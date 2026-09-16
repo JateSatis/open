@@ -1,9 +1,11 @@
+import type { Session as SupabaseSession } from '@supabase/supabase-js';
 import { render, screen, userEvent } from '@testing-library/react-native';
 
 import ChatsScreen from './index';
 
 import type { ChatSummary } from '@/api/chats';
 import { listChats, subscribeToOnlineUsers } from '@/api/chats';
+import { useSession } from '@/features/auth/useSession';
 
 const mockPush = jest.fn();
 
@@ -11,17 +13,26 @@ jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockPush }),
 }));
 
+jest.mock('@/features/auth/useSession', () => ({
+  useSession: jest.fn(),
+}));
+
 jest.mock('@/api/chats', () => ({
   listChats: jest.fn(),
-  getCurrentUserId: jest.fn(),
   subscribeToOnlineUsers: jest.fn(),
 }));
 
 const mockedListChats = listChats as jest.MockedFunction<typeof listChats>;
 const mockedPresence = subscribeToOnlineUsers as jest.MockedFunction<typeof subscribeToOnlineUsers>;
-const { getCurrentUserId } = jest.requireMock('@/api/chats') as {
-  getCurrentUserId: jest.Mock;
-};
+const mockedSession = useSession as jest.MockedFunction<typeof useSession>;
+
+function signedInAs(userId: string) {
+  mockedSession.mockReturnValue({
+    session: { user: { id: userId } } as unknown as SupabaseSession,
+    isAuthenticated: true,
+    isLoading: false,
+  });
+}
 
 const chat: ChatSummary = {
   id: 'chat-1',
@@ -37,7 +48,7 @@ const chat: ChatSummary = {
 
 beforeEach(() => {
   jest.clearAllMocks();
-  getCurrentUserId.mockResolvedValue('user-1');
+  signedInAs('user-1');
   mockedPresence.mockReturnValue(() => {});
 });
 

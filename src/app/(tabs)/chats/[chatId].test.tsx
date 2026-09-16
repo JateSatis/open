@@ -1,14 +1,20 @@
+import type { Session as SupabaseSession } from '@supabase/supabase-js';
 import { fireEvent, render, screen, userEvent } from '@testing-library/react-native';
 
 import ChatScreen from './[chatId]';
 
 import type { ChatChannelHandlers, ChatSummary, Message } from '@/api/chats';
 import { getChat, listMessages, sendMessage, subscribeToChat } from '@/api/chats';
+import { useSession } from '@/features/auth/useSession';
 import { formatMessageTime } from '@/features/chats/chatDisplay';
 
 jest.mock('expo-router', () => ({
   useLocalSearchParams: () => ({ chatId: 'chat-1' }),
   Stack: { Screen: () => null },
+}));
+
+jest.mock('@/features/auth/useSession', () => ({
+  useSession: jest.fn(),
 }));
 
 jest.mock('@/api/chats', () => ({
@@ -17,7 +23,6 @@ jest.mock('@/api/chats', () => ({
   listMessagesSince: jest.fn(),
   sendMessage: jest.fn(),
   subscribeToChat: jest.fn(),
-  getCurrentUserId: jest.fn(),
   MESSAGE_PAGE_SIZE: 30,
 }));
 
@@ -25,8 +30,8 @@ const mockedGetChat = getChat as jest.MockedFunction<typeof getChat>;
 const mockedListMessages = listMessages as jest.MockedFunction<typeof listMessages>;
 const mockedSendMessage = sendMessage as jest.MockedFunction<typeof sendMessage>;
 const mockedSubscribe = subscribeToChat as jest.MockedFunction<typeof subscribeToChat>;
-const { getCurrentUserId, listMessagesSince } = jest.requireMock('@/api/chats') as {
-  getCurrentUserId: jest.Mock;
+const mockedSession = useSession as jest.MockedFunction<typeof useSession>;
+const { listMessagesSince } = jest.requireMock('@/api/chats') as {
   listMessagesSince: jest.Mock;
 };
 
@@ -66,7 +71,11 @@ const unsubscribe = jest.fn();
 beforeEach(() => {
   jest.clearAllMocks();
   handlers = null;
-  getCurrentUserId.mockResolvedValue('user-1');
+  mockedSession.mockReturnValue({
+    session: { user: { id: 'user-1' } } as unknown as SupabaseSession,
+    isAuthenticated: true,
+    isLoading: false,
+  });
   listMessagesSince.mockResolvedValue([]);
   mockedListMessages.mockResolvedValue({ items: [], nextCursor: null });
   mockedGetChat.mockResolvedValue(chatWith([member, other]));
