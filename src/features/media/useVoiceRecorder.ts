@@ -79,12 +79,16 @@ export function useVoiceRecorder(): VoiceRecorder {
   const [status, setStatus] = useState<VoiceRecorderStatus>('idle');
 
   // `stop()` clears the recorder state, so the duration has to be read from
-  // the last poll before stopping rather than after it.
+  // the last poll before stopping rather than after it. The ref is what `stop`
+  // reads synchronously; the state is what the UI keeps showing afterwards.
   const durationRef = useRef(0);
+  const [lastDurationMs, setLastDurationMs] = useState(0);
 
-  if (recorderState.isRecording) {
-    durationRef.current = recorderState.durationMillis;
-  }
+  useEffect(() => {
+    if (recorderState.isRecording) {
+      durationRef.current = recorderState.durationMillis;
+    }
+  }, [recorderState.isRecording, recorderState.durationMillis]);
 
   const start = useCallback(async () => {
     const permission = await requestRecordingPermissionsAsync();
@@ -100,6 +104,7 @@ export function useVoiceRecorder(): VoiceRecorder {
     await recorder.prepareToRecordAsync();
 
     durationRef.current = 0;
+    setLastDurationMs(0);
     recorder.record();
     setStatus('recording');
   }, [recorder]);
@@ -108,9 +113,13 @@ export function useVoiceRecorder(): VoiceRecorder {
     await recorder.stop();
     // Leaving the session in recording mode keeps later playback quiet on iOS.
     await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true });
+
+    const durationMs = durationRef.current;
+
+    setLastDurationMs(durationMs);
     setStatus('idle');
 
-    return { uri: recorder.uri, durationMs: durationRef.current };
+    return { uri: recorder.uri, durationMs };
   }, [recorder]);
 
   const stop = useCallback(async (): Promise<LocalMedia | null> => {
@@ -157,7 +166,7 @@ export function useVoiceRecorder(): VoiceRecorder {
 
   return {
     status,
-    durationMs: recorderState.isRecording ? recorderState.durationMillis : durationRef.current,
+    durationMs: recorderState.isRecording ? recorderState.durationMillis : lastDurationMs,
     level: normalizeLevel(recorderState.metering),
     start,
     stop,
