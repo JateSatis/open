@@ -6,6 +6,8 @@
 // (it is generated from the schema by a human, see CLAUDE.md section 2a) and
 // the shared Supabase client is therefore still untyped.
 
+import type { RealtimeChannel } from '@supabase/supabase-js';
+
 import { supabase } from '@/api/supabase';
 
 export const MESSAGE_PAGE_SIZE = 30;
@@ -336,4 +338,78 @@ export async function sendMessage(chatId: string, input: SendMessageInput): Prom
   if (error) throw error;
 
   return toMessage(data as MessageRow);
+}
+
+// =============================================================================
+// Realtime
+// =============================================================================
+//
+// Messages travel over Broadcast, not Postgres Changes: Postgres Changes
+// re-evaluates RLS per subscriber on every write and does not survive a public
+// messenger. The broadcast payload is only a notification — the row itself is
+// always re-read from Postgres, so a forged broadcast cannot put a message
+// into anyone's chat.
+
+export type ChatChannelHandlers = {
+  onMessage: () => void;
+  onTyping: (userId: string) => void;
+};
+
+export type ChatChannel = {
+  broadcastMessage: () => void;
+  broadcastTyping: (userId: string) => void;
+  unsubscribe: () => void;
+};
+
+export function subscribeToChat(chatId: string, handlers: ChatChannelHandlers): ChatChannel {
+  const channel: RealtimeChannel = supabase.channel(`chat:${chatId}`, {
+    config: { broadcast: { self: false } },
+  });
+
+  channel
+    .on('broadcast', { event: 'message' }, () => handlers.onMessage())
+    .on('broadcast', { event: 'typing' }, ({ payload }) => {
+      const userId = (payload as { userId?: string })?.userId;
+
+      if (userId) handlers.onTyping(userId);
+    })
+    .subscribe();
+
+  return {
+    broadcastMessage: () => {
+      void channel.send({ type: 'broadcast', event: 'message', payload: {} });
+    },
+    broadcastTyping: (userId: string) => {
+      void channel.send({ type: 'broadcast', event: 'typing', payload: { userId } });
+    },
+    unsubscribe: () => {
+      void supabase.removeChannel(channel);
+    },
+  };
+}
+
+/**
+ * Presence of everyone currently in the app, used for the "в сети" status in
+ * the chat list. Returns the unsubscribe function — leaking this channel is
+ * what makes Realtime go quiet after a few screen transitions.
+ */
+export function subscribeToOnlineUsers(
+  userId: string,
+  onChange: (userIds: string[]) => void,
+): () => void {
+  const channel: RealtimeChannel = supabase.channel('presence:online', {
+    config: { presence: { key: userId } },
+  });
+
+  channel
+    .on('presence', { event: 'sync' }, () => onChange(Object.keys(channel.presenceState())))
+    .subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        void channel.track({ onlineAt: new Date().toISOString() });
+      }
+    });
+
+  return () => {
+    void supabase.removeChannel(channel);
+  };
 }
