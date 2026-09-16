@@ -5,8 +5,12 @@ import { useSession } from '@/features/auth/useSession';
 import { useTheme } from '@/hooks/use-theme';
 
 export default function TabsLayout() {
-  const { isAuthenticated } = useSession();
+  const { isAuthenticated, isLoading } = useSession();
   const theme = useTheme();
+
+  if (isLoading) {
+    return null;
+  }
 
   if (!isAuthenticated) {
     return <Redirect href="/(auth)/sign-in" />;
