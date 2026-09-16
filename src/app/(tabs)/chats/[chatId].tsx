@@ -86,6 +86,7 @@ export default function ChatScreen() {
           </View>
         ) : (
           <FlatList
+            testID="messages-list"
             inverted
             data={messages}
             keyExtractor={(message) => message.id}
