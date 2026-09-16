@@ -1,12 +1,13 @@
-export type Session = {
-  isAuthenticated: boolean;
-};
+import { useSyncExternalStore } from 'react';
+
+import { getSessionState, subscribeToSession, type SessionState } from './sessionStore';
+
+export type { SessionState };
 
 /**
- * Placeholder until the real Supabase session lands in this feature module.
- * Routing already depends on it so the (auth)/(tabs) redirect has one place
- * to read from instead of being rewired when auth ships.
+ * The only place auth state is read from. Components never call
+ * supabase.auth.getSession() themselves.
  */
-export function useSession(): Session {
-  return { isAuthenticated: false };
+export function useSession(): SessionState {
+  return useSyncExternalStore(subscribeToSession, getSessionState, getSessionState);
 }
