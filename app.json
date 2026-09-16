@@ -8,7 +8,8 @@
     "scheme": "open",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/expo.icon",
+      "usesAppleSignIn": true
     },
     "android": {
       "adaptiveIcon": {
@@ -34,6 +35,13 @@
         }
       ],
       [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": ""
+        }
+      ],
+      "expo-apple-authentication",
+      [
         "expo-audio",
         {
           "microphonePermission": "Open uses the microphone to record voice messages and sound for your videos."
@@ -58,6 +66,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "googleSignIn": {
+        "webClientId": "",
+        "iosClientId": ""
+      }
     }
   }
 }
