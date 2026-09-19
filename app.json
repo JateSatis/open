@@ -5,11 +5,12 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "open",
+    "scheme": "openger",
     "userInterfaceStyle": "automatic",
     "ios": {
       "icon": "./assets/expo.icon",
-      "usesAppleSignIn": true
+      "usesAppleSignIn": true,
+      "bundleIdentifier": "com.openger.app"
     },
     "android": {
       "adaptiveIcon": {
@@ -18,7 +19,8 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.openger.app"
     },
     "web": {
       "output": "static",
@@ -37,7 +39,7 @@
       [
         "@react-native-google-signin/google-signin",
         {
-          "iosUrlScheme": ""
+          "iosUrlScheme": "com.googleusercontent.apps.82062890513-pgdiipj28he9vsnl6k9mdst786q237p3"
         }
       ],
       "expo-apple-authentication",
@@ -69,8 +71,8 @@
     },
     "extra": {
       "googleSignIn": {
-        "webClientId": "",
-        "iosClientId": ""
+        "webClientId": "82062890513-5vnh5a1ued1phadqfm187glu9rfu7boc.apps.googleusercontent.com",
+        "iosClientId": "82062890513-pgdiipj28he9vsnl6k9mdst786q237p3.apps.googleusercontent.com"
       }
     }
   }
