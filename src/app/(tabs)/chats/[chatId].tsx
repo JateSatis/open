@@ -1,5 +1,5 @@
 import { Stack, useLocalSearchParams } from 'expo-router';
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -17,7 +17,9 @@ import { chatTitle, isChatMember } from '@/features/chats/chatDisplay';
 import { useChat } from '@/features/chats/useChat';
 import { useChatMessages, type ChatMessage } from '@/features/chats/useChatMessages';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
+import { useMarkChatRead } from '@/features/chats/useMarkChatRead';
 import { useTheme } from '@/hooks/use-theme';
+import { setActiveChatId } from '@/store/activeChat';
 import { Spacing } from '@/theme';
 
 export default function ChatScreen() {
@@ -39,6 +41,31 @@ export default function ChatScreen() {
     notifyTyping,
   } = useChatMessages(chatId, currentUserId);
 
+  // Пока чат открыт, уведомления о нём не нужны: человек и так смотрит сюда.
+  useEffect(() => {
+    setActiveChatId(chatId);
+
+    return () => setActiveChatId(null);
+  }, [chatId]);
+
+  useMarkChatRead(chatId, messages.length > 0 ? messages[0].id : null);
+
+  // Диалог прочитан собеседником до этого момента. В групповом чате берём
+  // самого отстающего: «прочитано» должно значить «прочитали все».
+  const readUpTo = useMemo(() => {
+    const others = (chat?.participants ?? []).filter(
+      (participant) => participant.id !== currentUserId,
+    );
+
+    if (others.length === 0) return null;
+
+    return others.reduce(
+      (earliest, participant) =>
+        participant.lastReadAt < earliest ? participant.lastReadAt : earliest,
+      others[0].lastReadAt,
+    );
+  }, [chat, currentUserId]);
+
   const participantsById = useMemo(
     () => new Map((chat?.participants ?? []).map((participant) => [participant.id, participant])),
     [chat],
@@ -52,13 +79,14 @@ export default function ChatScreen() {
         <MessageBubble
           message={item}
           isOwn={item.authorId === currentUserId}
+          isRead={readUpTo !== null && item.createdAt <= readUpTo}
           authorName={author?.displayName ?? 'Удалённый аккаунт'}
           authorAvatarUrl={author?.avatarUrl ?? null}
           onRetry={retry}
         />
       );
     },
-    [currentUserId, participantsById, retry],
+    [currentUserId, participantsById, readUpTo, retry],
   );
 
   const typingLabel =

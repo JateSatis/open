@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import {
@@ -8,6 +9,8 @@ import {
   type ChatChannel,
   type Message,
 } from '@/api/chats';
+import { chatQueryKey } from '@/features/chats/useChat';
+import { chatsQueryKey } from '@/features/chats/useChats';
 
 /** How long a "печатает…" mark survives without another typing broadcast. */
 const TYPING_TIMEOUT_MS = 4000;
@@ -57,6 +60,7 @@ function mergeNewest(existing: ChatMessage[], incoming: Message[]): ChatMessage[
 }
 
 export function useChatMessages(chatId: string, currentUserId: string | null): ChatMessagesState {
+  const queryClient = useQueryClient();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -140,6 +144,11 @@ export function useChatMessages(chatId: string, currentUserId: string | null): C
       onMessage: () => {
         void pullNewMessages();
       },
+      onRead: () => {
+        // Отметка собеседника живёт в участниках чата, а не в сообщениях —
+        // перечитываем именно чат, история при этом не дёргается.
+        void queryClient.invalidateQueries({ queryKey: chatQueryKey(chatId) });
+      },
       onTyping: (userId) => {
         if (userId === currentUserId) return;
 
@@ -168,7 +177,7 @@ export function useChatMessages(chatId: string, currentUserId: string | null): C
       timers.clear();
       setTypingUserIds([]);
     };
-  }, [chatId, currentUserId, pullNewMessages]);
+  }, [chatId, currentUserId, pullNewMessages, queryClient]);
 
   const loadMore = useCallback(() => {
     const cursor = cursorRef.current;
@@ -208,7 +217,9 @@ export function useChatMessages(chatId: string, currentUserId: string | null): C
               message.localId === localId ? { ...saved, status: 'sent' as const } : message,
             ),
           );
-          channelRef.current?.broadcastMessage();
+          // Список чатов держит последнее сообщение и порядок — после отправки
+          // он устарел, хотя сама переписка на экране уже верна.
+          void queryClient.invalidateQueries({ queryKey: chatsQueryKey });
         })
         .catch(() => {
           // The insert policy on `messages` is what decides whether this user
@@ -221,7 +232,7 @@ export function useChatMessages(chatId: string, currentUserId: string | null): C
           );
         });
     },
-    [chatId, rememberLatest],
+    [chatId, queryClient, rememberLatest],
   );
 
   const send = useCallback(

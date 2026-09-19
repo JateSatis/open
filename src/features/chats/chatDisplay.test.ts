@@ -7,11 +7,13 @@ const direct: ChatSummary = {
   kind: 'direct',
   title: null,
   participants: [
-    { id: 'user-1', displayName: 'Я', avatarUrl: null },
-    { id: 'user-2', displayName: 'Марина', avatarUrl: 'https://cdn.example/avatar.png' },
+    { id: 'user-1', displayName: 'Я', avatarUrl: null, lastReadAt: '2026-09-16T10:00:00Z' },
+    { id: 'user-2', displayName: 'Марина', avatarUrl: 'https://cdn.example/avatar.png', lastReadAt: '2026-09-16T10:00:00Z' },
   ],
   lastMessagePreview: null,
   lastMessageAt: null,
+  lastMessageAuthorId: null,
+  hasUnread: false,
 };
 
 const group: ChatSummary = {

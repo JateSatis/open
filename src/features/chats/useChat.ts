@@ -1,6 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 
 import { getChat, type ChatSummary } from '@/api/chats';
+
+export function chatQueryKey(chatId: string) {
+  return ['chat', chatId] as const;
+}
 
 export type ChatState = {
   chat: ChatSummary | null;
@@ -9,38 +13,14 @@ export type ChatState = {
 };
 
 export function useChat(chatId: string): ChatState {
-  const [chat, setChat] = useState<ChatSummary | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { data, isPending, error } = useQuery({
+    queryKey: chatQueryKey(chatId),
+    queryFn: () => getChat(chatId),
+  });
 
-  useEffect(() => {
-    let active = true;
-
-    const load = async () => {
-      setIsLoading(true);
-
-      try {
-        const loaded = await getChat(chatId);
-
-        if (!active) return;
-
-        setChat(loaded);
-        setError(null);
-      } catch (cause) {
-        if (!active) return;
-
-        setError(cause instanceof Error ? cause.message : 'Не удалось открыть чат');
-      } finally {
-        if (active) setIsLoading(false);
-      }
-    };
-
-    void load();
-
-    return () => {
-      active = false;
-    };
-  }, [chatId]);
-
-  return { chat, isLoading, error };
+  return {
+    chat: data ?? null,
+    isLoading: isPending,
+    error: error ? (error.message ?? 'Не удалось открыть чат') : null,
+  };
 }

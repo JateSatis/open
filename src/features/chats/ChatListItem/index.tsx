@@ -44,7 +44,11 @@ export function ChatListItem({ chat, currentUserId, isOnline, onPress }: ChatLis
           </Text>
         </View>
 
-        <Text variant="small" color="textSecondary" numberOfLines={1}>
+        <Text
+          variant="small"
+          color={chat.hasUnread ? 'text' : 'textSecondary'}
+          numberOfLines={1}
+        >
           {chat.lastMessagePreview ?? 'Нет сообщений'}
         </Text>
 
@@ -57,6 +61,13 @@ export function ChatListItem({ chat, currentUserId, isOnline, onPress }: ChatLis
           </Text>
         </View>
       </View>
+
+      {chat.hasUnread ? (
+        <View
+          accessibilityLabel="Есть непрочитанные сообщения"
+          style={[styles.unreadDot, { backgroundColor: theme.primary }]}
+        />
+      ) : null}
     </Pressable>
   );
 }
