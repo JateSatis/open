@@ -66,18 +66,21 @@ export type Database = {
           chat_id: string
           id: string
           joined_at: string
+          last_read_at: string
           user_id: string
         }
         Insert: {
           chat_id: string
           id?: string
           joined_at?: string
+          last_read_at?: string
           user_id: string
         }
         Update: {
           chat_id?: string
           id?: string
           joined_at?: string
+          last_read_at?: string
           user_id?: string
         }
         Relationships: [
@@ -104,6 +107,9 @@ export type Database = {
           deleted_at: string | null
           id: string
           kind: string
+          last_message_at: string | null
+          last_message_author_id: string | null
+          last_message_text: string | null
           title: string | null
         }
         Insert: {
@@ -112,6 +118,9 @@ export type Database = {
           deleted_at?: string | null
           id?: string
           kind: string
+          last_message_at?: string | null
+          last_message_author_id?: string | null
+          last_message_text?: string | null
           title?: string | null
         }
         Update: {
@@ -120,12 +129,22 @@ export type Database = {
           deleted_at?: string | null
           id?: string
           kind?: string
+          last_message_at?: string | null
+          last_message_author_id?: string | null
+          last_message_text?: string | null
           title?: string | null
         }
         Relationships: [
           {
             foreignKeyName: "chats_created_by_fkey"
             columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chats_last_message_author_id_fkey"
+            columns: ["last_message_author_id"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -215,7 +234,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_or_create_direct_chat: {
+        Args: { other_user_id: string }
+        Returns: string
+      }
     }
     Enums: {
       [_ in never]: never
