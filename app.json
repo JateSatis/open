@@ -20,7 +20,14 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.openger.app"
+      "package": "com.openger.app",
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+        "android.permission.CAMERA"
+      ]
     },
     "web": {
       "output": "static",
@@ -73,7 +80,17 @@
       "googleSignIn": {
         "webClientId": "82062890513-5vnh5a1ued1phadqfm187glu9rfu7boc.apps.googleusercontent.com",
         "iosClientId": "82062890513-pgdiipj28he9vsnl6k9mdst786q237p3.apps.googleusercontent.com"
+      },
+      "router": {},
+      "eas": {
+        "projectId": "3dfc2778-15a0-4d8e-a02c-4afa84e8aaa7"
       }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/3dfc2778-15a0-4d8e-a02c-4afa84e8aaa7"
     }
   }
 }
