@@ -49,9 +49,6 @@ export function useConnectionWatch() {
         return;
       }
 
-      reportRealtimeDown();
-      wasDown = true;
-
       ticks += 1;
 
       // Сокета нет, но и бить тревогу рано: если связь на месте, проверяем
@@ -59,6 +56,11 @@ export function useConnectionWatch() {
       const calm = getConnectionStatus() === 'online' && ticks % CALM_FACTOR !== 0;
 
       if (calm) return;
+
+      // Состояние тут намеренно не сбрасывается в «подключаемся»: такой сброс
+      // на каждой проверке заставлял TanStack Query считать, что связь то
+      // появляется, то пропадает, и список дёргался обновлением каждые
+      // несколько секунд.
 
       const reachable = await probeServer();
 

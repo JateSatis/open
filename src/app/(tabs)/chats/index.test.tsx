@@ -11,6 +11,10 @@ import {
   subscribeToOnlineUsers,
 } from '@/api/chats';
 import { useSession } from '@/features/auth/useSession';
+import {
+  reportRealtimeJoined,
+  resetConnectionState,
+} from '@/features/connection/connectionStore';
 import { renderWithQuery } from '@/test/renderWithQuery';
 
 const mockPush = jest.fn();
@@ -68,6 +72,10 @@ beforeEach(() => {
   mockedPresence.mockReturnValue(() => {});
   mockedListChats.mockResolvedValue([]);
   mockedCandidates.mockResolvedValue([]);
+  // Плашка о сбое загрузки появляется только при живой связи: об обрыве
+  // говорит шапка, и дублировать её красным текстом незачем.
+  resetConnectionState();
+  reportRealtimeJoined();
 });
 
 describe('ChatsScreen', () => {

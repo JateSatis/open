@@ -27,5 +27,11 @@ export function isNetworkError(error: unknown): boolean {
 export function describeLoadError(error: unknown, fallback: string): string | null {
   if (error === null || error === undefined) return null;
 
-  return isNetworkError(error) ? null : fallback;
+  if (isNetworkError(error)) return null;
+
+  // Наружу уходит фраза, понятная человеку, но сам сбой терять нельзя —
+  // иначе его не в чем будет разобрать.
+  if (__DEV__) console.warn('Ошибка загрузки:', error);
+
+  return fallback;
 }
