@@ -6,10 +6,12 @@ import {
   isRealtimeConnected,
   probeServer,
   reconnectRealtime,
+  watchDeviceNetwork,
   watchRealtimeConnection,
 } from '@/api/connection';
 import {
   getConnectionStatus,
+  reportDeviceNetwork,
   reportRealtimeDown,
   reportRealtimeJoined,
   reportRequestFailed,
@@ -96,6 +98,19 @@ export function useConnectionWatch() {
       }
     };
 
+    // Система сообщает о сети мгновенно — это и даёт реакцию быстрее любой
+    // пробы. Но её «сеть есть» означает лишь наличие подключения, а не
+    // доступность сервера, поэтому следом сразу проверяем по-настоящему.
+    const stopDeviceWatch = watchDeviceNetwork((connected) => {
+      reportDeviceNetwork(connected);
+
+      if (connected) {
+        void check();
+      } else {
+        wasDown = true;
+      }
+    });
+
     const stopHeartbeat = watchRealtimeConnection((state) => {
       if (state === 'joined') {
         reportRealtimeJoined();
@@ -120,6 +135,7 @@ export function useConnectionWatch() {
       cancelled = true;
       clearInterval(interval);
       appState.remove();
+      stopDeviceWatch();
       stopHeartbeat();
     };
   }, [queryClient]);

@@ -3,7 +3,26 @@
 // связи, и о её возвращении — раньше любого запроса, который пользователь
 // ещё не сделал.
 
+import * as Network from 'expo-network';
+
 import { supabase } from '@/api/supabase';
+
+/**
+ * Системное состояние сети. Оно приходит мгновенно, в отличие от собственных
+ * проб, но говорит лишь о наличии подключения, а не о доступности сервера:
+ * Wi-Fi без выхода наружу система считает связью.
+ */
+export function watchDeviceNetwork(onChange: (connected: boolean) => void): () => void {
+  const subscription = Network.addNetworkStateListener(({ isConnected }) => {
+    onChange(isConnected === true);
+  });
+
+  void Network.getNetworkStateAsync()
+    .then(({ isConnected }) => onChange(isConnected === true))
+    .catch(() => onChange(true));
+
+  return () => subscription.remove();
+}
 
 /** Держится ли сейчас сокет Realtime. Ответ бесплатный — состояние локальное. */
 export function isRealtimeConnected(): boolean {

@@ -14,11 +14,17 @@ type RequestState = 'ok' | 'failed' | 'unknown';
 
 let realtime: RealtimeState = 'down';
 let requests: RequestState = 'unknown';
+let deviceOffline = false;
 let status: ConnectionStatus = 'connecting';
 
 const listeners = new Set<() => void>();
 
 function derive(): ConnectionStatus {
+  // Система говорит, что подключения нет вообще. Это единственный сигнал,
+  // который приходит мгновенно, и спорить с ним бессмысленно: без сети не
+  // поможет ни живой сокет из прошлого, ни удачный запрос минуту назад.
+  if (deviceOffline) return 'offline';
+
   // Сокет живёт — связь точно есть.
   if (realtime === 'joined') return 'online';
   // Сокет ещё поднимается, но запросы проходят: данные ходят, значит связь есть.
@@ -53,6 +59,26 @@ export function subscribeToConnectionStatus(listener: () => void): () => void {
   return () => {
     listeners.delete(listener);
   };
+}
+
+/**
+ * Сеть на устройстве пропала или появилась — по данным системы.
+ *
+ * Появление сети не означает, что сервер доступен, поэтому «онлайн» отсюда не
+ * объявляется: состояние возвращается к тому, что известно из сокета и
+ * запросов, а проба уточнит остальное.
+ */
+export function reportDeviceNetwork(connected: boolean) {
+  deviceOffline = !connected;
+
+  if (!connected) {
+    realtime = 'down';
+    requests = 'failed';
+  } else if (requests === 'failed') {
+    requests = 'unknown';
+  }
+
+  publish();
 }
 
 export function reportRealtimeJoined() {
@@ -91,6 +117,7 @@ export function reportRequestFailed() {
 export function resetConnectionState() {
   realtime = 'down';
   requests = 'unknown';
+  deviceOffline = false;
   status = 'connecting';
   onlineManager.setOnline(true);
   listeners.clear();

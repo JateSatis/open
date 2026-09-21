@@ -2,6 +2,7 @@ import { onlineManager } from '@tanstack/react-query';
 
 import {
   getConnectionStatus,
+  reportDeviceNetwork,
   reportRealtimeDown,
   reportRealtimeJoined,
   reportRequestFailed,
@@ -76,5 +77,29 @@ describe('connectionStore', () => {
     reportRealtimeJoined();
 
     expect(listener).not.toHaveBeenCalled();
+  });
+
+  it('believes the system at once when the device says there is no network', () => {
+    reportRealtimeJoined();
+    reportDeviceNetwork(false);
+
+    // Живой сокет из прошлого не спорит с фактом: сети нет.
+    expect(getConnectionStatus()).toBe('offline');
+  });
+
+  it('does not call itself online just because the device found a network', () => {
+    reportDeviceNetwork(false);
+    reportDeviceNetwork(true);
+
+    // Wi-Fi без выхода наружу — обычное дело, сервер ещё надо проверить.
+    expect(getConnectionStatus()).toBe('connecting');
+  });
+
+  it('comes back online when the server answers after the network returns', () => {
+    reportDeviceNetwork(false);
+    reportDeviceNetwork(true);
+    reportRequestSucceeded();
+
+    expect(getConnectionStatus()).toBe('online');
   });
 });
