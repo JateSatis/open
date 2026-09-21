@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback } from 'react';
 
 import { listChats, type ChatSummary } from '@/api/chats';
+import { describeLoadError } from '@/lib/network';
 
 export const chatsQueryKey = ['chats'] as const;
 
@@ -28,7 +29,7 @@ export function useChats(): ChatsState {
     chats: data ?? [],
     isLoading: isPending,
     isRefreshing: isFetching && !isPending,
-    error: error ? (error.message ?? 'Не удалось загрузить чаты') : null,
+    error: describeLoadError(error, 'Не удалось загрузить чаты'),
     refresh,
   };
 }

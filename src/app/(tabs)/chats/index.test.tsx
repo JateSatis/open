@@ -132,15 +132,16 @@ describe('ChatsScreen', () => {
     expect(mockPush).toHaveBeenCalledWith('/chats/chat-new');
   });
 
-  it('reports a failure to open a dialogue instead of staying silent', async () => {
+  it('reports a failure to open a dialogue in plain words, not in server wording', async () => {
     mockedCandidates.mockResolvedValue([stranger]);
-    mockedOpenDirect.mockRejectedValue(new Error('Пользователь не найден'));
+    mockedOpenDirect.mockRejectedValue(new Error('duplicate key value violates unique constraint'));
     const user = userEvent.setup();
 
     await renderWithQuery(<ChatsScreen />);
     await user.press(await screen.findByText('Пётр'));
 
-    expect(await screen.findByText('Пользователь не найден')).toBeTruthy();
+    expect(await screen.findByText('Не удалось открыть диалог')).toBeTruthy();
+    expect(screen.queryByText(/violates/)).toBeNull();
     expect(mockPush).not.toHaveBeenCalled();
   });
 
@@ -167,11 +168,24 @@ describe('ChatsScreen', () => {
   });
 
   it('reports a failure to load instead of showing an empty list', async () => {
-    mockedListChats.mockRejectedValue(new Error('Сеть недоступна'));
+    mockedListChats.mockRejectedValue(new Error('unexpected token in response'));
 
     await renderWithQuery(<ChatsScreen />);
 
-    expect(await screen.findByText('Сеть недоступна')).toBeTruthy();
+    expect(await screen.findByText('Не удалось загрузить чаты')).toBeTruthy();
+  });
+
+  it('stays quiet about a lost connection: the header already says it', async () => {
+    mockedListChats.mockRejectedValue(new Error('Network request failed'));
+    mockedCandidates.mockResolvedValue([stranger]);
+
+    await renderWithQuery(<ChatsScreen />);
+
+    // Красная плашка с java.net.UnknownHostException ничего не объясняет
+    // человеку и только перекрывает то, что уже загружено.
+    await screen.findByText('Пётр');
+    expect(screen.queryByText(/Не удалось загрузить чаты/)).toBeNull();
+    expect(screen.queryByText(/Network request failed/)).toBeNull();
   });
 
   it('leaves no presence channel behind on unmount', async () => {

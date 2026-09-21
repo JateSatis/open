@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { getChat, type ChatSummary } from '@/api/chats';
+import { describeLoadError } from '@/lib/network';
 
 export function chatQueryKey(chatId: string) {
   return ['chat', chatId] as const;
@@ -21,6 +22,6 @@ export function useChat(chatId: string): ChatState {
   return {
     chat: data ?? null,
     isLoading: isPending,
-    error: error ? (error.message ?? 'Не удалось открыть чат') : null,
+    error: describeLoadError(error, 'Не удалось открыть чат'),
   };
 }

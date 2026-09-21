@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { listDirectCandidates, type DirectCandidate } from '@/api/chats';
+import { describeLoadError } from '@/lib/network';
 
 export const directCandidatesQueryKey = ['direct-candidates'] as const;
 
@@ -20,6 +21,6 @@ export function useDirectCandidates(): DirectCandidatesState {
   return {
     candidates: data ?? [],
     isLoading: isPending,
-    error: error ? (error.message ?? 'Не удалось загрузить пользователей') : null,
+    error: describeLoadError(error, 'Не удалось загрузить пользователей'),
   };
 }
