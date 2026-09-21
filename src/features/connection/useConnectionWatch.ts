@@ -2,7 +2,12 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { AppState } from 'react-native';
 
-import { isRealtimeConnected, probeServer, watchRealtimeConnection } from '@/api/connection';
+import {
+  isRealtimeConnected,
+  probeServer,
+  reconnectRealtime,
+  watchRealtimeConnection,
+} from '@/api/connection';
 import {
   getConnectionStatus,
   reportRealtimeDown,
@@ -11,9 +16,11 @@ import {
   reportRequestSucceeded,
 } from '@/features/connection/connectionStore';
 
-/** Как часто проверяем связь, когда её нет. */
-const CHECK_INTERVAL_MS = 5000;
-/** Во сколько раз реже стучимся на сервер, когда всё в порядке. */
+// Раз в секунду: состояние сокета читается локально и ничего не стоит, а
+// запрос наружу уходит только когда сокета нет. Реже — и возвращение связи
+// замечается с задержкой, которая на глаз читается как «приложение тормозит».
+const CHECK_INTERVAL_MS = 1000;
+/** Во сколько раз реже стучимся на сервер, когда связь при этом жива. */
 const CALM_FACTOR = 6;
 
 /**
@@ -31,6 +38,9 @@ export function useConnectionWatch() {
     let cancelled = false;
     let wasDown = getConnectionStatus() !== 'online';
     let ticks = 0;
+    // Пробы не должны накладываться: медленная попытка иначе тянет за собой
+    // очередь таких же, и каждая следующая отвечает всё позже.
+    let probing = false;
 
     const recover = () => {
       // Пока связи не было, данные успели устареть, а события Realtime
@@ -55,19 +65,30 @@ export function useConnectionWatch() {
       // редко, чтобы не гонять запросы впустую.
       const calm = getConnectionStatus() === 'online' && ticks % CALM_FACTOR !== 0;
 
-      if (calm) return;
+      if (calm || probing) return;
 
       // Состояние тут намеренно не сбрасывается в «подключаемся»: такой сброс
       // на каждой проверке заставлял TanStack Query считать, что связь то
       // появляется, то пропадает, и список дёргался обновлением каждые
       // несколько секунд.
 
-      const reachable = await probeServer();
+      probing = true;
+
+      // Сокет пробуем поднять на каждой попытке: если сеть уже вернулась, он
+      // встанет за доли секунды и сообщит об этом раньше пробы.
+      reconnectRealtime();
+
+      const reachable = await probeServer().finally(() => {
+        probing = false;
+      });
 
       if (cancelled) return;
 
       if (reachable) {
         reportRequestSucceeded();
+        // Сеть есть — незачем ждать, пока клиент сам доберётся до следующей
+        // попытки: события Realtime должны пойти сразу.
+        reconnectRealtime();
         recover();
       } else {
         reportRequestFailed();

@@ -15,22 +15,50 @@ export function isRealtimeConnected(): boolean {
  * иначе приложение не отличит «сеть пропала» от «ещё подключаемся» и не узнает
  * о возвращении связи, пока пользователь сам что-нибудь не запросит.
  */
+// Короткая проба: пока связи нет, запрос всё равно не ответит, а каждая
+// лишняя секунда ожидания — это секунда, на которую приложение опаздывает с
+// новостью, что сеть вернулась.
+const PROBE_TIMEOUT_MS = 2000;
+
 export async function probeServer(): Promise<boolean> {
   const url = process.env.EXPO_PUBLIC_SUPABASE_URL;
   const key = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
   if (!url || !key) return false;
 
+  // Без таймаута проба может висеть десятки секунд: сразу после возвращения
+  // сети запрос уходит в ещё не поднявшийся стек и молчит, а приложение всё
+  // это время думает, что сети нет.
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), PROBE_TIMEOUT_MS);
+
   try {
-    const response = await fetch(`${url}/auth/v1/health`, { headers: { apikey: key } });
+    const response = await fetch(`${url}/auth/v1/health?t=${Date.now()}`, {
+      headers: { apikey: key },
+      signal: abort.signal,
+      cache: 'no-store',
+    });
 
     return response.ok;
   } catch {
     return false;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
 export type RealtimeConnectionState = 'joined' | 'down';
+
+/**
+ * Поднять сокет немедленно, не дожидаясь очередной попытки клиента: после
+ * возвращения сети он переподключается с нарастающими паузами и может
+ * молчать ещё десяток секунд, хотя связь уже есть.
+ */
+export function reconnectRealtime() {
+  if (supabase.realtime.isConnected()) return;
+
+  supabase.realtime.connect();
+}
 
 /**
  * Пульс соединения. Клиент сам переподключается с нарастающими паузами, а
