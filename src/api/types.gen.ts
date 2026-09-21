@@ -238,6 +238,7 @@ export type Database = {
         Args: { other_user_id: string }
         Returns: string
       }
+      mark_chat_read: { Args: { target_chat: string }; Returns: string }
     }
     Enums: {
       [_ in never]: never

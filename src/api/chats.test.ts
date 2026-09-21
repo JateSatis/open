@@ -1,10 +1,11 @@
-import { listMessages, sendMessage } from './chats';
+import { listMessages, markChatRead, sendMessage } from './chats';
 
 import { supabase } from '@/api/supabase';
 
 jest.mock('@/api/supabase', () => ({
   supabase: {
     from: jest.fn(),
+    rpc: jest.fn(),
     auth: { getUser: jest.fn() },
   },
 }));
@@ -171,5 +172,26 @@ describe('sendMessage', () => {
 
   it('refuses an empty message', async () => {
     await expect(sendMessage('chat-1', { text: '   ' })).rejects.toThrow(/Пустое сообщение/);
+  });
+});
+
+describe('markChatRead', () => {
+  const mockedRpc = supabase.rpc as jest.MockedFunction<typeof supabase.rpc>;
+
+  it('lets the database stamp the time instead of sending the device clock', async () => {
+    mockedRpc.mockResolvedValue({ data: null, error: null } as never);
+
+    await markChatRead('chat-1');
+
+    expect(mockedRpc).toHaveBeenCalledWith('mark_chat_read', { target_chat: 'chat-1' });
+    // Часы устройства сюда попасть не должны: сообщения штампует сервер, и
+    // отставшие на секунды часы оставили бы их непрочитанными навсегда.
+    expect(mockedFrom).not.toHaveBeenCalled();
+  });
+
+  it('surfaces a rejection instead of pretending the chat was read', async () => {
+    mockedRpc.mockResolvedValue({ data: null, error: { message: 'нет доступа' } } as never);
+
+    await expect(markChatRead('chat-1')).rejects.toEqual({ message: 'нет доступа' });
   });
 });

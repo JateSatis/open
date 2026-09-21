@@ -85,10 +85,13 @@ export function useChatMessages(chatId: string, currentUserId: string | null): C
   const pullNewMessages = useCallback(async () => {
     const since = latestServerAtRef.current;
 
-    if (!since) return;
-
     try {
-      const incoming = await listMessagesSince(chatId, since);
+      // В пустом чате отметки «докуда прочитано» ещё нет, и дочитывать не от
+      // чего — первое сообщение забираем обычной страницей, иначе диалог
+      // оживает только после повторного входа.
+      const incoming = since
+        ? await listMessagesSince(chatId, since)
+        : [...(await listMessages(chatId)).items].reverse();
 
       if (incoming.length === 0) return;
 

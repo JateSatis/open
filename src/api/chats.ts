@@ -295,15 +295,13 @@ export async function getOrCreateDirectChat(otherUserId: string): Promise<string
   return data;
 }
 
-/** Moves my read mark to now. Everything already in the chat counts as seen. */
+/**
+ * Moves my read mark to now. The timestamp comes from the database, never from
+ * the device: messages are stamped by the server, and a device clock running
+ * even a few seconds behind would leave them unread forever.
+ */
 export async function markChatRead(chatId: string): Promise<void> {
-  const userId = await getCurrentUserId();
-
-  const { error } = await supabase
-    .from('chat_members')
-    .update({ last_read_at: new Date().toISOString() })
-    .eq('chat_id', chatId)
-    .eq('user_id', userId);
+  const { error } = await supabase.rpc('mark_chat_read', { target_chat: chatId });
 
   if (error) throw error;
 }

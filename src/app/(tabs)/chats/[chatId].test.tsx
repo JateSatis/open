@@ -272,6 +272,59 @@ describe('ChatScreen', () => {
     expect(listMessagesSince).toHaveBeenCalledWith('chat-1', SENT_AT);
   });
 
+  it('turns an own message read as soon as the other side reports reading', async () => {
+    mockedListMessages.mockResolvedValue({
+      items: [message('m1', 'как дела', 'user-1')],
+      nextCursor: null,
+    });
+
+    await renderWithQuery(<ChatScreen />);
+    expect(await screen.findByText('доставлено')).toBeTruthy();
+
+    mockedGetChat.mockResolvedValue(
+      chatWith([member, { ...other, lastReadAt: '2026-09-16T11:00:00Z' }]),
+    );
+    handlers?.onRead();
+
+    expect(await screen.findByText('прочитано')).toBeTruthy();
+  });
+
+  it('marks the chat read when a message arrives while it is already open', async () => {
+    mockedListMessages.mockResolvedValue({
+      items: [message('m1', 'привет', 'user-2')],
+      nextCursor: null,
+    });
+    listMessagesSince.mockResolvedValue([message('m2', 'ещё сообщение', 'user-2')]);
+
+    await renderWithQuery(<ChatScreen />);
+    await screen.findByText('привет');
+    mockedMarkRead.mockClear();
+
+    handlers?.onMessage();
+    await screen.findByText('ещё сообщение');
+
+    expect(mockedMarkRead).toHaveBeenCalledWith('chat-1');
+  });
+
+  it('marks a chat read even when the first message ever arrives into an empty one', async () => {
+    // Пустой чат при открытии и он же с первым сообщением после рассылки:
+    // дочитывать не от чего, поэтому страница читается заново.
+    mockedListMessages
+      .mockResolvedValueOnce({ items: [], nextCursor: null })
+      .mockResolvedValueOnce({
+        items: [message('m1', 'первое', 'user-2')],
+        nextCursor: null,
+      });
+
+    await renderWithQuery(<ChatScreen />);
+    await screen.findByLabelText('Сообщение');
+
+    handlers?.onMessage();
+
+    expect(await screen.findByText('первое')).toBeTruthy();
+    expect(mockedMarkRead).toHaveBeenCalledWith('chat-1');
+  });
+
   it('shows who is typing and unsubscribes from the channel on unmount', async () => {
     await renderWithQuery(<ChatScreen />);
     await screen.findByLabelText('Сообщение');
