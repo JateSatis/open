@@ -27,16 +27,24 @@ export function useIncomingMessageAlerts(): IncomingMessageAlertsState {
   useEffect(() => {
     if (!currentUserId) return;
 
-    const unsubscribe = subscribeToIncomingMessages(currentUserId, (incoming) => {
-      void queryClient.invalidateQueries({ queryKey: chatsQueryKey });
-      void queryClient.invalidateQueries({ queryKey: chatQueryKey(incoming.chatId) });
+    const unsubscribe = subscribeToIncomingMessages(
+      currentUserId,
+      (incoming) => {
+        void queryClient.invalidateQueries({ queryKey: chatsQueryKey });
+        void queryClient.invalidateQueries({ queryKey: chatQueryKey(incoming.chatId) });
 
-      // Показывать карточку о чате, который человек прямо сейчас читает, —
-      // значит перекрывать уведомлением то самое сообщение.
-      if (incoming.chatId === activeChatId) return;
+        // Показывать карточку о чате, который человек прямо сейчас читает, —
+        // значит перекрывать уведомлением то самое сообщение.
+        if (incoming.chatId === activeChatId) return;
 
-      setAlert(incoming);
-    });
+        setAlert(incoming);
+      },
+      () => {
+        // Канал возвращается после обрыва: сообщения, пришедшие за это время,
+        // мимо него прошли, и список чатов о них не знает.
+        void queryClient.invalidateQueries({ queryKey: chatsQueryKey });
+      },
+    );
 
     return () => {
       unsubscribe();
