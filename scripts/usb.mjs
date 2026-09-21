@@ -71,7 +71,8 @@ function findEmulatorBinary() {
   return null;
 }
 
-function listDevices() {
+/** Все устройства, которые adb вообще видит, вместе с их состоянием. */
+function listAttached() {
   const res = adb(["devices"]);
 
   if (res.status !== 0) {
@@ -82,8 +83,24 @@ function listDevices() {
     .split(/\r?\n/)
     .slice(1)
     .map((line) => line.split(/\s+/))
-    .filter(([serial, state]) => serial && state === "device")
-    .map(([serial]) => serial);
+    .filter(([serial, state]) => serial && state)
+    .map(([serial, state]) => ({ serial, state }));
+}
+
+/** Только те, с которыми можно работать: offline и authorizing ещё не готовы. */
+function listDevices() {
+  return listAttached()
+    .filter(({ state }) => state === "device")
+    .map(({ serial }) => serial);
+}
+
+/** Перезапуск сервера adb: лечит устройства, застрявшие в authorizing. */
+function restartAdbServer() {
+  console.log("adb не может договориться с устройством, перезапускаю его сервер...");
+  adb(["kill-server"], { stdio: "ignore" });
+  // stdio: ignore обязателен — демон adb держит открытыми унаследованные
+  // потоки, и spawnSync с перехватом вывода ждал бы его завершения вечно.
+  adb(["start-server"], { stdio: "ignore" });
 }
 
 const isEmulator = (serial) => serial.startsWith("emulator-");
@@ -168,17 +185,49 @@ async function startEmulators(count, wanted) {
 
   console.log("Жду загрузки системы...");
 
+  let healed = false;
+  let lastReport = 0;
+
   // Одно условие вместо двух: во время загрузки устройство то появляется в
   // adb, то снова пропадает, поэтому ждём сразу нужное количество полностью
   // загруженных, а не «появилось» и «загрузилось» по отдельности.
-  const ready = await waitFor(() => {
-    const current = listDevices();
+  const allReady = await waitFor(() => {
+    const attached = listAttached();
+    const usable = attached.filter(({ state }) => state === "device");
+    const stuck = attached.filter(({ state }) => state !== "device");
 
-    return current.length >= wanted && current.every(isBooted);
+    if (Date.now() - lastReport > 20_000) {
+      lastReport = Date.now();
+      console.log(
+        `Готовы: ${usable.length}/${wanted}` +
+          (stuck.length > 0
+            ? `, ждут: ${stuck.map((d) => `${d.serial} (${d.state})`).join(", ")}`
+            : ""),
+      );
+    }
+
+    // Устройство, застрявшее в authorizing, само из него не выйдет: adb должен
+    // заново предъявить ключ. Пробуем один раз — дальше перезапуск сервера уже
+    // не помогает, и молчать об этом нельзя.
+    if (!healed && stuck.some(({ state }) => state === "authorizing")) {
+      healed = true;
+      restartAdbServer();
+      return false;
+    }
+
+    return usable.length >= wanted && usable.every((d) => isBooted(d.serial));
   }, 300_000);
 
-  if (!ready) {
-    console.error("\nЭмулятор не загрузился за пять минут.");
+  if (!allReady) {
+    const stuck = listAttached().filter(({ state }) => state !== "device");
+
+    console.error(
+      "\nЭмулятор не пришёл в рабочее состояние за пять минут." +
+        (stuck.length > 0
+          ? `\nЗастряли: ${stuck.map((d) => `${d.serial} (${d.state})`).join(", ")}.` +
+            "\nПомогает закрыть окно эмулятора и запустить команду заново."
+          : ""),
+    );
   }
 }
 
