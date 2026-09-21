@@ -1,10 +1,9 @@
 import { Stack, useLocalSearchParams } from 'expo-router';
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
   KeyboardAvoidingView,
-  Platform,
   StyleSheet,
   View,
 } from 'react-native';
@@ -17,13 +16,17 @@ import { chatTitle, isChatMember } from '@/features/chats/chatDisplay';
 import { useChat } from '@/features/chats/useChat';
 import { useChatMessages, type ChatMessage } from '@/features/chats/useChatMessages';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
+import { useMarkChatRead } from '@/features/chats/useMarkChatRead';
+import { useKeyboardVisible } from '@/hooks/use-keyboard-visible';
 import { useTheme } from '@/hooks/use-theme';
+import { setActiveChatId } from '@/store/activeChat';
 import { Spacing } from '@/theme';
 
 export default function ChatScreen() {
   const { chatId } = useLocalSearchParams<{ chatId: string }>();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const isKeyboardVisible = useKeyboardVisible();
   const currentUserId = useCurrentUserId();
   const { chat, isLoading: isChatLoading, error: chatError } = useChat(chatId);
   const {
@@ -39,6 +42,38 @@ export default function ChatScreen() {
     notifyTyping,
   } = useChatMessages(chatId, currentUserId);
 
+  const containerRef = useRef<View | null>(null);
+  const [topOffset, setTopOffset] = useState(0);
+
+  const measureTopOffset = useCallback(() => {
+    containerRef.current?.measureInWindow((_x, y) => setTopOffset(y));
+  }, []);
+
+  // Пока чат открыт, уведомления о нём не нужны: человек и так смотрит сюда.
+  useEffect(() => {
+    setActiveChatId(chatId);
+
+    return () => setActiveChatId(null);
+  }, [chatId]);
+
+  useMarkChatRead(chatId, messages.length > 0 ? messages[0].id : null);
+
+  // Диалог прочитан собеседником до этого момента. В групповом чате берём
+  // самого отстающего: «прочитано» должно значить «прочитали все».
+  const readUpTo = useMemo(() => {
+    const others = (chat?.participants ?? []).filter(
+      (participant) => participant.id !== currentUserId,
+    );
+
+    if (others.length === 0) return null;
+
+    return others.reduce(
+      (earliest, participant) =>
+        participant.lastReadAt < earliest ? participant.lastReadAt : earliest,
+      others[0].lastReadAt,
+    );
+  }, [chat, currentUserId]);
+
   const participantsById = useMemo(
     () => new Map((chat?.participants ?? []).map((participant) => [participant.id, participant])),
     [chat],
@@ -52,13 +87,14 @@ export default function ChatScreen() {
         <MessageBubble
           message={item}
           isOwn={item.authorId === currentUserId}
+          isRead={readUpTo !== null && item.createdAt <= readUpTo}
           authorName={author?.displayName ?? 'Удалённый аккаунт'}
           authorAvatarUrl={author?.avatarUrl ?? null}
           onRetry={retry}
         />
       );
     },
-    [currentUserId, participantsById, retry],
+    [currentUserId, participantsById, readUpTo, retry],
   );
 
   const typingLabel =
@@ -69,16 +105,23 @@ export default function ChatScreen() {
         : null;
 
   return (
-    <View style={[styles.flex, { backgroundColor: theme.background }]}>
+    <View
+      ref={containerRef}
+      onLayout={measureTopOffset}
+      style={[styles.flex, { backgroundColor: theme.background }]}
+    >
       <Stack.Screen options={{ title: chat ? chatTitle(chat, currentUserId) : 'Чат' }} />
 
       <KeyboardAvoidingView
         style={styles.flex}
-        // iOS floats the keyboard over the screen, so the composer has to be
-        // lifted by hand; on Android `adjustResize` already shrinks the window
-        // and adding padding on top of it double-counts the keyboard.
-        behavior={Platform.select({ ios: 'padding', default: undefined })}
-        keyboardVerticalOffset={Platform.select({ ios: insets.top + Spacing.six, default: 0 })}
+        // Клавиатуру приходится обходить вручную на обеих платформах: iOS
+        // рисует её поверх экрана, а на Android с edge-to-edge окно под неё
+        // больше не сжимается — adjustResize там ничего не даёт.
+        behavior="padding"
+        // Отступ равен расстоянию от верха окна до этого экрана — то есть
+        // высоте шапки со строкой состояния. Он измеряется, а не подбирается:
+        // шапка разная на разных устройствах и платформах.
+        keyboardVerticalOffset={topOffset}
       >
         {isChatLoading || isLoading ? (
           <View style={styles.centered}>
@@ -126,7 +169,7 @@ export default function ChatScreen() {
           </View>
         ) : null}
 
-        <View style={{ paddingBottom: insets.bottom }}>
+        <View style={{ paddingBottom: isKeyboardVisible ? 0 : insets.bottom }}>
           <MessageComposer
             canSend={chat ? isChatMember(chat, currentUserId) : false}
             onSend={send}

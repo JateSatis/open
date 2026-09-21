@@ -2,9 +2,8 @@
 // write side is guarded by RLS (`messages` accepts an insert only from a row
 // in `chat_members`), so nothing here may assume the caller is a member.
 //
-// Row types are declared by hand: `src/api/types.gen.ts` does not exist yet
-// (it is generated from the schema by a human, see CLAUDE.md section 2a) and
-// the shared Supabase client is therefore still untyped.
+// Row types below describe what PostgREST returns for these specific selects
+// (embeds included), which `src/api/types.gen.ts` cannot express on its own.
 
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
@@ -20,6 +19,8 @@ export type ChatParticipant = {
   id: string;
   displayName: string;
   avatarUrl: string | null;
+  /** Everything posted up to this moment has been seen by this participant. */
+  lastReadAt: string;
 };
 
 export type ChatSummary = {
@@ -29,6 +30,15 @@ export type ChatSummary = {
   participants: ChatParticipant[];
   lastMessagePreview: string | null;
   lastMessageAt: string | null;
+  lastMessageAuthorId: string | null;
+  /** True when the last message is somebody else's and arrived after my read mark. */
+  hasUnread: boolean;
+};
+
+export type DirectCandidate = {
+  id: string;
+  displayName: string;
+  avatarUrl: string | null;
 };
 
 /**
@@ -69,6 +79,9 @@ type ChatRow = {
   id: string;
   kind: ChatKind;
   title: string | null;
+  last_message_at: string | null;
+  last_message_text: string | null;
+  last_message_author_id: string | null;
 };
 
 type ProfileRow = {
@@ -82,6 +95,7 @@ type ProfileRow = {
 type MemberRow = {
   chat_id: string;
   user_id: string;
+  last_read_at: string;
   profile: ProfileRow | ProfileRow[] | null;
 };
 
@@ -104,8 +118,10 @@ type MessageRow = {
   attachments: AttachmentRow[] | null;
 };
 
-const CHAT_COLUMNS = 'id, kind, title';
-const MEMBER_COLUMNS = 'chat_id, user_id, profile:profiles(id, display_name, avatar_url)';
+const CHAT_COLUMNS =
+  'id, kind, title, last_message_at, last_message_text, last_message_author_id';
+const MEMBER_COLUMNS =
+  'chat_id, user_id, last_read_at, profile:profiles(id, display_name, avatar_url)';
 const MESSAGE_COLUMNS =
   'id, chat_id, author_id, kind, text, created_at, attachments(id, url, mime_type, width, height, duration_ms)';
 
@@ -116,6 +132,7 @@ function toParticipant(row: MemberRow): ChatParticipant {
     id: row.user_id,
     displayName: profile?.display_name ?? 'Без имени',
     avatarUrl: profile?.avatar_url ?? null,
+    lastReadAt: row.last_read_at,
   };
 }
 
@@ -138,6 +155,26 @@ function toMessage(row: MessageRow): Message {
   };
 }
 
+function toSummary(chat: ChatRow, members: MemberRow[], currentUserId: string): ChatSummary {
+  const participants = members.map(toParticipant);
+  const mine = participants.find((participant) => participant.id === currentUserId);
+
+  return {
+    id: chat.id,
+    kind: chat.kind,
+    title: chat.title,
+    participants,
+    lastMessagePreview: chat.last_message_text,
+    lastMessageAt: chat.last_message_at,
+    lastMessageAuthorId: chat.last_message_author_id,
+    hasUnread:
+      chat.last_message_at !== null &&
+      chat.last_message_author_id !== currentUserId &&
+      mine !== undefined &&
+      chat.last_message_at > mine.lastReadAt,
+  };
+}
+
 export async function getCurrentUserId(): Promise<string> {
   const { data, error } = await supabase.auth.getUser();
 
@@ -147,8 +184,8 @@ export async function getCurrentUserId(): Promise<string> {
   return data.user.id;
 }
 
-async function fetchParticipants(chatIds: string[]): Promise<Map<string, ChatParticipant[]>> {
-  const byChat = new Map<string, ChatParticipant[]>();
+async function fetchMembers(chatIds: string[]): Promise<Map<string, MemberRow[]>> {
+  const byChat = new Map<string, MemberRow[]>();
 
   if (chatIds.length === 0) return byChat;
 
@@ -160,36 +197,16 @@ async function fetchParticipants(chatIds: string[]): Promise<Map<string, ChatPar
   if (error) throw error;
 
   for (const row of (data ?? []) as MemberRow[]) {
-    const participants = byChat.get(row.chat_id) ?? [];
-    participants.push(toParticipant(row));
-    byChat.set(row.chat_id, participants);
+    byChat.set(row.chat_id, [...(byChat.get(row.chat_id) ?? []), row]);
   }
 
   return byChat;
 }
 
-async function fetchLastMessage(chatId: string): Promise<Message | null> {
-  const { data, error } = await supabase
-    .from('messages')
-    .select(MESSAGE_COLUMNS)
-    .eq('chat_id', chatId)
-    .is('deleted_at', null)
-    .order('created_at', { ascending: false })
-    .limit(1);
-
-  if (error) throw error;
-
-  const rows = (data ?? []) as MessageRow[];
-
-  return rows.length > 0 ? toMessage(rows[0]) : null;
-}
-
 /**
- * Chats the current user takes part in, most recent conversation first.
- *
- * The last message is fetched per chat because the schema has no denormalised
- * `last_message_at` yet; adding one (plus a trigger) needs a migration, which
- * is a human's call — see the task report.
+ * Chats the current user takes part in, most recent conversation first. The
+ * preview comes from the denormalised columns on `chats`, kept up to date by a
+ * trigger — reading the last message per chat would be one query per row.
  */
 export async function listChats(): Promise<ChatSummary[]> {
   const userId = await getCurrentUserId();
@@ -209,31 +226,20 @@ export async function listChats(): Promise<ChatSummary[]> {
     .from('chats')
     .select(CHAT_COLUMNS)
     .in('id', chatIds)
-    .is('deleted_at', null);
+    .is('deleted_at', null)
+    .order('last_message_at', { ascending: false, nullsFirst: false });
 
   if (chatError) throw chatError;
 
   const chats = (chatData ?? []) as ChatRow[];
-  const participantsByChat = await fetchParticipants(chats.map((chat) => chat.id));
-  const lastMessages = await Promise.all(chats.map((chat) => fetchLastMessage(chat.id)));
+  const membersByChat = await fetchMembers(chats.map((chat) => chat.id));
 
-  const summaries = chats.map((chat, index): ChatSummary => {
-    const lastMessage = lastMessages[index];
-
-    return {
-      id: chat.id,
-      kind: chat.kind,
-      title: chat.title,
-      participants: participantsByChat.get(chat.id) ?? [],
-      lastMessagePreview: lastMessage?.text ?? null,
-      lastMessageAt: lastMessage?.createdAt ?? null,
-    };
-  });
-
-  return summaries.sort((a, b) => (b.lastMessageAt ?? '').localeCompare(a.lastMessageAt ?? ''));
+  return chats.map((chat) => toSummary(chat, membersByChat.get(chat.id) ?? [], userId));
 }
 
 export async function getChat(chatId: string): Promise<ChatSummary> {
+  const userId = await getCurrentUserId();
+
   const { data, error } = await supabase
     .from('chats')
     .select(CHAT_COLUMNS)
@@ -245,17 +251,59 @@ export async function getChat(chatId: string): Promise<ChatSummary> {
   if (!data) throw new Error('Чат не найден');
 
   const chat = data as ChatRow;
-  const participantsByChat = await fetchParticipants([chat.id]);
-  const lastMessage = await fetchLastMessage(chat.id);
+  const membersByChat = await fetchMembers([chat.id]);
 
-  return {
-    id: chat.id,
-    kind: chat.kind,
-    title: chat.title,
-    participants: participantsByChat.get(chat.id) ?? [],
-    lastMessagePreview: lastMessage?.text ?? null,
-    lastMessageAt: lastMessage?.createdAt ?? null,
-  };
+  return toSummary(chat, membersByChat.get(chat.id) ?? [], userId);
+}
+
+/**
+ * Everyone except the signed-in user. A stand-in for search and contacts while
+ * the product has neither — every account is reachable in one tap.
+ */
+export async function listDirectCandidates(): Promise<DirectCandidate[]> {
+  const userId = await getCurrentUserId();
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, display_name, avatar_url')
+    .neq('id', userId)
+    .is('deleted_at', null)
+    .order('display_name', { ascending: true, nullsFirst: false });
+
+  if (error) throw error;
+
+  return ((data ?? []) as ProfileRow[]).map((row) => ({
+    id: row.id,
+    displayName: row.display_name ?? 'Без имени',
+    avatarUrl: row.avatar_url,
+  }));
+}
+
+/**
+ * Id of the dialogue with this person, creating it on first use. Runs as a
+ * database function: adding the second participant from the client would hit
+ * the `chat_members` policy, and two taps at once would create two chats.
+ */
+export async function getOrCreateDirectChat(otherUserId: string): Promise<string> {
+  const { data, error } = await supabase.rpc('get_or_create_direct_chat', {
+    other_user_id: otherUserId,
+  });
+
+  if (error) throw error;
+  if (typeof data !== 'string') throw new Error('Не удалось открыть диалог');
+
+  return data;
+}
+
+/**
+ * Moves my read mark to now. The timestamp comes from the database, never from
+ * the device: messages are stamped by the server, and a device clock running
+ * even a few seconds behind would leave them unread forever.
+ */
+export async function markChatRead(chatId: string): Promise<void> {
+  const { error } = await supabase.rpc('mark_chat_read', { target_chat: chatId });
+
+  if (error) throw error;
 }
 
 /**
@@ -346,28 +394,62 @@ export async function sendMessage(chatId: string, input: SendMessageInput): Prom
 //
 // Messages travel over Broadcast, not Postgres Changes: Postgres Changes
 // re-evaluates RLS per subscriber on every write and does not survive a public
-// messenger. The broadcast payload is only a notification — the row itself is
-// always re-read from Postgres, so a forged broadcast cannot put a message
-// into anyone's chat.
+// messenger. `new_message` and `read` are emitted by database triggers, so
+// delivery does not depend on the sender's app still being alive; `typing` is
+// ephemeral and stays a client-to-client event.
+//
+// The payload is only a notification — rows are always re-read from Postgres,
+// so a forged broadcast cannot put a message into anyone's chat.
+
+export type IncomingMessage = {
+  messageId: string;
+  chatId: string;
+  authorId: string | null;
+  authorName: string;
+  text: string | null;
+  createdAt: string;
+};
 
 export type ChatChannelHandlers = {
   onMessage: () => void;
   onTyping: (userId: string) => void;
+  onRead: () => void;
 };
 
 export type ChatChannel = {
-  broadcastMessage: () => void;
   broadcastTyping: (userId: string) => void;
   unsubscribe: () => void;
 };
 
+function toIncoming(payload: unknown): IncomingMessage | null {
+  if (typeof payload !== 'object' || payload === null) return null;
+
+  const row = payload as Record<string, unknown>;
+
+  if (typeof row.chat_id !== 'string' || typeof row.message_id !== 'string') return null;
+
+  return {
+    messageId: row.message_id,
+    chatId: row.chat_id,
+    authorId: typeof row.author_id === 'string' ? row.author_id : null,
+    authorName: typeof row.author_name === 'string' ? row.author_name : 'Без имени',
+    text: typeof row.text === 'string' ? row.text : null,
+    createdAt: typeof row.created_at === 'string' ? row.created_at : new Date().toISOString(),
+  };
+}
+
 export function subscribeToChat(chatId: string, handlers: ChatChannelHandlers): ChatChannel {
+  // Private channels carry the user's token, which is what the policies on
+  // realtime.messages check; without this the subscription is rejected.
+  void supabase.realtime.setAuth();
+
   const channel: RealtimeChannel = supabase.channel(`chat:${chatId}`, {
-    config: { broadcast: { self: false } },
+    config: { private: true },
   });
 
   channel
-    .on('broadcast', { event: 'message' }, () => handlers.onMessage())
+    .on('broadcast', { event: 'new_message' }, () => handlers.onMessage())
+    .on('broadcast', { event: 'read' }, () => handlers.onRead())
     .on('broadcast', { event: 'typing' }, ({ payload }) => {
       const userId = (payload as { userId?: string })?.userId;
 
@@ -376,15 +458,39 @@ export function subscribeToChat(chatId: string, handlers: ChatChannelHandlers): 
     .subscribe();
 
   return {
-    broadcastMessage: () => {
-      void channel.send({ type: 'broadcast', event: 'message', payload: {} });
-    },
     broadcastTyping: (userId: string) => {
       void channel.send({ type: 'broadcast', event: 'typing', payload: { userId } });
     },
     unsubscribe: () => {
       void supabase.removeChannel(channel);
     },
+  };
+}
+
+/**
+ * Messages addressed to this user in any chat, used for the in-app alert.
+ * The per-user topic is readable only by its owner.
+ */
+export function subscribeToIncomingMessages(
+  userId: string,
+  onMessage: (message: IncomingMessage) => void,
+): () => void {
+  void supabase.realtime.setAuth();
+
+  const channel: RealtimeChannel = supabase.channel(`user:${userId}`, {
+    config: { private: true },
+  });
+
+  channel
+    .on('broadcast', { event: 'new_message' }, ({ payload }) => {
+      const incoming = toIncoming(payload);
+
+      if (incoming) onMessage(incoming);
+    })
+    .subscribe();
+
+  return () => {
+    void supabase.removeChannel(channel);
   };
 }
 

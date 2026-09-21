@@ -13,6 +13,11 @@ const noEmulator = process.argv.includes("--no-emulator");
 const deviceFlag = process.argv.indexOf("--device");
 const onlyDevice = deviceFlag === -1 ? null : process.argv[deviceFlag + 1];
 
+// Сколько устройств нужно для проверки переписки: два собеседника. Телефон,
+// если он подключён, занимает одно место — эмулятор поднимается только на
+// недостающие.
+const WANTED_DEVICES = 2;
+
 // Схема приложения из app.json: по ней dev build ловит ссылку на Metro.
 // В Expo Go это был exp://, но Expo Go нам больше не подходит — в нём нет
 // нативных модулей проекта (вход через Apple и Google, камера, WebRTC).
@@ -23,6 +28,27 @@ const devClientUrl = `${expo.scheme}://expo-development-client/?url=${encodeURIC
 )}`;
 
 const exe = process.platform === "win32" ? ".exe" : "";
+// Зависший сервер adb отвечает не ошибкой, а молчанием: без ограничения любая
+// команда висит бесконечно, и скрипт выглядит сломанным.
+const ADB_TIMEOUT_MS = 15_000;
+
+function adb(args, extra = {}) {
+  const res = spawnSync("adb", args, {
+    encoding: "utf8",
+    timeout: ADB_TIMEOUT_MS,
+    ...extra,
+  });
+
+  if (res.error?.code === "ETIMEDOUT") {
+    console.error(
+      `\nadb не ответил за ${ADB_TIMEOUT_MS / 1000} с — похоже, завис его сервер.` +
+        "\nПерезапусти его: adb kill-server, затем повтори команду.",
+    );
+    process.exit(1);
+  }
+
+  return res;
+}
 
 /** Путь к SDK берётся из окружения, но переменная часто указывает не туда, поэтому проверяем. */
 function findEmulatorBinary() {
@@ -45,8 +71,9 @@ function findEmulatorBinary() {
   return null;
 }
 
-function listDevices() {
-  const res = spawnSync("adb", ["devices"], { shell: true, encoding: "utf8" });
+/** Все устройства, которые adb вообще видит, вместе с их состоянием. */
+function listAttached() {
+  const res = adb(["devices"]);
 
   if (res.status !== 0) {
     return [];
@@ -56,25 +83,55 @@ function listDevices() {
     .split(/\r?\n/)
     .slice(1)
     .map((line) => line.split(/\s+/))
-    .filter(([serial, state]) => serial && state === "device")
-    .map(([serial]) => serial);
+    .filter(([serial, state]) => serial && state)
+    .map(([serial, state]) => ({ serial, state }));
 }
 
-function pickAvd(binary) {
+/** Только те, с которыми можно работать: offline и authorizing ещё не готовы. */
+function listDevices() {
+  return listAttached()
+    .filter(({ state }) => state === "device")
+    .map(({ serial }) => serial);
+}
+
+/** Перезапуск сервера adb: лечит устройства, застрявшие в authorizing. */
+function restartAdbServer() {
+  console.log("adb не может договориться с устройством, перезапускаю его сервер...");
+  adb(["kill-server"], { stdio: "ignore" });
+  // stdio: ignore обязателен — демон adb держит открытыми унаследованные
+  // потоки, и spawnSync с перехватом вывода ждал бы его завершения вечно.
+  adb(["start-server"], { stdio: "ignore" });
+}
+
+const isEmulator = (serial) => serial.startsWith("emulator-");
+
+/** Имя AVD, на котором работает запущенный эмулятор: по нему видно, что поднимать не надо. */
+function runningAvdName(serial) {
+  const res = adb(["-s", serial, "emu", "avd", "name"]);
+
+  return (res.stdout ?? "").split(/\r?\n/)[0]?.trim() ?? "";
+}
+
+/** Телефонные AVD в порядке предпочтения: телевизоры, часы и планшеты не подходят. */
+function phoneAvds(binary) {
   const res = spawnSync(binary, ["-list-avds"], { encoding: "utf8" });
-  const avds = (res.stdout ?? "")
+  const all = (res.stdout ?? "")
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean);
 
-  if (avds.length === 0) {
-    return null;
-  }
+  const phones = all.filter((name) => !/tv|television|wear|watch|tablet/i.test(name));
+  const preferred = process.env.OPEN_AVD;
 
-  // Телевизоры и часы не годятся под телефонное приложение, поэтому уходят в конец.
-  const phones = avds.filter((name) => !/tv|television|wear|watch|tablet/i.test(name));
+  // Свои устройства идут первыми: на чужом AVD может не быть ни Play Services,
+  // ни установленного приложения, и проверка упрётся в это на ровном месте.
+  const ours = phones.filter((name) => name.startsWith("open")).sort();
+  const rest = phones.filter((name) => !name.startsWith("open")).sort();
 
-  return process.env.OPEN_AVD ?? (phones.includes("open_test") ? "open_test" : (phones[0] ?? avds[0]));
+  return [
+    ...(preferred && phones.includes(preferred) ? [preferred] : []),
+    ...[...ours, ...rest].filter((name) => name !== preferred),
+  ];
 }
 
 async function waitFor(check, timeoutMs, stepMs = 2000) {
@@ -91,73 +148,97 @@ async function waitFor(check, timeoutMs, stepMs = 2000) {
 }
 
 function isBooted(serial) {
-  const res = spawnSync("adb", ["-s", serial, "shell", "getprop", "sys.boot_completed"], {
-    shell: true,
-    encoding: "utf8",
-  });
+  const res = adb(["-s", serial, "shell", "getprop", "sys.boot_completed"]);
 
   return (res.stdout ?? "").trim() === "1";
 }
 
-async function startEmulator() {
+async function startEmulators(count, wanted) {
   const binary = findEmulatorBinary();
 
   if (binary === null) {
+    console.error('\nЭмулятор не найден. Укажи путь к SDK: setx ANDROID_HOME "путь\\к\\Android\\Sdk"');
+    return;
+  }
+
+  const busy = new Set(listDevices().filter(isEmulator).map(runningAvdName));
+  const free = phoneAvds(binary).filter((name) => !busy.has(name));
+
+  if (free.length < count) {
     console.error(
-      "\nЭмулятор не найден. Укажи путь к SDK: setx ANDROID_HOME \"путь\\к\\Android\\Sdk\"",
+      `\nНужно ещё ${count} эмулятор(а), а свободных AVD — ${free.length}.` +
+        `\nСоздай устройство в Android Studio → Device Manager.`,
     );
-    return null;
   }
 
-  const avd = pickAvd(binary);
+  const starting = free.slice(0, count);
 
-  if (avd === null) {
-    console.error("\nНи одного AVD. Создай устройство в Android Studio → Device Manager.");
-    return null;
+  for (const avd of starting) {
+    console.log(`Запускаю эмулятор ${avd}...`);
+
+    // detached + unref: эмулятор должен пережить остановку Metro по Ctrl+C,
+    // иначе каждая перезагрузка скрипта убивала бы устройство вместе с сессией.
+    spawn(binary, ["-avd", avd, "-no-boot-anim"], { detached: true, stdio: "ignore" }).unref();
   }
 
-  console.log(`Запускаю эмулятор ${avd}...`);
+  if (starting.length === 0) return;
 
-  // detached + unref: эмулятор должен пережить остановку Metro по Ctrl+C,
-  // иначе каждая перезагрузка скрипта убивала бы устройство вместе с сессией.
-  const before = new Set(listDevices());
-  spawn(binary, ["-avd", avd, "-no-boot-anim"], { detached: true, stdio: "ignore" }).unref();
+  console.log("Жду загрузки системы...");
 
-  let serial = null;
-  const appeared = await waitFor(() => {
-    serial = listDevices().find((d) => !before.has(d) && d.startsWith("emulator-")) ?? null;
-    return serial !== null;
-  }, 120_000);
+  let healed = false;
+  let lastReport = 0;
 
-  if (!appeared) {
-    console.error("\nЭмулятор не появился в adb за две минуты.");
-    return null;
+  // Одно условие вместо двух: во время загрузки устройство то появляется в
+  // adb, то снова пропадает, поэтому ждём сразу нужное количество полностью
+  // загруженных, а не «появилось» и «загрузилось» по отдельности.
+  const allReady = await waitFor(() => {
+    const attached = listAttached();
+    const usable = attached.filter(({ state }) => state === "device");
+    const stuck = attached.filter(({ state }) => state !== "device");
+
+    if (Date.now() - lastReport > 20_000) {
+      lastReport = Date.now();
+      console.log(
+        `Готовы: ${usable.length}/${wanted}` +
+          (stuck.length > 0
+            ? `, ждут: ${stuck.map((d) => `${d.serial} (${d.state})`).join(", ")}`
+            : ""),
+      );
+    }
+
+    // Устройство, застрявшее в authorizing, само из него не выйдет: adb должен
+    // заново предъявить ключ. Пробуем один раз — дальше перезапуск сервера уже
+    // не помогает, и молчать об этом нельзя.
+    if (!healed && stuck.some(({ state }) => state === "authorizing")) {
+      healed = true;
+      restartAdbServer();
+      return false;
+    }
+
+    return usable.length >= wanted && usable.every((d) => isBooted(d.serial));
+  }, 300_000);
+
+  if (!allReady) {
+    const stuck = listAttached().filter(({ state }) => state !== "device");
+
+    console.error(
+      "\nЭмулятор не пришёл в рабочее состояние за пять минут." +
+        (stuck.length > 0
+          ? `\nЗастряли: ${stuck.map((d) => `${d.serial} (${d.state})`).join(", ")}.` +
+            "\nПомогает закрыть окно эмулятора и запустить команду заново."
+          : ""),
+    );
   }
-
-  console.log(`${serial}: жду загрузки системы...`);
-
-  if (!(await waitFor(() => isBooted(serial), 180_000))) {
-    console.error(`\n${serial}: система не загрузилась за три минуты.`);
-    return null;
-  }
-
-  console.log(`${serial}: готов.`);
-  return serial;
 }
 
 function reversePort(serial) {
   // Порт пробрасывается на каждое устройство отдельно: телефон и эмулятор
   // тянут бандл с одного Metro, но туннель у каждого свой.
-  return (
-    spawnSync("adb", ["-s", serial, "reverse", `tcp:${PORT}`, `tcp:${PORT}`], opts).status === 0
-  );
+  return adb(["-s", serial, "reverse", `tcp:${PORT}`, `tcp:${PORT}`]).status === 0;
 }
 
 function hasApp(serial) {
-  const res = spawnSync("adb", ["-s", serial, "shell", "pm", "list", "packages", appId], {
-    shell: true,
-    encoding: "utf8",
-  });
+  const res = adb(["-s", serial, "shell", "pm", "list", "packages", appId]);
 
   return (res.stdout ?? "").includes(appId);
 }
@@ -171,8 +252,7 @@ function openDevBuild(serial) {
     return false;
   }
 
-  const open = spawnSync(
-    "adb",
+  const open = adb(
     [
       "-s",
       serial,
@@ -182,9 +262,8 @@ function openDevBuild(serial) {
       "-a",
       "android.intent.action.VIEW",
       "-d",
-      `"${devClientUrl}"`,
+      devClientUrl,
     ],
-    opts,
   );
 
   return open.status === 0;
@@ -204,12 +283,16 @@ async function waitForMetro() {
   );
 }
 
-// 1. Собираем устройства: телефон по USB, эмулятор, или и то и другое
+// 1. Собираем устройства: телефон по USB, эмуляторы, или и то и другое
 let devices = listDevices();
 
-if (!noEmulator && !devices.some((d) => d.startsWith("emulator-"))) {
-  const started = await startEmulator();
-  devices = started === null ? devices : listDevices();
+if (!noEmulator && !onlyDevice) {
+  const missing = WANTED_DEVICES - devices.length;
+
+  if (missing > 0) {
+    await startEmulators(missing, WANTED_DEVICES);
+    devices = listDevices();
+  }
 }
 
 if (onlyDevice) {

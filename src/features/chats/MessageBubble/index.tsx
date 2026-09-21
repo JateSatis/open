@@ -12,6 +12,8 @@ import { Spacing } from '@/theme';
 export type MessageBubbleProps = {
   message: ChatMessage;
   isOwn: boolean;
+  /** Собеседник дочитал переписку до этого сообщения. Смысл имеет только для своих. */
+  isRead: boolean;
   authorName: string;
   authorAvatarUrl: string | null;
   onRetry: (localId: string) => void;
@@ -20,6 +22,7 @@ export type MessageBubbleProps = {
 export function MessageBubble({
   message,
   isOwn,
+  isRead,
   authorName,
   authorAvatarUrl,
   onRetry,
@@ -71,9 +74,17 @@ export function MessageBubble({
               </Text>
             </Pressable>
           ) : (
-            <Text variant="caption" color={isOwn ? 'primaryText' : 'textSecondary'}>
-              {formatMessageTime(message.createdAt)}
-            </Text>
+            <>
+              <Text variant="caption" color={isOwn ? 'primaryText' : 'textSecondary'}>
+                {formatMessageTime(message.createdAt)}
+              </Text>
+
+              {isOwn ? (
+                <Text variant="caption" color="primaryText">
+                  {isRead ? 'прочитано' : 'доставлено'}
+                </Text>
+              ) : null}
+            </>
           )}
         </View>
       </View>

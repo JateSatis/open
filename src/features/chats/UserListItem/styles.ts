@@ -13,27 +13,14 @@ export const styles = StyleSheet.create({
     flex: 1,
     gap: Spacing.half,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.two,
-  },
-  title: {
-    flex: 1,
+  onlineDot: {
+    width: Spacing.two,
+    height: Spacing.two,
+    borderRadius: Spacing.one,
   },
   status: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.one,
-  },
-  unreadDot: {
-    width: Spacing.three,
-    height: Spacing.three,
-    borderRadius: Spacing.two,
-  },
-  onlineDot: {
-    width: Spacing.two,
-    height: Spacing.two,
-    borderRadius: Spacing.one,
   },
 });
