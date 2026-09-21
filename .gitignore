@@ -45,3 +45,5 @@ example
 
 # agents
 .claude/worktrees/
+# supabase cli: локальное состояние привязки к проекту
+supabase/.temp/
