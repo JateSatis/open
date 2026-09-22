@@ -10,9 +10,11 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Text } from '@/components/Text';
+import { MediaPickerSheet } from '@/features/chats/MediaPickerSheet';
 import { MessageBubble } from '@/features/chats/MessageBubble';
 import { MessageComposer } from '@/features/chats/MessageComposer';
 import { chatTitle, isChatMember } from '@/features/chats/chatDisplay';
+import { useComposerDraft } from '@/features/chats/useComposerDraft';
 import { ConnectionTitle } from '@/features/connection/ConnectionTitle';
 import { useChat } from '@/features/chats/useChat';
 import { useChatMessages, type ChatMessage } from '@/features/chats/useChatMessages';
@@ -42,9 +44,16 @@ export default function ChatScreen() {
     retry,
     notifyTyping,
   } = useChatMessages(chatId, currentUserId);
+  const draft = useComposerDraft(chatId);
+  const [isMediaSheetOpen, setIsMediaSheetOpen] = useState(false);
 
   const containerRef = useRef<View | null>(null);
   const [topOffset, setTopOffset] = useState(0);
+
+  const submitDraft = useCallback(() => {
+    send(draft.text, draft.media);
+    draft.clear();
+  }, [draft, send]);
 
   const measureTopOffset = useCallback(() => {
     containerRef.current?.measureInWindow((_x, y) => setTopOffset(y));
@@ -178,12 +187,25 @@ export default function ChatScreen() {
 
         <View style={{ paddingBottom: isKeyboardVisible ? 0 : insets.bottom }}>
           <MessageComposer
+            text={draft.text}
+            onChangeText={draft.setText}
+            media={draft.media}
+            onRemoveMedia={draft.removeMedia}
             canSend={chat ? isChatMember(chat, currentUserId) : false}
-            onSend={send}
+            onSend={submitDraft}
             onTyping={notifyTyping}
+            onAttachPress={() => setIsMediaSheetOpen(true)}
           />
         </View>
       </KeyboardAvoidingView>
+
+      <MediaPickerSheet
+        visible={isMediaSheetOpen}
+        onDismiss={() => setIsMediaSheetOpen(false)}
+        draft={draft}
+        onTyping={notifyTyping}
+        onSend={submitDraft}
+      />
     </View>
   );
 }
