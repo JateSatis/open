@@ -1,4 +1,5 @@
 import { onlineManager } from '@tanstack/react-query';
+import { create } from 'zustand';
 
 // Состояние связи с сервером — одно на всё приложение.
 //
@@ -12,23 +13,30 @@ export type ConnectionStatus = 'online' | 'connecting' | 'offline';
 type RealtimeState = 'joined' | 'down';
 type RequestState = 'ok' | 'failed' | 'unknown';
 
-let realtime: RealtimeState = 'down';
-let requests: RequestState = 'unknown';
-let deviceOffline = false;
-let status: ConnectionStatus = 'connecting';
+type ConnectionStoreState = {
+  realtime: RealtimeState;
+  requests: RequestState;
+  deviceOffline: boolean;
+  status: ConnectionStatus;
+};
 
-const listeners = new Set<() => void>();
+const initialState: ConnectionStoreState = {
+  realtime: 'down',
+  requests: 'unknown',
+  deviceOffline: false,
+  status: 'connecting',
+};
 
-function derive(): ConnectionStatus {
+function derive(state: Pick<ConnectionStoreState, 'realtime' | 'requests' | 'deviceOffline'>): ConnectionStatus {
   // Система говорит, что подключения нет вообще. Это единственный сигнал,
   // который приходит мгновенно, и спорить с ним бессмысленно: без сети не
   // поможет ни живой сокет из прошлого, ни удачный запрос минуту назад.
-  if (deviceOffline) return 'offline';
+  if (state.deviceOffline) return 'offline';
 
   // Сокет живёт — связь точно есть.
-  if (realtime === 'joined') return 'online';
+  if (state.realtime === 'joined') return 'online';
   // Сокет ещё поднимается, но запросы проходят: данные ходят, значит связь есть.
-  if (requests === 'ok') return 'online';
+  if (state.requests === 'ok') return 'online';
 
   // Сеть на устройстве есть, а сервер не отвечает — это «подключение», а не
   // «нет сети». Разница не косметическая: раньше каждая неудачная проба
@@ -37,31 +45,33 @@ function derive(): ConnectionStatus {
   return 'connecting';
 }
 
-function publish() {
-  const next = derive();
+const useConnectionStore = create<ConnectionStoreState>(() => initialState);
 
-  if (next === status) return;
+function apply(patch: Partial<Pick<ConnectionStoreState, 'realtime' | 'requests' | 'deviceOffline'>>) {
+  const prev = useConnectionStore.getState();
+  const status = derive({ ...prev, ...patch });
 
-  status = next;
-  // Пока связи нет, TanStack Query не должен долбиться в сеть; как только она
-  // появляется, он сам перезапрашивает всё, что успело устареть.
-  onlineManager.setOnline(next !== 'offline');
-
-  for (const listener of listeners) {
-    listener();
+  if (status !== prev.status) {
+    // Пока связи нет, TanStack Query не должен долбиться в сеть; как только
+    // она появляется, он сам перезапрашивает всё, что успело устареть.
+    onlineManager.setOnline(status !== 'offline');
   }
+
+  useConnectionStore.setState({ ...patch, status });
 }
 
 export function getConnectionStatus(): ConnectionStatus {
-  return status;
+  return useConnectionStore.getState().status;
 }
 
 export function subscribeToConnectionStatus(listener: () => void): () => void {
-  listeners.add(listener);
+  return useConnectionStore.subscribe((state, prevState) => {
+    if (state.status !== prevState.status) listener();
+  });
+}
 
-  return () => {
-    listeners.delete(listener);
-  };
+export function useConnectionStatus(): ConnectionStatus {
+  return useConnectionStore((state) => state.status);
 }
 
 /**
@@ -72,23 +82,20 @@ export function subscribeToConnectionStatus(listener: () => void): () => void {
  * запросов, а проба уточнит остальное.
  */
 export function reportDeviceNetwork(connected: boolean) {
-  deviceOffline = !connected;
-
-  if (!connected) {
-    realtime = 'down';
-    requests = 'failed';
-  }
-
-  publish();
+  apply({
+    deviceOffline: !connected,
+    ...(connected ? {} : { realtime: 'down', requests: 'failed' }),
+  });
 }
 
 export function reportRealtimeJoined() {
-  realtime = 'joined';
-  requests = 'ok';
-  // Живой сокет — прямое доказательство связи, оно сильнее мнения системы:
-  // та может сообщить о появлении сети с заметной задержкой.
-  deviceOffline = false;
-  publish();
+  apply({
+    realtime: 'joined',
+    requests: 'ok',
+    // Живой сокет — прямое доказательство связи, оно сильнее мнения системы:
+    // та может сообщить о появлении сети с заметной задержкой.
+    deviceOffline: false,
+  });
 }
 
 /**
@@ -97,16 +104,15 @@ export function reportRealtimeJoined() {
  * «подключаемся», пока что-нибудь не прояснится.
  */
 export function reportRealtimeDown() {
-  realtime = 'down';
-  requests = 'unknown';
-  publish();
+  apply({ realtime: 'down', requests: 'unknown' });
 }
 
 export function reportRequestSucceeded() {
-  requests = 'ok';
-  // Запрос дошёл до сервера — значит сеть есть, что бы ни считала система.
-  deviceOffline = false;
-  publish();
+  apply({
+    requests: 'ok',
+    // Запрос дошёл до сервера — значит сеть есть, что бы ни считала система.
+    deviceOffline: false,
+  });
 }
 
 /**
@@ -115,17 +121,11 @@ export function reportRequestSucceeded() {
  * недоступен может быть и один сервер.
  */
 export function reportRequestFailed() {
-  realtime = 'down';
-  requests = 'failed';
-  publish();
+  apply({ realtime: 'down', requests: 'failed' });
 }
 
 /** Только для тестов: вернуть состояние к исходному. */
 export function resetConnectionState() {
-  realtime = 'down';
-  requests = 'unknown';
-  deviceOffline = false;
-  status = 'connecting';
+  useConnectionStore.setState(initialState);
   onlineManager.setOnline(true);
-  listeners.clear();
 }

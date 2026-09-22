@@ -1,6 +1,6 @@
-import { useSyncExternalStore } from 'react';
+import { useEffect } from 'react';
 
-import { getSessionState, subscribeToSession, type SessionState } from './sessionStore';
+import { subscribeToSession, useSessionStore, type SessionState } from './sessionStore';
 
 export type { SessionState };
 
@@ -9,5 +9,7 @@ export type { SessionState };
  * supabase.auth.getSession() themselves.
  */
 export function useSession(): SessionState {
-  return useSyncExternalStore(subscribeToSession, getSessionState, getSessionState);
+  useEffect(() => subscribeToSession(), []);
+
+  return useSessionStore();
 }

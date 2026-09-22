@@ -1,4 +1,5 @@
 import type { Session } from '@supabase/supabase-js';
+import { create } from 'zustand';
 
 import { supabase } from '@/api/supabase';
 
@@ -15,19 +16,13 @@ const emptyState: SessionState = {
   isLoading: true,
 };
 
-let state: SessionState = emptyState;
-const listeners = new Set<() => void>();
-let authSubscription: { unsubscribe: () => void } | null = null;
+export const useSessionStore = create<SessionState>(() => emptyState);
 
-function emit(next: SessionState) {
-  state = next;
-  for (const listener of listeners) {
-    listener();
-  }
-}
+let authSubscription: { unsubscribe: () => void } | null = null;
+let refCount = 0;
 
 function settle(session: Session | null) {
-  emit({ session, isAuthenticated: session !== null, isLoading: false });
+  useSessionStore.setState({ session, isAuthenticated: session !== null, isLoading: false });
 }
 
 function start() {
@@ -41,7 +36,7 @@ function start() {
 
   void supabase.auth.getSession().then(({ data: { session } }) => {
     // onAuthStateChange may have delivered a fresher session already.
-    if (state.isLoading) {
+    if (useSessionStore.getState().isLoading) {
       settle(session);
     }
   });
@@ -50,29 +45,20 @@ function start() {
 function stop() {
   authSubscription?.unsubscribe();
   authSubscription = null;
-  state = emptyState;
-}
-
-export function getSessionState(): SessionState {
-  return state;
+  useSessionStore.setState(emptyState);
 }
 
 /**
  * One Supabase auth listener per app, shared by every useSession() caller, so
- * the session is read in a single place instead of once per screen.
+ * the session is read in a single place instead of once per screen. Attached
+ * lazily on the first caller and torn down once the last one goes away.
  */
-export function subscribeToSession(listener: () => void): () => void {
-  listeners.add(listener);
-
-  if (authSubscription === null) {
-    start();
-  }
+export function subscribeToSession(): () => void {
+  refCount += 1;
+  if (refCount === 1) start();
 
   return () => {
-    listeners.delete(listener);
-
-    if (listeners.size === 0) {
-      stop();
-    }
+    refCount -= 1;
+    if (refCount === 0) stop();
   };
 }
