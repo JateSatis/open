@@ -67,6 +67,17 @@ describe('useComposerDraft', () => {
     expect(result.current.media).toEqual([]);
   });
 
+  it('clears only the media, keeping the text', async () => {
+    const { result } = await renderHook(() => useComposerDraft('chat-1'));
+
+    await act(() => result.current.setText('привет'));
+    await act(() => result.current.toggleMedia(asset('a')));
+    await act(() => result.current.clearMedia());
+
+    expect(result.current.text).toBe('привет');
+    expect(result.current.media).toEqual([]);
+  });
+
   it('discards the draft when the chat changes', async () => {
     const { result, rerender } = await renderHook(
       ({ chatId }: { chatId: string }) => useComposerDraft(chatId),

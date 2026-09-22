@@ -12,6 +12,8 @@ export type ComposerDraft = {
   selectionOrder: (id: string) => number | null;
   isFull: boolean;
   clear: () => void;
+  /** Сбрасывает только выбор файлов — текст черновика при отмене выбора не теряется. */
+  clearMedia: () => void;
 };
 
 /**
@@ -69,6 +71,10 @@ export function useComposerDraft(chatId: string): ComposerDraft {
     setMedia([]);
   }, []);
 
+  const clearMedia = useCallback(() => {
+    setMedia([]);
+  }, []);
+
   return {
     text,
     setText,
@@ -79,5 +85,6 @@ export function useComposerDraft(chatId: string): ComposerDraft {
     selectionOrder,
     isFull: media.length >= MediaLimits.gallery.maxSelection,
     clear,
+    clearMedia,
   };
 }
