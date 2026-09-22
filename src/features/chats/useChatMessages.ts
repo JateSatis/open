@@ -295,13 +295,26 @@ export function useChatMessages(chatId: string, currentUserId: string | null): C
         });
 
         rememberLatest(saved.createdAt);
-        setMessages((current) =>
-          current.map((message) =>
+        setMessages((current) => {
+          // Свой же broadcast мог прийти раньше ответа на вставку и уже
+          // подтянуть это сообщение через pullNewMessages() под его настоящим
+          // id. Тогда placeholder не переименовывается в тот же id (вышли бы
+          // два элемента с одинаковым id и задвоенный рендер), а просто
+          // убирается — актуальная копия уже в списке.
+          const alreadyPulled = current.some(
+            (message) => message.id === saved.id && message.localId === undefined,
+          );
+
+          if (alreadyPulled) {
+            return current.filter((message) => message.localId !== localId);
+          }
+
+          return current.map((message) =>
             message.localId === localId
               ? { ...saved, status: 'sent' as const, pendingMedia: undefined }
               : message,
-          ),
-        );
+          );
+        });
         // Список чатов держит последнее сообщение и порядок — после отправки
         // он устарел, хотя сама переписка на экране уже верна.
         void queryClient.invalidateQueries({ queryKey: chatsQueryKey });
