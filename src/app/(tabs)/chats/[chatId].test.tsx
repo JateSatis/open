@@ -39,13 +39,17 @@ jest.mock('@/features/media', () => ({
   MediaLimits: { gallery: { maxSelection: 50, pageSize: 30 } },
 }));
 
-// Нативный bottom sheet из @expo/ui недоступен под jest по той же причине.
-jest.mock('@expo/ui/community/bottom-sheet', () => {
+// @gorhom/bottom-sheet тянет reanimated/worklets, которых под jest нет по
+// той же причине, что и остального нативного медиа-стека выше.
+jest.mock('@gorhom/bottom-sheet', () => {
   const { View } = require('react-native');
 
   return {
-    BottomSheetModal: ({ children }: { children: React.ReactNode }) => <View>{children}</View>,
-    BottomSheetView: ({ children }: { children: React.ReactNode }) => <View>{children}</View>,
+    BottomSheetModal: () => null,
+    BottomSheetFlatList: () => null,
+    BottomSheetFooter: ({ children }: { children: React.ReactNode }) => <View>{children}</View>,
+    BottomSheetBackdrop: () => null,
+    BottomSheetModalProvider: ({ children }: { children: React.ReactNode }) => <View>{children}</View>,
   };
 });
 
