@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { MediaLimits } from './constants';
-import { queryRecentMedia, requestMediaLibraryAccess, type LibraryAsset } from './mediaLibrary';
+import { queryRecentMedia, requestMediaLibraryAccess, type MediaLibraryItem } from './mediaLibrary';
 
 export type RecentMediaStatus = 'checking' | 'granted' | 'denied';
 
 export type RecentMediaState = {
   status: RecentMediaStatus;
-  items: LibraryAsset[];
+  items: MediaLibraryItem[];
   isLoadingMore: boolean;
   hasMore: boolean;
   loadMore: () => void;
@@ -21,7 +21,7 @@ export type RecentMediaState = {
  */
 export function useRecentMedia(): RecentMediaState {
   const [status, setStatus] = useState<RecentMediaStatus>('checking');
-  const [items, setItems] = useState<LibraryAsset[]>([]);
+  const [items, setItems] = useState<MediaLibraryItem[]>([]);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const offsetRef = useRef(0);

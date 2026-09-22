@@ -4,20 +4,28 @@
  * версткой, а не встроенным UI, значит нужен прямой доступ к последним
  * файлам через `expo-media-library`.
  */
-import { AssetField, MediaType, Query, requestPermissionsAsync } from 'expo-media-library';
+import { Asset, AssetField, MediaType, Query, requestPermissionsAsync } from 'expo-media-library';
 
 import { MediaLimits } from './constants';
 import { mimeFromUri } from './lib/mime';
 import type { LocalMedia, MediaKind } from './types';
 
-export type LibraryAsset = {
+/**
+ * Строка грида до того, как файл выбран. `exeForMetadata()` отдаёт эти поля
+ * дёшево, без похода к файловой системе за путём — значит известно, сколько
+ * клеток рисовать, ещё до того, как хоть один файл готов открыться.
+ */
+export type MediaLibraryItem = {
   id: string;
   kind: MediaKind;
+  width: number | null;
+  height: number | null;
+  durationMs: number | null;
+};
+
+export type LibraryAsset = MediaLibraryItem & {
   /** file:// URI, пригоден и для превью, и для чтения байт при отправке. */
   uri: string;
-  width: number;
-  height: number;
-  durationMs: number | null;
 };
 
 export type LibraryAccess = 'granted' | 'denied';
@@ -39,14 +47,16 @@ function toMediaKind(mediaType: MediaType): MediaKind {
 }
 
 /**
- * Одна страница последних фото и видео, новые сначала. `getInfo()` даёт uri
- * и метаданные одним нативным вызовом на файл — дешевле, чем собирать их
- * по отдельным геттерам `Asset`.
+ * Одна страница последних фото и видео, новые сначала. `exeForMetadata()`
+ * читает эти поля прямо из индекса медиатеки, не трогая файлы на диске —
+ * страница готова сразу, а не только после того, как каждый файл в ней
+ * получит свой путь. Путь (`uri`) резолвится отдельно и лениво, см.
+ * `resolveAssetUri`.
  */
 export async function queryRecentMedia(params: {
   offset: number;
   limit?: number;
-}): Promise<LibraryAsset[]> {
+}): Promise<MediaLibraryItem[]> {
   const limit = params.limit ?? MediaLimits.gallery.pageSize;
 
   const assets = await new Query()
@@ -54,18 +64,24 @@ export async function queryRecentMedia(params: {
     .orderBy({ key: AssetField.CREATION_TIME, ascending: false })
     .offset(params.offset)
     .limit(limit)
-    .exe();
+    .exeForMetadata();
 
-  const infos = await Promise.all(assets.map((asset) => asset.getInfo()));
-
-  return infos.map((info) => ({
+  return assets.map((info) => ({
     id: info.id,
     kind: toMediaKind(info.mediaType),
-    uri: info.uri,
     width: info.width,
     height: info.height,
     durationMs: info.duration,
   }));
+}
+
+/**
+ * `uri` файла — единственное, что дорого получить (обращение к файловой
+ * системе), поэтому запрашивается только для клетки, которая реально
+ * попала в поле зрения, а не для всей страницы разом.
+ */
+export function resolveAssetUri(id: string): Promise<string> {
+  return new Asset(id).getUri();
 }
 
 /**

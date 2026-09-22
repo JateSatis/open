@@ -1,4 +1,5 @@
-import { FlatList, View, useWindowDimensions } from 'react-native';
+import { FlatList, View, useWindowDimensions, type FlatListProps, type ListRenderItem } from 'react-native';
+import { useCallback, useMemo, type ComponentType } from 'react';
 
 import { styles } from './styles';
 
@@ -6,17 +7,42 @@ import { Button } from '@/components/Button';
 import { Text } from '@/components/Text';
 import { MediaGridItem } from '@/features/media/MediaGridItem';
 import { MediaLimits } from '@/features/media/constants';
-import type { LibraryAsset } from '@/features/media/mediaLibrary';
+import type { LibraryAsset, MediaLibraryItem } from '@/features/media/mediaLibrary';
 import { useRecentMedia } from '@/features/media/useRecentMedia';
 import { Spacing } from '@/theme';
 
 const COLUMNS = 3;
 const GAP = Spacing.half;
 
+/**
+ * Минимальный набор пропов, которым пользуется грид — им отвечает и обычный
+ * `FlatList`, и `BottomSheetFlatList` из `@gorhom/bottom-sheet` (её пропы —
+ * надмножество `FlatListProps`). Снаружи решают, какой список подставить:
+ * внутри шита выбора медиа скролл грида должен быть частью самого жеста
+ * шита, а не отдельным `FlatList`.
+ */
+export type MediaListComponent = ComponentType<
+  Pick<
+    FlatListProps<MediaLibraryItem>,
+    | 'testID'
+    | 'data'
+    | 'numColumns'
+    | 'keyExtractor'
+    | 'contentContainerStyle'
+    | 'columnWrapperStyle'
+    | 'onEndReached'
+    | 'onEndReachedThreshold'
+    | 'renderItem'
+    | 'ListEmptyComponent'
+    | 'ListFooterComponent'
+  >
+>;
+
 export type MediaGridProps = {
   /** Порядок = порядок выбора, а не порядок в галерее — так строится нумерация кружков. */
   selected: LibraryAsset[];
   onToggle: (asset: LibraryAsset) => void;
+  ListComponent?: MediaListComponent;
 };
 
 /**
@@ -24,13 +50,42 @@ export type MediaGridProps = {
  * без альбомов, без предпросмотра — только выбор через кружок в углу
  * клетки.
  */
-export function MediaGrid({ selected, onToggle }: MediaGridProps) {
+export function MediaGrid({ selected, onToggle, ListComponent = FlatList }: MediaGridProps) {
   const { width } = useWindowDimensions();
   const { status, items, isLoadingMore, hasMore, loadMore, requestAccess } = useRecentMedia();
 
   const cellSize = (width - GAP * (COLUMNS + 1)) / COLUMNS;
-  const selectedIds = new Map(selected.map((asset, index) => [asset.id, index + 1]));
+  const selectedIds = useMemo(
+    () => new Map(selected.map((asset, index) => [asset.id, index + 1])),
+    [selected],
+  );
   const isFull = selected.length >= MediaLimits.gallery.maxSelection;
+
+  const renderItem = useCallback<ListRenderItem<MediaLibraryItem>>(
+    ({ item }) => {
+      const selectionOrder = selectedIds.get(item.id) ?? null;
+
+      return (
+        <MediaGridItem
+          asset={item}
+          size={cellSize}
+          selectionOrder={selectionOrder}
+          disabled={isFull && selectionOrder === null}
+          onToggle={(uri) =>
+            onToggle({
+              id: item.id,
+              kind: item.kind,
+              uri,
+              width: item.width,
+              height: item.height,
+              durationMs: item.durationMs,
+            })
+          }
+        />
+      );
+    },
+    [cellSize, isFull, onToggle, selectedIds],
+  );
 
   if (status === 'denied') {
     return (
@@ -43,8 +98,10 @@ export function MediaGrid({ selected, onToggle }: MediaGridProps) {
     );
   }
 
+  const List = ListComponent;
+
   return (
-    <FlatList
+    <List
       testID="media-grid"
       data={items}
       numColumns={COLUMNS}
@@ -53,19 +110,7 @@ export function MediaGrid({ selected, onToggle }: MediaGridProps) {
       columnWrapperStyle={styles.row}
       onEndReached={hasMore ? loadMore : undefined}
       onEndReachedThreshold={0.6}
-      renderItem={({ item }) => {
-        const selectionOrder = selectedIds.get(item.id) ?? null;
-
-        return (
-          <MediaGridItem
-            asset={item}
-            size={cellSize}
-            selectionOrder={selectionOrder}
-            disabled={isFull && selectionOrder === null}
-            onToggle={() => onToggle(item)}
-          />
-        );
-      }}
+      renderItem={renderItem}
       ListEmptyComponent={
         status === 'checking' ? null : (
           <View style={styles.notice}>

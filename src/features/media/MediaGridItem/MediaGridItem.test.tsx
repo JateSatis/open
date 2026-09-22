@@ -2,25 +2,26 @@ import { render, screen, userEvent } from '@testing-library/react-native';
 
 import { MediaGridItem } from '.';
 
-import type { LibraryAsset } from '@/features/media/mediaLibrary';
+import type { MediaLibraryItem } from '@/features/media/mediaLibrary';
 
 jest.mock('@/features/media/useVideoThumbnail', () => ({
   useVideoThumbnail: jest.fn(() => null),
 }));
+jest.mock('@/features/media/useAssetUri', () => ({
+  useAssetUri: jest.fn((id: string) => `file:///cache/${id}.jpg`),
+}));
 
-const photo: LibraryAsset = {
+const photo: MediaLibraryItem = {
   id: 'a1',
   kind: 'photo',
-  uri: 'file:///cache/a1.jpg',
   width: 100,
   height: 100,
   durationMs: null,
 };
 
-const video: LibraryAsset = {
+const video: MediaLibraryItem = {
   id: 'v1',
   kind: 'video',
-  uri: 'file:///cache/v1.mp4',
   width: 100,
   height: 100,
   durationMs: 12_000,
@@ -39,7 +40,7 @@ describe('MediaGridItem', () => {
     const user = userEvent.setup();
     await user.press(screen.getByLabelText('Убрать из выбранного'));
 
-    expect(onToggle).toHaveBeenCalledTimes(1);
+    expect(onToggle).toHaveBeenCalledWith('file:///cache/a1.jpg');
   });
 
   it('offers a select button for an unpicked file', async () => {
@@ -52,7 +53,7 @@ describe('MediaGridItem', () => {
     const user = userEvent.setup();
     await user.press(screen.getByLabelText('Выбрать файл'));
 
-    expect(onToggle).toHaveBeenCalledTimes(1);
+    expect(onToggle).toHaveBeenCalledWith('file:///cache/a1.jpg');
   });
 
   it('disables selecting once the album limit is reached, but not for an already picked file', async () => {
@@ -69,5 +70,22 @@ describe('MediaGridItem', () => {
     );
 
     expect(screen.getByText('0:12')).toBeTruthy();
+  });
+
+  it('does not report a toggle while the uri is still resolving', async () => {
+    const { useAssetUri } = jest.requireMock('@/features/media/useAssetUri') as {
+      useAssetUri: jest.Mock;
+    };
+    useAssetUri.mockReturnValueOnce(null);
+    const onToggle = jest.fn();
+
+    await render(
+      <MediaGridItem asset={photo} size={100} selectionOrder={null} disabled={false} onToggle={onToggle} />,
+    );
+
+    const user = userEvent.setup();
+    await user.press(screen.getByLabelText('Выбрать файл'));
+
+    expect(onToggle).not.toHaveBeenCalled();
   });
 });

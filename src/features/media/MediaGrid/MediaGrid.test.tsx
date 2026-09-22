@@ -9,11 +9,14 @@ jest.mock('@/features/media/useRecentMedia', () => ({
 jest.mock('@/features/media/useVideoThumbnail', () => ({
   useVideoThumbnail: jest.fn(() => null),
 }));
+jest.mock('@/features/media/useAssetUri', () => ({
+  useAssetUri: jest.fn((id: string) => `file:///${id}.jpg`),
+}));
 
 const mockedUseRecentMedia = useRecentMedia as jest.MockedFunction<typeof useRecentMedia>;
 
 function asset(id: string) {
-  return { id, kind: 'photo' as const, uri: `file:///${id}.jpg`, width: 10, height: 10, durationMs: null };
+  return { id, kind: 'photo' as const, width: 10, height: 10, durationMs: null };
 }
 
 beforeEach(() => {
@@ -73,6 +76,6 @@ describe('MediaGrid', () => {
     const user = userEvent.setup();
     await user.press(screen.getByLabelText('Выбрать файл'));
 
-    expect(onToggle).toHaveBeenCalledWith(asset('a'));
+    expect(onToggle).toHaveBeenCalledWith({ ...asset('a'), uri: 'file:///a.jpg' });
   });
 });
