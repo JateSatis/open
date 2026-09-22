@@ -26,11 +26,13 @@ describe('connectionStore', () => {
     expect(getConnectionStatus()).toBe('online');
   });
 
-  it('calls it a lost connection only when a request fails to reach the server', () => {
+  it('calls a silent server a reconnection, not a missing network', () => {
     reportRealtimeJoined();
     reportRequestFailed();
 
-    expect(getConnectionStatus()).toBe('offline');
+    // «Нет сети» — это про устройство. Сервер может молчать и при живой сети,
+    // и тогда честный ответ — «подключаемся».
+    expect(getConnectionStatus()).toBe('connecting');
   });
 
   it('says connecting, not offline, when only the socket drops', () => {
@@ -41,16 +43,18 @@ describe('connectionStore', () => {
   });
 
   it('counts a request that went through as proof of connection', () => {
-    reportRequestFailed();
+    reportDeviceNetwork(false);
+    reportDeviceNetwork(true);
     reportRequestSucceeded();
 
     expect(getConnectionStatus()).toBe('online');
   });
 
   it('stops queries from hammering a network that is not there', () => {
-    reportRequestFailed();
+    reportDeviceNetwork(false);
     expect(onlineManager.isOnline()).toBe(false);
 
+    reportDeviceNetwork(true);
     reportRealtimeJoined();
     expect(onlineManager.isOnline()).toBe(true);
   });
@@ -65,7 +69,7 @@ describe('connectionStore', () => {
     reportRealtimeJoined();
     expect(listener).toHaveBeenCalledTimes(1);
 
-    reportRequestFailed();
+    reportDeviceNetwork(false);
     expect(listener).toHaveBeenCalledTimes(2);
   });
 
@@ -100,6 +104,15 @@ describe('connectionStore', () => {
     reportDeviceNetwork(true);
     reportRequestSucceeded();
 
+    expect(getConnectionStatus()).toBe('online');
+  });
+
+  it('trusts a request that went through over a system that still says offline', () => {
+    reportDeviceNetwork(false);
+    reportRequestSucceeded();
+
+    // Система сообщает о возвращении сети с задержкой, а удачный запрос — это
+    // уже случившийся факт связи.
     expect(getConnectionStatus()).toBe('online');
   });
 });

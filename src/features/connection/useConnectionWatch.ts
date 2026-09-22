@@ -63,9 +63,11 @@ export function useConnectionWatch() {
 
       ticks += 1;
 
-      // Сокета нет, но и бить тревогу рано: если связь на месте, проверяем
-      // редко, чтобы не гонять запросы впустую.
-      const calm = getConnectionStatus() === 'online' && ticks % CALM_FACTOR !== 0;
+      // Реже стучимся в двух случаях: связь на месте (проверять нечего) и
+      // система говорит, что сети нет вообще — тогда запрос всё равно не
+      // уйдёт дальше DNS, а о возвращении сети система сообщит сама.
+      const status = getConnectionStatus();
+      const calm = (status === 'online' || status === 'offline') && ticks % CALM_FACTOR !== 0;
 
       if (calm || probing) return;
 

@@ -3,9 +3,9 @@ import { act, render, screen } from '@testing-library/react-native';
 import { ConnectionTitle } from './index';
 
 import {
+  reportDeviceNetwork,
   reportRealtimeDown,
   reportRealtimeJoined,
-  reportRequestFailed,
   resetConnectionState,
 } from '@/features/connection/connectionStore';
 
@@ -27,7 +27,7 @@ describe('ConnectionTitle', () => {
 
     await render(<ConnectionTitle title="Чаты" />);
 
-    await act(() => reportRequestFailed());
+    await act(() => reportDeviceNetwork(false));
 
     expect(screen.getByText('Нет сети')).toBeTruthy();
     expect(screen.queryByText('Чаты')).toBeNull();
@@ -44,12 +44,15 @@ describe('ConnectionTitle', () => {
   });
 
   it('returns the name once the connection is back', async () => {
-    reportRequestFailed();
+    reportDeviceNetwork(false);
 
     await render(<ConnectionTitle title="Чаты" />);
     expect(screen.getByText('Нет сети')).toBeTruthy();
 
-    await act(() => reportRealtimeJoined());
+    await act(() => {
+      reportDeviceNetwork(true);
+      reportRealtimeJoined();
+    });
 
     expect(screen.getByText('Чаты')).toBeTruthy();
   });

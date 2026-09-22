@@ -29,8 +29,11 @@ function derive(): ConnectionStatus {
   if (realtime === 'joined') return 'online';
   // Сокет ещё поднимается, но запросы проходят: данные ходят, значит связь есть.
   if (requests === 'ok') return 'online';
-  if (requests === 'failed') return 'offline';
 
+  // Сеть на устройстве есть, а сервер не отвечает — это «подключение», а не
+  // «нет сети». Разница не косметическая: раньше каждая неудачная проба
+  // роняла состояние в «нет сети», и после возвращения сети оно прыгало
+  // туда-сюда, ни разу не дойдя до рабочего.
   return 'connecting';
 }
 
@@ -74,8 +77,6 @@ export function reportDeviceNetwork(connected: boolean) {
   if (!connected) {
     realtime = 'down';
     requests = 'failed';
-  } else if (requests === 'failed') {
-    requests = 'unknown';
   }
 
   publish();
@@ -84,6 +85,9 @@ export function reportDeviceNetwork(connected: boolean) {
 export function reportRealtimeJoined() {
   realtime = 'joined';
   requests = 'ok';
+  // Живой сокет — прямое доказательство связи, оно сильнее мнения системы:
+  // та может сообщить о появлении сети с заметной задержкой.
+  deviceOffline = false;
   publish();
 }
 
@@ -100,12 +104,15 @@ export function reportRealtimeDown() {
 
 export function reportRequestSucceeded() {
   requests = 'ok';
+  // Запрос дошёл до сервера — значит сеть есть, что бы ни считала система.
+  deviceOffline = false;
   publish();
 }
 
 /**
  * Запрос не дошёл до сервера. Сокет при этом считаем упавшим, даже если он
- * ещё не успел это заметить: сеть общая.
+ * ещё не успел это заметить: сеть общая. «Нет сети» из этого не следует —
+ * недоступен может быть и один сервер.
  */
 export function reportRequestFailed() {
   realtime = 'down';
