@@ -106,13 +106,12 @@ function toChatKind(kind: string): ChatKind {
 function toMessageKind(kind: string): MessageKind {
   return MESSAGE_KINDS.has(kind) ? (kind as MessageKind) : 'system';
 }
-function toParticipant(row: MemberRow): ChatParticipant {
-  const profile = row.profile;
 
+function toParticipant(row: MemberRow): ChatParticipant {
   return {
     id: row.user_id,
-    displayName: profile?.display_name ?? 'Без имени',
-    avatarUrl: profile?.avatar_url ?? null,
+    displayName: row.profile?.display_name ?? 'Без имени',
+    avatarUrl: row.profile?.avatar_url ?? null,
     lastReadAt: row.last_read_at,
   };
 }
