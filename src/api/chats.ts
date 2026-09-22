@@ -1,11 +1,8 @@
 // Queries for the messenger. Chats and messages are publicly readable — the
 // write side is guarded by RLS (`messages` accepts an insert only from a row
 // in `chat_members`), so nothing here may assume the caller is a member.
-//
-// Row types below describe what PostgREST returns for these specific selects
-// (embeds included), which `src/api/types.gen.ts` cannot express on its own.
 
-import type { RealtimeChannel } from '@supabase/supabase-js';
+import type { QueryData, RealtimeChannel } from '@supabase/supabase-js';
 
 import { supabase } from '@/api/supabase';
 
@@ -75,58 +72,42 @@ export type Page<T> = {
   nextCursor: string | null;
 };
 
-type ChatRow = {
-  id: string;
-  kind: ChatKind;
-  title: string | null;
-  last_message_at: string | null;
-  last_message_text: string | null;
-  last_message_author_id: string | null;
-};
-
-type ProfileRow = {
-  id: string;
-  display_name: string | null;
-  avatar_url: string | null;
-};
-
-// PostgREST returns a single object for a many-to-one embed, but the untyped
-// client cannot know that and infers an array — accept both shapes.
-type MemberRow = {
-  chat_id: string;
-  user_id: string;
-  last_read_at: string;
-  profile: ProfileRow | ProfileRow[] | null;
-};
-
-type AttachmentRow = {
-  id: string;
-  url: string;
-  mime_type: string | null;
-  width: number | null;
-  height: number | null;
-  duration_ms: number | null;
-};
-
-type MessageRow = {
-  id: string;
-  chat_id: string;
-  author_id: string | null;
-  kind: MessageKind;
-  text: string | null;
-  created_at: string;
-  attachments: AttachmentRow[] | null;
-};
-
-const CHAT_COLUMNS =
-  'id, kind, title, last_message_at, last_message_text, last_message_author_id';
+const CHAT_COLUMNS = 'id, kind, title, last_message_at, last_message_text, last_message_author_id';
 const MEMBER_COLUMNS =
   'chat_id, user_id, last_read_at, profile:profiles(id, display_name, avatar_url)';
 const MESSAGE_COLUMNS =
   'id, chat_id, author_id, kind, text, created_at, attachments(id, url, mime_type, width, height, duration_ms)';
 
+// Заготовки запросов. Они же задают типы рядов: клиент разбирает select-строку
+// вместе со встроенными таблицами, поэтому форма ответа выводится из самого
+// запроса и не может разойтись со схемой — описывать ряды руками не нужно.
+const chatsSelect = () => supabase.from('chats').select(CHAT_COLUMNS);
+const membersSelect = () => supabase.from('chat_members').select(MEMBER_COLUMNS);
+const messagesSelect = () => supabase.from('messages').select(MESSAGE_COLUMNS);
+
+type ChatRow = QueryData<ReturnType<typeof chatsSelect>>[number];
+type MemberRow = QueryData<ReturnType<typeof membersSelect>>[number];
+type MessageRow = QueryData<ReturnType<typeof messagesSelect>>[number];
+
+// `kind` в базе — текст с CHECK-ограничением, и генератор типов видит его как
+// строку: сузить её больше негде, поэтому расхождение схемы с доменными
+// типами живёт ровно в этих двух функциях.
+const MESSAGE_KINDS = new Set<string>(['text', 'photo', 'video', 'voice', 'video_note', 'system']);
+
+function toChatKind(kind: string): ChatKind {
+  return kind === 'group' ? 'group' : 'direct';
+}
+
+/**
+ * Вид, которого клиент не знает, показывается как системное сообщение: так
+ * старое приложение переживает появление нового типа контента, не притворяясь,
+ * что перед ним текст.
+ */
+function toMessageKind(kind: string): MessageKind {
+  return MESSAGE_KINDS.has(kind) ? (kind as MessageKind) : 'system';
+}
 function toParticipant(row: MemberRow): ChatParticipant {
-  const profile = Array.isArray(row.profile) ? (row.profile[0] ?? null) : row.profile;
+  const profile = row.profile;
 
   return {
     id: row.user_id,
@@ -141,7 +122,7 @@ function toMessage(row: MessageRow): Message {
     id: row.id,
     chatId: row.chat_id,
     authorId: row.author_id,
-    kind: row.kind,
+    kind: toMessageKind(row.kind),
     text: row.text,
     createdAt: row.created_at,
     attachments: (row.attachments ?? []).map((attachment) => ({
@@ -161,7 +142,7 @@ function toSummary(chat: ChatRow, members: MemberRow[], currentUserId: string): 
 
   return {
     id: chat.id,
-    kind: chat.kind,
+    kind: toChatKind(chat.kind),
     title: chat.title,
     participants,
     lastMessagePreview: chat.last_message_text,
@@ -189,14 +170,11 @@ async function fetchMembers(chatIds: string[]): Promise<Map<string, MemberRow[]>
 
   if (chatIds.length === 0) return byChat;
 
-  const { data, error } = await supabase
-    .from('chat_members')
-    .select(MEMBER_COLUMNS)
-    .in('chat_id', chatIds);
+  const { data, error } = await membersSelect().in('chat_id', chatIds);
 
   if (error) throw error;
 
-  for (const row of (data ?? []) as MemberRow[]) {
+  for (const row of data ?? []) {
     byChat.set(row.chat_id, [...(byChat.get(row.chat_id) ?? []), row]);
   }
 
@@ -218,20 +196,18 @@ export async function listChats(): Promise<ChatSummary[]> {
 
   if (membershipError) throw membershipError;
 
-  const chatIds = ((membershipData ?? []) as { chat_id: string }[]).map((row) => row.chat_id);
+  const chatIds = (membershipData ?? []).map((row) => row.chat_id);
 
   if (chatIds.length === 0) return [];
 
-  const { data: chatData, error: chatError } = await supabase
-    .from('chats')
-    .select(CHAT_COLUMNS)
+  const { data: chatData, error: chatError } = await chatsSelect()
     .in('id', chatIds)
     .is('deleted_at', null)
     .order('last_message_at', { ascending: false, nullsFirst: false });
 
   if (chatError) throw chatError;
 
-  const chats = (chatData ?? []) as ChatRow[];
+  const chats = chatData ?? [];
   const membersByChat = await fetchMembers(chats.map((chat) => chat.id));
 
   return chats.map((chat) => toSummary(chat, membersByChat.get(chat.id) ?? [], userId));
@@ -240,17 +216,12 @@ export async function listChats(): Promise<ChatSummary[]> {
 export async function getChat(chatId: string): Promise<ChatSummary> {
   const userId = await getCurrentUserId();
 
-  const { data, error } = await supabase
-    .from('chats')
-    .select(CHAT_COLUMNS)
-    .eq('id', chatId)
-    .is('deleted_at', null)
-    .maybeSingle();
+  const { data, error } = await chatsSelect().eq('id', chatId).is('deleted_at', null).maybeSingle();
 
   if (error) throw error;
   if (!data) throw new Error('Чат не найден');
 
-  const chat = data as ChatRow;
+  const chat = data;
   const membersByChat = await fetchMembers([chat.id]);
 
   return toSummary(chat, membersByChat.get(chat.id) ?? [], userId);
@@ -272,7 +243,7 @@ export async function listDirectCandidates(): Promise<DirectCandidate[]> {
 
   if (error) throw error;
 
-  return ((data ?? []) as ProfileRow[]).map((row) => ({
+  return (data ?? []).map((row) => ({
     id: row.id,
     displayName: row.display_name ?? 'Без имени',
     avatarUrl: row.avatar_url,
@@ -317,9 +288,7 @@ export async function listMessages(
 ): Promise<Page<Message>> {
   const limit = params.limit ?? MESSAGE_PAGE_SIZE;
 
-  let query = supabase
-    .from('messages')
-    .select(MESSAGE_COLUMNS)
+  let query = messagesSelect()
     .eq('chat_id', chatId)
     .is('deleted_at', null)
     .order('created_at', { ascending: false })
@@ -333,7 +302,7 @@ export async function listMessages(
 
   if (error) throw error;
 
-  const items = ((data ?? []) as MessageRow[]).map(toMessage);
+  const items = (data ?? []).map(toMessage);
 
   return {
     items,
@@ -347,9 +316,7 @@ export async function listMessages(
  * themselves always come from Postgres, where RLS decides what is visible.
  */
 export async function listMessagesSince(chatId: string, since: string): Promise<Message[]> {
-  const { data, error } = await supabase
-    .from('messages')
-    .select(MESSAGE_COLUMNS)
+  const { data, error } = await messagesSelect()
     .eq('chat_id', chatId)
     .is('deleted_at', null)
     .gt('created_at', since)
@@ -358,7 +325,7 @@ export async function listMessagesSince(chatId: string, since: string): Promise<
 
   if (error) throw error;
 
-  return ((data ?? []) as MessageRow[]).map(toMessage);
+  return (data ?? []).map(toMessage);
 }
 
 /**
@@ -385,7 +352,7 @@ export async function sendMessage(chatId: string, input: SendMessageInput): Prom
 
   if (error) throw error;
 
-  return toMessage(data as MessageRow);
+  return toMessage(data);
 }
 
 // =============================================================================
