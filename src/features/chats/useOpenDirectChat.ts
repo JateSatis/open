@@ -4,6 +4,7 @@ import { useCallback, useState } from 'react';
 
 import { getOrCreateDirectChat } from '@/api/chats';
 import { chatsQueryKey } from '@/features/chats/useChats';
+import { describeLoadError } from '@/lib/network';
 
 export type OpenDirectChatState = {
   /** Id пользователя, диалог с которым открывается прямо сейчас. */
@@ -30,7 +31,7 @@ export function useOpenDirectChat(): OpenDirectChatState {
       router.push(`/chats/${chatId}`);
     },
     onError: (cause: Error) => {
-      setError(cause.message ?? 'Не удалось открыть диалог');
+      setError(describeLoadError(cause, 'Не удалось открыть диалог'));
     },
     onSettled: () => setPendingUserId(null),
   });

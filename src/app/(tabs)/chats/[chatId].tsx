@@ -13,6 +13,7 @@ import { Text } from '@/components/Text';
 import { MessageBubble } from '@/features/chats/MessageBubble';
 import { MessageComposer } from '@/features/chats/MessageComposer';
 import { chatTitle, isChatMember } from '@/features/chats/chatDisplay';
+import { ConnectionTitle } from '@/features/connection/ConnectionTitle';
 import { useChat } from '@/features/chats/useChat';
 import { useChatMessages, type ChatMessage } from '@/features/chats/useChatMessages';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
@@ -110,7 +111,13 @@ export default function ChatScreen() {
       onLayout={measureTopOffset}
       style={[styles.flex, { backgroundColor: theme.background }]}
     >
-      <Stack.Screen options={{ title: chat ? chatTitle(chat, currentUserId) : 'Чат' }} />
+      <Stack.Screen
+        options={{
+          headerTitle: () => (
+            <ConnectionTitle title={chat ? chatTitle(chat, currentUserId) : 'Чат'} />
+          ),
+        }}
+      />
 
       <KeyboardAvoidingView
         style={styles.flex}

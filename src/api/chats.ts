@@ -414,6 +414,11 @@ export type ChatChannelHandlers = {
   onMessage: () => void;
   onTyping: (userId: string) => void;
   onRead: () => void;
+  /**
+   * Канал заново подключился. Пока его не было, события терялись, поэтому
+   * подписчик обязан дочитать пропущенное, а не ждать следующего сообщения.
+   */
+  onReconnected?: () => void;
 };
 
 export type ChatChannel = {
@@ -447,6 +452,8 @@ export function subscribeToChat(chatId: string, handlers: ChatChannelHandlers): 
     config: { private: true },
   });
 
+  let wasJoined = false;
+
   channel
     .on('broadcast', { event: 'new_message' }, () => handlers.onMessage())
     .on('broadcast', { event: 'read' }, () => handlers.onRead())
@@ -455,7 +462,20 @@ export function subscribeToChat(chatId: string, handlers: ChatChannelHandlers): 
 
       if (userId) handlers.onTyping(userId);
     })
-    .subscribe();
+    .subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        // Первая подписка — не переподключение: историю в этот момент грузит
+        // сам экран, и дочитывать нечего.
+        if (wasJoined) handlers.onReconnected?.();
+
+        wasJoined = true;
+        return;
+      }
+
+      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+        wasJoined = false;
+      }
+    });
 
   return {
     broadcastTyping: (userId: string) => {
@@ -474,6 +494,7 @@ export function subscribeToChat(chatId: string, handlers: ChatChannelHandlers): 
 export function subscribeToIncomingMessages(
   userId: string,
   onMessage: (message: IncomingMessage) => void,
+  onReconnected?: () => void,
 ): () => void {
   void supabase.realtime.setAuth();
 
@@ -481,13 +502,26 @@ export function subscribeToIncomingMessages(
     config: { private: true },
   });
 
+  let wasJoined = false;
+
   channel
     .on('broadcast', { event: 'new_message' }, ({ payload }) => {
       const incoming = toIncoming(payload);
 
       if (incoming) onMessage(incoming);
     })
-    .subscribe();
+    .subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        if (wasJoined) onReconnected?.();
+
+        wasJoined = true;
+        return;
+      }
+
+      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+        wasJoined = false;
+      }
+    });
 
   return () => {
     void supabase.removeChannel(channel);

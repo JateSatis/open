@@ -1,5 +1,5 @@
 import type { Session as SupabaseSession } from '@supabase/supabase-js';
-import { fireEvent, screen, userEvent } from '@testing-library/react-native';
+import { act, fireEvent, screen, userEvent, waitFor } from '@testing-library/react-native';
 
 import ChatScreen from './[chatId]';
 
@@ -7,6 +7,7 @@ import type { ChatChannelHandlers, ChatSummary, Message } from '@/api/chats';
 import { getChat, listMessages, markChatRead, sendMessage, subscribeToChat } from '@/api/chats';
 import { useSession } from '@/features/auth/useSession';
 import { formatMessageTime } from '@/features/chats/chatDisplay';
+import { reportRealtimeJoined, resetConnectionState } from '@/features/connection/connectionStore';
 import { renderWithQuery } from '@/test/renderWithQuery';
 
 jest.mock('expo-router', () => ({
@@ -84,6 +85,8 @@ beforeEach(() => {
   });
   listMessagesSince.mockResolvedValue([]);
   mockedMarkRead.mockResolvedValue(undefined);
+  resetConnectionState();
+  reportRealtimeJoined();
   mockedListMessages.mockResolvedValue({ items: [], nextCursor: null });
   mockedGetChat.mockResolvedValue(chatWith([member, other]));
   mockedSubscribe.mockImplementation((_chatId, given) => {
@@ -323,6 +326,42 @@ describe('ChatScreen', () => {
 
     expect(await screen.findByText('первое')).toBeTruthy();
     expect(mockedMarkRead).toHaveBeenCalledWith('chat-1');
+  });
+
+  it('catches up on what it missed while the channel was gone', async () => {
+    mockedListMessages.mockResolvedValue({
+      items: [message('m1', 'привет', 'user-2')],
+      nextCursor: null,
+    });
+    listMessagesSince.mockResolvedValue([message('m2', 'пока тебя не было', 'user-2')]);
+
+    await renderWithQuery(<ChatScreen />);
+    await screen.findByText('привет');
+
+    handlers?.onReconnected?.();
+
+    expect(await screen.findByText('пока тебя не было')).toBeTruthy();
+  });
+
+  it('sends what did not go through once the connection is back', async () => {
+    mockedSendMessage.mockRejectedValueOnce(new Error('Network request failed'));
+    const user = userEvent.setup();
+
+    await renderWithQuery(<ChatScreen />);
+
+    await user.type(await screen.findByLabelText('Сообщение'), 'как дела');
+    await user.press(screen.getByText('Отправить'));
+    await screen.findByText('Не отправлено. Повторить');
+
+    mockedSendMessage.mockResolvedValueOnce(message('m9', 'как дела', 'user-1'));
+
+    // Неудачная отправка уже перевела приложение в «нет сети» — осталось
+    // вернуть связь.
+    await act(() => reportRealtimeJoined());
+
+    // Повторять вручную не приходится: человек уже нажал «отправить».
+    await waitFor(() => expect(screen.queryByText('Не отправлено. Повторить')).toBeNull());
+    expect(mockedSendMessage).toHaveBeenCalledTimes(2);
   });
 
   it('shows who is typing and unsubscribes from the channel on unmount', async () => {

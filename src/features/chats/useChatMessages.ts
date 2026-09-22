@@ -10,6 +10,9 @@ import {
   type Message,
 } from '@/api/chats';
 import { chatQueryKey } from '@/features/chats/useChat';
+import { reportRequestFailed } from '@/features/connection/connectionStore';
+import { useConnectionStatus } from '@/features/connection/useConnectionStatus';
+import { describeLoadError, isNetworkError } from '@/lib/network';
 import { chatsQueryKey } from '@/features/chats/useChats';
 
 /** How long a "печатает…" mark survives without another typing broadcast. */
@@ -61,6 +64,7 @@ function mergeNewest(existing: ChatMessage[], incoming: Message[]): ChatMessage[
 
 export function useChatMessages(chatId: string, currentUserId: string | null): ChatMessagesState {
   const queryClient = useQueryClient();
+  const connection = useConnectionStatus();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -75,6 +79,10 @@ export function useChatMessages(chatId: string, currentUserId: string | null): C
   const channelRef = useRef<ChatChannel | null>(null);
   const typingTimersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const lastTypingSentAtRef = useRef(0);
+  // Неотправленное держим отдельно от рендера: повтор запускается по событию
+  // связи, а не по перерисовке списка.
+  const unsentRef = useRef<{ localId: string; text: string }[]>([]);
+  const wasOfflineRef = useRef(false);
 
   const rememberLatest = useCallback((createdAt: string) => {
     if (!latestServerAtRef.current || createdAt > latestServerAtRef.current) {
@@ -127,7 +135,7 @@ export function useChatMessages(chatId: string, currentUserId: string | null): C
       } catch (cause) {
         if (!active) return;
 
-        setError(cause instanceof Error ? cause.message : 'Не удалось загрузить сообщения');
+        setError(describeLoadError(cause, 'Не удалось загрузить сообщения'));
       } finally {
         if (active) setIsLoading(false);
       }
@@ -146,6 +154,12 @@ export function useChatMessages(chatId: string, currentUserId: string | null): C
     const channel = subscribeToChat(chatId, {
       onMessage: () => {
         void pullNewMessages();
+      },
+      onReconnected: () => {
+        // Пока канала не было, события терялись: и новые сообщения, и чужие
+        // отметки прочтения. Забираем и то, и другое.
+        void pullNewMessages();
+        void queryClient.invalidateQueries({ queryKey: chatQueryKey(chatId) });
       },
       onRead: () => {
         // Отметка собеседника живёт в участниках чата, а не в сообщениях —
@@ -182,6 +196,14 @@ export function useChatMessages(chatId: string, currentUserId: string | null): C
     };
   }, [chatId, currentUserId, pullNewMessages, queryClient]);
 
+  useEffect(() => {
+    unsentRef.current = messages.flatMap((message) =>
+      message.status === 'failed' && message.localId && message.text
+        ? [{ localId: message.localId, text: message.text }]
+        : [],
+    );
+  }, [messages]);
+
   const loadMore = useCallback(() => {
     const cursor = cursorRef.current;
 
@@ -199,7 +221,7 @@ export function useChatMessages(chatId: string, currentUserId: string | null): C
         ]);
       })
       .catch((cause: unknown) => {
-        setError(cause instanceof Error ? cause.message : 'Не удалось загрузить историю');
+        setError(describeLoadError(cause, 'Не удалось загрузить историю'));
       })
       .finally(() => setIsLoadingMore(false));
   }, [chatId, isLoadingMore]);
@@ -224,7 +246,11 @@ export function useChatMessages(chatId: string, currentUserId: string | null): C
           // он устарел, хотя сама переписка на экране уже верна.
           void queryClient.invalidateQueries({ queryKey: chatsQueryKey });
         })
-        .catch(() => {
+        .catch((cause: unknown) => {
+          // Не дошло до сервера — это факт о связи, а не только об этом
+          // сообщении: с него и начинается ожидание сети.
+          if (isNetworkError(cause)) reportRequestFailed();
+
           // The insert policy on `messages` is what decides whether this user
           // may write here; a rejection lands the message in "failed", it is
           // never dropped silently.
@@ -237,6 +263,24 @@ export function useChatMessages(chatId: string, currentUserId: string | null): C
     },
     [chatId, queryClient, rememberLatest],
   );
+
+  useEffect(() => {
+    if (connection !== 'online') {
+      wasOfflineRef.current = true;
+      return;
+    }
+
+    if (!wasOfflineRef.current) return;
+
+    wasOfflineRef.current = false;
+
+    // Связь вернулась — дописываем то, что не ушло. Пользователь уже нажал
+    // «отправить»: заставлять его тыкать «повторить» по каждому сообщению
+    // значит перекладывать на него работу приложения.
+    for (const unsent of unsentRef.current) {
+      deliver(unsent.localId, unsent.text);
+    }
+  }, [connection, deliver]);
 
   const send = useCallback(
     (text: string) => {
