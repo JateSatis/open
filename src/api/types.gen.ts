@@ -23,6 +23,7 @@ export type Database = {
           message_id: string
           message_kind: string
           mime_type: string | null
+          position: number
           size_bytes: number | null
           url: string
           width: number | null
@@ -35,6 +36,7 @@ export type Database = {
           message_id: string
           message_kind: string
           mime_type?: string | null
+          position?: number
           size_bytes?: number | null
           url: string
           width?: number | null
@@ -47,6 +49,7 @@ export type Database = {
           message_id?: string
           message_kind?: string
           mime_type?: string | null
+          position?: number
           size_bytes?: number | null
           url?: string
           width?: number | null
@@ -239,6 +242,10 @@ export type Database = {
         Returns: string
       }
       mark_chat_read: { Args: { target_chat: string }; Returns: string }
+      send_media_message: {
+        Args: { media: Json; message_text: string; target_chat: string }
+        Returns: string
+      }
     }
     Enums: {
       [_ in never]: never
