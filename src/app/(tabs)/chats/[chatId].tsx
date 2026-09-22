@@ -190,7 +190,6 @@ export default function ChatScreen() {
             text={draft.text}
             onChangeText={draft.setText}
             media={draft.media}
-            onRemoveMedia={draft.removeMedia}
             canSend={chat ? isChatMember(chat, currentUserId) : false}
             onSend={submitDraft}
             onTyping={notifyTyping}

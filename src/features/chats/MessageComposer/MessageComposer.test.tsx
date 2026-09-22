@@ -20,7 +20,6 @@ describe('MessageComposer', () => {
         text=""
         onChangeText={jest.fn()}
         media={[]}
-        onRemoveMedia={jest.fn()}
         onSend={jest.fn()}
         onTyping={jest.fn()}
         canSend={false}
@@ -37,7 +36,6 @@ describe('MessageComposer', () => {
         text=""
         onChangeText={jest.fn()}
         media={[]}
-        onRemoveMedia={jest.fn()}
         onSend={jest.fn()}
         onTyping={jest.fn()}
         canSend
@@ -54,7 +52,6 @@ describe('MessageComposer', () => {
         text=""
         onChangeText={jest.fn()}
         media={[]}
-        onRemoveMedia={jest.fn()}
         onSend={jest.fn()}
         onTyping={jest.fn()}
         canSend
@@ -72,7 +69,6 @@ describe('MessageComposer', () => {
         text=""
         onChangeText={jest.fn()}
         media={[photo]}
-        onRemoveMedia={jest.fn()}
         onSend={onSend}
         onTyping={jest.fn()}
         canSend
@@ -93,7 +89,6 @@ describe('MessageComposer', () => {
         text="   "
         onChangeText={jest.fn()}
         media={[]}
-        onRemoveMedia={jest.fn()}
         onSend={onSend}
         onTyping={jest.fn()}
         canSend
@@ -106,19 +101,34 @@ describe('MessageComposer', () => {
     expect(onSend).not.toHaveBeenCalled();
   });
 
-  it('shows the attached media strip above the field', async () => {
+  it('shows how many files are attached as a badge on the send button, not as thumbnails', async () => {
     await render(
       <MessageComposer
         text=""
         onChangeText={jest.fn()}
-        media={[photo]}
-        onRemoveMedia={jest.fn()}
+        media={[photo, { ...photo, id: 'a2' }]}
         onSend={jest.fn()}
         onTyping={jest.fn()}
         canSend
       />,
     );
 
-    expect(screen.getByTestId('attached-media-strip')).toBeTruthy();
+    expect(screen.getByText('2')).toBeTruthy();
+    expect(screen.queryByTestId('attached-media-strip')).toBeNull();
+  });
+
+  it('shows no badge when nothing is attached', async () => {
+    await render(
+      <MessageComposer
+        text=""
+        onChangeText={jest.fn()}
+        media={[]}
+        onSend={jest.fn()}
+        onTyping={jest.fn()}
+        canSend
+      />,
+    );
+
+    expect(screen.queryByText('0')).toBeNull();
   });
 });

@@ -2,7 +2,6 @@ import { TextInput, View } from 'react-native';
 
 import { styles } from './styles';
 
-import { AttachedMediaStrip } from '@/features/chats/AttachedMediaStrip';
 import { Button } from '@/components/Button';
 import { Text } from '@/components/Text';
 import type { LibraryAsset } from '@/features/media';
@@ -12,7 +11,6 @@ export type MessageComposerProps = {
   text: string;
   onChangeText: (text: string) => void;
   media: LibraryAsset[];
-  onRemoveMedia: (id: string) => void;
   onSend: () => void;
   onTyping: () => void;
   /**
@@ -31,7 +29,6 @@ export function MessageComposer({
   text,
   onChangeText,
   media,
-  onRemoveMedia,
   onSend,
   onTyping,
   canSend,
@@ -57,8 +54,6 @@ export function MessageComposer({
 
   return (
     <View style={[styles.container, { borderTopColor: theme.border }]}>
-      <AttachedMediaStrip media={media} onRemove={onRemoveMedia} />
-
       <View style={styles.row}>
         <TextInput
           accessibilityLabel="Сообщение"
@@ -72,12 +67,28 @@ export function MessageComposer({
           }}
           style={[styles.field, { color: theme.text, borderColor: theme.border }]}
         />
-        <Button
-          label="Отправить"
-          size="sm"
-          disabled={!text.trim() && media.length === 0}
-          onPress={submit}
-        />
+
+        <View style={styles.sendWrapper}>
+          <Button
+            label="Отправить"
+            size="sm"
+            disabled={!text.trim() && media.length === 0}
+            onPress={submit}
+          />
+
+          {media.length > 0 ? (
+            <View
+              style={[
+                styles.mediaBadge,
+                { backgroundColor: theme.danger, borderColor: theme.background },
+              ]}
+            >
+              <Text variant="caption" color="textInverse">
+                {media.length}
+              </Text>
+            </View>
+          ) : null}
+        </View>
 
         {onAttachPress ? (
           // Буква вместо иконки — намеренно: набор иконок ещё не выбран, и
