@@ -17,6 +17,8 @@ export const Colors = {
     viewerBackground: '#000000',
     /** Полупрозрачная плашка для контролов и бейджей поверх фото/видео. */
     mediaScrim: 'rgba(0, 0, 0, 0.5)',
+    /** Затемнение фона под модальными окнами — одинаковое в обеих темах. */
+    overlay: 'rgba(0, 0, 0, 0.5)',
   },
   dark: {
     text: '#ffffff',
@@ -32,6 +34,7 @@ export const Colors = {
     success: '#3DD68C',
     viewerBackground: '#000000',
     mediaScrim: 'rgba(0, 0, 0, 0.5)',
+    overlay: 'rgba(0, 0, 0, 0.5)',
   },
 } as const;
 
