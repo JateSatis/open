@@ -13,6 +13,10 @@ export const Colors = {
     primaryText: '#ffffff',
     danger: '#E5484D',
     success: '#30A46C',
+    /** Полноэкранный просмотр медиа — фон один и тот же в обеих темах, как летбокс. */
+    viewerBackground: '#000000',
+    /** Полупрозрачная плашка для контролов и бейджей поверх фото/видео. */
+    mediaScrim: 'rgba(0, 0, 0, 0.5)',
   },
   dark: {
     text: '#ffffff',
@@ -26,6 +30,8 @@ export const Colors = {
     primaryText: '#ffffff',
     danger: '#FF6369',
     success: '#3DD68C',
+    viewerBackground: '#000000',
+    mediaScrim: 'rgba(0, 0, 0, 0.5)',
   },
 } as const;
 

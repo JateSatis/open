@@ -29,6 +29,26 @@ jest.mock('@/api/chats', () => ({
   MESSAGE_PAGE_SIZE: 30,
 }));
 
+// Этот экран не тестирует ни грид выбора медиа, ни просмотрщик — оба тянут
+// за собой нативные модули (expo-video, expo-camera, expo-media-library…),
+// которых в тестовом окружении нет и не должно быть. Мок обрывает эту
+// цепочку на границе фичи, как и мок `@/api/chats` выше.
+jest.mock('@/features/media', () => ({
+  MediaGrid: () => null,
+  MediaViewer: () => null,
+  MediaLimits: { gallery: { maxSelection: 50, pageSize: 30 } },
+}));
+
+// Нативный bottom sheet из @expo/ui недоступен под jest по той же причине.
+jest.mock('@expo/ui/community/bottom-sheet', () => {
+  const { View } = require('react-native');
+
+  return {
+    BottomSheetModal: ({ children }: { children: React.ReactNode }) => <View>{children}</View>,
+    BottomSheetView: ({ children }: { children: React.ReactNode }) => <View>{children}</View>,
+  };
+});
+
 const mockedGetChat = getChat as jest.MockedFunction<typeof getChat>;
 const mockedListMessages = listMessages as jest.MockedFunction<typeof listMessages>;
 const mockedSendMessage = sendMessage as jest.MockedFunction<typeof sendMessage>;

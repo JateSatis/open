@@ -1,11 +1,14 @@
-import { Pressable, View } from 'react-native';
+import { useState } from 'react';
+import { Pressable, View, type LayoutChangeEvent } from 'react-native';
 
 import { styles } from './styles';
 
 import { Avatar } from '@/components/Avatar';
 import { Text } from '@/components/Text';
 import { formatMessageTime } from '@/features/chats/chatDisplay';
+import { MediaAttachmentGrid } from '@/features/chats/MediaAttachmentGrid';
 import type { ChatMessage } from '@/features/chats/useChatMessages';
+import { MediaViewer, type MediaViewerItem } from '@/features/media';
 import { useTheme } from '@/hooks/use-theme';
 import { Spacing } from '@/theme';
 
@@ -29,13 +32,30 @@ export function MessageBubble({
 }: MessageBubbleProps) {
   const theme = useTheme();
   const failed = message.status === 'failed';
-  const hasAttachments = message.attachments.length > 0 || message.kind !== 'text';
+  const isMediaMessage = message.kind === 'media' && message.attachments.length > 0;
+  // Остальные вложения (голосовые, кружки) пока не подключены к облачку —
+  // это отдельная задача; здесь только заглушка, чтобы сообщение не было пустым.
+  const hasUnhandledAttachment = !isMediaMessage && message.kind !== 'text';
+  const [bubbleWidth, setBubbleWidth] = useState<number | null>(null);
+  const [viewerIndex, setViewerIndex] = useState<number | null>(null);
+
+  const onBubbleLayout = (event: LayoutChangeEvent) => {
+    setBubbleWidth(event.nativeEvent.layout.width);
+  };
+
+  const viewerItems: MediaViewerItem[] = message.attachments.map((attachment) => ({
+    id: attachment.id,
+    kind: attachment.mimeType?.startsWith('video/') ? 'video' : 'photo',
+    url: attachment.url,
+  }));
 
   return (
     <View style={[styles.row, isOwn && styles.own]}>
       {isOwn ? null : <Avatar uri={authorAvatarUrl} name={authorName} size={Spacing.five} />}
 
       <View
+        testID="message-bubble"
+        onLayout={onBubbleLayout}
         style={[
           styles.bubble,
           { backgroundColor: isOwn ? theme.primary : theme.backgroundElement },
@@ -47,7 +67,15 @@ export function MessageBubble({
           </Text>
         )}
 
-        {hasAttachments ? (
+        {isMediaMessage && bubbleWidth !== null ? (
+          <MediaAttachmentGrid
+            attachments={message.attachments}
+            containerWidth={bubbleWidth - Spacing.three * 2}
+            onPress={setViewerIndex}
+          />
+        ) : null}
+
+        {hasUnhandledAttachment ? (
           // Rendering and playback of media belong to the `media` feature; the
           // bubble only keeps the slot so a message carrying one is not blank.
           <View style={[styles.attachmentSlot, { backgroundColor: theme.backgroundSelected }]}>
@@ -88,6 +116,15 @@ export function MessageBubble({
           )}
         </View>
       </View>
+
+      {isMediaMessage ? (
+        <MediaViewer
+          visible={viewerIndex !== null}
+          items={viewerItems}
+          initialIndex={viewerIndex ?? 0}
+          onClose={() => setViewerIndex(null)}
+        />
+      ) : null}
     </View>
   );
 }

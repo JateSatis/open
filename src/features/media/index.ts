@@ -24,6 +24,19 @@ export {
 export { MediaUploadError, removeUploadedMedia, uploadMedia } from './storage';
 export { useVoiceRecorder, type VoiceRecorder as VoiceRecorderApi } from './useVoiceRecorder';
 
+export { MediaGrid, type MediaGridProps } from './MediaGrid';
+export { MediaViewer, type MediaViewerItem, type MediaViewerProps } from './MediaViewer';
+export {
+  libraryAssetToLocalMedia,
+  queryRecentMedia,
+  requestMediaLibraryAccess,
+  type LibraryAccess,
+  type LibraryAsset,
+} from './mediaLibrary';
+export { useRecentMedia, type RecentMediaState, type RecentMediaStatus } from './useRecentMedia';
+export { prepareForUpload } from './lib/prepareForUpload';
+export { uploadAllMedia } from './uploadAll';
+
 export { MediaLimits } from './constants';
 export { formatDuration } from './lib/formatDuration';
 export type { LocalMedia, MediaKind, UploadedMedia } from './types';

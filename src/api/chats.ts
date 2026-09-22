@@ -10,7 +10,7 @@ export const MESSAGE_PAGE_SIZE = 30;
 
 export type ChatKind = 'direct' | 'group';
 
-export type MessageKind = 'text' | 'photo' | 'video' | 'voice' | 'video_note' | 'system';
+export type MessageKind = 'text' | 'photo' | 'video' | 'voice' | 'video_note' | 'system' | 'media';
 
 export type ChatParticipant = {
   id: string;
@@ -62,9 +62,23 @@ export type Message = {
   attachments: MessageAttachment[];
 };
 
+/**
+ * Уже загруженные в Storage файлы — форма, в которой их отдаёт
+ * `uploadMedia()` из фичи `media`. Сжатие и заливка байт делает не этот
+ * модуль: сюда приходят готовые URL, а он лишь связывает их с сообщением.
+ */
+export type SendMessageMedia = {
+  url: string;
+  mimeType: string;
+  width: number | null;
+  height: number | null;
+  durationMs: number | null;
+  sizeBytes: number;
+};
+
 export type SendMessageInput = {
   text?: string;
-  attachmentIds?: string[];
+  media?: SendMessageMedia[];
 };
 
 export type Page<T> = {
@@ -83,7 +97,11 @@ const MESSAGE_COLUMNS =
 // запроса и не может разойтись со схемой — описывать ряды руками не нужно.
 const chatsSelect = () => supabase.from('chats').select(CHAT_COLUMNS);
 const membersSelect = () => supabase.from('chat_members').select(MEMBER_COLUMNS);
-const messagesSelect = () => supabase.from('messages').select(MESSAGE_COLUMNS);
+// Мозаика в облачке должна собираться в порядке выбора файлов, а PostgREST
+// не гарантирует порядок вложенной выборки сам по себе — нужен явный order
+// по `position` (см. attachments_message_id_position_key в миграции).
+const messagesSelect = () =>
+  supabase.from('messages').select(MESSAGE_COLUMNS).order('position', { referencedTable: 'attachments' });
 
 type ChatRow = QueryData<ReturnType<typeof chatsSelect>>[number];
 type MemberRow = QueryData<ReturnType<typeof membersSelect>>[number];
@@ -92,7 +110,15 @@ type MessageRow = QueryData<ReturnType<typeof messagesSelect>>[number];
 // `kind` в базе — текст с CHECK-ограничением, и генератор типов видит его как
 // строку: сузить её больше негде, поэтому расхождение схемы с доменными
 // типами живёт ровно в этих двух функциях.
-const MESSAGE_KINDS = new Set<string>(['text', 'photo', 'video', 'voice', 'video_note', 'system']);
+const MESSAGE_KINDS = new Set<string>([
+  'text',
+  'photo',
+  'video',
+  'voice',
+  'video_note',
+  'system',
+  'media',
+]);
 
 function toChatKind(kind: string): ChatKind {
   return kind === 'group' ? 'group' : 'direct';
@@ -332,15 +358,7 @@ export async function listMessagesSince(chatId: string, since: string): Promise<
  * insert policy on `messages` is the authority and a rejection surfaces as a
  * failed send in the UI.
  */
-export async function sendMessage(chatId: string, input: SendMessageInput): Promise<Message> {
-  if (input.attachmentIds && input.attachmentIds.length > 0) {
-    throw new Error('Вложения отправляет фича media, здесь они ещё не поддерживаются');
-  }
-
-  const text = input.text?.trim();
-
-  if (!text) throw new Error('Пустое сообщение нельзя отправить');
-
+async function sendTextMessage(chatId: string, text: string): Promise<Message> {
   const authorId = await getCurrentUserId();
 
   const { data, error } = await supabase
@@ -352,6 +370,52 @@ export async function sendMessage(chatId: string, input: SendMessageInput): Prom
   if (error) throw error;
 
   return toMessage(data);
+}
+
+/**
+ * Сообщение с вложениями идёт через `send_media_message` — функцию в базе,
+ * которая вставляет сообщение и все его вложения одной транзакцией (см.
+ * миграцию `20260922120000_message_media.sql`). Прямая последовательная
+ * вставка с клиента не даёт такой гарантии: сообщение уже разошлось бы по
+ * Broadcast раньше, чем к нему привязались бы все файлы.
+ */
+async function sendMediaMessage(
+  chatId: string,
+  text: string | null,
+  media: SendMessageMedia[],
+): Promise<Message> {
+  const { data: newMessageId, error } = await supabase.rpc('send_media_message', {
+    target_chat: chatId,
+    // Функция в базе принимает `text`, допускающий NULL, но генератор типов
+    // не размечает скалярные аргументы rpc как nullable — отсюда приведение.
+    message_text: text as string,
+    media: media.map((item) => ({
+      url: item.url,
+      mime_type: item.mimeType,
+      width: item.width,
+      height: item.height,
+      duration_ms: item.durationMs,
+      size_bytes: item.sizeBytes,
+    })),
+  });
+
+  if (error) throw error;
+  if (typeof newMessageId !== 'string') throw new Error('Не удалось отправить сообщение');
+
+  const { data, error: fetchError } = await messagesSelect().eq('id', newMessageId).single();
+
+  if (fetchError) throw fetchError;
+
+  return toMessage(data);
+}
+
+export async function sendMessage(chatId: string, input: SendMessageInput): Promise<Message> {
+  const text = input.text?.trim() || null;
+  const media = input.media ?? [];
+
+  if (!text && media.length === 0) throw new Error('Пустое сообщение нельзя отправить');
+
+  return media.length === 0 ? sendTextMessage(chatId, text!) : sendMediaMessage(chatId, text, media);
 }
 
 // =============================================================================

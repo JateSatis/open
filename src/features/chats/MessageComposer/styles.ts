@@ -4,12 +4,14 @@ import { Radii, Spacing, Typography } from '@/theme';
 
 export const styles = StyleSheet.create({
   container: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  row: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     gap: Spacing.two,
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.two,
-    borderTopWidth: StyleSheet.hairlineWidth,
   },
   field: {
     flex: 1,

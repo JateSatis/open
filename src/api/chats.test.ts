@@ -62,8 +62,9 @@ class QueryBuilderMock implements PromiseLike<QueryResult> {
     return this.calls.some((call) => call.method === method);
   }
 
-  argsOf(method: string): unknown[] {
-    return this.calls.find((call) => call.method === method)?.args ?? [];
+  /** `occurrence` picks which call to a method that is used more than once, 0-based. */
+  argsOf(method: string, occurrence = 0): unknown[] {
+    return this.calls.filter((call) => call.method === method)[occurrence]?.args ?? [];
   }
 }
 
@@ -99,7 +100,9 @@ describe('listMessages', () => {
 
     expect(mockedFrom).toHaveBeenCalledWith('messages');
     expect(builder.argsOf('limit')).toEqual([2]);
-    expect(builder.argsOf('order')).toEqual(['created_at', { ascending: false }]);
+    // Первый order — за порядок вложений внутри сообщения (см. messagesSelect).
+    expect(builder.argsOf('order', 0)).toEqual(['position', { referencedTable: 'attachments' }]);
+    expect(builder.argsOf('order', 1)).toEqual(['created_at', { ascending: false }]);
     expect(page.items.map((message) => message.id)).toEqual(['m2', 'm1']);
     expect(page.nextCursor).toBe('2026-09-16T10:00:00Z');
   });
@@ -163,15 +166,98 @@ describe('sendMessage', () => {
     });
   });
 
-  it('refuses attachments, which belong to the media feature', async () => {
-    await expect(sendMessage('chat-1', { text: 'привет', attachmentIds: ['a1'] })).rejects.toThrow(
-      /media/,
-    );
-    expect(mockedFrom).not.toHaveBeenCalled();
-  });
-
   it('refuses an empty message', async () => {
     await expect(sendMessage('chat-1', { text: '   ' })).rejects.toThrow(/Пустое сообщение/);
+  });
+
+  describe('with media', () => {
+    const mockedRpc = supabase.rpc as jest.MockedFunction<typeof supabase.rpc>;
+
+    it('sends the message and its attachments through one transactional call', async () => {
+      mockedRpc.mockResolvedValue({ data: 'm2', error: null } as never);
+      const builder = new QueryBuilderMock({
+        data: { ...messageRow('m2', '2026-09-16T10:02:00Z'), kind: 'media' },
+        error: null,
+      });
+      mockedFrom.mockReturnValue(builder);
+
+      const message = await sendMessage('chat-1', {
+        text: 'смотри',
+        media: [
+          {
+            url: 'https://cdn.example/a.jpg',
+            mimeType: 'image/jpeg',
+            width: 800,
+            height: 600,
+            durationMs: null,
+            sizeBytes: 1234,
+          },
+        ],
+      });
+
+      expect(mockedRpc).toHaveBeenCalledWith('send_media_message', {
+        target_chat: 'chat-1',
+        message_text: 'смотри',
+        media: [
+          {
+            url: 'https://cdn.example/a.jpg',
+            mime_type: 'image/jpeg',
+            width: 800,
+            height: 600,
+            duration_ms: null,
+            size_bytes: 1234,
+          },
+        ],
+      });
+      // После RPC сообщение перечитывается полной строкой — с ней уже
+      // работает остальной код (вложения, kind и т.д.).
+      expect(builder.argsOf('eq')).toEqual(['id', 'm2']);
+      expect(message.id).toBe('m2');
+    });
+
+    it('allows media without any text', async () => {
+      mockedRpc.mockResolvedValue({ data: 'm3', error: null } as never);
+      mockedFrom.mockReturnValue(
+        new QueryBuilderMock({ data: messageRow('m3', '2026-09-16T10:03:00Z'), error: null }),
+      );
+
+      await sendMessage('chat-1', {
+        media: [
+          {
+            url: 'https://cdn.example/b.jpg',
+            mimeType: 'image/jpeg',
+            width: null,
+            height: null,
+            durationMs: null,
+            sizeBytes: 10,
+          },
+        ],
+      });
+
+      expect(mockedRpc).toHaveBeenCalledWith(
+        'send_media_message',
+        expect.objectContaining({ message_text: null }),
+      );
+    });
+
+    it('surfaces a rejection from the database function', async () => {
+      mockedRpc.mockResolvedValue({ data: null, error: { message: 'нельзя больше 50' } } as never);
+
+      await expect(
+        sendMessage('chat-1', {
+          media: [
+            {
+              url: 'https://cdn.example/c.jpg',
+              mimeType: 'image/jpeg',
+              width: null,
+              height: null,
+              durationMs: null,
+              sizeBytes: 10,
+            },
+          ],
+        }),
+      ).rejects.toEqual({ message: 'нельзя больше 50' });
+    });
   });
 });
 
