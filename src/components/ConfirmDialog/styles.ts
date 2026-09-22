@@ -2,6 +2,9 @@ import { StyleSheet } from 'react-native';
 
 import { Radii, Spacing } from '@/theme';
 
+/** Узкая карточка по центру экрана — шире незачем даже на планшете. */
+const CARD_MAX_WIDTH = 360;
+
 export const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
@@ -11,7 +14,7 @@ export const styles = StyleSheet.create({
   },
   card: {
     width: '100%',
-    maxWidth: 360,
+    maxWidth: CARD_MAX_WIDTH,
     borderRadius: Radii.lg,
     padding: Spacing.four,
     gap: Spacing.two,

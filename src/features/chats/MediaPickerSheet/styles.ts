@@ -1,9 +1,9 @@
 import { StyleSheet } from 'react-native';
 
-import { Spacing } from '@/theme';
+import { Radii, Spacing } from '@/theme';
 
-const HANDLE_BAR_WIDTH = 36;
-const HANDLE_BAR_HEIGHT = 4;
+const HANDLE_BAR_WIDTH = Spacing.five + Spacing.one;
+const HANDLE_BAR_HEIGHT = Spacing.one;
 
 export const styles = StyleSheet.create({
   handle: {
@@ -11,13 +11,13 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: Spacing.two,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderTopLeftRadius: Radii.lg,
+    borderTopRightRadius: Radii.lg,
   },
   handleBar: {
     width: HANDLE_BAR_WIDTH,
     height: HANDLE_BAR_HEIGHT,
-    borderRadius: HANDLE_BAR_HEIGHT / 2,
+    borderRadius: Radii.full,
   },
   closeButton: {
     position: 'absolute',
