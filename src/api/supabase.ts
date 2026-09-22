@@ -2,6 +2,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
 import { AppState } from 'react-native';
 
+import type { Database } from '@/api/types.gen';
+
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
@@ -11,9 +13,11 @@ if (!supabaseUrl || !supabaseAnonKey) {
   );
 }
 
-// TODO: pass the generated Database type once src/api/types.gen.ts exists
-// (created by `npx supabase gen types typescript --local` after the first migration).
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+// Схема базы прокинута в клиент: отсюда типы строк, аргументов rpc и разбор
+// select-строк вместе со встроенными таблицами. Без неё каждый запрос
+// возвращал бы `any`, и ряды приходилось бы описывать руками рядом с каждым
+// запросом — а значит, расходиться со схемой при первой же миграции.
+export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   auth: {
     storage: AsyncStorage,
     autoRefreshToken: true,

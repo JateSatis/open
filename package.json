@@ -82,15 +82,8 @@
     "setupFiles": [
       "<rootDir>/src/test/jest.setup.js"
     ],
-    "modulePathIgnorePatterns": [
-      "<rootDir>/.claude/worktrees/"
-    ],
     "testPathIgnorePatterns": [
-      "<rootDir>/node_modules/",
-      "<rootDir>/.claude/worktrees/"
-    ],
-    "watchPathIgnorePatterns": [
-      "<rootDir>/.claude/worktrees/"
+      "<rootDir>/node_modules/"
     ]
   }
 }
