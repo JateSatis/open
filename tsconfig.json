@@ -19,7 +19,6 @@
     "expo-env.d.ts"
   ],
   "exclude": [
-    "node_modules",
-    ".claude/worktrees/**"
+    "node_modules"
   ]
 }
