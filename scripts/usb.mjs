@@ -115,8 +115,37 @@ function listAttached() {
     .map(([serial, state]) => ({ serial, state }));
 }
 
+/**
+ * Устройство в `offline` — это оборвавшаяся сессия adb, а не отключённый
+ * кабель: помогает `adb reconnect`, после которого оно возвращается за
+ * пару секунд. Перезапуск сервера тут не нужен и только дольше.
+ */
+function reconnectOffline() {
+  const offline = listAttached().filter(({ state }) => state === "offline");
+
+  if (offline.length === 0) return false;
+
+  console.log(`Связь с ${offline.map((d) => d.serial).join(", ")} оборвалась, переподключаю...`);
+
+  for (const { serial } of offline) {
+    adb(["-s", serial, "reconnect"], { stdio: "ignore" });
+  }
+
+  return true;
+}
+
 /** Только те, с которыми можно работать: offline и authorizing ещё не готовы. */
 function listDevices() {
+  const ready = listAttached()
+    .filter(({ state }) => state === "device")
+    .map(({ serial }) => serial);
+
+  if (ready.length > 0 || !reconnectOffline()) return ready;
+
+  // Переподключение занимает секунду-две, и ждать его дешевле, чем считать,
+  // что телефона нет.
+  spawnSync(process.execPath, ["-e", "setTimeout(() => {}, 3000)"]);
+
   return listAttached()
     .filter(({ state }) => state === "device")
     .map(({ serial }) => serial);

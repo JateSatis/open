@@ -65,7 +65,7 @@ export async function queryRecentMedia(params: {
   offset: number;
   limit?: number;
 }): Promise<MediaLibraryItem[]> {
-  const limit = params.limit ?? MediaLimits.gallery.chunk;
+  const limit = params.limit ?? MediaLimits.gallery.firstChunk;
 
   const startedAt = performance.now();
   const assets = await new Query()

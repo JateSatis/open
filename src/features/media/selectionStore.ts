@@ -47,23 +47,42 @@ export const useMediaSelection = create<SelectionState>((set) => ({
   clear: () => set({ order: [], items: {} }),
 }));
 
-/** Номер файла в выборе (с единицы) или `null`, если он не выбран. */
-export function useSelectionOrder(id: string): number | null {
+/** Клетка не выбрана, но выбрать её можно. */
+export const SLOT_FREE = 0;
+/** Клетка не выбрана, и лимит альбома уже добран. */
+export const SLOT_BLOCKED = -1;
+
+/**
+ * Всё, что клетке нужно знать о выборе, одним числом: `> 0` — её номер,
+ * `SLOT_FREE` — можно выбрать, `SLOT_BLOCKED` — лимит добран.
+ *
+ * Именно одним числом, а не объектом и не двумя подписками. Объект ломал бы
+ * сравнение по ссылке, и любое изменение стора перерисовывало бы все клетки;
+ * две подписки — это два слушателя и два пересчёта на клетку вместо одного,
+ * а клеток в окне списка десятки.
+ */
+export function useSelectionSlot(id: string): number {
   return useMediaSelection((state) => {
     const index = state.order.indexOf(id);
 
-    return index === -1 ? null : index + 1;
-  });
-}
+    if (index !== -1) return index + 1;
 
-/** Лимит альбома добран — новые файлы больше не принимаются. */
-export function useSelectionIsFull(): boolean {
-  return useMediaSelection((state) => state.order.length >= MediaLimits.gallery.maxSelection);
+    return state.order.length >= MediaLimits.gallery.maxSelection ? SLOT_BLOCKED : SLOT_FREE;
+  });
 }
 
 /** Сколько файлов выбрано. Подписываться на число дешевле, чем на сам список. */
 export function useSelectionCount(): number {
   return useMediaSelection((state) => state.order.length);
+}
+
+/**
+ * Есть ли выбор вообще. Шиту нужен именно факт, а не число: на счётчике он
+ * перерисовывался бы на каждый тап, а вместе с ним — и весь список, потому
+ * что его шапка и хвост пересоздаются при каждом рендере шита.
+ */
+export function useHasSelection(): boolean {
+  return useMediaSelection((state) => state.order.length > 0);
 }
 
 /** Выбранное в порядке выбора. Для отправки, а не для отрисовки. */

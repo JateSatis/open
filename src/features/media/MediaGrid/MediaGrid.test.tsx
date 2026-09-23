@@ -1,8 +1,10 @@
 import { render, screen, userEvent } from '@testing-library/react-native';
+import type { FlatListProps } from 'react-native';
 
 import { MediaGrid } from '.';
 
 import { useMediaSelection } from '@/features/media/selectionStore';
+import type { MediaLibraryItem } from '@/features/media/mediaLibrary';
 import { useGalleryAssets } from '@/features/media/useGalleryAssets';
 
 jest.mock('@/features/media/useGalleryAssets', () => ({
@@ -63,6 +65,32 @@ describe('MediaGrid', () => {
     await render(<MediaGrid enabled={false} />);
 
     expect(mockedUseGalleryAssets).toHaveBeenCalledWith(false);
+  });
+
+  it('lays rows out by row index, not by file index', async () => {
+    // FlatList отдаёт getItemLayout в VirtualizedList как есть, а тот при
+    // numColumns считает строками: его getItemCount возвращает
+    // ceil(файлов / колонок). Если поделить index на число колонок ещё раз,
+    // список решит, что его содержимое втрое короче, и в глубине галереи
+    // начнёт рисовать пустоту вместо клеток.
+    gallery([asset('a'), asset('b'), asset('c'), asset('d')]);
+
+    let captured: FlatListProps<MediaLibraryItem>['getItemLayout'];
+    const Capture = (props: { getItemLayout?: typeof captured }) => {
+      captured = props.getItemLayout;
+      return null;
+    };
+
+    await render(<MediaGrid ListComponent={Capture} headerHeight={100} />);
+
+    const rowZero = captured?.(null, 0);
+    const rowOne = captured?.(null, 1);
+    const rowTwo = captured?.(null, 2);
+
+    expect(rowZero?.offset).toBe(100);
+    // Соседние строки стоят ровно на высоту строки друг под другом.
+    expect((rowOne?.offset ?? 0) - (rowZero?.offset ?? 0)).toBeCloseTo(rowZero?.length ?? 0, 5);
+    expect((rowTwo?.offset ?? 0) - (rowOne?.offset ?? 0)).toBeCloseTo(rowOne?.length ?? 0, 5);
   });
 
   it('writes the tapped file into the selection store, in tap order', async () => {

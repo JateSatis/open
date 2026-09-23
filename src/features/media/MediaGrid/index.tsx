@@ -1,4 +1,4 @@
-import { useCallback, type ComponentType, type ReactElement } from 'react';
+import { useCallback, useMemo, type ComponentType, type ReactElement } from 'react';
 import { FlatList, View, useWindowDimensions, type FlatListProps, type ListRenderItem } from 'react-native';
 
 import { styles } from './styles';
@@ -7,7 +7,7 @@ import { Button } from '@/components/Button';
 import { Text } from '@/components/Text';
 import { MediaGridItem } from '@/features/media/MediaGridItem';
 import type { MediaLibraryItem } from '@/features/media/mediaLibrary';
-import { countRender } from '@/features/media/perf';
+import { countRender, perfLog, perfLogFirst } from '@/features/media/perf';
 import { useMediaSelection } from '@/features/media/selectionStore';
 import { useGalleryAssets } from '@/features/media/useGalleryAssets';
 import { Spacing } from '@/theme';
@@ -47,6 +47,7 @@ export type MediaListComponent = ComponentType<
     | 'getItemLayout'
     | 'initialNumToRender'
     | 'maxToRenderPerBatch'
+    | 'onContentSizeChange'
     | 'windowSize'
     | 'ListEmptyComponent'
     | 'ListHeaderComponent'
@@ -70,6 +71,13 @@ export type MediaGridProps = {
    * разрешения и чтение галереи не отнимали кадры у анимации открытия шита.
    */
   enabled?: boolean;
+  /**
+   * Фон строк. Именно строки, а не отдельный слой под списком, рисуют фон
+   * шита: так он едет вместе с клетками нативным скроллом и не может от них
+   * отстать. Прозрачная шапка списка остаётся прозрачной — сквозь неё видно
+   * то, что под шитом.
+   */
+  background?: string;
 };
 
 /**
@@ -86,30 +94,49 @@ export function MediaGrid({
   headerHeight = 0,
   footer = null,
   enabled = true,
+  background,
 }: MediaGridProps) {
   countRender('MediaGrid');
 
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const { status, items, requestAccess } = useGalleryAssets(enabled);
   const toggle = useMediaSelection((state) => state.toggle);
 
   const cellSize = (width - GAP * (COLUMNS + 1)) / COLUMNS;
   const rowHeight = cellSize + GAP;
+  const rowStyle = useMemo(
+    () => [styles.row, background === undefined ? null : { backgroundColor: background }],
+    [background],
+  );
 
   const renderItem = useCallback<ListRenderItem<MediaLibraryItem>>(
     ({ item }) => <MediaGridItem asset={item} size={cellSize} onToggle={toggle} />,
     [cellSize, toggle],
   );
 
-  // Клетки квадратные и одного размера, значит положение любой строки
-  // известно заранее — списку не нужно её измерять, чтобы отрисовать, и
-  // прыжок в любую точку галереи ничего не считает.
+  /**
+   * Клетки квадратные и одного размера, значит положение любой строки
+   * известно заранее — списку не нужно её измерять, и прыжок в любую точку
+   * галереи ничего не считает.
+   *
+   * `index` здесь — номер СТРОКИ, а не файла. `FlatList` отдаёт
+   * `getItemLayout` в `VirtualizedList` как есть (через `{...restProps}`), а
+   * тот при `numColumns` видит строки: его `getItemCount` возвращает
+   * `ceil(data.length / numColumns)`, а `getItem` собирает строку из
+   * `numColumns` файлов. Делить `index` на число колонок здесь — ошибка:
+   * список начинает считать своё содержимое втрое короче, чем оно есть, и
+   * расхождение копится с глубиной.
+   */
   const getItemLayout = useCallback(
-    (_: ArrayLike<MediaLibraryItem> | null | undefined, index: number) => ({
-      length: rowHeight,
-      offset: headerHeight + GAP + rowHeight * Math.floor(index / COLUMNS),
-      index,
-    }),
+    (_: ArrayLike<MediaLibraryItem> | null | undefined, index: number) => {
+      perfLogFirst('getItemLayout', 6, 'getItemLayout зовут с индексом', { index });
+
+      return {
+        length: rowHeight,
+        offset: headerHeight + rowHeight * index,
+        index,
+      };
+    },
     [headerHeight, rowHeight],
   );
 
@@ -133,19 +160,39 @@ export function MediaGrid({
       numColumns={COLUMNS}
       keyExtractor={(asset) => asset.id}
       contentContainerStyle={styles.content}
-      columnWrapperStyle={styles.row}
+      columnWrapperStyle={rowStyle}
       getItemLayout={getItemLayout}
       initialNumToRender={COLUMNS * INITIAL_ROWS}
       maxToRenderPerBatch={COLUMNS * ROWS_PER_BATCH}
       windowSize={WINDOW_SIZE}
       renderItem={renderItem}
+      onContentSizeChange={(_width, height) => {
+        // Сверяем, что список думает о своей высоте, с тем, сколько её на
+        // самом деле: расхождение здесь и есть развал грида в глубине.
+        const rows = Math.ceil(items.length / COLUMNS);
+
+        perfLog('высота содержимого', {
+          файлов: items.length,
+          строк: rows,
+          посписку: Math.round(height),
+          поформуле: Math.round(headerHeight + rows * rowHeight),
+        });
+      }}
       ListHeaderComponent={header}
       ListEmptyComponent={
-        status === 'checking' || !enabled ? null : (
-          <View style={styles.notice}>
+        // Пустой список — это ещё и «галерея не прочитана»: фон шита рисуют
+        // строки, и без них сквозь шит было бы видно то, что под ним.
+        <View
+          style={[
+            styles.empty,
+            { height },
+            background === undefined ? null : { backgroundColor: background },
+          ]}
+        >
+          {status === 'checking' || !enabled ? null : (
             <Text color="textSecondary">На устройстве нет фото и видео.</Text>
-          </View>
-        )
+          )}
+        </View>
       }
       ListFooterComponent={footer}
     />

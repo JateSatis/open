@@ -41,9 +41,9 @@ export {
 export {
   selectedAssets,
   useMediaSelection,
+  useHasSelection,
   useSelectionCount,
-  useSelectionIsFull,
-  useSelectionOrder,
+  useSelectionSlot,
 } from './selectionStore';
 export { useGalleryAssets, type GalleryAssets, type GalleryStatus } from './useGalleryAssets';
 export { prepareForUpload } from './lib/prepareForUpload';

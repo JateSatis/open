@@ -21,9 +21,8 @@ export type GalleryAssets = {
  * замер показал, что запрос метаданных не дорожает с глубиной (страница на
  * offset 3000 отвечает за 48 мс против 106 мс на offset 100), а дорого —
  * ждать её в тот момент, когда палец уже доскроллил до конца. Поэтому весь
- * список вычитывается вперёд, кусками, пока человек смотрит на первый экран:
- * дальше длина списка соответствует всей галерее, скроллбар честный, а
- * прыжок в любую точку ничего не ждёт.
+ * список вычитывается вперёд: дальше длина списка соответствует всей
+ * галерее, скроллбар честный, а прыжок в любую точку ничего не ждёт.
  *
  * Метаданные дёшевы (`exeForMetadata` читает индекс медиатеки, а не файлы), а
  * превью грузит сам `expo-image` по мере появления клеток на экране — никакого
@@ -50,29 +49,17 @@ export function useGalleryAssets(enabled: boolean): GalleryAssets {
 
       if (head.length < MediaLimits.gallery.firstChunk) return;
 
-      // Хвост вычитывается кусками, а не одним запросом на всю галерею:
-      // целиком это около секунды, и весь этот срок список не обновлялся бы
-      // вовсе. Кусками он растёт на глазах и не занимает поток надолго.
-      let offset = head.length;
-      const rest: MediaLibraryItem[] = [];
+      // Остальное — одним запросом, а не кусками. Куски выглядели мягче, но
+      // каждый из них пересоздавал массив и перерисовывал весь список, и эти
+      // перерисовки приходились ровно на то время, когда человек уже
+      // скроллит. Один запрос и одна перерисовка: по замеру вся галерея
+      // (3345 файлов) читается за ~1.1 с против ~2.3 с кусками по 600.
+      const all = await queryRecentMedia({ offset: 0, limit: MediaLimits.gallery.maxAssets });
 
-      while (offset < MediaLimits.gallery.maxAssets) {
-        const chunk = await queryRecentMedia({
-          offset,
-          limit: MediaLimits.gallery.chunk,
-        });
+      if (cancelledRef.current) return;
 
-        if (cancelledRef.current) return;
-        if (chunk.length === 0) break;
-
-        rest.push(...chunk);
-        offset += chunk.length;
-        setItems([...head, ...rest]);
-
-        if (chunk.length < MediaLimits.gallery.chunk) break;
-      }
-
-      perfLog('галерея: дочитана', { total: head.length + rest.length });
+      perfLog('галерея: дочитана', { total: all.length });
+      setItems(all);
     } finally {
       if (!cancelledRef.current) setIsFilling(false);
     }

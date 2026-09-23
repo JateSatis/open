@@ -6,11 +6,11 @@ const HANDLE_BAR_WIDTH = Spacing.five + Spacing.one;
 const HANDLE_BAR_HEIGHT = Spacing.one;
 
 /**
- * Высота полоски-ручки вместе с отступами. Списку она нужна числом: на эту
- * высоту поднимается его шапка, чтобы первая строка грида не легла поверх
- * ручки.
+ * Высота верхнего края шита вместе с ручкой и отступами. Списку она нужна
+ * числом: шапка сдвигает начало содержимого, а `getItemLayout` считает
+ * положение строк формулой от этого начала.
  */
-export const HANDLE_BLOCK_HEIGHT = Spacing.two * 2 + HANDLE_BAR_HEIGHT;
+export const SHEET_TOP_HEIGHT = Spacing.two * 2 + HANDLE_BAR_HEIGHT + Spacing.half;
 
 export const styles = StyleSheet.create({
   root: {
@@ -18,15 +18,6 @@ export const styles = StyleSheet.create({
   },
   backdrop: {
     ...StyleSheet.absoluteFill,
-  },
-  /** Фон шита с ручкой. Лежит под списком и следует за его скроллом. */
-  panel: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    borderTopLeftRadius: Radii.lg,
-    borderTopRightRadius: Radii.lg,
   },
   /**
    * Окно списка. Начинается там же, где верхний предел шита, и обрезает
@@ -40,10 +31,13 @@ export const styles = StyleSheet.create({
     bottom: 0,
     overflow: 'hidden',
   },
-  handle: {
+  /** Верхний край шита. Живёт в шапке списка, а не отдельным слоем под ним. */
+  sheetTop: {
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: Spacing.two,
+    paddingTop: Spacing.two,
+    paddingBottom: Spacing.two + Spacing.half,
+    borderTopLeftRadius: Radii.lg,
+    borderTopRightRadius: Radii.lg,
   },
   handleBar: {
     width: HANDLE_BAR_WIDTH,

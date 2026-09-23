@@ -3,12 +3,20 @@ import { StyleSheet } from 'react-native';
 import { Spacing } from '@/theme';
 
 export const styles = StyleSheet.create({
-  content: {
-    padding: Spacing.half,
-  },
+  /**
+   * У содержимого нет собственных отступов: положение строки считается
+   * формулой в `getItemLayout`, и любой отступ контейнера пришлось бы в неё
+   * закладывать. Отступы живут внутри строки.
+   */
+  content: {},
   row: {
     gap: Spacing.half,
-    marginBottom: Spacing.half,
+    paddingHorizontal: Spacing.half,
+    paddingBottom: Spacing.half,
+  },
+  empty: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   notice: {
     flex: 1,
@@ -19,8 +27,5 @@ export const styles = StyleSheet.create({
   },
   noticeText: {
     textAlign: 'center',
-  },
-  footerSpace: {
-    height: Spacing.four,
   },
 });

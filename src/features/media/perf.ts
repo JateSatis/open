@@ -92,6 +92,25 @@ export function probeJsFrames(label: string, durationMs: number): FrameProbe {
   return { stop };
 }
 
+/** Логирует только первые `times` вызовов с этим ключом — для горячих мест. */
+const seen = new Map<string, number>();
+
+export function perfLogFirst(
+  key: string,
+  times: number,
+  label: string,
+  payload?: Record<string, unknown>,
+): void {
+  if (!MEDIA_PERF) return;
+
+  const count = seen.get(key) ?? 0;
+
+  if (count >= times) return;
+
+  seen.set(key, count + 1);
+  perfLog(label, payload);
+}
+
 /**
  * Счётчик рендеров: сколько раз компонент отрисовался между двумя отчётами.
  * Нужен, чтобы увидеть цену одного тапа по кружку выбора.
@@ -109,4 +128,32 @@ export function reportRenders(label: string): void {
 
   perfLog(`${label}: рендеров`, Object.fromEntries(renderCounts));
   renderCounts.clear();
+}
+
+/**
+ * Счётчик монтирований. Рендер переиспользованной вью и монтирование новой —
+ * разные по цене события, и в списке важно именно второе.
+ */
+const mountCounts = new Map<string, number>();
+
+export function countMount(label: string): void {
+  if (!MEDIA_PERF) return;
+
+  mountCounts.set(label, (mountCounts.get(label) ?? 0) + 1);
+}
+
+export function reportMounts(label: string): void {
+  if (!MEDIA_PERF) return;
+
+  perfLog(`${label}: монтирований`, Object.fromEntries(mountCounts));
+  mountCounts.clear();
+}
+
+/** Сбрасывает всё, чтобы следующий сценарий считал с нуля. */
+export function resetPerfCounters(): void {
+  if (!MEDIA_PERF) return;
+
+  renderCounts.clear();
+  mountCounts.clear();
+  seen.clear();
 }

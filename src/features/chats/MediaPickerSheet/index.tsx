@@ -30,14 +30,14 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { HANDLE_BLOCK_HEIGHT, styles } from './styles';
+import { SHEET_TOP_HEIGHT, styles } from './styles';
 
 import { confirm } from '@/components/ConfirmDialog';
 import { MessageComposer } from '@/features/chats/MessageComposer';
 import type { ComposerDraft } from '@/features/chats/useComposerDraft';
 import { MediaGrid, type MediaListComponent, type MediaLibraryItem } from '@/features/media';
 import { countRender } from '@/features/media/perf';
-import { useMediaSelection, useSelectionCount } from '@/features/media/selectionStore';
+import { useHasSelection, useMediaSelection } from '@/features/media/selectionStore';
 import { useTheme } from '@/hooks/use-theme';
 
 export type MediaPickerSheetProps = {
@@ -104,8 +104,7 @@ export function MediaPickerSheet({ visible, onDismiss, draft, onTyping, onSend }
   const travel = headerHeight - insets.top;
   const dismissDistance = collapsedHeight * DISMISS_RATIO;
 
-  const selectedCount = useSelectionCount();
-  const hasMedia = selectedCount > 0;
+  const hasMedia = useHasSelection();
   const hasMediaShared = useSharedValue(hasMedia);
 
   useEffect(() => {
@@ -258,14 +257,6 @@ export function MediaPickerSheet({ visible, onDismiss, draft, onTyping, onSend }
     transform: [{ translateY: dismissY.value }],
   }));
 
-  /**
-   * Панель (фон с закруглением и ручка) следует за скроллом: её верхний край
-   * стоит там, где кончается прозрачная шапка списка.
-   */
-  const panelStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: Math.max(travel - scrollOffset.value, 0) }],
-  }));
-
   const backdropStyle = useAnimatedStyle(() => ({
     opacity: interpolate(dismissY.value, [0, collapsedHeight], [1, 0], Extrapolation.CLAMP),
   }));
@@ -273,6 +264,38 @@ export function MediaPickerSheet({ visible, onDismiss, draft, onTyping, onSend }
   const measureFooter = useCallback((event: LayoutChangeEvent) => {
     setFooterHeight(event.nativeEvent.layout.height);
   }, []);
+
+  /**
+   * Шапка и хвост списка мемоизированы намеренно. `ListHeaderComponent` и
+   * `ListFooterComponent` сравниваются по ссылке: новый элемент на каждом
+   * рендере шита заставлял `FlatList` перерисовывать всё смонтированное окно,
+   * и «одна клетка» из замера была правдой только внутри грида.
+   */
+  const header = useMemo(
+    () => (
+      <>
+        {/* Прозрачная шапка — это одновременно и ход шита, и место, тап по
+            которому закрывает: фона под списком не достать. */}
+        <Pressable
+          testID="media-picker-backdrop"
+          style={{ height: travel }}
+          onPress={requestClose}
+        />
+        {/* Верх шита: скруглённый край и ручка. Он часть содержимого списка,
+            поэтому едет нативным скроллом вместе с клетками и не может от
+            них отстать. */}
+        <View style={[styles.sheetTop, { backgroundColor: theme.background }]}>
+          <View style={[styles.handleBar, { backgroundColor: theme.border }]} />
+        </View>
+      </>
+    ),
+    [requestClose, theme.background, theme.border, travel],
+  );
+
+  const footer = useMemo(
+    () => <View style={{ height: footerHeight, backgroundColor: theme.background }} />,
+    [footerHeight, theme.background],
+  );
 
   if (!mounted) return null;
 
@@ -288,40 +311,15 @@ export function MediaPickerSheet({ visible, onDismiss, draft, onTyping, onSend }
         />
 
         <Animated.View style={[styles.root, shiftStyle]}>
-          {/* Панель под списком: она только фон, все касания идут списку. */}
-          <Animated.View
-            style={[
-              styles.panel,
-              { top: insets.top, backgroundColor: theme.background },
-              panelStyle,
-            ]}
-            pointerEvents="none"
-          >
-            <View style={styles.handle}>
-              <View style={[styles.handleBar, { backgroundColor: theme.border }]} />
-            </View>
-          </Animated.View>
-
           <GestureDetector gesture={dismissPan}>
             <View style={[styles.listWindow, { top: insets.top }]}>
               <MediaGrid
                 ListComponent={ListComponent}
                 enabled={ready}
-                headerHeight={travel + HANDLE_BLOCK_HEIGHT}
-                header={
-                  <>
-                    {/* Прозрачная шапка это одновременно и ход шита, и место,
-                        тап по которому закрывает: фона под списком не достать. */}
-                    <Pressable
-                      testID="media-picker-backdrop"
-                      style={{ height: travel }}
-                      onPress={requestClose}
-                    />
-                    {/* Место под ручку: иначе первая строка легла бы на неё. */}
-                    <View style={{ height: HANDLE_BLOCK_HEIGHT }} />
-                  </>
-                }
-                footer={<View style={{ height: footerHeight }} />}
+                headerHeight={travel + SHEET_TOP_HEIGHT}
+                header={header}
+                footer={footer}
+                background={theme.background}
               />
             </View>
           </GestureDetector>
