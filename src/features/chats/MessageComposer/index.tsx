@@ -4,13 +4,12 @@ import { styles } from './styles';
 
 import { Button } from '@/components/Button';
 import { Text } from '@/components/Text';
-import type { LibraryAsset } from '@/features/media';
+import { useSelectionCount } from '@/features/media/selectionStore';
 import { useTheme } from '@/hooks/use-theme';
 
 export type MessageComposerProps = {
   text: string;
   onChangeText: (text: string) => void;
-  media: LibraryAsset[];
   onSend: () => void;
   onTyping: () => void;
   /**
@@ -28,13 +27,15 @@ export type MessageComposerProps = {
 export function MessageComposer({
   text,
   onChangeText,
-  media,
   onSend,
   onTyping,
   canSend,
   onAttachPress,
 }: MessageComposerProps) {
   const theme = useTheme();
+  // Счётчик берётся из стора выбора, а не приходит пропом: иначе выбор файла
+  // перерисовывал бы весь экран чата ради цифры в кружке.
+  const mediaCount = useSelectionCount();
 
   if (!canSend) {
     return (
@@ -47,7 +48,7 @@ export function MessageComposer({
   }
 
   const submit = () => {
-    if (!text.trim() && media.length === 0) return;
+    if (!text.trim() && mediaCount === 0) return;
 
     onSend();
   };
@@ -72,11 +73,11 @@ export function MessageComposer({
           <Button
             label="Отправить"
             size="sm"
-            disabled={!text.trim() && media.length === 0}
+            disabled={!text.trim() && mediaCount === 0}
             onPress={submit}
           />
 
-          {media.length > 0 ? (
+          {mediaCount > 0 ? (
             <View
               style={[
                 styles.mediaBadge,
@@ -84,7 +85,7 @@ export function MessageComposer({
               ]}
             >
               <Text variant="caption" color="textInverse">
-                {media.length}
+                {mediaCount}
               </Text>
             </View>
           ) : null}

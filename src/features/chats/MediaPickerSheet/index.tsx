@@ -3,11 +3,8 @@
 // shared value — единственный штатный способ им пользоваться, а не
 // нарушение чистоты, которое видит в этом React Compiler. Запуск анимации
 // сразу при появлении шита в эффекте — тоже осознанное действие, а не
-// побочный каскад рендеров. По той же причине отключён `react-hooks/refs`:
-// анимированный ref списка передаётся в `scrollTo` внутри колбэка жеста —
-// это worklet на UI-потоке, а не чтение ref во время рендера, которое видит
-// в нём правило.
-/* eslint-disable react-hooks/immutability, react-hooks/set-state-in-effect, react-hooks/refs */
+// побочный каскад рендеров.
+/* eslint-disable react-hooks/immutability, react-hooks/set-state-in-effect */
 import { useCallback, useEffect, useMemo, useState, type ComponentProps } from 'react';
 import {
   KeyboardAvoidingView,
@@ -24,23 +21,23 @@ import Animated, {
   Extrapolation,
   interpolate,
   runOnJS,
-  scrollTo,
   useAnimatedRef,
   useAnimatedStyle,
   useScrollOffset,
   useSharedValue,
-  withDecay,
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { styles } from './styles';
+import { HANDLE_BLOCK_HEIGHT, styles } from './styles';
 
 import { confirm } from '@/components/ConfirmDialog';
 import { MessageComposer } from '@/features/chats/MessageComposer';
 import type { ComposerDraft } from '@/features/chats/useComposerDraft';
 import { MediaGrid, type MediaListComponent, type MediaLibraryItem } from '@/features/media';
+import { countRender } from '@/features/media/perf';
+import { useMediaSelection, useSelectionCount } from '@/features/media/selectionStore';
 import { useTheme } from '@/hooks/use-theme';
 
 export type MediaPickerSheetProps = {
@@ -51,70 +48,64 @@ export type MediaPickerSheetProps = {
   onSend: () => void;
 };
 
-/** Жест шита — снаружи он нужен только тестам, поэтому лежит рядом с самим жестом. */
+/** Жест закрытия — снаружи нужен только тестам, поэтому лежит рядом с самим жестом. */
 export const SHEET_PAN_TEST_ID = 'media-picker-pan';
 
-const SPRING_CONFIG = { damping: 32, stiffness: 300, mass: 0.9 };
-const CLOSE_DURATION_MS = 200;
 /** Доля экрана, на которую шит открывается по кнопке медиа. */
 const COLLAPSED_RATIO = 0.55;
-/** Сколько нужно утащить шит ниже свёрнутого положения, чтобы отпускание закрыло его. */
-const CLOSE_RATIO = 0.25;
+const OPEN_SPRING = { damping: 32, stiffness: 300, mass: 0.9 };
+const CLOSE_DURATION_MS = 220;
+/** Утащили шит ниже этой доли свёрнутой высоты — отпускание закрывает его. */
+const DISMISS_RATIO = 0.2;
 const FLING_VELOCITY = 800;
-/**
- * Инерция после отпускания: шит остаётся там, где его отпустили, и лишь
- * немного докатывается по скорости. Ближе к единице — дольше едет.
- */
-const DECELERATION = 0.985;
-/** Жест считается вертикальным после этого сдвига — иначе тап по кружку выбора не доживал бы до Pressable. */
+/** Жест считается вертикальным после этого сдвига — иначе тап по кружку не доживал бы до Pressable. */
 const PAN_ACTIVATION_PX = 8;
-/** Меньше пикселя до края — считаем, что шит в него упёрся. */
-const EDGE_EPSILON = 1;
 
 /**
  * Свой шит на голых `react-native-gesture-handler` + `react-native-reanimated`
  * вместо `@gorhom/bottom-sheet`: библиотека не работает с Reanimated 4 —
  * `present()` отрабатывает без ошибок, но шит физически не появляется.
- * Перепроверено на последней опубликованной версии (5.2.14, она же последняя
- * на момент этой задачи) — поведение прежнее, обходного пути в апстриме нет.
- * Даунгрейд Reanimated до 3.x тоже не вариант — та ветка не собирается под
- * текущий RN (несовпадение с Hermes prefab при сборке нативного модуля).
+ * Проверено на последней опубликованной версии (5.2.14), обходного пути в
+ * апстриме нет.
  *
- * Положение шита — один shared value `sheetY` (сдвиг вниз от полностью
- * раскрытого состояния), который двигает **один** жест на всём шите, а грид
- * внутри — обычный виртуализированный список со своим нативным скроллом.
- * Связка между ними сделана руками:
+ * Главное в устройстве: **движением владеет список, а не шит**. Положение
+ * шита не двигают жестом — оно вычисляется из `scrollOffset` списка в
+ * worklet'е, а над гридом лежит прозрачная шапка высотой в ход шита. Пока
+ * человек скроллит внутри этой шапки, «едет шит»; кончилась шапка — дальше
+ * едет грид. Это одно и то же движение одного скролла, поэтому инерция
+ * непрерывна сама собой: разгон в любую сторону перетекает из шита в список
+ * и обратно ровно так же, как если бы палец не отрывался.
  *
- * - жест объявлен одновременным с `Gesture.Native()` грида, поэтому палец не
- *   выбирает между «двигать шит» и «скроллить список» — активны оба;
- * - кто из двоих реально двигается, решает `onUpdate`: пока шит не упёрся в
- *   верх экрана, движение достаётся шиту, а список принудительно держится в
- *   нуле через `scrollTo`; как только шит наверху — движение вверх уходит
- *   списку, а движение вниз возвращается шиту ровно в тот момент, когда
- *   список дошёл до начала. Всё это внутри одного непрерывного жеста;
- * - отпущенный шит не притягивается к снап-поинтам: `withDecay` докатывает
- *   его по скорости и оставляет там, где остановился. Единственные жёсткие
- *   границы — верх экрана и свёрнутое положение.
+ * Раньше здесь было наоборот — шит перехватывал движение своим `Gesture.Pan`
+ * и держал список в нуле через `scrollTo`. Палец при этом вёл шит идеально,
+ * но инерция обрывалась на стыке: передавать скорость от жеста нативному
+ * скроллу нечем.
  *
- * Закрывает шит только жест, начатый с уже свёрнутого положения: тот же
- * жест, что опустил шит от верха экрана, упирается в «половину». Закрытие —
- * всегда через `requestClose()`, общий для жеста, тапа по фону и системной
- * кнопки «назад», поэтому подтверждение сброса выбранных файлов спрашивается
- * одинаково во всех трёх случаях.
+ * Отдельным жестом остаётся ровно одно — смахнуть шит вниз, когда список
+ * уже в нуле. Он не соревнуется со скроллом: активируется только при
+ * `scrollOffset <= 0` и движении вниз.
+ *
+ * Закрытие всегда идёт через `requestClose()`: шит сначала уезжает вниз
+ * целиком и только потом, если файлы были выбраны, спрашивает про сброс.
+ * «Отмена» возвращает его на то же место — список всё это время остаётся
+ * смонтированным, поэтому и позиция скролла, и положение шита те же.
  */
 export function MediaPickerSheet({ visible, onDismiss, draft, onTyping, onSend }: MediaPickerSheetProps) {
+  countRender('MediaPickerSheet');
+
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { height: screenHeight } = useWindowDimensions();
 
-  const expandedHeight = screenHeight - insets.top;
   const collapsedHeight = screenHeight * COLLAPSED_RATIO;
-  // `sheetY` = насколько шит сдвинут вниз от полностью раскрытого состояния.
-  const collapsedY = expandedHeight - collapsedHeight;
-  const closedY = expandedHeight;
-  const closeDistance = collapsedHeight * CLOSE_RATIO;
+  /** Пустое место над свёрнутым шитом — оно же прозрачная шапка списка. */
+  const headerHeight = screenHeight - collapsedHeight;
+  /** Ход шита: от свёрнутого положения до верхней безопасной зоны. */
+  const travel = headerHeight - insets.top;
+  const dismissDistance = collapsedHeight * DISMISS_RATIO;
 
-  const hasMedia = draft.media.length > 0;
+  const selectedCount = useSelectionCount();
+  const hasMedia = selectedCount > 0;
   const hasMediaShared = useSharedValue(hasMedia);
 
   useEffect(() => {
@@ -122,67 +113,97 @@ export function MediaPickerSheet({ visible, onDismiss, draft, onTyping, onSend }
   }, [hasMedia, hasMediaShared]);
 
   const [mounted, setMounted] = useState(visible);
+  /** Грид начинает работать только после анимации открытия — см. комментарий у `MediaGrid.enabled`. */
+  const [ready, setReady] = useState(false);
   const [footerHeight, setFooterHeight] = useState(0);
 
-  const sheetY = useSharedValue(closedY);
-  const lastTranslationY = useSharedValue(0);
-  /** Жест начался со свёрнутого шита — значит этим же жестом его можно закрыть. */
-  const canClose = useSharedValue(false);
-  /** Текущий жест двигает шит, а не скроллит список. */
-  const dragsSheet = useSharedValue(false);
+  /** Насколько шит утащен вниз относительно рабочего положения: 0 — на месте, screenHeight — за краем. */
+  const dismissY = useSharedValue(screenHeight);
+  const panStartY = useSharedValue(0);
+  const canDismiss = useSharedValue(false);
 
   const listRef = useAnimatedRef<FlatList<MediaLibraryItem>>();
   const scrollOffset = useScrollOffset(listRef);
 
   const finishClose = useCallback(() => {
     setMounted(false);
+    setReady(false);
     onDismiss();
   }, [onDismiss]);
 
+  /**
+   * Уехать вниз и только потом размонтироваться. Разбор шита стоит заметного
+   * времени (замер: ~200 мс кадров на разрушение окна `Modal` и списка), и
+   * это время должно приходиться на уже пустой экран, а не на анимацию.
+   */
   const closeAnimated = useCallback(() => {
-    sheetY.value = withTiming(closedY, { duration: CLOSE_DURATION_MS }, (finished) => {
+    dismissY.value = withTiming(screenHeight, { duration: CLOSE_DURATION_MS }, (finished) => {
       if (finished) runOnJS(finishClose)();
     });
-  }, [closedY, finishClose, sheetY]);
+  }, [dismissY, finishClose, screenHeight]);
+
+  const openSheet = useCallback(() => {
+    dismissY.value = withSpring(0, OPEN_SPRING, (finished) => {
+      if (finished) runOnJS(setReady)(true);
+    });
+  }, [dismissY]);
 
   useEffect(() => {
     if (visible) {
       setMounted(true);
-      sheetY.value = closedY;
-      sheetY.value = withSpring(collapsedY, SPRING_CONFIG);
+      dismissY.value = screenHeight;
+      openSheet();
     } else if (mounted) {
       closeAnimated();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
 
+  /**
+   * Единственный путь закрытия — и для жеста, и для тапа по фону, и для
+   * системной «назад». Сначала шит уезжает, и только потом задаётся вопрос:
+   * спрашивать поверх наполовину открытого шита не о чем.
+   */
   const requestClose = useCallback(() => {
-    if (!hasMedia) {
-      closeAnimated();
-      return;
-    }
+    dismissY.value = withTiming(screenHeight, { duration: CLOSE_DURATION_MS }, (finished) => {
+      if (!finished) return;
 
-    void confirm({
-      title: 'Отменить выбор файлов?',
-      message: 'Выбранные фото и видео не будут отправлены.',
-      confirmLabel: 'Сбросить',
-      cancelLabel: 'Отмена',
-      destructive: true,
-    }).then((discard) => {
-      if (!discard) return;
+      if (!hasMediaShared.value) {
+        runOnJS(finishClose)();
+        return;
+      }
 
-      draft.clearMedia();
-      closeAnimated();
+      runOnJS(askToDiscard)();
     });
-  }, [hasMedia, draft, closeAnimated]);
+
+    function askToDiscard() {
+      void confirm({
+        title: 'Отменить выбор файлов?',
+        message: 'Выбранные фото и видео не будут отправлены.',
+        confirmLabel: 'Сбросить',
+        cancelLabel: 'Отмена',
+        destructive: true,
+      }).then((discard) => {
+        if (discard) {
+          useMediaSelection.getState().clear();
+          finishClose();
+          return;
+        }
+
+        // Передумал — шит возвращается туда же, откуда его смахнули:
+        // список всё это время оставался смонтированным.
+        openSheet();
+      });
+    }
+  }, [dismissY, finishClose, hasMediaShared, openSheet, screenHeight]);
 
   const submit = useCallback(() => {
     onSend();
     onDismiss();
   }, [onSend, onDismiss]);
 
-  // Нативный жест самого списка: пан шита объявлен одновременным с ним, и
-  // ссылка на него должна пережить рендер, иначе связка распадётся.
+  // Нативный жест самого списка: жест закрытия объявлен одновременным с ним,
+  // и ссылка на него должна пережить рендер, иначе связка распадётся.
   const listGesture = useMemo(() => Gesture.Native(), []);
 
   const ListComponent = useMemo<MediaListComponent>(
@@ -190,89 +211,64 @@ export function MediaPickerSheet({ visible, onDismiss, draft, onTyping, onSend }
       function SheetMediaList(props: ComponentProps<MediaListComponent>) {
         return (
           <GestureDetector gesture={listGesture}>
-            <Animated.FlatList {...props} ref={listRef} showsVerticalScrollIndicator={false} />
+            <Animated.FlatList
+              {...props}
+              ref={listRef}
+              showsVerticalScrollIndicator={false}
+              // Положение шита считается из этих событий, поэтому они нужны
+              // каждый кадр, а не раз в 50 мс, как по умолчанию у FlatList.
+              scrollEventThrottle={16}
+            />
           </GestureDetector>
         );
       },
     [listGesture, listRef],
   );
 
-  const sheetPan = Gesture.Pan()
+  const dismissPan = Gesture.Pan()
     .withTestId(SHEET_PAN_TEST_ID)
     .activeOffsetY([-PAN_ACTIVATION_PX, PAN_ACTIVATION_PX])
     .simultaneousWithExternalGesture(listGesture)
-    .onStart((event) => {
-      lastTranslationY.value = event.translationY;
-      dragsSheet.value = false;
-      canClose.value = sheetY.value >= collapsedY - EDGE_EPSILON;
+    .onStart(() => {
+      panStartY.value = dismissY.value;
+      // Смахнуть можно только с самого верха списка: во всех остальных
+      // положениях это обычный скролл, и мешать ему нечем.
+      canDismiss.value = scrollOffset.value <= 0;
     })
     .onUpdate((event) => {
-      const dy = event.translationY - lastTranslationY.value;
+      if (!canDismiss.value) return;
 
-      lastTranslationY.value = event.translationY;
-
-      const atTopOfScreen = sheetY.value <= EDGE_EPSILON;
-      const listAtStart = dy > 0 && scrollOffset.value <= 0;
-
-      if (atTopOfScreen && !listAtStart) {
-        // Шит наверху, палец идёт вверх (или список ещё не домотан до
-        // начала) — движение целиком достаётся списку.
-        dragsSheet.value = false;
-        return;
-      }
-
-      const maxY = canClose.value ? closedY : collapsedY;
-
-      sheetY.value = Math.min(Math.max(sheetY.value + dy, 0), maxY);
-      // Пока двигается шит, список стоит в начале: иначе одно движение
-      // пальца двигало бы и шит, и его содержимое.
-      scrollTo(listRef, 0, 0, false);
-      dragsSheet.value = true;
+      dismissY.value = Math.max(panStartY.value + event.translationY, 0);
     })
     .onEnd((event) => {
-      if (!dragsSheet.value) return;
+      if (!canDismiss.value) return;
 
-      dragsSheet.value = false;
+      canDismiss.value = false;
 
-      const draggedFarEnough = sheetY.value > collapsedY + closeDistance;
-      const flungDown = event.velocityY > FLING_VELOCITY && sheetY.value > collapsedY;
-
-      if (canClose.value && (draggedFarEnough || flungDown)) {
-        // Подтверждение сброса спрашивается уже на свёрнутом шите — решение
-        // за `requestClose`, жест только возвращает шит на место.
-        if (hasMediaShared.value) sheetY.value = withSpring(collapsedY, SPRING_CONFIG);
-
+      if (dismissY.value > dismissDistance || event.velocityY > FLING_VELOCITY) {
         runOnJS(requestClose)();
         return;
       }
 
-      if (sheetY.value >= collapsedY) {
-        sheetY.value = withSpring(collapsedY, SPRING_CONFIG);
-        return;
-      }
-
-      sheetY.value = withDecay({
-        velocity: event.velocityY,
-        deceleration: DECELERATION,
-        clamp: [0, collapsedY],
-      });
+      dismissY.value = withSpring(0, OPEN_SPRING);
     });
 
-  const sheetStyle = useAnimatedStyle(() => ({ transform: [{ translateY: sheetY.value }] }));
-  const backdropStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(sheetY.value, [closedY, collapsedY], [0, 1], Extrapolation.CLAMP),
-  }));
-  // Строка ввода стоит на месте, пока шит ходит между «половиной» и верхом
-  // экрана, и уезжает вниз только когда шит уходит за нижний край.
-  const footerStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: Math.max(sheetY.value - collapsedY, 0) }],
+  /** Весь шит целиком: и панель, и список, и строка ввода уезжают вместе. */
+  const shiftStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: dismissY.value }],
   }));
 
-  // Список живёт в шите на всю высоту экрана, а видно от него только то, что
-  // выше нижнего края экрана. Поэтому под последней строкой нужен хвост
-  // ровно в ту высоту, на которую шит опущен, плюс высота строки ввода —
-  // иначе конец галереи со свёрнутого шита не долистать.
-  const tailSpacerStyle = useAnimatedStyle(() => ({ height: sheetY.value + footerHeight }));
+  /**
+   * Панель (фон с закруглением и ручка) следует за скроллом: её верхний край
+   * стоит там, где кончается прозрачная шапка списка.
+   */
+  const panelStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: Math.max(travel - scrollOffset.value, 0) }],
+  }));
+
+  const backdropStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(dismissY.value, [0, collapsedHeight], [1, 0], Extrapolation.CLAMP),
+  }));
 
   const measureFooter = useCallback((event: LayoutChangeEvent) => {
     setFooterHeight(event.nativeEvent.layout.height);
@@ -286,41 +282,58 @@ export function MediaPickerSheet({ visible, onDismiss, draft, onTyping, onSend }
           GestureHandlerRootView из _layout.tsx: без своего жесты внутри шита
           не работают. */}
       <GestureHandlerRootView style={styles.root}>
-        <Animated.View style={[styles.backdrop, { backgroundColor: theme.overlay }, backdropStyle]}>
-          <Pressable
-            testID="media-picker-backdrop"
-            style={styles.backdropTouchable}
-            onPress={requestClose}
-          />
-        </Animated.View>
+        <Animated.View
+          style={[styles.backdrop, { backgroundColor: theme.overlay }, backdropStyle]}
+          pointerEvents="none"
+        />
 
-        <GestureDetector gesture={sheetPan}>
+        <Animated.View style={[styles.root, shiftStyle]}>
+          {/* Панель под списком: она только фон, все касания идут списку. */}
           <Animated.View
-            style={[styles.sheet, { top: insets.top, backgroundColor: theme.background }, sheetStyle]}
+            style={[
+              styles.panel,
+              { top: insets.top, backgroundColor: theme.background },
+              panelStyle,
+            ]}
+            pointerEvents="none"
           >
             <View style={styles.handle}>
               <View style={[styles.handleBar, { backgroundColor: theme.border }]} />
             </View>
+          </Animated.View>
 
-            <View style={styles.content}>
+          <GestureDetector gesture={dismissPan}>
+            <View style={[styles.listWindow, { top: insets.top }]}>
               <MediaGrid
-                selected={draft.media}
-                onToggle={draft.toggleMedia}
                 ListComponent={ListComponent}
-                footerSpace={<Animated.View style={tailSpacerStyle} />}
+                enabled={ready}
+                headerHeight={travel + HANDLE_BLOCK_HEIGHT}
+                header={
+                  <>
+                    {/* Прозрачная шапка это одновременно и ход шита, и место,
+                        тап по которому закрывает: фона под списком не достать. */}
+                    <Pressable
+                      testID="media-picker-backdrop"
+                      style={{ height: travel }}
+                      onPress={requestClose}
+                    />
+                    {/* Место под ручку: иначе первая строка легла бы на неё. */}
+                    <View style={{ height: HANDLE_BLOCK_HEIGHT }} />
+                  </>
+                }
+                footer={<View style={{ height: footerHeight }} />}
               />
             </View>
-          </Animated.View>
-        </GestureDetector>
+          </GestureDetector>
+        </Animated.View>
 
         {hasMedia ? (
-          <Animated.View style={[styles.footer, footerStyle]} onLayout={measureFooter}>
+          <Animated.View style={[styles.footer, shiftStyle]} onLayout={measureFooter}>
             <KeyboardAvoidingView behavior={Platform.select({ ios: 'padding', default: undefined })}>
               <View style={{ backgroundColor: theme.background }}>
                 <MessageComposer
                   text={draft.text}
                   onChangeText={draft.setText}
-                  media={draft.media}
                   onSend={submit}
                   onTyping={onTyping}
                   canSend

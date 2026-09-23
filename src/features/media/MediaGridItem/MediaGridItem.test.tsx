@@ -2,17 +2,12 @@ import { render, screen, userEvent } from '@testing-library/react-native';
 
 import { MediaGridItem } from '.';
 
+import { MediaLimits } from '@/features/media/constants';
 import type { MediaLibraryItem } from '@/features/media/mediaLibrary';
-
-jest.mock('@/features/media/useVideoThumbnail', () => ({
-  useVideoThumbnail: jest.fn(() => null),
-}));
-jest.mock('@/features/media/useAssetUri', () => ({
-  useAssetUri: jest.fn((id: string) => `file:///cache/${id}.jpg`),
-}));
+import { useMediaSelection } from '@/features/media/selectionStore';
 
 const photo: MediaLibraryItem = {
-  id: 'a1',
+  id: 'content://media/external/images/media/1',
   kind: 'photo',
   width: 100,
   height: 100,
@@ -20,35 +15,32 @@ const photo: MediaLibraryItem = {
 };
 
 const video: MediaLibraryItem = {
-  id: 'v1',
+  id: 'content://media/external/video/media/2',
   kind: 'video',
   width: 100,
   height: 100,
   durationMs: 12_000,
 };
 
+function select(...assets: MediaLibraryItem[]) {
+  for (const asset of assets) useMediaSelection.getState().toggle(asset);
+}
+
+beforeEach(() => {
+  useMediaSelection.getState().clear();
+});
+
 describe('MediaGridItem', () => {
-  it('shows the selection order once a file is picked', async () => {
-    const onToggle = jest.fn();
+  it('shows the preview straight from the asset id — nothing is resolved first', async () => {
+    await render(<MediaGridItem asset={photo} size={100} onToggle={jest.fn()} />);
 
-    await render(
-      <MediaGridItem asset={photo} size={100} selectionOrder={2} disabled={false} onToggle={onToggle} />,
-    );
-
-    expect(screen.getByText('2')).toBeTruthy();
-
-    const user = userEvent.setup();
-    await user.press(screen.getByLabelText('Убрать из выбранного'));
-
-    expect(onToggle).toHaveBeenCalledWith(photo);
+    expect(screen.getByLabelText('Выбрать файл')).toBeTruthy();
   });
 
-  it('offers a select button for an unpicked file', async () => {
+  it('reports the whole asset when the circle is tapped', async () => {
     const onToggle = jest.fn();
 
-    await render(
-      <MediaGridItem asset={photo} size={100} selectionOrder={null} disabled={false} onToggle={onToggle} />,
-    );
+    await render(<MediaGridItem asset={photo} size={100} onToggle={onToggle} />);
 
     const user = userEvent.setup();
     await user.press(screen.getByLabelText('Выбрать файл'));
@@ -56,36 +48,28 @@ describe('MediaGridItem', () => {
     expect(onToggle).toHaveBeenCalledWith(photo);
   });
 
+  it('takes its selection number from the store, not from a prop', async () => {
+    select({ ...photo, id: 'other' }, photo);
+
+    await render(<MediaGridItem asset={photo} size={100} onToggle={jest.fn()} />);
+
+    expect(screen.getByText('2')).toBeTruthy();
+    expect(screen.getByLabelText('Убрать из выбранного')).toBeTruthy();
+  });
+
   it('disables selecting once the album limit is reached, but not for an already picked file', async () => {
-    await render(
-      <MediaGridItem asset={photo} size={100} selectionOrder={null} disabled onToggle={jest.fn()} />,
-    );
+    for (let index = 0; index < MediaLimits.gallery.maxSelection; index++) {
+      select({ ...photo, id: `filler-${index}` });
+    }
+
+    await render(<MediaGridItem asset={photo} size={100} onToggle={jest.fn()} />);
 
     expect(screen.getByLabelText('Выбрать файл').props.accessibilityState.disabled).toBe(true);
   });
 
   it('shows a duration badge on video files so they read differently from photos', async () => {
-    await render(
-      <MediaGridItem asset={video} size={100} selectionOrder={null} disabled={false} onToggle={jest.fn()} />,
-    );
+    await render(<MediaGridItem asset={video} size={100} onToggle={jest.fn()} />);
 
     expect(screen.getByText('0:12')).toBeTruthy();
-  });
-
-  it('reports a toggle even while the preview is still resolving — the path is not needed to pick a file', async () => {
-    const { useAssetUri } = jest.requireMock('@/features/media/useAssetUri') as {
-      useAssetUri: jest.Mock;
-    };
-    useAssetUri.mockReturnValueOnce(null);
-    const onToggle = jest.fn();
-
-    await render(
-      <MediaGridItem asset={photo} size={100} selectionOrder={null} disabled={false} onToggle={onToggle} />,
-    );
-
-    const user = userEvent.setup();
-    await user.press(screen.getByLabelText('Выбрать файл'));
-
-    expect(onToggle).toHaveBeenCalledWith(photo);
   });
 });

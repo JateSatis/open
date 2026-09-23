@@ -8,67 +8,50 @@ import { MediaPickerSheet, SHEET_PAN_TEST_ID } from '.';
 import { ConfirmDialogHost } from '@/components/ConfirmDialog';
 import { resetConfirmDialogQueue } from '@/components/ConfirmDialog/store';
 import type { ComposerDraft } from '@/features/chats/useComposerDraft';
-import type { LibraryAsset } from '@/features/media';
+import { useMediaSelection } from '@/features/media/selectionStore';
 
-jest.mock('@/features/media', () => ({
-  MediaGrid: () => null,
-}));
+// Грид тянет за собой expo-media-library, которого в тестах нет. Подменяем
+// его, но шапку рисуем: в ней живёт место, тап по которому закрывает шит.
+jest.mock('@/features/media', () => {
+  const React = require('react');
+  const { View } = require('react-native');
 
-function draftWith(media: LibraryAsset[]): ComposerDraft {
   return {
-    text: '',
-    setText: jest.fn(),
-    media,
-    toggleMedia: jest.fn(),
-    removeMedia: jest.fn(),
-    isSelected: jest.fn(() => false),
-    selectionOrder: jest.fn(() => null),
-    isFull: false,
-    clear: jest.fn(),
-    clearMedia: jest.fn(),
+    ...jest.requireActual('@/features/media/selectionStore'),
+    MediaGrid: ({ header }: { header?: React.ReactNode }) =>
+      React.createElement(View, null, header),
   };
-}
+});
 
-const photo: LibraryAsset = {
-  id: 'a1',
-  kind: 'photo',
-  uri: 'file:///cache/a1.jpg',
+const photo = {
+  id: 'content://media/external/images/media/1',
+  kind: 'photo' as const,
   width: 100,
   height: 100,
   durationMs: null,
 };
 
-/** Жест доводит дело до состояния React (подтверждение сброса), поэтому идёт внутри act. */
-async function fireSwipe(events: Parameters<typeof fireGestureHandler<PanGesture>>[1]) {
+function draft(): ComposerDraft {
+  return {
+    text: '',
+    setText: jest.fn(),
+    media: jest.fn(() => []),
+    clear: jest.fn(),
+    clearMedia: jest.fn(),
+  };
+}
+
+/** Смахивание вниз. Скорость выше порога не зависит от высоты тестового экрана. */
+async function swipeDown({ velocityY = 2000, translationY = 200 } = {}) {
   await act(async () => {
-    fireGestureHandler<PanGesture>(getByGestureTestId(SHEET_PAN_TEST_ID), events);
+    fireGestureHandler<PanGesture>(getByGestureTestId(SHEET_PAN_TEST_ID), [
+      { state: State.BEGAN, translationY: 0 },
+      { state: State.ACTIVE, translationY: 0 },
+      { translationY: translationY / 2 },
+      { translationY },
+      { state: State.END, translationY, velocityY },
+    ]);
   });
-}
-
-/**
- * Свайп вниз от текущего положения шита. Скорость выше порога — то же самое,
- * что короткий рывок пальцем: результат не зависит от высоты экрана, на
- * котором гоняются тесты.
- */
-function swipeDown({ velocityY = 2000, translationY = 120 } = {}) {
-  return fireSwipe([
-    { state: State.BEGAN, translationY: 0 },
-    { state: State.ACTIVE, translationY: 0 },
-    { translationY: translationY / 2 },
-    { translationY },
-    { state: State.END, translationY, velocityY },
-  ]);
-}
-
-/** Свайп вверх — тот же жест в обратную сторону, он доводит шит до верха экрана. */
-function swipeUp(translationY = -2000) {
-  return fireSwipe([
-    { state: State.BEGAN, translationY: 0 },
-    { state: State.ACTIVE, translationY: 0 },
-    { translationY: translationY / 2 },
-    { translationY },
-    { state: State.END, translationY, velocityY: -2000 },
-  ]);
 }
 
 function renderSheet(props: Partial<React.ComponentProps<typeof MediaPickerSheet>> = {}) {
@@ -77,7 +60,7 @@ function renderSheet(props: Partial<React.ComponentProps<typeof MediaPickerSheet
       <MediaPickerSheet
         visible
         onDismiss={jest.fn()}
-        draft={draftWith([])}
+        draft={draft()}
         onTyping={jest.fn()}
         onSend={jest.fn()}
         {...props}
@@ -90,6 +73,7 @@ function renderSheet(props: Partial<React.ComponentProps<typeof MediaPickerSheet
 beforeEach(() => {
   jest.clearAllMocks();
   resetConfirmDialogQueue();
+  useMediaSelection.getState().clear();
 });
 
 describe('MediaPickerSheet', () => {
@@ -116,68 +100,59 @@ describe('MediaPickerSheet', () => {
     expect(screen.queryByLabelText('Закрыть')).toBeNull();
   });
 
-  it('stays open when the swipe down is too short to count as a dismissal', async () => {
+  it('asks about discarding only when the sheet is actually being dismissed', async () => {
+    useMediaSelection.getState().toggle(photo);
+
+    await renderSheet();
+
+    // Сам по себе выбор файлов ничего не спрашивает.
+    expect(screen.queryByText('Отменить выбор файлов?')).toBeNull();
+
+    await swipeDown();
+
+    // Вопрос задаётся из колбэка анимации закрытия, то есть уже после того,
+    // как шит уехал. Порядок «уехал → спросили» на глаз проверяется на
+    // устройстве: мок reanimated выполняет анимацию мгновенно.
+    expect(await screen.findByText('Отменить выбор файлов?')).toBeTruthy();
+  });
+
+  it('keeps the selection and brings the sheet back on cancel', async () => {
     const onDismiss = jest.fn();
+    useMediaSelection.getState().toggle(photo);
 
     await renderSheet({ onDismiss });
-    await swipeDown({ velocityY: 0, translationY: 8 });
-
-    expect(onDismiss).not.toHaveBeenCalled();
-  });
-
-  it('collapses back to half height instead of closing when the same swipe started at the top', async () => {
-    const onDismiss = jest.fn();
-
-    await renderSheet({ onDismiss, draft: draftWith([]) });
-    // Тот же палец: сперва развернули шит на весь экран…
-    await swipeUp();
-    // …и следующим движением тянем вниз через весь экран — шит
-    // останавливается на половине и дальше в этом жесте не идёт.
-    await swipeDown({ translationY: 5000 });
-
-    expect(onDismiss).not.toHaveBeenCalled();
-
-    // А вот уже отдельный свайп вниз с половины — закрывает.
     await swipeDown();
-
-    expect(onDismiss).toHaveBeenCalledTimes(1);
-  });
-
-  it('asks for confirmation when swiped down with files selected, and keeps them on cancel', async () => {
-    const onDismiss = jest.fn();
-    const draft = draftWith([photo]);
-
-    await renderSheet({ onDismiss, draft });
-    await swipeDown();
-
-    expect(await screen.findByText('Отменить выбор файлов?')).toBeTruthy();
+    await screen.findByText('Отменить выбор файлов?');
 
     const user = userEvent.setup();
     await user.press(screen.getByText('Отмена'));
 
-    expect(draft.clearMedia).not.toHaveBeenCalled();
+    expect(useMediaSelection.getState().order).toEqual([photo.id]);
+    // Шит вернулся, а не закрылся: наружу о закрытии не сообщали.
     expect(onDismiss).not.toHaveBeenCalled();
+    expect(screen.getByTestId('media-picker-backdrop')).toBeTruthy();
   });
 
-  it('clears the media and closes once discard is confirmed', async () => {
+  it('clears the selection and stays closed once discard is confirmed', async () => {
     const onDismiss = jest.fn();
-    const draft = draftWith([photo]);
+    useMediaSelection.getState().toggle(photo);
 
-    await renderSheet({ onDismiss, draft });
+    await renderSheet({ onDismiss });
     await swipeDown();
     await screen.findByText('Отменить выбор файлов?');
 
     const user = userEvent.setup();
     await user.press(screen.getByText('Сбросить'));
 
-    expect(draft.clearMedia).toHaveBeenCalledTimes(1);
+    expect(useMediaSelection.getState().order).toEqual([]);
     expect(onDismiss).toHaveBeenCalledTimes(1);
   });
 
   it('asks the same question on a backdrop tap while files are selected', async () => {
     const onDismiss = jest.fn();
+    useMediaSelection.getState().toggle(photo);
 
-    await renderSheet({ onDismiss, draft: draftWith([photo]) });
+    await renderSheet({ onDismiss });
 
     const user = userEvent.setup();
     await user.press(screen.getByTestId('media-picker-backdrop'));
@@ -202,12 +177,16 @@ describe('MediaPickerSheet', () => {
 
     expect(screen.queryByLabelText('Сообщение')).toBeNull();
 
+    await act(async () => {
+      useMediaSelection.getState().toggle(photo);
+    });
+
     await rerender(
       <>
         <MediaPickerSheet
           visible
           onDismiss={jest.fn()}
-          draft={draftWith([photo])}
+          draft={draft()}
           onTyping={jest.fn()}
           onSend={jest.fn()}
         />
@@ -218,25 +197,12 @@ describe('MediaPickerSheet', () => {
     expect(await screen.findByLabelText('Сообщение')).toBeTruthy();
   });
 
-  it('sends and closes when the footer composer submits', async () => {
-    const onDismiss = jest.fn();
-    const onSend = jest.fn();
-
-    await renderSheet({ onDismiss, onSend, draft: draftWith([photo]) });
-
-    const user = userEvent.setup();
-    await user.press(await screen.findByText('Отправить'));
-
-    expect(onSend).toHaveBeenCalledTimes(1);
-    expect(onDismiss).toHaveBeenCalledTimes(1);
-  });
-
   it('renders nothing until it is made visible', async () => {
     const { rerender } = await render(
       <MediaPickerSheet
         visible={false}
         onDismiss={jest.fn()}
-        draft={draftWith([])}
+        draft={draft()}
         onTyping={jest.fn()}
         onSend={jest.fn()}
       />,
@@ -248,7 +214,7 @@ describe('MediaPickerSheet', () => {
       <MediaPickerSheet
         visible
         onDismiss={jest.fn()}
-        draft={draftWith([])}
+        draft={draft()}
         onTyping={jest.fn()}
         onSend={jest.fn()}
       />,

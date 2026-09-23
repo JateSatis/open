@@ -24,6 +24,7 @@ jest.mock('@/api/chats', () => ({
   subscribeToChat: jest.fn(),
 }));
 jest.mock('@/features/media', () => ({
+  assetPreviewUri: jest.fn((asset) => asset.id),
   libraryAssetToLocalMedia: jest.fn((asset) => ({
     kind: asset.kind,
     uri: asset.uri,
@@ -34,7 +35,9 @@ jest.mock('@/features/media', () => ({
   })),
   // Путь к файлу может догоняться уже после выбора — к отправке он обязан
   // быть, поэтому мок просто отдаёт то, что уже есть.
-  resolveLibraryAsset: jest.fn((asset) => Promise.resolve(asset)),
+  resolveLibraryAsset: jest.fn((asset) =>
+    Promise.resolve({ ...asset, uri: 'file:///cache/a1.jpg' }),
+  ),
   uploadAllMedia: jest.fn(),
   removeUploadedMedia: jest.fn(),
 }));
@@ -45,10 +48,10 @@ const mockedSubscribe = subscribeToChat as jest.MockedFunction<typeof subscribeT
 const mockedUploadAll = uploadAllMedia as jest.MockedFunction<typeof uploadAllMedia>;
 const mockedRemove = removeUploadedMedia as jest.MockedFunction<typeof removeUploadedMedia>;
 
+// Файл из грида: путь к нему не известен, он добирается уже при отправке.
 const asset = {
-  id: 'a1',
+  id: 'content://media/external/images/media/1',
   kind: 'photo' as const,
-  uri: 'file:///cache/a1.jpg',
   width: 800,
   height: 600,
   durationMs: null,

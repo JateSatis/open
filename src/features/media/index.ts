@@ -26,24 +26,26 @@ export { useVoiceRecorder, type VoiceRecorder as VoiceRecorderApi } from './useV
 
 export { MediaGrid, type MediaGridProps, type MediaListComponent } from './MediaGrid';
 export { MediaViewer, type MediaViewerItem, type MediaViewerProps } from './MediaViewer';
-export {
-  cachedAssetUri,
-  loadAssetUri,
-  resolveLibraryAsset,
-  warmAssetUris,
-} from './assetUriCache';
+export { assetPreviewUri } from './lib/previewUri';
 export {
   libraryAssetToLocalMedia,
   queryRecentMedia,
   requestMediaLibraryAccess,
   resolveAssetUri,
+  resolveLibraryAsset,
   type LibraryAccess,
   type LibraryAsset,
   type MediaLibraryItem,
   type ResolvedLibraryAsset,
 } from './mediaLibrary';
-export { useAssetUri } from './useAssetUri';
-export { useRecentMedia, type RecentMediaState, type RecentMediaStatus } from './useRecentMedia';
+export {
+  selectedAssets,
+  useMediaSelection,
+  useSelectionCount,
+  useSelectionIsFull,
+  useSelectionOrder,
+} from './selectionStore';
+export { useGalleryAssets, type GalleryAssets, type GalleryStatus } from './useGalleryAssets';
 export { prepareForUpload } from './lib/prepareForUpload';
 export { uploadAllMedia } from './uploadAll';
 

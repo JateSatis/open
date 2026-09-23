@@ -7,6 +7,7 @@
 import { Asset, AssetField, MediaType, Query, requestPermissionsAsync } from 'expo-media-library';
 
 import { MediaLimits } from './constants';
+import { perfLog, perfTime } from './perf';
 import { mimeFromUri } from './lib/mime';
 import type { LocalMedia, MediaKind } from './types';
 
@@ -64,14 +65,22 @@ export async function queryRecentMedia(params: {
   offset: number;
   limit?: number;
 }): Promise<MediaLibraryItem[]> {
-  const limit = params.limit ?? MediaLimits.gallery.pageSize;
+  const limit = params.limit ?? MediaLimits.gallery.chunk;
 
+  const startedAt = performance.now();
   const assets = await new Query()
     .within(AssetField.MEDIA_TYPE, [MediaType.IMAGE, MediaType.VIDEO])
     .orderBy({ key: AssetField.CREATION_TIME, ascending: false })
     .offset(params.offset)
     .limit(limit)
     .exeForMetadata();
+
+  perfLog('queryRecentMedia', {
+    offset: params.offset,
+    limit,
+    got: assets.length,
+    ms: Math.round(performance.now() - startedAt),
+  });
 
   return assets.map((info) => ({
     id: info.id,
@@ -83,12 +92,25 @@ export async function queryRecentMedia(params: {
 }
 
 /**
- * `uri` файла — единственное, что дорого получить (обращение к файловой
- * системе), поэтому запрашивается только для клетки, которая реально
- * попала в поле зрения, а не для всей страницы разом.
+ * `uri` файла нужен ровно в одном месте — когда пора читать байты для
+ * отправки. Для показа он не нужен, см. `assetPreviewUri`.
  */
 export function resolveAssetUri(id: string): Promise<string> {
-  return new Asset(id).getUri();
+  return perfTime('getUri', () => new Asset(id).getUri());
+}
+
+/**
+ * Путь к файлу нужен только к отправке, поэтому и добирается только там:
+ * в гриде выбранный файл хранится без него.
+ */
+export async function resolveLibraryAsset(
+  asset: MediaLibraryItem | LibraryAsset,
+): Promise<ResolvedLibraryAsset> {
+  const known = 'uri' in asset ? asset.uri : null;
+
+  if (known !== null) return { ...asset, uri: known };
+
+  return { ...asset, uri: await resolveAssetUri(asset.id) };
 }
 
 /**

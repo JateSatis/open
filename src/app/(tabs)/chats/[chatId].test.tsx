@@ -34,9 +34,10 @@ jest.mock('@/api/chats', () => ({
 // которых в тестовом окружении нет и не должно быть. Мок обрывает эту
 // цепочку на границе фичи, как и мок `@/api/chats` выше.
 jest.mock('@/features/media', () => ({
+  ...jest.requireActual('@/features/media/selectionStore'),
+  assetPreviewUri: (asset: { id: string }) => asset.id,
   MediaGrid: () => null,
   MediaViewer: () => null,
-  MediaLimits: { gallery: { maxSelection: 50, pageSize: 30 } },
 }));
 
 const mockedGetChat = getChat as jest.MockedFunction<typeof getChat>;

@@ -15,11 +15,12 @@ import { chatQueryKey } from '@/features/chats/useChat';
 import { reportRequestFailed } from '@/features/connection/connectionStore';
 import { useConnectionStatus } from '@/features/connection/useConnectionStatus';
 import {
+  assetPreviewUri,
   libraryAssetToLocalMedia,
   removeUploadedMedia,
   resolveLibraryAsset,
   uploadAllMedia,
-  type LibraryAsset,
+  type MediaLibraryItem,
   type UploadedMedia,
 } from '@/features/media';
 import { describeLoadError, isNetworkError } from '@/lib/network';
@@ -37,7 +38,7 @@ export type ChatMessage = Message & {
   /** Set only while the message exists optimistically, before the server id. */
   localId?: string;
   /** Исходный выбор из галереи — нужен только для повтора неудачной отправки. */
-  pendingMedia?: LibraryAsset[];
+  pendingMedia?: MediaLibraryItem[];
 };
 
 export type ChatMessagesState = {
@@ -49,7 +50,7 @@ export type ChatMessagesState = {
   error: string | null;
   typingUserIds: string[];
   loadMore: () => void;
-  send: (text: string, media?: LibraryAsset[]) => void;
+  send: (text: string, media?: MediaLibraryItem[]) => void;
   retry: (localId: string) => void;
   notifyTyping: () => void;
 };
@@ -75,12 +76,12 @@ function mergeNewest(existing: ChatMessage[], incoming: Message[]): ChatMessage[
 }
 
 /** Локальный предпросмотр вложения до ответа сервера — облачко не пустует, пока файлы грузятся. */
-function toLocalAttachment(asset: LibraryAsset): MessageAttachment {
+function toLocalAttachment(asset: MediaLibraryItem): MessageAttachment {
   return {
     id: asset.id,
-    // Путь может ещё догоняться (см. `resolveLibraryAsset`) — тогда облачко
-    // покажет пустое место вместо превью, а не задержит отрисовку.
-    url: asset.uri ?? '',
+    // Превью берётся по id ассета: путь к файлу для показа не нужен, он
+    // понадобится только когда дойдёт до чтения байт.
+    url: assetPreviewUri(asset),
     mimeType: asset.kind === 'video' ? 'video/mp4' : 'image/jpeg',
     width: asset.width,
     height: asset.height,
@@ -118,7 +119,7 @@ export function useChatMessages(chatId: string, currentUserId: string | null): C
   const lastTypingSentAtRef = useRef(0);
   // Неотправленное держим отдельно от рендера: повтор запускается по событию
   // связи, а не по перерисовке списка.
-  const unsentRef = useRef<{ localId: string; text: string; media: LibraryAsset[] }[]>([]);
+  const unsentRef = useRef<{ localId: string; text: string; media: MediaLibraryItem[] }[]>([]);
   const wasOfflineRef = useRef(false);
   // Связь может мигать чаще, чем успевает отработать одна отправка (особенно
   // с медиа — загрузка файлов идёт заметно дольше вставки текста), и тогда
@@ -269,7 +270,7 @@ export function useChatMessages(chatId: string, currentUserId: string | null): C
   }, [chatId, isLoadingMore]);
 
   const deliver = useCallback(
-    async (localId: string, text: string, media: LibraryAsset[]) => {
+    async (localId: string, text: string, media: MediaLibraryItem[]) => {
       if (deliveringRef.current.has(localId)) return;
 
       deliveringRef.current.add(localId);
@@ -370,7 +371,7 @@ export function useChatMessages(chatId: string, currentUserId: string | null): C
   }, [connection, deliver]);
 
   const send = useCallback(
-    (text: string, media: LibraryAsset[] = []) => {
+    (text: string, media: MediaLibraryItem[] = []) => {
       const trimmed = text.trim();
 
       if (!trimmed && media.length === 0) return;

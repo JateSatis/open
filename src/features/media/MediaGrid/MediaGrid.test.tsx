@@ -1,46 +1,45 @@
 import { render, screen, userEvent } from '@testing-library/react-native';
 
 import { MediaGrid } from '.';
-import { cachedAssetUri } from '@/features/media/assetUriCache';
-import { useRecentMedia } from '@/features/media/useRecentMedia';
 
-jest.mock('@/features/media/useRecentMedia', () => ({
-  useRecentMedia: jest.fn(),
-}));
-jest.mock('@/features/media/useVideoThumbnail', () => ({
-  useVideoThumbnail: jest.fn(() => null),
-}));
-jest.mock('@/features/media/useAssetUri', () => ({
-  useAssetUri: jest.fn((id: string) => `file:///${id}.jpg`),
-}));
-jest.mock('@/features/media/assetUriCache', () => ({
-  cachedAssetUri: jest.fn(() => null),
+import { useMediaSelection } from '@/features/media/selectionStore';
+import { useGalleryAssets } from '@/features/media/useGalleryAssets';
+
+jest.mock('@/features/media/useGalleryAssets', () => ({
+  useGalleryAssets: jest.fn(),
 }));
 
-const mockedUseRecentMedia = useRecentMedia as jest.MockedFunction<typeof useRecentMedia>;
-const mockedCachedAssetUri = cachedAssetUri as jest.MockedFunction<typeof cachedAssetUri>;
+const mockedUseGalleryAssets = useGalleryAssets as jest.MockedFunction<typeof useGalleryAssets>;
 
 function asset(id: string) {
   return { id, kind: 'photo' as const, width: 10, height: 10, durationMs: null };
 }
 
+function gallery(items: ReturnType<typeof asset>[], status: 'granted' | 'denied' = 'granted') {
+  mockedUseGalleryAssets.mockReturnValue({
+    status,
+    items,
+    isFilling: false,
+    requestAccess: jest.fn(),
+  });
+}
+
 beforeEach(() => {
   jest.clearAllMocks();
+  useMediaSelection.getState().clear();
 });
 
 describe('MediaGrid', () => {
   it('offers to ask for access again instead of showing an empty grid', async () => {
     const requestAccess = jest.fn();
-    mockedUseRecentMedia.mockReturnValue({
+    mockedUseGalleryAssets.mockReturnValue({
       status: 'denied',
       items: [],
-      isLoadingMore: false,
-      hasMore: false,
-      loadMore: jest.fn(),
+      isFilling: false,
       requestAccess,
     });
 
-    await render(<MediaGrid selected={[]} onToggle={jest.fn()} />);
+    await render(<MediaGrid />);
 
     expect(screen.getByText(/без доступа к галерее/)).toBeTruthy();
 
@@ -50,58 +49,32 @@ describe('MediaGrid', () => {
     expect(requestAccess).toHaveBeenCalledTimes(1);
   });
 
-  it('renders every recent file as a grid cell', async () => {
-    mockedUseRecentMedia.mockReturnValue({
-      status: 'granted',
-      items: [asset('a'), asset('b')],
-      isLoadingMore: false,
-      hasMore: false,
-      loadMore: jest.fn(),
-      requestAccess: jest.fn(),
-    });
+  it('renders every file of the gallery as a grid cell', async () => {
+    gallery([asset('a'), asset('b')]);
 
-    await render(<MediaGrid selected={[]} onToggle={jest.fn()} />);
+    await render(<MediaGrid />);
 
     expect(screen.getAllByLabelText('Выбрать файл')).toHaveLength(2);
   });
 
-  it('passes the tapped asset back with the path it already has cached', async () => {
-    const onToggle = jest.fn();
-    mockedCachedAssetUri.mockReturnValue('file:///a.jpg');
-    mockedUseRecentMedia.mockReturnValue({
-      status: 'granted',
-      items: [asset('a')],
-      isLoadingMore: false,
-      hasMore: false,
-      loadMore: jest.fn(),
-      requestAccess: jest.fn(),
-    });
+  it('keeps the media library untouched until it is enabled', async () => {
+    gallery([]);
 
-    await render(<MediaGrid selected={[]} onToggle={onToggle} />);
+    await render(<MediaGrid enabled={false} />);
 
-    const user = userEvent.setup();
-    await user.press(screen.getByLabelText('Выбрать файл'));
-
-    expect(onToggle).toHaveBeenCalledWith({ ...asset('a'), uri: 'file:///a.jpg' });
+    expect(mockedUseGalleryAssets).toHaveBeenCalledWith(false);
   });
 
-  it('selects a file whose path has not been resolved yet — the tap does not wait for it', async () => {
-    const onToggle = jest.fn();
-    mockedCachedAssetUri.mockReturnValue(null);
-    mockedUseRecentMedia.mockReturnValue({
-      status: 'granted',
-      items: [asset('a')],
-      isLoadingMore: false,
-      hasMore: false,
-      loadMore: jest.fn(),
-      requestAccess: jest.fn(),
-    });
+  it('writes the tapped file into the selection store, in tap order', async () => {
+    gallery([asset('a'), asset('b')]);
 
-    await render(<MediaGrid selected={[]} onToggle={onToggle} />);
+    await render(<MediaGrid />);
 
     const user = userEvent.setup();
-    await user.press(screen.getByLabelText('Выбрать файл'));
+    const circles = screen.getAllByLabelText('Выбрать файл');
+    await user.press(circles[1]);
+    await user.press(circles[0]);
 
-    expect(onToggle).toHaveBeenCalledWith({ ...asset('a'), uri: null });
+    expect(useMediaSelection.getState().order).toEqual(['b', 'a']);
   });
 });
