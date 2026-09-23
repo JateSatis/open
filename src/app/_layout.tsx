@@ -1,4 +1,3 @@
-import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
@@ -70,14 +69,12 @@ export default function RootLayout() {
       <QueryClientProvider client={queryClient}>
         <SafeAreaProvider>
           <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-            <BottomSheetModalProvider>
-              <ConnectionWatcher />
-              <Stack screenOptions={{ headerShown: false }} />
-              {/* Поверх навигатора: уведомление не принадлежит ни одному экрану. */}
-              <InAppMessageToast />
-              {/* Один диалог подтверждения на всё приложение, см. src/components/ConfirmDialog. */}
-              <ConfirmDialogHost />
-            </BottomSheetModalProvider>
+            <ConnectionWatcher />
+            <Stack screenOptions={{ headerShown: false }} />
+            {/* Поверх навигатора: уведомление не принадлежит ни одному экрану. */}
+            <InAppMessageToast />
+            {/* Один диалог подтверждения на всё приложение, см. src/components/ConfirmDialog. */}
+            <ConfirmDialogHost />
           </ThemeProvider>
         </SafeAreaProvider>
       </QueryClientProvider>

@@ -39,20 +39,6 @@ jest.mock('@/features/media', () => ({
   MediaLimits: { gallery: { maxSelection: 50, pageSize: 30 } },
 }));
 
-// @gorhom/bottom-sheet тянет reanimated/worklets, которых под jest нет по
-// той же причине, что и остального нативного медиа-стека выше.
-jest.mock('@gorhom/bottom-sheet', () => {
-  const { View } = require('react-native');
-
-  return {
-    BottomSheetModal: () => null,
-    BottomSheetFlatList: () => null,
-    BottomSheetFooter: ({ children }: { children: React.ReactNode }) => <View>{children}</View>,
-    BottomSheetBackdrop: () => null,
-    BottomSheetModalProvider: ({ children }: { children: React.ReactNode }) => <View>{children}</View>,
-  };
-});
-
 const mockedGetChat = getChat as jest.MockedFunction<typeof getChat>;
 const mockedListMessages = listMessages as jest.MockedFunction<typeof listMessages>;
 const mockedSendMessage = sendMessage as jest.MockedFunction<typeof sendMessage>;

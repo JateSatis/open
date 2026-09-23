@@ -24,9 +24,16 @@ export type MediaLibraryItem = {
 };
 
 export type LibraryAsset = MediaLibraryItem & {
-  /** file:// URI, пригоден и для превью, и для чтения байт при отправке. */
-  uri: string;
+  /**
+   * file:// URI — пригоден и для превью, и для чтения байт при отправке.
+   * `null`, пока путь не резолвился: выбор файла в гриде не ждёт похода в
+   * файловую систему, путь догоняет выбор (см. `resolveLibraryAsset`).
+   */
+  uri: string | null;
 };
+
+/** Тот же файл, но уже с путём — всё, что читает байты, требует именно его. */
+export type ResolvedLibraryAsset = LibraryAsset & { uri: string };
 
 export type LibraryAccess = 'granted' | 'denied';
 
@@ -88,7 +95,7 @@ export function resolveAssetUri(id: string): Promise<string> {
  * Галерея не сообщает MIME-тип напрямую (только тип медиа), поэтому он
  * выводится из расширения файла — тот же приём, что и в системном пикере.
  */
-export function libraryAssetToLocalMedia(asset: LibraryAsset): LocalMedia {
+export function libraryAssetToLocalMedia(asset: ResolvedLibraryAsset): LocalMedia {
   const fallbackMime = asset.kind === 'video' ? 'video/mp4' : 'image/jpeg';
 
   return {

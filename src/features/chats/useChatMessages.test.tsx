@@ -32,6 +32,9 @@ jest.mock('@/features/media', () => ({
     height: asset.height,
     durationMs: asset.durationMs,
   })),
+  // Путь к файлу может догоняться уже после выбора — к отправке он обязан
+  // быть, поэтому мок просто отдаёт то, что уже есть.
+  resolveLibraryAsset: jest.fn((asset) => Promise.resolve(asset)),
   uploadAllMedia: jest.fn(),
   removeUploadedMedia: jest.fn(),
 }));

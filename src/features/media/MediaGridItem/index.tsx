@@ -19,8 +19,12 @@ export type MediaGridItemProps = {
   selectionOrder: number | null;
   /** Лимит уже набран, а этот файл ещё не выбран — кружок недоступен. */
   disabled: boolean;
-  /** Отдаёт уже разрешённый `uri` — клетка сама знает, когда файл готов открыться. */
-  onToggle: (uri: string) => void;
+  /**
+   * Отдаёт наверх сам файл, а не его путь: выбор не должен ждать, пока
+   * резолвится `uri` — это поход в файловую систему ради данных, которые
+   * нужны только к отправке.
+   */
+  onToggle: (asset: MediaLibraryItem) => void;
 };
 
 /**
@@ -43,14 +47,6 @@ export const MediaGridItem = memo(function MediaGridItem({
   const videoThumbnail = useVideoThumbnail(asset.kind === 'video' && uri ? uri : '');
   const isSelected = selectionOrder !== null;
   const imageUri = asset.kind === 'video' ? videoThumbnail : uri;
-
-  const handleToggle = () => {
-    // Кружок недоступен на долю секунды, пока файл резолвится — не сама
-    // клетка блокируется, а лишь нечего пока передать наверх.
-    if (!uri) return;
-
-    onToggle(uri);
-  };
 
   return (
     <View style={{ width: size, height: size }}>
@@ -82,7 +78,7 @@ export const MediaGridItem = memo(function MediaGridItem({
         accessibilityState={{ selected: isSelected, disabled: disabled && !isSelected }}
         disabled={disabled && !isSelected}
         hitSlop={Spacing.two}
-        onPress={handleToggle}
+        onPress={() => onToggle(asset)}
         style={[
           styles.circle,
           {

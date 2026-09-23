@@ -6,6 +6,9 @@ import { queryRecentMedia, requestMediaLibraryAccess } from './mediaLibrary';
 jest.mock('./mediaLibrary', () => ({
   requestMediaLibraryAccess: jest.fn(),
   queryRecentMedia: jest.fn(),
+  // Загруженная страница сразу греет пути к файлам — походы в медиатеку
+  // из теста наружу не выпускаем.
+  resolveAssetUri: jest.fn((id: string) => Promise.resolve(`file:///${id}.jpg`)),
 }));
 jest.mock('./constants', () => ({
   MediaLimits: { gallery: { maxSelection: 50, pageSize: 2 } },

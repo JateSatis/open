@@ -40,7 +40,7 @@ describe('MediaGridItem', () => {
     const user = userEvent.setup();
     await user.press(screen.getByLabelText('Убрать из выбранного'));
 
-    expect(onToggle).toHaveBeenCalledWith('file:///cache/a1.jpg');
+    expect(onToggle).toHaveBeenCalledWith(photo);
   });
 
   it('offers a select button for an unpicked file', async () => {
@@ -53,7 +53,7 @@ describe('MediaGridItem', () => {
     const user = userEvent.setup();
     await user.press(screen.getByLabelText('Выбрать файл'));
 
-    expect(onToggle).toHaveBeenCalledWith('file:///cache/a1.jpg');
+    expect(onToggle).toHaveBeenCalledWith(photo);
   });
 
   it('disables selecting once the album limit is reached, but not for an already picked file', async () => {
@@ -72,7 +72,7 @@ describe('MediaGridItem', () => {
     expect(screen.getByText('0:12')).toBeTruthy();
   });
 
-  it('does not report a toggle while the uri is still resolving', async () => {
+  it('reports a toggle even while the preview is still resolving — the path is not needed to pick a file', async () => {
     const { useAssetUri } = jest.requireMock('@/features/media/useAssetUri') as {
       useAssetUri: jest.Mock;
     };
@@ -86,6 +86,6 @@ describe('MediaGridItem', () => {
     const user = userEvent.setup();
     await user.press(screen.getByLabelText('Выбрать файл'));
 
-    expect(onToggle).not.toHaveBeenCalled();
+    expect(onToggle).toHaveBeenCalledWith(photo);
   });
 });

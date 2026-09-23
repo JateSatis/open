@@ -1,6 +1,7 @@
 import { render, screen, userEvent } from '@testing-library/react-native';
 
 import { MediaGrid } from '.';
+import { cachedAssetUri } from '@/features/media/assetUriCache';
 import { useRecentMedia } from '@/features/media/useRecentMedia';
 
 jest.mock('@/features/media/useRecentMedia', () => ({
@@ -12,8 +13,12 @@ jest.mock('@/features/media/useVideoThumbnail', () => ({
 jest.mock('@/features/media/useAssetUri', () => ({
   useAssetUri: jest.fn((id: string) => `file:///${id}.jpg`),
 }));
+jest.mock('@/features/media/assetUriCache', () => ({
+  cachedAssetUri: jest.fn(() => null),
+}));
 
 const mockedUseRecentMedia = useRecentMedia as jest.MockedFunction<typeof useRecentMedia>;
+const mockedCachedAssetUri = cachedAssetUri as jest.MockedFunction<typeof cachedAssetUri>;
 
 function asset(id: string) {
   return { id, kind: 'photo' as const, width: 10, height: 10, durationMs: null };
@@ -60,8 +65,9 @@ describe('MediaGrid', () => {
     expect(screen.getAllByLabelText('Выбрать файл')).toHaveLength(2);
   });
 
-  it('passes the tapped asset back to the caller', async () => {
+  it('passes the tapped asset back with the path it already has cached', async () => {
     const onToggle = jest.fn();
+    mockedCachedAssetUri.mockReturnValue('file:///a.jpg');
     mockedUseRecentMedia.mockReturnValue({
       status: 'granted',
       items: [asset('a')],
@@ -77,5 +83,25 @@ describe('MediaGrid', () => {
     await user.press(screen.getByLabelText('Выбрать файл'));
 
     expect(onToggle).toHaveBeenCalledWith({ ...asset('a'), uri: 'file:///a.jpg' });
+  });
+
+  it('selects a file whose path has not been resolved yet — the tap does not wait for it', async () => {
+    const onToggle = jest.fn();
+    mockedCachedAssetUri.mockReturnValue(null);
+    mockedUseRecentMedia.mockReturnValue({
+      status: 'granted',
+      items: [asset('a')],
+      isLoadingMore: false,
+      hasMore: false,
+      loadMore: jest.fn(),
+      requestAccess: jest.fn(),
+    });
+
+    await render(<MediaGrid selected={[]} onToggle={onToggle} />);
+
+    const user = userEvent.setup();
+    await user.press(screen.getByLabelText('Выбрать файл'));
+
+    expect(onToggle).toHaveBeenCalledWith({ ...asset('a'), uri: null });
   });
 });

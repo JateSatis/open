@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { warmAssetUris } from './assetUriCache';
 import { MediaLimits } from './constants';
 import { queryRecentMedia, requestMediaLibraryAccess, type MediaLibraryItem } from './mediaLibrary';
 
@@ -37,6 +38,10 @@ export function useRecentMedia(): RecentMediaState {
       const page = await queryRecentMedia({ offset: offsetRef.current });
 
       offsetRef.current += page.length;
+      // Пути к файлам греются сразу на всю страницу: пока пользователь
+      // долистает до этих клеток, превью уже готовы, а не появляются
+      // пачкой следом за скроллом.
+      warmAssetUris(page.map((item) => item.id));
       setItems((current) => [...current, ...page]);
       setHasMore(page.length === MediaLimits.gallery.pageSize);
     } finally {

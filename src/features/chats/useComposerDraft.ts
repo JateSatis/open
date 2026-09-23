@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 
-import { MediaLimits, type LibraryAsset } from '@/features/media';
+import { MediaLimits, loadAssetUri, type LibraryAsset } from '@/features/media';
 
 export type ComposerDraft = {
   text: string;
@@ -41,6 +41,22 @@ export function useComposerDraft(chatId: string): ComposerDraft {
   }
 
   const toggleMedia = useCallback((asset: LibraryAsset) => {
+    // Грид отдаёт файл без пути, если тот ещё не прогрет, — тап по кружку
+    // не ждёт файловую систему. Путь догоняет выбор здесь, задолго до
+    // отправки; повторный запрос по тому же id обслуживается кэшем.
+    if (asset.uri === null) {
+      void loadAssetUri(asset.id)
+        .then((uri) => {
+          setMedia((current) =>
+            current.map((item) => (item.id === asset.id ? { ...item, uri } : item)),
+          );
+        })
+        .catch(() => {
+          // Файл могли удалить из галереи — отправка попробует ещё раз и
+          // честно упадёт в «не отправлено», а не подвиснет здесь.
+        });
+    }
+
     setMedia((current) => {
       const alreadySelected = current.some((item) => item.id === asset.id);
 

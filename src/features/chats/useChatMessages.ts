@@ -17,6 +17,7 @@ import { useConnectionStatus } from '@/features/connection/useConnectionStatus';
 import {
   libraryAssetToLocalMedia,
   removeUploadedMedia,
+  resolveLibraryAsset,
   uploadAllMedia,
   type LibraryAsset,
   type UploadedMedia,
@@ -77,7 +78,9 @@ function mergeNewest(existing: ChatMessage[], incoming: Message[]): ChatMessage[
 function toLocalAttachment(asset: LibraryAsset): MessageAttachment {
   return {
     id: asset.id,
-    url: asset.uri,
+    // Путь может ещё догоняться (см. `resolveLibraryAsset`) — тогда облачко
+    // покажет пустое место вместо превью, а не задержит отрисовку.
+    url: asset.uri ?? '',
     mimeType: asset.kind === 'video' ? 'video/mp4' : 'image/jpeg',
     width: asset.width,
     height: asset.height,
@@ -286,7 +289,11 @@ export function useChatMessages(chatId: string, currentUserId: string | null): C
           // потеряло вложения по дороге.
           if (!currentUserId) throw new Error('Нет активной сессии');
 
-          uploaded = await uploadAllMedia(media.map(libraryAssetToLocalMedia), currentUserId);
+          // Пути к файлам могли не успеть резолвиться к моменту выбора —
+          // добираем их здесь, там, где байты действительно нужны.
+          const resolved = await Promise.all(media.map(resolveLibraryAsset));
+
+          uploaded = await uploadAllMedia(resolved.map(libraryAssetToLocalMedia), currentUserId);
         }
 
         const saved = await sendMessage(chatId, {

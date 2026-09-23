@@ -1,9 +1,10 @@
-import { act, renderHook } from '@testing-library/react-native';
+import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import { useComposerDraft } from './useComposerDraft';
 
 jest.mock('@/features/media', () => ({
   MediaLimits: { gallery: { maxSelection: 2, pageSize: 30 } },
+  loadAssetUri: jest.fn((id: string) => Promise.resolve(`file://${id}.jpg`)),
 }));
 
 function asset(id: string) {
@@ -21,6 +22,17 @@ describe('useComposerDraft', () => {
     expect(result.current.selectionOrder('b')).toBe(1);
     expect(result.current.selectionOrder('a')).toBe(2);
     expect(result.current.selectionOrder('c')).toBeNull();
+  });
+
+  it('accepts a file without a path yet and fills it in afterwards', async () => {
+    const { result } = await renderHook(() => useComposerDraft('chat-1'));
+
+    await act(() => result.current.toggleMedia({ ...asset('a'), uri: null }));
+
+    // Выбран сразу, не дожидаясь файловой системы.
+    expect(result.current.media.map((item) => item.id)).toEqual(['a']);
+
+    await waitFor(() => expect(result.current.media[0].uri).toBe('file://a.jpg'));
   });
 
   it('removes a file from the selection when toggled again', async () => {
