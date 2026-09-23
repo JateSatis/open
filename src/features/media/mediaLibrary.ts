@@ -5,6 +5,7 @@
  * файлам через `expo-media-library`.
  */
 import { Asset, AssetField, MediaType, Query, requestPermissionsAsync } from 'expo-media-library';
+import { getAssetsAsync } from 'expo-media-library/legacy';
 
 import { MediaLimits } from './constants';
 import { perfLog, perfTime } from './perf';
@@ -128,4 +129,39 @@ export function libraryAssetToLocalMedia(asset: ResolvedLibraryAsset): LocalMedi
     height: asset.height,
     durationMs: asset.durationMs,
   };
+}
+
+/**
+ * Сколько всего фото и видео в галерее. Нужно ровно для одного: длина списка
+ * должна быть честной с первого кадра, чтобы скелет занимал столько клеток,
+ * сколько их будет на самом деле, а не «экран с запасом».
+ *
+ * Считает legacy-API: у нового `Query` метода вроде `exeForCount` нет вовсе
+ * (проверено по `Query.d.ts` в SDK 57 — там только `exe` и `exeForMetadata`),
+ * а `getAssetsAsync` отдаёт `totalCount` рядом с первой же страницей.
+ * Запрашивается один файл: считает его не клиент, а сама медиатека своим
+ * `COUNT(*)` по индексу.
+ *
+ * Цена измерена на устройстве, см. отчёт по задаче; если бы она оказалась
+ * сравнимой с чтением первого куска, смысла в отдельном запросе не было бы.
+ */
+export async function countRecentMedia(): Promise<number | null> {
+  const startedAt = performance.now();
+
+  try {
+    const page = await getAssetsAsync({ first: 1, mediaType: ['photo', 'video'] });
+
+    perfLog('countRecentMedia', {
+      total: page.totalCount,
+      ms: Math.round(performance.now() - startedAt),
+    });
+
+    return page.totalCount;
+  } catch (error) {
+    // Счётчик — удобство, а не условие работы грида: без него список просто
+    // начнёт со скелета на экран и дорастёт до настоящей длины.
+    perfLog('countRecentMedia: не вышло', { error: String(error) });
+
+    return null;
+  }
 }

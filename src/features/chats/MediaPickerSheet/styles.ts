@@ -31,13 +31,25 @@ export const styles = StyleSheet.create({
     bottom: 0,
     overflow: 'hidden',
   },
-  /** Верхний край шита. Живёт в шапке списка, а не отдельным слоем под ним. */
+  /**
+   * Подложка шита. Абсолютный слой внутри содержимого списка: `top` ей
+   * задаёт шит (высота прозрачной шапки), а `bottom: 0` дотягивает её до
+   * конца содержимого. Скругление верхних углов здесь же — фон и скругление
+   * обязаны быть одним и тем же вью, иначе между ними появится шов.
+   */
+  surface: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderTopLeftRadius: Radii.lg,
+    borderTopRightRadius: Radii.lg,
+  },
+  /** Верхний край шита с ручкой. Фон под ним рисует подложка. */
   sheetTop: {
     alignItems: 'center',
     paddingTop: Spacing.two,
     paddingBottom: Spacing.two + Spacing.half,
-    borderTopLeftRadius: Radii.lg,
-    borderTopRightRadius: Radii.lg,
   },
   handleBar: {
     width: HANDLE_BAR_WIDTH,

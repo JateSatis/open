@@ -54,6 +54,10 @@ async function swipeDown({ velocityY = 2000, translationY = 200 } = {}) {
   });
 }
 
+// Пороги закрытия — «отпустил, не дотянув» и «тащил медленно» — проверяются
+// отдельно, в shouldDismissSheet.test.ts: мок reanimated не хранит значения
+// shared value, поэтому через жест эти случаи здесь неотличимы от закрытия.
+
 function renderSheet(props: Partial<React.ComponentProps<typeof MediaPickerSheet>> = {}) {
   return render(
     <>
@@ -100,20 +104,55 @@ describe('MediaPickerSheet', () => {
     expect(screen.queryByLabelText('Закрыть')).toBeNull();
   });
 
-  it('asks about discarding only when the sheet is actually being dismissed', async () => {
+  it('keeps the sheet on screen and asks instead of leaving with the files selected', async () => {
+    const onDismiss = jest.fn();
     useMediaSelection.getState().toggle(photo);
 
-    await renderSheet();
+    await renderSheet({ onDismiss });
 
     // Сам по себе выбор файлов ничего не спрашивает.
     expect(screen.queryByText('Отменить выбор файлов?')).toBeNull();
 
     await swipeDown();
 
-    // Вопрос задаётся из колбэка анимации закрытия, то есть уже после того,
-    // как шит уехал. Порядок «уехал → спросили» на глаз проверяется на
-    // устройстве: мок reanimated выполняет анимацию мгновенно.
     expect(await screen.findByText('Отменить выбор файлов?')).toBeTruthy();
+    // Шит никуда не уехал и наружу о закрытии не сообщал: вопрос задаётся
+    // поверх него, а не вместо него.
+    expect(onDismiss).not.toHaveBeenCalled();
+    expect(screen.getByTestId('media-picker-backdrop')).toBeTruthy();
+  });
+
+  it('draws the question in its own window instead of opening a second one', async () => {
+    useMediaSelection.getState().toggle(photo);
+
+    // Корневого хоста здесь нет вовсе: вопрос обязан нарисоваться самим
+    // шитом, внутри уже открытого окна. Второе нативное окно Modal на Android
+    // рождается около 200 мс и съедает ровно те кадры, в которые шит должен
+    // отвечать на палец.
+    await render(
+      <MediaPickerSheet
+        visible
+        onDismiss={jest.fn()}
+        draft={draft()}
+        onTyping={jest.fn()}
+        onSend={jest.fn()}
+      />,
+    );
+
+    await swipeDown();
+
+    expect(await screen.findByText('Отменить выбор файлов?')).toBeTruthy();
+  });
+
+  it('asks once, not twice, when the root host is mounted as well', async () => {
+    useMediaSelection.getState().toggle(photo);
+
+    await renderSheet();
+    await swipeDown();
+
+    await screen.findByText('Отменить выбор файлов?');
+
+    expect(screen.getAllByText('Отменить выбор файлов?')).toHaveLength(1);
   });
 
   it('keeps the selection and brings the sheet back on cancel', async () => {
@@ -133,7 +172,7 @@ describe('MediaPickerSheet', () => {
     expect(screen.getByTestId('media-picker-backdrop')).toBeTruthy();
   });
 
-  it('clears the selection and stays closed once discard is confirmed', async () => {
+  it('clears the selection and only then leaves once discard is confirmed', async () => {
     const onDismiss = jest.fn();
     useMediaSelection.getState().toggle(photo);
 

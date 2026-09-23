@@ -1,14 +1,35 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { MediaLimits } from './constants';
-import { queryRecentMedia, requestMediaLibraryAccess, type MediaLibraryItem } from './mediaLibrary';
+import {
+  countRecentMedia,
+  queryRecentMedia,
+  requestMediaLibraryAccess,
+  type MediaLibraryItem,
+} from './mediaLibrary';
 import { perfLog } from './perf';
 
-export type GalleryStatus = 'checking' | 'granted' | 'denied';
+/**
+ * Состояния разделены намеренно и полностью.
+ *
+ * Раньше их было три (`checking` / `granted` / `denied`), и «читаю галерею»
+ * ничем не отличалось от «галерея пуста»: разрешение уже выдано, статус уже
+ * `granted`, а `items` ещё пустой — и грид показывал «На устройстве нет фото
+ * и видео» на те доли секунды, пока идёт первый запрос к медиатеке. Надпись
+ * про пустую галерею имеет право появиться ровно в одном состоянии — `empty`,
+ * то есть когда медиатека ответила и ответила ничем.
+ */
+export type GalleryStatus = 'checking' | 'denied' | 'loading' | 'empty' | 'ready';
 
 export type GalleryAssets = {
   status: GalleryStatus;
   items: MediaLibraryItem[];
+  /**
+   * Сколько файлов в галерее всего. Приходит раньше самих файлов и нужен
+   * скелету: столько клеток он рисует, пока настоящих ещё нет. `null` —
+   * счётчик пока неизвестен или не дался.
+   */
+  total: number | null;
   /** Дочитывается ли ещё хвост галереи — нужно только для индикатора. */
   isFilling: boolean;
   requestAccess: () => void;
@@ -31,11 +52,20 @@ export type GalleryAssets = {
 export function useGalleryAssets(enabled: boolean): GalleryAssets {
   const [status, setStatus] = useState<GalleryStatus>('checking');
   const [items, setItems] = useState<MediaLibraryItem[]>([]);
+  const [total, setTotal] = useState<number | null>(null);
   const [isFilling, setIsFilling] = useState(false);
   const cancelledRef = useRef(false);
 
   const fill = useCallback(async () => {
+    setStatus('loading');
     setIsFilling(true);
+
+    // Счётчик идёт параллельно первому куску, а не перед ним: он нужен
+    // скелету, а не файлам, и задерживать из-за него появление настоящих
+    // клеток незачем.
+    void countRecentMedia().then((count) => {
+      if (!cancelledRef.current && count !== null) setTotal(count);
+    });
 
     try {
       // Первый кусок маленький: он нужен прямо сейчас, чтобы на экране
@@ -46,8 +76,14 @@ export function useGalleryAssets(enabled: boolean): GalleryAssets {
 
       perfLog('галерея: первый кусок', { got: head.length });
       setItems(head);
+      setStatus(head.length === 0 ? 'empty' : 'ready');
 
-      if (head.length < MediaLimits.gallery.firstChunk) return;
+      if (head.length < MediaLimits.gallery.firstChunk) {
+        // Галерея кончилась на первом же куске — вот теперь её длина
+        // известна точно, и счётчику верить больше незачем.
+        setTotal(head.length);
+        return;
+      }
 
       // Остальное — одним запросом, а не кусками. Куски выглядели мягче, но
       // каждый из них пересоздавал массив и перерисовывал весь список, и эти
@@ -60,17 +96,25 @@ export function useGalleryAssets(enabled: boolean): GalleryAssets {
 
       perfLog('галерея: дочитана', { total: all.length });
       setItems(all);
+      setTotal(all.length);
     } finally {
       if (!cancelledRef.current) setIsFilling(false);
     }
   }, []);
 
+  // Статус здесь не сбрасывается в `checking` намеренно: до ответа системы
+  // менять нечего, а синхронный setState в эффекте — это лишний каскад
+  // рендеров ровно в тот момент, когда шит открывается.
   const requestAccess = useCallback(() => {
     void requestMediaLibraryAccess().then((access) => {
       if (cancelledRef.current) return;
 
-      setStatus(access);
-      if (access === 'granted') void fill();
+      if (access === 'denied') {
+        setStatus('denied');
+        return;
+      }
+
+      void fill();
     });
   }, [fill]);
 
@@ -85,5 +129,5 @@ export function useGalleryAssets(enabled: boolean): GalleryAssets {
     };
   }, [enabled, requestAccess]);
 
-  return { status, items, isFilling, requestAccess };
+  return { status, items, total, isFilling, requestAccess };
 }
