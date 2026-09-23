@@ -25,6 +25,7 @@ export { MediaUploadError, removeUploadedMedia, uploadMedia } from './storage';
 export { useVoiceRecorder, type VoiceRecorder as VoiceRecorderApi } from './useVoiceRecorder';
 
 export { MediaGrid, type MediaGridProps, type MediaListComponent } from './MediaGrid';
+export { GridSkeleton, type GridSkeletonProps } from './GridSkeleton';
 export { MediaViewer, type MediaViewerItem, type MediaViewerProps } from './MediaViewer';
 export { assetPreviewUri } from './lib/previewUri';
 export {

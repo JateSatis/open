@@ -125,5 +125,9 @@ export function ConfirmDialogSurface() {
 
   if (!isTop) return null;
 
-  return <ConfirmDialogCard />;
+  return (
+    <View style={styles.surface}>
+      <ConfirmDialogCard />
+    </View>
+  );
 }

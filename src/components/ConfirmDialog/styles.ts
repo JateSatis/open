@@ -6,6 +6,15 @@ import { Radii, Spacing } from '@/theme';
 const CARD_MAX_WIDTH = 360;
 
 export const styles = StyleSheet.create({
+  /**
+   * Вопрос, нарисованный внутри чужого экрана. Затемнение обязано лежать
+   * поверх всего окна, а не занимать место в потоке родителя: внутри шита
+   * оно иначе оказывается тем, что осталось от экрана после списка, и
+   * карточка съезжает вниз вместе с ним.
+   */
+  surface: {
+    ...StyleSheet.absoluteFill,
+  },
   backdrop: {
     flex: 1,
     alignItems: 'center',

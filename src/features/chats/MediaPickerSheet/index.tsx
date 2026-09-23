@@ -6,7 +6,16 @@
 // побочный каскад рендеров.
 /* eslint-disable react-hooks/immutability, react-hooks/set-state-in-effect */
 import { FlashList } from '@shopify/flash-list';
-import { forwardRef, useCallback, useEffect, useMemo, useState, type ComponentProps } from 'react';
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentProps,
+  type ComponentType,
+} from 'react';
 import {
   KeyboardAvoidingView,
   Modal,
@@ -20,7 +29,12 @@ import {
   type NativeSyntheticEvent,
   type ScrollViewProps,
 } from 'react-native';
-import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
+import {
+  createNativeWrapper,
+  Gesture,
+  GestureDetector,
+  GestureHandlerRootView,
+} from 'react-native-gesture-handler';
 import Animated, {
   Extrapolation,
   interpolate,
@@ -32,14 +46,14 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { FLING_VELOCITY, shouldDismissSheet } from './shouldDismissSheet';
-import { styles } from './styles';
+import { shouldDismissSheet } from './shouldDismissSheet';
+import { SHEET_TOP_HEIGHT, styles } from './styles';
 
 import { ConfirmDialogSurface, confirm } from '@/components/ConfirmDialog';
 import { dismissTopConfirmDialog } from '@/components/ConfirmDialog/store';
 import { MessageComposer } from '@/features/chats/MessageComposer';
 import type { ComposerDraft } from '@/features/chats/useComposerDraft';
-import { MediaGrid, type MediaListComponent } from '@/features/media';
+import { GridSkeleton, MediaGrid, type MediaListComponent } from '@/features/media';
 import { countRender } from '@/features/media/perf';
 import { useHasSelection, useMediaSelection } from '@/features/media/selectionStore';
 import { useTheme } from '@/hooks/use-theme';
@@ -51,6 +65,27 @@ export type MediaPickerSheetProps = {
   onTyping: () => void;
   onSend: () => void;
 };
+
+/**
+ * Скролл списка, про который жест закрытия знает, что с ним не спорит.
+ *
+ * `createNativeWrapper` вешает на `ScrollView` нативный жест RNGH и отдаёт
+ * наружу сам `ScrollView` с проставленным `handlerTag` — то есть одна и та же
+ * ссылка годится и списку, который этим скроллом управляет, и
+ * `simultaneousWithExternalGesture`, которому нужен тег обработчика.
+ *
+ * Почему не `GestureDetector` с `Gesture.Native()`: снаружи `FlashList` он
+ * цепляется к вью-обёртке, а не к скроллу, и жест закрытия просто съедает
+ * скролл — список не двигается вовсе. Вокруг самого `ScrollView` он добавляет
+ * свою вью, и `FlashList`, который меряет положение содержимого относительно
+ * своего контейнера, начинает считать его неверно: после резкого броска сетка
+ * пропадала целиком на 1.79 с (замер по записи экрана). Этот же враппер
+ * дерево вью не трогает.
+ */
+const GestureScrollView = createNativeWrapper<ScrollViewProps>(ScrollView, {
+  disallowInterruption: false,
+  shouldCancelWhenOutside: false,
+});
 
 /** Жест закрытия — снаружи нужен только тестам, поэтому лежит рядом с самим жестом. */
 export const SHEET_PAN_TEST_ID = 'media-picker-pan';
@@ -158,6 +193,11 @@ export function MediaPickerSheet({ visible, onDismiss, draft, onTyping, onSend }
     if (visible) {
       setMounted(true);
       dismissY.value = screenHeight;
+      // Шит закрывается, но не размонтируется — значения переживают закрытие.
+      // Список при следующем открытии начинается сверху, и позиция скролла
+      // обязана начинаться оттуда же: с чужими 450 от прошлого раза жест
+      // закрытия считает, что список пролистан, и смахнуть шит нельзя.
+      scrollOffset.value = 0;
       openSheet();
     } else if (mounted) {
       closeAnimated();
@@ -215,9 +255,8 @@ export function MediaPickerSheet({ visible, onDismiss, draft, onTyping, onSend }
     onDismiss();
   }, [onSend, onDismiss]);
 
-  // Нативный жест самого списка: жест закрытия объявлен одновременным с ним,
-  // и ссылка на него должна пережить рендер, иначе связка распадётся.
-  const listGesture = useMemo(() => Gesture.Native(), []);
+  /** Скролл списка: жест закрытия объявлен одновременным с ним по этой ссылке. */
+  const scrollGestureRef = useRef<ComponentType | null>(null);
 
   const trackScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -241,43 +280,67 @@ export function MediaPickerSheet({ visible, onDismiss, draft, onTyping, onSend }
     () =>
       forwardRef<ScrollView, ScrollViewProps>(function SheetScrollView({ children, ...rest }, ref) {
         return (
-          <ScrollView {...rest} ref={ref}>
+          <GestureScrollView
+            {...rest}
+            ref={(instance: ComponentType | null) => {
+              // Скролл нужен двоим: самому списку, который им управляет, и
+              // жесту закрытия, которому достаточно знать, с чем не спорить.
+              scrollGestureRef.current = instance;
+
+              // RNGH описывает свой враппер как `ComponentType`, хотя наружу
+              // отдаёт сам `ScrollView` — со всеми его методами и с
+              // проставленным `handlerTag`. Списку нужен именно он.
+              const scrollView = instance as unknown as ScrollView | null;
+
+              if (typeof ref === 'function') ref(scrollView);
+              else if (ref) ref.current = scrollView;
+            }}
+          >
             <View
-              style={[
-                styles.surface,
-                { top: travel, backgroundColor: theme.background },
-              ]}
+              style={[styles.surface, { top: travel, backgroundColor: theme.background }]}
               pointerEvents="none"
-            />
+            >
+              {/* Сетка скелета живёт в подложке, то есть в координатах
+                  содержимого: её двигает тот же нативный скролл, что и клетки.
+                  Смещение — высота полосы с ручкой, ниже неё начинается
+                  первая строка. */}
+              <GridSkeleton
+                top={SHEET_TOP_HEIGHT}
+                square={theme.backgroundElement}
+                gap={theme.background}
+              />
+            </View>
             {children}
-          </ScrollView>
+          </GestureScrollView>
         );
       }),
-    [theme.background, travel],
+    [theme.background, theme.backgroundElement, travel],
   );
 
   const ListComponent = useMemo<MediaListComponent>(
     () =>
       function SheetMediaList(props: ComponentProps<MediaListComponent>) {
         return (
-          <GestureDetector gesture={listGesture}>
-            <FlashList
-              {...props}
-              showsVerticalScrollIndicator={false}
-              renderScrollComponent={scrollComponent}
-              onScroll={trackScroll}
-              scrollEventThrottle={16}
-            />
-          </GestureDetector>
+          <FlashList
+            {...props}
+            showsVerticalScrollIndicator={false}
+            renderScrollComponent={scrollComponent}
+            onScroll={trackScroll}
+            scrollEventThrottle={16}
+          />
         );
       },
-    [listGesture, scrollComponent, trackScroll],
+    [scrollComponent, trackScroll],
   );
 
   const dismissPan = Gesture.Pan()
     .withTestId(SHEET_PAN_TEST_ID)
     .activeOffsetY([-PAN_ACTIVATION_PX, PAN_ACTIVATION_PX])
-    .simultaneousWithExternalGesture(listGesture)
+    // Жест не читает ссылку в рендере — он запоминает её и спрашивает уже в
+    // момент касания, когда скролл давно смонтирован. Правило про рефы этого
+    // различить не может.
+    // eslint-disable-next-line react-hooks/refs
+    .simultaneousWithExternalGesture(scrollGestureRef)
     .onStart(() => {
       panStartY.value = dismissY.value;
       // Смахнуть можно только с самого верха списка: во всех остальных
