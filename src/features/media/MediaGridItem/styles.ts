@@ -8,6 +8,10 @@ export const styles = StyleSheet.create({
   thumbnail: {
     ...StyleSheet.absoluteFill,
   },
+  broken: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   videoBadge: {
     position: 'absolute',
     right: Spacing.one,

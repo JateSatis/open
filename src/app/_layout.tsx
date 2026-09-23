@@ -2,9 +2,11 @@ import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from '@ta
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useState } from 'react';
-import { useColorScheme } from 'react-native';
+import { StyleSheet, useColorScheme } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { ConfirmDialogHost } from '@/components/ConfirmDialog';
 import { ConnectionWatcher } from '@/features/connection/ConnectionWatcher';
 import {
   reportRequestFailed,
@@ -61,15 +63,27 @@ export default function RootLayout() {
   }, []);
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <SafeAreaProvider>
-        <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-          <ConnectionWatcher />
-          <Stack screenOptions={{ headerShown: false }} />
-          {/* Поверх навигатора: уведомление не принадлежит ни одному экрану. */}
-          <InAppMessageToast />
-        </ThemeProvider>
-      </SafeAreaProvider>
-    </QueryClientProvider>
+    // Нужен react-native-gesture-handler в принципе (им пользуется шит выбора
+    // медиа) — без корневой обёртки жесты не работают на Android.
+    <GestureHandlerRootView style={styles.flex}>
+      <QueryClientProvider client={queryClient}>
+        <SafeAreaProvider>
+          <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+            <ConnectionWatcher />
+            <Stack screenOptions={{ headerShown: false }} />
+            {/* Поверх навигатора: уведомление не принадлежит ни одному экрану. */}
+            <InAppMessageToast />
+            {/* Один диалог подтверждения на всё приложение, см. src/components/ConfirmDialog. */}
+            <ConfirmDialogHost />
+          </ThemeProvider>
+        </SafeAreaProvider>
+      </QueryClientProvider>
+    </GestureHandlerRootView>
   );
 }
+
+const styles = StyleSheet.create({
+  flex: {
+    flex: 1,
+  },
+});

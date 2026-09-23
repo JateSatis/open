@@ -15,10 +15,12 @@ import { chatQueryKey } from '@/features/chats/useChat';
 import { reportRequestFailed } from '@/features/connection/connectionStore';
 import { useConnectionStatus } from '@/features/connection/useConnectionStatus';
 import {
+  assetPreviewUri,
   libraryAssetToLocalMedia,
   removeUploadedMedia,
+  resolveLibraryAsset,
   uploadAllMedia,
-  type LibraryAsset,
+  type MediaLibraryItem,
   type UploadedMedia,
 } from '@/features/media';
 import { describeLoadError, isNetworkError } from '@/lib/network';
@@ -36,7 +38,7 @@ export type ChatMessage = Message & {
   /** Set only while the message exists optimistically, before the server id. */
   localId?: string;
   /** Исходный выбор из галереи — нужен только для повтора неудачной отправки. */
-  pendingMedia?: LibraryAsset[];
+  pendingMedia?: MediaLibraryItem[];
 };
 
 export type ChatMessagesState = {
@@ -48,7 +50,7 @@ export type ChatMessagesState = {
   error: string | null;
   typingUserIds: string[];
   loadMore: () => void;
-  send: (text: string, media?: LibraryAsset[]) => void;
+  send: (text: string, media?: MediaLibraryItem[]) => void;
   retry: (localId: string) => void;
   notifyTyping: () => void;
 };
@@ -74,10 +76,12 @@ function mergeNewest(existing: ChatMessage[], incoming: Message[]): ChatMessage[
 }
 
 /** Локальный предпросмотр вложения до ответа сервера — облачко не пустует, пока файлы грузятся. */
-function toLocalAttachment(asset: LibraryAsset): MessageAttachment {
+function toLocalAttachment(asset: MediaLibraryItem): MessageAttachment {
   return {
     id: asset.id,
-    url: asset.uri,
+    // Превью берётся по id ассета: путь к файлу для показа не нужен, он
+    // понадобится только когда дойдёт до чтения байт.
+    url: assetPreviewUri(asset),
     mimeType: asset.kind === 'video' ? 'video/mp4' : 'image/jpeg',
     width: asset.width,
     height: asset.height,
@@ -115,7 +119,7 @@ export function useChatMessages(chatId: string, currentUserId: string | null): C
   const lastTypingSentAtRef = useRef(0);
   // Неотправленное держим отдельно от рендера: повтор запускается по событию
   // связи, а не по перерисовке списка.
-  const unsentRef = useRef<{ localId: string; text: string; media: LibraryAsset[] }[]>([]);
+  const unsentRef = useRef<{ localId: string; text: string; media: MediaLibraryItem[] }[]>([]);
   const wasOfflineRef = useRef(false);
   // Связь может мигать чаще, чем успевает отработать одна отправка (особенно
   // с медиа — загрузка файлов идёт заметно дольше вставки текста), и тогда
@@ -266,7 +270,7 @@ export function useChatMessages(chatId: string, currentUserId: string | null): C
   }, [chatId, isLoadingMore]);
 
   const deliver = useCallback(
-    async (localId: string, text: string, media: LibraryAsset[]) => {
+    async (localId: string, text: string, media: MediaLibraryItem[]) => {
       if (deliveringRef.current.has(localId)) return;
 
       deliveringRef.current.add(localId);
@@ -286,7 +290,11 @@ export function useChatMessages(chatId: string, currentUserId: string | null): C
           // потеряло вложения по дороге.
           if (!currentUserId) throw new Error('Нет активной сессии');
 
-          uploaded = await uploadAllMedia(media.map(libraryAssetToLocalMedia), currentUserId);
+          // Пути к файлам могли не успеть резолвиться к моменту выбора —
+          // добираем их здесь, там, где байты действительно нужны.
+          const resolved = await Promise.all(media.map(resolveLibraryAsset));
+
+          uploaded = await uploadAllMedia(resolved.map(libraryAssetToLocalMedia), currentUserId);
         }
 
         const saved = await sendMessage(chatId, {
@@ -295,13 +303,26 @@ export function useChatMessages(chatId: string, currentUserId: string | null): C
         });
 
         rememberLatest(saved.createdAt);
-        setMessages((current) =>
-          current.map((message) =>
+        setMessages((current) => {
+          // Свой же broadcast мог прийти раньше ответа на вставку и уже
+          // подтянуть это сообщение через pullNewMessages() под его настоящим
+          // id. Тогда placeholder не переименовывается в тот же id (вышли бы
+          // два элемента с одинаковым id и задвоенный рендер), а просто
+          // убирается — актуальная копия уже в списке.
+          const alreadyPulled = current.some(
+            (message) => message.id === saved.id && message.localId === undefined,
+          );
+
+          if (alreadyPulled) {
+            return current.filter((message) => message.localId !== localId);
+          }
+
+          return current.map((message) =>
             message.localId === localId
               ? { ...saved, status: 'sent' as const, pendingMedia: undefined }
               : message,
-          ),
-        );
+          );
+        });
         // Список чатов держит последнее сообщение и порядок — после отправки
         // он устарел, хотя сама переписка на экране уже верна.
         void queryClient.invalidateQueries({ queryKey: chatsQueryKey });
@@ -350,7 +371,7 @@ export function useChatMessages(chatId: string, currentUserId: string | null): C
   }, [connection, deliver]);
 
   const send = useCallback(
-    (text: string, media: LibraryAsset[] = []) => {
+    (text: string, media: MediaLibraryItem[] = []) => {
       const trimmed = text.trim();
 
       if (!trimmed && media.length === 0) return;

@@ -27,4 +27,19 @@ export const styles = StyleSheet.create({
     paddingVertical: Spacing.three,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
+  sendWrapper: {
+    position: 'relative',
+  },
+  mediaBadge: {
+    position: 'absolute',
+    top: -Spacing.one,
+    right: -Spacing.one,
+    minWidth: Spacing.four,
+    height: Spacing.four,
+    borderRadius: Radii.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.one,
+    borderWidth: 2,
+  },
 });

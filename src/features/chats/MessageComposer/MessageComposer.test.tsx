@@ -2,16 +2,19 @@ import { render, screen, userEvent } from '@testing-library/react-native';
 
 import { MessageComposer } from '.';
 
-import type { LibraryAsset } from '@/features/media';
+import { useMediaSelection } from '@/features/media/selectionStore';
 
-const photo: LibraryAsset = {
-  id: 'a1',
-  kind: 'photo',
-  uri: 'file:///cache/a1.jpg',
+const photo = {
+  id: 'content://media/external/images/media/1',
+  kind: 'photo' as const,
   width: 100,
   height: 100,
   durationMs: null,
 };
+
+beforeEach(() => {
+  useMediaSelection.getState().clear();
+});
 
 describe('MessageComposer', () => {
   it('hides everything but the explanation when the reader is not a member', async () => {
@@ -19,8 +22,6 @@ describe('MessageComposer', () => {
       <MessageComposer
         text=""
         onChangeText={jest.fn()}
-        media={[]}
-        onRemoveMedia={jest.fn()}
         onSend={jest.fn()}
         onTyping={jest.fn()}
         canSend={false}
@@ -36,8 +37,6 @@ describe('MessageComposer', () => {
       <MessageComposer
         text=""
         onChangeText={jest.fn()}
-        media={[]}
-        onRemoveMedia={jest.fn()}
         onSend={jest.fn()}
         onTyping={jest.fn()}
         canSend
@@ -53,8 +52,6 @@ describe('MessageComposer', () => {
       <MessageComposer
         text=""
         onChangeText={jest.fn()}
-        media={[]}
-        onRemoveMedia={jest.fn()}
         onSend={jest.fn()}
         onTyping={jest.fn()}
         canSend
@@ -66,13 +63,12 @@ describe('MessageComposer', () => {
 
   it('calls onSend when there is media but no text', async () => {
     const onSend = jest.fn();
+    useMediaSelection.getState().toggle(photo);
 
     await render(
       <MessageComposer
         text=""
         onChangeText={jest.fn()}
-        media={[photo]}
-        onRemoveMedia={jest.fn()}
         onSend={onSend}
         onTyping={jest.fn()}
         canSend
@@ -92,8 +88,6 @@ describe('MessageComposer', () => {
       <MessageComposer
         text="   "
         onChangeText={jest.fn()}
-        media={[]}
-        onRemoveMedia={jest.fn()}
         onSend={onSend}
         onTyping={jest.fn()}
         canSend
@@ -106,19 +100,35 @@ describe('MessageComposer', () => {
     expect(onSend).not.toHaveBeenCalled();
   });
 
-  it('shows the attached media strip above the field', async () => {
+  it('shows how many files are attached as a badge on the send button, not as thumbnails', async () => {
+    useMediaSelection.getState().toggle(photo);
+    useMediaSelection.getState().toggle({ ...photo, id: 'a2' });
+
     await render(
       <MessageComposer
         text=""
         onChangeText={jest.fn()}
-        media={[photo]}
-        onRemoveMedia={jest.fn()}
         onSend={jest.fn()}
         onTyping={jest.fn()}
         canSend
       />,
     );
 
-    expect(screen.getByTestId('attached-media-strip')).toBeTruthy();
+    expect(screen.getByText('2')).toBeTruthy();
+    expect(screen.queryByTestId('attached-media-strip')).toBeNull();
+  });
+
+  it('shows no badge when nothing is attached', async () => {
+    await render(
+      <MessageComposer
+        text=""
+        onChangeText={jest.fn()}
+        onSend={jest.fn()}
+        onTyping={jest.fn()}
+        canSend
+      />,
+    );
+
+    expect(screen.queryByText('0')).toBeNull();
   });
 });

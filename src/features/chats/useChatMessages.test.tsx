@@ -5,6 +5,7 @@ import type { ReactNode } from 'react';
 import { useChatMessages } from './useChatMessages';
 
 import { listMessages, sendMessage, subscribeToChat } from '@/api/chats';
+import type { ChatChannelHandlers } from '@/api/chats';
 import {
   reportRealtimeDown,
   reportRealtimeJoined,
@@ -23,6 +24,7 @@ jest.mock('@/api/chats', () => ({
   subscribeToChat: jest.fn(),
 }));
 jest.mock('@/features/media', () => ({
+  assetPreviewUri: jest.fn((asset) => asset.id),
   libraryAssetToLocalMedia: jest.fn((asset) => ({
     kind: asset.kind,
     uri: asset.uri,
@@ -31,6 +33,11 @@ jest.mock('@/features/media', () => ({
     height: asset.height,
     durationMs: asset.durationMs,
   })),
+  // Путь к файлу может догоняться уже после выбора — к отправке он обязан
+  // быть, поэтому мок просто отдаёт то, что уже есть.
+  resolveLibraryAsset: jest.fn((asset) =>
+    Promise.resolve({ ...asset, uri: 'file:///cache/a1.jpg' }),
+  ),
   uploadAllMedia: jest.fn(),
   removeUploadedMedia: jest.fn(),
 }));
@@ -41,10 +48,10 @@ const mockedSubscribe = subscribeToChat as jest.MockedFunction<typeof subscribeT
 const mockedUploadAll = uploadAllMedia as jest.MockedFunction<typeof uploadAllMedia>;
 const mockedRemove = removeUploadedMedia as jest.MockedFunction<typeof removeUploadedMedia>;
 
+// Файл из грида: путь к нему не известен, он добирается уже при отправке.
 const asset = {
-  id: 'a1',
+  id: 'content://media/external/images/media/1',
   kind: 'photo' as const,
-  uri: 'file:///cache/a1.jpg',
   width: 800,
   height: 600,
   durationMs: null,
@@ -228,5 +235,69 @@ describe('useChatMessages sending media', () => {
 
     // Один провал плюс один повтор — не три параллельных попытки на одно и то же сообщение.
     expect(mockedSendMessage).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not duplicate a message that its own broadcast pulled in before the insert answered', async () => {
+    let handlers: ChatChannelHandlers | null = null;
+    mockedSubscribe.mockImplementation((_chatId, given) => {
+      handlers = given;
+      return { broadcastTyping: jest.fn(), unsubscribe: jest.fn() };
+    });
+
+    // Догрузка через listMessagesSince() требует уже известного "докуда
+    // прочитано" — оно берётся из первой загрузки чата, поэтому в чате уже
+    // есть одно более раннее сообщение.
+    mockedListMessages.mockResolvedValue({
+      items: [
+        {
+          id: 'm0',
+          chatId: 'chat-1',
+          authorId: 'user-2',
+          kind: 'text' as const,
+          text: 'до этого',
+          createdAt: '2026-09-22T09:00:00Z',
+          attachments: [],
+        },
+      ],
+      nextCursor: null,
+    });
+
+    const saved = {
+      id: 'm1',
+      chatId: 'chat-1',
+      authorId: 'user-1',
+      kind: 'text' as const,
+      text: 'привет',
+      createdAt: '2026-09-22T10:00:00Z',
+      attachments: [],
+    };
+
+    const { listMessagesSince } = jest.requireMock('@/api/chats') as { listMessagesSince: jest.Mock };
+    listMessagesSince.mockResolvedValue([saved]);
+
+    // Вставка "висит" — как если бы свой же broadcast дошёл раньше, чем
+    // ответ на INSERT успел вернуться клиенту.
+    let resolveSend!: (value: Awaited<ReturnType<typeof sendMessage>>) => void;
+    mockedSendMessage.mockImplementation(() => new Promise((resolve) => { resolveSend = resolve; }));
+
+    const { result } = await renderHook(() => useChatMessages('chat-1', 'user-1'), { wrapper });
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    await act(() => result.current.send('привет'));
+    expect(result.current.messages).toHaveLength(2);
+
+    // Свой broadcast прилетает первым и подтягивает то же сообщение под его
+    // настоящим id — до того, как локальный placeholder успел смениться.
+    await act(() => handlers?.onMessage());
+    await waitFor(() => expect(result.current.messages).toHaveLength(3));
+
+    await act(() => resolveSend(saved));
+
+    // Placeholder убирается, а не переименовывается поверх уже пришедшей копии.
+    expect(result.current.messages).toHaveLength(2);
+    expect(result.current.messages.filter((message) => message.id === 'm1')).toHaveLength(1);
+    expect(result.current.messages[0].id).toBe('m1');
+    expect(result.current.messages[0].status).toBe('sent');
   });
 });

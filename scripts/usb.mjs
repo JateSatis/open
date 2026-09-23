@@ -32,22 +32,50 @@ const exe = process.platform === "win32" ? ".exe" : "";
 // команда висит бесконечно, и скрипт выглядит сломанным.
 const ADB_TIMEOUT_MS = 15_000;
 
-function adb(args, extra = {}) {
+/**
+ * Снимает сервер adb средствами системы. `adb kill-server` для этого не
+ * годится: он сам ходит в тот же залипший сервер и виснет вместе с ним.
+ */
+function killAdbServer() {
+  if (process.platform === "win32") {
+    spawnSync("taskkill", ["/F", "/IM", `adb${exe}`], { stdio: "ignore" });
+  } else {
+    spawnSync("pkill", ["-x", "adb"], { stdio: "ignore" });
+  }
+}
+
+/** Поднимаем залипший сервер один раз за запуск: не помогло — дальше без толку. */
+let adbHealed = false;
+
+function adb(args, extra = {}, { allowHeal = true } = {}) {
   const res = spawnSync("adb", args, {
     encoding: "utf8",
     timeout: ADB_TIMEOUT_MS,
     ...extra,
   });
 
-  if (res.error?.code === "ETIMEDOUT") {
-    console.error(
-      `\nadb не ответил за ${ADB_TIMEOUT_MS / 1000} с — похоже, завис его сервер.` +
-        "\nПерезапусти его: adb kill-server, затем повтори команду.",
-    );
-    process.exit(1);
+  if (res.error?.code !== "ETIMEDOUT") {
+    return res;
   }
 
-  return res;
+  // Залипший сервер лечится только перезапуском, и просить об этом человека
+  // незачем — скрипт умеет это сам.
+  if (allowHeal && !adbHealed) {
+    adbHealed = true;
+    console.log(
+      `adb не ответил за ${ADB_TIMEOUT_MS / 1000} с — снимаю залипший сервер и поднимаю заново...`,
+    );
+    killAdbServer();
+    adb(["start-server"], { stdio: "ignore" }, { allowHeal: false });
+
+    return adb(args, extra, { allowHeal: false });
+  }
+
+  console.error(
+    `\nadb не ответил за ${ADB_TIMEOUT_MS / 1000} с даже после перезапуска сервера.` +
+      "\nПереткни кабель и повтори команду.",
+  );
+  process.exit(1);
 }
 
 /** Путь к SDK берётся из окружения, но переменная часто указывает не туда, поэтому проверяем. */
@@ -87,8 +115,37 @@ function listAttached() {
     .map(([serial, state]) => ({ serial, state }));
 }
 
+/**
+ * Устройство в `offline` — это оборвавшаяся сессия adb, а не отключённый
+ * кабель: помогает `adb reconnect`, после которого оно возвращается за
+ * пару секунд. Перезапуск сервера тут не нужен и только дольше.
+ */
+function reconnectOffline() {
+  const offline = listAttached().filter(({ state }) => state === "offline");
+
+  if (offline.length === 0) return false;
+
+  console.log(`Связь с ${offline.map((d) => d.serial).join(", ")} оборвалась, переподключаю...`);
+
+  for (const { serial } of offline) {
+    adb(["-s", serial, "reconnect"], { stdio: "ignore" });
+  }
+
+  return true;
+}
+
 /** Только те, с которыми можно работать: offline и authorizing ещё не готовы. */
 function listDevices() {
+  const ready = listAttached()
+    .filter(({ state }) => state === "device")
+    .map(({ serial }) => serial);
+
+  if (ready.length > 0 || !reconnectOffline()) return ready;
+
+  // Переподключение занимает секунду-две, и ждать его дешевле, чем считать,
+  // что телефона нет.
+  spawnSync(process.execPath, ["-e", "setTimeout(() => {}, 3000)"]);
+
   return listAttached()
     .filter(({ state }) => state === "device")
     .map(({ serial }) => serial);
@@ -97,7 +154,7 @@ function listDevices() {
 /** Перезапуск сервера adb: лечит устройства, застрявшие в authorizing. */
 function restartAdbServer() {
   console.log("adb не может договориться с устройством, перезапускаю его сервер...");
-  adb(["kill-server"], { stdio: "ignore" });
+  killAdbServer();
   // stdio: ignore обязателен — демон adb держит открытыми унаследованные
   // потоки, и spawnSync с перехватом вывода ждал бы его завершения вечно.
   adb(["start-server"], { stdio: "ignore" });
@@ -269,6 +326,79 @@ function openDevBuild(serial) {
   return open.status === 0;
 }
 
+/** Живой ли Metro на порту: отвечает он не чем попало, а своим статусом. */
+async function metroIsRunning() {
+  try {
+    const res = await fetch(`http://127.0.0.1:${PORT}/status`, {
+      signal: AbortSignal.timeout(2000),
+    });
+
+    return (await res.text()).includes("packager-status:running");
+  } catch {
+    return false;
+  }
+}
+
+/** PID и имя того, кто слушает порт — чтобы не гадать, чей это Metro. */
+function portListener(port) {
+  const res =
+    process.platform === "win32"
+      ? spawnSync("netstat", ["-ano", "-p", "TCP"], { encoding: "utf8" })
+      : spawnSync("lsof", ["-nP", `-iTCP:${port}`, "-sTCP:LISTEN", "-t"], { encoding: "utf8" });
+
+  if (res.status !== 0) return null;
+
+  const pid =
+    process.platform === "win32"
+      ? res.stdout
+          .split(/\r?\n/)
+          .filter((line) => /LISTENING/.test(line) && new RegExp(`:${port}\\s`).test(line))
+          .map((line) => line.trim().split(/\s+/).pop())[0]
+      : res.stdout.trim().split(/\r?\n/)[0];
+
+  if (!pid) return null;
+
+  const name =
+    process.platform === "win32"
+      ? spawnSync("tasklist", ["/FI", `PID eq ${pid}`, "/NH", "/FO", "CSV"], { encoding: "utf8" })
+          .stdout?.split('"')[1]
+      : spawnSync("ps", ["-p", pid, "-o", "comm="], { encoding: "utf8" }).stdout?.trim();
+
+  return { pid, name: name ?? "неизвестно" };
+}
+
+/**
+ * Освобождает порт под Metro. Чаще всего его держит Metro из прошлого
+ * запуска, переживший Ctrl+C: он либо ещё отвечает (тогда переиспользуем
+ * его), либо висит мёртвым и его надо снять. Всё, что не node, трогать
+ * нельзя — под этим PID может быть что угодно.
+ */
+async function freePort() {
+  if (await metroIsRunning()) return "reuse";
+
+  const listener = portListener(PORT);
+
+  if (listener === null) return "free";
+
+  if (!/^node/i.test(listener.name)) {
+    console.error(
+      `\nПорт ${PORT} занят процессом ${listener.name} (PID ${listener.pid}), и это не Metro.` +
+        `\nЗакрой его или освободи порт вручную.`,
+    );
+    process.exit(1);
+  }
+
+  console.log(`Порт ${PORT} держит зависший Metro (PID ${listener.pid}), снимаю его...`);
+
+  if (process.platform === "win32") {
+    spawnSync("taskkill", ["/F", "/T", "/PID", listener.pid], { stdio: "ignore" });
+  } else {
+    spawnSync("kill", ["-9", listener.pid], { stdio: "ignore" });
+  }
+
+  return "free";
+}
+
 async function waitForMetro() {
   return waitFor(
     async () => {
@@ -299,6 +429,18 @@ if (onlyDevice) {
   devices = devices.filter((d) => d === onlyDevice);
 }
 
+// Устройство в unauthorized adb видит, но работать с ним не может, и со
+// стороны это выглядит как «телефон не подключён» — про запрос на экране
+// сказать надо прямо.
+const unauthorized = listAttached().filter(({ state }) => state === "unauthorized");
+
+if (unauthorized.length > 0) {
+  console.error(
+    `\nadb не пустили на ${unauthorized.map((d) => d.serial).join(", ")}.` +
+      "\nРазблокируй телефон и подтверди «Разрешить отладку по USB» — там ждёт запрос.",
+  );
+}
+
 if (devices.length === 0) {
   console.error("\nНи одного устройства: эмулятор не поднялся, телефон не подключён.");
   process.exit(1);
@@ -318,7 +460,14 @@ if (openOnly) {
   process.exit(devices.map((serial) => openDevBuild(serial)).every(Boolean) ? 0 : 1);
 }
 
-// 3. Поднимаем Metro — один на все устройства
+// 3. Освобождаем порт и поднимаем Metro — один на все устройства.
+// Уже работающий Metro переиспользуется: перезапускать его ради открытия
+// приложения незачем, а два сразу всё равно не поместятся на один порт.
+if ((await freePort()) === "reuse") {
+  console.log(`Metro уже слушает ${PORT}, переиспользую его.`);
+  process.exit(devices.map((serial) => openDevBuild(serial)).every(Boolean) ? 0 : 1);
+}
+
 const metro = spawn("npx", ["expo", "start", "--dev-client"], opts);
 metro.on("exit", (code) => process.exit(code ?? 0));
 

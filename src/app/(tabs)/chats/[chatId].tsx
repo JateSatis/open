@@ -51,7 +51,7 @@ export default function ChatScreen() {
   const [topOffset, setTopOffset] = useState(0);
 
   const submitDraft = useCallback(() => {
-    send(draft.text, draft.media);
+    send(draft.text, draft.media());
     draft.clear();
   }, [draft, send]);
 
@@ -189,8 +189,6 @@ export default function ChatScreen() {
           <MessageComposer
             text={draft.text}
             onChangeText={draft.setText}
-            media={draft.media}
-            onRemoveMedia={draft.removeMedia}
             canSend={chat ? isChatMember(chat, currentUserId) : false}
             onSend={submitDraft}
             onTyping={notifyTyping}

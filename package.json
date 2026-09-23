@@ -31,7 +31,6 @@
     "expo-system-ui": "~57.0.4",
     "expo-updates": "~57.0.23",
     "expo-video": "~57.0.4",
-    "expo-video-thumbnails": "~57.0.2",
     "expo-web-browser": "~57.0.3",
     "react": "19.2.3",
     "react-dom": "19.2.3",
@@ -43,7 +42,6 @@
     "react-native-safe-area-context": "~5.7.0",
     "react-native-screens": "~4.26.0",
     "react-native-web": "~0.21.0",
-    "react-native-worklets": "0.10.1",
     "zustand": "^5.0.15"
   },
   "devDependencies": {
@@ -78,6 +76,7 @@
   "private": true,
   "jest": {
     "preset": "jest-expo",
+    "resolver": "react-native-worklets/jest/resolver.js",
     "transformIgnorePatterns": [
       "node_modules/(?!((jest-)?react-native|@react-native(-community)?)|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@unimodules/.*|unimodules|sentry-expo|native-base|react-native-svg)"
     ],

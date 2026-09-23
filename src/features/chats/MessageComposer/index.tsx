@@ -2,17 +2,14 @@ import { TextInput, View } from 'react-native';
 
 import { styles } from './styles';
 
-import { AttachedMediaStrip } from '@/features/chats/AttachedMediaStrip';
 import { Button } from '@/components/Button';
 import { Text } from '@/components/Text';
-import type { LibraryAsset } from '@/features/media';
+import { useSelectionCount } from '@/features/media/selectionStore';
 import { useTheme } from '@/hooks/use-theme';
 
 export type MessageComposerProps = {
   text: string;
   onChangeText: (text: string) => void;
-  media: LibraryAsset[];
-  onRemoveMedia: (id: string) => void;
   onSend: () => void;
   onTyping: () => void;
   /**
@@ -30,14 +27,15 @@ export type MessageComposerProps = {
 export function MessageComposer({
   text,
   onChangeText,
-  media,
-  onRemoveMedia,
   onSend,
   onTyping,
   canSend,
   onAttachPress,
 }: MessageComposerProps) {
   const theme = useTheme();
+  // Счётчик берётся из стора выбора, а не приходит пропом: иначе выбор файла
+  // перерисовывал бы весь экран чата ради цифры в кружке.
+  const mediaCount = useSelectionCount();
 
   if (!canSend) {
     return (
@@ -50,15 +48,13 @@ export function MessageComposer({
   }
 
   const submit = () => {
-    if (!text.trim() && media.length === 0) return;
+    if (!text.trim() && mediaCount === 0) return;
 
     onSend();
   };
 
   return (
     <View style={[styles.container, { borderTopColor: theme.border }]}>
-      <AttachedMediaStrip media={media} onRemove={onRemoveMedia} />
-
       <View style={styles.row}>
         <TextInput
           accessibilityLabel="Сообщение"
@@ -72,12 +68,28 @@ export function MessageComposer({
           }}
           style={[styles.field, { color: theme.text, borderColor: theme.border }]}
         />
-        <Button
-          label="Отправить"
-          size="sm"
-          disabled={!text.trim() && media.length === 0}
-          onPress={submit}
-        />
+
+        <View style={styles.sendWrapper}>
+          <Button
+            label="Отправить"
+            size="sm"
+            disabled={!text.trim() && mediaCount === 0}
+            onPress={submit}
+          />
+
+          {mediaCount > 0 ? (
+            <View
+              style={[
+                styles.mediaBadge,
+                { backgroundColor: theme.danger, borderColor: theme.background },
+              ]}
+            >
+              <Text variant="caption" color="textInverse">
+                {mediaCount}
+              </Text>
+            </View>
+          ) : null}
+        </View>
 
         {onAttachPress ? (
           // Буква вместо иконки — намеренно: набор иконок ещё не выбран, и
