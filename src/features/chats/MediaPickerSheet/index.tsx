@@ -13,7 +13,6 @@ import {
   Pressable,
   useWindowDimensions,
   View,
-  type FlatList,
   type LayoutChangeEvent,
 } from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -21,9 +20,8 @@ import Animated, {
   Extrapolation,
   interpolate,
   runOnJS,
-  useAnimatedRef,
+  useAnimatedScrollHandler,
   useAnimatedStyle,
-  useScrollOffset,
   useSharedValue,
   withSpring,
   withTiming,
@@ -35,7 +33,7 @@ import { SHEET_TOP_HEIGHT, styles } from './styles';
 import { confirm } from '@/components/ConfirmDialog';
 import { MessageComposer } from '@/features/chats/MessageComposer';
 import type { ComposerDraft } from '@/features/chats/useComposerDraft';
-import { MediaGrid, type MediaListComponent, type MediaLibraryItem } from '@/features/media';
+import { MediaGrid, type MediaListComponent } from '@/features/media';
 import { countRender } from '@/features/media/perf';
 import { useHasSelection, useMediaSelection } from '@/features/media/selectionStore';
 import { useTheme } from '@/hooks/use-theme';
@@ -121,8 +119,14 @@ export function MediaPickerSheet({ visible, onDismiss, draft, onTyping, onSend }
   const panStartY = useSharedValue(0);
   const canDismiss = useSharedValue(false);
 
-  const listRef = useAnimatedRef<FlatList<MediaLibraryItem>>();
-  const scrollOffset = useScrollOffset(listRef);
+  /**
+   * Позиция скролла нужна ровно одному месту — жесту закрытия, который
+   * работает только из самого верха списка. Пишет её обработчик на
+   * UI-потоке, а не `useScrollOffset` с анимированным ref: ref пришлось бы
+   * заводить и тогда, когда шит не смонтирован, и reanimated справедливо
+   * ругался бы на него в логи.
+   */
+  const scrollOffset = useSharedValue(0);
 
   const finishClose = useCallback(() => {
     setMounted(false);
@@ -208,20 +212,22 @@ export function MediaPickerSheet({ visible, onDismiss, draft, onTyping, onSend }
   const ListComponent = useMemo<MediaListComponent>(
     () =>
       function SheetMediaList(props: ComponentProps<MediaListComponent>) {
+        const onScroll = useAnimatedScrollHandler((event) => {
+          scrollOffset.value = event.contentOffset.y;
+        });
+
         return (
           <GestureDetector gesture={listGesture}>
             <Animated.FlatList
               {...props}
-              ref={listRef}
               showsVerticalScrollIndicator={false}
-              // Положение шита считается из этих событий, поэтому они нужны
-              // каждый кадр, а не раз в 50 мс, как по умолчанию у FlatList.
+              onScroll={onScroll}
               scrollEventThrottle={16}
             />
           </GestureDetector>
         );
       },
-    [listGesture, listRef],
+    [listGesture, scrollOffset],
   );
 
   const dismissPan = Gesture.Pan()
