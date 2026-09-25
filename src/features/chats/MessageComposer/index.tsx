@@ -4,6 +4,7 @@ import { styles } from './styles';
 
 import { Button } from '@/components/Button';
 import { Text } from '@/components/Text';
+import { perfMark, perfMarkStart } from '@/features/media/perf';
 import { useSelectionCount } from '@/features/media/selectionStore';
 import { useTheme } from '@/hooks/use-theme';
 
@@ -22,6 +23,13 @@ export type MessageComposerProps = {
    * самого шита — там прикреплять уже нечем открывать.
    */
   onAttachPress?: () => void;
+  /**
+   * Касание и уход пальца с кнопки медиа. Шит открывает отпускание
+   * (`onAttachPress`), а касание только готовит его — пока палец на кнопке,
+   * успевает родиться окно шита.
+   */
+  onAttachPressIn?: () => void;
+  onAttachPressOut?: () => void;
 };
 
 export function MessageComposer({
@@ -31,6 +39,8 @@ export function MessageComposer({
   onTyping,
   canSend,
   onAttachPress,
+  onAttachPressIn,
+  onAttachPressOut,
 }: MessageComposerProps) {
   const theme = useTheme();
   // Счётчик берётся из стора выбора, а не приходит пропом: иначе выбор файла
@@ -94,7 +104,20 @@ export function MessageComposer({
         {onAttachPress ? (
           // Буква вместо иконки — намеренно: набор иконок ещё не выбран, и
           // дизайн заменит эту кнопку на нормальную, не трогая остальной код.
-          <Button label="M" variant="secondary" size="sm" onPress={onAttachPress} />
+          <Button
+            label="M"
+            variant="secondary"
+            size="sm"
+            onPressIn={() => {
+              perfMarkStart('M: касание');
+              onAttachPressIn?.();
+            }}
+            onPressOut={onAttachPressOut}
+            onPress={() => {
+              perfMark('M: отпускание');
+              onAttachPress();
+            }}
+          />
         ) : null}
       </View>
     </View>

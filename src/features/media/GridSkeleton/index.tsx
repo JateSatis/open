@@ -34,6 +34,8 @@ export type GridSkeletonProps = {
   square: string;
   /** Цвет зазоров — он же фон шита. */
   gap: string;
+  /** Сколько строк нарисовать; по умолчанию — на самую длинную галерею. */
+  maxRows?: number;
 };
 
 type SegmentProps = {
@@ -85,7 +87,12 @@ function GridSkeletonSegment({ height, square, gap, rule, columnRules }: Segment
  * зазоры скелета стоят там же, где у настоящих клеток, — иначе в момент
  * подмены скелета фотографиями сетка бы дёрнулась.
  */
-export function GridSkeleton({ top, square, gap }: GridSkeletonProps) {
+export function GridSkeleton({
+  top,
+  square,
+  gap,
+  maxRows = Math.ceil(MediaLimits.gallery.maxAssets / GRID_COLUMNS),
+}: GridSkeletonProps) {
   const { width } = useWindowDimensions();
   const { cellSize, rowHeight } = gridGeometry(width);
   const columnWidth = cellSize + GRID_CELL_PADDING * 2;
@@ -108,7 +115,7 @@ export function GridSkeleton({ top, square, gap }: GridSkeletonProps) {
 
   // Кусков ровно столько, сколько нужно на самую длинную галерею, которую
   // грид вообще показывает. Лишние обрежет сам слой.
-  const segments = Math.ceil(MediaLimits.gallery.maxAssets / GRID_COLUMNS / SEGMENT_ROWS);
+  const segments = Math.ceil(maxRows / SEGMENT_ROWS);
   const segmentHeight = rowHeight * SEGMENT_ROWS;
 
   return (

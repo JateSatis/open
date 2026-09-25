@@ -45,6 +45,15 @@ export const styles = StyleSheet.create({
     borderTopLeftRadius: Radii.lg,
     borderTopRightRadius: Radii.lg,
   },
+  /** Оболочка первого кадра: та же подложка, что в списке, только неподвижная. */
+  shell: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    borderTopLeftRadius: Radii.lg,
+    borderTopRightRadius: Radii.lg,
+    overflow: 'hidden',
+  },
   /** Верхний край шита с ручкой. Фон под ним рисует подложка. */
   sheetTop: {
     alignItems: 'center',
