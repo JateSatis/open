@@ -1,8 +1,8 @@
-import { useWindowDimensions, View } from 'react-native';
+import { View } from 'react-native';
 
-import { SHEET_TOP_HEIGHT, styles } from './styles';
+import { styles } from './styles';
 
-import { GridSkeleton, gridGeometry } from '@/features/media';
+import { GridSkeleton, useGridGeometry } from '@/features/media';
 import { useTheme } from '@/hooks/use-theme';
 
 type SheetShellProps = {
@@ -10,6 +10,7 @@ type SheetShellProps = {
   top: number;
   /** Высота свёрнутого шита — дальше рисовать незачем. */
   height: number;
+  topBarHeight: number;
 };
 
 /**
@@ -20,10 +21,9 @@ type SheetShellProps = {
  * Остаётся под списком и дальше: в свёрнутом положении список закрывает её
  * пиксель в пиксель, а в развёрнутом его непрозрачная подложка выше неё.
  */
-export function SheetShell({ top, height }: SheetShellProps) {
+export function SheetShell({ top, height, topBarHeight }: SheetShellProps) {
   const theme = useTheme();
-  const { width } = useWindowDimensions();
-  const { rowHeight } = gridGeometry(width);
+  const { pitch } = useGridGeometry();
 
   return (
     <View
@@ -31,14 +31,14 @@ export function SheetShell({ top, height }: SheetShellProps) {
       style={[styles.shell, { top, height, backgroundColor: theme.background }]}
       pointerEvents="none"
     >
-      <View style={styles.sheetTop}>
+      <View style={[styles.sheetTop, { height: topBarHeight }]}>
         <View style={[styles.handleBar, { backgroundColor: theme.border }]} />
       </View>
       <GridSkeleton
-        top={SHEET_TOP_HEIGHT}
+        top={topBarHeight}
         square={theme.backgroundElement}
         gap={theme.background}
-        maxRows={Math.ceil(height / rowHeight)}
+        maxRows={Math.ceil(height / pitch)}
       />
     </View>
   );

@@ -113,11 +113,8 @@ function SheetWindow({ phase, draft, onTyping, onSend }: SheetWindowProps) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { height: screenHeight } = useWindowDimensions();
-  const { travel, collapsedHeight, listTop, listWindowHeight, dismissDistance } = sheetGeometry(
-    screenHeight,
-    insets.top,
-    PixelRatio.get(),
-  );
+  const { travel, collapsedHeight, listTop, listWindowHeight, dismissDistance, topBarHeight } =
+    sheetGeometry(screenHeight, insets.top, PixelRatio.get());
 
   const hasMedia = useHasSelection();
 
@@ -232,13 +229,14 @@ function SheetWindow({ phase, draft, onTyping, onSend }: SheetWindowProps) {
   const listContext = useMemo<SheetListContextValue>(
     () => ({
       travel,
+      topBarHeight,
       animatedRef,
       gestureRef: scrollGestureRef,
       scrollOffset,
       dismissing,
       onScrollAttached: markScrollAttached,
     }),
-    [animatedRef, dismissing, markScrollAttached, scrollOffset, travel],
+    [animatedRef, dismissing, markScrollAttached, scrollOffset, topBarHeight, travel],
   );
 
   /** Весь шит целиком: и панель, и список, и строка ввода уезжают вместе. */
@@ -262,14 +260,18 @@ function SheetWindow({ phase, draft, onTyping, onSend }: SheetWindowProps) {
     () => (
       <>
         {/* Прозрачная шапка — это и ход шита, и место, тап по которому закрывает. */}
-        <Pressable testID="media-picker-backdrop" style={{ height: travel }} onPress={requestClose} />
+        <Pressable
+          testID="media-picker-backdrop"
+          style={{ height: travel }}
+          onPress={requestClose}
+        />
         {/* Верх шита с ручкой; фон под ним рисует подложка в содержимом списка. */}
-        <View style={styles.sheetTop}>
+        <View style={[styles.sheetTop, { height: topBarHeight }]}>
           <View style={[styles.handleBar, { backgroundColor: theme.border }]} />
         </View>
       </>
     ),
-    [requestClose, theme.border, travel],
+    [requestClose, theme.border, topBarHeight, travel],
   );
 
   const footer = useMemo(() => <View style={{ height: footerHeight }} />, [footerHeight]);
@@ -298,7 +300,7 @@ function SheetWindow({ phase, draft, onTyping, onSend }: SheetWindowProps) {
         <Animated.View style={[styles.root, shiftStyle]}>
           <GestureDetector gesture={dismissPan}>
             <View style={[styles.listWindow, { top: listTop }]}>
-              <SheetShell top={travel} height={collapsedHeight} />
+              <SheetShell top={travel} height={collapsedHeight} topBarHeight={topBarHeight} />
               {listMounted ? (
                 <SheetListContext.Provider value={listContext}>
                   <MediaGrid
@@ -319,7 +321,9 @@ function SheetWindow({ phase, draft, onTyping, onSend }: SheetWindowProps) {
 
         {hasMedia ? (
           <Animated.View style={[styles.footer, shiftStyle]} onLayout={measureFooter}>
-            <KeyboardAvoidingView behavior={Platform.select({ ios: 'padding', default: undefined })}>
+            <KeyboardAvoidingView
+              behavior={Platform.select({ ios: 'padding', default: undefined })}
+            >
               <View style={{ backgroundColor: theme.background }}>
                 <MessageComposer
                   text={draft.text}

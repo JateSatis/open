@@ -2,26 +2,24 @@ import { FlashList, type FlashListProps, type ListRenderItem } from '@shopify/fl
 import { useCallback, useMemo, type ComponentType, type ReactElement } from 'react';
 import { View, useWindowDimensions } from 'react-native';
 
-import { GRID_COLUMNS, cellsToFill, gridGeometry } from './gridLayout';
+import { GRID_COLUMNS, rowsToFill } from './gridLayout';
 import { styles } from './styles';
+import { useGridGeometry } from './useGridGeometry';
 
 import { Button } from '@/components/Button';
 import { Text } from '@/components/Text';
-import { MediaGridItem } from '@/features/media/MediaGridItem';
-import type { MediaLibraryItem } from '@/features/media/mediaLibrary';
+import { MediaGridRow, type GridCell } from '@/features/media/MediaGridRow';
 import { countRender, perfLog } from '@/features/media/perf';
 import { useMediaSelection } from '@/features/media/selectionStore';
 import { useGalleryAssets } from '@/features/media/useGalleryAssets';
-import { useTheme } from '@/hooks/use-theme';
 
-/**
- * Клетка грида: либо файл, либо место под файл, которого ещё нет.
- *
- * `null` — это не «пустая клетка» в смысле дырки, а скелет: серый квадрат
- * ровно того же размера и в той же сетке. Он существует только пока галерея
- * читается; как только файлы приехали, `null` в данных не остаётся.
- */
-export type GridCell = MediaLibraryItem | null;
+export type { GridCell } from '@/features/media/MediaGridRow';
+
+/** Строка списка — три клетки сетки. */
+export type GridRow = {
+  index: number;
+  cells: GridCell[];
+};
 
 /**
  * Минимальный набор пропов, которым пользуется грид. Снаружи решают, какой
@@ -30,10 +28,9 @@ export type GridCell = MediaLibraryItem | null;
  */
 export type MediaListComponent = ComponentType<
   Pick<
-    FlashListProps<GridCell>,
+    FlashListProps<GridRow>,
     | 'testID'
     | 'data'
-    | 'numColumns'
     | 'keyExtractor'
     | 'contentContainerStyle'
     | 'renderItem'
@@ -88,65 +85,49 @@ export function MediaGrid({
 }: MediaGridProps) {
   countRender('MediaGrid');
 
-  const theme = useTheme();
-  const { width, height } = useWindowDimensions();
+  const { height } = useWindowDimensions();
+  const geometry = useGridGeometry();
   const { status, items, total, requestAccess } = useGalleryAssets(enabled);
   const toggle = useMediaSelection((state) => state.toggle);
 
-  const { cellSize, rowHeight } = gridGeometry(width);
-
   /**
-   * Данные списка: сначала настоящие файлы, за ними — скелет до известной
+   * Строки списка: сначала настоящие файлы, за ними — скелет до известной
    * длины галереи. Пока длина неизвестна, скелета ровно на экран с запасом.
    *
-   * Скелет живёт в данных, а не отдельным слоем поверх, ровно потому, что
-   * сетка у него обязана совпасть с настоящей: это те же клетки того же
-   * списка, разойтись им негде.
+   * Список идёт строками, а не клетками с `numColumns`: `FlashList` делит
+   * ширину на колонки сам, и края клеток попадали бы на дробные пиксели.
    */
-  const data = useMemo<GridCell[]>(() => {
+  const rows = useMemo<GridRow[]>(() => {
     if (status === 'denied' || status === 'empty') return [];
 
-    const known = total ?? cellsToFill(height, rowHeight);
-    const missing = Math.max(0, known - items.length);
+    const known = total ?? rowsToFill(height, geometry.pitch) * GRID_COLUMNS;
+    const count = Math.max(known, items.length);
 
-    if (missing === 0) return items;
+    return Array.from({ length: Math.ceil(count / GRID_COLUMNS) }, (_, index) => {
+      const cells: GridCell[] = [];
 
-    return [...items, ...(new Array(missing).fill(null) as null[])];
-  }, [height, items, rowHeight, status, total]);
+      for (let column = 0; column < GRID_COLUMNS; column += 1) {
+        const at = index * GRID_COLUMNS + column;
 
-  const renderItem = useCallback<ListRenderItem<GridCell>>(
-    ({ item }) => (
-      <View style={[styles.cell, { height: rowHeight }]}>
-        {item === null ? (
-          <View
-            testID="media-grid-skeleton"
-            style={[
-              styles.skeleton,
-              { width: cellSize, height: cellSize, backgroundColor: theme.backgroundElement },
-            ]}
-          />
-        ) : (
-          <MediaGridItem asset={item} size={cellSize} onToggle={toggle} />
-        )}
-      </View>
-    ),
-    [cellSize, rowHeight, theme.backgroundElement, toggle],
+        if (at < count) cells.push(items[at] ?? null);
+      }
+
+      return { index, cells };
+    });
+  }, [geometry.pitch, height, items, status, total]);
+
+  const renderItem = useCallback<ListRenderItem<GridRow>>(
+    ({ item }) => <MediaGridRow cells={item.cells} geometry={geometry} onToggle={toggle} />,
+    [geometry, toggle],
   );
 
-  /**
-   * Файл и скелет — один тип для пула вью: клетка у них устроена одинаково,
-   * и разделять пул значило бы монтировать новую вью там, где хватило бы
-   * переиспользования.
-   */
-  const getItemType = useCallback(() => 'cell', []);
+  /** Все строки одинаковы по устройству — один пул вью на всех. */
+  const getItemType = useCallback(() => 'row', []);
 
-  const keyExtractor = useCallback(
-    (item: GridCell, index: number) => item?.id ?? `skeleton-${index}`,
-    [],
-  );
+  const keyExtractor = useCallback((row: GridRow) => String(row.index), []);
 
   const contentContainerStyle = useMemo(
-    () => ({ ...styles.content, minHeight: minContentHeight }),
+    () => ({ minHeight: minContentHeight }),
     [minContentHeight],
   );
 
@@ -163,13 +144,12 @@ export function MediaGrid({
 
   const List = ListComponent;
 
-  perfLog('грид: данные', { status, файлов: items.length, всего: total, клеток: data.length });
+  perfLog('грид: данные', { status, файлов: items.length, всего: total, строк: rows.length });
 
   return (
     <List
       testID="media-grid"
-      data={data}
-      numColumns={GRID_COLUMNS}
+      data={rows}
       keyExtractor={keyExtractor}
       getItemType={getItemType}
       contentContainerStyle={contentContainerStyle}

@@ -11,7 +11,6 @@ import {
   type SharedValue,
 } from 'react-native-reanimated';
 
-
 const SCROLL_EVENTS = [
   'onScroll',
   'onScrollBeginDrag',
@@ -50,21 +49,18 @@ export function useSheetScroll(
   scrollOffset: SharedValue<number>,
   dismissing: SharedValue<boolean>,
 ) {
-  const handler = useEvent<ReanimatedEvent<NativeScrollEvent>>(
-    (event) => {
-      'worklet';
-      const y = event.contentOffset.y;
+  const handler = useEvent<ReanimatedEvent<NativeScrollEvent>>((event) => {
+    'worklet';
+    const y = event.contentOffset.y;
 
-      if (dismissing.value && y > 0) {
-        scrollTo(animatedRef, 0, 0, false);
-        scrollOffset.value = 0;
-        return;
-      }
+    if (dismissing.value && y > 0) {
+      scrollTo(animatedRef, 0, 0, false);
+      scrollOffset.value = 0;
+      return;
+    }
 
-      scrollOffset.value = y;
-    },
-    SCROLL_EVENTS,
-  ) as unknown as RegistrableHandler;
+    scrollOffset.value = y;
+  }, SCROLL_EVENTS) as unknown as RegistrableHandler;
 
   useEffect(
     () =>

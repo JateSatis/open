@@ -1,3 +1,5 @@
+import { SHEET_TOP_HEIGHT } from './styles';
+
 /** Доля экрана, на которую шит открывается по кнопке медиа. */
 const COLLAPSED_RATIO = 0.55;
 /** Утащили шит ниже этой доли свёрнутой высоты — отпускание закрывает его. */
@@ -15,14 +17,20 @@ export type SheetGeometry = {
   /** Высота окна списка — от верхней безопасной зоны до низа экрана. */
   listWindowHeight: number;
   dismissDistance: number;
+  /** Полоса с ручкой над первой строкой сетки. */
+  topBarHeight: number;
 };
 
 /**
- * Положение шита — в целых физических пикселях. Ход шита задаёт начало
- * первой строки сетки в содержимом списка, и дробный ход сдвигал бы всю сетку
- * на долю пикселя относительно скелета.
+ * Положение шита — в целых физических пикселях. Ход шита и полоса с ручкой
+ * задают начало первой строки сетки в содержимом списка, и дробные значения
+ * сдвигали бы всю сетку на долю пикселя.
  */
-export function sheetGeometry(screenHeight: number, insetTop: number, scale: number): SheetGeometry {
+export function sheetGeometry(
+  screenHeight: number,
+  insetTop: number,
+  scale: number,
+): SheetGeometry {
   const snap = (dp: number) => Math.round(dp * scale) / scale;
 
   const collapsedHeight = snap(screenHeight * COLLAPSED_RATIO);
@@ -34,5 +42,6 @@ export function sheetGeometry(screenHeight: number, insetTop: number, scale: num
     listTop,
     listWindowHeight: screenHeight - listTop,
     dismissDistance: collapsedHeight * DISMISS_RATIO,
+    topBarHeight: snap(SHEET_TOP_HEIGHT),
   };
 }

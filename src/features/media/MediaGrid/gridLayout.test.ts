@@ -1,32 +1,59 @@
-import { GRID_CELL_PADDING, GRID_COLUMNS, GRID_GAP, cellsToFill, gridGeometry } from './gridLayout';
+import { GRID_COLUMNS, gridGeometry, rowsToFill, snapToPixels } from './gridLayout';
+
+/** Плотности реальных экранов: целая, дробная и «неудобная». */
+const SCREENS = [
+  { width: 360, scale: 3 },
+  { width: 411.4286, scale: 2.625 },
+  { width: 393, scale: 2.75 },
+  { width: 412, scale: 3.5 },
+];
+
+const isWholePixel = (dp: number, scale: number) =>
+  Math.abs(dp * scale - Math.round(dp * scale)) < 1e-6;
 
 describe('gridGeometry', () => {
-  it('leaves the same gap between cells and at the edges of the screen', () => {
-    const width = 360;
-    const { cellSize } = gridGeometry(width);
+  it.each(SCREENS)('puts every edge on a whole pixel ($width dp × $scale)', ({ width, scale }) => {
+    const { cellSize, gap, pitch, columnLeft } = gridGeometry(width, scale);
 
-    // Ширина колонки: `FlashList` делит на колонки то, что осталось от
-    // экрана после отступов содержимого, и делает это сам — любое другое
-    // допущение развалило бы сетку на скролле.
-    const columnWidth = (width - GRID_CELL_PADDING * 2) / GRID_COLUMNS;
+    for (const value of [cellSize, gap, pitch, ...columnLeft]) {
+      expect(isWholePixel(value, scale)).toBe(true);
+    }
 
-    expect(cellSize + GRID_CELL_PADDING * 2).toBeCloseTo(columnWidth, 5);
-    // Между двумя соседними квадратами — по половине зазора от каждого.
-    expect(GRID_CELL_PADDING * 2).toBeCloseTo(GRID_GAP, 5);
+    // Глубоко в списке строка стоит на целом пикселе так же, как первая:
+    // шаг целый, ошибка не копится.
+    expect(isWholePixel(pitch * 999, scale)).toBe(true);
   });
 
-  it('keeps the vertical step equal to a cell plus one gap', () => {
-    const { cellSize, rowHeight } = gridGeometry(412);
+  it.each(SCREENS)('keeps one gap everywhere ($width dp × $scale)', ({ width, scale }) => {
+    const { cellSize, gap, pitch, columnLeft } = gridGeometry(width, scale);
 
-    expect(rowHeight - cellSize).toBeCloseTo(GRID_GAP, 5);
+    // Между строками — ровно зазор.
+    expect(pitch - cellSize).toBeCloseTo(gap, 6);
+    // Между колонками — тот же зазор, и у левого края тоже.
+    expect(columnLeft[0]).toBeCloseTo(gap, 6);
+    for (let i = 1; i < GRID_COLUMNS; i += 1) {
+      expect(columnLeft[i] - (columnLeft[i - 1] + cellSize)).toBeCloseTo(gap, 6);
+    }
   });
 
-  it('fills a screen with whole rows and one spare', () => {
-    const { rowHeight } = gridGeometry(360);
-    const cells = cellsToFill(800, rowHeight);
+  it.each(SCREENS)('never draws past the screen edge ($width dp × $scale)', ({ width, scale }) => {
+    const { width: gridWidth, columnLeft, cellSize, gap } = gridGeometry(width, scale);
 
-    expect(cells % GRID_COLUMNS).toBe(0);
-    // Скелет обязан перекрывать экран, иначе под ним видно то, что за шитом.
-    expect((cells / GRID_COLUMNS) * rowHeight).toBeGreaterThan(800);
+    expect(columnLeft[GRID_COLUMNS - 1] + cellSize + gap).toBeCloseTo(gridWidth, 6);
+    expect(gridWidth).toBeLessThanOrEqual(width + 1e-6);
+  });
+});
+
+describe('snapToPixels', () => {
+  it('rounds a length to whole physical pixels', () => {
+    expect(snapToPixels(22, 2.625) * 2.625).toBeCloseTo(58, 6);
+  });
+});
+
+describe('rowsToFill', () => {
+  it('covers a screen with whole rows and one spare', () => {
+    const { pitch } = gridGeometry(360, 3);
+
+    expect(rowsToFill(800, pitch) * pitch).toBeGreaterThan(800 + pitch - 1);
   });
 });

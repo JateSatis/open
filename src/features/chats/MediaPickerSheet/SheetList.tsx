@@ -13,7 +13,7 @@ import { ScrollView, View, type ScrollViewProps } from 'react-native';
 import { createNativeWrapper } from 'react-native-gesture-handler';
 import type { AnimatedRef, SharedValue } from 'react-native-reanimated';
 
-import { SHEET_TOP_HEIGHT, styles } from './styles';
+import { styles } from './styles';
 import { useSheetScroll } from './useSheetScroll';
 
 import { GridSkeleton, type MediaListComponent } from '@/features/media';
@@ -38,6 +38,8 @@ const GestureScrollView = createNativeWrapper<ScrollViewProps>(ScrollView, {
 export type SheetListContextValue = {
   /** Высота прозрачной шапки — отсюда в содержимом начинается шит. */
   travel: number;
+  /** Полоса с ручкой: под ней начинается первая строка сетки. */
+  topBarHeight: number;
   animatedRef: AnimatedRef<ScrollView>;
   /** Ссылка для `simultaneousWithExternalGesture` жеста закрытия. */
   gestureRef: RefObject<ComponentType | null>;
@@ -73,7 +75,7 @@ const SheetScrollView = forwardRef<ScrollView, ScrollViewProps>(function SheetSc
   ref,
 ) {
   const theme = useTheme();
-  const { travel, animatedRef, gestureRef } = useSheetListContext();
+  const { travel, topBarHeight, animatedRef, gestureRef } = useSheetListContext();
 
   const attach = useCallback(
     (instance: ComponentType | null) => {
@@ -104,7 +106,7 @@ const SheetScrollView = forwardRef<ScrollView, ScrollViewProps>(function SheetSc
         style={[styles.surface, { top: travel, backgroundColor: theme.background }]}
         pointerEvents="none"
       >
-        <GridSkeleton top={SHEET_TOP_HEIGHT} square={theme.backgroundElement} gap={theme.background} />
+        <GridSkeleton top={topBarHeight} square={theme.backgroundElement} gap={theme.background} />
       </View>
       {children}
     </GestureScrollView>
@@ -122,6 +124,10 @@ export const SheetMediaList: MediaListComponent = function SheetMediaList(
   useEffect(onScrollAttached, [onScrollAttached]);
 
   return (
-    <FlashList {...props} showsVerticalScrollIndicator={false} renderScrollComponent={SheetScrollView} />
+    <FlashList
+      {...props}
+      showsVerticalScrollIndicator={false}
+      renderScrollComponent={SheetScrollView}
+    />
   );
 };

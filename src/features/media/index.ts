@@ -26,7 +26,7 @@ export { useVoiceRecorder, type VoiceRecorder as VoiceRecorderApi } from './useV
 
 export { MediaGrid, type MediaGridProps, type MediaListComponent } from './MediaGrid';
 export { GridSkeleton, type GridSkeletonProps } from './GridSkeleton';
-export { gridGeometry } from './MediaGrid/gridLayout';
+export { useGridGeometry } from './MediaGrid/useGridGeometry';
 export { MediaViewer, type MediaViewerItem, type MediaViewerProps } from './MediaViewer';
 export { assetPreviewUri } from './lib/previewUri';
 export {

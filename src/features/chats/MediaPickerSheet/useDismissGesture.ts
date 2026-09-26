@@ -109,6 +109,16 @@ export function useDismissGesture({
         }),
     // `scrollAttached` в теле не читается, но пересобрать жест должен именно он.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [anchor, dismissDistance, dismissY, dismissing, lastTranslation, onRelease, scrollAttached, scrollGestureRef, scrollOffset],
+    [
+      anchor,
+      dismissDistance,
+      dismissY,
+      dismissing,
+      lastTranslation,
+      onRelease,
+      scrollAttached,
+      scrollGestureRef,
+      scrollOffset,
+    ],
   );
 }

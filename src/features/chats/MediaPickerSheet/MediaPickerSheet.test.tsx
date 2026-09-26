@@ -28,7 +28,7 @@ jest.mock('@/features/media', () => {
 
   return {
     ...jest.requireActual('@/features/media/selectionStore'),
-    ...jest.requireActual('@/features/media/MediaGrid/gridLayout'),
+    ...jest.requireActual('@/features/media/MediaGrid/useGridGeometry'),
     GridSkeleton: () => null,
     MediaGrid: ({ header }: { header?: React.ReactNode }) =>
       React.createElement(View, null, header),
@@ -106,6 +106,12 @@ beforeEach(() => {
   useMediaSelection.getState().clear();
 });
 
+/**
+ * Первый тест в файле тянет холодную инициализацию моков
+ * reanimated/gesture-handler — 5 секунд по умолчанию иногда не хватает.
+ */
+const COLD_START_TIMEOUT_MS = 15_000;
+
 describe('MediaPickerSheet', () => {
   it(
     'closes on a swipe down when nothing is selected',
@@ -117,9 +123,7 @@ describe('MediaPickerSheet', () => {
       expect(getMediaSheetPhase()).toBe('closed');
       expect(screen.queryByTestId('media-picker-backdrop')).toBeNull();
     },
-    // Первый тест в файле тянет холодную инициализацию моков
-    // reanimated/gesture-handler — 5 секунд по умолчанию иногда не хватает.
-    15_000,
+    COLD_START_TIMEOUT_MS,
   );
 
   it('has no close button — the sheet is dismissed by gestures and by the backdrop', async () => {

@@ -58,7 +58,6 @@ export const styles = StyleSheet.create({
   sheetTop: {
     alignItems: 'center',
     paddingTop: Spacing.two,
-    paddingBottom: Spacing.two + Spacing.half,
   },
   handleBar: {
     width: HANDLE_BAR_WIDTH,

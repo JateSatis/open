@@ -1,7 +1,5 @@
 import { StyleSheet } from 'react-native';
 
-import { GRID_GAP } from '@/features/media/MediaGrid/gridLayout';
-
 export const styles = StyleSheet.create({
   /**
    * Начинается там, где первая строка сетки, и тянется до конца содержимого.
@@ -14,18 +12,5 @@ export const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     overflow: 'hidden',
-  },
-  canvas: {
-    position: 'absolute',
-    top: 0,
-    bottom: 0,
-    left: GRID_GAP,
-    right: GRID_GAP,
-  },
-  columnRule: {
-    position: 'absolute',
-    top: 0,
-    bottom: 0,
-    width: GRID_GAP,
   },
 });

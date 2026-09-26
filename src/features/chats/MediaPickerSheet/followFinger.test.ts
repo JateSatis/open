@@ -52,8 +52,11 @@ describe('followFinger', () => {
 
   it('picks the sheet up where the finger caught it while it was still moving', () => {
     // Шит ещё выезжал и был в 200 от места: палец ведёт его оттуда же.
-    expect(drag(startFinger(0, 200), [{ y: 30, scroll: 0 }, { y: -50, scroll: 0 }])).toEqual([
-      230, 150,
-    ]);
+    expect(
+      drag(startFinger(0, 200), [
+        { y: 30, scroll: 0 },
+        { y: -50, scroll: 0 },
+      ]),
+    ).toEqual([230, 150]);
   });
 });
