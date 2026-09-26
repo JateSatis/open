@@ -123,7 +123,7 @@ describe('EditProfileScreen', () => {
     const { findByPlaceholderText, getByText } = await renderWithQuery(<EditProfileScreen />);
 
     await fireEvent.changeText(
-      await findByPlaceholderText('Например: в отпуске до понедельника'),
+      await findByPlaceholderText('Например: в отпуске'),
       '  на связи вечером ',
     );
     await fireEvent.press(getByText('Сохранить'));

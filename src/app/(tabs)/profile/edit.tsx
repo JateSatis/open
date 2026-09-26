@@ -20,7 +20,7 @@ import {
 import { Spacing } from '@/theme';
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
+  form: { flex: 1, gap: Spacing.three },
   content: { gap: Spacing.three },
   bio: { minHeight: Spacing.six },
 });
@@ -90,7 +90,7 @@ function EditProfileForm({ initial }: { initial: FormValues }) {
 
   return (
     <KeyboardAvoidingView
-      style={styles.flex}
+      style={styles.form}
       behavior={Platform.select({ ios: 'padding', default: undefined })}>
       <Input
         label="Имя пользователя"
@@ -116,7 +116,7 @@ function EditProfileForm({ initial }: { initial: FormValues }) {
         value={values.status}
         onChangeText={setField('status')}
         maxLength={STATUS_MAX_LENGTH}
-        placeholder="Например: в отпуске до понедельника"
+        placeholder="Например: в отпуске"
       />
 
       <Input

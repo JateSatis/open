@@ -12,7 +12,10 @@ function modelName(): string | null {
 
   if (!model) return Device.manufacturer ?? null;
 
-  const maker = Device.manufacturer;
+  // Android отдаёт производителя как есть — у Samsung это «samsung».
+  const maker = Device.manufacturer
+    ? Device.manufacturer.charAt(0).toUpperCase() + Device.manufacturer.slice(1)
+    : null;
 
   if (!maker || Platform.OS === 'ios' || model.toLowerCase().startsWith(maker.toLowerCase())) {
     return model;
