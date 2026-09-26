@@ -11,6 +11,7 @@ import {
   type MessageAttachment,
   type SendMessageMedia,
 } from '@/api/chats';
+import { MAX_ALBUM_SIZE } from '@/features/chats/lib/mosaicLayout';
 import { chatQueryKey } from '@/features/chats/useChat';
 import { reportRequestFailed } from '@/features/connection/connectionStore';
 import { useConnectionStatus } from '@/features/connection/useConnectionStatus';
@@ -19,6 +20,7 @@ import {
   libraryAssetToLocalMedia,
   removeUploadedMedia,
   resolveLibraryAsset,
+  storedPaths,
   uploadAllMedia,
   type MediaLibraryItem,
   type UploadedMedia,
@@ -39,6 +41,12 @@ export type ChatMessage = Message & {
   localId?: string;
   /** Исходный выбор из галереи — нужен только для повтора неудачной отправки. */
   pendingMedia?: MediaLibraryItem[];
+  /**
+   * Локальные превью вложений своего только что отправленного сообщения, по
+   * позициям. Переживают ответ сервера: плитка держит локальную картинку,
+   * пока грузится удалённая, и не мигает пустотой.
+   */
+  localPreviews?: string[];
 };
 
 export type ChatMessagesState = {
@@ -72,7 +80,14 @@ function mergeNewest(existing: ChatMessage[], incoming: Message[]): ChatMessage[
 
   if (added.length === 0) return existing;
 
-  return [...added.reverse(), ...existing];
+  // Свои неподтверждённые сообщения остаются самыми новыми: пришедшее с
+  // сервера встаёт под них. Иначе альбом, разбитый на части, перемешался бы —
+  // первая часть, доставленная раньше ответа на вставку, всплыла бы над
+  // ещё отправляющимися следующими.
+  const pending = existing.findIndex((message) => message.localId === undefined);
+  const split = pending === -1 ? existing.length : pending;
+
+  return [...existing.slice(0, split), ...added.reverse(), ...existing.slice(split)];
 }
 
 /** Локальный предпросмотр вложения до ответа сервера — облачко не пустует, пока файлы грузятся. */
@@ -82,6 +97,7 @@ function toLocalAttachment(asset: MediaLibraryItem): MessageAttachment {
     // Превью берётся по id ассета: путь к файлу для показа не нужен, он
     // понадобится только когда дойдёт до чтения байт.
     url: assetPreviewUri(asset),
+    posterUrl: null,
     mimeType: asset.kind === 'video' ? 'video/mp4' : 'image/jpeg',
     width: asset.width,
     height: asset.height,
@@ -92,12 +108,32 @@ function toLocalAttachment(asset: MediaLibraryItem): MessageAttachment {
 function toSendMedia(item: UploadedMedia): SendMessageMedia {
   return {
     url: item.url,
+    posterUrl: item.posterUrl,
     mimeType: item.mimeType,
     width: item.width,
     height: item.height,
     durationMs: item.durationMs,
     sizeBytes: item.sizeBytes,
   };
+}
+
+/** Текст и файлы одного сообщения → сообщения по `MAX_ALBUM_SIZE` файлов, подпись у первого. */
+export function splitIntoAlbums(
+  text: string,
+  media: MediaLibraryItem[],
+): { text: string; media: MediaLibraryItem[] }[] {
+  if (media.length <= MAX_ALBUM_SIZE) return [{ text, media }];
+
+  const parts: { text: string; media: MediaLibraryItem[] }[] = [];
+
+  for (let start = 0; start < media.length; start += MAX_ALBUM_SIZE) {
+    parts.push({
+      text: start === 0 ? text : '',
+      media: media.slice(start, start + MAX_ALBUM_SIZE),
+    });
+  }
+
+  return parts;
 }
 
 export function useChatMessages(chatId: string, currentUserId: string | null): ChatMessagesState {
@@ -314,12 +350,23 @@ export function useChatMessages(chatId: string, currentUserId: string | null): C
           );
 
           if (alreadyPulled) {
-            return current.filter((message) => message.localId !== localId);
+            const localPreviews = current.find((m) => m.localId === localId)?.localPreviews;
+
+            return current
+              .filter((message) => message.localId !== localId)
+              .map((message) =>
+                message.id === saved.id ? { ...message, localPreviews } : message,
+              );
           }
 
           return current.map((message) =>
             message.localId === localId
-              ? { ...saved, status: 'sent' as const, pendingMedia: undefined }
+              ? {
+                  ...saved,
+                  status: 'sent' as const,
+                  pendingMedia: undefined,
+                  localPreviews: message.localPreviews,
+                }
               : message,
           );
         });
@@ -330,7 +377,7 @@ export function useChatMessages(chatId: string, currentUserId: string | null): C
         // Сообщение в базу не попало (или упало на середине) — загруженные
         // файлы теперь ничьи, оставлять их в Storage незачем.
         if (uploaded.length > 0) {
-          void Promise.all(uploaded.map((item) => removeUploadedMedia(item.path)));
+          void Promise.all(uploaded.map((item) => removeUploadedMedia(storedPaths(item))));
         }
 
         // Не дошло до сервера — это факт о связи, а не только об этом
@@ -376,27 +423,42 @@ export function useChatMessages(chatId: string, currentUserId: string | null): C
 
       if (!trimmed && media.length === 0) return;
 
-      const localId = nextLocalId();
+      // Одна мозаика вмещает не больше MAX_ALBUM_SIZE файлов — остальные
+      // уходят следующими сообщениями, в порядке выбора. Подпись — у первого.
+      const parts = splitIntoAlbums(trimmed, media);
+      const now = Date.now();
+      const drafts: ChatMessage[] = parts.map((part, index) => {
+        const localId = nextLocalId();
+        const attachments = part.media.map(toLocalAttachment);
 
-      // Shown before the server answers — this is a messenger, waiting for the
-      // round trip before drawing the bubble is not an option.
-      setMessages((current) => [
-        {
+        return {
           id: localId,
           localId,
           chatId,
           authorId: currentUserId,
-          kind: media.length > 0 ? 'media' : 'text',
-          text: trimmed || null,
-          createdAt: new Date().toISOString(),
-          attachments: media.map(toLocalAttachment),
-          pendingMedia: media.length > 0 ? media : undefined,
+          kind: part.media.length > 0 ? 'media' : 'text',
+          text: part.text || null,
+          // Миллисекунда между частями держит их порядок в списке.
+          createdAt: new Date(now + index).toISOString(),
+          attachments,
+          pendingMedia: part.media.length > 0 ? part.media : undefined,
+          localPreviews: attachments.length > 0 ? attachments.map((a) => a.url) : undefined,
           status: 'sending',
-        },
-        ...current,
-      ]);
+        };
+      });
 
-      void deliver(localId, trimmed, media);
+      // Shown before the server answers — this is a messenger, waiting for the
+      // round trip before drawing the bubble is not an option. Все части
+      // появляются сразу; список новыми вперёд, поэтому последняя часть сверху.
+      setMessages((current) => [...[...drafts].reverse(), ...current]);
+
+      // Части уходят по очереди: параллельная вставка перемешала бы их время
+      // на сервере. Каждая при этом падает и повторяется сама по себе.
+      void (async () => {
+        for (const [index, draft] of drafts.entries()) {
+          await deliver(draft.localId!, parts[index].text, parts[index].media);
+        }
+      })();
     },
     [chatId, currentUserId, deliver],
   );

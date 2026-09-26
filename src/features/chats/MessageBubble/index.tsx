@@ -1,12 +1,13 @@
-import { useState } from 'react';
-import { Pressable, View, type LayoutChangeEvent } from 'react-native';
+import { useMemo, useState } from 'react';
+import { PixelRatio, View } from 'react-native';
 
 import { styles } from './styles';
 
 import { Avatar } from '@/components/Avatar';
 import { Text } from '@/components/Text';
-import { formatMessageTime } from '@/features/chats/chatDisplay';
+import { computeMosaicLayout, type MosaicBounds } from '@/features/chats/lib/mosaicLayout';
 import { MediaAttachmentGrid } from '@/features/chats/MediaAttachmentGrid';
+import { MessageMeta } from '@/features/chats/MessageMeta';
 import type { ChatMessage } from '@/features/chats/useChatMessages';
 import { MediaViewer, type MediaViewerItem } from '@/features/media';
 import { useTheme } from '@/hooks/use-theme';
@@ -19,6 +20,12 @@ export type MessageBubbleProps = {
   isRead: boolean;
   authorName: string;
   authorAvatarUrl: string | null;
+  /**
+   * Границы мозаики — от ширины списка, а не от `onLayout` облачка: размер
+   * мозаики обязан быть известен в первом же рендере, иначе строка
+   * перевёрнутого списка прыгает по высоте.
+   */
+  mediaBounds: MosaicBounds;
   onRetry: (localId: string) => void;
 };
 
@@ -28,20 +35,27 @@ export function MessageBubble({
   isRead,
   authorName,
   authorAvatarUrl,
+  mediaBounds,
   onRetry,
 }: MessageBubbleProps) {
   const theme = useTheme();
-  const failed = message.status === 'failed';
   const isMediaMessage = message.kind === 'media' && message.attachments.length > 0;
   // Остальные вложения (голосовые, кружки) пока не подключены к облачку —
   // это отдельная задача; здесь только заглушка, чтобы сообщение не было пустым.
   const hasUnhandledAttachment = !isMediaMessage && message.kind !== 'text';
-  const [bubbleWidth, setBubbleWidth] = useState<number | null>(null);
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
+  const textColor = isOwn ? 'primaryText' : 'text';
+  const bubbleColor = isOwn ? theme.primary : theme.backgroundElement;
 
-  const onBubbleLayout = (event: LayoutChangeEvent) => {
-    setBubbleWidth(event.nativeEvent.layout.width);
-  };
+  // Список сообщений — горячий путь: раскладка пересчитывается только при
+  // смене вложений или ширины, а не на каждую перерисовку строки.
+  const layout = useMemo(
+    () =>
+      isMediaMessage
+        ? computeMosaicLayout(message.attachments, mediaBounds, PixelRatio.get())
+        : null,
+    [isMediaMessage, message.attachments, mediaBounds],
+  );
 
   const viewerItems: MediaViewerItem[] = message.attachments.map((attachment) => ({
     id: attachment.id,
@@ -49,73 +63,80 @@ export function MessageBubble({
     url: attachment.url,
   }));
 
+  const meta = (variant: 'inline' | 'overlay') => (
+    <MessageMeta
+      message={message}
+      isOwn={isOwn}
+      isRead={isRead}
+      variant={variant}
+      onRetry={onRetry}
+    />
+  );
+
   return (
     <View style={[styles.row, isOwn && styles.own]}>
       {isOwn ? null : <Avatar uri={authorAvatarUrl} name={authorName} size={Spacing.five} />}
 
-      <View
-        testID="message-bubble"
-        onLayout={onBubbleLayout}
-        style={[
-          styles.bubble,
-          { backgroundColor: isOwn ? theme.primary : theme.backgroundElement },
-        ]}
-      >
-        {isOwn ? null : (
-          <Text variant="smallBold" color={isOwn ? 'primaryText' : 'text'}>
-            {authorName}
-          </Text>
-        )}
+      {layout ? (
+        // Медиа — само облачко: мозаика заподлицо с краями, скругление
+        // облачка на ней. Подпись и имя автора — в полосах того же облачка.
+        <View
+          testID="message-bubble"
+          style={[
+            styles.mediaBubble,
+            {
+              width: layout.width,
+              // Без подписи и имени облачка нет — только мозаика, и в её
+              // зазорах виден фон чата, как в Telegram.
+              backgroundColor: !message.text && isOwn ? 'transparent' : bubbleColor,
+            },
+          ]}
+        >
+          {isOwn ? null : (
+            <Text variant="smallBold" color={textColor} style={styles.mediaAuthor}>
+              {authorName}
+            </Text>
+          )}
 
-        {isMediaMessage && bubbleWidth !== null ? (
           <MediaAttachmentGrid
             attachments={message.attachments}
-            containerWidth={bubbleWidth - Spacing.three * 2}
+            layout={layout}
+            localPreviews={message.localPreviews}
             onPress={setViewerIndex}
-          />
-        ) : null}
+          >
+            {message.text ? null : meta('overlay')}
+          </MediaAttachmentGrid>
 
-        {hasUnhandledAttachment ? (
-          // Rendering and playback of media belong to the `media` feature; the
-          // bubble only keeps the slot so a message carrying one is not blank.
-          <View style={[styles.attachmentSlot, { backgroundColor: theme.backgroundSelected }]}>
-            <Text variant="small" color="textSecondary">
-              Вложение
-            </Text>
-          </View>
-        ) : null}
-
-        {message.text ? <Text color={isOwn ? 'primaryText' : 'text'}>{message.text}</Text> : null}
-
-        <View style={styles.meta}>
-          {message.status === 'sending' ? (
-            <Text variant="caption" color={isOwn ? 'primaryText' : 'textSecondary'}>
-              Отправляется…
-            </Text>
-          ) : failed ? (
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => message.localId && onRetry(message.localId)}
-            >
-              <Text variant="caption" color="danger">
-                Не отправлено. Повторить
-              </Text>
-            </Pressable>
-          ) : (
-            <>
-              <Text variant="caption" color={isOwn ? 'primaryText' : 'textSecondary'}>
-                {formatMessageTime(message.createdAt)}
-              </Text>
-
-              {isOwn ? (
-                <Text variant="caption" color="primaryText">
-                  {isRead ? 'прочитано' : 'доставлено'}
-                </Text>
-              ) : null}
-            </>
-          )}
+          {message.text ? (
+            <View style={styles.caption}>
+              <Text color={textColor}>{message.text}</Text>
+              {meta('inline')}
+            </View>
+          ) : null}
         </View>
-      </View>
+      ) : (
+        <View testID="message-bubble" style={[styles.bubble, { backgroundColor: bubbleColor }]}>
+          {isOwn ? null : (
+            <Text variant="smallBold" color={textColor}>
+              {authorName}
+            </Text>
+          )}
+
+          {hasUnhandledAttachment ? (
+            // Rendering and playback of media belong to the `media` feature; the
+            // bubble only keeps the slot so a message carrying one is not blank.
+            <View style={[styles.attachmentSlot, { backgroundColor: theme.backgroundSelected }]}>
+              <Text variant="small" color="textSecondary">
+                Вложение
+              </Text>
+            </View>
+          ) : null}
+
+          {message.text ? <Text color={textColor}>{message.text}</Text> : null}
+
+          {meta('inline')}
+        </View>
+      )}
 
       {isMediaMessage ? (
         <MediaViewer

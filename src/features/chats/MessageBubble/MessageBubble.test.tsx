@@ -1,7 +1,8 @@
-import { fireEvent, render, screen, userEvent } from '@testing-library/react-native';
+import { render, screen, userEvent, within } from '@testing-library/react-native';
 
 import { MessageBubble } from '.';
 
+import { mosaicBounds } from '@/features/chats/lib/mosaicLayout';
 import type { ChatMessage } from '@/features/chats/useChatMessages';
 
 jest.mock('@/features/media', () => ({
@@ -33,6 +34,7 @@ function mediaMessage(overrides: Partial<ChatMessage> = {}): ChatMessage {
       {
         id: 'att-1',
         url: 'https://cdn.example/a.jpg',
+        posterUrl: null,
         mimeType: 'image/jpeg',
         width: 800,
         height: 600,
@@ -48,6 +50,7 @@ const baseProps = {
   isRead: false,
   authorName: 'Марина',
   authorAvatarUrl: null,
+  mediaBounds: mosaicBounds(328),
   onRetry: jest.fn(),
 };
 
@@ -69,21 +72,52 @@ describe('MessageBubble', () => {
     expect(screen.getByText('Вложение')).toBeTruthy();
   });
 
-  it('renders a mosaic for a media message once its width is known, and opens the viewer on tap', async () => {
+  it('renders the mosaic in the very first render and opens the viewer on tap', async () => {
     await render(<MessageBubble message={mediaMessage()} {...baseProps} />);
 
+    // Без onLayout: размер мозаики известен сразу, от ширины списка.
+    expect(screen.getByTestId('media-mosaic')).toBeTruthy();
     expect(screen.queryByText('Вложение')).toBeNull();
 
-    // Тестовый рендерер не считает реальную раскладку — ширина облачка
-    // приходит вручную тем же событием, что и на устройстве.
-    fireEvent(screen.getByTestId('message-bubble'), 'layout', {
-      nativeEvent: { layout: { width: 260, height: 40 } },
-    });
-
-    const image = await screen.findByLabelText('Открыть фото');
     const user = userEvent.setup();
-    await user.press(image);
+    await user.press(screen.getByLabelText('Открыть фото'));
 
     expect(screen.getByText('Просмотр открыт')).toBeTruthy();
+  });
+
+  it('puts the time on the mosaic when the media has no caption', async () => {
+    await render(<MessageBubble message={mediaMessage()} {...baseProps} />);
+
+    expect(within(screen.getByTestId('media-mosaic')).getByTestId('message-meta')).toBeTruthy();
+  });
+
+  it('puts the caption and the time under the mosaic, as wide as the mosaic', async () => {
+    await render(<MessageBubble message={mediaMessage({ text: 'подпись' })} {...baseProps} />);
+
+    const mosaic = screen.getByTestId('media-mosaic');
+
+    expect(within(mosaic).queryByTestId('message-meta')).toBeNull();
+    expect(screen.getByText('подпись')).toBeTruthy();
+    expect(screen.getByTestId('message-bubble')).toHaveStyle({
+      width: mosaic.props.style.find((style: { width?: number }) => style?.width).width,
+    });
+  });
+
+  it('keeps the retry control on a failed media message', async () => {
+    const onRetry = jest.fn();
+
+    await render(
+      <MessageBubble
+        message={mediaMessage({ status: 'failed', localId: 'local-1' })}
+        {...baseProps}
+        isOwn
+        onRetry={onRetry}
+      />,
+    );
+
+    const user = userEvent.setup();
+    await user.press(screen.getByText('Не отправлено. Повторить'));
+
+    expect(onRetry).toHaveBeenCalledWith('local-1');
   });
 });

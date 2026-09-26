@@ -8,6 +8,8 @@ jest.mock('./lib/prepareForUpload', () => ({
 jest.mock('./storage', () => ({
   uploadMedia: jest.fn(),
   removeUploadedMedia: jest.fn(),
+  storedPaths: (item: { path: string; posterPath: string | null }) =>
+    item.posterPath ? [item.path, item.posterPath] : [item.path],
 }));
 
 const mockedUpload = uploadMedia as jest.MockedFunction<typeof uploadMedia>;
@@ -29,6 +31,8 @@ function uploaded(id: string): UploadedMedia {
     kind: 'photo',
     url: `https://cdn.example/${id}.jpg`,
     path: `user-1/photo/${id}.jpg`,
+    posterUrl: null,
+    posterPath: null,
     mimeType: 'image/jpeg',
     width: 100,
     height: 100,
@@ -69,8 +73,8 @@ describe('uploadAllMedia', () => {
 
     // Сообщение с частью вложений в базу не попадёт — загруженные объекты
     // не должны остаться висеть в бакете без ссылки на них.
-    expect(mockedRemove).toHaveBeenCalledWith('user-1/photo/a.jpg');
-    expect(mockedRemove).toHaveBeenCalledWith('user-1/photo/b.jpg');
+    expect(mockedRemove).toHaveBeenCalledWith(['user-1/photo/a.jpg']);
+    expect(mockedRemove).toHaveBeenCalledWith(['user-1/photo/b.jpg']);
     expect(mockedRemove).toHaveBeenCalledTimes(2);
   });
 

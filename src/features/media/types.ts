@@ -17,6 +17,11 @@ export type LocalMedia = {
   width: number | null;
   height: number | null;
   durationMs: number | null;
+  /**
+   * Кадр видео, снятый перед отправкой (`file://` JPEG). Заливается рядом с
+   * видео и показывается в плитке, пока видео не запущено. У фото — нет.
+   */
+  posterUri?: string | null;
 };
 
 /**
@@ -29,6 +34,9 @@ export type UploadedMedia = {
   url: string;
   /** Path inside the bucket, kept so the file can be removed on a failed send. */
   path: string;
+  /** Постер видео в Storage — `attachments.poster_url`. */
+  posterUrl: string | null;
+  posterPath: string | null;
   mimeType: string;
   width: number | null;
   height: number | null;

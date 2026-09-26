@@ -4,14 +4,12 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useState } from 'react';
 import { StyleSheet, useColorScheme } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { ConfirmDialogHost } from '@/components/ConfirmDialog';
 import { ConnectionWatcher } from '@/features/connection/ConnectionWatcher';
-import {
-  reportRequestFailed,
-  reportRequestSucceeded,
-} from '@/features/connection/connectionStore';
+import { reportRequestFailed, reportRequestSucceeded } from '@/features/connection/connectionStore';
 import { InAppMessageToast } from '@/features/notifications/InAppMessageToast';
 import { isNetworkError } from '@/lib/network';
 
@@ -66,18 +64,22 @@ export default function RootLayout() {
     // Нужен react-native-gesture-handler в принципе (им пользуется шит выбора
     // медиа) — без корневой обёртки жесты не работают на Android.
     <GestureHandlerRootView style={styles.flex}>
-      <QueryClientProvider client={queryClient}>
-        <SafeAreaProvider>
-          <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-            <ConnectionWatcher />
-            <Stack screenOptions={{ headerShown: false }} />
-            {/* Поверх навигатора: уведомление не принадлежит ни одному экрану. */}
-            <InAppMessageToast />
-            {/* Один диалог подтверждения на всё приложение, см. src/components/ConfirmDialog. */}
-            <ConfirmDialogHost />
-          </ThemeProvider>
-        </SafeAreaProvider>
-      </QueryClientProvider>
+      {/* Высота клавиатуры кадр в кадр с системной анимацией — в том числе
+          внутри окна Modal на Android, где живёт шит выбора медиа. */}
+      <KeyboardProvider>
+        <QueryClientProvider client={queryClient}>
+          <SafeAreaProvider>
+            <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+              <ConnectionWatcher />
+              <Stack screenOptions={{ headerShown: false }} />
+              {/* Поверх навигатора: уведомление не принадлежит ни одному экрану. */}
+              <InAppMessageToast />
+              {/* Один диалог подтверждения на всё приложение, см. src/components/ConfirmDialog. */}
+              <ConfirmDialogHost />
+            </ThemeProvider>
+          </SafeAreaProvider>
+        </QueryClientProvider>
+      </KeyboardProvider>
     </GestureHandlerRootView>
   );
 }

@@ -1,12 +1,8 @@
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  ActivityIndicator,
-  FlatList,
-  KeyboardAvoidingView,
-  StyleSheet,
-  View,
-} from 'react-native';
+import { ActivityIndicator, FlatList, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { useWindowDimensions as useKeyboardWindow } from 'react-native-keyboard-controller';
+import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Text } from '@/components/Text';
@@ -19,13 +15,14 @@ import {
 import { MessageBubble } from '@/features/chats/MessageBubble';
 import { MessageComposer } from '@/features/chats/MessageComposer';
 import { chatTitle, isChatMember } from '@/features/chats/chatDisplay';
+import { claimKeyboardForChat, useOwnKeyboardHeight } from '@/features/chats/composerKeyboard';
+import { mosaicBounds } from '@/features/chats/lib/mosaicLayout';
 import { useComposerDraft } from '@/features/chats/useComposerDraft';
 import { ConnectionTitle } from '@/features/connection/ConnectionTitle';
 import { useChat } from '@/features/chats/useChat';
 import { useChatMessages, type ChatMessage } from '@/features/chats/useChatMessages';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
 import { useMarkChatRead } from '@/features/chats/useMarkChatRead';
-import { useKeyboardVisible } from '@/hooks/use-keyboard-visible';
 import { useTheme } from '@/hooks/use-theme';
 import { setActiveChatId } from '@/store/activeChat';
 import { Spacing } from '@/theme';
@@ -34,7 +31,14 @@ export default function ChatScreen() {
   const { chatId } = useLocalSearchParams<{ chatId: string }>();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const isKeyboardVisible = useKeyboardVisible();
+  const keyboardHeight = useOwnKeyboardHeight('chat');
+  // Размер окна целиком, от края до края, — от него же меряется клавиатура.
+  const { height: windowHeight } = useKeyboardWindow();
+  const containerRef = useRef<View | null>(null);
+  const [bottomOffset, setBottomOffset] = useState(0);
+  const { width: windowWidth } = useWindowDimensions();
+  // Ширина списка — окно минус его боковые поля (`styles.list`).
+  const mediaBounds = useMemo(() => mosaicBounds(windowWidth - Spacing.three * 2), [windowWidth]);
   const currentUserId = useCurrentUserId();
   const { chat, isLoading: isChatLoading, error: chatError } = useChat(chatId);
   const {
@@ -51,17 +55,10 @@ export default function ChatScreen() {
   } = useChatMessages(chatId, currentUserId);
   const draft = useComposerDraft(chatId);
 
-  const containerRef = useRef<View | null>(null);
-  const [topOffset, setTopOffset] = useState(0);
-
   const submitDraft = useCallback(() => {
     send(draft.text, draft.media());
     draft.clear();
   }, [draft, send]);
-
-  const measureTopOffset = useCallback(() => {
-    containerRef.current?.measureInWindow((_x, y) => setTopOffset(y));
-  }, []);
 
   // Пока чат открыт, уведомления о нём не нужны: человек и так смотрит сюда.
   useEffect(() => {
@@ -104,11 +101,12 @@ export default function ChatScreen() {
           isRead={readUpTo !== null && item.createdAt <= readUpTo}
           authorName={author?.displayName ?? 'Удалённый аккаунт'}
           authorAvatarUrl={author?.avatarUrl ?? null}
+          mediaBounds={mediaBounds}
           onRetry={retry}
         />
       );
     },
-    [currentUserId, participantsById, readUpTo, retry],
+    [currentUserId, mediaBounds, participantsById, readUpTo, retry],
   );
 
   const typingLabel =
@@ -118,10 +116,33 @@ export default function ChatScreen() {
         ? 'Несколько человек печатают…'
         : null;
 
+  /**
+   * Что лежит под экраном чата до низа окна — таб-бар. Его клавиатура
+   * перекрывает, и на его высоту поле подниматься не должно. Измеряется, а не
+   * подбирается: таб-бар разный на разных устройствах и платформах.
+   */
+  const measureBottomOffset = useCallback(() => {
+    containerRef.current?.measureInWindow((_x, y, _width, height) =>
+      setBottomOffset(Math.max(0, windowHeight - (y + height))),
+    );
+  }, [windowHeight]);
+
+  /**
+   * Клавиатуру приходится обходить вручную на обеих платформах: iOS рисует её
+   * поверх экрана, а на Android с edge-to-edge окно под неё не сжимается.
+   * Высота клавиатуры меряется от низа окна и уже покрывает и таб-бар, и
+   * полосу системной навигации — поэтому отступ не сумма, а большее из двух.
+   * Считается только от клавиатуры этого поля: поле в шите медиа двигает
+   * себя, а не чат под шитом (см. `composerKeyboard`).
+   */
+  const keyboardInsetStyle = useAnimatedStyle(() => ({
+    paddingBottom: Math.max(keyboardHeight.value - bottomOffset, insets.bottom),
+  }));
+
   return (
     <View
       ref={containerRef}
-      onLayout={measureTopOffset}
+      onLayout={measureBottomOffset}
       style={[styles.flex, { backgroundColor: theme.background }]}
     >
       <Stack.Screen
@@ -132,17 +153,7 @@ export default function ChatScreen() {
         }}
       />
 
-      <KeyboardAvoidingView
-        style={styles.flex}
-        // Клавиатуру приходится обходить вручную на обеих платформах: iOS
-        // рисует её поверх экрана, а на Android с edge-to-edge окно под неё
-        // больше не сжимается — adjustResize там ничего не даёт.
-        behavior="padding"
-        // Отступ равен расстоянию от верха окна до этого экрана — то есть
-        // высоте шапки со строкой состояния. Он измеряется, а не подбирается:
-        // шапка разная на разных устройствах и платформах.
-        keyboardVerticalOffset={topOffset}
-      >
+      <Animated.View testID="chat-keyboard-area" style={[styles.flex, keyboardInsetStyle]}>
         {isChatLoading || isLoading ? (
           <View style={styles.centered}>
             <ActivityIndicator accessibilityLabel="Загрузка переписки" />
@@ -189,25 +200,20 @@ export default function ChatScreen() {
           </View>
         ) : null}
 
-        <View style={{ paddingBottom: isKeyboardVisible ? 0 : insets.bottom }}>
-          <MessageComposer
-            text={draft.text}
-            onChangeText={draft.setText}
-            canSend={chat ? isChatMember(chat, currentUserId) : false}
-            onSend={submitDraft}
-            onTyping={notifyTyping}
-            onAttachPressIn={armMediaSheet}
-            onAttachPressOut={releaseMediaSheetArm}
-            onAttachPress={openMediaSheet}
-          />
-        </View>
-      </KeyboardAvoidingView>
+        <MessageComposer
+          text={draft.text}
+          onChangeText={draft.setText}
+          canSend={chat ? isChatMember(chat, currentUserId) : false}
+          onSend={submitDraft}
+          onTyping={notifyTyping}
+          onFieldActivate={claimKeyboardForChat}
+          onAttachPressIn={armMediaSheet}
+          onAttachPressOut={releaseMediaSheetArm}
+          onAttachPress={openMediaSheet}
+        />
+      </Animated.View>
 
-      <MediaPickerSheet
-        draft={draft}
-        onTyping={notifyTyping}
-        onSend={submitDraft}
-      />
+      <MediaPickerSheet draft={draft} onTyping={notifyTyping} onSend={submitDraft} />
     </View>
   );
 }

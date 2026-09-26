@@ -30,6 +30,12 @@ export type MessageComposerProps = {
    */
   onAttachPressIn?: () => void;
   onAttachPressOut?: () => void;
+  /**
+   * Касание и фокус поля ввода: так поле забирает себе клавиатуру. Касание
+   * приходит раньше, чем клавиатура начинает выезжать, фокус — страховка на
+   * случай, когда поле получило его не пальцем.
+   */
+  onFieldActivate?: () => void;
 };
 
 export function MessageComposer({
@@ -41,6 +47,7 @@ export function MessageComposer({
   onAttachPress,
   onAttachPressIn,
   onAttachPressOut,
+  onFieldActivate,
 }: MessageComposerProps) {
   const theme = useTheme();
   // Счётчик берётся из стора выбора, а не приходит пропом: иначе выбор файла
@@ -72,6 +79,8 @@ export function MessageComposer({
           placeholderTextColor={theme.textSecondary}
           value={text}
           multiline
+          onPressIn={onFieldActivate}
+          onFocus={onFieldActivate}
           onChangeText={(value) => {
             onChangeText(value);
             onTyping();
