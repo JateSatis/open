@@ -1,4 +1,4 @@
-import { act, render, screen, userEvent } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, userEvent } from '@testing-library/react-native';
 import { State } from 'react-native-gesture-handler';
 import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils';
 import type { PanGesture } from 'react-native-gesture-handler';
@@ -15,6 +15,7 @@ import { getMediaSheetPhase } from './sheetStore';
 
 import { ConfirmDialogHost } from '@/components/ConfirmDialog';
 import { resetConfirmDialogQueue } from '@/components/ConfirmDialog/store';
+import { getKeyboardOwner } from '@/features/chats/composerKeyboard';
 import type { ComposerDraft } from '@/features/chats/useComposerDraft';
 import { useMediaSelection } from '@/features/media/selectionStore';
 
@@ -347,5 +348,34 @@ describe('MediaPickerSheet', () => {
 
     expect(onSend).toHaveBeenCalledTimes(1);
     expect(getMediaSheetPhase()).toBe('closed');
+  });
+
+  it('takes the keyboard for its own field, so the chat under it stays still', async () => {
+    useMediaSelection.getState().toggle(photo);
+
+    await renderOpenSheet();
+
+    await act(async () => {
+      fireEvent(screen.getByLabelText('Сообщение'), 'pressIn');
+    });
+
+    expect(getKeyboardOwner()).toBe('sheet');
+  });
+
+  it('gives the keyboard back to the chat once it is gone', async () => {
+    const onSend = jest.fn();
+    useMediaSelection.getState().toggle(photo);
+
+    await renderOpenSheet({ onSend });
+
+    await act(async () => {
+      fireEvent(screen.getByLabelText('Сообщение'), 'pressIn');
+    });
+
+    const user = userEvent.setup();
+    await user.press(screen.getByText('Отправить'));
+
+    expect(getMediaSheetPhase()).toBe('closed');
+    expect(getKeyboardOwner()).toBe('chat');
   });
 });

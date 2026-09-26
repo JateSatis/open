@@ -5,10 +5,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
 import {
   InteractionManager,
-  KeyboardAvoidingView,
+  Keyboard,
   Modal,
   PixelRatio,
-  Platform,
   Pressable,
   useWindowDimensions,
   View,
@@ -16,6 +15,7 @@ import {
   type ScrollView,
 } from 'react-native';
 import { GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
+import { KeyboardController } from 'react-native-keyboard-controller';
 import Animated, {
   Extrapolation,
   interpolate,
@@ -44,6 +44,11 @@ import { useDismissGesture } from './useDismissGesture';
 
 import { ConfirmDialogSurface, confirm } from '@/components/ConfirmDialog';
 import { dismissTopConfirmDialog } from '@/components/ConfirmDialog/store';
+import {
+  claimKeyboardForSheet,
+  setSheetKeyboardWindowOpen,
+  useOwnKeyboardHeight,
+} from '@/features/chats/composerKeyboard';
 import { MessageComposer } from '@/features/chats/MessageComposer';
 import type { ComposerDraft } from '@/features/chats/useComposerDraft';
 import { MediaGrid } from '@/features/media';
@@ -84,6 +89,18 @@ export function MediaPickerSheet(props: MediaPickerSheetProps) {
   // Уход с экрана посреди открытого шита: окно уходит вместе с экраном, и
   // следующий экран должен застать шит закрытым.
   useEffect(() => () => finishMediaSheetClose(), []);
+
+  // Пока окно шита существует, клавиатурой может владеть его поле, и чат
+  // под шитом на неё не реагирует.
+  useEffect(() => setSheetKeyboardWindowOpen(phase !== 'closed'), [phase]);
+
+  // Поле чата теряет фокус, как только шит начинает открываться. Клавиатуру
+  // система прячет и сама, вместе с появлением окна, но фокус оставляет — и
+  // после закрытия шита клавиатура выехала бы снова. Поле шита в этот момент
+  // ещё не в фокусе: его фокусирует только касание.
+  useEffect(() => {
+    if (phase === 'armed' || phase === 'open') Keyboard.dismiss();
+  }, [phase]);
 
   // Начало галереи читается заранее, пока человек читает чат: к открытию
   // шита клетки уже известны. Без выданного разрешения не делает ничего.
@@ -127,6 +144,7 @@ function SheetWindow({ phase, draft, onTyping, onSend }: SheetWindowProps) {
     sheetGeometry(screenHeight, insets.top, PixelRatio.get());
 
   const hasMedia = useHasSelection();
+  const keyboardHeight = useOwnKeyboardHeight('sheet');
 
   const [shown, setShown] = useState(false);
   const [listMounted, setListMounted] = useState(false);
@@ -173,6 +191,9 @@ function SheetWindow({ phase, draft, onTyping, onSend }: SheetWindowProps) {
   useEffect(() => {
     if (phase !== 'closing') return;
 
+    // Как бы шит ни закрывался — отправкой, тапом по фону или жестом, —
+    // клавиатура его поля уезжает вместе с ним.
+    void KeyboardController.dismiss();
     dismissY.value = withTiming(screenHeight, { duration: CLOSE_DURATION_MS }, (finished) => {
       if (finished) runOnJS(finishMediaSheetClose)();
     });
@@ -184,6 +205,9 @@ function SheetWindow({ phase, draft, onTyping, onSend }: SheetWindowProps) {
    * вопрос задаётся поверх него, в этом же окне.
    */
   const requestClose = useCallback(() => {
+    // Вопрос про сброс не должен оказаться под клавиатурой.
+    void KeyboardController.dismiss();
+
     if (useMediaSelection.getState().order.length === 0) {
       closeMediaSheet();
       return;
@@ -252,6 +276,16 @@ function SheetWindow({ phase, draft, onTyping, onSend }: SheetWindowProps) {
   /** Весь шит целиком: и панель, и список, и строка ввода уезжают вместе. */
   const shiftStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: dismissY.value }],
+  }));
+
+  /**
+   * Строка ввода стоит ровно над клавиатурой своего поля, поверх грида, и
+   * уезжает вниз вместе с шитом. Высота клавиатуры меряется от низа экрана и
+   * уже покрывает полосу системной навигации, под которую у строки свой
+   * отступ, — его клавиатура и закрывает.
+   */
+  const footerStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: dismissY.value - Math.max(keyboardHeight.value - insets.bottom, 0) }],
   }));
 
   const backdropStyle = useAnimatedStyle(() => ({
@@ -330,20 +364,23 @@ function SheetWindow({ phase, draft, onTyping, onSend }: SheetWindowProps) {
         </Animated.View>
 
         {hasMedia ? (
-          <Animated.View style={[styles.footer, shiftStyle]} onLayout={measureFooter}>
-            <KeyboardAvoidingView
-              behavior={Platform.select({ ios: 'padding', default: undefined })}
-            >
-              <View style={{ backgroundColor: theme.background }}>
-                <MessageComposer
-                  text={draft.text}
-                  onChangeText={draft.setText}
-                  onSend={submit}
-                  onTyping={onTyping}
-                  canSend
-                />
-              </View>
-            </KeyboardAvoidingView>
+          <Animated.View
+            testID="media-picker-footer"
+            style={[
+              styles.footer,
+              { backgroundColor: theme.background, paddingBottom: insets.bottom },
+              footerStyle,
+            ]}
+            onLayout={measureFooter}
+          >
+            <MessageComposer
+              text={draft.text}
+              onChangeText={draft.setText}
+              onSend={submit}
+              onTyping={onTyping}
+              onFieldActivate={claimKeyboardForSheet}
+              canSend
+            />
           </Animated.View>
         ) : null}
 
