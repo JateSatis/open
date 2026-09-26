@@ -76,7 +76,8 @@
     "test": "jest",
     "build:android": "eas build --profile development --platform android",
     "build:ios": "eas build --profile development --platform ios",
-    "postinstall": "patch-package"
+    "postinstall": "patch-package",
+    "test:functions": "npx -y deno@2 test --allow-env supabase/functions"
   },
   "private": true,
   "jest": {
@@ -92,7 +93,8 @@
       "<rootDir>/src/test/jest.setup.js"
     ],
     "testPathIgnorePatterns": [
-      "<rootDir>/node_modules/"
+      "<rootDir>/node_modules/",
+      "<rootDir>/supabase/"
     ]
   },
   "expo": {
