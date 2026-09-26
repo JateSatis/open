@@ -10,12 +10,16 @@ import { useTheme } from '@/hooks/use-theme';
 export type PersonPickItemProps = {
   person: Person;
   isSelected: boolean;
-  isOnline: boolean;
   onToggle: (personId: string) => void;
 };
 
-/** Человек в списке выбора: нажатие отмечает или снимает отметку, чат создаёт кнопка. */
-export function PersonPickItem({ person, isSelected, isOnline, onToggle }: PersonPickItemProps) {
+/**
+ * Человек в списке выбора: нажатие отмечает или снимает отметку, чат создаёт
+ * кнопка. «В сети» здесь нет намеренно: presence-канал держит экран «Чаты», который
+ * остаётся смонтированным под этим, а второй подписчик на тот же топик
+ * Realtime не допускает.
+ */
+export function PersonPickItem({ person, isSelected, onToggle }: PersonPickItemProps) {
   const theme = useTheme();
 
   return (
@@ -28,20 +32,9 @@ export function PersonPickItem({ person, isSelected, isOnline, onToggle }: Perso
     >
       <Avatar uri={person.avatarUrl} name={person.displayName} />
 
-      <View style={styles.body}>
-        <Text variant="bodyBold" numberOfLines={1}>
-          {person.displayName}
-        </Text>
-
-        {isOnline ? (
-          <View style={styles.status}>
-            <View style={[styles.onlineDot, { backgroundColor: theme.success }]} />
-            <Text variant="caption" color="textSecondary">
-              в сети
-            </Text>
-          </View>
-        ) : null}
-      </View>
+      <Text variant="bodyBold" numberOfLines={1} style={styles.name}>
+        {person.displayName}
+      </Text>
 
       <View
         style={[

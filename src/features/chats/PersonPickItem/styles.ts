@@ -9,19 +9,8 @@ export const styles = StyleSheet.create({
     gap: Spacing.three,
     paddingVertical: Spacing.two,
   },
-  body: {
+  name: {
     flex: 1,
-    gap: Spacing.half,
-  },
-  status: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.one,
-  },
-  onlineDot: {
-    width: Spacing.two,
-    height: Spacing.two,
-    borderRadius: Spacing.one,
   },
   check: {
     width: Spacing.four,

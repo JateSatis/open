@@ -9,7 +9,8 @@ import { useTheme } from '@/hooks/use-theme';
 
 export type InviteResponseBarProps = {
   invite: MyInvite;
-  isResponding: boolean;
+  /** Какой ответ уходит прямо сейчас. */
+  responding: 'accept' | 'decline' | null;
   error: string | null;
   onAccept: () => void;
   onDecline: () => void;
@@ -22,7 +23,7 @@ export type InviteResponseBarProps = {
  */
 export function InviteResponseBar({
   invite,
-  isResponding,
+  responding,
   error,
   onAccept,
   onDecline,
@@ -49,12 +50,19 @@ export function InviteResponseBar({
           <Button
             label="Отклонить"
             variant="secondary"
-            disabled={isResponding}
+            loading={responding === 'decline'}
+            disabled={responding !== null}
             onPress={onDecline}
             style={styles.action}
           />
         ) : null}
-        <Button label="Принять" loading={isResponding} onPress={onAccept} style={styles.action} />
+        <Button
+          label="Принять"
+          loading={responding === 'accept'}
+          disabled={responding !== null}
+          onPress={onAccept}
+          style={styles.action}
+        />
       </View>
     </View>
   );

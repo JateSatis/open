@@ -1,7 +1,11 @@
 import { useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, View } from 'react-native';
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import {
+  useReanimatedKeyboardAnimation,
+  useWindowDimensions as useKeyboardWindow,
+} from 'react-native-keyboard-controller';
+import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/Button';
@@ -9,8 +13,6 @@ import { Input } from '@/components/Input';
 import { Text } from '@/components/Text';
 import { PersonPickItem } from '@/features/chats/PersonPickItem';
 import { useCreateChat } from '@/features/chats/useCreateChat';
-import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
-import { useOnlineUsers } from '@/features/chats/useOnlineUsers';
 import { usePeople } from '@/features/chats/usePeople';
 import { useTheme } from '@/hooks/use-theme';
 import { Spacing } from '@/theme';
@@ -24,21 +26,45 @@ export default function NewChatScreen() {
   const router = useRouter();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const currentUserId = useCurrentUserId();
-  const onlineIds = useOnlineUsers(currentUserId);
+  const keyboard = useReanimatedKeyboardAnimation();
+  const { height: windowHeight } = useKeyboardWindow();
+  const containerRef = useRef<View | null>(null);
+  const [bottomOffset, setBottomOffset] = useState(0);
   const { people, isLoading, error } = usePeople();
   const [selected, setSelected] = useState<string[]>([]);
   const [title, setTitle] = useState('');
 
   // replace, а не push: «назад» из нового чата ведёт к списку, а не обратно в выбор.
   const openChat = useCallback((chatId: string) => router.replace(`/chats/${chatId}`), [router]);
-  const { isCreating, problem, create } = useCreateChat(openChat);
+  const { isCreating, problem, create, dismissProblem } = useCreateChat(openChat);
 
-  const toggle = useCallback((personId: string) => {
-    setSelected((current) =>
-      current.includes(personId) ? current.filter((id) => id !== personId) : [...current, personId],
+  const toggle = useCallback(
+    (personId: string) => {
+      dismissProblem();
+      setSelected((current) =>
+        current.includes(personId)
+          ? current.filter((id) => id !== personId)
+          : [...current, personId],
+      );
+    },
+    [dismissProblem],
+  );
+
+  /**
+   * Что лежит под экраном до низа окна — таб-бар. Клавиатура его перекрывает,
+   * поэтому низ поднимается на её высоту за вычетом таб-бара. Тот же приём,
+   * что в переписке: KeyboardAvoidingView на Android с edge-to-edge под
+   * нативным таб-баром кнопку не поднимает.
+   */
+  const measureBottomOffset = useCallback(() => {
+    containerRef.current?.measureInWindow((_x, y, _width, height) =>
+      setBottomOffset(Math.max(0, windowHeight - (y + height))),
     );
-  }, []);
+  }, [windowHeight]);
+
+  const keyboardInsetStyle = useAnimatedStyle(() => ({
+    paddingBottom: Math.max(Math.abs(keyboard.height.value) - bottomOffset, 0),
+  }));
 
   const createLabel =
     selected.length === 0
@@ -48,9 +74,10 @@ export default function NewChatScreen() {
         : `Позвать в группу (${selected.length})`;
 
   return (
-    <KeyboardAvoidingView
-      behavior="padding"
-      style={[styles.flex, { backgroundColor: theme.background }]}
+    <Animated.View
+      ref={containerRef}
+      onLayout={measureBottomOffset}
+      style={[styles.flex, { backgroundColor: theme.background }, keyboardInsetStyle]}
     >
       <View style={styles.titleField}>
         <Input
@@ -75,7 +102,6 @@ export default function NewChatScreen() {
             <PersonPickItem
               person={item}
               isSelected={selected.includes(item.id)}
-              isOnline={onlineIds.has(item.id)}
               onToggle={toggle}
             />
           )}
@@ -124,7 +150,7 @@ export default function NewChatScreen() {
           Чат публичный: прочитать его сможет кто угодно.
         </Text>
       </View>
-    </KeyboardAvoidingView>
+    </Animated.View>
   );
 }
 

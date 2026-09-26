@@ -13,7 +13,8 @@ import { useTheme } from '@/hooks/use-theme';
 export type InviteCardProps = {
   invite: ChatInvite;
   currentUserId: string | null;
-  isResponding: boolean;
+  /** Какой ответ на эту заявку уходит прямо сейчас. */
+  responding: 'accept' | 'decline' | null;
   onOpen: (chatId: string) => void;
   onAccept: (chatId: string) => void;
   onDecline: (chatId: string) => void;
@@ -23,6 +24,7 @@ function previewText(message: Message): string {
   if (message.text) return message.text;
   if (message.kind === 'photo') return 'Фото';
   if (message.kind === 'video') return 'Видео';
+  if (message.kind === 'media') return 'Медиа';
   if (message.kind === 'voice') return 'Голосовое';
 
   return 'Вложение';
@@ -35,7 +37,7 @@ function previewText(message: Message): string {
 export function InviteCard({
   invite,
   currentUserId,
-  isResponding,
+  responding,
   onOpen,
   onAccept,
   onDecline,
@@ -104,7 +106,8 @@ export function InviteCard({
             label="Отклонить"
             variant="secondary"
             size="md"
-            disabled={isResponding}
+            loading={responding === 'decline'}
+            disabled={responding !== null}
             onPress={() => onDecline(invite.chatId)}
             style={styles.action}
           />
@@ -112,7 +115,8 @@ export function InviteCard({
         <Button
           label="Принять"
           size="md"
-          loading={isResponding}
+          loading={responding === 'accept'}
+          disabled={responding !== null}
           onPress={() => onAccept(invite.chatId)}
           style={styles.action}
         />

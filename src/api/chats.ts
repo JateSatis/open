@@ -591,7 +591,10 @@ export type UserChannelHandlers = {
   onMessage: (message: IncomingMessage) => void;
   /** Меня позвали в чат. */
   onInvite: (invite: IncomingInvite) => void;
-  /** Я ответил на заявку — возможно, с другого устройства. */
+  /**
+   * Заявка изменилась: я ответил (возможно, с другого устройства) или в чат,
+   * куда меня зовут, написали — карточке заявки пора перечитать превью.
+   */
   onInviteChanged: (chatId: string) => void;
   /** В чат, где я участник, вошёл принявший заявку. */
   onMemberJoined: (chatId: string) => void;
@@ -625,6 +628,11 @@ export function subscribeToUserEvents(userId: string, handlers: UserChannelHandl
       if (invite) handlers.onInvite(invite);
     })
     .on('broadcast', { event: 'invite_changed' }, ({ payload }) => {
+      const chatId = chatIdOf(payload);
+
+      if (chatId) handlers.onInviteChanged(chatId);
+    })
+    .on('broadcast', { event: 'invite_activity' }, ({ payload }) => {
       const chatId = chatIdOf(payload);
 
       if (chatId) handlers.onInviteChanged(chatId);

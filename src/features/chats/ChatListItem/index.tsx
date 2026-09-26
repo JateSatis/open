@@ -56,7 +56,7 @@ export function ChatListItem({ chat, currentUserId, isOnline, onPress }: ChatLis
         </Text>
 
         <View style={styles.status}>
-          {chat.kind === 'direct' && isOnline ? (
+          {chat.kind === 'direct' && waiting === 0 && isOnline ? (
             <View style={[styles.onlineDot, { backgroundColor: theme.success }]} />
           ) : null}
           <Text variant="caption" color="textSecondary">

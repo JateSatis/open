@@ -10,9 +10,11 @@ import { describeLoadError } from '@/lib/network';
 
 export type InviteAnswer = 'accept' | 'decline';
 
+export type PendingAnswer = { chatId: string; answer: InviteAnswer };
+
 export type RespondToInviteState = {
-  /** Чат, на заявку в который ответ уходит прямо сейчас. */
-  pendingChatId: string | null;
+  /** Ответ, который уходит прямо сейчас: какая кнопка крутится. */
+  pending: PendingAnswer | null;
   error: string | null;
   respond: (chatId: string, answer: InviteAnswer) => void;
 };
@@ -23,18 +25,22 @@ export type RespondToInviteState = {
  */
 export function useRespondToInvite(): RespondToInviteState {
   const queryClient = useQueryClient();
-  const [pendingChatId, setPendingChatId] = useState<string | null>(null);
+  const [pending, setPending] = useState<PendingAnswer | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const mutation = useMutation({
     mutationFn: ({ chatId, answer }: { chatId: string; answer: InviteAnswer }) =>
       answer === 'accept' ? acceptInvite(chatId) : declineInvite(chatId),
-    onSuccess: (_result, { chatId }) => {
-      void queryClient.invalidateQueries({ queryKey: invitesQueryKey });
-      void queryClient.invalidateQueries({ queryKey: chatsQueryKey });
-      void queryClient.invalidateQueries({ queryKey: chatQueryKey(chatId) });
-      void queryClient.invalidateQueries({ queryKey: myInviteQueryKey(chatId) });
-    },
+    // Мутация остаётся «в процессе», пока списки не перечитаны: кнопка
+    // крутится до того самого момента, когда карточка переезжает, а не гаснет
+    // на секунды раньше, оставляя человека гадать, сработало ли нажатие.
+    onSuccess: (_result, { chatId }) =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: invitesQueryKey }),
+        queryClient.invalidateQueries({ queryKey: chatsQueryKey }),
+        queryClient.invalidateQueries({ queryKey: chatQueryKey(chatId) }),
+        queryClient.invalidateQueries({ queryKey: myInviteQueryKey(chatId) }),
+      ]),
     onError: (cause: Error, { answer }) => {
       setError(
         describeLoadError(
@@ -43,17 +49,17 @@ export function useRespondToInvite(): RespondToInviteState {
         ),
       );
     },
-    onSettled: () => setPendingChatId(null),
+    onSettled: () => setPending(null),
   });
 
   const respond = useCallback(
     (chatId: string, answer: InviteAnswer) => {
       setError(null);
-      setPendingChatId(chatId);
+      setPending({ chatId, answer });
       mutation.mutate({ chatId, answer });
     },
     [mutation],
   );
 
-  return { pendingChatId, error, respond };
+  return { pending, error, respond };
 }

@@ -217,7 +217,7 @@ export default function ChatScreen() {
         {!isMember && myInvite && myInvite.status !== 'accepted' ? (
           <InviteResponseBar
             invite={myInvite}
-            isResponding={invite.pendingChatId === chatId}
+            responding={invite.pending?.chatId === chatId ? invite.pending.answer : null}
             error={invite.error}
             onAccept={() => invite.respond(chatId, 'accept')}
             onDecline={() => invite.respond(chatId, 'decline')}

@@ -13,6 +13,8 @@ export type CreateChatState = {
   isCreating: boolean;
   problem: CreateChatProblem | null;
   create: (input: CreateChatInput) => void;
+  /** Убрать сообщение о прошлой попытке: выбор изменился, и оно уже не о нём. */
+  dismissProblem: () => void;
 };
 
 /**
@@ -51,5 +53,7 @@ export function useCreateChat(onOpen: (chatId: string) => void): CreateChatState
     [mutation],
   );
 
-  return { isCreating: mutation.isPending, problem, create };
+  const dismissProblem = useCallback(() => setProblem(null), []);
+
+  return { isCreating: mutation.isPending, problem, create, dismissProblem };
 }

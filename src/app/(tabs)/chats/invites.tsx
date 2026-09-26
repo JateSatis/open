@@ -17,7 +17,7 @@ export default function InvitesScreen() {
   const router = useRouter();
   const currentUserId = useCurrentUserId();
   const { incoming, declined, isLoading, isRefreshing, error, refresh } = useInvites();
-  const { pendingChatId, error: respondError, respond } = useRespondToInvite();
+  const { pending, error: respondError, respond } = useRespondToInvite();
 
   const openChat = useCallback((chatId: string) => router.push(`/chats/${chatId}`), [router]);
   const accept = useCallback((chatId: string) => respond(chatId, 'accept'), [respond]);
@@ -68,7 +68,7 @@ export default function InvitesScreen() {
           <InviteCard
             invite={item}
             currentUserId={currentUserId}
-            isResponding={pendingChatId === item.chatId}
+            responding={pending?.chatId === item.chatId ? pending.answer : null}
             onOpen={openChat}
             onAccept={accept}
             onDecline={decline}

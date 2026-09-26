@@ -10,8 +10,7 @@ import { myInviteQueryKey } from '@/features/chats/useMyInvite';
 import { useActiveChatId } from '@/store/activeChat';
 
 export type InAppAlert =
-  | ({ kind: 'message' } & IncomingMessage)
-  | ({ kind: 'invite' } & IncomingInvite);
+  ({ kind: 'message' } & IncomingMessage) | ({ kind: 'invite' } & IncomingInvite);
 
 export type InAppAlertsState = {
   alert: InAppAlert | null;
@@ -56,8 +55,8 @@ export function useInAppAlerts(): InAppAlertsState {
         setAlert({ kind: 'invite', ...invite });
       },
       onInviteChanged: (chatId) => {
-        // Ответ с другого моего устройства: здесь заявка должна исчезнуть или
-        // переехать в отклонённые так же, как там.
+        // Ответ с другого моего устройства или новое сообщение в чате, куда
+        // меня зовут: карточка заявки и сам чат должны это отразить.
         void queryClient.invalidateQueries({ queryKey: invitesQueryKey });
         void queryClient.invalidateQueries({ queryKey: myInviteQueryKey(chatId) });
         refreshChat(chatId);

@@ -3,7 +3,7 @@ import { screen, userEvent } from '@testing-library/react-native';
 
 import NewChatScreen from './new';
 
-import { listPeople, subscribeToOnlineUsers } from '@/api/chats';
+import { listPeople } from '@/api/chats';
 import { createChat, DuplicateChatError } from '@/api/invites';
 import { useSession } from '@/features/auth/useSession';
 import { reportRealtimeJoined, resetConnectionState } from '@/features/connection/connectionStore';
@@ -21,7 +21,6 @@ jest.mock('@/features/auth/useSession', () => ({
 
 jest.mock('@/api/chats', () => ({
   listPeople: jest.fn(),
-  subscribeToOnlineUsers: jest.fn(),
 }));
 
 jest.mock('@/api/invites', () => {
@@ -39,7 +38,6 @@ jest.mock('@/api/invites', () => {
 
 const mockedPeople = listPeople as jest.MockedFunction<typeof listPeople>;
 const mockedCreate = createChat as jest.MockedFunction<typeof createChat>;
-const mockedPresence = subscribeToOnlineUsers as jest.MockedFunction<typeof subscribeToOnlineUsers>;
 const mockedSession = useSession as jest.MockedFunction<typeof useSession>;
 
 beforeEach(() => {
@@ -49,7 +47,6 @@ beforeEach(() => {
     isAuthenticated: true,
     isLoading: false,
   });
-  mockedPresence.mockReturnValue(() => {});
   mockedPeople.mockResolvedValue([
     { id: 'user-2', displayName: 'Марина', avatarUrl: null },
     { id: 'user-3', displayName: 'Пётр', avatarUrl: null },
@@ -131,6 +128,20 @@ describe('NewChatScreen', () => {
 
     await user.press(screen.getByText('Открыть тот чат'));
     expect(mockReplace).toHaveBeenCalledWith('/chats/chat-old');
+  });
+
+  it('drops the repeat warning once the choice of people changes', async () => {
+    mockedCreate.mockRejectedValue(new DuplicateChatError('chat-old'));
+    const user = userEvent.setup();
+
+    await renderWithQuery(<NewChatScreen />);
+    await user.press(await screen.findByText('Марина'));
+    await user.press(screen.getByText('Позвать в диалог'));
+    await screen.findByText(/Вы уже позвали этих людей/);
+
+    await user.press(screen.getByText('Пётр'));
+
+    expect(screen.queryByText(/Вы уже позвали этих людей/)).toBeNull();
   });
 
   it('reports a failure in plain words, not in server wording', async () => {
