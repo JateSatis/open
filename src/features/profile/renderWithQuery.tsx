@@ -9,11 +9,12 @@ import type { ReactElement, ReactNode } from 'react';
  * `retry: false` lets an intentionally failing query reach the error branch on
  * the first attempt instead of timing the test out, and `gcTime: 0` drops the
  * cache as soon as the screen unmounts — otherwise its garbage-collection
- * timer keeps the Jest worker alive after the suite is done.
+ * timer keeps the Jest worker alive after the suite is done. Mutations have
+ * the same five-minute timer, so they get the same treatment.
  */
 export function renderWithQuery(ui: ReactElement) {
   const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false, gcTime: 0 } },
+    defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { gcTime: 0 } },
   });
 
   return render(ui, {

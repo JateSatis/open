@@ -55,6 +55,19 @@ const baseProps = {
 };
 
 describe('MessageBubble', () => {
+  it('opens the author profile from the avatar and from the name', async () => {
+    const onAuthorPress = jest.fn();
+    const user = userEvent.setup();
+
+    await render(
+      <MessageBubble message={textMessage()} {...baseProps} onAuthorPress={onAuthorPress} />,
+    );
+    await user.press(screen.getByLabelText('Профиль: Марина'));
+    await user.press(screen.getByText('Марина'));
+
+    expect(onAuthorPress).toHaveBeenCalledTimes(2);
+  });
+
   it('renders plain text as before', async () => {
     await render(<MessageBubble message={textMessage()} {...baseProps} />);
 

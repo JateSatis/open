@@ -26,7 +26,14 @@ export function ProfileView({ profile, actions }: ProfileViewProps) {
       <Avatar uri={profile.avatarUrl} name={name} size={AVATAR_SIZE} />
 
       <View style={styles.identity}>
-        <Text variant="title">{name}</Text>
+        <Text variant="title" style={styles.centered}>
+          {name}
+        </Text>
+        {profile.status ? (
+          <Text variant="body" style={styles.centered}>
+            {profile.status}
+          </Text>
+        ) : null}
         {username ? (
           <Text variant="body" color="textSecondary">
             {username}

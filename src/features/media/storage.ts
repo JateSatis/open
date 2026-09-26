@@ -1,7 +1,7 @@
 import { File } from 'expo-file-system';
 
 import { MEDIA_BUCKET } from './constants';
-import { buildObjectPath } from './lib/objectPath';
+import { buildAvatarPath, buildObjectPath, ownAvatarPathFromUrl } from './lib/objectPath';
 import type { LocalMedia, UploadedMedia } from './types';
 
 import { supabase } from '@/api/supabase';
@@ -106,4 +106,35 @@ export async function removeUploadedMedia(path: string | string[]): Promise<bool
     .remove(Array.isArray(path) ? path : [path]);
 
   return !error;
+}
+
+/** Загружает подготовленный аватар (`pickAvatar`) и отдаёт его публичный URL. */
+export async function uploadAvatar(uri: string, userId: string): Promise<string> {
+  const file = new File(uri);
+
+  if (!file.exists) {
+    throw new MediaUploadError(`Avatar file no longer exists: ${uri}`);
+  }
+
+  const path = buildAvatarPath(userId);
+  const { error } = await supabase.storage
+    .from(MEDIA_BUCKET)
+    .upload(path, await file.arrayBuffer(), { contentType: 'image/jpeg', upsert: false });
+
+  if (error) {
+    throw new MediaUploadError(`Failed to upload avatar: ${error.message}`, error);
+  }
+
+  return supabase.storage.from(MEDIA_BUCKET).getPublicUrl(path).data.publicUrl;
+}
+
+/**
+ * Убирает прежний аватар из бакета — он не часть переписки, хранить его
+ * незачем. Аватар от провайдера или чужой файл не трогает. Сбой не ошибка:
+ * новый аватар уже на месте, лишний файл лишь занимает место.
+ */
+export async function removeOwnAvatar(url: string | null, userId: string): Promise<void> {
+  const path = url ? ownAvatarPathFromUrl(url, MEDIA_BUCKET, userId) : null;
+
+  if (path) await removeUploadedMedia(path);
 }

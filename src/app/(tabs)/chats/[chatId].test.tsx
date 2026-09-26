@@ -6,15 +6,27 @@ import ChatScreen from './[chatId]';
 import type { ChatChannelHandlers, ChatSummary, Message } from '@/api/chats';
 import { getChat, listMessages, markChatRead, sendMessage, subscribeToChat } from '@/api/chats';
 import { acceptInvite, declineInvite, getMyInvite } from '@/api/invites';
+import { getProfile } from '@/api/profile';
 import { useSession } from '@/features/auth/useSession';
 import { formatMessageTime } from '@/features/chats/chatDisplay';
 import { reportRealtimeJoined, resetConnectionState } from '@/features/connection/connectionStore';
 import { renderWithQuery } from '@/test/renderWithQuery';
 
+const mockPush = jest.fn();
+const mockNavigate = jest.fn();
+
+// Шапку экран ставит через Stack.Screen — мок рисует её прямо в дереве, чтобы
+// статус собеседника и тап по шапке можно было проверить.
 jest.mock('expo-router', () => ({
   useLocalSearchParams: () => ({ chatId: 'chat-1' }),
-  Stack: { Screen: () => null },
+  useRouter: () => ({ push: mockPush, navigate: mockNavigate }),
+  Stack: {
+    Screen: ({ options }: { options?: { headerTitle?: () => React.ReactNode } }) =>
+      options?.headerTitle ? options.headerTitle() : null,
+  },
 }));
+
+jest.mock('@/api/profile', () => ({ getProfile: jest.fn() }));
 
 jest.mock('@/features/auth/useSession', () => ({
   useSession: jest.fn(),
@@ -53,6 +65,7 @@ const mockedListMessages = listMessages as jest.MockedFunction<typeof listMessag
 const mockedSendMessage = sendMessage as jest.MockedFunction<typeof sendMessage>;
 const mockedSubscribe = subscribeToChat as jest.MockedFunction<typeof subscribeToChat>;
 const mockedMarkRead = markChatRead as jest.MockedFunction<typeof markChatRead>;
+const mockedGetProfile = getProfile as jest.MockedFunction<typeof getProfile>;
 const mockedSession = useSession as jest.MockedFunction<typeof useSession>;
 const mockedMyInvite = getMyInvite as jest.MockedFunction<typeof getMyInvite>;
 const mockedAccept = acceptInvite as jest.MockedFunction<typeof acceptInvite>;
@@ -115,6 +128,14 @@ beforeEach(() => {
   mockedMyInvite.mockResolvedValue(null);
   mockedAccept.mockResolvedValue(undefined);
   mockedDecline.mockResolvedValue(undefined);
+  mockedGetProfile.mockResolvedValue({
+    id: 'user-2',
+    username: 'marina',
+    displayName: 'Марина',
+    avatarUrl: null,
+    bio: null,
+    status: 'в отпуске до понедельника',
+  });
   mockedSubscribe.mockImplementation((_chatId, given) => {
     handlers = given;
     return { broadcastTyping, unsubscribe };
@@ -122,6 +143,32 @@ beforeEach(() => {
 });
 
 describe('ChatScreen', () => {
+  it('shows the counterpart status in the header and opens their profile on tap', async () => {
+    const user = userEvent.setup();
+
+    await renderWithQuery(<ChatScreen />);
+
+    expect(await screen.findByText('в отпуске до понедельника')).toBeTruthy();
+    expect(mockedGetProfile).toHaveBeenCalledWith('user-2');
+
+    await user.press(screen.getByLabelText('Профиль: Разговор'));
+    expect(mockPush).toHaveBeenCalledWith('/chats/people/user-2');
+  });
+
+  it('opens the author profile from a tap on their avatar', async () => {
+    mockedListMessages.mockResolvedValue({
+      items: [message('m1', 'привет', 'user-2')],
+      nextCursor: null,
+    });
+    const user = userEvent.setup();
+
+    await renderWithQuery(<ChatScreen />);
+    await screen.findByText('привет');
+    await user.press(screen.getByLabelText('Профиль: Марина'));
+
+    expect(mockPush).toHaveBeenCalledWith('/chats/people/user-2');
+  });
+
   it('shows the conversation to anyone who opens it', async () => {
     mockedGetChat.mockResolvedValue(
       chatWith([

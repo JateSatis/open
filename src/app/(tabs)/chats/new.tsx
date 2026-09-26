@@ -1,4 +1,4 @@
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, View } from 'react-native';
 import {
@@ -31,7 +31,10 @@ export default function NewChatScreen() {
   const containerRef = useRef<View | null>(null);
   const [bottomOffset, setBottomOffset] = useState(0);
   const { people, isLoading, error } = usePeople();
-  const [selected, setSelected] = useState<string[]>([]);
+  // «Написать» из чужого профиля открывает этот экран с уже выбранным
+  // человеком; дальше работают обычные правила создания чата.
+  const { with: preselected } = useLocalSearchParams<{ with?: string }>();
+  const [selected, setSelected] = useState<string[]>(() => (preselected ? [preselected] : []));
   const [title, setTitle] = useState('');
 
   // replace, а не push: «назад» из нового чата ведёт к списку, а не обратно в выбор.

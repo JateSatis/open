@@ -21,7 +21,15 @@ export {
   type PickMediaResult,
 } from './pickMedia';
 
-export { MediaUploadError, removeUploadedMedia, storedPaths, uploadMedia } from './storage';
+export {
+  MediaUploadError,
+  removeOwnAvatar,
+  removeUploadedMedia,
+  storedPaths,
+  uploadAvatar,
+  uploadMedia,
+} from './storage';
+export { pickAvatar, type AvatarSource, type PickAvatarResult } from './pickAvatar';
 export { useVoiceRecorder, type VoiceRecorder as VoiceRecorderApi } from './useVoiceRecorder';
 
 export { MediaGrid, type MediaGridProps, type MediaListComponent } from './MediaGrid';

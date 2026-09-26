@@ -7,18 +7,20 @@ import { Button } from '@/components/Button';
 import { Input } from '@/components/Input';
 import { Screen } from '@/components/Screen';
 import { Text } from '@/components/Text';
+import { AvatarEditor } from '@/features/profile/AvatarEditor';
 import { ProfileLoader } from '@/features/profile/ProfileLoader';
 import { useMyProfile, useUpdateMyProfile } from '@/features/profile/queries';
 import {
   BIO_MAX_LENGTH,
   DISPLAY_NAME_MAX_LENGTH,
+  STATUS_MAX_LENGTH,
   USERNAME_MAX_LENGTH,
   validateUsername,
 } from '@/features/profile/username';
 import { Spacing } from '@/theme';
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
+  form: { flex: 1, gap: Spacing.three },
   content: { gap: Spacing.three },
   bio: { minHeight: Spacing.six },
 });
@@ -29,12 +31,14 @@ export default function EditProfileScreen() {
   return (
     <Screen scrollable contentContainerStyle={styles.content}>
       <ProfileLoader isPending={isPending} error={error} onRetry={() => refetch()}>
+        {profile ? <AvatarEditor profile={profile} /> : null}
         {profile ? (
           <EditProfileForm
             key={profile.id}
             initial={{
               username: profile.username ?? '',
               displayName: profile.displayName ?? '',
+              status: profile.status ?? '',
               bio: profile.bio ?? '',
             }}
           />
@@ -44,7 +48,7 @@ export default function EditProfileScreen() {
   );
 }
 
-type FormValues = { username: string; displayName: string; bio: string };
+type FormValues = { username: string; displayName: string; status: string; bio: string };
 
 function EditProfileForm({ initial }: { initial: FormValues }) {
   const [values, setValues] = useState(initial);
@@ -68,6 +72,7 @@ function EditProfileForm({ initial }: { initial: FormValues }) {
       {
         username,
         displayName: values.displayName.trim() || null,
+        status: values.status.trim() || null,
         bio: values.bio.trim() || null,
       },
       {
@@ -85,7 +90,7 @@ function EditProfileForm({ initial }: { initial: FormValues }) {
 
   return (
     <KeyboardAvoidingView
-      style={styles.flex}
+      style={styles.form}
       behavior={Platform.select({ ios: 'padding', default: undefined })}>
       <Input
         label="Имя пользователя"
@@ -104,6 +109,14 @@ function EditProfileForm({ initial }: { initial: FormValues }) {
         onChangeText={setField('displayName')}
         maxLength={DISPLAY_NAME_MAX_LENGTH}
         placeholder="Как вас зовут"
+      />
+
+      <Input
+        label="Статус"
+        value={values.status}
+        onChangeText={setField('status')}
+        maxLength={STATUS_MAX_LENGTH}
+        placeholder="Например: в отпуске"
       />
 
       <Input

@@ -11,6 +11,7 @@ const profile: Profile = {
   displayName: 'Максим',
   avatarUrl: null,
   bio: 'Привет',
+  status: null,
 };
 
 describe('ProfileView', () => {
@@ -36,6 +37,14 @@ describe('ProfileView', () => {
     expect(getByText('Без имени')).toBeTruthy();
     expect(queryByText('@maxim')).toBeNull();
     expect(queryByText('Привет')).toBeNull();
+  });
+
+  it('shows the status under the name when there is one', async () => {
+    const { getByText } = await render(
+      <ProfileView profile={{ ...profile, status: 'в отпуске до понедельника' }} />,
+    );
+
+    expect(getByText('в отпуске до понедельника')).toBeTruthy();
   });
 
   it('renders the actions it is given', async () => {

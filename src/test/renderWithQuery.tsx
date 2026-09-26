@@ -9,7 +9,7 @@ import type { ReactElement } from 'react';
  */
 export function renderWithQuery(ui: ReactElement) {
   const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false, gcTime: 0 } },
+    defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { gcTime: 0 } },
   });
 
   return render(ui, {

@@ -8,6 +8,7 @@ import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { ConfirmDialogHost } from '@/components/ConfirmDialog';
+import { AccountLifecycle } from '@/features/auth/AccountLifecycle';
 import { ConnectionWatcher } from '@/features/connection/ConnectionWatcher';
 import { reportRequestFailed, reportRequestSucceeded } from '@/features/connection/connectionStore';
 import { InAppMessageToast } from '@/features/notifications/InAppMessageToast';
@@ -71,6 +72,7 @@ export default function RootLayout() {
           <SafeAreaProvider>
             <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
               <ConnectionWatcher />
+              <AccountLifecycle />
               <Stack screenOptions={{ headerShown: false }} />
               {/* Поверх навигатора: уведомление не принадлежит ни одному экрану. */}
               <InAppMessageToast />

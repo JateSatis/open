@@ -20,6 +20,11 @@ export default function InvitesScreen() {
   const { pending, error: respondError, respond } = useRespondToInvite();
 
   const openChat = useCallback((chatId: string) => router.push(`/chats/${chatId}`), [router]);
+  const openPerson = useCallback(
+    (userId: string) =>
+      userId === currentUserId ? router.navigate('/profile') : router.push(`/chats/people/${userId}`),
+    [currentUserId, router],
+  );
   const accept = useCallback((chatId: string) => respond(chatId, 'accept'), [respond]);
   const decline = useCallback((chatId: string) => respond(chatId, 'decline'), [respond]);
 
@@ -72,6 +77,7 @@ export default function InvitesScreen() {
             onOpen={openChat}
             onAccept={accept}
             onDecline={decline}
+            onOpenPerson={openPerson}
           />
         )}
         ListEmptyComponent={

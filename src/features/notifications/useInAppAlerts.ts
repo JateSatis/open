@@ -27,6 +27,14 @@ export function useInAppAlerts(): InAppAlertsState {
   const activeChatId = useActiveChatId();
   const queryClient = useQueryClient();
   const [alert, setAlert] = useState<InAppAlert | null>(null);
+  // Карточка прежнего пользователя не должна пережить выход: состояние
+  // подстраивается под сменившийся аккаунт прямо в рендере.
+  const [alertUserId, setAlertUserId] = useState(currentUserId);
+
+  if (alertUserId !== currentUserId) {
+    setAlertUserId(currentUserId);
+    setAlert(null);
+  }
 
   useEffect(() => {
     if (!currentUserId) return;

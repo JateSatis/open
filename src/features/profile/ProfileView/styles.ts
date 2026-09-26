@@ -11,6 +11,9 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.half,
   },
+  centered: {
+    textAlign: 'center',
+  },
   bio: {
     textAlign: 'center',
     marginTop: Spacing.two,

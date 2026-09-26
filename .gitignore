@@ -45,3 +45,4 @@ example
 
 # supabase cli: локальное состояние привязки к проекту
 supabase/.temp/
+deno.lock

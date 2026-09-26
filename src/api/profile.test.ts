@@ -24,6 +24,7 @@ const row = {
   display_name: 'Максим',
   avatar_url: 'https://cdn.example/a.jpg',
   bio: 'Привет',
+  status: 'в отпуске',
 };
 
 /** Mimics the PostgREST builder chain, which returns `this` until `single()`. */
@@ -52,6 +53,7 @@ describe('getProfile', () => {
       displayName: 'Максим',
       avatarUrl: 'https://cdn.example/a.jpg',
       bio: 'Привет',
+      status: 'в отпуске',
     });
     expect(from).toHaveBeenCalledWith('profiles');
     expect(chain.eq).toHaveBeenCalledWith('id', 'user-1');
@@ -109,6 +111,18 @@ describe('updateMyProfile', () => {
     await updateMyProfile({ bio: 'Новое' });
 
     expect(chain.update).toHaveBeenCalledWith({ bio: 'Новое' });
+  });
+
+  it('writes the status and never touches service columns', async () => {
+    const chain = mockChain({ data: row, error: null });
+
+    await updateMyProfile({ status: 'в отпуске', avatarUrl: null });
+
+    const patch = chain.update.mock.calls[0][0] as Record<string, unknown>;
+
+    expect(patch).toEqual({ status: 'в отпуске', avatar_url: null });
+    expect(patch).not.toHaveProperty('deleted_at');
+    expect(patch).not.toHaveProperty('id');
   });
 
   it('translates a unique violation into UsernameTakenError', async () => {
