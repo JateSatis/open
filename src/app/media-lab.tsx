@@ -1,9 +1,13 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/Button';
 import { Text } from '@/components/Text';
-import { MediaPickerSheet } from '@/features/chats/MediaPickerSheet';
+import {
+  closeMediaSheet,
+  MediaPickerSheet,
+  openMediaSheet,
+} from '@/features/chats/MediaPickerSheet';
 import { useComposerDraft } from '@/features/chats/useComposerDraft';
 import { queryRecentMedia, useMediaSelection, useSelectionCount } from '@/features/media';
 import {
@@ -38,7 +42,6 @@ export default function MediaLabScreen() {
 
   const draft = useComposerDraft('media-lab');
   const selectedCount = useSelectionCount();
-  const [open, setOpen] = useState(false);
 
   useEffect(() => {
     if (!MEDIA_PERF) return;
@@ -56,7 +59,7 @@ export default function MediaLabScreen() {
     resetPerfCounters();
     perfLog('=== открываю для скролла ===');
     probeJsFrames('открытие', ANIMATION_MS);
-    setOpen(true);
+    openMediaSheet();
   }, []);
 
   /** Полный прогон: открытие, выбор в тишине, закрытие. */
@@ -65,7 +68,7 @@ export default function MediaLabScreen() {
       resetPerfCounters();
       perfLog('=== прогон: открываю ===');
       probeJsFrames('открытие', ANIMATION_MS);
-      setOpen(true);
+      openMediaSheet();
 
       setTimeout(() => {
         if (!first) return;
@@ -84,7 +87,7 @@ export default function MediaLabScreen() {
       setTimeout(() => {
         perfLog('=== прогон: закрываю ===');
         probeJsFrames('закрытие', CLOSE_MS);
-        setOpen(false);
+        closeMediaSheet();
       }, SETTLE_MS + 1500);
     });
   }, []);
@@ -98,8 +101,6 @@ export default function MediaLabScreen() {
       <Button label="Открыть для скролла" variant="secondary" onPress={openOnly} />
 
       <MediaPickerSheet
-        visible={open}
-        onDismiss={() => setOpen(false)}
         draft={draft}
         onTyping={() => undefined}
         onSend={() => draft.clear()}

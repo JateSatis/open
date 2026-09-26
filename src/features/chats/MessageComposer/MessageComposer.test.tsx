@@ -47,6 +47,28 @@ describe('MessageComposer', () => {
     expect(screen.getByText('M')).toBeTruthy();
   });
 
+  it('only prepares the sheet on touch and opens it when the finger is lifted', async () => {
+    const calls: string[] = [];
+
+    await render(
+      <MessageComposer
+        text=""
+        onChangeText={jest.fn()}
+        onSend={jest.fn()}
+        onTyping={jest.fn()}
+        canSend
+        onAttachPressIn={() => calls.push('in')}
+        onAttachPressOut={() => calls.push('out')}
+        onAttachPress={() => calls.push('press')}
+      />,
+    );
+
+    const user = userEvent.setup();
+    await user.press(screen.getByText('M'));
+
+    expect(calls).toEqual(['in', 'out', 'press']);
+  });
+
   it('omits the attach button when there is nowhere to attach from (inside the sheet itself)', async () => {
     await render(
       <MessageComposer

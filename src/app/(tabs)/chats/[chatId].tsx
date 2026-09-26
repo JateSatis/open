@@ -10,7 +10,12 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Text } from '@/components/Text';
-import { MediaPickerSheet } from '@/features/chats/MediaPickerSheet';
+import {
+  armMediaSheet,
+  MediaPickerSheet,
+  openMediaSheet,
+  releaseMediaSheetArm,
+} from '@/features/chats/MediaPickerSheet';
 import { MessageBubble } from '@/features/chats/MessageBubble';
 import { MessageComposer } from '@/features/chats/MessageComposer';
 import { chatTitle, isChatMember } from '@/features/chats/chatDisplay';
@@ -45,7 +50,6 @@ export default function ChatScreen() {
     notifyTyping,
   } = useChatMessages(chatId, currentUserId);
   const draft = useComposerDraft(chatId);
-  const [isMediaSheetOpen, setIsMediaSheetOpen] = useState(false);
 
   const containerRef = useRef<View | null>(null);
   const [topOffset, setTopOffset] = useState(0);
@@ -192,14 +196,14 @@ export default function ChatScreen() {
             canSend={chat ? isChatMember(chat, currentUserId) : false}
             onSend={submitDraft}
             onTyping={notifyTyping}
-            onAttachPress={() => setIsMediaSheetOpen(true)}
+            onAttachPressIn={armMediaSheet}
+            onAttachPressOut={releaseMediaSheetArm}
+            onAttachPress={openMediaSheet}
           />
         </View>
       </KeyboardAvoidingView>
 
       <MediaPickerSheet
-        visible={isMediaSheetOpen}
-        onDismiss={() => setIsMediaSheetOpen(false)}
         draft={draft}
         onTyping={notifyTyping}
         onSend={submitDraft}

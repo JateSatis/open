@@ -1,11 +1,9 @@
 import { render, screen, userEvent } from '@testing-library/react-native';
-import type { FlatListProps } from 'react-native';
 
 import { MediaGrid } from '.';
 
 import { useMediaSelection } from '@/features/media/selectionStore';
-import type { MediaLibraryItem } from '@/features/media/mediaLibrary';
-import { useGalleryAssets } from '@/features/media/useGalleryAssets';
+import { useGalleryAssets, type GalleryStatus } from '@/features/media/useGalleryAssets';
 
 jest.mock('@/features/media/useGalleryAssets', () => ({
   useGalleryAssets: jest.fn(),
@@ -17,10 +15,15 @@ function asset(id: string) {
   return { id, kind: 'photo' as const, width: 10, height: 10, durationMs: null };
 }
 
-function gallery(items: ReturnType<typeof asset>[], status: 'granted' | 'denied' = 'granted') {
+function gallery(
+  items: ReturnType<typeof asset>[],
+  status: GalleryStatus = 'ready',
+  total: number | null = items.length,
+) {
   mockedUseGalleryAssets.mockReturnValue({
     status,
     items,
+    total,
     isFilling: false,
     requestAccess: jest.fn(),
   });
@@ -37,6 +40,7 @@ describe('MediaGrid', () => {
     mockedUseGalleryAssets.mockReturnValue({
       status: 'denied',
       items: [],
+      total: null,
       isFilling: false,
       requestAccess,
     });
@@ -67,30 +71,35 @@ describe('MediaGrid', () => {
     expect(mockedUseGalleryAssets).toHaveBeenCalledWith(false);
   });
 
-  it('lays rows out by row index, not by file index', async () => {
-    // FlatList отдаёт getItemLayout в VirtualizedList как есть, а тот при
-    // numColumns считает строками: его getItemCount возвращает
-    // ceil(файлов / колонок). Если поделить index на число колонок ещё раз,
-    // список решит, что его содержимое втрое короче, и в глубине галереи
-    // начнёт рисовать пустоту вместо клеток.
-    gallery([asset('a'), asset('b'), asset('c'), asset('d')]);
+  it('shows a skeleton and stays silent about an empty gallery while it is still being read', async () => {
+    // Разрешение выдано, медиатека ещё отвечает. Сказать в этот момент, что
+    // фотографий нет, — соврать: их просто ещё не прочитали.
+    gallery([], 'loading', null);
 
-    let captured: FlatListProps<MediaLibraryItem>['getItemLayout'];
-    const Capture = (props: { getItemLayout?: typeof captured }) => {
-      captured = props.getItemLayout;
-      return null;
-    };
+    await render(<MediaGrid />);
 
-    await render(<MediaGrid ListComponent={Capture} headerHeight={100} />);
+    expect(screen.queryByText(/нет фото и видео/)).toBeNull();
+    expect(screen.getAllByTestId('media-grid-skeleton').length).toBeGreaterThan(0);
+  });
 
-    const rowZero = captured?.(null, 0);
-    const rowOne = captured?.(null, 1);
-    const rowTwo = captured?.(null, 2);
+  it('keeps the skeleton going up to the known length of the gallery', async () => {
+    // Первый кусок уже приехал, вся галерея — нет. Место под непрочитанные
+    // файлы занято заранее, иначе на быстром скролле список просто кончится.
+    gallery([asset('a')], 'ready', 40);
 
-    expect(rowZero?.offset).toBe(100);
-    // Соседние строки стоят ровно на высоту строки друг под другом.
-    expect((rowOne?.offset ?? 0) - (rowZero?.offset ?? 0)).toBeCloseTo(rowZero?.length ?? 0, 5);
-    expect((rowTwo?.offset ?? 0) - (rowOne?.offset ?? 0)).toBeCloseTo(rowOne?.length ?? 0, 5);
+    await render(<MediaGrid />);
+
+    expect(screen.getAllByLabelText('Выбрать файл')).toHaveLength(1);
+    expect(screen.getAllByTestId('media-grid-skeleton').length).toBeGreaterThan(0);
+  });
+
+  it('says the gallery is empty only once it has been read', async () => {
+    gallery([], 'empty', 0);
+
+    await render(<MediaGrid />);
+
+    expect(screen.getByText(/нет фото и видео/)).toBeTruthy();
+    expect(screen.queryByTestId('media-grid-skeleton')).toBeNull();
   });
 
   it('writes the tapped file into the selection store, in tap order', async () => {

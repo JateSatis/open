@@ -40,7 +40,11 @@ export const MediaGridItem = memo(function MediaGridItem({
 
   const theme = useTheme();
   const slot = useSelectionSlot(asset.id);
-  const [failed, setFailed] = useState(false);
+  // Помним, у какого файла превью не открылось, а не просто «не открылось»:
+  // список переиспользует клетку под другие файлы, и флаг без id делал бы
+  // битыми и их.
+  const [failedId, setFailedId] = useState<string | null>(null);
+  const failed = failedId === asset.id;
 
   useEffect(() => countMount('MediaGridItem'), []);
 
@@ -61,19 +65,21 @@ export const MediaGridItem = memo(function MediaGridItem({
         </View>
       ) : (
         <Image
+          testID="media-grid-preview"
           // Источник — сам id ассета: content:// на Android, ph:// на iOS.
           // Оба expo-image открывает напрямую, у видео берёт кадр.
           source={{ uri: assetPreviewUri(asset) }}
           style={[styles.thumbnail, { backgroundColor: theme.backgroundElement }]}
           contentFit="cover"
-          // Кэш и отмена загрузок за экраном — на стороне expo-image; свой
-          // прогрев путей только мешал бы ему, конкурируя за тот же ресурс.
-          cachePolicy="memory-disk"
+          // Только память: у Glide она ограничена, и превью, пролистанные
+          // туда и обратно, берутся из неё. Диск для локальных content://
+          // бесполезен — исходник и так лежит на устройстве.
+          cachePolicy="memory"
           recyclingKey={asset.id}
           transition={120}
           onError={(event) => {
             perfLog('превью не открылось', { id: asset.id, error: String(event.error) });
-            setFailed(true);
+            setFailedId(asset.id);
           }}
           accessibilityIgnoresInvertColors
         />

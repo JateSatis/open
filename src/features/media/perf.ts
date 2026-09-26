@@ -157,3 +157,23 @@ export function resetPerfCounters(): void {
   mountCounts.clear();
   seen.clear();
 }
+
+/**
+ * Временная шкала одного сценария: метки считаются от `perfMarkStart`.
+ * `Date.now()`, а не `performance.now()`, — тем же часам верит и UI-поток,
+ * где метку ставит worklet.
+ */
+let markOrigin = 0;
+
+export function perfMarkStart(label: string): void {
+  if (!MEDIA_PERF) return;
+
+  markOrigin = Date.now();
+  perfLog(`⏱ ${label} +0`);
+}
+
+export function perfMark(label: string, at: number = Date.now()): void {
+  if (!MEDIA_PERF || markOrigin === 0) return;
+
+  perfLog(`⏱ ${label} +${at - markOrigin}`);
+}

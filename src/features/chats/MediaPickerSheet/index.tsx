@@ -1,26 +1,27 @@
-// Компонент завязан на низкоуровневый API Reanimated напрямую (без
-// @gorhom/bottom-sheet, см. комментарий ниже по файлу): мутация `.value` у
-// shared value — единственный штатный способ им пользоваться, а не
-// нарушение чистоты, которое видит в этом React Compiler. Запуск анимации
-// сразу при появлении шита в эффекте — тоже осознанное действие, а не
-// побочный каскад рендеров.
-/* eslint-disable react-hooks/immutability, react-hooks/set-state-in-effect */
-import { useCallback, useEffect, useMemo, useState, type ComponentProps } from 'react';
+// Шит на низкоуровневом API Reanimated: мутация `.value` у shared value —
+// штатный способ им пользоваться, а не нарушение чистоты, которое видит в
+// этом React Compiler.
+/* eslint-disable react-hooks/immutability */
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
 import {
+  InteractionManager,
   KeyboardAvoidingView,
   Modal,
+  PixelRatio,
   Platform,
   Pressable,
   useWindowDimensions,
   View,
   type LayoutChangeEvent,
+  type ScrollView,
 } from 'react-native';
-import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
+import { GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, {
   Extrapolation,
   interpolate,
   runOnJS,
-  useAnimatedScrollHandler,
+  useAnimatedReaction,
+  useAnimatedRef,
   useAnimatedStyle,
   useSharedValue,
   withSpring,
@@ -28,235 +29,225 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { SHEET_TOP_HEIGHT, styles } from './styles';
+import { CLOSE_DURATION_MS, OPEN_SPRING, sheetGeometry } from './geometry';
+import { SheetListContext, SheetMediaList, type SheetListContextValue } from './SheetList';
+import { SheetShell } from './SheetShell';
+import {
+  closeMediaSheet,
+  finishMediaSheetClose,
+  getMediaSheetPhase,
+  useMediaSheetPhase,
+  type MediaSheetPhase,
+} from './sheetStore';
+import { styles } from './styles';
+import { useDismissGesture } from './useDismissGesture';
 
-import { confirm } from '@/components/ConfirmDialog';
+import { ConfirmDialogSurface, confirm } from '@/components/ConfirmDialog';
+import { dismissTopConfirmDialog } from '@/components/ConfirmDialog/store';
 import { MessageComposer } from '@/features/chats/MessageComposer';
 import type { ComposerDraft } from '@/features/chats/useComposerDraft';
-import { MediaGrid, type MediaListComponent } from '@/features/media';
-import { countRender } from '@/features/media/perf';
+import { MediaGrid } from '@/features/media';
+import { prefetchGallery } from '@/features/media/galleryPrefetch';
+import { countRender, perfMark } from '@/features/media/perf';
 import { useHasSelection, useMediaSelection } from '@/features/media/selectionStore';
 import { useTheme } from '@/hooks/use-theme';
 
+export { SHEET_PAN_TEST_ID } from './useDismissGesture';
+export {
+  armMediaSheet,
+  closeMediaSheet,
+  openMediaSheet,
+  releaseMediaSheetArm,
+  resetMediaSheet,
+} from './sheetStore';
+
+/** За сколько dp до рабочего положения монтируется список — см. ниже. */
+const LIST_MOUNT_DISTANCE = 2;
+
 export type MediaPickerSheetProps = {
-  visible: boolean;
-  onDismiss: () => void;
   draft: ComposerDraft;
   onTyping: () => void;
   onSend: () => void;
 };
 
-/** Жест закрытия — снаружи нужен только тестам, поэтому лежит рядом с самим жестом. */
-export const SHEET_PAN_TEST_ID = 'media-picker-pan';
+/**
+ * Шит выбора медиа. Открывается и закрывается через `sheetStore`: касание
+ * кнопки медиа его готовит, отпускание — показывает.
+ *
+ * Окно `Modal` существует только пока шит нужен. Всё, что живёт одно
+ * открытие, — анимация, жест, смонтирован ли список, — лежит в `SheetWindow`
+ * и рождается вместе с окном, так что сбрасывать между открытиями нечего.
+ */
+export function MediaPickerSheet(props: MediaPickerSheetProps) {
+  const phase = useMediaSheetPhase();
 
-/** Доля экрана, на которую шит открывается по кнопке медиа. */
-const COLLAPSED_RATIO = 0.55;
-const OPEN_SPRING = { damping: 32, stiffness: 300, mass: 0.9 };
-const CLOSE_DURATION_MS = 220;
-/** Утащили шит ниже этой доли свёрнутой высоты — отпускание закрывает его. */
-const DISMISS_RATIO = 0.2;
-const FLING_VELOCITY = 800;
-/** Жест считается вертикальным после этого сдвига — иначе тап по кружку не доживал бы до Pressable. */
-const PAN_ACTIVATION_PX = 8;
+  // Уход с экрана посреди открытого шита: окно уходит вместе с экраном, и
+  // следующий экран должен застать шит закрытым.
+  useEffect(() => () => finishMediaSheetClose(), []);
+
+  // Начало галереи читается заранее, пока человек читает чат: к открытию
+  // шита клетки уже известны. Без выданного разрешения не делает ничего.
+  useEffect(() => {
+    const task = InteractionManager.runAfterInteractions(prefetchGallery);
+
+    return () => task.cancel();
+  }, []);
+
+  if (phase === 'closed') return null;
+
+  return <SheetWindow phase={phase} {...props} />;
+}
+
+type SheetWindowProps = MediaPickerSheetProps & { phase: Exclude<MediaSheetPhase, 'closed'> };
 
 /**
- * Свой шит на голых `react-native-gesture-handler` + `react-native-reanimated`
- * вместо `@gorhom/bottom-sheet`: библиотека не работает с Reanimated 4 —
- * `present()` отрабатывает без ошибок, но шит физически не появляется.
- * Проверено на последней опубликованной версии (5.2.14), обходного пути в
- * апстриме нет.
+ * Свой шит на `react-native-gesture-handler` + `react-native-reanimated`:
+ * `@gorhom/bottom-sheet` не работает с Reanimated 4.
  *
- * Главное в устройстве: **движением владеет список, а не шит**. Положение
- * шита не двигают жестом — оно вычисляется из `scrollOffset` списка в
- * worklet'е, а над гридом лежит прозрачная шапка высотой в ход шита. Пока
- * человек скроллит внутри этой шапки, «едет шит»; кончилась шапка — дальше
- * едет грид. Это одно и то же движение одного скролла, поэтому инерция
- * непрерывна сама собой: разгон в любую сторону перетекает из шита в список
- * и обратно ровно так же, как если бы палец не отрывался.
+ * **Движением владеет список, а не шит.** Над гридом лежит прозрачная шапка
+ * высотой в ход шита: пока человек скроллит внутри неё, «едет шит», дальше
+ * едет грид. Это одно движение одного скролла, поэтому инерция непрерывна.
+ * Ниже свёрнутого положения шит тянет жест закрытия — см. `useDismissGesture`.
  *
- * Раньше здесь было наоборот — шит перехватывал движение своим `Gesture.Pan`
- * и держал список в нуле через `scrollTo`. Палец при этом вёл шит идеально,
- * но инерция обрывалась на стыке: передавать скорость от жеста нативному
- * скроллу нечем.
+ * Открытие устроено так, чтобы движение начиналось в первый же кадр окна:
  *
- * Отдельным жестом остаётся ровно одно — смахнуть шит вниз, когда список
- * уже в нуле. Он не соревнуется со скроллом: активируется только при
- * `scrollOffset <= 0` и движении вниз.
- *
- * Закрытие всегда идёт через `requestClose()`: шит сначала уезжает вниз
- * целиком и только потом, если файлы были выбраны, спрашивает про сброс.
- * «Отмена» возвращает его на то же место — список всё это время остаётся
- * смонтированным, поэтому и позиция скролла, и положение шита те же.
+ * - окно создаётся, пока палец ещё на кнопке, и рисует только лёгкую
+ *   оболочку — подложку, ручку и сетку скелета (`SheetShell`);
+ * - пружина стартует, когда окно уже на экране и палец отпущен: раньше она
+ *   проигрывалась бы вхолостую, за невидимым окном;
+ * - тяжёлый список монтируется под готовой оболочкой, уже на ходу.
  */
-export function MediaPickerSheet({ visible, onDismiss, draft, onTyping, onSend }: MediaPickerSheetProps) {
+function SheetWindow({ phase, draft, onTyping, onSend }: SheetWindowProps) {
   countRender('MediaPickerSheet');
 
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { height: screenHeight } = useWindowDimensions();
-
-  const collapsedHeight = screenHeight * COLLAPSED_RATIO;
-  /** Пустое место над свёрнутым шитом — оно же прозрачная шапка списка. */
-  const headerHeight = screenHeight - collapsedHeight;
-  /** Ход шита: от свёрнутого положения до верхней безопасной зоны. */
-  const travel = headerHeight - insets.top;
-  const dismissDistance = collapsedHeight * DISMISS_RATIO;
+  const { travel, collapsedHeight, listTop, listWindowHeight, dismissDistance, topBarHeight } =
+    sheetGeometry(screenHeight, insets.top, PixelRatio.get());
 
   const hasMedia = useHasSelection();
-  const hasMediaShared = useSharedValue(hasMedia);
 
-  useEffect(() => {
-    hasMediaShared.value = hasMedia;
-  }, [hasMedia, hasMediaShared]);
-
-  const [mounted, setMounted] = useState(visible);
-  /** Грид начинает работать только после анимации открытия — см. комментарий у `MediaGrid.enabled`. */
-  const [ready, setReady] = useState(false);
+  const [shown, setShown] = useState(false);
+  const [listMounted, setListMounted] = useState(false);
+  const [scrollAttached, setScrollAttached] = useState(false);
   const [footerHeight, setFooterHeight] = useState(0);
 
-  /** Насколько шит утащен вниз относительно рабочего положения: 0 — на месте, screenHeight — за краем. */
+  /** Насколько шит утащен вниз относительно рабочего положения: 0 — на месте. */
   const dismissY = useSharedValue(screenHeight);
-  const panStartY = useSharedValue(0);
-  const canDismiss = useSharedValue(false);
-
-  /**
-   * Позиция скролла нужна ровно одному месту — жесту закрытия, который
-   * работает только из самого верха списка. Пишет её обработчик на
-   * UI-потоке, а не `useScrollOffset` с анимированным ref: ref пришлось бы
-   * заводить и тогда, когда шит не смонтирован, и reanimated справедливо
-   * ругался бы на него в логи.
-   */
   const scrollOffset = useSharedValue(0);
-
-  const finishClose = useCallback(() => {
-    setMounted(false);
-    setReady(false);
-    onDismiss();
-  }, [onDismiss]);
-
-  /**
-   * Уехать вниз и только потом размонтироваться. Разбор шита стоит заметного
-   * времени (замер: ~200 мс кадров на разрушение окна `Modal` и списка), и
-   * это время должно приходиться на уже пустой экран, а не на анимацию.
-   */
-  const closeAnimated = useCallback(() => {
-    dismissY.value = withTiming(screenHeight, { duration: CLOSE_DURATION_MS }, (finished) => {
-      if (finished) runOnJS(finishClose)();
-    });
-  }, [dismissY, finishClose, screenHeight]);
-
-  const openSheet = useCallback(() => {
-    dismissY.value = withSpring(0, OPEN_SPRING, (finished) => {
-      if (finished) runOnJS(setReady)(true);
-    });
-  }, [dismissY]);
+  const dismissing = useSharedValue(false);
+  const animatedRef = useAnimatedRef<ScrollView>();
+  const scrollGestureRef = useRef<ComponentType | null>(null);
+  const started = useRef(false);
 
   useEffect(() => {
-    if (visible) {
-      setMounted(true);
-      dismissY.value = screenHeight;
-      openSheet();
-    } else if (mounted) {
-      closeAnimated();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible]);
+    if (phase !== 'open' || !shown || started.current) return;
+
+    started.current = true;
+    perfMark('шит: старт пружины');
+    // Если шит подхватили пальцем на ходу, пружина прерывается — список
+    // всё равно нужен.
+    dismissY.value = withSpring(0, OPEN_SPRING, () => {
+      runOnJS(setListMounted)(true);
+    });
+  }, [dismissY, phase, shown]);
+
+  /**
+   * Список со всеми его клетками монтируется, когда шит уже почти на месте.
+   * Монтирование занимает UI-поток на кадр в 60–80 мс, и в начале пути оно
+   * замораживало бы сам выезд; на последних двух dp заморозку не видно, а
+   * хвост пружины ждать незачем.
+   */
+  useAnimatedReaction(
+    () => dismissY.value <= LIST_MOUNT_DISTANCE,
+    (near, wasNear) => {
+      if (near && !wasNear) runOnJS(setListMounted)(true);
+    },
+  );
+
+  /**
+   * Уехать вниз и только потом разобрать окно: разбор стоит заметного
+   * времени и должен приходиться на уже пустой экран.
+   */
+  useEffect(() => {
+    if (phase !== 'closing') return;
+
+    dismissY.value = withTiming(screenHeight, { duration: CLOSE_DURATION_MS }, (finished) => {
+      if (finished) runOnJS(finishMediaSheetClose)();
+    });
+  }, [dismissY, phase, screenHeight]);
 
   /**
    * Единственный путь закрытия — и для жеста, и для тапа по фону, и для
-   * системной «назад». Сначала шит уезжает, и только потом задаётся вопрос:
-   * спрашивать поверх наполовину открытого шита не о чем.
+   * «назад». С выбранными файлами шит замирает там, где его оставил палец, и
+   * вопрос задаётся поверх него, в этом же окне.
    */
   const requestClose = useCallback(() => {
-    dismissY.value = withTiming(screenHeight, { duration: CLOSE_DURATION_MS }, (finished) => {
-      if (!finished) return;
+    if (useMediaSelection.getState().order.length === 0) {
+      closeMediaSheet();
+      return;
+    }
 
-      if (!hasMediaShared.value) {
-        runOnJS(finishClose)();
+    void confirm({
+      title: 'Отменить выбор файлов?',
+      message: 'Выбранные фото и видео не будут отправлены.',
+      confirmLabel: 'Сбросить',
+      cancelLabel: 'Отмена',
+      destructive: true,
+    }).then((discard) => {
+      if (discard) {
+        useMediaSelection.getState().clear();
+        closeMediaSheet();
         return;
       }
 
-      runOnJS(askToDiscard)();
+      // Передумал — шит возвращается в рабочее положение, откуда бы его ни утащили.
+      dismissY.value = withSpring(0, OPEN_SPRING);
     });
+  }, [dismissY]);
 
-    function askToDiscard() {
-      void confirm({
-        title: 'Отменить выбор файлов?',
-        message: 'Выбранные фото и видео не будут отправлены.',
-        confirmLabel: 'Сбросить',
-        cancelLabel: 'Отмена',
-        destructive: true,
-      }).then((discard) => {
-        if (discard) {
-          useMediaSelection.getState().clear();
-          finishClose();
-          return;
-        }
+  /** «Назад» отвечает на вопрос, если он задан, и только иначе закрывает шит. */
+  const handleBack = useCallback(() => {
+    if (dismissTopConfirmDialog()) return;
 
-        // Передумал — шит возвращается туда же, откуда его смахнули:
-        // список всё это время оставался смонтированным.
-        openSheet();
-      });
+    if (getMediaSheetPhase() === 'armed') {
+      closeMediaSheet();
+      return;
     }
-  }, [dismissY, finishClose, hasMediaShared, openSheet, screenHeight]);
+
+    requestClose();
+  }, [requestClose]);
 
   const submit = useCallback(() => {
     onSend();
-    onDismiss();
-  }, [onSend, onDismiss]);
+    closeMediaSheet();
+  }, [onSend]);
 
-  // Нативный жест самого списка: жест закрытия объявлен одновременным с ним,
-  // и ссылка на него должна пережить рендер, иначе связка распадётся.
-  const listGesture = useMemo(() => Gesture.Native(), []);
+  const dismissPan = useDismissGesture({
+    dismissY,
+    scrollOffset,
+    dismissing,
+    scrollGestureRef,
+    scrollAttached,
+    dismissDistance,
+    onRelease: requestClose,
+  });
 
-  const ListComponent = useMemo<MediaListComponent>(
-    () =>
-      function SheetMediaList(props: ComponentProps<MediaListComponent>) {
-        const onScroll = useAnimatedScrollHandler((event) => {
-          scrollOffset.value = event.contentOffset.y;
-        });
+  const markScrollAttached = useCallback(() => setScrollAttached(true), []);
 
-        return (
-          <GestureDetector gesture={listGesture}>
-            <Animated.FlatList
-              {...props}
-              showsVerticalScrollIndicator={false}
-              onScroll={onScroll}
-              scrollEventThrottle={16}
-            />
-          </GestureDetector>
-        );
-      },
-    [listGesture, scrollOffset],
+  const listContext = useMemo<SheetListContextValue>(
+    () => ({
+      travel,
+      topBarHeight,
+      animatedRef,
+      gestureRef: scrollGestureRef,
+      scrollOffset,
+      dismissing,
+      onScrollAttached: markScrollAttached,
+    }),
+    [animatedRef, dismissing, markScrollAttached, scrollOffset, topBarHeight, travel],
   );
-
-  const dismissPan = Gesture.Pan()
-    .withTestId(SHEET_PAN_TEST_ID)
-    .activeOffsetY([-PAN_ACTIVATION_PX, PAN_ACTIVATION_PX])
-    .simultaneousWithExternalGesture(listGesture)
-    .onStart(() => {
-      panStartY.value = dismissY.value;
-      // Смахнуть можно только с самого верха списка: во всех остальных
-      // положениях это обычный скролл, и мешать ему нечем.
-      canDismiss.value = scrollOffset.value <= 0;
-    })
-    .onUpdate((event) => {
-      if (!canDismiss.value) return;
-
-      dismissY.value = Math.max(panStartY.value + event.translationY, 0);
-    })
-    .onEnd((event) => {
-      if (!canDismiss.value) return;
-
-      canDismiss.value = false;
-
-      if (dismissY.value > dismissDistance || event.velocityY > FLING_VELOCITY) {
-        runOnJS(requestClose)();
-        return;
-      }
-
-      dismissY.value = withSpring(0, OPEN_SPRING);
-    });
 
   /** Весь шит целиком: и панель, и список, и строка ввода уезжают вместе. */
   const shiftStyle = useAnimatedStyle(() => ({
@@ -272,44 +263,44 @@ export function MediaPickerSheet({ visible, onDismiss, draft, onTyping, onSend }
   }, []);
 
   /**
-   * Шапка и хвост списка мемоизированы намеренно. `ListHeaderComponent` и
-   * `ListFooterComponent` сравниваются по ссылке: новый элемент на каждом
-   * рендере шита заставлял `FlatList` перерисовывать всё смонтированное окно,
-   * и «одна клетка» из замера была правдой только внутри грида.
+   * Шапка и хвост списка мемоизированы: `FlashList` сравнивает их по ссылке,
+   * и новый элемент на каждом рендере перерисовывал бы всё смонтированное окно.
    */
   const header = useMemo(
     () => (
       <>
-        {/* Прозрачная шапка — это одновременно и ход шита, и место, тап по
-            которому закрывает: фона под списком не достать. */}
+        {/* Прозрачная шапка — это и ход шита, и место, тап по которому закрывает. */}
         <Pressable
           testID="media-picker-backdrop"
           style={{ height: travel }}
           onPress={requestClose}
         />
-        {/* Верх шита: скруглённый край и ручка. Он часть содержимого списка,
-            поэтому едет нативным скроллом вместе с клетками и не может от
-            них отстать. */}
-        <View style={[styles.sheetTop, { backgroundColor: theme.background }]}>
+        {/* Верх шита с ручкой; фон под ним рисует подложка в содержимом списка. */}
+        <View style={[styles.sheetTop, { height: topBarHeight }]}>
           <View style={[styles.handleBar, { backgroundColor: theme.border }]} />
         </View>
       </>
     ),
-    [requestClose, theme.background, theme.border, travel],
+    [requestClose, theme.border, topBarHeight, travel],
   );
 
-  const footer = useMemo(
-    () => <View style={{ height: footerHeight, backgroundColor: theme.background }} />,
-    [footerHeight, theme.background],
-  );
-
-  if (!mounted) return null;
+  const footer = useMemo(() => <View style={{ height: footerHeight }} />, [footerHeight]);
 
   return (
-    <Modal visible transparent animationType="none" statusBarTranslucent onRequestClose={requestClose}>
+    <Modal
+      testID="media-picker-window"
+      visible
+      transparent
+      animationType="none"
+      statusBarTranslucent
+      onRequestClose={handleBack}
+      onShow={() => {
+        perfMark('Modal.onShow');
+        setShown(true);
+      }}
+    >
       {/* Modal — отдельное нативное окно на Android, не потомок корневого
-          GestureHandlerRootView из _layout.tsx: без своего жесты внутри шита
-          не работают. */}
+          GestureHandlerRootView: без своего жесты внутри шита не работают. */}
       <GestureHandlerRootView style={styles.root}>
         <Animated.View
           style={[styles.backdrop, { backgroundColor: theme.overlay }, backdropStyle]}
@@ -318,22 +309,31 @@ export function MediaPickerSheet({ visible, onDismiss, draft, onTyping, onSend }
 
         <Animated.View style={[styles.root, shiftStyle]}>
           <GestureDetector gesture={dismissPan}>
-            <View style={[styles.listWindow, { top: insets.top }]}>
-              <MediaGrid
-                ListComponent={ListComponent}
-                enabled={ready}
-                headerHeight={travel + SHEET_TOP_HEIGHT}
-                header={header}
-                footer={footer}
-                background={theme.background}
-              />
+            <View style={[styles.listWindow, { top: listTop }]}>
+              <SheetShell top={travel} height={collapsedHeight} topBarHeight={topBarHeight} />
+              {listMounted ? (
+                <SheetListContext.Provider value={listContext}>
+                  <MediaGrid
+                    ListComponent={SheetMediaList}
+                    enabled={listMounted}
+                    header={header}
+                    footer={footer}
+                    // Подложка тянется до конца содержимого, значит содержимое
+                    // не должно быть короче окна — иначе под ним осталась бы
+                    // полоса, сквозь которую видно чат.
+                    minContentHeight={travel + listWindowHeight}
+                  />
+                </SheetListContext.Provider>
+              ) : null}
             </View>
           </GestureDetector>
         </Animated.View>
 
         {hasMedia ? (
           <Animated.View style={[styles.footer, shiftStyle]} onLayout={measureFooter}>
-            <KeyboardAvoidingView behavior={Platform.select({ ios: 'padding', default: undefined })}>
+            <KeyboardAvoidingView
+              behavior={Platform.select({ ios: 'padding', default: undefined })}
+            >
               <View style={{ backgroundColor: theme.background }}>
                 <MessageComposer
                   text={draft.text}
@@ -346,6 +346,10 @@ export function MediaPickerSheet({ visible, onDismiss, draft, onTyping, onSend }
             </KeyboardAvoidingView>
           </Animated.View>
         ) : null}
+
+        {/* Вопрос про сброс выбора рисуется внутри уже открытого окна шита:
+            второе нативное окно на Android рождается заметное время. */}
+        <ConfirmDialogSurface />
       </GestureHandlerRootView>
     </Modal>
   );

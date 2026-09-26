@@ -1,4 +1,4 @@
-import { render, screen, userEvent } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, userEvent } from '@testing-library/react-native';
 
 import { MediaGridItem } from '.';
 
@@ -31,6 +31,24 @@ beforeEach(() => {
 });
 
 describe('MediaGridItem', () => {
+  it('forgets a broken preview once the cell is reused for another file', async () => {
+    const { rerender } = await render(
+      <MediaGridItem asset={photo} size={100} onToggle={jest.fn()} />,
+    );
+
+    await act(async () => {
+      fireEvent(screen.getByTestId('media-grid-preview'), 'error', { nativeEvent: { error: 'broken' } });
+    });
+
+    expect(screen.getByText('?')).toBeTruthy();
+
+    // Список переиспользует ту же клетку под следующий файл.
+    await rerender(<MediaGridItem asset={video} size={100} onToggle={jest.fn()} />);
+
+    expect(screen.queryByText('?')).toBeNull();
+    expect(screen.getByTestId('media-grid-preview')).toBeTruthy();
+  });
+
   it('shows the preview straight from the asset id — nothing is resolved first', async () => {
     await render(<MediaGridItem asset={photo} size={100} onToggle={jest.fn()} />);
 

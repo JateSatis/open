@@ -1,54 +1,41 @@
+import { FlashList, type FlashListProps, type ListRenderItem } from '@shopify/flash-list';
 import { useCallback, useMemo, type ComponentType, type ReactElement } from 'react';
-import { FlatList, View, useWindowDimensions, type FlatListProps, type ListRenderItem } from 'react-native';
+import { View, useWindowDimensions } from 'react-native';
 
+import { GRID_COLUMNS, rowsToFill } from './gridLayout';
 import { styles } from './styles';
+import { useGridGeometry } from './useGridGeometry';
 
 import { Button } from '@/components/Button';
 import { Text } from '@/components/Text';
-import { MediaGridItem } from '@/features/media/MediaGridItem';
-import type { MediaLibraryItem } from '@/features/media/mediaLibrary';
-import { countRender, perfLog, perfLogFirst } from '@/features/media/perf';
+import { MediaGridRow, type GridCell } from '@/features/media/MediaGridRow';
+import { countRender, perfLog } from '@/features/media/perf';
 import { useMediaSelection } from '@/features/media/selectionStore';
 import { useGalleryAssets } from '@/features/media/useGalleryAssets';
-import { Spacing } from '@/theme';
 
-const COLUMNS = 3;
-const GAP = Spacing.half;
+export type { GridCell } from '@/features/media/MediaGridRow';
 
-/** Клеток в первом кадре — с запасом на высокий экран, чтобы грид открылся заполненным. */
-const INITIAL_ROWS = 8;
-/** Сколько строк грид дорисовывает за один проход — иначе скролл опережает отрисовку. */
-const ROWS_PER_BATCH = 6;
-/**
- * Экранов содержимого вокруг видимой зоны. По умолчанию их 21, то есть при
- * галерее в три тысячи файлов список держит смонтированными около трёхсот
- * клеток — их приходится и рисовать, и разбирать при закрытии шита. Запас в
- * два экрана в каждую сторону тут ничего не стоит: строки фиксированной
- * высоты, а превью грузит сам expo-image.
- */
-const WINDOW_SIZE = 5;
+/** Строка списка — три клетки сетки. */
+export type GridRow = {
+  index: number;
+  cells: GridCell[];
+};
 
 /**
- * Минимальный набор пропов, которым пользуется грид — им отвечает и обычный
- * `FlatList`, и `Animated.FlatList`. Снаружи решают, какой список
- * подставить: внутри шита положение самого шита считается из скролла этого
- * списка, поэтому шит подставляет свой.
+ * Минимальный набор пропов, которым пользуется грид. Снаружи решают, какой
+ * список подставить: шит подставляет свой, чтобы добавить к нему подложку и
+ * слежение за позицией скролла.
  */
 export type MediaListComponent = ComponentType<
   Pick<
-    FlatListProps<MediaLibraryItem>,
+    FlashListProps<GridRow>,
     | 'testID'
     | 'data'
-    | 'numColumns'
     | 'keyExtractor'
     | 'contentContainerStyle'
-    | 'columnWrapperStyle'
     | 'renderItem'
-    | 'getItemLayout'
-    | 'initialNumToRender'
-    | 'maxToRenderPerBatch'
-    | 'onContentSizeChange'
-    | 'windowSize'
+    | 'drawDistance'
+    | 'getItemType'
     | 'ListEmptyComponent'
     | 'ListHeaderComponent'
     | 'ListFooterComponent'
@@ -59,25 +46,19 @@ export type MediaGridProps = {
   ListComponent?: MediaListComponent;
   /** Шапка списка: внутри шита ею становится пустое место над шитом. */
   header?: ReactElement | null;
-  /**
-   * Высота шапки. Списку её нужно знать числом: `getItemLayout` считает
-   * положение строки от начала содержимого, а шапка это начало сдвигает.
-   */
-  headerHeight?: number;
   /** Хвост списка: место под тем, что перекрывает грид снизу (строка ввода). */
   footer?: ReactElement | null;
+  /**
+   * Нижняя граница высоты содержимого. Подложка шита живёт в координатах
+   * содержимого и тянется до его конца — значит содержимое обязано быть не
+   * короче окна, иначе под ним осталась бы непокрытая полоса.
+   */
+  minContentHeight?: number;
   /**
    * Пока `false`, грид не трогает медиатеку вовсе. Нужно, чтобы запрос
    * разрешения и чтение галереи не отнимали кадры у анимации открытия шита.
    */
   enabled?: boolean;
-  /**
-   * Фон строк. Именно строки, а не отдельный слой под списком, рисуют фон
-   * шита: так он едет вместе с клетками нативным скроллом и не может от них
-   * отстать. Прозрачная шапка списка остаётся прозрачной — сквозь неё видно
-   * то, что под шитом.
-   */
-  background?: string;
 };
 
 /**
@@ -87,57 +68,67 @@ export type MediaGridProps = {
  *
  * Выбранное живёт в `selectionStore`, а не приходит пропом: грид не
  * перерисовывается от того, что человек тронул кружок.
+ *
+ * Список — `FlashList`, а не `FlatList`, ради переиспользования вью. У
+ * `FlatList` каждая появившаяся клетка монтируется заново (замер: 150–228
+ * монтирований за две секунды быстрого скролла, ровно столько же, сколько
+ * рендеров), и на скорости он не успевает — на месте клеток оставались
+ * дырки. `FlashList` v2 держит пул вью и переиспользует их; заодно это
+ * лекарство от роста памяти на длинной галерее.
  */
 export function MediaGrid({
-  ListComponent = FlatList,
+  ListComponent = FlashList,
   header = null,
-  headerHeight = 0,
   footer = null,
+  minContentHeight = 0,
   enabled = true,
-  background,
 }: MediaGridProps) {
   countRender('MediaGrid');
 
-  const { width, height } = useWindowDimensions();
-  const { status, items, requestAccess } = useGalleryAssets(enabled);
+  const { height } = useWindowDimensions();
+  const geometry = useGridGeometry();
+  const { status, items, total, requestAccess } = useGalleryAssets(enabled);
   const toggle = useMediaSelection((state) => state.toggle);
 
-  const cellSize = (width - GAP * (COLUMNS + 1)) / COLUMNS;
-  const rowHeight = cellSize + GAP;
-  const rowStyle = useMemo(
-    () => [styles.row, background === undefined ? null : { backgroundColor: background }],
-    [background],
-  );
-
-  const renderItem = useCallback<ListRenderItem<MediaLibraryItem>>(
-    ({ item }) => <MediaGridItem asset={item} size={cellSize} onToggle={toggle} />,
-    [cellSize, toggle],
-  );
-
   /**
-   * Клетки квадратные и одного размера, значит положение любой строки
-   * известно заранее — списку не нужно её измерять, и прыжок в любую точку
-   * галереи ничего не считает.
+   * Строки списка: сначала настоящие файлы, за ними — скелет до известной
+   * длины галереи. Пока длина неизвестна, скелета ровно на экран с запасом.
    *
-   * `index` здесь — номер СТРОКИ, а не файла. `FlatList` отдаёт
-   * `getItemLayout` в `VirtualizedList` как есть (через `{...restProps}`), а
-   * тот при `numColumns` видит строки: его `getItemCount` возвращает
-   * `ceil(data.length / numColumns)`, а `getItem` собирает строку из
-   * `numColumns` файлов. Делить `index` на число колонок здесь — ошибка:
-   * список начинает считать своё содержимое втрое короче, чем оно есть, и
-   * расхождение копится с глубиной.
+   * Список идёт строками, а не клетками с `numColumns`: `FlashList` делит
+   * ширину на колонки сам, и края клеток попадали бы на дробные пиксели.
    */
-  const getItemLayout = useCallback(
-    (_: ArrayLike<MediaLibraryItem> | null | undefined, index: number) => {
-      perfLogFirst('getItemLayout', 6, 'getItemLayout зовут с индексом', { index });
+  const rows = useMemo<GridRow[]>(() => {
+    if (status === 'denied' || status === 'empty') return [];
 
-      return {
-        length: rowHeight,
-        offset: headerHeight + rowHeight * index,
-        index,
-      };
-    },
-    [headerHeight, rowHeight],
+    const known = total ?? rowsToFill(height, geometry.pitch) * GRID_COLUMNS;
+    const count = Math.max(known, items.length);
+
+    return Array.from({ length: Math.ceil(count / GRID_COLUMNS) }, (_, index) => {
+      const cells: GridCell[] = [];
+
+      for (let column = 0; column < GRID_COLUMNS; column += 1) {
+        const at = index * GRID_COLUMNS + column;
+
+        if (at < count) cells.push(items[at] ?? null);
+      }
+
+      return { index, cells };
+    });
+  }, [geometry.pitch, height, items, status, total]);
+
+  const renderItem = useCallback<ListRenderItem<GridRow>>(
+    ({ item }) => <MediaGridRow cells={item.cells} geometry={geometry} onToggle={toggle} />,
+    [geometry, toggle],
+  );
+
+  /** Все строки одинаковы по устройству — один пул вью на всех. */
+  const getItemType = useCallback(() => 'row', []);
+
+  const keyExtractor = useCallback((row: GridRow) => String(row.index), []);
+
+  const contentContainerStyle = useMemo(
+    () => ({ minHeight: minContentHeight }),
+    [minContentHeight],
   );
 
   if (status === 'denied') {
@@ -153,46 +144,31 @@ export function MediaGrid({
 
   const List = ListComponent;
 
+  perfLog('грид: данные', { status, файлов: items.length, всего: total, строк: rows.length });
+
   return (
     <List
       testID="media-grid"
-      data={items}
-      numColumns={COLUMNS}
-      keyExtractor={(asset) => asset.id}
-      contentContainerStyle={styles.content}
-      columnWrapperStyle={rowStyle}
-      getItemLayout={getItemLayout}
-      initialNumToRender={COLUMNS * INITIAL_ROWS}
-      maxToRenderPerBatch={COLUMNS * ROWS_PER_BATCH}
-      windowSize={WINDOW_SIZE}
+      data={rows}
+      keyExtractor={keyExtractor}
+      getItemType={getItemType}
+      contentContainerStyle={contentContainerStyle}
       renderItem={renderItem}
-      onContentSizeChange={(_width, height) => {
-        // Сверяем, что список думает о своей высоте, с тем, сколько её на
-        // самом деле: расхождение здесь и есть развал грида в глубине.
-        const rows = Math.ceil(items.length / COLUMNS);
-
-        perfLog('высота содержимого', {
-          файлов: items.length,
-          строк: rows,
-          посписку: Math.round(height),
-          поформуле: Math.round(headerHeight + rows * rowHeight),
-        });
-      }}
+      // Запас отрисовки за краем экрана: по умолчанию его четверть экрана, и
+      // клетка появляется ровно тогда, когда её уже видно. Экран в каждую
+      // сторону стоит дёшево — клетки переиспользуются, а не монтируются.
+      //
+      // На резком броске не спасает никакой запас (замер: пусто до 2.5 с и при
+      // четверти экрана, и при целом) — там место под клетку держит `GridSkeleton`,
+      // который вообще не зависит от виртуализации.
+      drawDistance={height}
       ListHeaderComponent={header}
       ListEmptyComponent={
-        // Пустой список — это ещё и «галерея не прочитана»: фон шита рисуют
-        // строки, и без них сквозь шит было бы видно то, что под ним.
-        <View
-          style={[
-            styles.empty,
-            { height },
-            background === undefined ? null : { backgroundColor: background },
-          ]}
-        >
-          {status === 'checking' || !enabled ? null : (
+        status === 'empty' ? (
+          <View style={styles.empty}>
             <Text color="textSecondary">На устройстве нет фото и видео.</Text>
-          )}
-        </View>
+          </View>
+        ) : null
       }
       ListFooterComponent={footer}
     />
