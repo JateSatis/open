@@ -99,7 +99,7 @@ export function RecordingBar({ hold, drag }: RecordingBarProps) {
         // Подсказка едет влево внутри своей области и не наезжает на уровни.
         <View style={styles.hintClip}>
           <Animated.View style={hintStyle}>
-            <Text variant="small" color="textSecondary">
+            <Text variant="small" color="textSecondary" numberOfLines={1}>
               {CANCEL_HINT}
             </Text>
           </Animated.View>

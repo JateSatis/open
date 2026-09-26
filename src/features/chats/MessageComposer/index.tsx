@@ -99,8 +99,11 @@ export function MessageComposer({
       />
 
       <View style={styles.sendWrapper}>
+        {/* Буква, как «М» и «Г»: иконки ещё не выбраны, а слово целиком
+            съедало ширину поля на крупном шрифте. */}
         <Button
-          label="Отправить"
+          label="О"
+          accessibilityLabel="Отправить"
           size="sm"
           disabled={!text.trim() && mediaCount === 0}
           onPress={submit}

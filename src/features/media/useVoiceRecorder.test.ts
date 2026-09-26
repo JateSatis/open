@@ -10,7 +10,7 @@ import { AppState, Platform, type AppStateStatus } from 'react-native';
 
 import { MediaLimits } from './constants';
 import { WAVEFORM_BARS } from './lib/waveform';
-import { useVoiceRecorder } from './useVoiceRecorder';
+import { RECENT_LEVELS, useVoiceRecorder } from './useVoiceRecorder';
 
 jest.mock('expo-audio', () => ({
   RecordingPresets: { HIGH_QUALITY: { extension: '.m4a', sampleRate: 44100 } },
@@ -168,7 +168,7 @@ describe('useVoiceRecorder', () => {
 
     for (let index = 1; index <= 30; index += 1) await tick(index * 100, -30);
 
-    expect(result.current.recentLevels).toHaveLength(20);
+    expect(result.current.recentLevels).toHaveLength(RECENT_LEVELS);
     expect(result.current.durationMs).toBe(3000);
     expect(result.current.level).toBeCloseTo(0.5);
   });

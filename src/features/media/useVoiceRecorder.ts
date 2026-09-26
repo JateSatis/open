@@ -34,7 +34,7 @@ export const VoiceRecordingOptions: RecordingOptions = {
 const STATE_POLL_MS = 100;
 
 /** Сколько последних уровней держать для живой волны на полосе записи. */
-export const RECENT_LEVELS = 20;
+export const RECENT_LEVELS = 16;
 
 /**
  * Готовить рекордер заранее — только на Android. Там подготовка создаёт

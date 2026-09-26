@@ -25,8 +25,11 @@ export const styles = StyleSheet.create({
     paddingVertical: Spacing.one,
     paddingHorizontal: Spacing.three,
   },
+  // Круг растёт вверх от низа строки, а не во все стороны от центра кнопки:
+  // под строкой таб-бар, и он обрезал бы нижнюю половину круга.
   circle: {
     position: 'absolute',
+    bottom: -Spacing.two,
     width: ACTIVE_CIRCLE,
     height: ACTIVE_CIRCLE,
     borderRadius: Radii.full,
@@ -35,7 +38,7 @@ export const styles = StyleSheet.create({
   },
   lock: {
     position: 'absolute',
-    bottom: ACTIVE_CIRCLE / 2 + Spacing.five,
+    bottom: ACTIVE_CIRCLE + Spacing.two,
     alignItems: 'center',
     paddingVertical: Spacing.two,
     paddingHorizontal: Spacing.two,

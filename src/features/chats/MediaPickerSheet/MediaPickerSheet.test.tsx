@@ -348,7 +348,7 @@ describe('MediaPickerSheet', () => {
     await renderOpenSheet({ onSend });
 
     const user = userEvent.setup();
-    await user.press(screen.getByText('Отправить'));
+    await user.press(screen.getByLabelText('Отправить'));
 
     expect(onSend).toHaveBeenCalledTimes(1);
     expect(getMediaSheetPhase()).toBe('closed');
@@ -377,7 +377,7 @@ describe('MediaPickerSheet', () => {
     });
 
     const user = userEvent.setup();
-    await user.press(screen.getByText('Отправить'));
+    await user.press(screen.getByLabelText('Отправить'));
 
     expect(getMediaSheetPhase()).toBe('closed');
     expect(getKeyboardOwner()).toBe('chat');

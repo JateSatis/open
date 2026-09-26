@@ -124,7 +124,7 @@ describe('MessageComposer', () => {
     );
 
     const user = userEvent.setup();
-    await user.press(screen.getByText('Отправить'));
+    await user.press(screen.getByLabelText('Отправить'));
 
     expect(onSend).toHaveBeenCalledTimes(1);
   });
@@ -143,7 +143,7 @@ describe('MessageComposer', () => {
     );
 
     const user = userEvent.setup();
-    await user.press(screen.getByText('Отправить'));
+    await user.press(screen.getByLabelText('Отправить'));
 
     expect(onSend).not.toHaveBeenCalled();
   });
