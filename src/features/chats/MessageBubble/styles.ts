@@ -18,10 +18,19 @@ export const styles = StyleSheet.create({
     borderRadius: Radii.lg,
     gap: Spacing.one,
   },
-  meta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
+  /** Ширину задаёт мозаика; скругление облачка обрезает её углы. */
+  mediaBubble: {
+    borderRadius: Radii.lg,
+    overflow: 'hidden',
+  },
+  mediaAuthor: {
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.one,
+  },
+  caption: {
+    paddingTop: Spacing.one + Spacing.half,
+    paddingBottom: Spacing.two,
+    paddingHorizontal: Spacing.three,
     gap: Spacing.one,
   },
   attachmentSlot: {

@@ -1,76 +1,58 @@
-import { Image } from 'expo-image';
-import { Pressable, View } from 'react-native';
+import type { ReactNode } from 'react';
+import { View } from 'react-native';
 
 import { styles } from './styles';
 
-import { Text } from '@/components/Text';
 import type { MessageAttachment } from '@/api/chats';
-import { formatDuration } from '@/features/media/lib/formatDuration';
-import { computeMosaicLayout } from '@/features/chats/lib/mosaicLayout';
-import { useTheme } from '@/hooks/use-theme';
+import type { MosaicLayout } from '@/features/chats/lib/mosaicLayout';
+import { MediaTile } from '@/features/chats/MediaTile';
 
 export type MediaAttachmentGridProps = {
   attachments: MessageAttachment[];
-  /** Ширина, которую мозаика обязана заполнить целиком — считается по фактическому облачку. */
-  containerWidth: number;
+  /** Раскладка считается снаружи и мемоизируется там: см. `useMosaicLayout`. */
+  layout: MosaicLayout;
+  localPreviews?: string[];
   onPress: (index: number) => void;
+  /** Слой поверх мозаики — плашка времени у медиа без подписи. */
+  children?: ReactNode;
 };
 
-function isVideo(attachment: MessageAttachment): boolean {
-  return attachment.mimeType?.startsWith('video/') ?? false;
-}
-
 /**
- * Мозаика вложений одного сообщения — фото и видео вперемешку, каждое в
- * своих реальных пропорциях, вместе заполняющие ровный прямоугольник.
- * Раскладку считает `computeMosaicLayout`, этот компонент только рисует
- * результат и открывает просмотр по тапу.
+ * Мозаика вложений одного сообщения. Раскладку считает `computeMosaicLayout`,
+ * здесь она только рисуется. Скругление даёт облачко вокруг, у самой мозаики
+ * углы прямые.
  */
-export function MediaAttachmentGrid({ attachments, containerWidth, onPress }: MediaAttachmentGridProps) {
-  const theme = useTheme();
-
-  const tiles = computeMosaicLayout(
-    attachments.map((attachment) => ({
-      width: attachment.width ?? 1,
-      height: attachment.height ?? 1,
-    })),
-    containerWidth,
-  );
-
-  const totalHeight = tiles.reduce((max, tile) => Math.max(max, tile.y + tile.height), 0);
-
+export function MediaAttachmentGrid({
+  attachments,
+  layout,
+  localPreviews,
+  onPress,
+  children,
+}: MediaAttachmentGridProps) {
   return (
-    <View style={[styles.container, { width: containerWidth, height: totalHeight }]}>
+    <View
+      testID="media-mosaic"
+      style={[styles.container, { width: layout.width, height: layout.height }]}
+    >
       {attachments.map((attachment, index) => {
-        const tile = tiles[index];
+        const tile = layout.tiles[index];
 
         if (!tile) return null;
 
         return (
-          <Pressable
-            key={attachment.id}
-            accessibilityRole="button"
-            accessibilityLabel={isVideo(attachment) ? 'Открыть видео' : 'Открыть фото'}
+          <MediaTile
+            // По позиции, а не по id: у оптимистичного сообщения id вложений
+            // локальные, и смена на серверные не должна пересоздавать плитки.
+            key={index}
+            attachment={attachment}
+            tile={tile}
+            localPreview={localPreviews?.[index]}
             onPress={() => onPress(index)}
-            style={[styles.tile, { left: tile.x, top: tile.y, width: tile.width, height: tile.height }]}
-          >
-            <Image
-              source={{ uri: attachment.url }}
-              style={styles.image}
-              contentFit="cover"
-              accessibilityIgnoresInvertColors
-            />
-
-            {isVideo(attachment) ? (
-              <View style={[styles.videoBadge, { backgroundColor: theme.mediaScrim }]}>
-                <Text variant="caption" color="textInverse">
-                  {attachment.durationMs !== null ? formatDuration(attachment.durationMs) : '▶'}
-                </Text>
-              </View>
-            ) : null}
-          </Pressable>
+          />
         );
       })}
+
+      {children}
     </View>
   );
 }

@@ -40,6 +40,8 @@ jest.mock('@/features/media', () => ({
   ),
   uploadAllMedia: jest.fn(),
   removeUploadedMedia: jest.fn(),
+  storedPaths: (item: { path: string; posterPath: string | null }) =>
+    item.posterPath ? [item.path, item.posterPath] : [item.path],
 }));
 
 const mockedListMessages = listMessages as jest.MockedFunction<typeof listMessages>;
@@ -76,6 +78,8 @@ describe('useChatMessages sending media', () => {
         kind: 'photo',
         url: 'https://cdn.example/a1.jpg',
         path: 'user-1/photo/a1.jpg',
+        posterUrl: null,
+        posterPath: null,
         mimeType: 'image/jpeg',
         width: 800,
         height: 600,
@@ -94,6 +98,7 @@ describe('useChatMessages sending media', () => {
         {
           id: 'att-1',
           url: 'https://cdn.example/a1.jpg',
+          posterUrl: null,
           mimeType: 'image/jpeg',
           width: 800,
           height: 600,
@@ -112,11 +117,14 @@ describe('useChatMessages sending media', () => {
     // Локальный предпросмотр был по ссылке на файл на устройстве — после
     // ответа сервера он заменяется на реальное вложение целиком.
     expect(result.current.messages[0].attachments[0].url).toBe('https://cdn.example/a1.jpg');
+    // Локальная картинка остаётся заглушкой, пока грузится удалённая.
+    expect(result.current.messages[0].localPreviews).toEqual([asset.id]);
     expect(mockedSendMessage).toHaveBeenCalledWith('chat-1', {
       text: undefined,
       media: [
         {
           url: 'https://cdn.example/a1.jpg',
+          posterUrl: null,
           mimeType: 'image/jpeg',
           width: 800,
           height: 600,
@@ -133,6 +141,8 @@ describe('useChatMessages sending media', () => {
         kind: 'photo',
         url: 'https://cdn.example/a1.jpg',
         path: 'user-1/photo/a1.jpg',
+        posterUrl: null,
+        posterPath: null,
         mimeType: 'image/jpeg',
         width: 800,
         height: 600,
@@ -149,7 +159,7 @@ describe('useChatMessages sending media', () => {
     await act(() => result.current.send('подпись', [asset]));
 
     await waitFor(() => expect(result.current.messages[0].status).toBe('failed'));
-    expect(mockedRemove).toHaveBeenCalledWith('user-1/photo/a1.jpg');
+    expect(mockedRemove).toHaveBeenCalledWith(['user-1/photo/a1.jpg']);
   });
 
   it('retries a failed media message from the original selection', async () => {
@@ -159,6 +169,8 @@ describe('useChatMessages sending media', () => {
         kind: 'photo',
         url: 'https://cdn.example/a1.jpg',
         path: 'user-1/photo/a1.jpg',
+        posterUrl: null,
+        posterPath: null,
         mimeType: 'image/jpeg',
         width: 800,
         height: 600,
@@ -210,7 +222,10 @@ describe('useChatMessages sending media', () => {
     // придёт ответ сервера, а не благодаря его скорости.
     let resolveRetry!: (value: Awaited<ReturnType<typeof sendMessage>>) => void;
     mockedSendMessage.mockImplementation(
-      () => new Promise((resolve) => { resolveRetry = resolve; }),
+      () =>
+        new Promise((resolve) => {
+          resolveRetry = resolve;
+        }),
     );
 
     // Связь мигает туда-сюда до того, как первый повтор успел завершиться —
@@ -272,13 +287,20 @@ describe('useChatMessages sending media', () => {
       attachments: [],
     };
 
-    const { listMessagesSince } = jest.requireMock('@/api/chats') as { listMessagesSince: jest.Mock };
+    const { listMessagesSince } = jest.requireMock('@/api/chats') as {
+      listMessagesSince: jest.Mock;
+    };
     listMessagesSince.mockResolvedValue([saved]);
 
     // Вставка "висит" — как если бы свой же broadcast дошёл раньше, чем
     // ответ на INSERT успел вернуться клиенту.
     let resolveSend!: (value: Awaited<ReturnType<typeof sendMessage>>) => void;
-    mockedSendMessage.mockImplementation(() => new Promise((resolve) => { resolveSend = resolve; }));
+    mockedSendMessage.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveSend = resolve;
+        }),
+    );
 
     const { result } = await renderHook(() => useChatMessages('chat-1', 'user-1'), { wrapper });
 
@@ -299,5 +321,68 @@ describe('useChatMessages sending media', () => {
     expect(result.current.messages.filter((message) => message.id === 'm1')).toHaveLength(1);
     expect(result.current.messages[0].id).toBe('m1');
     expect(result.current.messages[0].status).toBe('sent');
+  });
+});
+
+describe('useChatMessages large albums', () => {
+  function assets(count: number) {
+    return Array.from({ length: count }, (_, i) => ({ ...asset, id: `content://media/${i}` }));
+  }
+
+  it('splits more than ten files into messages of ten, caption on the first, all shown at once', async () => {
+    // Отправка держится, пока тест смотрит на оптимистичные сообщения.
+    mockedUploadAll.mockReturnValue(new Promise(() => undefined));
+
+    const { result } = await renderHook(() => useChatMessages('chat-1', 'user-1'), { wrapper });
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    await act(() => result.current.send('подпись', assets(23)));
+
+    // Список новыми вперёд: последняя часть — первая в массиве.
+    const parts = [...result.current.messages].reverse();
+
+    expect(parts.map((m) => m.attachments.length)).toEqual([10, 10, 3]);
+    expect(parts.map((m) => m.text)).toEqual(['подпись', null, null]);
+    expect(parts.every((m) => m.status === 'sending')).toBe(true);
+    // Порядок файлов — порядок выбора, сквозь все части.
+    expect(parts.flatMap((m) => m.attachments.map((a) => a.id))).toEqual(
+      assets(23).map((a) => a.id),
+    );
+  });
+
+  it('keeps a part delivered through the broadcast below the parts still sending', async () => {
+    let onMessage: () => void = () => undefined;
+
+    mockedSubscribe.mockImplementation((_chatId, handlers) => {
+      onMessage = handlers.onMessage;
+      return { broadcastTyping: jest.fn(), unsubscribe: jest.fn() };
+    });
+    mockedUploadAll.mockReturnValue(new Promise(() => undefined));
+
+    const { result } = await renderHook(() => useChatMessages('chat-1', 'user-1'), { wrapper });
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    await act(() => result.current.send('', assets(13)));
+
+    // Первая часть уже в базе, и broadcast о ней пришёл раньше ответа на вставку.
+    mockedListMessages.mockResolvedValue({
+      items: [
+        {
+          id: 'server-1',
+          chatId: 'chat-1',
+          authorId: 'user-1',
+          kind: 'media',
+          text: null,
+          createdAt: '2026-09-26T10:00:00Z',
+          attachments: [],
+        },
+      ],
+      nextCursor: null,
+    });
+    await act(async () => onMessage());
+
+    await waitFor(() => expect(result.current.messages).toHaveLength(3));
+    // Отправляющиеся части остаются сверху (самыми новыми).
+    expect(result.current.messages.map((m) => m.status)).toEqual(['sending', 'sending', 'sent']);
   });
 });
