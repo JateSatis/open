@@ -23,6 +23,10 @@ const WINDOW = 'media-picker-window';
 
 // Грид тянет за собой expo-media-library, которого в тестах нет. Подменяем
 // его, но шапку рисуем: в ней живёт место, тап по которому закрывает шит.
+// Копия composer'а в шите без кнопки записи, но модуль всё равно подгружается.
+jest.mock('@/features/media/HoldToRecordRow', () => ({
+  HoldToRecordRow: ({ children }: { children: unknown }) => children,
+}));
 jest.mock('@/features/media', () => {
   const React = require('react');
   const { View } = require('react-native');

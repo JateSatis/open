@@ -1,4 +1,5 @@
 import type { ChatSummary, Person } from '@/api/chats';
+import type { UserActivity } from '@/features/chats/useChatMessages';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const WEEKDAYS = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
@@ -71,4 +72,24 @@ export function isChatMember(chat: ChatSummary, currentUserId: string | null): b
   if (!currentUserId) return false;
 
   return chat.participants.some((participant) => participant.id === currentUserId);
+}
+
+/** «Аня печатает…», «Аня записывает голосовое…», и во множественном числе. */
+export function activityLabel(
+  activities: UserActivity[],
+  nameOf: (userId: string) => string,
+): string | null {
+  if (activities.length === 0) return null;
+
+  const allRecording = activities.every((entry) => entry.activity === 'recording_voice');
+
+  if (activities.length === 1) {
+    const [{ userId, activity }] = activities;
+
+    return activity === 'recording_voice'
+      ? `${nameOf(userId)} записывает голосовое…`
+      : `${nameOf(userId)} печатает…`;
+  }
+
+  return allRecording ? 'Несколько человек записывают голосовые…' : 'Несколько человек печатают…';
 }

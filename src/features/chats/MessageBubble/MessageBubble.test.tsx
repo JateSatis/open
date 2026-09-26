@@ -10,6 +10,10 @@ jest.mock('@/features/media', () => ({
     const { Text } = require('react-native');
     return visible ? <Text>Просмотр открыт</Text> : null;
   },
+  VoicePlayer: ({ uri, playbackKey }: { uri: string; playbackKey: string }) => {
+    const { Text } = require('react-native');
+    return <Text>{`плеер ${playbackKey} ${uri}`}</Text>;
+  },
 }));
 
 function textMessage(overrides: Partial<ChatMessage> = {}): ChatMessage {
@@ -39,6 +43,7 @@ function mediaMessage(overrides: Partial<ChatMessage> = {}): ChatMessage {
         width: 800,
         height: 600,
         durationMs: null,
+        waveform: null,
       },
     ],
     ...overrides,
@@ -132,5 +137,63 @@ describe('MessageBubble', () => {
     await user.press(screen.getByText('Не отправлено. Повторить'));
 
     expect(onRetry).toHaveBeenCalledWith('local-1');
+  });
+
+  it('plays a voice message in the bubble, for a visitor just as for a member', async () => {
+    await render(
+      <MessageBubble
+        {...baseProps}
+        message={textMessage({
+          kind: 'voice',
+          text: null,
+          attachments: [
+            {
+              id: 'att-v',
+              url: 'https://cdn.example/v.m4a',
+              posterUrl: null,
+              mimeType: 'audio/mp4',
+              width: null,
+              height: null,
+              durationMs: 4200,
+              waveform: [1, 2],
+            },
+          ],
+        })}
+      />,
+    );
+
+    expect(
+      screen.getByText('плеер https://cdn.example/v.m4a https://cdn.example/v.m4a'),
+    ).toBeTruthy();
+    expect(screen.queryByText('Вложение')).toBeNull();
+  });
+
+  it('keeps playing an own voice message from the local file after it is sent', async () => {
+    await render(
+      <MessageBubble
+        {...baseProps}
+        isOwn
+        message={textMessage({
+          kind: 'voice',
+          text: null,
+          authorId: 'user-1',
+          localPreviews: ['file:///cache/v.m4a'],
+          attachments: [
+            {
+              id: 'att-v',
+              url: 'https://cdn.example/v.m4a',
+              posterUrl: null,
+              mimeType: 'audio/mp4',
+              width: null,
+              height: null,
+              durationMs: 4200,
+              waveform: null,
+            },
+          ],
+        })}
+      />,
+    );
+
+    expect(screen.getByText('плеер file:///cache/v.m4a file:///cache/v.m4a')).toBeTruthy();
   });
 });

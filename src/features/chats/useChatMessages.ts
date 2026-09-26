@@ -5,7 +5,9 @@ import {
   listMessages,
   listMessagesSince,
   sendMessage,
+  sendVoiceMessage,
   subscribeToChat,
+  type ChatActivity,
   type ChatChannel,
   type Message,
   type MessageAttachment,
@@ -22,6 +24,7 @@ import {
   resolveLibraryAsset,
   storedPaths,
   uploadAllMedia,
+  type LocalMedia,
   type MediaLibraryItem,
   type UploadedMedia,
 } from '@/features/media';
@@ -41,6 +44,8 @@ export type ChatMessage = Message & {
   localId?: string;
   /** Исходный выбор из галереи — нужен только для повтора неудачной отправки. */
   pendingMedia?: MediaLibraryItem[];
+  /** Записанное голосовое до ответа сервера — для повтора неудачной отправки. */
+  pendingVoice?: LocalMedia;
   /**
    * Локальные превью вложений своего только что отправленного сообщения, по
    * позициям. Переживают ответ сервера: плитка держит локальную картинку,
@@ -56,12 +61,21 @@ export type ChatMessagesState = {
   isLoadingMore: boolean;
   hasMore: boolean;
   error: string | null;
-  typingUserIds: string[];
+  /** Кто сейчас печатает или записывает голосовое, кроме меня. */
+  activities: UserActivity[];
   loadMore: () => void;
   send: (text: string, media?: MediaLibraryItem[]) => void;
+  sendVoice: (voice: LocalMedia) => void;
   retry: (localId: string) => void;
   notifyTyping: () => void;
+  notifyRecordingVoice: () => void;
 };
+
+export type UserActivity = { userId: string; activity: ChatActivity };
+
+/** Что уходит на сервер одной отправкой: текст с альбомом или голосовое. */
+type Outgoing =
+  { type: 'post'; text: string; media: MediaLibraryItem[] } | { type: 'voice'; voice: LocalMedia };
 
 let localIdCounter = 0;
 
@@ -102,7 +116,31 @@ function toLocalAttachment(asset: MediaLibraryItem): MessageAttachment {
     width: asset.width,
     height: asset.height,
     durationMs: asset.durationMs,
+    waveform: null,
   };
+}
+
+/** Своё голосовое до ответа сервера: играет локальный файл, волна уже есть. */
+function toLocalVoiceAttachment(localId: string, voice: LocalMedia): MessageAttachment {
+  return {
+    id: `${localId}-voice`,
+    url: voice.uri,
+    posterUrl: null,
+    mimeType: voice.mimeType,
+    width: null,
+    height: null,
+    durationMs: voice.durationMs,
+    waveform: voice.waveform ?? null,
+  };
+}
+
+function outgoingOf(message: ChatMessage): Outgoing | null {
+  if (message.pendingVoice) return { type: 'voice', voice: message.pendingVoice };
+
+  const text = message.text ?? '';
+  const media = message.pendingMedia ?? [];
+
+  return text || media.length > 0 ? { type: 'post', text, media } : null;
 }
 
 function toSendMedia(item: UploadedMedia): SendMessageMedia {
@@ -143,7 +181,7 @@ export function useChatMessages(chatId: string, currentUserId: string | null): C
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [typingUserIds, setTypingUserIds] = useState<string[]>([]);
+  const [activities, setActivities] = useState<UserActivity[]>([]);
   // Mirrors `cursorRef` for rendering: the ref is what callbacks read, but a
   // ref must not be touched during render.
   const [hasMore, setHasMore] = useState(false);
@@ -152,10 +190,10 @@ export function useChatMessages(chatId: string, currentUserId: string | null): C
   const latestServerAtRef = useRef<string | null>(null);
   const channelRef = useRef<ChatChannel | null>(null);
   const typingTimersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>());
-  const lastTypingSentAtRef = useRef(0);
+  const lastActivitySentRef = useRef<{ activity: ChatActivity; at: number } | null>(null);
   // Неотправленное держим отдельно от рендера: повтор запускается по событию
   // связи, а не по перерисовке списка.
-  const unsentRef = useRef<{ localId: string; text: string; media: MediaLibraryItem[] }[]>([]);
+  const unsentRef = useRef<{ localId: string; outgoing: Outgoing }[]>([]);
   const wasOfflineRef = useRef(false);
   // Связь может мигать чаще, чем успевает отработать одна отправка (особенно
   // с медиа — загрузка файлов идёт заметно дольше вставки текста), и тогда
@@ -184,6 +222,19 @@ export function useChatMessages(chatId: string, currentUserId: string | null): C
 
       rememberLatest(incoming[incoming.length - 1].createdAt);
       setMessages((current) => mergeNewest(current, incoming));
+
+      // Сообщение пришло — «печатает…» и «записывает…» его автора больше не
+      // правда, ждать таймаута незачем.
+      const timers = typingTimersRef.current;
+      const authors = new Set(
+        incoming.flatMap((message) => (message.authorId ? [message.authorId] : [])),
+      );
+
+      setActivities((current) => current.filter((entry) => !authors.has(entry.userId)));
+      authors.forEach((authorId) => {
+        clearTimeout(timers.get(authorId));
+        timers.delete(authorId);
+      });
     } catch {
       // A failed catch-up is not worth an error banner: the next broadcast or
       // a re-entry into the chat reloads the page anyway.
@@ -249,10 +300,16 @@ export function useChatMessages(chatId: string, currentUserId: string | null): C
         // перечитываем именно чат, история при этом не дёргается.
         void queryClient.invalidateQueries({ queryKey: chatQueryKey(chatId) });
       },
-      onTyping: (userId) => {
+      onTyping: (userId, activity) => {
         if (userId === currentUserId) return;
 
-        setTypingUserIds((current) => (current.includes(userId) ? current : [...current, userId]));
+        setActivities((current) => {
+          const existing = current.find((entry) => entry.userId === userId);
+
+          if (existing?.activity === activity) return current;
+
+          return [...current.filter((entry) => entry.userId !== userId), { userId, activity }];
+        });
 
         const running = timers.get(userId);
 
@@ -262,7 +319,7 @@ export function useChatMessages(chatId: string, currentUserId: string | null): C
           userId,
           setTimeout(() => {
             timers.delete(userId);
-            setTypingUserIds((current) => current.filter((id) => id !== userId));
+            setActivities((current) => current.filter((entry) => entry.userId !== userId));
           }, TYPING_TIMEOUT_MS),
         );
       },
@@ -275,16 +332,16 @@ export function useChatMessages(chatId: string, currentUserId: string | null): C
       channel.unsubscribe();
       timers.forEach(clearTimeout);
       timers.clear();
-      setTypingUserIds([]);
+      setActivities([]);
     };
   }, [chatId, currentUserId, pullNewMessages, queryClient]);
 
   useEffect(() => {
-    unsentRef.current = messages.flatMap((message) =>
-      message.status === 'failed' && message.localId
-        ? [{ localId: message.localId, text: message.text ?? '', media: message.pendingMedia ?? [] }]
-        : [],
-    );
+    unsentRef.current = messages.flatMap((message) => {
+      const outgoing = message.status === 'failed' ? outgoingOf(message) : null;
+
+      return outgoing && message.localId ? [{ localId: message.localId, outgoing }] : [];
+    });
   }, [messages]);
 
   const loadMore = useCallback(() => {
@@ -310,7 +367,7 @@ export function useChatMessages(chatId: string, currentUserId: string | null): C
   }, [chatId, isLoadingMore]);
 
   const deliver = useCallback(
-    async (localId: string, text: string, media: MediaLibraryItem[]) => {
+    async (localId: string, outgoing: Outgoing) => {
       if (deliveringRef.current.has(localId)) return;
 
       deliveringRef.current.add(localId);
@@ -324,23 +381,41 @@ export function useChatMessages(chatId: string, currentUserId: string | null): C
       let uploaded: UploadedMedia[] = [];
 
       try {
-        if (media.length > 0) {
-          // Без своего id файлы заливать некуда (путь в Storage строится от
-          // него) — явный сбой лучше, чем сообщение, которое молча
-          // потеряло вложения по дороге.
-          if (!currentUserId) throw new Error('Нет активной сессии');
+        const hasFiles = outgoing.type === 'voice' || outgoing.media.length > 0;
 
-          // Пути к файлам могли не успеть резолвиться к моменту выбора —
-          // добираем их здесь, там, где байты действительно нужны.
-          const resolved = await Promise.all(media.map(resolveLibraryAsset));
+        // Без своего id файлы заливать некуда (путь в Storage строится от
+        // него) — явный сбой лучше, чем сообщение, которое молча потеряло
+        // вложения по дороге.
+        if (hasFiles && !currentUserId) throw new Error('Нет активной сессии');
 
-          uploaded = await uploadAllMedia(resolved.map(libraryAssetToLocalMedia), currentUserId);
+        let saved: Message;
+
+        if (outgoing.type === 'voice') {
+          uploaded = await uploadAllMedia([outgoing.voice], currentUserId!);
+
+          const [file] = uploaded;
+
+          saved = await sendVoiceMessage(chatId, {
+            url: file.url,
+            mimeType: file.mimeType,
+            durationMs: file.durationMs ?? 0,
+            sizeBytes: file.sizeBytes,
+            waveform: file.waveform,
+          });
+        } else {
+          if (outgoing.media.length > 0) {
+            // Пути к файлам могли не успеть резолвиться к моменту выбора —
+            // добираем их здесь, там, где байты действительно нужны.
+            const resolved = await Promise.all(outgoing.media.map(resolveLibraryAsset));
+
+            uploaded = await uploadAllMedia(resolved.map(libraryAssetToLocalMedia), currentUserId!);
+          }
+
+          saved = await sendMessage(chatId, {
+            text: outgoing.text || undefined,
+            media: uploaded.length > 0 ? uploaded.map(toSendMedia) : undefined,
+          });
         }
-
-        const saved = await sendMessage(chatId, {
-          text: text || undefined,
-          media: uploaded.length > 0 ? uploaded.map(toSendMedia) : undefined,
-        });
 
         rememberLatest(saved.createdAt);
         setMessages((current) => {
@@ -369,6 +444,7 @@ export function useChatMessages(chatId: string, currentUserId: string | null): C
                   ...saved,
                   status: 'sent' as const,
                   pendingMedia: undefined,
+                  pendingVoice: undefined,
                   localPreviews: message.localPreviews,
                 }
               : message,
@@ -417,7 +493,7 @@ export function useChatMessages(chatId: string, currentUserId: string | null): C
     // «отправить»: заставлять его тыкать «повторить» по каждому сообщению
     // значит перекладывать на него работу приложения.
     for (const unsent of unsentRef.current) {
-      void deliver(unsent.localId, unsent.text, unsent.media);
+      void deliver(unsent.localId, unsent.outgoing);
     }
   }, [connection, deliver]);
 
@@ -460,9 +536,35 @@ export function useChatMessages(chatId: string, currentUserId: string | null): C
       // на сервере. Каждая при этом падает и повторяется сама по себе.
       void (async () => {
         for (const [index, draft] of drafts.entries()) {
-          await deliver(draft.localId!, parts[index].text, parts[index].media);
+          await deliver(draft.localId!, { type: 'post', ...parts[index] });
         }
       })();
+    },
+    [chatId, currentUserId, deliver],
+  );
+
+  const sendVoice = useCallback(
+    (voice: LocalMedia) => {
+      const localId = nextLocalId();
+      const draft: ChatMessage = {
+        id: localId,
+        localId,
+        chatId,
+        authorId: currentUserId,
+        kind: 'voice',
+        text: null,
+        createdAt: new Date().toISOString(),
+        attachments: [toLocalVoiceAttachment(localId, voice)],
+        pendingVoice: voice,
+        // Своё голосовое и после отправки играет из локального файла:
+        // скачивать только что записанное обратно незачем.
+        localPreviews: [voice.uri],
+        status: 'sending',
+      };
+
+      // Облачко с плеером — сразу, до загрузки: это мессенджер.
+      setMessages((current) => [draft, ...current]);
+      void deliver(localId, { type: 'voice', voice });
     },
     [chatId, currentUserId, deliver],
   );
@@ -470,25 +572,37 @@ export function useChatMessages(chatId: string, currentUserId: string | null): C
   const retry = useCallback(
     (localId: string) => {
       const failed = messages.find((message) => message.localId === localId);
+      const outgoing = failed ? outgoingOf(failed) : null;
 
-      if (!failed) return;
-      if (!failed.text && !failed.pendingMedia?.length) return;
+      if (!outgoing) return;
 
-      void deliver(localId, failed.text ?? '', failed.pendingMedia ?? []);
+      void deliver(localId, outgoing);
     },
     [deliver, messages],
   );
 
-  const notifyTyping = useCallback(() => {
-    if (!currentUserId) return;
+  const notifyActivity = useCallback(
+    (activity: ChatActivity) => {
+      if (!currentUserId) return;
 
-    const now = Date.now();
+      const now = Date.now();
+      const last = lastActivitySentRef.current;
 
-    if (now - lastTypingSentAtRef.current < TYPING_THROTTLE_MS) return;
+      // Смена занятия уходит сразу: начал записывать — собеседник должен
+      // увидеть это, а не ещё две секунды «печатает…».
+      if (last && last.activity === activity && now - last.at < TYPING_THROTTLE_MS) return;
 
-    lastTypingSentAtRef.current = now;
-    channelRef.current?.broadcastTyping(currentUserId);
-  }, [currentUserId]);
+      lastActivitySentRef.current = { activity, at: now };
+      channelRef.current?.broadcastTyping(currentUserId, activity);
+    },
+    [currentUserId],
+  );
+
+  const notifyTyping = useCallback(() => notifyActivity('typing'), [notifyActivity]);
+  const notifyRecordingVoice = useCallback(
+    () => notifyActivity('recording_voice'),
+    [notifyActivity],
+  );
 
   return {
     messages,
@@ -496,10 +610,12 @@ export function useChatMessages(chatId: string, currentUserId: string | null): C
     isLoadingMore,
     hasMore,
     error,
-    typingUserIds,
+    activities,
     loadMore,
     send,
+    sendVoice,
     retry,
     notifyTyping,
+    notifyRecordingVoice,
   };
 }

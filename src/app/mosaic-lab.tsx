@@ -58,6 +58,7 @@ function fakeMessages(): ChatMessage[] {
       id: `lab-${index}-${i}`,
       url: `lab://${index}/${i}`,
       posterUrl: null,
+      waveform: null,
       mimeType: shape === 'V' ? 'video/mp4' : 'image/jpeg',
       width: SHAPES[shape][0],
       height: SHAPES[shape][1],

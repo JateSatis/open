@@ -13,6 +13,7 @@ const photo: MessageAttachment = {
   width: 800,
   height: 600,
   durationMs: null,
+  waveform: null,
 };
 
 const video: MessageAttachment = {
@@ -23,6 +24,7 @@ const video: MessageAttachment = {
   width: 800,
   height: 600,
   durationMs: 5000,
+  waveform: null,
 };
 
 const layout = computeMosaicLayout([photo, video], mosaicBounds(328), 3);

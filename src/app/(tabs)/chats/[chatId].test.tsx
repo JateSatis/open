@@ -57,6 +57,10 @@ jest.mock('@/features/media', () => ({
   assetPreviewUri: (asset: { id: string }) => asset.id,
   MediaGrid: () => null,
   MediaViewer: () => null,
+  stopVoice: jest.fn(),
+}));
+jest.mock('@/features/media/HoldToRecordRow', () => ({
+  HoldToRecordRow: ({ children }: { children: unknown }) => children,
 }));
 jest.mock('@/features/media/galleryPrefetch', () => ({ prefetchGallery: jest.fn() }));
 
@@ -508,7 +512,7 @@ describe('ChatScreen', () => {
     await renderWithQuery(<ChatScreen />);
     await screen.findByLabelText('Сообщение');
 
-    handlers?.onTyping('user-2');
+    handlers?.onTyping('user-2', 'typing');
 
     expect(await screen.findByText('Марина печатает…')).toBeTruthy();
 

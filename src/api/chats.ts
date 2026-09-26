@@ -57,6 +57,8 @@ export type MessageAttachment = {
   durationMs: number | null;
   /** Кадр видео для плитки и ленты. У фото и у видео, отправленных до постеров, — `null`. */
   posterUrl: string | null;
+  /** Форма волны голосового, столбики 0..31. У остального — `null`. */
+  waveform: number[] | null;
 };
 
 export type Message = {
@@ -89,6 +91,15 @@ export type SendMessageInput = {
   media?: SendMessageMedia[];
 };
 
+/** Загруженное голосовое: файл, длительность и форма волны. */
+export type SendVoiceInput = {
+  url: string;
+  mimeType: string;
+  durationMs: number;
+  sizeBytes: number;
+  waveform: number[] | null;
+};
+
 export type Page<T> = {
   items: T[];
   nextCursor: string | null;
@@ -99,7 +110,7 @@ const MEMBER_COLUMNS =
   'chat_id, user_id, last_read_at, profile:profiles(id, display_name, avatar_url)';
 const WAITING_COLUMNS = 'chat_id, user_id, display_name, avatar_url';
 export const MESSAGE_COLUMNS =
-  'id, chat_id, author_id, kind, text, created_at, attachments(id, url, poster_url, mime_type, width, height, duration_ms)';
+  'id, chat_id, author_id, kind, text, created_at, attachments(id, url, poster_url, mime_type, width, height, duration_ms, waveform)';
 
 // Заготовки запросов. Они же задают типы рядов: клиент разбирает select-строку
 // вместе со встроенными таблицами, поэтому форма ответа выводится из самого
@@ -111,7 +122,10 @@ const waitingSelect = () => supabase.from('chat_waiting_invitees').select(WAITIN
 // не гарантирует порядок вложенной выборки сам по себе — нужен явный order
 // по `position` (см. attachments_message_id_position_key в миграции).
 export const messagesSelect = () =>
-  supabase.from('messages').select(MESSAGE_COLUMNS).order('position', { referencedTable: 'attachments' });
+  supabase
+    .from('messages')
+    .select(MESSAGE_COLUMNS)
+    .order('position', { referencedTable: 'attachments' });
 
 type ChatRow = QueryData<ReturnType<typeof chatsSelect>>[number];
 type MemberRow = QueryData<ReturnType<typeof membersSelect>>[number];
@@ -181,6 +195,7 @@ export function toMessage(row: MessageRow): Message {
       width: attachment.width,
       height: attachment.height,
       durationMs: attachment.duration_ms,
+      waveform: attachment.waveform,
     })),
   };
 }
@@ -455,6 +470,33 @@ export async function sendMessage(chatId: string, input: SendMessageInput): Prom
     : sendMediaMessage(chatId, text, media);
 }
 
+/**
+ * Голосовое — через `send_voice_message`: сообщение и его единственное
+ * вложение одной транзакцией. Что вложение ровно одно, что это звук и что у
+ * него есть длительность, проверяет база (миграция голосовых), не клиент.
+ */
+export async function sendVoiceMessage(chatId: string, voice: SendVoiceInput): Promise<Message> {
+  const { data: newMessageId, error } = await supabase.rpc('send_voice_message', {
+    target_chat: chatId,
+    voice: {
+      url: voice.url,
+      mime_type: voice.mimeType,
+      duration_ms: Math.round(voice.durationMs),
+      size_bytes: voice.sizeBytes,
+      waveform: voice.waveform,
+    },
+  });
+
+  if (error) throw error;
+  if (typeof newMessageId !== 'string') throw new Error('Не удалось отправить голосовое');
+
+  const { data, error: fetchError } = await messagesSelect().eq('id', newMessageId).single();
+
+  if (fetchError) throw fetchError;
+
+  return toMessage(data);
+}
+
 // =============================================================================
 // Realtime
 // =============================================================================
@@ -477,9 +519,12 @@ export type IncomingMessage = {
   createdAt: string;
 };
 
+/** Что человек делает прямо сейчас — для «печатает…» и «записывает голосовое…». */
+export type ChatActivity = 'typing' | 'recording_voice';
+
 export type ChatChannelHandlers = {
   onMessage: () => void;
-  onTyping: (userId: string) => void;
+  onTyping: (userId: string, activity: ChatActivity) => void;
   onRead: () => void;
   /** Кто-то принял заявку: состав участников изменился. */
   onMembersChanged: () => void;
@@ -491,7 +536,7 @@ export type ChatChannelHandlers = {
 };
 
 export type ChatChannel = {
-  broadcastTyping: (userId: string) => void;
+  broadcastTyping: (userId: string, activity?: ChatActivity) => void;
   unsubscribe: () => void;
 };
 
@@ -512,6 +557,10 @@ function toIncoming(payload: unknown): IncomingMessage | null {
   };
 }
 
+function toActivity(value: unknown): ChatActivity {
+  return value === 'recording_voice' ? value : 'typing';
+}
+
 export function subscribeToChat(chatId: string, handlers: ChatChannelHandlers): ChatChannel {
   // Private channels carry the user's token, which is what the policies on
   // realtime.messages check; without this the subscription is rejected.
@@ -528,9 +577,10 @@ export function subscribeToChat(chatId: string, handlers: ChatChannelHandlers): 
     .on('broadcast', { event: 'read' }, () => handlers.onRead())
     .on('broadcast', { event: 'member_joined' }, () => handlers.onMembersChanged())
     .on('broadcast', { event: 'typing' }, ({ payload }) => {
-      const userId = (payload as { userId?: string })?.userId;
+      const { userId, activity } = (payload ?? {}) as { userId?: unknown; activity?: unknown };
 
-      if (userId) handlers.onTyping(userId);
+      // Событие без `activity` — от версии приложения до голосовых: это набор текста.
+      if (typeof userId === 'string') handlers.onTyping(userId, toActivity(activity));
     })
     .subscribe((status) => {
       if (status === 'SUBSCRIBED') {
@@ -548,8 +598,8 @@ export function subscribeToChat(chatId: string, handlers: ChatChannelHandlers): 
     });
 
   return {
-    broadcastTyping: (userId: string) => {
-      void channel.send({ type: 'broadcast', event: 'typing', payload: { userId } });
+    broadcastTyping: (userId: string, activity: ChatActivity = 'typing') => {
+      void channel.send({ type: 'broadcast', event: 'typing', payload: { userId, activity } });
     },
     unsubscribe: () => {
       void supabase.removeChannel(channel);

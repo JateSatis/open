@@ -1,4 +1,4 @@
-import { listMessages, markChatRead, sendMessage } from './chats';
+import { listMessages, markChatRead, sendMessage, sendVoiceMessage } from './chats';
 
 import { supabase } from '@/api/supabase';
 
@@ -283,5 +283,73 @@ describe('markChatRead', () => {
     mockedRpc.mockResolvedValue({ data: null, error: { message: 'нет доступа' } } as never);
 
     await expect(markChatRead('chat-1')).rejects.toEqual({ message: 'нет доступа' });
+  });
+});
+
+describe('sendVoiceMessage', () => {
+  const mockedRpc = supabase.rpc as jest.MockedFunction<typeof supabase.rpc>;
+
+  it('sends the recording and its waveform through the voice function', async () => {
+    mockedRpc.mockResolvedValue({ data: 'v1', error: null } as never);
+    mockedFrom.mockReturnValue(
+      new QueryBuilderMock({
+        data: {
+          ...messageRow('v1', '2026-09-26T10:00:00Z'),
+          kind: 'voice',
+          text: null,
+          attachments: [
+            {
+              id: 'a1',
+              url: 'https://cdn.example/v.m4a',
+              poster_url: null,
+              mime_type: 'audio/mp4',
+              width: null,
+              height: null,
+              duration_ms: 4200,
+              waveform: [0, 31],
+            },
+          ],
+        },
+        error: null,
+      }),
+    );
+
+    const message = await sendVoiceMessage('chat-1', {
+      url: 'https://cdn.example/v.m4a',
+      mimeType: 'audio/mp4',
+      durationMs: 4200.6,
+      sizeBytes: 3000,
+      waveform: [0, 31],
+    });
+
+    expect(mockedRpc).toHaveBeenCalledWith('send_voice_message', {
+      target_chat: 'chat-1',
+      voice: {
+        url: 'https://cdn.example/v.m4a',
+        mime_type: 'audio/mp4',
+        duration_ms: 4201,
+        size_bytes: 3000,
+        waveform: [0, 31],
+      },
+    });
+    expect(message.kind).toBe('voice');
+    expect(message.attachments[0].waveform).toEqual([0, 31]);
+  });
+
+  it('surfaces a refusal from the database as an error', async () => {
+    mockedRpc.mockResolvedValue({
+      data: null,
+      error: { message: 'new row violates row-level security policy for table "messages"' },
+    } as never);
+
+    await expect(
+      sendVoiceMessage('chat-1', {
+        url: 'https://cdn.example/v.m4a',
+        mimeType: 'audio/mp4',
+        durationMs: 4200,
+        sizeBytes: 3000,
+        waveform: null,
+      }),
+    ).rejects.toMatchObject({ message: expect.stringMatching(/row-level security/) });
   });
 });

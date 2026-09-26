@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 
 import { useChatMessages } from './useChatMessages';
 
-import { listMessages, sendMessage, subscribeToChat } from '@/api/chats';
+import { listMessages, sendMessage, sendVoiceMessage, subscribeToChat } from '@/api/chats';
 import type { ChatChannelHandlers } from '@/api/chats';
 import {
   reportRealtimeDown,
@@ -21,6 +21,7 @@ jest.mock('@/api/chats', () => ({
   listMessages: jest.fn(),
   listMessagesSince: jest.fn(),
   sendMessage: jest.fn(),
+  sendVoiceMessage: jest.fn(),
   subscribeToChat: jest.fn(),
 }));
 jest.mock('@/features/media', () => ({
@@ -46,6 +47,7 @@ jest.mock('@/features/media', () => ({
 
 const mockedListMessages = listMessages as jest.MockedFunction<typeof listMessages>;
 const mockedSendMessage = sendMessage as jest.MockedFunction<typeof sendMessage>;
+const mockedSendVoice = sendVoiceMessage as jest.MockedFunction<typeof sendVoiceMessage>;
 const mockedSubscribe = subscribeToChat as jest.MockedFunction<typeof subscribeToChat>;
 const mockedUploadAll = uploadAllMedia as jest.MockedFunction<typeof uploadAllMedia>;
 const mockedRemove = removeUploadedMedia as jest.MockedFunction<typeof removeUploadedMedia>;
@@ -85,6 +87,7 @@ describe('useChatMessages sending media', () => {
         height: 600,
         durationMs: null,
         sizeBytes: 1000,
+        waveform: null,
       },
     ]);
     mockedSendMessage.mockResolvedValue({
@@ -103,6 +106,7 @@ describe('useChatMessages sending media', () => {
           width: 800,
           height: 600,
           durationMs: null,
+          waveform: null,
         },
       ],
     });
@@ -148,6 +152,7 @@ describe('useChatMessages sending media', () => {
         height: 600,
         durationMs: null,
         sizeBytes: 1000,
+        waveform: null,
       },
     ]);
     mockedSendMessage.mockRejectedValue(new Error('new row violates row-level security policy'));
@@ -176,6 +181,7 @@ describe('useChatMessages sending media', () => {
         height: 600,
         durationMs: null,
         sizeBytes: 1000,
+        waveform: null,
       },
     ]);
     mockedSendMessage.mockResolvedValue({
@@ -384,5 +390,150 @@ describe('useChatMessages large albums', () => {
     await waitFor(() => expect(result.current.messages).toHaveLength(3));
     // Отправляющиеся части остаются сверху (самыми новыми).
     expect(result.current.messages.map((m) => m.status)).toEqual(['sending', 'sending', 'sent']);
+  });
+});
+
+describe('useChatMessages voice messages', () => {
+  const voice = {
+    kind: 'voice' as const,
+    uri: 'file:///cache/voice.m4a',
+    mimeType: 'audio/mp4',
+    width: null,
+    height: null,
+    durationMs: 4200,
+    waveform: [0, 10, 31],
+  };
+  const uploadedVoice = {
+    kind: 'voice' as const,
+    url: 'https://cdn.example/voice.m4a',
+    path: 'user-1/voice/v1.m4a',
+    posterUrl: null,
+    posterPath: null,
+    mimeType: 'audio/mp4',
+    width: null,
+    height: null,
+    durationMs: 4200,
+    sizeBytes: 3000,
+    waveform: [0, 10, 31],
+  };
+  const savedVoice = {
+    id: 'm-voice',
+    chatId: 'chat-1',
+    authorId: 'user-1',
+    kind: 'voice' as const,
+    text: null,
+    createdAt: '2026-09-26T10:00:00Z',
+    attachments: [
+      {
+        id: 'att-voice',
+        url: 'https://cdn.example/voice.m4a',
+        posterUrl: null,
+        mimeType: 'audio/mp4',
+        width: null,
+        height: null,
+        durationMs: 4200,
+        waveform: [0, 10, 31],
+      },
+    ],
+  };
+
+  it('shows the voice bubble at once and sends exactly one voice message', async () => {
+    let finishUpload: (value: (typeof uploadedVoice)[]) => void = () => undefined;
+    mockedUploadAll.mockReturnValue(
+      new Promise((resolve) => {
+        finishUpload = resolve;
+      }),
+    );
+    mockedSendVoice.mockResolvedValue(savedVoice);
+
+    const { result } = await renderHook(() => useChatMessages('chat-1', 'user-1'), { wrapper });
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    await act(() => result.current.sendVoice(voice));
+
+    // До загрузки: облачко уже есть, играет локальный файл.
+    expect(result.current.messages[0]).toMatchObject({
+      kind: 'voice',
+      status: 'sending',
+      localPreviews: ['file:///cache/voice.m4a'],
+    });
+    expect(result.current.messages[0].attachments[0]).toMatchObject({
+      url: 'file:///cache/voice.m4a',
+      durationMs: 4200,
+      waveform: [0, 10, 31],
+    });
+
+    await act(async () => finishUpload([uploadedVoice]));
+
+    await waitFor(() => expect(result.current.messages[0].status).toBe('sent'));
+    expect(mockedSendVoice).toHaveBeenCalledTimes(1);
+    expect(mockedSendVoice).toHaveBeenCalledWith('chat-1', {
+      url: 'https://cdn.example/voice.m4a',
+      mimeType: 'audio/mp4',
+      durationMs: 4200,
+      sizeBytes: 3000,
+      waveform: [0, 10, 31],
+    });
+    expect(mockedSendMessage).not.toHaveBeenCalled();
+    // Своё голосовое и дальше играет из локального файла.
+    expect(result.current.messages[0].localPreviews).toEqual(['file:///cache/voice.m4a']);
+  });
+
+  it('keeps a failed voice message for a retry and removes the orphaned upload', async () => {
+    mockedUploadAll.mockResolvedValue([uploadedVoice]);
+    mockedSendVoice.mockRejectedValueOnce(new Error('not a member')).mockResolvedValue(savedVoice);
+
+    const { result } = await renderHook(() => useChatMessages('chat-1', 'user-1'), { wrapper });
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    await act(() => result.current.sendVoice(voice));
+
+    await waitFor(() => expect(result.current.messages[0].status).toBe('failed'));
+    expect(mockedRemove).toHaveBeenCalledWith(['user-1/voice/v1.m4a']);
+
+    await act(() => result.current.retry(result.current.messages[0].localId!));
+
+    await waitFor(() => expect(result.current.messages[0].status).toBe('sent'));
+    expect(mockedSendVoice).toHaveBeenCalledTimes(2);
+  });
+
+  it('shows «записывает голосовое» and clears it when their message arrives', async () => {
+    let handlers: ChatChannelHandlers | undefined;
+    mockedSubscribe.mockImplementation((_chatId, next) => {
+      handlers = next;
+      return { broadcastTyping: jest.fn(), unsubscribe: jest.fn() };
+    });
+
+    const { result } = await renderHook(() => useChatMessages('chat-1', 'user-1'), { wrapper });
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    await act(async () => handlers?.onTyping('user-2', 'recording_voice'));
+
+    expect(result.current.activities).toEqual([{ userId: 'user-2', activity: 'recording_voice' }]);
+
+    mockedListMessages.mockResolvedValue({
+      items: [{ ...savedVoice, id: 'm-theirs', authorId: 'user-2' }],
+      nextCursor: null,
+    });
+    await act(async () => handlers?.onMessage());
+
+    await waitFor(() => expect(result.current.activities).toEqual([]));
+  });
+
+  it('announces recording right away even right after typing', async () => {
+    const broadcastTyping = jest.fn();
+    mockedSubscribe.mockReturnValue({ broadcastTyping, unsubscribe: jest.fn() });
+
+    const { result } = await renderHook(() => useChatMessages('chat-1', 'user-1'), { wrapper });
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    act(() => result.current.notifyTyping());
+    act(() => result.current.notifyRecordingVoice());
+    act(() => result.current.notifyRecordingVoice());
+
+    expect(broadcastTyping.mock.calls).toEqual([
+      ['user-1', 'typing'],
+      ['user-1', 'recording_voice'],
+    ]);
   });
 });
