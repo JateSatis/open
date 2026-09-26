@@ -40,7 +40,11 @@ export const MediaGridItem = memo(function MediaGridItem({
 
   const theme = useTheme();
   const slot = useSelectionSlot(asset.id);
-  const [failed, setFailed] = useState(false);
+  // Помним, у какого файла превью не открылось, а не просто «не открылось»:
+  // список переиспользует клетку под другие файлы, и флаг без id делал бы
+  // битыми и их.
+  const [failedId, setFailedId] = useState<string | null>(null);
+  const failed = failedId === asset.id;
 
   useEffect(() => countMount('MediaGridItem'), []);
 
@@ -61,6 +65,7 @@ export const MediaGridItem = memo(function MediaGridItem({
         </View>
       ) : (
         <Image
+          testID="media-grid-preview"
           // Источник — сам id ассета: content:// на Android, ph:// на iOS.
           // Оба expo-image открывает напрямую, у видео берёт кадр.
           source={{ uri: assetPreviewUri(asset) }}
@@ -74,7 +79,7 @@ export const MediaGridItem = memo(function MediaGridItem({
           transition={120}
           onError={(event) => {
             perfLog('превью не открылось', { id: asset.id, error: String(event.error) });
-            setFailed(true);
+            setFailedId(asset.id);
           }}
           accessibilityIgnoresInvertColors
         />
