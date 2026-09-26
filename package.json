@@ -54,6 +54,7 @@
     "eslint-config-prettier": "^10.1.8",
     "jest": "~29.7.0",
     "jest-expo": "~57.0.5",
+    "patch-package": "^8.0.1",
     "prettier": "^3.9.7",
     "supabase": "^2.117.0",
     "typescript": "~6.0.3"
@@ -72,7 +73,8 @@
     "typecheck": "tsc --noEmit",
     "test": "jest",
     "build:android": "eas build --profile development --platform android",
-    "build:ios": "eas build --profile development --platform ios"
+    "build:ios": "eas build --profile development --platform ios",
+    "postinstall": "patch-package"
   },
   "private": true,
   "jest": {
@@ -90,5 +92,14 @@
     "testPathIgnorePatterns": [
       "<rootDir>/node_modules/"
     ]
+  },
+  "expo": {
+    "autolinking": {
+      "android": {
+        "buildFromSource": [
+          "expo-image"
+        ]
+      }
+    }
   }
 }

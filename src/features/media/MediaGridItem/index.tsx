@@ -66,9 +66,10 @@ export const MediaGridItem = memo(function MediaGridItem({
           source={{ uri: assetPreviewUri(asset) }}
           style={[styles.thumbnail, { backgroundColor: theme.backgroundElement }]}
           contentFit="cover"
-          // Кэш и отмена загрузок за экраном — на стороне expo-image; свой
-          // прогрев путей только мешал бы ему, конкурируя за тот же ресурс.
-          cachePolicy="memory-disk"
+          // Только память: у Glide она ограничена, и превью, пролистанные
+          // туда и обратно, берутся из неё. Диск для локальных content://
+          // бесполезен — исходник и так лежит на устройстве.
+          cachePolicy="memory"
           recyclingKey={asset.id}
           transition={120}
           onError={(event) => {
