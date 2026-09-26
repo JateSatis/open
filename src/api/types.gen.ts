@@ -215,6 +215,62 @@ export type Database = {
           },
         ]
       }
+      devices: {
+        Row: {
+          app_version: string | null
+          created_at: string
+          id: string
+          installation_id: string
+          last_seen_at: string
+          model: string | null
+          os_version: string | null
+          platform: string
+          push_token: string | null
+          push_token_updated_at: string | null
+          session_id: string | null
+          signed_out_at: string | null
+          user_id: string
+        }
+        Insert: {
+          app_version?: string | null
+          created_at?: string
+          id?: string
+          installation_id: string
+          last_seen_at?: string
+          model?: string | null
+          os_version?: string | null
+          platform: string
+          push_token?: string | null
+          push_token_updated_at?: string | null
+          session_id?: string | null
+          signed_out_at?: string | null
+          user_id: string
+        }
+        Update: {
+          app_version?: string | null
+          created_at?: string
+          id?: string
+          installation_id?: string
+          last_seen_at?: string
+          model?: string | null
+          os_version?: string | null
+          platform?: string
+          push_token?: string | null
+          push_token_updated_at?: string | null
+          session_id?: string | null
+          signed_out_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "devices_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       messages: {
         Row: {
           author_id: string | null
@@ -271,6 +327,7 @@ export type Database = {
           deleted_at: string | null
           display_name: string | null
           id: string
+          status: string | null
           username: string | null
         }
         Insert: {
@@ -280,6 +337,7 @@ export type Database = {
           deleted_at?: string | null
           display_name?: string | null
           id: string
+          status?: string | null
           username?: string | null
         }
         Update: {
@@ -289,6 +347,7 @@ export type Database = {
           deleted_at?: string | null
           display_name?: string | null
           id?: string
+          status?: string | null
           username?: string | null
         }
         Relationships: []
@@ -327,7 +386,10 @@ export type Database = {
         Args: { chat_title?: string; invitee_ids: string[] }
         Returns: Json
       }
+      current_session_id: { Args: never; Returns: string }
       decline_chat_invite: { Args: { target_chat: string }; Returns: undefined }
+      end_device_session: { Args: { p_device_id: string }; Returns: undefined }
+      end_other_sessions: { Args: never; Returns: undefined }
       latest_chat_messages: {
         Args: { chat_ids: string[]; per_chat?: number }
         Returns: {
@@ -348,10 +410,25 @@ export type Database = {
         }
       }
       mark_chat_read: { Args: { target_chat: string }; Returns: string }
+      mark_device_signed_out: {
+        Args: { p_installation_id: string }
+        Returns: undefined
+      }
+      register_device: {
+        Args: {
+          p_app_version: string
+          p_installation_id: string
+          p_model: string
+          p_os_version: string
+          p_platform: string
+        }
+        Returns: string
+      }
       send_media_message: {
         Args: { media: Json; message_text: string; target_chat: string }
         Returns: string
       }
+      touch_device: { Args: { p_installation_id: string }; Returns: boolean }
     }
     Enums: {
       [_ in never]: never
