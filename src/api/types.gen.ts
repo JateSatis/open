@@ -67,6 +67,61 @@ export type Database = {
           },
         ]
       }
+      chat_invites: {
+        Row: {
+          accepted_at: string | null
+          chat_id: string
+          created_at: string
+          declined_at: string | null
+          id: string
+          invitee_id: string | null
+          inviter_id: string | null
+          status: string
+        }
+        Insert: {
+          accepted_at?: string | null
+          chat_id: string
+          created_at?: string
+          declined_at?: string | null
+          id?: string
+          invitee_id?: string | null
+          inviter_id?: string | null
+          status?: string
+        }
+        Update: {
+          accepted_at?: string | null
+          chat_id?: string
+          created_at?: string
+          declined_at?: string | null
+          id?: string
+          invitee_id?: string | null
+          inviter_id?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_invites_chat_id_fkey"
+            columns: ["chat_id"]
+            isOneToOne: false
+            referencedRelation: "chats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_invites_invitee_id_fkey"
+            columns: ["invitee_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_invites_inviter_id_fkey"
+            columns: ["inviter_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       chat_members: {
         Row: {
           chat_id: string
@@ -111,6 +166,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           deleted_at: string | null
+          founding_member_ids: string[]
           id: string
           kind: string
           last_message_at: string | null
@@ -122,6 +178,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null
+          founding_member_ids?: string[]
           id?: string
           kind: string
           last_message_at?: string | null
@@ -133,6 +190,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null
+          founding_member_ids?: string[]
           id?: string
           kind?: string
           last_message_at?: string | null
@@ -237,12 +295,57 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      chat_waiting_invitees: {
+        Row: {
+          avatar_url: string | null
+          chat_id: string | null
+          display_name: string | null
+          invited_at: string | null
+          user_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_invites_chat_id_fkey"
+            columns: ["chat_id"]
+            isOneToOne: false
+            referencedRelation: "chats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_invites_invitee_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
-      get_or_create_direct_chat: {
-        Args: { other_user_id: string }
-        Returns: string
+      accept_chat_invite: { Args: { target_chat: string }; Returns: undefined }
+      create_chat: {
+        Args: { chat_title?: string; invitee_ids: string[] }
+        Returns: Json
+      }
+      decline_chat_invite: { Args: { target_chat: string }; Returns: undefined }
+      latest_chat_messages: {
+        Args: { chat_ids: string[]; per_chat?: number }
+        Returns: {
+          author_id: string | null
+          chat_id: string
+          created_at: string
+          deleted_at: string | null
+          edited_at: string | null
+          id: string
+          kind: string
+          text: string | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "messages"
+          isOneToOne: false
+          isSetofReturn: true
+        }
       }
       mark_chat_read: { Args: { target_chat: string }; Returns: string }
       send_media_message: {

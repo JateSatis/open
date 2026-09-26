@@ -1,27 +1,27 @@
 import { useQuery } from '@tanstack/react-query';
 
-import { listDirectCandidates, type DirectCandidate } from '@/api/chats';
+import { listPeople, type Person } from '@/api/chats';
 import { useConnectionStatus } from '@/features/connection/useConnectionStatus';
 import { describeLoadError } from '@/lib/network';
 
-export const directCandidatesQueryKey = ['direct-candidates'] as const;
+export const peopleQueryKey = ['people'] as const;
 
-export type DirectCandidatesState = {
-  candidates: DirectCandidate[];
+export type PeopleState = {
+  people: Person[];
   isLoading: boolean;
   error: string | null;
 };
 
 /** Все остальные пользователи — временная замена поиску и контактам. */
-export function useDirectCandidates(): DirectCandidatesState {
+export function usePeople(): PeopleState {
   const connection = useConnectionStatus();
   const { data, isPending, fetchStatus, error } = useQuery({
-    queryKey: directCandidatesQueryKey,
-    queryFn: listDirectCandidates,
+    queryKey: peopleQueryKey,
+    queryFn: listPeople,
   });
 
   return {
-    candidates: data ?? [],
+    people: data ?? [],
     // Без связи запрос стоит на паузе. Показывать в этот момент крутилку —
     // значит врать, что данные вот-вот придут: они не придут, пока сети нет.
     isLoading: isPending && fetchStatus !== 'paused',

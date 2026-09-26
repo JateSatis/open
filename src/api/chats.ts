@@ -1,6 +1,8 @@
 // Queries for the messenger. Chats and messages are publicly readable — the
 // write side is guarded by RLS (`messages` accepts an insert only from a row
 // in `chat_members`), so nothing here may assume the caller is a member.
+// Membership itself is never written from here: a chat is created and an
+// invite answered only through database functions (see `invites.ts`).
 
 import type { QueryData, RealtimeChannel } from '@supabase/supabase-js';
 
@@ -12,10 +14,14 @@ export type ChatKind = 'direct' | 'group';
 
 export type MessageKind = 'text' | 'photo' | 'video' | 'voice' | 'video_note' | 'system' | 'media';
 
-export type ChatParticipant = {
+/** Человек, как его показывают в списках: без ролей и состояний. */
+export type Person = {
   id: string;
   displayName: string;
   avatarUrl: string | null;
+};
+
+export type ChatParticipant = Person & {
   /** Everything posted up to this moment has been seen by this participant. */
   lastReadAt: string;
 };
@@ -25,17 +31,16 @@ export type ChatSummary = {
   kind: ChatKind;
   title: string | null;
   participants: ChatParticipant[];
+  /**
+   * Позванные, но ещё не принявшие заявку. Отказ здесь неотличим от молчания:
+   * база отдаёт только «принял / ещё не принял» (см. `chat_waiting_invitees`).
+   */
+  waiting: Person[];
   lastMessagePreview: string | null;
   lastMessageAt: string | null;
   lastMessageAuthorId: string | null;
   /** True when the last message is somebody else's and arrived after my read mark. */
   hasUnread: boolean;
-};
-
-export type DirectCandidate = {
-  id: string;
-  displayName: string;
-  avatarUrl: string | null;
 };
 
 /**
@@ -92,22 +97,25 @@ export type Page<T> = {
 const CHAT_COLUMNS = 'id, kind, title, last_message_at, last_message_text, last_message_author_id';
 const MEMBER_COLUMNS =
   'chat_id, user_id, last_read_at, profile:profiles(id, display_name, avatar_url)';
-const MESSAGE_COLUMNS =
+const WAITING_COLUMNS = 'chat_id, user_id, display_name, avatar_url';
+export const MESSAGE_COLUMNS =
   'id, chat_id, author_id, kind, text, created_at, attachments(id, url, poster_url, mime_type, width, height, duration_ms)';
 
 // Заготовки запросов. Они же задают типы рядов: клиент разбирает select-строку
 // вместе со встроенными таблицами, поэтому форма ответа выводится из самого
 // запроса и не может разойтись со схемой — описывать ряды руками не нужно.
-const chatsSelect = () => supabase.from('chats').select(CHAT_COLUMNS);
+export const chatsSelect = () => supabase.from('chats').select(CHAT_COLUMNS);
 const membersSelect = () => supabase.from('chat_members').select(MEMBER_COLUMNS);
+const waitingSelect = () => supabase.from('chat_waiting_invitees').select(WAITING_COLUMNS);
 // Мозаика в облачке должна собираться в порядке выбора файлов, а PostgREST
 // не гарантирует порядок вложенной выборки сам по себе — нужен явный order
 // по `position` (см. attachments_message_id_position_key в миграции).
-const messagesSelect = () =>
+export const messagesSelect = () =>
   supabase.from('messages').select(MESSAGE_COLUMNS).order('position', { referencedTable: 'attachments' });
 
 type ChatRow = QueryData<ReturnType<typeof chatsSelect>>[number];
 type MemberRow = QueryData<ReturnType<typeof membersSelect>>[number];
+type WaitingRow = QueryData<ReturnType<typeof waitingSelect>>[number];
 type MessageRow = QueryData<ReturnType<typeof messagesSelect>>[number];
 
 // `kind` в базе — текст с CHECK-ограничением, и генератор типов видит его как
@@ -145,7 +153,19 @@ function toParticipant(row: MemberRow): ChatParticipant {
   };
 }
 
-function toMessage(row: MessageRow): Message {
+function toWaiting(row: WaitingRow): Person | null {
+  // Колонки view генератор типов считает nullable целиком, хотя строка без
+  // приглашённого в него не попадает.
+  if (!row.user_id) return null;
+
+  return {
+    id: row.user_id,
+    displayName: row.display_name ?? 'Без имени',
+    avatarUrl: row.avatar_url,
+  };
+}
+
+export function toMessage(row: MessageRow): Message {
   return {
     id: row.id,
     chatId: row.chat_id,
@@ -165,8 +185,10 @@ function toMessage(row: MessageRow): Message {
   };
 }
 
-function toSummary(chat: ChatRow, members: MemberRow[], currentUserId: string): ChatSummary {
-  const participants = members.map(toParticipant);
+export type ChatPeople = { members: MemberRow[]; waiting: Person[] };
+
+export function toSummary(chat: ChatRow, people: ChatPeople, currentUserId: string): ChatSummary {
+  const participants = people.members.map(toParticipant);
   const mine = participants.find((participant) => participant.id === currentUserId);
 
   return {
@@ -174,6 +196,7 @@ function toSummary(chat: ChatRow, members: MemberRow[], currentUserId: string): 
     kind: toChatKind(chat.kind),
     title: chat.title,
     participants,
+    waiting: people.waiting,
     lastMessagePreview: chat.last_message_text,
     lastMessageAt: chat.last_message_at,
     lastMessageAuthorId: chat.last_message_author_id,
@@ -194,21 +217,44 @@ export async function getCurrentUserId(): Promise<string> {
   return data.user.id;
 }
 
-async function fetchMembers(chatIds: string[]): Promise<Map<string, MemberRow[]>> {
-  const byChat = new Map<string, MemberRow[]>();
+/** Участники и ещё не принявшие — для нескольких чатов разом, двумя запросами. */
+export async function fetchChatPeople(chatIds: string[]): Promise<Map<string, ChatPeople>> {
+  const byChat = new Map<string, ChatPeople>();
 
   if (chatIds.length === 0) return byChat;
 
-  const { data, error } = await membersSelect().in('chat_id', chatIds);
+  const [members, waiting] = await Promise.all([
+    membersSelect().in('chat_id', chatIds),
+    waitingSelect().in('chat_id', chatIds).order('invited_at', { ascending: true }),
+  ]);
 
-  if (error) throw error;
+  if (members.error) throw members.error;
+  if (waiting.error) throw waiting.error;
 
-  for (const row of data ?? []) {
-    byChat.set(row.chat_id, [...(byChat.get(row.chat_id) ?? []), row]);
+  const entry = (chatId: string): ChatPeople => {
+    const existing = byChat.get(chatId);
+
+    if (existing) return existing;
+
+    const created: ChatPeople = { members: [], waiting: [] };
+    byChat.set(chatId, created);
+    return created;
+  };
+
+  for (const row of members.data ?? []) {
+    entry(row.chat_id).members.push(row);
+  }
+
+  for (const row of waiting.data ?? []) {
+    const person = toWaiting(row);
+
+    if (person && row.chat_id) entry(row.chat_id).waiting.push(person);
   }
 
   return byChat;
 }
+
+const NO_PEOPLE: ChatPeople = { members: [], waiting: [] };
 
 /**
  * Chats the current user takes part in, most recent conversation first. The
@@ -237,9 +283,9 @@ export async function listChats(): Promise<ChatSummary[]> {
   if (chatError) throw chatError;
 
   const chats = chatData ?? [];
-  const membersByChat = await fetchMembers(chats.map((chat) => chat.id));
+  const peopleByChat = await fetchChatPeople(chats.map((chat) => chat.id));
 
-  return chats.map((chat) => toSummary(chat, membersByChat.get(chat.id) ?? [], userId));
+  return chats.map((chat) => toSummary(chat, peopleByChat.get(chat.id) ?? NO_PEOPLE, userId));
 }
 
 export async function getChat(chatId: string): Promise<ChatSummary> {
@@ -251,16 +297,16 @@ export async function getChat(chatId: string): Promise<ChatSummary> {
   if (!data) throw new Error('Чат не найден');
 
   const chat = data;
-  const membersByChat = await fetchMembers([chat.id]);
+  const peopleByChat = await fetchChatPeople([chat.id]);
 
-  return toSummary(chat, membersByChat.get(chat.id) ?? [], userId);
+  return toSummary(chat, peopleByChat.get(chat.id) ?? NO_PEOPLE, userId);
 }
 
 /**
  * Everyone except the signed-in user. A stand-in for search and contacts while
  * the product has neither — every account is reachable in one tap.
  */
-export async function listDirectCandidates(): Promise<DirectCandidate[]> {
+export async function listPeople(): Promise<Person[]> {
   const userId = await getCurrentUserId();
 
   const { data, error } = await supabase
@@ -277,22 +323,6 @@ export async function listDirectCandidates(): Promise<DirectCandidate[]> {
     displayName: row.display_name ?? 'Без имени',
     avatarUrl: row.avatar_url,
   }));
-}
-
-/**
- * Id of the dialogue with this person, creating it on first use. Runs as a
- * database function: adding the second participant from the client would hit
- * the `chat_members` policy, and two taps at once would create two chats.
- */
-export async function getOrCreateDirectChat(otherUserId: string): Promise<string> {
-  const { data, error } = await supabase.rpc('get_or_create_direct_chat', {
-    other_user_id: otherUserId,
-  });
-
-  if (error) throw error;
-  if (typeof data !== 'string') throw new Error('Не удалось открыть диалог');
-
-  return data;
 }
 
 /**
@@ -420,7 +450,9 @@ export async function sendMessage(chatId: string, input: SendMessageInput): Prom
 
   if (!text && media.length === 0) throw new Error('Пустое сообщение нельзя отправить');
 
-  return media.length === 0 ? sendTextMessage(chatId, text!) : sendMediaMessage(chatId, text, media);
+  return media.length === 0
+    ? sendTextMessage(chatId, text!)
+    : sendMediaMessage(chatId, text, media);
 }
 
 // =============================================================================
@@ -449,6 +481,8 @@ export type ChatChannelHandlers = {
   onMessage: () => void;
   onTyping: (userId: string) => void;
   onRead: () => void;
+  /** Кто-то принял заявку: состав участников изменился. */
+  onMembersChanged: () => void;
   /**
    * Канал заново подключился. Пока его не было, события терялись, поэтому
    * подписчик обязан дочитать пропущенное, а не ждать следующего сообщения.
@@ -492,6 +526,7 @@ export function subscribeToChat(chatId: string, handlers: ChatChannelHandlers): 
   channel
     .on('broadcast', { event: 'new_message' }, () => handlers.onMessage())
     .on('broadcast', { event: 'read' }, () => handlers.onRead())
+    .on('broadcast', { event: 'member_joined' }, () => handlers.onMembersChanged())
     .on('broadcast', { event: 'typing' }, ({ payload }) => {
       const userId = (payload as { userId?: string })?.userId;
 
@@ -522,15 +557,57 @@ export function subscribeToChat(chatId: string, handlers: ChatChannelHandlers): 
   };
 }
 
+export type IncomingInvite = {
+  chatId: string;
+  inviterId: string | null;
+  inviterName: string;
+  chatTitle: string | null;
+};
+
+function toInvite(payload: unknown): IncomingInvite | null {
+  if (typeof payload !== 'object' || payload === null) return null;
+
+  const row = payload as Record<string, unknown>;
+
+  if (typeof row.chat_id !== 'string') return null;
+
+  return {
+    chatId: row.chat_id,
+    inviterId: typeof row.inviter_id === 'string' ? row.inviter_id : null,
+    inviterName: typeof row.inviter_name === 'string' ? row.inviter_name : 'Без имени',
+    chatTitle: typeof row.chat_title === 'string' ? row.chat_title : null,
+  };
+}
+
+function chatIdOf(payload: unknown): string | null {
+  if (typeof payload !== 'object' || payload === null) return null;
+
+  const chatId = (payload as Record<string, unknown>).chat_id;
+
+  return typeof chatId === 'string' ? chatId : null;
+}
+
+export type UserChannelHandlers = {
+  onMessage: (message: IncomingMessage) => void;
+  /** Меня позвали в чат. */
+  onInvite: (invite: IncomingInvite) => void;
+  /**
+   * Заявка изменилась: я ответил (возможно, с другого устройства) или в чат,
+   * куда меня зовут, написали — карточке заявки пора перечитать превью.
+   */
+  onInviteChanged: (chatId: string) => void;
+  /** В чат, где я участник, вошёл принявший заявку. */
+  onMemberJoined: (chatId: string) => void;
+  onReconnected?: () => void;
+};
+
 /**
- * Messages addressed to this user in any chat, used for the in-app alert.
- * The per-user topic is readable only by its owner.
+ * Everything addressed to this user personally: messages in any chat, invites
+ * and membership changes. The per-user topic is readable only by its owner.
+ * One channel for all of them — Realtime keeps a single channel per topic, so
+ * a second subscriber to `user:<id>` would not get its own.
  */
-export function subscribeToIncomingMessages(
-  userId: string,
-  onMessage: (message: IncomingMessage) => void,
-  onReconnected?: () => void,
-): () => void {
+export function subscribeToUserEvents(userId: string, handlers: UserChannelHandlers): () => void {
   void supabase.realtime.setAuth();
 
   const channel: RealtimeChannel = supabase.channel(`user:${userId}`, {
@@ -543,11 +620,31 @@ export function subscribeToIncomingMessages(
     .on('broadcast', { event: 'new_message' }, ({ payload }) => {
       const incoming = toIncoming(payload);
 
-      if (incoming) onMessage(incoming);
+      if (incoming) handlers.onMessage(incoming);
+    })
+    .on('broadcast', { event: 'invite' }, ({ payload }) => {
+      const invite = toInvite(payload);
+
+      if (invite) handlers.onInvite(invite);
+    })
+    .on('broadcast', { event: 'invite_changed' }, ({ payload }) => {
+      const chatId = chatIdOf(payload);
+
+      if (chatId) handlers.onInviteChanged(chatId);
+    })
+    .on('broadcast', { event: 'invite_activity' }, ({ payload }) => {
+      const chatId = chatIdOf(payload);
+
+      if (chatId) handlers.onInviteChanged(chatId);
+    })
+    .on('broadcast', { event: 'member_joined' }, ({ payload }) => {
+      const chatId = chatIdOf(payload);
+
+      if (chatId) handlers.onMemberJoined(chatId);
     })
     .subscribe((status) => {
       if (status === 'SUBSCRIBED') {
-        if (wasJoined) onReconnected?.();
+        if (wasJoined) handlers.onReconnected?.();
 
         wasJoined = true;
         return;

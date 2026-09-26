@@ -3,18 +3,11 @@ import { screen, userEvent } from '@testing-library/react-native';
 
 import ChatsScreen from './index';
 
-import type { ChatSummary, DirectCandidate } from '@/api/chats';
-import {
-  getOrCreateDirectChat,
-  listChats,
-  listDirectCandidates,
-  subscribeToOnlineUsers,
-} from '@/api/chats';
+import type { ChatSummary } from '@/api/chats';
+import { listChats, subscribeToOnlineUsers } from '@/api/chats';
+import { listInvites, type ChatInvite } from '@/api/invites';
 import { useSession } from '@/features/auth/useSession';
-import {
-  reportRealtimeJoined,
-  resetConnectionState,
-} from '@/features/connection/connectionStore';
+import { reportRealtimeJoined, resetConnectionState } from '@/features/connection/connectionStore';
 import { renderWithQuery } from '@/test/renderWithQuery';
 
 const mockPush = jest.fn();
@@ -29,14 +22,15 @@ jest.mock('@/features/auth/useSession', () => ({
 
 jest.mock('@/api/chats', () => ({
   listChats: jest.fn(),
-  listDirectCandidates: jest.fn(),
-  getOrCreateDirectChat: jest.fn(),
   subscribeToOnlineUsers: jest.fn(),
 }));
 
+jest.mock('@/api/invites', () => ({
+  listInvites: jest.fn(),
+}));
+
 const mockedListChats = listChats as jest.MockedFunction<typeof listChats>;
-const mockedCandidates = listDirectCandidates as jest.MockedFunction<typeof listDirectCandidates>;
-const mockedOpenDirect = getOrCreateDirectChat as jest.MockedFunction<typeof getOrCreateDirectChat>;
+const mockedInvites = listInvites as jest.MockedFunction<typeof listInvites>;
 const mockedPresence = subscribeToOnlineUsers as jest.MockedFunction<typeof subscribeToOnlineUsers>;
 const mockedSession = useSession as jest.MockedFunction<typeof useSession>;
 
@@ -58,20 +52,30 @@ const chat: ChatSummary = {
     { id: 'user-1', displayName: 'Я', avatarUrl: null, lastReadAt: READ_AT },
     { id: 'user-2', displayName: 'Марина', avatarUrl: null, lastReadAt: READ_AT },
   ],
+  waiting: [],
   lastMessagePreview: 'до встречи',
   lastMessageAt: '2026-09-16T10:00:00Z',
   lastMessageAuthorId: 'user-2',
   hasUnread: false,
 };
 
-const stranger: DirectCandidate = { id: 'user-3', displayName: 'Пётр', avatarUrl: null };
+function invite(chatId: string, status: ChatInvite['status']): ChatInvite {
+  return {
+    chatId,
+    status,
+    invitedAt: '2026-09-16T10:00:00Z',
+    inviter: { id: 'user-3', displayName: 'Пётр', avatarUrl: null },
+    chat: { ...chat, id: chatId },
+    recentMessages: [],
+  };
+}
 
 beforeEach(() => {
   jest.clearAllMocks();
   signedInAs('user-1');
   mockedPresence.mockReturnValue(() => {});
   mockedListChats.mockResolvedValue([]);
-  mockedCandidates.mockResolvedValue([]);
+  mockedInvites.mockResolvedValue([]);
   // Плашка о сбое загрузки появляется только при живой связи: об обрыве
   // говорит шапка, и дублировать её красным текстом незачем.
   resetConnectionState();
@@ -105,52 +109,60 @@ describe('ChatsScreen', () => {
     expect(screen.queryByLabelText('Есть непрочитанные сообщения')).toBeNull();
   });
 
-  it('lists everyone else so a first message needs no search', async () => {
-    mockedCandidates.mockResolvedValue([stranger]);
+  it('shows the invites row with the number of incoming ones', async () => {
+    mockedListChats.mockResolvedValue([chat]);
+    mockedInvites.mockResolvedValue([
+      invite('chat-7', 'pending'),
+      invite('chat-8', 'pending'),
+      invite('chat-9', 'declined'),
+    ]);
+    const user = userEvent.setup();
+
+    await renderWithQuery(<ChatsScreen />);
+    await user.press(await screen.findByLabelText('Заявки: 2'));
+
+    expect(mockPush).toHaveBeenCalledWith('/chats/invites');
+  });
+
+  it('keeps the invites row for declined ones so they can still be accepted', async () => {
+    mockedInvites.mockResolvedValue([invite('chat-9', 'declined')]);
 
     await renderWithQuery(<ChatsScreen />);
 
-    expect(await screen.findByText('Все пользователи')).toBeTruthy();
-    expect(screen.getByText('Пётр')).toBeTruthy();
+    expect(await screen.findByLabelText('Заявки')).toBeTruthy();
   });
 
-  it('does not list a person twice when a chat with them already exists', async () => {
+  it('has no invites row when there are no invites', async () => {
     mockedListChats.mockResolvedValue([chat]);
-    mockedCandidates.mockResolvedValue([
-      { id: 'user-2', displayName: 'Марина', avatarUrl: null },
-      stranger,
+
+    await renderWithQuery(<ChatsScreen />);
+
+    await screen.findByText('Марина');
+    expect(screen.queryByText('Заявки')).toBeNull();
+  });
+
+  it('names a dialogue after the invitee while the invite is unanswered', async () => {
+    mockedListChats.mockResolvedValue([
+      {
+        ...chat,
+        participants: [chat.participants[0]],
+        waiting: [{ id: 'user-2', displayName: 'Марина', avatarUrl: null }],
+      },
     ]);
 
     await renderWithQuery(<ChatsScreen />);
 
-    await screen.findByText('Пётр');
-    expect(screen.getAllByText('Марина')).toHaveLength(1);
+    expect(await screen.findByText('Марина')).toBeTruthy();
+    expect(screen.getByText('ждём ответа на заявку')).toBeTruthy();
   });
 
-  it('opens a dialogue with a person who has no chat yet', async () => {
-    mockedCandidates.mockResolvedValue([stranger]);
-    mockedOpenDirect.mockResolvedValue('chat-new');
+  it('offers to start a chat when there are none', async () => {
     const user = userEvent.setup();
 
     await renderWithQuery(<ChatsScreen />);
-    await user.press(await screen.findByText('Пётр'));
+    await user.press(await screen.findByText('Новый чат'));
 
-    // Вторым аргументом TanStack Query передаёт свой контекст мутации.
-    expect(mockedOpenDirect).toHaveBeenCalledWith('user-3', expect.anything());
-    expect(mockPush).toHaveBeenCalledWith('/chats/chat-new');
-  });
-
-  it('reports a failure to open a dialogue in plain words, not in server wording', async () => {
-    mockedCandidates.mockResolvedValue([stranger]);
-    mockedOpenDirect.mockRejectedValue(new Error('duplicate key value violates unique constraint'));
-    const user = userEvent.setup();
-
-    await renderWithQuery(<ChatsScreen />);
-    await user.press(await screen.findByText('Пётр'));
-
-    expect(await screen.findByText('Не удалось открыть диалог')).toBeTruthy();
-    expect(screen.queryByText(/violates/)).toBeNull();
-    expect(mockPush).not.toHaveBeenCalled();
+    expect(mockPush).toHaveBeenCalledWith('/chats/new');
   });
 
   it('marks a chat partner who is present as online', async () => {
@@ -185,13 +197,13 @@ describe('ChatsScreen', () => {
 
   it('stays quiet about a lost connection: the header already says it', async () => {
     mockedListChats.mockRejectedValue(new Error('Network request failed'));
-    mockedCandidates.mockResolvedValue([stranger]);
+    mockedInvites.mockResolvedValue([invite('chat-9', 'pending')]);
 
     await renderWithQuery(<ChatsScreen />);
 
     // Красная плашка с java.net.UnknownHostException ничего не объясняет
     // человеку и только перекрывает то, что уже загружено.
-    await screen.findByText('Пётр');
+    await screen.findByText('Заявки');
     expect(screen.queryByText(/Не удалось загрузить чаты/)).toBeNull();
     expect(screen.queryByText(/Network request failed/)).toBeNull();
   });

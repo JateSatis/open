@@ -18,12 +18,15 @@ export type ChatListItemProps = {
 export function ChatListItem({ chat, currentUserId, isOnline, onPress }: ChatListItemProps) {
   const theme = useTheme();
   const title = chatTitle(chat, currentUserId);
+  const waiting = chat.waiting.length;
   const status =
     chat.kind === 'group'
-      ? `${chat.participants.length} участников`
-      : isOnline
-        ? 'в сети'
-        : 'не в сети';
+      ? `${chat.participants.length} участников${waiting > 0 ? ` · ждём ответа: ${waiting}` : ''}`
+      : waiting > 0
+        ? 'ждём ответа на заявку'
+        : isOnline
+          ? 'в сети'
+          : 'не в сети';
 
   return (
     <Pressable
@@ -53,7 +56,7 @@ export function ChatListItem({ chat, currentUserId, isOnline, onPress }: ChatLis
         </Text>
 
         <View style={styles.status}>
-          {chat.kind === 'direct' && isOnline ? (
+          {chat.kind === 'direct' && waiting === 0 && isOnline ? (
             <View style={[styles.onlineDot, { backgroundColor: theme.success }]} />
           ) : null}
           <Text variant="caption" color="textSecondary">

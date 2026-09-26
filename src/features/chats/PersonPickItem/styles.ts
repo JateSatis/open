@@ -1,6 +1,6 @@
 import { StyleSheet } from 'react-native';
 
-import { Spacing } from '@/theme';
+import { Radii, Spacing } from '@/theme';
 
 export const styles = StyleSheet.create({
   row: {
@@ -9,18 +9,15 @@ export const styles = StyleSheet.create({
     gap: Spacing.three,
     paddingVertical: Spacing.two,
   },
-  body: {
+  name: {
     flex: 1,
-    gap: Spacing.half,
   },
-  onlineDot: {
-    width: Spacing.two,
-    height: Spacing.two,
-    borderRadius: Spacing.one,
-  },
-  status: {
-    flexDirection: 'row',
+  check: {
+    width: Spacing.four,
+    height: Spacing.four,
+    borderRadius: Radii.full,
+    borderWidth: 2,
     alignItems: 'center',
-    gap: Spacing.one,
+    justifyContent: 'center',
   },
 });
