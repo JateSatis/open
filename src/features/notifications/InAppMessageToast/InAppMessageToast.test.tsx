@@ -3,7 +3,12 @@ import { screen, userEvent, waitFor } from '@testing-library/react-native';
 
 import { InAppMessageToast } from './index';
 
-import { subscribeToIncomingMessages, type IncomingMessage } from '@/api/chats';
+import {
+  subscribeToUserEvents,
+  type IncomingInvite,
+  type IncomingMessage,
+  type UserChannelHandlers,
+} from '@/api/chats';
 import { useSession } from '@/features/auth/useSession';
 import { setActiveChatId } from '@/store/activeChat';
 import { renderWithQuery } from '@/test/renderWithQuery';
@@ -19,15 +24,17 @@ jest.mock('@/features/auth/useSession', () => ({
 }));
 
 jest.mock('@/api/chats', () => ({
-  subscribeToIncomingMessages: jest.fn(),
+  subscribeToUserEvents: jest.fn(),
 }));
 
-const mockedSubscribe = subscribeToIncomingMessages as jest.MockedFunction<
-  typeof subscribeToIncomingMessages
->;
+jest.mock('@/api/invites', () => ({}));
+
+const mockedSubscribe = subscribeToUserEvents as jest.MockedFunction<typeof subscribeToUserEvents>;
 const mockedSession = useSession as jest.MockedFunction<typeof useSession>;
 
-let deliver: ((message: IncomingMessage) => void) | null = null;
+let handlers: UserChannelHandlers | null = null;
+const deliver = (message: IncomingMessage) => handlers?.onMessage(message);
+const deliverInvite = (invite: IncomingInvite) => handlers?.onInvite(invite);
 
 const incoming: IncomingMessage = {
   messageId: 'm1',
@@ -40,15 +47,15 @@ const incoming: IncomingMessage = {
 
 beforeEach(() => {
   jest.clearAllMocks();
-  deliver = null;
+  handlers = null;
   setActiveChatId(null);
   mockedSession.mockReturnValue({
     session: { user: { id: 'user-1' } } as unknown as SupabaseSession,
     isAuthenticated: true,
     isLoading: false,
   });
-  mockedSubscribe.mockImplementation((_userId, onMessage) => {
-    deliver = onMessage;
+  mockedSubscribe.mockImplementation((_userId, received) => {
+    handlers = received;
     return () => {};
   });
 });
@@ -63,7 +70,7 @@ describe('InAppMessageToast', () => {
   it('shows who wrote and what they wrote', async () => {
     await renderWithQuery(<InAppMessageToast />);
 
-    deliver?.(incoming);
+    deliver(incoming);
 
     expect(await screen.findByText('Марина')).toBeTruthy();
     expect(screen.getByText('ты где')).toBeTruthy();
@@ -74,7 +81,7 @@ describe('InAppMessageToast', () => {
 
     await renderWithQuery(<InAppMessageToast />);
 
-    deliver?.(incoming);
+    deliver(incoming);
     await user.press(await screen.findByText('ты где'));
 
     expect(mockPush).toHaveBeenCalledWith('/chats/chat-1');
@@ -86,7 +93,7 @@ describe('InAppMessageToast', () => {
 
     await renderWithQuery(<InAppMessageToast />);
 
-    deliver?.(incoming);
+    deliver(incoming);
 
     await waitFor(() => expect(screen.queryByText('ты где')).toBeNull());
   });
@@ -96,9 +103,26 @@ describe('InAppMessageToast', () => {
 
     await renderWithQuery(<InAppMessageToast />);
 
-    deliver?.(incoming);
+    deliver(incoming);
 
     expect(await screen.findByText('ты где')).toBeTruthy();
+  });
+
+  it('announces an invite and opens the chat it invites to', async () => {
+    const user = userEvent.setup();
+
+    await renderWithQuery(<InAppMessageToast />);
+
+    deliverInvite({
+      chatId: 'chat-7',
+      inviterId: 'user-2',
+      inviterName: 'Марина',
+      chatTitle: 'Поход',
+    });
+    expect(await screen.findByText('Марина')).toBeTruthy();
+    await user.press(screen.getByText('Зовёт вас в чат «Поход»'));
+
+    expect(mockPush).toHaveBeenCalledWith('/chats/chat-7');
   });
 
   it('leaves no channel behind on unmount', async () => {

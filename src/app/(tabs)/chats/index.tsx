@@ -1,68 +1,35 @@
 import { useRouter } from 'expo-router';
-import { useCallback, useMemo } from 'react';
-import { ActivityIndicator, RefreshControl, SectionList, View } from 'react-native';
+import { useCallback } from 'react';
+import { ActivityIndicator, FlatList, RefreshControl, View } from 'react-native';
 
-import type { ChatSummary, DirectCandidate } from '@/api/chats';
+import { Button } from '@/components/Button';
 import { Screen } from '@/components/Screen';
 import { Text } from '@/components/Text';
 import { ChatListItem } from '@/features/chats/ChatListItem';
-import { UserListItem } from '@/features/chats/UserListItem';
+import { InvitesEntry } from '@/features/chats/InvitesEntry';
 import { counterpart } from '@/features/chats/chatDisplay';
 import { useChats } from '@/features/chats/useChats';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
-import { useDirectCandidates } from '@/features/chats/useDirectCandidates';
+import { useInvites } from '@/features/chats/useInvites';
 import { useOnlineUsers } from '@/features/chats/useOnlineUsers';
-import { useOpenDirectChat } from '@/features/chats/useOpenDirectChat';
 import { Spacing } from '@/theme';
-
-// Секции держат разные сущности, но SectionList требует один тип строки на
-// список — отсюда размеченное объединение вместо двух отдельных списков.
-type Row =
-  | { key: string; kind: 'chat'; chat: ChatSummary }
-  | { key: string; kind: 'person'; user: DirectCandidate };
-
-type Section = { title: string; data: Row[] };
 
 export default function ChatsScreen() {
   const router = useRouter();
   const currentUserId = useCurrentUserId();
   const onlineIds = useOnlineUsers(currentUserId);
   const { chats, isLoading, isRefreshing, error, refresh } = useChats();
-  const { candidates, error: candidatesError } = useDirectCandidates();
-  const { pendingUserId, error: openError, open } = useOpenDirectChat();
+  const { incoming, declined, error: invitesError, refresh: refreshInvites } = useInvites();
 
   const openChat = useCallback((chatId: string) => router.push(`/chats/${chatId}`), [router]);
+  const refreshAll = useCallback(() => {
+    refresh();
+    refreshInvites();
+  }, [refresh, refreshInvites]);
 
-  const sections = useMemo((): Section[] => {
-    const talkingTo = new Set(
-      chats.flatMap((chat) => chat.participants.map((participant) => participant.id)),
-    );
-    // Человек, с которым переписка уже есть, живёт в разделе чатов — иначе он
-    // оказался бы в списке дважды, с двумя разными способами открыть одно и то
-    // же.
-    const newcomers = candidates.filter((candidate) => !talkingTo.has(candidate.id));
-
-    return [
-      ...(chats.length > 0
-        ? [
-            {
-              title: 'Чаты',
-              data: chats.map((chat): Row => ({ key: chat.id, kind: 'chat', chat })),
-            },
-          ]
-        : []),
-      ...(newcomers.length > 0
-        ? [
-            {
-              title: 'Все пользователи',
-              data: newcomers.map((user): Row => ({ key: user.id, kind: 'person', user })),
-            },
-          ]
-        : []),
-    ];
-  }, [candidates, chats]);
-
-  const problem = error ?? candidatesError ?? openError;
+  // Отклонённые тоже ведут сюда: иначе передумать и принять было бы негде.
+  const hasInvites = incoming.length > 0 || declined.length > 0;
+  const problem = error ?? invitesError;
 
   if (isLoading) {
     return (
@@ -80,41 +47,35 @@ export default function ChatsScreen() {
         </View>
       ) : null}
 
-      <SectionList
-        sections={sections}
-        keyExtractor={(item) => item.key}
-        stickySectionHeadersEnabled={false}
-        refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={refresh} />}
-        renderSectionHeader={({ section }) => (
-          <View style={{ paddingTop: Spacing.three, paddingBottom: Spacing.one }}>
-            <Text variant="smallBold" color="textSecondary">
-              {section.title}
-            </Text>
-          </View>
-        )}
-        renderItem={({ item }) =>
-          item.kind === 'chat' ? (
-            <ChatListItem
-              chat={item.chat}
-              currentUserId={currentUserId}
-              isOnline={onlineIds.has(counterpart(item.chat, currentUserId)?.id ?? '')}
-              onPress={openChat}
+      <FlatList
+        data={chats}
+        keyExtractor={(chat) => chat.id}
+        refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={refreshAll} />}
+        ListHeaderComponent={
+          hasInvites ? (
+            <InvitesEntry
+              incomingCount={incoming.length}
+              onPress={() => router.push('/chats/invites')}
             />
-          ) : (
-            <UserListItem
-              user={item.user}
-              isOnline={onlineIds.has(item.user.id)}
-              isOpening={pendingUserId === item.user.id}
-              onPress={open}
-            />
-          )
+          ) : null
         }
+        renderItem={({ item }) => (
+          <ChatListItem
+            chat={item}
+            currentUserId={currentUserId}
+            isOnline={onlineIds.has(counterpart(item, currentUserId)?.id ?? '')}
+            onPress={openChat}
+          />
+        )}
         ListEmptyComponent={
           problem ? null : (
-            <Text color="textSecondary">
-              Пока некому написать: в Open вы первый. Всё, что здесь появится, сможет прочитать кто
-              угодно.
-            </Text>
+            <View style={{ gap: Spacing.three, paddingTop: Spacing.three }}>
+              <Text color="textSecondary">
+                Чатов пока нет. Позовите кого-нибудь — всё, что здесь появится, сможет прочитать кто
+                угодно.
+              </Text>
+              <Button label="Новый чат" onPress={() => router.push('/chats/new')} />
+            </View>
           )
         }
       />

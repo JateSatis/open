@@ -1,4 +1,4 @@
-import type { ChatParticipant, ChatSummary } from '@/api/chats';
+import type { ChatSummary, Person } from '@/api/chats';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const WEEKDAYS = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
@@ -30,14 +30,27 @@ export function formatChatTimestamp(iso: string | null, now: Date = new Date()):
   return `${pad(date.getDate())}.${pad(date.getMonth() + 1)}`;
 }
 
-/** The other side of a direct chat, or null in a group. */
-export function counterpart(
-  chat: ChatSummary,
-  currentUserId: string | null,
-): ChatParticipant | null {
+/**
+ * The other side of a direct chat, or null in a group. Until they accept the
+ * invite the other side is not a participant yet — the dialogue is still
+ * theirs by name.
+ */
+export function counterpart(chat: ChatSummary, currentUserId: string | null): Person | null {
   if (chat.kind !== 'direct') return null;
 
-  return chat.participants.find((participant) => participant.id !== currentUserId) ?? null;
+  return (
+    chat.participants.find((participant) => participant.id !== currentUserId) ??
+    chat.waiting.find((person) => person.id !== currentUserId) ??
+    null
+  );
+}
+
+/** «Марина, Пётр и ещё 2» — для состава чата в одну строку. */
+export function listNames(people: Person[], limit = 3): string {
+  const names = people.slice(0, limit).map((person) => person.displayName);
+  const rest = people.length - names.length;
+
+  return rest > 0 ? `${names.join(', ')} и ещё ${rest}` : names.join(', ');
 }
 
 export function chatTitle(chat: ChatSummary, currentUserId: string | null): string {

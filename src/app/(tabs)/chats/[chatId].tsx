@@ -12,6 +12,7 @@ import {
   openMediaSheet,
   releaseMediaSheetArm,
 } from '@/features/chats/MediaPickerSheet';
+import { InviteResponseBar } from '@/features/chats/InviteResponseBar';
 import { MessageBubble } from '@/features/chats/MessageBubble';
 import { MessageComposer } from '@/features/chats/MessageComposer';
 import { chatTitle, isChatMember } from '@/features/chats/chatDisplay';
@@ -23,6 +24,9 @@ import { useChat } from '@/features/chats/useChat';
 import { useChatMessages, type ChatMessage } from '@/features/chats/useChatMessages';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
 import { useMarkChatRead } from '@/features/chats/useMarkChatRead';
+import { useMyInvite } from '@/features/chats/useMyInvite';
+import { useRespondToInvite } from '@/features/chats/useRespondToInvite';
+import { WaitingBanner } from '@/features/chats/WaitingBanner';
 import { useTheme } from '@/hooks/use-theme';
 import { setActiveChatId } from '@/store/activeChat';
 import { Spacing } from '@/theme';
@@ -54,6 +58,14 @@ export default function ChatScreen() {
     notifyTyping,
   } = useChatMessages(chatId, currentUserId);
   const draft = useComposerDraft(chatId);
+  const isMember = chat ? isChatMember(chat, currentUserId) : false;
+  // Заявку спрашиваем только у не-участника: участнику отвечать уже не на что.
+  const myInvite = useMyInvite(chatId, chat !== null && !isMember);
+  const invite = useRespondToInvite();
+  const waitingForOthers = useMemo(
+    () => (chat?.waiting ?? []).filter((person) => person.id !== currentUserId),
+    [chat, currentUserId],
+  );
 
   const submitDraft = useCallback(() => {
     send(draft.text, draft.media());
@@ -154,6 +166,8 @@ export default function ChatScreen() {
       />
 
       <Animated.View testID="chat-keyboard-area" style={[styles.flex, keyboardInsetStyle]}>
+        <WaitingBanner waiting={waitingForOthers} />
+
         {isChatLoading || isLoading ? (
           <View style={styles.centered}>
             <ActivityIndicator accessibilityLabel="Загрузка переписки" />
@@ -200,17 +214,27 @@ export default function ChatScreen() {
           </View>
         ) : null}
 
-        <MessageComposer
-          text={draft.text}
-          onChangeText={draft.setText}
-          canSend={chat ? isChatMember(chat, currentUserId) : false}
-          onSend={submitDraft}
-          onTyping={notifyTyping}
-          onFieldActivate={claimKeyboardForChat}
-          onAttachPressIn={armMediaSheet}
-          onAttachPressOut={releaseMediaSheetArm}
-          onAttachPress={openMediaSheet}
-        />
+        {!isMember && myInvite && myInvite.status !== 'accepted' ? (
+          <InviteResponseBar
+            invite={myInvite}
+            isResponding={invite.pendingChatId === chatId}
+            error={invite.error}
+            onAccept={() => invite.respond(chatId, 'accept')}
+            onDecline={() => invite.respond(chatId, 'decline')}
+          />
+        ) : (
+          <MessageComposer
+            text={draft.text}
+            onChangeText={draft.setText}
+            canSend={isMember}
+            onSend={submitDraft}
+            onTyping={notifyTyping}
+            onFieldActivate={claimKeyboardForChat}
+            onAttachPressIn={armMediaSheet}
+            onAttachPressOut={releaseMediaSheetArm}
+            onAttachPress={openMediaSheet}
+          />
+        )}
       </Animated.View>
 
       <MediaPickerSheet draft={draft} onTyping={notifyTyping} onSend={submitDraft} />

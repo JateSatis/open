@@ -228,6 +228,8 @@ follows              подписки
 
 chats                диалог или групповой чат: kind = direct | group
 chat_members         участники — единственные, кто может отправлять сообщения
+chat_invites         заявки в чат: pending | accepted | declined; статус видит только
+                     приглашённый, остальным — view chat_waiting_invitees («ещё не принял»)
 messages             сообщения: текст, фото, видео, голосовое, кружок, системное
 attachments          медиафайлы сообщения
 

@@ -5,6 +5,7 @@ import ChatScreen from './[chatId]';
 
 import type { ChatChannelHandlers, ChatSummary, Message } from '@/api/chats';
 import { getChat, listMessages, markChatRead, sendMessage, subscribeToChat } from '@/api/chats';
+import { acceptInvite, declineInvite, getMyInvite } from '@/api/invites';
 import { useSession } from '@/features/auth/useSession';
 import { formatMessageTime } from '@/features/chats/chatDisplay';
 import { reportRealtimeJoined, resetConnectionState } from '@/features/connection/connectionStore';
@@ -29,6 +30,12 @@ jest.mock('@/api/chats', () => ({
   MESSAGE_PAGE_SIZE: 30,
 }));
 
+jest.mock('@/api/invites', () => ({
+  getMyInvite: jest.fn(),
+  acceptInvite: jest.fn(),
+  declineInvite: jest.fn(),
+}));
+
 // Этот экран не тестирует ни грид выбора медиа, ни просмотрщик — оба тянут
 // за собой нативные модули (expo-video, expo-camera, expo-media-library…),
 // которых в тестовом окружении нет и не должно быть. Мок обрывает эту
@@ -47,6 +54,9 @@ const mockedSendMessage = sendMessage as jest.MockedFunction<typeof sendMessage>
 const mockedSubscribe = subscribeToChat as jest.MockedFunction<typeof subscribeToChat>;
 const mockedMarkRead = markChatRead as jest.MockedFunction<typeof markChatRead>;
 const mockedSession = useSession as jest.MockedFunction<typeof useSession>;
+const mockedMyInvite = getMyInvite as jest.MockedFunction<typeof getMyInvite>;
+const mockedAccept = acceptInvite as jest.MockedFunction<typeof acceptInvite>;
+const mockedDecline = declineInvite as jest.MockedFunction<typeof declineInvite>;
 const { listMessagesSince } = jest.requireMock('@/api/chats') as {
   listMessagesSince: jest.Mock;
 };
@@ -64,6 +74,7 @@ function chatWith(participants: ChatSummary['participants']): ChatSummary {
     kind: 'direct',
     title: 'Разговор',
     participants,
+    waiting: [],
     lastMessagePreview: null,
     lastMessageAt: null,
     lastMessageAuthorId: null,
@@ -101,6 +112,9 @@ beforeEach(() => {
   reportRealtimeJoined();
   mockedListMessages.mockResolvedValue({ items: [], nextCursor: null });
   mockedGetChat.mockResolvedValue(chatWith([member, other]));
+  mockedMyInvite.mockResolvedValue(null);
+  mockedAccept.mockResolvedValue(undefined);
+  mockedDecline.mockResolvedValue(undefined);
   mockedSubscribe.mockImplementation((_chatId, given) => {
     handlers = given;
     return { broadcastTyping, unsubscribe };
@@ -199,6 +213,65 @@ describe('ChatScreen', () => {
       await screen.findByText('Читать этот чат может кто угодно, писать — только участники.'),
     ).toBeTruthy();
     expect(screen.queryByLabelText('Сообщение')).toBeNull();
+  });
+
+  it('offers the invitee to accept or decline instead of the composer', async () => {
+    mockedGetChat.mockResolvedValue({ ...chatWith([other]), waiting: [member] });
+    mockedMyInvite.mockResolvedValue({ status: 'pending', inviter: other });
+
+    await renderWithQuery(<ChatScreen />);
+
+    expect(
+      await screen.findByText('Марина зовёт вас в этот чат. Примите заявку, чтобы писать.'),
+    ).toBeTruthy();
+    expect(screen.getByText('Отклонить')).toBeTruthy();
+    expect(screen.queryByLabelText('Сообщение')).toBeNull();
+    // Себя в «ждём ответа» приглашённый не видит: ответить — его ход.
+    expect(screen.queryByText(/Ждём ответа/)).toBeNull();
+  });
+
+  it('lets the invitee write once they accept', async () => {
+    mockedGetChat.mockResolvedValueOnce({ ...chatWith([other]), waiting: [member] });
+    mockedMyInvite.mockResolvedValue({ status: 'pending', inviter: other });
+    const user = userEvent.setup();
+
+    await renderWithQuery(<ChatScreen />);
+    await user.press(await screen.findByText('Принять'));
+
+    expect(mockedAccept).toHaveBeenCalledWith('chat-1');
+    expect(await screen.findByLabelText('Сообщение')).toBeTruthy();
+  });
+
+  it('lets the invitee take back a refusal but not refuse twice', async () => {
+    mockedGetChat.mockResolvedValue({ ...chatWith([other]), waiting: [member] });
+    mockedMyInvite.mockResolvedValue({ status: 'declined', inviter: other });
+
+    await renderWithQuery(<ChatScreen />);
+
+    expect(await screen.findByText('Вы отклонили заявку. Её всё ещё можно принять.')).toBeTruthy();
+    expect(screen.getByText('Принять')).toBeTruthy();
+    expect(screen.queryByText('Отклонить')).toBeNull();
+  });
+
+  it('tells everyone who has not answered the invite yet', async () => {
+    mockedGetChat.mockResolvedValue({ ...chatWith([member]), waiting: [other] });
+
+    await renderWithQuery(<ChatScreen />);
+
+    expect(await screen.findByText('Ждём ответа на заявку: Марина')).toBeTruthy();
+    // Создатель — участник и пишет сразу, не дожидаясь ответа.
+    expect(screen.getByLabelText('Сообщение')).toBeTruthy();
+  });
+
+  it('refreshes the members when someone accepts while the chat is open', async () => {
+    mockedGetChat.mockResolvedValueOnce({ ...chatWith([member]), waiting: [other] });
+
+    await renderWithQuery(<ChatScreen />);
+    await screen.findByText('Ждём ответа на заявку: Марина');
+
+    await act(async () => handlers?.onMembersChanged());
+
+    await waitFor(() => expect(screen.queryByText(/Ждём ответа/)).toBeNull());
   });
 
   it('lets a member write and shows the message before the server answers', async () => {

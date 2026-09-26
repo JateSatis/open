@@ -7,7 +7,7 @@ import { styles } from './styles';
 
 import { Avatar } from '@/components/Avatar';
 import { Text } from '@/components/Text';
-import { useIncomingMessageAlerts } from '@/features/notifications/useIncomingMessageAlerts';
+import { useInAppAlerts } from '@/features/notifications/useInAppAlerts';
 import { useTheme } from '@/hooks/use-theme';
 import { Spacing } from '@/theme';
 
@@ -16,14 +16,14 @@ const VISIBLE_MS = 4500;
 const SLIDE_MS = 220;
 
 /**
- * Карточка о новом сообщении поверх любого экрана. Живёт в корневом layout,
+ * Карточка о новом сообщении или заявке поверх любого экрана. Живёт в корневом layout,
  * потому что уведомление не принадлежит ни одной вкладке.
  */
 export function InAppMessageToast() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const theme = useTheme();
-  const { alert, dismiss } = useIncomingMessageAlerts();
+  const { alert, dismiss } = useInAppAlerts();
   // Встроенная анимация вместо Reanimated: карточка выезжает один раз и не
   // требует worklet-потока, зато работает в тестах без отдельного мока.
   // Значение живёт в состоянии, а не в ref: его читает и рендер тоже.
@@ -48,8 +48,17 @@ export function InAppMessageToast() {
 
   const open = () => {
     dismiss();
+    // Заявка открывает сам чат: его можно прочитать и там же принять.
     router.push(`/chats/${alert.chatId}`);
   };
+
+  const who = alert.kind === 'message' ? alert.authorName : alert.inviterName;
+  const what =
+    alert.kind === 'message'
+      ? (alert.text ?? 'Вложение')
+      : alert.chatTitle
+        ? `Зовёт вас в чат «${alert.chatTitle}»`
+        : 'Зовёт вас в чат';
 
   return (
     <Animated.View
@@ -71,21 +80,23 @@ export function InAppMessageToast() {
     >
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={`Новое сообщение от ${alert.authorName}`}
+        accessibilityLabel={
+          alert.kind === 'message' ? `Новое сообщение от ${who}` : `Заявка в чат от ${who}`
+        }
         onPress={open}
         style={[
           styles.card,
           { backgroundColor: theme.backgroundElement, borderColor: theme.border },
         ]}
       >
-        <Avatar uri={null} name={alert.authorName} size={Spacing.five} />
+        <Avatar uri={null} name={who} size={Spacing.five} />
 
         <View style={styles.body}>
           <Text variant="smallBold" numberOfLines={1}>
-            {alert.authorName}
+            {who}
           </Text>
           <Text variant="small" color="textSecondary" numberOfLines={2}>
-            {alert.text ?? 'Вложение'}
+            {what}
           </Text>
         </View>
       </Pressable>

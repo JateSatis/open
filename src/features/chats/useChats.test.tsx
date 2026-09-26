@@ -22,6 +22,7 @@ const chat: ChatSummary = {
   kind: 'direct',
   title: null,
   participants: [],
+  waiting: [],
   lastMessagePreview: 'до встречи',
   lastMessageAt: '2026-09-16T10:00:00Z',
   lastMessageAuthorId: 'user-2',
