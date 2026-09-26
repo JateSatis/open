@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { MediaLimits } from './constants';
+import { getGallerySnapshot, setGallerySnapshot } from './galleryPrefetch';
 import {
   countRecentMedia,
   queryRecentMedia,
@@ -50,14 +51,21 @@ export type GalleryAssets = {
  * своего прогрева и кэша путей больше нет.
  */
 export function useGalleryAssets(enabled: boolean): GalleryAssets {
-  const [status, setStatus] = useState<GalleryStatus>('checking');
-  const [items, setItems] = useState<MediaLibraryItem[]>([]);
-  const [total, setTotal] = useState<number | null>(null);
+  // Начало галереи могли прочитать заранее — см. `prefetchGallery`. Тогда
+  // грид с первого кадра показывает настоящие клетки, а полное чтение ниже
+  // только освежает их.
+  const [initial] = useState(getGallerySnapshot);
+  const [status, setStatus] = useState<GalleryStatus>(
+    initial ? (initial.items.length > 0 ? 'ready' : 'empty') : 'checking',
+  );
+  const [items, setItems] = useState<MediaLibraryItem[]>(initial?.items ?? []);
+  const [total, setTotal] = useState<number | null>(initial?.total ?? null);
   const [isFilling, setIsFilling] = useState(false);
   const cancelledRef = useRef(false);
 
   const fill = useCallback(async () => {
-    setStatus('loading');
+    // Прогретые клетки уже на экране — «читаю» им не нужно.
+    setStatus((current) => (current === 'ready' ? current : 'loading'));
     setIsFilling(true);
 
     // Счётчик идёт параллельно первому куску, а не перед ним: он нужен
@@ -82,6 +90,7 @@ export function useGalleryAssets(enabled: boolean): GalleryAssets {
         // Галерея кончилась на первом же куске — вот теперь её длина
         // известна точно, и счётчику верить больше незачем.
         setTotal(head.length);
+        setGallerySnapshot({ items: head, total: head.length });
         return;
       }
 
@@ -97,6 +106,7 @@ export function useGalleryAssets(enabled: boolean): GalleryAssets {
       perfLog('галерея: дочитана', { total: all.length });
       setItems(all);
       setTotal(all.length);
+      setGallerySnapshot({ items: all, total: all.length });
     } finally {
       if (!cancelledRef.current) setIsFilling(false);
     }

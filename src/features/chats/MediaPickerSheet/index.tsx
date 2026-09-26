@@ -4,6 +4,7 @@
 /* eslint-disable react-hooks/immutability */
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
 import {
+  InteractionManager,
   KeyboardAvoidingView,
   Modal,
   PixelRatio,
@@ -46,6 +47,7 @@ import { dismissTopConfirmDialog } from '@/components/ConfirmDialog/store';
 import { MessageComposer } from '@/features/chats/MessageComposer';
 import type { ComposerDraft } from '@/features/chats/useComposerDraft';
 import { MediaGrid } from '@/features/media';
+import { prefetchGallery } from '@/features/media/galleryPrefetch';
 import { countRender, perfMark } from '@/features/media/perf';
 import { useHasSelection, useMediaSelection } from '@/features/media/selectionStore';
 import { useTheme } from '@/hooks/use-theme';
@@ -82,6 +84,14 @@ export function MediaPickerSheet(props: MediaPickerSheetProps) {
   // Уход с экрана посреди открытого шита: окно уходит вместе с экраном, и
   // следующий экран должен застать шит закрытым.
   useEffect(() => () => finishMediaSheetClose(), []);
+
+  // Начало галереи читается заранее, пока человек читает чат: к открытию
+  // шита клетки уже известны. Без выданного разрешения не делает ничего.
+  useEffect(() => {
+    const task = InteractionManager.runAfterInteractions(prefetchGallery);
+
+    return () => task.cancel();
+  }, []);
 
   if (phase === 'closed') return null;
 

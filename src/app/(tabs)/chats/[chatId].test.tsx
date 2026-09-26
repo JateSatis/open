@@ -39,6 +39,7 @@ jest.mock('@/features/media', () => ({
   MediaGrid: () => null,
   MediaViewer: () => null,
 }));
+jest.mock('@/features/media/galleryPrefetch', () => ({ prefetchGallery: jest.fn() }));
 
 const mockedGetChat = getChat as jest.MockedFunction<typeof getChat>;
 const mockedListMessages = listMessages as jest.MockedFunction<typeof listMessages>;
@@ -109,7 +110,10 @@ beforeEach(() => {
 describe('ChatScreen', () => {
   it('shows the conversation to anyone who opens it', async () => {
     mockedGetChat.mockResolvedValue(
-      chatWith([other, { id: 'user-3', displayName: 'Пётр', avatarUrl: null, lastReadAt: READ_AT }]),
+      chatWith([
+        other,
+        { id: 'user-3', displayName: 'Пётр', avatarUrl: null, lastReadAt: READ_AT },
+      ]),
     );
     mockedListMessages.mockResolvedValue({
       items: [message('m1', 'привет', 'user-2')],
@@ -135,7 +139,9 @@ describe('ChatScreen', () => {
 
   it('does not mark an empty chat read', async () => {
     await renderWithQuery(<ChatScreen />);
-    await screen.findByText('Сообщений пока нет. Всё, что здесь появится, сможет прочитать кто угодно.');
+    await screen.findByText(
+      'Сообщений пока нет. Всё, что здесь появится, сможет прочитать кто угодно.',
+    );
 
     expect(mockedMarkRead).not.toHaveBeenCalled();
   });
@@ -181,7 +187,10 @@ describe('ChatScreen', () => {
 
   it('hides the composer from an outsider and says why', async () => {
     mockedGetChat.mockResolvedValue(
-      chatWith([other, { id: 'user-3', displayName: 'Пётр', avatarUrl: null, lastReadAt: READ_AT }]),
+      chatWith([
+        other,
+        { id: 'user-3', displayName: 'Пётр', avatarUrl: null, lastReadAt: READ_AT },
+      ]),
     );
 
     await renderWithQuery(<ChatScreen />);

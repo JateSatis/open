@@ -4,7 +4,14 @@
  * версткой, а не встроенным UI, значит нужен прямой доступ к последним
  * файлам через `expo-media-library`.
  */
-import { Asset, AssetField, MediaType, Query, requestPermissionsAsync } from 'expo-media-library';
+import {
+  Asset,
+  AssetField,
+  getPermissionsAsync,
+  MediaType,
+  Query,
+  requestPermissionsAsync,
+} from 'expo-media-library';
 import { getAssetsAsync } from 'expo-media-library/legacy';
 
 import { MediaLimits } from './constants';
@@ -48,6 +55,17 @@ export async function requestMediaLibraryAccess(): Promise<LibraryAccess> {
 
   // `limited` (часть библиотеки на iOS) — рабочий режим, а не отказ: грид
   // просто покажет то, на что доступ дан.
+  return response.granted || response.accessPrivileges === 'limited' ? 'granted' : 'denied';
+}
+
+/**
+ * То же, что `requestMediaLibraryAccess`, но без системного запроса: только
+ * узнать, выдан ли доступ. Нужно прогреву галереи — спрашивать разрешение в
+ * момент, когда человек его не ждёт, нельзя.
+ */
+export async function checkMediaLibraryAccess(): Promise<LibraryAccess> {
+  const response = await getPermissionsAsync(false, ['photo', 'video']);
+
   return response.granted || response.accessPrivileges === 'limited' ? 'granted' : 'denied';
 }
 

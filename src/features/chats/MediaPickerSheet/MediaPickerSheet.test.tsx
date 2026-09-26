@@ -35,6 +35,9 @@ jest.mock('@/features/media', () => {
   };
 });
 
+// Прогрев галереи ходит в медиатеку — здесь её нет.
+jest.mock('@/features/media/galleryPrefetch', () => ({ prefetchGallery: jest.fn() }));
+
 const photo = {
   id: 'content://media/external/images/media/1',
   kind: 'photo' as const,
