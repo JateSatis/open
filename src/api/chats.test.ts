@@ -185,11 +185,12 @@ describe('sendMessage', () => {
         text: 'смотри',
         media: [
           {
-            url: 'https://cdn.example/a.jpg',
-            mimeType: 'image/jpeg',
+            url: 'https://cdn.example/a.mp4',
+            posterUrl: 'https://cdn.example/a.jpg',
+            mimeType: 'video/mp4',
             width: 800,
             height: 600,
-            durationMs: null,
+            durationMs: 5000,
             sizeBytes: 1234,
           },
         ],
@@ -200,11 +201,12 @@ describe('sendMessage', () => {
         message_text: 'смотри',
         media: [
           {
-            url: 'https://cdn.example/a.jpg',
-            mime_type: 'image/jpeg',
+            url: 'https://cdn.example/a.mp4',
+            poster_url: 'https://cdn.example/a.jpg',
+            mime_type: 'video/mp4',
             width: 800,
             height: 600,
-            duration_ms: null,
+            duration_ms: 5000,
             size_bytes: 1234,
           },
         ],
@@ -225,6 +227,7 @@ describe('sendMessage', () => {
         media: [
           {
             url: 'https://cdn.example/b.jpg',
+            posterUrl: null,
             mimeType: 'image/jpeg',
             width: null,
             height: null,
@@ -248,6 +251,7 @@ describe('sendMessage', () => {
           media: [
             {
               url: 'https://cdn.example/c.jpg',
+              posterUrl: null,
               mimeType: 'image/jpeg',
               width: null,
               height: null,

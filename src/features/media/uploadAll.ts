@@ -1,5 +1,5 @@
 import { prepareForUpload } from './lib/prepareForUpload';
-import { removeUploadedMedia, uploadMedia } from './storage';
+import { removeUploadedMedia, storedPaths, uploadMedia } from './storage';
 import type { LocalMedia, UploadedMedia } from './types';
 
 /** Столько файлов льётся в Storage одновременно — альбом до 50 штук не должен уходить одной волной. */
@@ -33,7 +33,7 @@ export async function uploadAllMedia(items: LocalMedia[], userId: string): Promi
     await Promise.all(
       uploaded
         .filter((item): item is UploadedMedia => item !== undefined)
-        .map((item) => removeUploadedMedia(item.path)),
+        .map((item) => removeUploadedMedia(storedPaths(item))),
     );
 
     throw error;

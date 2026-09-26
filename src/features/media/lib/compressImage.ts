@@ -9,8 +9,11 @@ import type { LocalMedia } from '@/features/media/types';
  * the feed. Resizing and re-encoding before the upload is the cheapest
  * traffic saving available on the client.
  */
-export async function compressImage(media: LocalMedia): Promise<LocalMedia> {
-  const { maxWidthPx, quality } = MediaLimits.photo;
+export async function compressImage(
+  media: LocalMedia,
+  limits: { maxWidthPx: number; quality: number } = MediaLimits.photo,
+): Promise<LocalMedia> {
+  const { maxWidthPx, quality } = limits;
 
   // Upscaling a small photo would cost bytes instead of saving them.
   const needsResize = media.width !== null && media.width > maxWidthPx;

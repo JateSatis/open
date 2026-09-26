@@ -1,6 +1,6 @@
 import { File } from 'expo-file-system';
 
-import { MediaUploadError, removeUploadedMedia, uploadMedia } from './storage';
+import { MediaUploadError, removeUploadedMedia, storedPaths, uploadMedia } from './storage';
 import type { LocalMedia } from './types';
 
 import { supabase } from '@/api/supabase';
@@ -38,7 +38,9 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockFile();
   upload.mockResolvedValue({ error: null });
-  getPublicUrl.mockReturnValue({ data: { publicUrl: 'https://cdn.test/media/user-1/photo/a.jpg' } });
+  getPublicUrl.mockReturnValue({
+    data: { publicUrl: 'https://cdn.test/media/user-1/photo/a.jpg' },
+  });
   remove.mockResolvedValue({ error: null });
   (supabase.storage.from as jest.Mock).mockReturnValue({ upload, getPublicUrl, remove });
 });
@@ -51,6 +53,8 @@ describe('uploadMedia', () => {
       kind: 'photo',
       url: 'https://cdn.test/media/user-1/photo/a.jpg',
       path: expect.stringMatching(/^user-1\/photo\/.+\.jpg$/),
+      posterUrl: null,
+      posterPath: null,
       mimeType: 'image/jpeg',
       width: 1600,
       height: 900,
@@ -74,6 +78,48 @@ describe('uploadMedia', () => {
 
     await expect(uploadMedia(photo, 'user-1')).rejects.toThrow(MediaUploadError);
     expect(upload).not.toHaveBeenCalled();
+  });
+
+  describe('video with a poster', () => {
+    const video: LocalMedia = {
+      kind: 'video',
+      uri: 'file:///cache/clip.mp4',
+      mimeType: 'video/mp4',
+      width: 720,
+      height: 1280,
+      durationMs: 4000,
+      posterUri: 'file:///cache/clip.jpg',
+    };
+
+    it('uploads the poster next to the video and returns both', async () => {
+      getPublicUrl.mockImplementation((path: string) => ({
+        data: { publicUrl: `https://cdn.test/media/${path}` },
+      }));
+
+      const result = await uploadMedia(video, 'user-1');
+
+      expect(upload).toHaveBeenCalledTimes(2);
+      expect(upload.mock.calls[1][2]).toEqual({ contentType: 'image/jpeg', upsert: false });
+      expect(result.posterPath).toMatch(/^user-1\/photo\/.+\.jpg$/);
+      expect(result.posterUrl).toBe(`https://cdn.test/media/${result.posterPath}`);
+    });
+
+    it('removes the uploaded video when its poster fails, leaving nothing orphaned', async () => {
+      upload
+        .mockResolvedValueOnce({ error: null })
+        .mockResolvedValueOnce({ error: { message: 'quota exceeded' } });
+
+      await expect(uploadMedia(video, 'user-1')).rejects.toThrow('quota exceeded');
+
+      const videoPath = upload.mock.calls[0][0];
+
+      expect(remove).toHaveBeenCalledWith([videoPath]);
+    });
+
+    it('lists the poster among the stored paths for a later cleanup', () => {
+      expect(storedPaths({ path: 'a.mp4', posterPath: 'a.jpg' })).toEqual(['a.mp4', 'a.jpg']);
+      expect(storedPaths({ path: 'b.jpg', posterPath: null })).toEqual(['b.jpg']);
+    });
   });
 
   it('surfaces a storage failure as MediaUploadError', async () => {

@@ -50,6 +50,8 @@ export type MessageAttachment = {
   width: number | null;
   height: number | null;
   durationMs: number | null;
+  /** Кадр видео для плитки и ленты. У фото и у видео, отправленных до постеров, — `null`. */
+  posterUrl: string | null;
 };
 
 export type Message = {
@@ -69,6 +71,7 @@ export type Message = {
  */
 export type SendMessageMedia = {
   url: string;
+  posterUrl: string | null;
   mimeType: string;
   width: number | null;
   height: number | null;
@@ -90,7 +93,7 @@ const CHAT_COLUMNS = 'id, kind, title, last_message_at, last_message_text, last_
 const MEMBER_COLUMNS =
   'chat_id, user_id, last_read_at, profile:profiles(id, display_name, avatar_url)';
 const MESSAGE_COLUMNS =
-  'id, chat_id, author_id, kind, text, created_at, attachments(id, url, mime_type, width, height, duration_ms)';
+  'id, chat_id, author_id, kind, text, created_at, attachments(id, url, poster_url, mime_type, width, height, duration_ms)';
 
 // Заготовки запросов. Они же задают типы рядов: клиент разбирает select-строку
 // вместе со встроенными таблицами, поэтому форма ответа выводится из самого
@@ -153,6 +156,7 @@ function toMessage(row: MessageRow): Message {
     attachments: (row.attachments ?? []).map((attachment) => ({
       id: attachment.id,
       url: attachment.url,
+      posterUrl: attachment.poster_url,
       mimeType: attachment.mime_type,
       width: attachment.width,
       height: attachment.height,
@@ -391,6 +395,7 @@ async function sendMediaMessage(
     message_text: text as string,
     media: media.map((item) => ({
       url: item.url,
+      poster_url: item.posterUrl,
       mime_type: item.mimeType,
       width: item.width,
       height: item.height,

@@ -24,6 +24,7 @@ export type Database = {
           message_kind: string
           mime_type: string | null
           position: number
+          poster_url: string | null
           size_bytes: number | null
           url: string
           width: number | null
@@ -37,6 +38,7 @@ export type Database = {
           message_kind: string
           mime_type?: string | null
           position?: number
+          poster_url?: string | null
           size_bytes?: number | null
           url: string
           width?: number | null
@@ -50,6 +52,7 @@ export type Database = {
           message_kind?: string
           mime_type?: string | null
           position?: number
+          poster_url?: string | null
           size_bytes?: number | null
           url?: string
           width?: number | null

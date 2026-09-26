@@ -24,6 +24,11 @@ export const MediaLimits = {
     /** JPEG quality after the resize. */
     quality: 0.7,
   },
+  poster: {
+    /** Постер видео — превью в плитке и в ленте, полный экран ему не нужен. */
+    maxWidthPx: 720,
+    quality: 0.7,
+  },
   video: {
     maxDurationMs: 5 * 60_000,
     /**
