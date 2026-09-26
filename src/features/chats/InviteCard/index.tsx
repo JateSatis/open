@@ -18,6 +18,8 @@ export type InviteCardProps = {
   onOpen: (chatId: string) => void;
   onAccept: (chatId: string) => void;
   onDecline: (chatId: string) => void;
+  /** Тап по позвавшему — его профиль. */
+  onOpenPerson?: (userId: string) => void;
 };
 
 function previewText(message: Message): string {
@@ -41,6 +43,7 @@ export function InviteCard({
   onOpen,
   onAccept,
   onDecline,
+  onOpenPerson,
 }: InviteCardProps) {
   const theme = useTheme();
   const { chat, inviter } = invite;
@@ -59,7 +62,15 @@ export function InviteCard({
         style={styles.body}
       >
         <View style={styles.header}>
-          <Avatar uri={inviter?.avatarUrl} name={inviterName} />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Профиль: ${inviterName}`}
+            disabled={!inviter || !onOpenPerson}
+            onPress={() => inviter && onOpenPerson?.(inviter.id)}
+            hitSlop={4}
+          >
+            <Avatar uri={inviter?.avatarUrl} name={inviterName} />
+          </Pressable>
           <View style={styles.headerText}>
             <Text variant="bodyBold" numberOfLines={1}>
               {chat.title ?? inviterName}

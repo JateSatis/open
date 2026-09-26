@@ -5,6 +5,8 @@ export const USERNAME_MIN_LENGTH = 3;
 export const USERNAME_MAX_LENGTH = 20;
 export const DISPLAY_NAME_MAX_LENGTH = 50;
 export const BIO_MAX_LENGTH = 200;
+/** Статус — одна строка под именем, как во ВКонтакте; в базе граница шире (200). */
+export const STATUS_MAX_LENGTH = 70;
 
 const USERNAME_PATTERN = /^[a-z][a-z0-9_]*$/;
 

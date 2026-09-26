@@ -20,3 +20,26 @@ function randomId(): string {
 export function buildObjectPath(userId: string, kind: MediaKind, mimeType: string): string {
   return `${userId}/${kind}/${randomId()}.${extensionFromMime(mimeType)}`;
 }
+
+/** Папка аватаров внутри префикса пользователя. Файлы в ней — не часть переписки. */
+export const AVATAR_FOLDER = 'avatar';
+
+export function buildAvatarPath(userId: string): string {
+  return `${userId}/${AVATAR_FOLDER}/${randomId()}.jpg`;
+}
+
+/**
+ * Путь файла в бакете по его публичному URL — только если это аватар самого
+ * `userId`. Аватар от провайдера (Google) или чужой файл даёт null: удалять
+ * такое приложение не должно.
+ */
+export function ownAvatarPathFromUrl(url: string, bucket: string, userId: string): string | null {
+  const marker = `/object/public/${bucket}/`;
+  const index = url.indexOf(marker);
+
+  if (index === -1) return null;
+
+  const path = decodeURIComponent(url.slice(index + marker.length).split('?')[0]);
+
+  return path.startsWith(`${userId}/${AVATAR_FOLDER}/`) ? path : null;
+}

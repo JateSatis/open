@@ -10,9 +10,11 @@ import { reportRealtimeJoined, resetConnectionState } from '@/features/connectio
 import { renderWithQuery } from '@/test/renderWithQuery';
 
 const mockReplace = jest.fn();
+const mockSearchParams = jest.fn((): { with?: string } => ({}));
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ replace: mockReplace, push: jest.fn() }),
+  useLocalSearchParams: () => mockSearchParams(),
 }));
 
 jest.mock('@/features/auth/useSession', () => ({
@@ -76,6 +78,21 @@ describe('NewChatScreen', () => {
       expect.anything(),
     );
     expect(mockReplace).toHaveBeenCalledWith('/chats/chat-new');
+  });
+
+  it('arrives from a profile with that person already picked', async () => {
+    mockSearchParams.mockReturnValueOnce({ with: 'user-3' });
+    const user = userEvent.setup();
+
+    await renderWithQuery(<NewChatScreen />);
+    await screen.findByText('Пётр');
+
+    expect(screen.getByRole('checkbox', { name: 'Пётр' })).toBeChecked();
+    await user.press(screen.getByText('Позвать в диалог'));
+    expect(mockedCreate).toHaveBeenCalledWith(
+      { inviteeIds: ['user-3'], title: '' },
+      expect.anything(),
+    );
   });
 
   it('invites several people into a titled group', async () => {

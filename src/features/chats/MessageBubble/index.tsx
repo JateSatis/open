@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { PixelRatio, View } from 'react-native';
+import { PixelRatio, Pressable, View } from 'react-native';
 
 import { styles } from './styles';
 
@@ -27,6 +27,8 @@ export type MessageBubbleProps = {
    */
   mediaBounds: MosaicBounds;
   onRetry: (localId: string) => void;
+  /** Тап по аватару или имени автора — его профиль. Нет автора (удалён) — нет и перехода. */
+  onAuthorPress?: () => void;
 };
 
 export function MessageBubble({
@@ -37,6 +39,7 @@ export function MessageBubble({
   authorAvatarUrl,
   mediaBounds,
   onRetry,
+  onAuthorPress,
 }: MessageBubbleProps) {
   const theme = useTheme();
   const isMediaMessage = message.kind === 'media' && message.attachments.length > 0;
@@ -75,7 +78,16 @@ export function MessageBubble({
 
   return (
     <View style={[styles.row, isOwn && styles.own]}>
-      {isOwn ? null : <Avatar uri={authorAvatarUrl} name={authorName} size={Spacing.five} />}
+      {isOwn ? null : (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Профиль: ${authorName}`}
+          disabled={!onAuthorPress}
+          onPress={onAuthorPress}
+        >
+          <Avatar uri={authorAvatarUrl} name={authorName} size={Spacing.five} />
+        </Pressable>
+      )}
 
       {layout ? (
         // Медиа — само облачко: мозаика заподлицо с краями, скругление
@@ -93,7 +105,13 @@ export function MessageBubble({
           ]}
         >
           {isOwn ? null : (
-            <Text variant="smallBold" color={textColor} style={styles.mediaAuthor}>
+            <Text
+              variant="smallBold"
+              color={textColor}
+              style={styles.mediaAuthor}
+              onPress={onAuthorPress}
+              suppressHighlighting
+            >
               {authorName}
             </Text>
           )}
@@ -117,7 +135,7 @@ export function MessageBubble({
       ) : (
         <View testID="message-bubble" style={[styles.bubble, { backgroundColor: bubbleColor }]}>
           {isOwn ? null : (
-            <Text variant="smallBold" color={textColor}>
+            <Text variant="smallBold" color={textColor} onPress={onAuthorPress} suppressHighlighting>
               {authorName}
             </Text>
           )}

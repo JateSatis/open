@@ -24,6 +24,11 @@ export const MediaLimits = {
     /** JPEG quality after the resize. */
     quality: 0.7,
   },
+  avatar: {
+    /** Сторона квадрата: аватар нигде не показывается крупнее ~100 точек. */
+    sizePx: 512,
+    quality: 0.8,
+  },
   poster: {
     /** Постер видео — превью в плитке и в ленте, полный экран ему не нужен. */
     maxWidthPx: 720,

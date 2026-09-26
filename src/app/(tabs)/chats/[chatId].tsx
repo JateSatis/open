@@ -1,4 +1,4 @@
-import { Stack, useLocalSearchParams } from 'expo-router';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useWindowDimensions as useKeyboardWindow } from 'react-native-keyboard-controller';
@@ -6,6 +6,7 @@ import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Text } from '@/components/Text';
+import { ChatHeaderTitle } from '@/features/chats/ChatHeaderTitle';
 import {
   armMediaSheet,
   MediaPickerSheet,
@@ -15,11 +16,10 @@ import {
 import { InviteResponseBar } from '@/features/chats/InviteResponseBar';
 import { MessageBubble } from '@/features/chats/MessageBubble';
 import { MessageComposer } from '@/features/chats/MessageComposer';
-import { chatTitle, isChatMember } from '@/features/chats/chatDisplay';
+import { chatTitle, counterpart, isChatMember } from '@/features/chats/chatDisplay';
 import { claimKeyboardForChat, useOwnKeyboardHeight } from '@/features/chats/composerKeyboard';
 import { mosaicBounds } from '@/features/chats/lib/mosaicLayout';
 import { useComposerDraft } from '@/features/chats/useComposerDraft';
-import { ConnectionTitle } from '@/features/connection/ConnectionTitle';
 import { useChat } from '@/features/chats/useChat';
 import { useChatMessages, type ChatMessage } from '@/features/chats/useChatMessages';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
@@ -27,12 +27,14 @@ import { useMarkChatRead } from '@/features/chats/useMarkChatRead';
 import { useMyInvite } from '@/features/chats/useMyInvite';
 import { useRespondToInvite } from '@/features/chats/useRespondToInvite';
 import { WaitingBanner } from '@/features/chats/WaitingBanner';
+import { useProfile } from '@/features/profile/queries';
 import { useTheme } from '@/hooks/use-theme';
 import { setActiveChatId } from '@/store/activeChat';
 import { Spacing } from '@/theme';
 
 export default function ChatScreen() {
   const { chatId } = useLocalSearchParams<{ chatId: string }>();
+  const router = useRouter();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const keyboardHeight = useOwnKeyboardHeight('chat');
@@ -97,6 +99,22 @@ export default function ChatScreen() {
     );
   }, [chat, currentUserId]);
 
+  // Собеседник личного диалога: его статус — в шапке, тап по шапке — его профиль.
+  const other = chat ? counterpart(chat, currentUserId) : null;
+  const { data: otherProfile } = useProfile(other?.id);
+
+  const openPerson = useCallback(
+    (personId: string) => {
+      if (personId === currentUserId) {
+        router.navigate('/profile');
+        return;
+      }
+
+      router.push(`/chats/people/${personId}`);
+    },
+    [currentUserId, router],
+  );
+
   const participantsById = useMemo(
     () => new Map((chat?.participants ?? []).map((participant) => [participant.id, participant])),
     [chat],
@@ -104,7 +122,8 @@ export default function ChatScreen() {
 
   const renderItem = useCallback(
     ({ item }: { item: ChatMessage }) => {
-      const author = item.authorId ? participantsById.get(item.authorId) : undefined;
+      const { authorId } = item;
+      const author = authorId ? participantsById.get(authorId) : undefined;
 
       return (
         <MessageBubble
@@ -115,10 +134,11 @@ export default function ChatScreen() {
           authorAvatarUrl={author?.avatarUrl ?? null}
           mediaBounds={mediaBounds}
           onRetry={retry}
+          onAuthorPress={authorId ? () => openPerson(authorId) : undefined}
         />
       );
     },
-    [currentUserId, mediaBounds, participantsById, readUpTo, retry],
+    [currentUserId, mediaBounds, openPerson, participantsById, readUpTo, retry],
   );
 
   const typingLabel =
@@ -160,7 +180,11 @@ export default function ChatScreen() {
       <Stack.Screen
         options={{
           headerTitle: () => (
-            <ConnectionTitle title={chat ? chatTitle(chat, currentUserId) : 'Чат'} />
+            <ChatHeaderTitle
+              title={chat ? chatTitle(chat, currentUserId) : 'Чат'}
+              subtitle={otherProfile?.status}
+              onPress={other ? () => openPerson(other.id) : undefined}
+            />
           ),
         }}
       />

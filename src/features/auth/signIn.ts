@@ -47,6 +47,12 @@ function configureGoogle(config: GoogleSignInConfig) {
   googleConfigured = true;
 }
 
+/** Id-токен из нативного листа провайдера — общий шаг входа и привязки. */
+export type IdTokenResult =
+  | { status: 'token'; token: string }
+  | { status: 'cancelled' }
+  | { status: 'error'; message: string };
+
 async function exchangeIdToken(provider: SignInProvider, token: string): Promise<SignInResult> {
   const { error } = await supabase.auth.signInWithIdToken({ provider, token });
 
@@ -59,7 +65,16 @@ async function exchangeIdToken(provider: SignInProvider, token: string): Promise
   return { status: 'success' };
 }
 
-export async function signInWithGoogle(): Promise<SignInResult> {
+async function withToken(
+  result: IdTokenResult,
+  provider: SignInProvider,
+): Promise<SignInResult> {
+  if (result.status !== 'token') return result;
+
+  return exchangeIdToken(provider, result.token);
+}
+
+export async function requestGoogleIdToken(): Promise<IdTokenResult> {
   const config = readGoogleConfig();
 
   // The id token's audience is the web client id; without it Supabase would
@@ -84,7 +99,7 @@ export async function signInWithGoogle(): Promise<SignInResult> {
       return { status: 'error', message: signInMessages.missingToken };
     }
 
-    return await exchangeIdToken('google', idToken);
+    return { status: 'token', token: idToken };
   } catch (error) {
     switch (errorCodeOf(error)) {
       case statusCodes.SIGN_IN_CANCELLED:
@@ -99,7 +114,7 @@ export async function signInWithGoogle(): Promise<SignInResult> {
   }
 }
 
-export async function signInWithApple(): Promise<SignInResult> {
+export async function requestAppleIdToken(): Promise<IdTokenResult> {
   try {
     const credential = await AppleAuthentication.signInAsync({
       requestedScopes: [
@@ -112,12 +127,38 @@ export async function signInWithApple(): Promise<SignInResult> {
       return { status: 'error', message: signInMessages.missingToken };
     }
 
-    return await exchangeIdToken('apple', credential.identityToken);
+    return { status: 'token', token: credential.identityToken };
   } catch (error) {
     if (errorCodeOf(error) === APPLE_CANCELLED) {
       return { status: 'cancelled' };
     }
 
     return { status: 'error', message: describeAuthError(error) };
+  }
+}
+
+export async function signInWithGoogle(): Promise<SignInResult> {
+  return withToken(await requestGoogleIdToken(), 'google');
+}
+
+export async function signInWithApple(): Promise<SignInResult> {
+  return withToken(await requestAppleIdToken(), 'apple');
+}
+
+/**
+ * Забывает выбранный Google-аккаунт на устройстве: иначе следующий вход молча
+ * взял бы прежний, и войти под другим было бы нельзя. Сбой не страшен — это
+ * лишь удобство выбора, сессия Open от него не зависит.
+ */
+export async function signOutOfGoogle(): Promise<void> {
+  const config = readGoogleConfig();
+
+  if (!config.webClientId) return;
+
+  try {
+    configureGoogle(config);
+    await GoogleSignin.signOut();
+  } catch {
+    // Лист Google мог быть и не открыт ни разу на этом устройстве.
   }
 }

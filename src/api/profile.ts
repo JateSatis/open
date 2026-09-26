@@ -8,7 +8,7 @@ import type { Tables, TablesUpdate } from '@/api/types.gen';
 /** Ровно те колонки, что перечислены в `COLUMNS` ниже. */
 type ProfileRow = Pick<
   Tables<'profiles'>,
-  'id' | 'username' | 'display_name' | 'avatar_url' | 'bio'
+  'id' | 'username' | 'display_name' | 'avatar_url' | 'bio' | 'status'
 >;
 
 export type Profile = {
@@ -19,10 +19,12 @@ export type Profile = {
   displayName: string | null;
   avatarUrl: string | null;
   bio: string | null;
+  /** Короткая строка под именем: «в отпуске до понедельника». */
+  status: string | null;
 };
 
 export type ProfileUpdateInput = Partial<
-  Pick<Profile, 'username' | 'displayName' | 'avatarUrl' | 'bio'>
+  Pick<Profile, 'username' | 'displayName' | 'avatarUrl' | 'bio' | 'status'>
 >;
 
 /** Thrown when the unique index on profiles.username rejects the update. */
@@ -40,7 +42,7 @@ export class NotAuthenticatedError extends Error {
   }
 }
 
-const COLUMNS = 'id, username, display_name, avatar_url, bio';
+const COLUMNS = 'id, username, display_name, avatar_url, bio, status';
 
 function toProfile(row: ProfileRow): Profile {
   return {
@@ -49,6 +51,7 @@ function toProfile(row: ProfileRow): Profile {
     displayName: row.display_name,
     avatarUrl: row.avatar_url,
     bio: row.bio,
+    status: row.status,
   };
 }
 
@@ -103,6 +106,9 @@ export async function updateMyProfile(input: ProfileUpdateInput): Promise<Profil
   }
   if ('bio' in input) {
     patch.bio = input.bio ?? null;
+  }
+  if ('status' in input) {
+    patch.status = input.status ?? null;
   }
 
   const { data, error } = await supabase
