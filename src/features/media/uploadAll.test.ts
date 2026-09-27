@@ -38,6 +38,7 @@ function uploaded(id: string): UploadedMedia {
     height: 100,
     durationMs: null,
     sizeBytes: 10,
+    waveform: null,
   };
 }
 

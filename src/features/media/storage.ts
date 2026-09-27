@@ -51,6 +51,7 @@ export async function uploadMedia(media: LocalMedia, userId: string): Promise<Up
     height: media.height,
     durationMs: media.durationMs,
     sizeBytes: main.sizeBytes,
+    waveform: media.waveform ?? null,
   };
 }
 

@@ -11,8 +11,10 @@
 export { CameraCapture, type CameraCaptureProps } from './CameraCapture';
 export { VideoNotePlayer, type VideoNotePlayerProps } from './VideoNotePlayer';
 export { VideoNoteRecorder, type VideoNoteRecorderProps } from './VideoNoteRecorder';
-export { VoicePlayer, type VoicePlayerProps } from './VoicePlayer';
-export { VoiceRecorder, type VoiceRecorderProps } from './VoiceRecorder';
+export { VoicePlayer, voiceDurationLabel, type VoicePlayerProps } from './VoicePlayer';
+export { HoldToRecordRow, type HoldToRecordRowProps } from './HoldToRecordRow';
+export { Waveform, type WaveformProps } from './Waveform';
+export { stopVoice } from './voicePlayback';
 
 export {
   captureMediaWithSystemCamera,
@@ -31,6 +33,7 @@ export {
 } from './storage';
 export { pickAvatar, type AvatarSource, type PickAvatarResult } from './pickAvatar';
 export { useVoiceRecorder, type VoiceRecorder as VoiceRecorderApi } from './useVoiceRecorder';
+export { useHoldToRecord, type HoldRecorder, type HoldToRecord } from './useHoldToRecord';
 
 export { MediaGrid, type MediaGridProps, type MediaListComponent } from './MediaGrid';
 export { GridSkeleton, type GridSkeletonProps } from './GridSkeleton';

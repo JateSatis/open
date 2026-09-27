@@ -60,6 +60,7 @@ describe('uploadMedia', () => {
       height: 900,
       durationMs: null,
       sizeBytes: 2048,
+      waveform: null,
     });
   });
 

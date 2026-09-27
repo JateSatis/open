@@ -4,8 +4,10 @@ import { styles } from './styles';
 
 import { Button } from '@/components/Button';
 import { Text } from '@/components/Text';
+import { HoldToRecordRow } from '@/features/media/HoldToRecordRow';
 import { perfMark, perfMarkStart } from '@/features/media/perf';
 import { useSelectionCount } from '@/features/media/selectionStore';
+import type { LocalMedia } from '@/features/media/types';
 import { useTheme } from '@/hooks/use-theme';
 
 export type MessageComposerProps = {
@@ -36,6 +38,13 @@ export type MessageComposerProps = {
    * случай, когда поле получило его не пальцем.
    */
   onFieldActivate?: () => void;
+  /**
+   * Записанное голосовое. Без обработчика кнопки записи нет — так у копии
+   * composer'а внутри шита медиа.
+   */
+  onSendVoice?: (voice: LocalMedia) => void;
+  /** Идёт запись голосового — для «записывает голосовое…» у собеседников. */
+  onRecordingVoice?: () => void;
 };
 
 export function MessageComposer({
@@ -48,6 +57,8 @@ export function MessageComposer({
   onAttachPressIn,
   onAttachPressOut,
   onFieldActivate,
+  onSendVoice,
+  onRecordingVoice,
 }: MessageComposerProps) {
   const theme = useTheme();
   // Счётчик берётся из стора выбора, а не приходит пропом: иначе выбор файла
@@ -70,65 +81,78 @@ export function MessageComposer({
     onSend();
   };
 
-  return (
-    <View style={[styles.container, { borderTopColor: theme.border }]}>
-      <View style={styles.row}>
-        <TextInput
-          accessibilityLabel="Сообщение"
-          placeholder="Сообщение"
-          placeholderTextColor={theme.textSecondary}
-          value={text}
-          multiline
-          onPressIn={onFieldActivate}
-          onFocus={onFieldActivate}
-          onChangeText={(value) => {
-            onChangeText(value);
-            onTyping();
-          }}
-          style={[styles.field, { color: theme.text, borderColor: theme.border }]}
+  const inputs = (
+    <>
+      <TextInput
+        accessibilityLabel="Сообщение"
+        placeholder="Сообщение"
+        placeholderTextColor={theme.textSecondary}
+        value={text}
+        multiline
+        onPressIn={onFieldActivate}
+        onFocus={onFieldActivate}
+        onChangeText={(value) => {
+          onChangeText(value);
+          onTyping();
+        }}
+        style={[styles.field, { color: theme.text, borderColor: theme.border }]}
+      />
+
+      <View style={styles.sendWrapper}>
+        {/* Буква, как «М» и «Г»: иконки ещё не выбраны, а слово целиком
+            съедало ширину поля на крупном шрифте. */}
+        <Button
+          label="О"
+          accessibilityLabel="Отправить"
+          size="sm"
+          disabled={!text.trim() && mediaCount === 0}
+          onPress={submit}
         />
 
-        <View style={styles.sendWrapper}>
-          <Button
-            label="Отправить"
-            size="sm"
-            disabled={!text.trim() && mediaCount === 0}
-            onPress={submit}
-          />
-
-          {mediaCount > 0 ? (
-            <View
-              style={[
-                styles.mediaBadge,
-                { backgroundColor: theme.danger, borderColor: theme.background },
-              ]}
-            >
-              <Text variant="caption" color="textInverse">
-                {mediaCount}
-              </Text>
-            </View>
-          ) : null}
-        </View>
-
-        {onAttachPress ? (
-          // Буква вместо иконки — намеренно: набор иконок ещё не выбран, и
-          // дизайн заменит эту кнопку на нормальную, не трогая остальной код.
-          <Button
-            label="M"
-            variant="secondary"
-            size="sm"
-            onPressIn={() => {
-              perfMarkStart('M: касание');
-              onAttachPressIn?.();
-            }}
-            onPressOut={onAttachPressOut}
-            onPress={() => {
-              perfMark('M: отпускание');
-              onAttachPress();
-            }}
-          />
+        {mediaCount > 0 ? (
+          <View
+            style={[
+              styles.mediaBadge,
+              { backgroundColor: theme.danger, borderColor: theme.background },
+            ]}
+          >
+            <Text variant="caption" color="textInverse">
+              {mediaCount}
+            </Text>
+          </View>
         ) : null}
       </View>
+
+      {onAttachPress ? (
+        // Буква вместо иконки — намеренно: набор иконок ещё не выбран, и
+        // дизайн заменит эту кнопку на нормальную, не трогая остальной код.
+        <Button
+          label="M"
+          variant="secondary"
+          size="sm"
+          onPressIn={() => {
+            perfMarkStart('M: касание');
+            onAttachPressIn?.();
+          }}
+          onPressOut={onAttachPressOut}
+          onPress={() => {
+            perfMark('M: отпускание');
+            onAttachPress();
+          }}
+        />
+      ) : null}
+    </>
+  );
+
+  return (
+    <View style={[styles.container, { borderTopColor: theme.border }]}>
+      {onSendVoice ? (
+        <HoldToRecordRow style={styles.row} onSend={onSendVoice} onActivity={onRecordingVoice}>
+          {inputs}
+        </HoldToRecordRow>
+      ) : (
+        <View style={styles.row}>{inputs}</View>
+      )}
     </View>
   );
 }

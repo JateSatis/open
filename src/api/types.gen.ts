@@ -27,6 +27,7 @@ export type Database = {
           poster_url: string | null
           size_bytes: number | null
           url: string
+          waveform: number[] | null
           width: number | null
         }
         Insert: {
@@ -41,6 +42,7 @@ export type Database = {
           poster_url?: string | null
           size_bytes?: number | null
           url: string
+          waveform?: number[] | null
           width?: number | null
         }
         Update: {
@@ -55,6 +57,7 @@ export type Database = {
           poster_url?: string | null
           size_bytes?: number | null
           url?: string
+          waveform?: number[] | null
           width?: number | null
         }
         Relationships: [
@@ -426,6 +429,10 @@ export type Database = {
       }
       send_media_message: {
         Args: { media: Json; message_text: string; target_chat: string }
+        Returns: string
+      }
+      send_voice_message: {
+        Args: { target_chat: string; voice: Json }
         Returns: string
       }
       touch_device: { Args: { p_installation_id: string }; Returns: boolean }

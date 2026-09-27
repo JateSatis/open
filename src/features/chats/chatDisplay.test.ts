@@ -1,4 +1,10 @@
-import { chatTitle, counterpart, formatChatTimestamp, isChatMember } from './chatDisplay';
+import {
+  activityLabel,
+  chatTitle,
+  counterpart,
+  formatChatTimestamp,
+  isChatMember,
+} from './chatDisplay';
 
 import type { ChatSummary } from '@/api/chats';
 
@@ -53,5 +59,41 @@ describe('chatDisplay', () => {
     expect(formatChatTimestamp(new Date(2026, 8, 14, 9, 5).toISOString(), now)).toBe('пн');
     expect(formatChatTimestamp(new Date(2026, 7, 3, 9, 5).toISOString(), now)).toBe('03.08');
     expect(formatChatTimestamp(null, now)).toBe('');
+  });
+});
+
+describe('activityLabel', () => {
+  const nameOf = (id: string) => (id === 'u1' ? 'Аня' : 'Борис');
+
+  it('is empty when nobody is doing anything', () => {
+    expect(activityLabel([], nameOf)).toBeNull();
+  });
+
+  it('tells typing from recording a voice message', () => {
+    expect(activityLabel([{ userId: 'u1', activity: 'typing' }], nameOf)).toBe('Аня печатает…');
+    expect(activityLabel([{ userId: 'u1', activity: 'recording_voice' }], nameOf)).toBe(
+      'Аня записывает голосовое…',
+    );
+  });
+
+  it('speaks of several people at once', () => {
+    expect(
+      activityLabel(
+        [
+          { userId: 'u1', activity: 'recording_voice' },
+          { userId: 'u2', activity: 'recording_voice' },
+        ],
+        nameOf,
+      ),
+    ).toBe('Несколько человек записывают голосовые…');
+    expect(
+      activityLabel(
+        [
+          { userId: 'u1', activity: 'recording_voice' },
+          { userId: 'u2', activity: 'typing' },
+        ],
+        nameOf,
+      ),
+    ).toBe('Несколько человек печатают…');
   });
 });

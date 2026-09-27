@@ -4,6 +4,32 @@ import { MessageComposer } from '.';
 
 import { useMediaSelection } from '@/features/media/selectionStore';
 
+// Жест и рекордер проверены в самой фиче `media`; здесь важно лишь, где
+// строка записи есть и что готовое голосовое уходит наверх.
+jest.mock('@/features/media/HoldToRecordRow', () => {
+  const { Pressable, Text, View } = require('react-native');
+
+  return {
+    HoldToRecordRow: ({
+      children,
+      onSend,
+    }: {
+      children: unknown;
+      onSend: (v: unknown) => void;
+    }) => (
+      <View>
+        {children}
+        <Pressable
+          accessibilityLabel="Г"
+          onPress={() => onSend({ kind: 'voice', uri: 'file:///v.m4a' })}
+        >
+          <Text>Г</Text>
+        </Pressable>
+      </View>
+    ),
+  };
+});
+
 const photo = {
   id: 'content://media/external/images/media/1',
   kind: 'photo' as const,
@@ -98,7 +124,7 @@ describe('MessageComposer', () => {
     );
 
     const user = userEvent.setup();
-    await user.press(screen.getByText('Отправить'));
+    await user.press(screen.getByLabelText('Отправить'));
 
     expect(onSend).toHaveBeenCalledTimes(1);
   });
@@ -117,7 +143,7 @@ describe('MessageComposer', () => {
     );
 
     const user = userEvent.setup();
-    await user.press(screen.getByText('Отправить'));
+    await user.press(screen.getByLabelText('Отправить'));
 
     expect(onSend).not.toHaveBeenCalled();
   });
@@ -152,5 +178,53 @@ describe('MessageComposer', () => {
     );
 
     expect(screen.queryByText('0')).toBeNull();
+  });
+
+  it('offers voice recording to a member and hands the recording up', async () => {
+    const onSendVoice = jest.fn();
+
+    await render(
+      <MessageComposer
+        text=""
+        onChangeText={jest.fn()}
+        onSend={jest.fn()}
+        onTyping={jest.fn()}
+        canSend
+        onSendVoice={onSendVoice}
+      />,
+    );
+
+    await userEvent.setup().press(screen.getByLabelText('Г'));
+
+    expect(onSendVoice).toHaveBeenCalledWith(expect.objectContaining({ kind: 'voice' }));
+  });
+
+  it('has no voice button inside the media sheet copy', async () => {
+    await render(
+      <MessageComposer
+        text=""
+        onChangeText={jest.fn()}
+        onSend={jest.fn()}
+        onTyping={jest.fn()}
+        canSend
+      />,
+    );
+
+    expect(screen.queryByLabelText('Г')).toBeNull();
+  });
+
+  it('has no voice button for a reader who is not a member', async () => {
+    await render(
+      <MessageComposer
+        text=""
+        onChangeText={jest.fn()}
+        onSend={jest.fn()}
+        onTyping={jest.fn()}
+        canSend={false}
+        onSendVoice={jest.fn()}
+      />,
+    );
+
+    expect(screen.queryByLabelText('Г')).toBeNull();
   });
 });

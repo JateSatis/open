@@ -16,7 +16,7 @@ import {
 import { InviteResponseBar } from '@/features/chats/InviteResponseBar';
 import { MessageBubble } from '@/features/chats/MessageBubble';
 import { MessageComposer } from '@/features/chats/MessageComposer';
-import { chatTitle, counterpart, isChatMember } from '@/features/chats/chatDisplay';
+import { activityLabel, chatTitle, counterpart, isChatMember } from '@/features/chats/chatDisplay';
 import { claimKeyboardForChat, useOwnKeyboardHeight } from '@/features/chats/composerKeyboard';
 import { mosaicBounds } from '@/features/chats/lib/mosaicLayout';
 import { useComposerDraft } from '@/features/chats/useComposerDraft';
@@ -27,6 +27,7 @@ import { useMarkChatRead } from '@/features/chats/useMarkChatRead';
 import { useMyInvite } from '@/features/chats/useMyInvite';
 import { useRespondToInvite } from '@/features/chats/useRespondToInvite';
 import { WaitingBanner } from '@/features/chats/WaitingBanner';
+import { stopVoice } from '@/features/media';
 import { useProfile } from '@/features/profile/queries';
 import { useTheme } from '@/hooks/use-theme';
 import { setActiveChatId } from '@/store/activeChat';
@@ -53,11 +54,13 @@ export default function ChatScreen() {
     isLoadingMore,
     hasMore,
     error,
-    typingUserIds,
+    activities,
     loadMore,
     send,
+    sendVoice,
     retry,
     notifyTyping,
+    notifyRecordingVoice,
   } = useChatMessages(chatId, currentUserId);
   const draft = useComposerDraft(chatId);
   const isMember = chat ? isChatMember(chat, currentUserId) : false;
@@ -80,6 +83,10 @@ export default function ChatScreen() {
 
     return () => setActiveChatId(null);
   }, [chatId]);
+
+  // Плеер голосовых общий на приложение и переживает облачко, уехавшее за
+  // экран. Но не чат: закрыл переписку — голосовое замолкает.
+  useEffect(() => () => stopVoice(), [chatId]);
 
   useMarkChatRead(chatId, messages.length > 0 ? messages[0].id : null);
 
@@ -141,12 +148,10 @@ export default function ChatScreen() {
     [currentUserId, mediaBounds, openPerson, participantsById, readUpTo, retry],
   );
 
-  const typingLabel =
-    typingUserIds.length === 1
-      ? `${participantsById.get(typingUserIds[0])?.displayName ?? 'Кто-то'} печатает…`
-      : typingUserIds.length > 1
-        ? 'Несколько человек печатают…'
-        : null;
+  const typingLabel = activityLabel(
+    activities,
+    (userId) => participantsById.get(userId)?.displayName ?? 'Кто-то',
+  );
 
   /**
    * Что лежит под экраном чата до низа окна — таб-бар. Его клавиатура
@@ -257,6 +262,8 @@ export default function ChatScreen() {
             onAttachPressIn={armMediaSheet}
             onAttachPressOut={releaseMediaSheetArm}
             onAttachPress={openMediaSheet}
+            onSendVoice={sendVoice}
+            onRecordingVoice={notifyRecordingVoice}
           />
         )}
       </Animated.View>

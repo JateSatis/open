@@ -57,6 +57,10 @@ jest.mock('@/features/media', () => ({
   assetPreviewUri: (asset: { id: string }) => asset.id,
   MediaGrid: () => null,
   MediaViewer: () => null,
+  stopVoice: jest.fn(),
+}));
+jest.mock('@/features/media/HoldToRecordRow', () => ({
+  HoldToRecordRow: ({ children }: { children: unknown }) => children,
 }));
 jest.mock('@/features/media/galleryPrefetch', () => ({ prefetchGallery: jest.fn() }));
 
@@ -334,7 +338,7 @@ describe('ChatScreen', () => {
     await renderWithQuery(<ChatScreen />);
 
     await user.type(await screen.findByLabelText('Сообщение'), 'как дела');
-    await user.press(screen.getByText('Отправить'));
+    await user.press(screen.getByLabelText('Отправить'));
 
     expect(screen.getByText('как дела')).toBeTruthy();
     expect(screen.getByText('Отправляется…')).toBeTruthy();
@@ -358,7 +362,7 @@ describe('ChatScreen', () => {
     await renderWithQuery(<ChatScreen />);
 
     await user.type(await screen.findByLabelText('Сообщение'), 'как дела');
-    await user.press(screen.getByText('Отправить'));
+    await user.press(screen.getByLabelText('Отправить'));
 
     expect(await screen.findByText('Не отправлено. Повторить')).toBeTruthy();
     expect(screen.getByText('как дела')).toBeTruthy();
@@ -373,7 +377,7 @@ describe('ChatScreen', () => {
     await renderWithQuery(<ChatScreen />);
 
     await user.type(await screen.findByLabelText('Сообщение'), 'как дела');
-    await user.press(screen.getByText('Отправить'));
+    await user.press(screen.getByLabelText('Отправить'));
     await user.press(await screen.findByText('Не отправлено. Повторить'));
 
     expect(await screen.findByText(formatMessageTime(SENT_AT))).toBeTruthy();
@@ -490,7 +494,7 @@ describe('ChatScreen', () => {
     await renderWithQuery(<ChatScreen />);
 
     await user.type(await screen.findByLabelText('Сообщение'), 'как дела');
-    await user.press(screen.getByText('Отправить'));
+    await user.press(screen.getByLabelText('Отправить'));
     await screen.findByText('Не отправлено. Повторить');
 
     mockedSendMessage.mockResolvedValueOnce(message('m9', 'как дела', 'user-1'));
@@ -508,7 +512,7 @@ describe('ChatScreen', () => {
     await renderWithQuery(<ChatScreen />);
     await screen.findByLabelText('Сообщение');
 
-    handlers?.onTyping('user-2');
+    handlers?.onTyping('user-2', 'typing');
 
     expect(await screen.findByText('Марина печатает…')).toBeTruthy();
 

@@ -9,6 +9,7 @@ import { computeMosaicLayout, type MosaicBounds } from '@/features/chats/lib/mos
 import { MediaAttachmentGrid } from '@/features/chats/MediaAttachmentGrid';
 import { MessageMeta } from '@/features/chats/MessageMeta';
 import type { ChatMessage } from '@/features/chats/useChatMessages';
+import { VoiceMessage } from '@/features/chats/VoiceMessage';
 import { MediaViewer, type MediaViewerItem } from '@/features/media';
 import { useTheme } from '@/hooks/use-theme';
 import { Spacing } from '@/theme';
@@ -43,9 +44,10 @@ export function MessageBubble({
 }: MessageBubbleProps) {
   const theme = useTheme();
   const isMediaMessage = message.kind === 'media' && message.attachments.length > 0;
-  // Остальные вложения (голосовые, кружки) пока не подключены к облачку —
-  // это отдельная задача; здесь только заглушка, чтобы сообщение не было пустым.
-  const hasUnhandledAttachment = !isMediaMessage && message.kind !== 'text';
+  const voice = message.kind === 'voice' ? message.attachments[0] : undefined;
+  // Кружки пока не подключены к облачку — это отдельная задача; здесь только
+  // заглушка, чтобы сообщение не было пустым.
+  const hasUnhandledAttachment = !isMediaMessage && !voice && message.kind !== 'text';
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
   const textColor = isOwn ? 'primaryText' : 'text';
   const bubbleColor = isOwn ? theme.primary : theme.backgroundElement;
@@ -135,10 +137,19 @@ export function MessageBubble({
       ) : (
         <View testID="message-bubble" style={[styles.bubble, { backgroundColor: bubbleColor }]}>
           {isOwn ? null : (
-            <Text variant="smallBold" color={textColor} onPress={onAuthorPress} suppressHighlighting>
+            <Text
+              variant="smallBold"
+              color={textColor}
+              onPress={onAuthorPress}
+              suppressHighlighting
+            >
               {authorName}
             </Text>
           )}
+
+          {voice ? (
+            <VoiceMessage attachment={voice} localUri={message.localPreviews?.[0]} isOwn={isOwn} />
+          ) : null}
 
           {hasUnhandledAttachment ? (
             // Rendering and playback of media belong to the `media` feature; the

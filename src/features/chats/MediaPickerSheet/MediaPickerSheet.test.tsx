@@ -23,6 +23,10 @@ const WINDOW = 'media-picker-window';
 
 // Грид тянет за собой expo-media-library, которого в тестах нет. Подменяем
 // его, но шапку рисуем: в ней живёт место, тап по которому закрывает шит.
+// Копия composer'а в шите без кнопки записи, но модуль всё равно подгружается.
+jest.mock('@/features/media/HoldToRecordRow', () => ({
+  HoldToRecordRow: ({ children }: { children: unknown }) => children,
+}));
 jest.mock('@/features/media', () => {
   const React = require('react');
   const { View } = require('react-native');
@@ -344,7 +348,7 @@ describe('MediaPickerSheet', () => {
     await renderOpenSheet({ onSend });
 
     const user = userEvent.setup();
-    await user.press(screen.getByText('Отправить'));
+    await user.press(screen.getByLabelText('Отправить'));
 
     expect(onSend).toHaveBeenCalledTimes(1);
     expect(getMediaSheetPhase()).toBe('closed');
@@ -373,7 +377,7 @@ describe('MediaPickerSheet', () => {
     });
 
     const user = userEvent.setup();
-    await user.press(screen.getByText('Отправить'));
+    await user.press(screen.getByLabelText('Отправить'));
 
     expect(getMediaSheetPhase()).toBe('closed');
     expect(getKeyboardOwner()).toBe('chat');

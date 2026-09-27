@@ -21,6 +21,10 @@ export const Colors = {
     textOnMedia: '#ffffff',
     /** Затемнение фона под модальными окнами — одинаковое в обеих темах. */
     overlay: 'rgba(0, 0, 0, 0.5)',
+    /** Непроигранные столбики волны голосового в чужом облачке. */
+    waveformRest: 'rgba(96, 100, 108, 0.35)',
+    /** То же в своём облачке, на `primary`. */
+    waveformRestOnPrimary: 'rgba(255, 255, 255, 0.45)',
   },
   dark: {
     text: '#ffffff',
@@ -38,6 +42,8 @@ export const Colors = {
     mediaScrim: 'rgba(0, 0, 0, 0.5)',
     textOnMedia: '#ffffff',
     overlay: 'rgba(0, 0, 0, 0.5)',
+    waveformRest: 'rgba(176, 180, 186, 0.35)',
+    waveformRestOnPrimary: 'rgba(255, 255, 255, 0.45)',
   },
 } as const;
 

@@ -22,6 +22,11 @@ export type LocalMedia = {
    * видео и показывается в плитке, пока видео не запущено. У фото — нет.
    */
   posterUri?: string | null;
+  /**
+   * Форма волны голосового: столбики 0..31, снятые с микрофона во время
+   * записи (`downsampleWaveform`). У остального медиа — нет.
+   */
+  waveform?: number[] | null;
 };
 
 /**
@@ -42,4 +47,6 @@ export type UploadedMedia = {
   height: number | null;
   durationMs: number | null;
   sizeBytes: number;
+  /** `attachments.waveform`. */
+  waveform: number[] | null;
 };
