@@ -154,7 +154,7 @@ function toChatKind(kind: string): ChatKind {
  * старое приложение переживает появление нового типа контента, не притворяясь,
  * что перед ним текст.
  */
-function toMessageKind(kind: string): MessageKind {
+export function toMessageKind(kind: string): MessageKind {
   return MESSAGE_KINDS.has(kind) ? (kind as MessageKind) : 'system';
 }
 
@@ -497,6 +497,34 @@ export async function sendVoiceMessage(chatId: string, voice: SendVoiceInput): P
   return toMessage(data);
 }
 
+/**
+ * Удаляет свои сообщения для всех — мягко, строки остаются с `deleted_at`.
+ * Что все они мои и из одного чата, проверяет база: чужое в пачке отвергает
+ * её целиком (см. миграцию `20260927100000_message_delete_and_pins.sql`).
+ */
+export async function deleteMessages(messageIds: string[]): Promise<void> {
+  if (messageIds.length === 0) return;
+
+  const { error } = await supabase.rpc('delete_messages', { message_ids: messageIds });
+
+  if (error) throw error;
+}
+
+/**
+ * Какие из этих сообщений удалены. Обычная выборка удалённое просто не
+ * отдаёт, а отличить «удалено» от «не загрузилось» нужно — например, чтобы
+ * после обрыва Realtime убрать с экрана то, что удалили без нас.
+ */
+export async function listDeletedMessageIds(messageIds: string[]): Promise<string[]> {
+  if (messageIds.length === 0) return [];
+
+  const { data, error } = await supabase.rpc('message_tombstones', { message_ids: messageIds });
+
+  if (error) throw error;
+
+  return (data ?? []).map((row) => row.id);
+}
+
 // =============================================================================
 // Realtime
 // =============================================================================
@@ -528,6 +556,14 @@ export type ChatChannelHandlers = {
   onRead: () => void;
   /** Кто-то принял заявку: состав участников изменился. */
   onMembersChanged: () => void;
+  /**
+   * Сообщения удалены. Payload — только подсказка, какие: подделать событие
+   * может любой, поэтому что удалено на самом деле, подписчик спрашивает у
+   * базы.
+   */
+  onMessagesDeleted: (messageIds: string[]) => void;
+  /** Закрепы чата изменились — полосу пора перечитать. */
+  onPinsChanged: () => void;
   /**
    * Канал заново подключился. Пока его не было, события терялись, поэтому
    * подписчик обязан дочитать пропущенное, а не ждать следующего сообщения.
@@ -570,12 +606,20 @@ export function subscribeToChat(chatId: string, handlers: ChatChannelHandlers): 
     config: { private: true },
   });
 
-  let wasJoined = false;
+  let joinedBefore = false;
 
   channel
     .on('broadcast', { event: 'new_message' }, () => handlers.onMessage())
     .on('broadcast', { event: 'read' }, () => handlers.onRead())
     .on('broadcast', { event: 'member_joined' }, () => handlers.onMembersChanged())
+    .on('broadcast', { event: 'messages_deleted' }, ({ payload }) => {
+      const ids = (payload as { message_ids?: unknown } | undefined)?.message_ids;
+
+      handlers.onMessagesDeleted(
+        Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string') : [],
+      );
+    })
+    .on('broadcast', { event: 'pins_changed' }, () => handlers.onPinsChanged())
     .on('broadcast', { event: 'typing' }, ({ payload }) => {
       const { userId, activity } = (payload ?? {}) as { userId?: unknown; activity?: unknown };
 
@@ -583,18 +627,15 @@ export function subscribeToChat(chatId: string, handlers: ChatChannelHandlers): 
       if (typeof userId === 'string') handlers.onTyping(userId, toActivity(activity));
     })
     .subscribe((status) => {
-      if (status === 'SUBSCRIBED') {
-        // Первая подписка — не переподключение: историю в этот момент грузит
-        // сам экран, и дочитывать нечего.
-        if (wasJoined) handlers.onReconnected?.();
+      // Первая подписка — не переподключение: историю в этот момент грузит
+      // сам экран, и дочитывать нечего. Любая следующая — после обрыва, и
+      // флаг при ошибке не сбрасывается: иначе повторное подключение
+      // выглядело бы первым и пропущенное так и осталось бы пропущенным.
+      if (status !== 'SUBSCRIBED') return;
 
-        wasJoined = true;
-        return;
-      }
+      if (joinedBefore) handlers.onReconnected?.();
 
-      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-        wasJoined = false;
-      }
+      joinedBefore = true;
     });
 
   return {
@@ -648,6 +689,8 @@ export type UserChannelHandlers = {
   onInviteChanged: (chatId: string) => void;
   /** В чат, где я участник, вошёл принявший заявку. */
   onMemberJoined: (chatId: string) => void;
+  /** Превью чата изменилось не из-за нового сообщения — например, последнее удалили. */
+  onChatChanged: (chatId: string) => void;
   onReconnected?: () => void;
 };
 
@@ -691,6 +734,11 @@ export function subscribeToUserEvents(userId: string, handlers: UserChannelHandl
       const chatId = chatIdOf(payload);
 
       if (chatId) handlers.onMemberJoined(chatId);
+    })
+    .on('broadcast', { event: 'chat_changed' }, ({ payload }) => {
+      const chatId = chatIdOf(payload);
+
+      if (chatId) handlers.onChatChanged(chatId);
     })
     .subscribe((status) => {
       if (status === 'SUBSCRIBED') {

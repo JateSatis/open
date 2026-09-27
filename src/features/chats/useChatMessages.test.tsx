@@ -11,6 +11,7 @@ import {
   reportRealtimeJoined,
   resetConnectionState,
 } from '@/features/connection/connectionStore';
+import { resetOutbox } from '@/features/chats/messages/outbox';
 import { removeUploadedMedia, uploadAllMedia } from '@/features/media';
 
 // Только путь с медиа: остальное поведение (текст, повтор, догрузка после
@@ -23,6 +24,12 @@ jest.mock('@/api/chats', () => ({
   sendMessage: jest.fn(),
   sendVoiceMessage: jest.fn(),
   subscribeToChat: jest.fn(),
+  deleteMessages: jest.fn(),
+  listDeletedMessageIds: jest.fn(),
+  MESSAGE_PAGE_SIZE: 30,
+}));
+jest.mock('@/api/pins', () => ({
+  listPinnedMessages: jest.fn(() => Promise.resolve([])),
 }));
 jest.mock('@/features/media', () => ({
   assetPreviewUri: jest.fn((asset) => asset.id),
@@ -69,6 +76,8 @@ function wrapper({ children }: { children: ReactNode }) {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  // Исходящие живут вне экрана, в сторе, — между тестами их надо чистить.
+  resetOutbox();
   mockedListMessages.mockResolvedValue({ items: [], nextCursor: null });
   mockedSubscribe.mockReturnValue({ broadcastTyping: jest.fn(), unsubscribe: jest.fn() });
 });

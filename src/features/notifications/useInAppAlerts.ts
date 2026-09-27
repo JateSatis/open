@@ -1,16 +1,21 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect } from 'react';
 
-import { subscribeToUserEvents, type IncomingInvite, type IncomingMessage } from '@/api/chats';
+import { subscribeToUserEvents } from '@/api/chats';
 import { chatQueryKey } from '@/features/chats/useChat';
 import { chatsQueryKey } from '@/features/chats/useChats';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
 import { invitesQueryKey } from '@/features/chats/useInvites';
 import { myInviteQueryKey } from '@/features/chats/useMyInvite';
+import {
+  dismissAlert,
+  showAlert,
+  useInAppAlert,
+  type InAppAlert,
+} from '@/features/notifications/alertsStore';
 import { useActiveChatId } from '@/store/activeChat';
 
-export type InAppAlert =
-  ({ kind: 'message' } & IncomingMessage) | ({ kind: 'invite' } & IncomingInvite);
+export type { InAppAlert } from '@/features/notifications/alertsStore';
 
 export type InAppAlertsState = {
   alert: InAppAlert | null;
@@ -26,15 +31,10 @@ export function useInAppAlerts(): InAppAlertsState {
   const currentUserId = useCurrentUserId();
   const activeChatId = useActiveChatId();
   const queryClient = useQueryClient();
-  const [alert, setAlert] = useState<InAppAlert | null>(null);
-  // Карточка прежнего пользователя не должна пережить выход: состояние
-  // подстраивается под сменившийся аккаунт прямо в рендере.
-  const [alertUserId, setAlertUserId] = useState(currentUserId);
+  const alert = useInAppAlert((state) => state.alert);
 
-  if (alertUserId !== currentUserId) {
-    setAlertUserId(currentUserId);
-    setAlert(null);
-  }
+  // Карточка прежнего пользователя не должна пережить выход.
+  useEffect(() => dismissAlert(), [currentUserId]);
 
   useEffect(() => {
     if (!currentUserId) return;
@@ -52,7 +52,7 @@ export function useInAppAlerts(): InAppAlertsState {
         // значит перекрывать уведомлением то самое сообщение.
         if (incoming.chatId === activeChatId) return;
 
-        setAlert({ kind: 'message', ...incoming });
+        showAlert({ kind: 'message', ...incoming });
       },
       onInvite: (invite) => {
         void queryClient.invalidateQueries({ queryKey: invitesQueryKey });
@@ -60,7 +60,7 @@ export function useInAppAlerts(): InAppAlertsState {
 
         if (invite.chatId === activeChatId) return;
 
-        setAlert({ kind: 'invite', ...invite });
+        showAlert({ kind: 'invite', ...invite });
       },
       onInviteChanged: (chatId) => {
         // Ответ с другого моего устройства или новое сообщение в чате, куда
@@ -70,6 +70,8 @@ export function useInAppAlerts(): InAppAlertsState {
         refreshChat(chatId);
       },
       onMemberJoined: refreshChat,
+      // Превью откатилось — например, последнее сообщение удалили.
+      onChatChanged: refreshChat,
       onReconnected: () => {
         // Канал возвращается после обрыва: сообщения и заявки, пришедшие за
         // это время, мимо него прошли, и списки о них не знают.
@@ -83,7 +85,5 @@ export function useInAppAlerts(): InAppAlertsState {
     };
   }, [activeChatId, currentUserId, queryClient]);
 
-  const dismiss = useCallback(() => setAlert(null), []);
-
-  return { alert, dismiss };
+  return { alert, dismiss: dismissAlert };
 }

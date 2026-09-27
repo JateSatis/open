@@ -9,6 +9,7 @@ import { acceptInvite, declineInvite, getMyInvite } from '@/api/invites';
 import { getProfile } from '@/api/profile';
 import { useSession } from '@/features/auth/useSession';
 import { formatMessageTime } from '@/features/chats/chatDisplay';
+import { resetOutbox } from '@/features/chats/messages/outbox';
 import { reportRealtimeJoined, resetConnectionState } from '@/features/connection/connectionStore';
 import { renderWithQuery } from '@/test/renderWithQuery';
 
@@ -39,7 +40,15 @@ jest.mock('@/api/chats', () => ({
   markChatRead: jest.fn(),
   sendMessage: jest.fn(),
   subscribeToChat: jest.fn(),
+  deleteMessages: jest.fn(),
+  listDeletedMessageIds: jest.fn(),
   MESSAGE_PAGE_SIZE: 30,
+}));
+
+jest.mock('@/api/pins', () => ({
+  listPinnedMessages: jest.fn(() => Promise.resolve([])),
+  pinMessage: jest.fn(),
+  unpinMessage: jest.fn(),
 }));
 
 jest.mock('@/api/invites', () => ({
@@ -118,6 +127,8 @@ const unsubscribe = jest.fn();
 beforeEach(() => {
   jest.clearAllMocks();
   handlers = null;
+  // Исходящие живут вне экрана, в сторе, — между тестами их надо чистить.
+  resetOutbox();
   mockedSession.mockReturnValue({
     session: { user: { id: 'user-1' } } as unknown as SupabaseSession,
     isAuthenticated: true,
