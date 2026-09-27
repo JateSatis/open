@@ -21,6 +21,15 @@ export const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: Spacing.four,
   },
+  /**
+   * Обёртка, ловящая тап по карточке, задаёт ей ширину: без этого карточка с
+   * `width: '100%'` мерилась бы по тексту, и кнопки с короткими подписями
+   * обрезались.
+   */
+  cardSlot: {
+    width: '100%',
+    maxWidth: CARD_MAX_WIDTH,
+  },
   card: {
     width: '100%',
     maxWidth: CARD_MAX_WIDTH,
