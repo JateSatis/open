@@ -44,9 +44,7 @@ function toPinned(row: PinRow): PinnedMessage | null {
   return {
     messageId: row.message_id,
     messageCreatedAt: row.message.created_at,
-    // Вид сверяет с известными `toMessage` в chats.ts; здесь для полосы
-    // достаточно отличить голосовое и медиа от текста.
-    kind: row.message.kind as MessageKind,
+    kind: toMessageKind(row.message.kind),
     text: row.message.text,
     thumbnailUrl: thumbnailOf(row.message),
   };

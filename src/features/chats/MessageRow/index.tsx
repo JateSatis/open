@@ -84,6 +84,7 @@ export function MessageRow({
       Gesture.LongPress()
         .minDuration(LONG_PRESS_MS)
         .enabled(!selectionMode)
+        .withTestId(`message-long-press-${messageId}`)
         .onStart((event) => {
           // Точка касания известна и в окне, и внутри строки — их разность и
           // есть угол строки в окне, без отдельного замера.
@@ -94,7 +95,7 @@ export function MessageRow({
             height: size.value.height,
           });
         }),
-    [onLongPress, selectionMode, size],
+    [messageId, onLongPress, selectionMode, size],
   );
 
   // Дерево строки одно и то же в обоих режимах: переключение выбора меняет
