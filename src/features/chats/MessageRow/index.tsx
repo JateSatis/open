@@ -1,4 +1,4 @@
-import { useEffect, useMemo, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, type ReactNode } from 'react';
 import { Pressable, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
@@ -16,6 +16,13 @@ import { styles } from './styles';
 import { Text } from '@/components/Text';
 import type { AnchorRect } from '@/features/chats/MessageContextMenu';
 import { useTheme } from '@/hooks/use-theme';
+
+/**
+ * Размеры строк по id сообщения — вне React и вне shared value: нужны только
+ * в момент долгого нажатия, а shared value, прочитанное из замыкания жеста,
+ * Reanimated засчитывает как чтение во время рендера каждой строки.
+ */
+const rowSizes = new Map<string, { width: number; height: number }>();
 
 /** Столько держать палец, чтобы открылось меню. */
 const LONG_PRESS_MS = 350;
@@ -59,9 +66,10 @@ export function MessageRow({
   onToggle,
 }: MessageRowProps) {
   const theme = useTheme();
-  const size = useSharedValue({ width: 0, height: 0 });
   const highlight = useSharedValue(0);
   const lifted = useIsLifted(messageId);
+
+  useEffect(() => () => void rowSizes.delete(messageId), [messageId]);
 
   useEffect(() => {
     if (highlightKey === null) return;
@@ -79,6 +87,15 @@ export function MessageRow({
 
   const highlightStyle = useAnimatedStyle(() => ({ opacity: highlight.value }));
 
+  const openMenu = useCallback(
+    (x: number, y: number) => {
+      // Раскладка всегда случается раньше касания; нулевой размер — только
+      // страховка, чтобы меню открылось, даже если её не было.
+      onLongPress({ x, y, ...(rowSizes.get(messageId) ?? { width: 0, height: 0 }) });
+    },
+    [messageId, onLongPress],
+  );
+
   const longPress = useMemo(
     () =>
       Gesture.LongPress()
@@ -88,14 +105,9 @@ export function MessageRow({
         .onStart((event) => {
           // Точка касания известна и в окне, и внутри строки — их разность и
           // есть угол строки в окне, без отдельного замера.
-          runOnJS(onLongPress)({
-            x: event.absoluteX - event.x,
-            y: event.absoluteY - event.y,
-            width: size.value.width,
-            height: size.value.height,
-          });
+          runOnJS(openMenu)(event.absoluteX - event.x, event.absoluteY - event.y);
         }),
-    [messageId, onLongPress, selectionMode, size],
+    [messageId, openMenu, selectionMode],
   );
 
   // Дерево строки одно и то же в обоих режимах: переключение выбора меняет
@@ -152,7 +164,10 @@ export function MessageRow({
               pointerEvents={selectionMode ? 'none' : 'auto'}
               style={[styles.content, lifted && styles.lifted]}
               onLayout={({ nativeEvent }) =>
-                size.set({ width: nativeEvent.layout.width, height: nativeEvent.layout.height })
+                rowSizes.set(messageId, {
+                  width: nativeEvent.layout.width,
+                  height: nativeEvent.layout.height,
+                })
               }
             >
               {children}
