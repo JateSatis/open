@@ -6,9 +6,11 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withDelay,
+  withSequence,
   withTiming,
 } from 'react-native-reanimated';
 
+import { useIsLifted } from './liftedStore';
 import { styles } from './styles';
 
 import { Text } from '@/components/Text';
@@ -17,9 +19,11 @@ import { useTheme } from '@/hooks/use-theme';
 
 /** Столько держать палец, чтобы открылось меню. */
 const LONG_PRESS_MS = 350;
-/** Подсветка сообщения, к которому прыгнули. */
-const HIGHLIGHT_HOLD_MS = 700;
-const HIGHLIGHT_FADE_MS = 300;
+/** Подсветка сообщения, к которому прыгнули: вспыхивает, когда прокрутка доехала, держится секунду. */
+const HIGHLIGHT_DELAY_MS = 300;
+const HIGHLIGHT_IN_MS = 150;
+const HIGHLIGHT_HOLD_MS = 1000;
+const HIGHLIGHT_FADE_MS = 400;
 
 export type MessageRowProps = {
   children: ReactNode;
@@ -30,8 +34,8 @@ export type MessageRowProps = {
   selected: boolean;
   /** Меняется при каждом прыжке к сообщению — подсветка вспыхивает заново. */
   highlightKey: number | null;
-  /** Над строкой открыто меню: её копия поднята над затемнением, а сама строка прячется. */
-  lifted: boolean;
+  /** Над строкой может быть открыто меню: её копия поднята над затемнением, а сама строка прячется. */
+  messageId: string;
   onLongPress: (anchor: AnchorRect) => void;
   onToggle: () => void;
 };
@@ -50,19 +54,27 @@ export function MessageRow({
   selectable,
   selected,
   highlightKey,
-  lifted,
+  messageId,
   onLongPress,
   onToggle,
 }: MessageRowProps) {
   const theme = useTheme();
   const size = useSharedValue({ width: 0, height: 0 });
   const highlight = useSharedValue(0);
+  const lifted = useIsLifted(messageId);
 
   useEffect(() => {
     if (highlightKey === null) return;
 
-    highlight.set(1);
-    highlight.set(withDelay(HIGHLIGHT_HOLD_MS, withTiming(0, { duration: HIGHLIGHT_FADE_MS })));
+    highlight.set(
+      withDelay(
+        HIGHLIGHT_DELAY_MS,
+        withSequence(
+          withTiming(1, { duration: HIGHLIGHT_IN_MS }),
+          withDelay(HIGHLIGHT_HOLD_MS, withTiming(0, { duration: HIGHLIGHT_FADE_MS })),
+        ),
+      ),
+    );
   }, [highlight, highlightKey]);
 
   const highlightStyle = useAnimatedStyle(() => ({ opacity: highlight.value }));
@@ -85,18 +97,10 @@ export function MessageRow({
     [onLongPress, selectionMode, size],
   );
 
-  const content = (
-    <View
-      collapsable={false}
-      style={[styles.content, lifted && styles.lifted]}
-      onLayout={({ nativeEvent }) =>
-        size.set({ width: nativeEvent.layout.width, height: nativeEvent.layout.height })
-      }
-    >
-      {children}
-    </View>
-  );
-
+  // Дерево строки одно и то же в обоих режимах: переключение выбора меняет
+  // лишь кружок и то, кому достаются касания. Иначе вход в выбор пересоздавал
+  // бы каждое облачко в списке — с картинками и плеерами, — и первые касания
+  // после него тонули бы, пока список пересобирается.
   return (
     <View style={styles.row}>
       <Animated.View
@@ -104,39 +108,57 @@ export function MessageRow({
         style={[styles.fill, { backgroundColor: theme.messageHighlight }, highlightStyle]}
       />
 
-      {selectionMode ? (
-        <Pressable
-          accessibilityRole="checkbox"
-          accessibilityState={{ checked: selected, disabled: !selectable }}
-          accessibilityLabel={selected ? 'Снять отметку' : 'Отметить сообщение'}
-          disabled={!selectable}
-          onPress={onToggle}
-          style={[styles.selectable, selected && { backgroundColor: theme.messageHighlight }]}
-        >
-          <View
-            style={[
-              styles.mark,
-              { borderColor: selected ? theme.primary : theme.textSecondary },
-              selected && { backgroundColor: theme.primary },
-              !selectable && styles.markHidden,
-            ]}
-          >
-            {selected ? (
-              <Text variant="caption" color="primaryText">
-                ✓
-              </Text>
-            ) : null}
-          </View>
+      {selected ? (
+        <View
+          pointerEvents="none"
+          style={[styles.fill, { backgroundColor: theme.messageHighlight }]}
+        />
+      ) : null}
 
-          {/* В режиме выбора облачко не живёт своей жизнью: тап не открывает
-              просмотрщик, не запускает голосовое и не ведёт в профиль. */}
-          <View pointerEvents="none" style={styles.content}>
-            {children}
-          </View>
-        </Pressable>
-      ) : (
-        <GestureDetector gesture={longPress}>{content}</GestureDetector>
-      )}
+      <GestureDetector gesture={longPress}>
+        <View collapsable={false}>
+          <Pressable
+            accessibilityRole={selectionMode ? 'checkbox' : undefined}
+            accessibilityState={selectionMode ? { checked: selected, disabled: !selectable } : undefined}
+            accessibilityLabel={
+              selectionMode ? (selected ? 'Снять отметку' : 'Отметить сообщение') : undefined
+            }
+            accessible={selectionMode}
+            disabled={!selectionMode || !selectable}
+            onPress={onToggle}
+            style={styles.selectable}
+          >
+            {selectionMode ? (
+              <View
+                style={[
+                  styles.mark,
+                  { borderColor: selected ? theme.primary : theme.textSecondary },
+                  selected && { backgroundColor: theme.primary },
+                  !selectable && styles.markHidden,
+                ]}
+              >
+                {selected ? (
+                  <Text variant="caption" color="primaryText">
+                    ✓
+                  </Text>
+                ) : null}
+              </View>
+            ) : null}
+
+            {/* В режиме выбора облачко не живёт своей жизнью: тап не открывает
+                просмотрщик, не запускает голосовое и не ведёт в профиль. */}
+            <View
+              pointerEvents={selectionMode ? 'none' : 'auto'}
+              style={[styles.content, lifted && styles.lifted]}
+              onLayout={({ nativeEvent }) =>
+                size.set({ width: nativeEvent.layout.width, height: nativeEvent.layout.height })
+              }
+            >
+              {children}
+            </View>
+          </Pressable>
+        </View>
+      </GestureDetector>
     </View>
   );
 }

@@ -21,8 +21,6 @@ export const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.two,
-    marginHorizontal: -Spacing.three,
-    paddingHorizontal: Spacing.three,
   },
   mark: {
     width: Sizes.selectionMark,

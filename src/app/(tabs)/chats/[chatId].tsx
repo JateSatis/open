@@ -28,6 +28,7 @@ import { MessageBubble } from '@/features/chats/MessageBubble';
 import { MessageComposer } from '@/features/chats/MessageComposer';
 import { MessageContextMenu, type AnchorRect } from '@/features/chats/MessageContextMenu';
 import { MessageRow } from '@/features/chats/MessageRow';
+import { setLiftedMessage } from '@/features/chats/MessageRow/liftedStore';
 import { PinnedBar } from '@/features/chats/PinnedBar';
 import { SelectionActionBar } from '@/features/chats/SelectionActionBar';
 import { isLocalMessage, visibleMessageActions } from '@/features/chats/messageActions';
@@ -180,10 +181,14 @@ export default function ChatScreen() {
   const openMenu = useCallback((message: ChatMessage, anchor: AnchorRect) => {
     impactAsync(ImpactFeedbackStyle.Medium).catch(() => undefined);
     Keyboard.dismiss();
+    setLiftedMessage(message.id);
     setMenu({ message, anchor });
   }, []);
 
-  const closeMenu = useCallback(() => setMenu(null), []);
+  const closeMenu = useCallback(() => {
+    setLiftedMessage(null);
+    setMenu(null);
+  }, []);
 
   // Системный «назад» в режиме выбора выходит из выбора, а не из чата.
   const { isActive: isSelecting, clear: clearSelection } = selection;
@@ -223,7 +228,6 @@ export default function ChatScreen() {
   );
 
   const { isSelected, toggle: toggleSelected } = selection;
-  const liftedId = menu?.message.id ?? null;
   const { highlight } = jump;
 
   const renderItem = useCallback(
@@ -233,14 +237,14 @@ export default function ChatScreen() {
         selectable={!isLocalMessage(item)}
         selected={isSelected(item.id)}
         highlightKey={highlight?.messageId === item.id ? highlight.key : null}
-        lifted={liftedId === item.id}
+        messageId={item.id}
         onLongPress={(anchor) => openMenu(item, anchor)}
         onToggle={() => toggleSelected(item.id)}
       >
         {bubbleFor(item, true)}
       </MessageRow>
     ),
-    [bubbleFor, highlight, isSelected, isSelecting, liftedId, openMenu, toggleSelected],
+    [bubbleFor, highlight, isSelected, isSelecting, openMenu, toggleSelected],
   );
 
   const menuActions = useMemo(

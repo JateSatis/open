@@ -90,7 +90,11 @@ export function MessageContextMenu({
     pendingRef.current = null;
     onClose();
 
-    if (action) onAction(action);
+    // Действие — следующим кадром, отдельным от закрытия проходом. Иначе
+    // окно меню исчезло бы только вместе с тем, что делает действие (вход в
+    // выбор перерисовывает весь список), и касания, сделанные сразу после
+    // выбора пункта, уходили бы в ещё не закрытое окно.
+    if (action) requestAnimationFrame(() => onAction(action));
   }, [onAction, onClose]);
 
   const close = useCallback(
