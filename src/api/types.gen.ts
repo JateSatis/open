@@ -274,6 +274,55 @@ export type Database = {
           },
         ]
       }
+      message_pins: {
+        Row: {
+          chat_id: string
+          created_at: string
+          deleted_at: string | null
+          id: string
+          message_id: string
+          pinned_by: string | null
+        }
+        Insert: {
+          chat_id: string
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          message_id: string
+          pinned_by?: string | null
+        }
+        Update: {
+          chat_id?: string
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          message_id?: string
+          pinned_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "message_pins_chat_id_fkey"
+            columns: ["chat_id"]
+            isOneToOne: false
+            referencedRelation: "chats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_pins_message_id_chat_id_fkey"
+            columns: ["message_id", "chat_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id", "chat_id"]
+          },
+          {
+            foreignKeyName: "message_pins_pinned_by_fkey"
+            columns: ["pinned_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       messages: {
         Row: {
           author_id: string | null
@@ -391,6 +440,7 @@ export type Database = {
       }
       current_session_id: { Args: never; Returns: string }
       decline_chat_invite: { Args: { target_chat: string }; Returns: undefined }
+      delete_messages: { Args: { message_ids: string[] }; Returns: undefined }
       end_device_session: { Args: { p_device_id: string }; Returns: undefined }
       end_other_sessions: { Args: never; Returns: undefined }
       latest_chat_messages: {
@@ -417,6 +467,18 @@ export type Database = {
         Args: { p_installation_id: string }
         Returns: undefined
       }
+      message_preview_text: {
+        Args: { m: Database["public"]["Tables"]["messages"]["Row"] }
+        Returns: string
+      }
+      message_tombstones: {
+        Args: { message_ids: string[] }
+        Returns: {
+          deleted_at: string
+          id: string
+        }[]
+      }
+      pin_message: { Args: { target_message: string }; Returns: undefined }
       register_device: {
         Args: {
           p_app_version: string
@@ -436,6 +498,7 @@ export type Database = {
         Returns: string
       }
       touch_device: { Args: { p_installation_id: string }; Returns: boolean }
+      unpin_message: { Args: { target_message: string }; Returns: undefined }
     }
     Enums: {
       [_ in never]: never
