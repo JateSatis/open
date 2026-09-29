@@ -27,6 +27,7 @@ import { renderWithQuery } from '@/test/renderWithQuery';
 // Шапку экран ставит через Stack.Screen — мок рисует и заголовок, и правую
 // кнопку прямо в дереве: так видно «Выбрано: N» и «Отмена».
 jest.mock('expo-router', () => ({
+  useNavigation: () => ({ getState: () => ({ index: 0, routes: [] }), dispatch: jest.fn() }),
   useLocalSearchParams: () => ({ chatId: 'chat-1' }),
   useRouter: () => ({ push: jest.fn(), navigate: jest.fn() }),
   Stack: {

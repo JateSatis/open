@@ -20,6 +20,7 @@ const mockNavigate = jest.fn();
 // Шапку экран ставит через Stack.Screen — мок рисует её прямо в дереве, чтобы
 // статус собеседника и тап по шапке можно было проверить.
 jest.mock('expo-router', () => ({
+  useNavigation: () => ({ getState: () => ({ index: 0, routes: [] }), dispatch: jest.fn() }),
   useLocalSearchParams: () => ({ chatId: 'chat-1' }),
   useRouter: () => ({ push: mockPush, navigate: mockNavigate }),
   Stack: {

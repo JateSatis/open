@@ -1,4 +1,4 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef } from 'react';
 
 import { listDeletedMessageIds } from '@/api/chats';
@@ -30,17 +30,26 @@ export function useQuoteNavigation(
   isHistoryReady: boolean,
 ): QuoteNavigation {
   const router = useRouter();
-  const { jumpTo, jumpAt } = useLocalSearchParams<{ jumpTo?: string; jumpAt?: string }>();
+  const navigation = useNavigation();
+  const { jumpTo, jumpAt, jumpKey } = useLocalSearchParams<{
+    jumpTo?: string;
+    jumpAt?: string;
+    jumpKey?: string;
+  }>();
   // Какая цитата следующая у каждого ответа — как у полосы закрепов.
   const cursorsRef = useRef(new Map<string, number>());
   const handledJumpRef = useRef<string | null>(null);
 
-  useEffect(() => {
-    if (!isHistoryReady || !jumpTo || !jumpAt || handledJumpRef.current === jumpTo) return;
+  // Ключ, а не id сообщения: к тому же оригиналу могут прийти и второй раз,
+  // вернувшись в уже открытый чат.
+  const requestedJump = jumpKey ?? jumpTo;
 
-    handledJumpRef.current = jumpTo;
+  useEffect(() => {
+    if (!isHistoryReady || !jumpTo || !jumpAt || handledJumpRef.current === requestedJump) return;
+
+    handledJumpRef.current = requestedJump ?? null;
     void jump(jumpTo, jumpAt).then(reportJump);
-  }, [isHistoryReady, jump, jumpAt, jumpTo]);
+  }, [isHistoryReady, jump, jumpAt, jumpTo, requestedJump]);
 
   const openQuote = useCallback(
     (message: ChatMessage) => {
@@ -83,17 +92,40 @@ export function useQuoteNavigation(
             return;
           }
 
-          router.push({
-            pathname: '/chats/[chatId]',
-            params: {
-              chatId: original.chatId,
-              jumpTo: original.messageId,
-              jumpAt: original.createdAt,
-            },
-          });
+          const params = {
+            chatId: original.chatId,
+            jumpTo: original.messageId,
+            jumpAt: original.createdAt,
+            jumpKey: String(Date.now()),
+          };
+
+          // Исходный чат уже открыт ниже в стеке — возвращаемся к нему, а не
+          // открываем второй экземпляр: два экрана одного чата делили бы
+          // один канал Realtime, и нижний перестал бы получать события.
+          // Экран ищется по ключу: `dismissTo` сравнивает адрес вместе с
+          // параметрами прыжка и не находит его.
+          const state = navigation.getState();
+          const index =
+            state?.routes.findIndex(
+              (route) =>
+                route.name === '[chatId]' &&
+                (route.params as { chatId?: string } | undefined)?.chatId === original.chatId,
+            ) ?? -1;
+
+          if (state && index !== -1) {
+            navigation.dispatch({
+              type: 'SET_PARAMS',
+              payload: { params },
+              source: state.routes[index].key,
+            });
+            navigation.dispatch({ type: 'POP', payload: { count: state.index - index } });
+            return;
+          }
+
+          router.push({ pathname: '/chats/[chatId]', params });
         });
     },
-    [chatId, jump, router],
+    [chatId, jump, navigation, router],
   );
 
   return { openQuote, openForwardOrigin };

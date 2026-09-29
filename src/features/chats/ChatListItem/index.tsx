@@ -11,7 +11,8 @@ import { useTheme } from '@/hooks/use-theme';
 export type ChatListItemProps = {
   chat: ChatSummary;
   currentUserId: string | null;
-  isOnline: boolean;
+  /** `undefined` — присутствие не известно здесь, и строки «в сети» нет. */
+  isOnline?: boolean;
   onPress: (chatId: string) => void;
 };
 
@@ -24,9 +25,11 @@ export function ChatListItem({ chat, currentUserId, isOnline, onPress }: ChatLis
       ? `${chat.participants.length} участников${waiting > 0 ? ` · ждём ответа: ${waiting}` : ''}`
       : waiting > 0
         ? 'ждём ответа на заявку'
-        : isOnline
-          ? 'в сети'
-          : 'не в сети';
+        : isOnline === undefined
+          ? null
+          : isOnline
+            ? 'в сети'
+            : 'не в сети';
 
   return (
     <Pressable
@@ -55,14 +58,16 @@ export function ChatListItem({ chat, currentUserId, isOnline, onPress }: ChatLis
           {chat.lastMessagePreview ?? 'Нет сообщений'}
         </Text>
 
-        <View style={styles.status}>
-          {chat.kind === 'direct' && waiting === 0 && isOnline ? (
-            <View style={[styles.onlineDot, { backgroundColor: theme.success }]} />
-          ) : null}
-          <Text variant="caption" color="textSecondary">
-            {status}
-          </Text>
-        </View>
+        {status ? (
+          <View style={styles.status}>
+            {chat.kind === 'direct' && waiting === 0 && isOnline ? (
+              <View style={[styles.onlineDot, { backgroundColor: theme.success }]} />
+            ) : null}
+            <Text variant="caption" color="textSecondary">
+              {status}
+            </Text>
+          </View>
+        ) : null}
       </View>
 
       {chat.hasUnread ? (

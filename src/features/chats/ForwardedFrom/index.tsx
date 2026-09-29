@@ -21,13 +21,17 @@ export function ForwardedFrom({ forward, isOwn, onPress }: ForwardedFromProps) {
     <Text
       testID="forwarded-from"
       accessibilityRole={onPress ? 'button' : undefined}
+      accessibilityLabel={label}
       variant="small"
       numberOfLines={1}
       style={{ color }}
       onPress={onPress}
       suppressHighlighting
     >
-      {label}
+      {'Переслано от '}
+      <Text variant="smallBold" style={{ color }}>
+        {forward.authorName ?? 'удалённого аккаунта'}
+      </Text>
     </Text>
   );
 }

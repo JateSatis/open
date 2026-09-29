@@ -1,0 +1,381 @@
+import type { Session as SupabaseSession } from '@supabase/supabase-js';
+import { act, fireEvent, screen, userEvent, waitFor, within } from '@testing-library/react-native';
+import { State } from 'react-native-gesture-handler';
+import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils';
+
+import ChatScreen from './[chatId]';
+
+import type { ChatSummary, Message, QuotedMessage } from '@/api/chats';
+import {
+  getChat,
+  listDeletedMessageIds,
+  listMessages,
+  sendMessage,
+  subscribeToChat,
+} from '@/api/chats';
+import { listPinnedMessages } from '@/api/pins';
+import { useSession } from '@/features/auth/useSession';
+import { readChatDraft, resetComposerDrafts, useComposerDrafts } from '@/features/chats/composerDraftStore';
+import { resetOutbox } from '@/features/chats/messages/outbox';
+import { reportRealtimeJoined, resetConnectionState } from '@/features/connection/connectionStore';
+import { useInAppAlert } from '@/features/notifications/alertsStore';
+import { renderWithQuery } from '@/test/renderWithQuery';
+
+const mockPush = jest.fn();
+
+jest.mock('expo-router', () => ({
+  useNavigation: () => ({ getState: () => ({ index: 0, routes: [] }), dispatch: jest.fn() }),
+  useLocalSearchParams: () => ({ chatId: 'chat-1' }),
+  useRouter: () => ({ push: mockPush, navigate: jest.fn() }),
+  Stack: { Screen: () => null },
+}));
+
+jest.mock('@/api/profile', () => ({ getProfile: jest.fn(() => Promise.resolve(null)) }));
+jest.mock('@/features/auth/useSession', () => ({ useSession: jest.fn() }));
+jest.mock('@/api/chats', () => ({
+  getChat: jest.fn(),
+  listMessages: jest.fn(),
+  listMessagesSince: jest.fn(() => Promise.resolve([])),
+  markChatRead: jest.fn(() => Promise.resolve()),
+  sendMessage: jest.fn(),
+  forwardMessages: jest.fn(),
+  subscribeToChat: jest.fn(),
+  deleteMessages: jest.fn(),
+  listDeletedMessageIds: jest.fn(),
+  MESSAGE_PAGE_SIZE: 30,
+}));
+jest.mock('@/api/pins', () => ({
+  listPinnedMessages: jest.fn(),
+  pinMessage: jest.fn(),
+  unpinMessage: jest.fn(),
+}));
+jest.mock('@/api/invites', () => ({
+  getMyInvite: jest.fn(() => Promise.resolve(null)),
+  acceptInvite: jest.fn(),
+  declineInvite: jest.fn(),
+}));
+jest.mock('@/components/ConfirmDialog', () => ({ confirm: jest.fn() }));
+jest.mock('expo-clipboard', () => ({ setStringAsync: jest.fn(() => Promise.resolve(true)) }));
+jest.mock('expo-haptics', () => ({
+  impactAsync: jest.fn(() => Promise.resolve()),
+  ImpactFeedbackStyle: { Medium: 'medium', Light: 'light' },
+}));
+jest.mock('@/features/media', () => ({
+  ...jest.requireActual('@/features/media/selectionStore'),
+  assetPreviewUri: (asset: { id: string }) => asset.id,
+  MediaGrid: () => null,
+  MediaViewer: () => null,
+  stopVoice: jest.fn(),
+}));
+jest.mock('@/features/media/HoldToRecordRow', () => ({
+  HoldToRecordRow: ({ children }: { children: unknown }) => children,
+}));
+jest.mock('@/features/media/galleryPrefetch', () => ({ prefetchGallery: jest.fn() }));
+
+const mockedGetChat = getChat as jest.MockedFunction<typeof getChat>;
+const mockedListMessages = listMessages as jest.MockedFunction<typeof listMessages>;
+const mockedSend = sendMessage as jest.MockedFunction<typeof sendMessage>;
+const mockedSubscribe = subscribeToChat as jest.MockedFunction<typeof subscribeToChat>;
+const mockedTombstones = listDeletedMessageIds as jest.MockedFunction<typeof listDeletedMessageIds>;
+const mockedPins = listPinnedMessages as jest.MockedFunction<typeof listPinnedMessages>;
+const mockedSession = useSession as jest.MockedFunction<typeof useSession>;
+
+const AT = '2026-09-29T10:00:00Z';
+const member = { id: 'user-1', displayName: 'Я', avatarUrl: null, lastReadAt: AT };
+const other = { id: 'user-2', displayName: 'Марина', avatarUrl: null, lastReadAt: AT };
+const stranger = { id: 'user-3', displayName: 'Пётр', avatarUrl: null, lastReadAt: AT };
+
+function chatWith(participants: ChatSummary['participants']): ChatSummary {
+  return {
+    id: 'chat-1',
+    kind: 'direct',
+    title: 'Разговор',
+    participants,
+    waiting: [],
+    lastMessagePreview: null,
+    lastMessageAt: null,
+    lastMessageAuthorId: null,
+    hasUnread: false,
+  };
+}
+
+function message(id: string, text: string, authorId: string, minute = 0): Message {
+  return {
+    id,
+    chatId: 'chat-1',
+    authorId,
+    kind: 'text',
+    text,
+    createdAt: `2026-09-29T10:0${minute}:00Z`,
+    attachments: [],
+    replies: [],
+    forward: null,
+  };
+}
+
+async function longPress(messageId: string) {
+  await act(async () => {
+    fireGestureHandler(getByGestureTestId(`message-long-press-${messageId}`), [
+      { state: State.BEGAN, x: 10, y: 10, absoluteX: 20, absoluteY: 200 },
+      { state: State.ACTIVE, x: 10, y: 10, absoluteX: 20, absoluteY: 200 },
+      { state: State.END, x: 10, y: 10, absoluteX: 20, absoluteY: 200 },
+    ]);
+  });
+}
+
+async function choose(label: string) {
+  fireEvent.press(await screen.findByRole('menuitem', { name: label }));
+  await waitFor(() => expect(screen.queryByTestId('message-menu')).toBeNull());
+}
+
+beforeEach(() => {
+  jest.clearAllMocks();
+  resetOutbox();
+  resetComposerDrafts();
+  resetConnectionState();
+  reportRealtimeJoined();
+  useInAppAlert.setState({ alert: null });
+  mockedSession.mockReturnValue({
+    session: { user: { id: 'user-1' } } as unknown as SupabaseSession,
+    isAuthenticated: true,
+    isLoading: false,
+  });
+  mockedGetChat.mockResolvedValue(chatWith([member, other]));
+  mockedListMessages.mockResolvedValue({
+    items: [message('m2', 'привет', 'user-2', 2), message('m1', 'эй', 'user-1', 1)],
+    nextCursor: null,
+  });
+  mockedPins.mockResolvedValue([]);
+  mockedTombstones.mockResolvedValue([]);
+  mockedSubscribe.mockReturnValue({ broadcastTyping: jest.fn(), unsubscribe: jest.fn() });
+});
+
+// Фокус в поле ставится следующим кадром после закрытия меню — кадр должен
+// отыграть внутри своего теста, а не посреди отрисовки следующего.
+afterEach(async () => {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  });
+});
+
+describe('replying', () => {
+  it('puts the message into a plate above the field and sends the text as a reply', async () => {
+    mockedSend.mockReturnValue(new Promise(() => undefined));
+
+    await renderWithQuery(<ChatScreen />);
+    await screen.findByText('привет');
+
+    await longPress('m2');
+    await choose('Ответить');
+
+    const plate = await screen.findByTestId('composer-plate');
+
+    expect(within(plate).getByText('В ответ Марина')).toBeTruthy();
+    expect(within(plate).getByText('привет')).toBeTruthy();
+
+    const user = userEvent.setup();
+
+    await user.type(screen.getByLabelText('Сообщение'), 'согласна');
+    await user.press(screen.getByLabelText('Отправить'));
+
+    await waitFor(() =>
+      expect(mockedSend).toHaveBeenCalledWith('chat-1', {
+        text: 'согласна',
+        media: undefined,
+        replyTo: ['m2'],
+      }),
+    );
+    // Ответ уже на экране — с цитатой; плашка ушла вместе с текстом.
+    await waitFor(() => expect(screen.queryByTestId('composer-plate')).toBeNull());
+    expect(await screen.findByTestId('reply-quote')).toBeTruthy();
+  });
+
+  it('drops the reply with the cross but keeps what was typed', async () => {
+    await renderWithQuery(<ChatScreen />);
+    await screen.findByText('привет');
+
+    await userEvent.setup().type(screen.getByLabelText('Сообщение'), 'черновик');
+    await longPress('m2');
+    await choose('Ответить');
+    fireEvent.press(await screen.findByRole('button', { name: 'Отменить ответ' }));
+
+    await waitFor(() => expect(screen.queryByTestId('composer-plate')).toBeNull());
+    expect(screen.getByLabelText('Сообщение').props.value).toBe('черновик');
+  });
+
+  it('keeps the reply draft for the chat after leaving it', async () => {
+    const view = await renderWithQuery(<ChatScreen />);
+    await screen.findByText('привет');
+
+    await longPress('m2');
+    await choose('Ответить');
+    await userEvent.setup().type(screen.getByLabelText('Сообщение'), 'допишу потом');
+    await view.unmount();
+
+    expect(readChatDraft('chat-1')).toMatchObject({
+      text: 'допишу потом',
+      mode: { type: 'reply', quotes: [expect.objectContaining({ messageId: 'm2' })] },
+    });
+  });
+
+  it('replies to several selected messages at once', async () => {
+    await renderWithQuery(<ChatScreen />);
+    await screen.findByText('привет');
+
+    await longPress('m2');
+    await choose('Выбрать');
+    fireEvent.press(screen.getAllByRole('checkbox')[1]);
+    fireEvent.press(await screen.findByRole('button', { name: 'Ответить' }));
+
+    const plate = await screen.findByTestId('composer-plate');
+
+    expect(within(plate).getByText('В ответ на 2 сообщения')).toBeTruthy();
+    // Порядок — как в переписке, а не как отмечали.
+    expect(
+      readChatDraft('chat-1').mode?.type === 'reply' &&
+        readChatDraft('chat-1').mode,
+    ).toMatchObject({ quotes: [{ messageId: 'm1' }, { messageId: 'm2' }] });
+  });
+
+  it('offers the swipe to a member only, and a swipe past the threshold starts a reply', async () => {
+    await renderWithQuery(<ChatScreen />);
+    await screen.findByText('привет');
+
+    expect(screen.queryByTestId('composer-plate')).toBeNull();
+
+    await act(async () => {
+      fireGestureHandler(getByGestureTestId('message-swipe-reply-m2'), [
+        { state: State.BEGAN, translationX: 0 },
+        { state: State.ACTIVE, translationX: -40 },
+        { state: State.ACTIVE, translationX: -120 },
+        { state: State.END, translationX: -120 },
+      ]);
+    });
+
+    expect(await screen.findByText('В ответ Марина')).toBeTruthy();
+  });
+
+  it('gives a visitor neither the menu item nor the swipe, and a disabled button in selection', async () => {
+    mockedGetChat.mockResolvedValue(chatWith([other, stranger]));
+
+    await renderWithQuery(<ChatScreen />);
+    await screen.findByText('привет');
+
+    await act(async () => {
+      fireGestureHandler(getByGestureTestId('message-swipe-reply-m2'), [
+        { state: State.BEGAN, translationX: 0 },
+        { state: State.ACTIVE, translationX: -120 },
+        { state: State.END, translationX: -120 },
+      ]);
+    });
+    // У посетителя нет поля ввода, поэтому смотрим в сам черновик.
+    expect(readChatDraft('chat-1').mode).toBeNull();
+
+    await longPress('m2');
+    await screen.findByTestId('message-menu');
+    expect(screen.queryByRole('menuitem', { name: 'Ответить' })).toBeNull();
+
+    await choose('Выбрать');
+
+    expect(screen.getByRole('button', { name: 'Ответить' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Переслать' })).toBeEnabled();
+  });
+});
+
+describe('quotes in bubbles', () => {
+  const liveQuote: QuotedMessage = {
+    messageId: 'm1',
+    state: 'live',
+    authorId: 'user-1',
+    authorName: 'Я',
+    createdAt: '2026-09-29T10:01:00Z',
+    preview: {
+      kind: 'text',
+      text: 'эй',
+      thumbnailUrl: null,
+      mediaCount: 0,
+      firstMediaIsVideo: false,
+      durationMs: null,
+    },
+  };
+
+  it('shows the quote, and a deleted original as «Сообщение удалено»', async () => {
+    mockedListMessages.mockResolvedValue({
+      items: [
+        { ...message('r2', 'про удалённое', 'user-2', 4), replies: [{ messageId: 'x', state: 'deleted' }] },
+        { ...message('r1', 'про эй', 'user-2', 3), replies: [liveQuote] },
+        message('m1', 'эй', 'user-1', 1),
+      ],
+      nextCursor: null,
+    });
+
+    await renderWithQuery(<ChatScreen />);
+    await screen.findByText('про эй');
+
+    const [deleted, live] = screen.getAllByTestId('reply-quote');
+
+    expect(within(deleted).getByText('Сообщение удалено')).toBeTruthy();
+    expect(deleted).toBeDisabled();
+    expect(within(live).getByText('Я')).toBeTruthy();
+    expect(within(live).getByText('эй')).toBeTruthy();
+  });
+
+  it('says where a forwarded message came from', async () => {
+    mockedListMessages.mockResolvedValue({
+      items: [
+        {
+          ...message('f1', 'чужие слова', 'user-2', 3),
+          forward: {
+            authorId: 'user-9',
+            authorName: 'Автор',
+            original: { messageId: 'o1', chatId: 'chat-9', createdAt: AT },
+          },
+        },
+        {
+          ...message('f2', 'ещё', 'user-2', 4),
+          forward: { authorId: null, authorName: null, original: null },
+        },
+      ],
+      nextCursor: null,
+    });
+
+    await renderWithQuery(<ChatScreen />);
+
+    expect(await screen.findByText('Переслано от Автор')).toBeTruthy();
+    expect(screen.getByText('Переслано от удалённого аккаунта')).toBeTruthy();
+
+    // Оригинал удалён — перехода нет, есть объяснение.
+    fireEvent.press(screen.getByText('Переслано от удалённого аккаунта'));
+    await waitFor(() =>
+      expect(useInAppAlert.getState().alert).toMatchObject({ text: 'Сообщение удалено' }),
+    );
+    expect(mockPush).not.toHaveBeenCalled();
+
+    // Оригинал жив — в исходный чат, к сообщению.
+    fireEvent.press(screen.getByText('Переслано от Автор'));
+    await waitFor(() =>
+      expect(mockPush).toHaveBeenCalledWith({
+        pathname: '/chats/[chatId]',
+        params: { chatId: 'chat-9', jumpTo: 'o1', jumpAt: AT, jumpKey: expect.any(String) },
+      }),
+    );
+  });
+});
+
+describe('forwarding', () => {
+  it('remembers what to forward and opens the chat picker', async () => {
+    await renderWithQuery(<ChatScreen />);
+    await screen.findByText('привет');
+
+    await longPress('m2');
+    await choose('Переслать');
+
+    expect(mockPush).toHaveBeenCalledWith({ pathname: '/chats/forward', params: { from: 'chat-1' } });
+    expect(useComposerDrafts.getState().forwardPick).toEqual([
+      expect.objectContaining({
+        message: expect.objectContaining({ id: 'm2' }),
+        origin: expect.objectContaining({ authorName: 'Марина' }),
+      }),
+    ]);
+  });
+});

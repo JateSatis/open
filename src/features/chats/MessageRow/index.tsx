@@ -72,7 +72,7 @@ export function MessageRow({
   const theme = useTheme();
   const highlight = useSharedValue(0);
   const lifted = useIsLifted(messageId);
-  const swipe = useSwipeReply(!selectionMode, onSwipeReply);
+  const swipe = useSwipeReply(messageId, !selectionMode, onSwipeReply);
 
   useEffect(() => () => void rowSizes.delete(messageId), [messageId]);
 

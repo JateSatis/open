@@ -6,10 +6,9 @@ import { styles } from './styles';
 import { Input } from '@/components/Input';
 import { Text } from '@/components/Text';
 import { ChatListItem } from '@/features/chats/ChatListItem';
-import { counterpart, matchesChatQuery } from '@/features/chats/chatDisplay';
+import { matchesChatQuery } from '@/features/chats/chatDisplay';
 import { useChats } from '@/features/chats/useChats';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
-import { useOnlineUsers } from '@/features/chats/useOnlineUsers';
 
 export type ForwardChatPickerProps = {
   onPick: (chatId: string) => void;
@@ -17,12 +16,13 @@ export type ForwardChatPickerProps = {
 
 /**
  * Куда переслать: чаты, где я участник, в том же порядке, что на вкладке
- * «Чаты», и поиск по названию и участникам. Чатов, куда я только позван,
+ * «Чаты», и поиск по названию и участникам. Без «в сети»: канал присутствия
+ * уже держит список чатов под этим экраном, второй подписчик на него ломает
+ * первого. Чатов, куда я только позван,
  * здесь нет — писать туда я не могу, и список их не отдаёт.
  */
 export function ForwardChatPicker({ onPick }: ForwardChatPickerProps) {
   const currentUserId = useCurrentUserId();
-  const onlineIds = useOnlineUsers(currentUserId);
   const { chats, isLoading, error } = useChats();
   const [query, setQuery] = useState('');
 
@@ -62,7 +62,6 @@ export function ForwardChatPicker({ onPick }: ForwardChatPickerProps) {
             <ChatListItem
               chat={item}
               currentUserId={currentUserId}
-              isOnline={onlineIds.has(counterpart(item, currentUserId)?.id ?? '')}
               onPress={onPick}
             />
           )}

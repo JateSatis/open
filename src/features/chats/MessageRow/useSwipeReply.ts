@@ -27,7 +27,11 @@ const ICON_START_SCALE = 0.6;
  *   касание раньше, так что по волне свайп не срабатывает;
  * - прокрутка переписки — вертикальный сдвиг гасит жест.
  */
-export function useSwipeReply(enabled: boolean, onReply: (() => void) | undefined) {
+export function useSwipeReply(
+  messageId: string,
+  enabled: boolean,
+  onReply: (() => void) | undefined,
+) {
   const offset = useSharedValue(0);
   const armed = useSharedValue(false);
 
@@ -40,6 +44,7 @@ export function useSwipeReply(enabled: boolean, onReply: (() => void) | undefine
     () =>
       Gesture.Pan()
         .enabled(enabled && onReply !== undefined)
+        .withTestId(`message-swipe-reply-${messageId}`)
         .activeOffsetX(-Sizes.swipeReplyActivation)
         .failOffsetY([-Spacing.three, Spacing.three])
         .onUpdate((event) => {
@@ -63,7 +68,7 @@ export function useSwipeReply(enabled: boolean, onReply: (() => void) | undefine
           armed.set(false);
           offset.set(withTiming(0, { duration: RETURN_MS }));
         }),
-    [armed, buzz, enabled, offset, onReply, reply],
+    [armed, buzz, enabled, messageId, offset, onReply, reply],
   );
 
   const contentStyle = useAnimatedStyle(() => ({
