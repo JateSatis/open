@@ -1,5 +1,5 @@
-import type { ChatSummary, Person } from '@/api/chats';
-import type { UserActivity } from '@/features/chats/useChatMessages';
+import type { ChatSummary, MessageAttachment, Person } from '@/api/chats';
+import type { UserActivity } from '@/features/chats/messages/types';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const WEEKDAYS = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
@@ -92,4 +92,15 @@ export function activityLabel(
   }
 
   return allRecording ? 'Несколько человек записывают голосовые…' : 'Несколько человек печатают…';
+}
+
+/** Картинка для миниатюры сообщения: фото или постер видео из первого вложения. */
+export function attachmentThumbnail(attachments: MessageAttachment[]): string | null {
+  const [first] = attachments;
+
+  if (!first) return null;
+  if (first.mimeType?.startsWith('video/')) return first.posterUrl;
+  if (first.mimeType?.startsWith('audio/')) return null;
+
+  return first.url;
 }

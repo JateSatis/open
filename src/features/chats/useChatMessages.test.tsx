@@ -11,6 +11,7 @@ import {
   reportRealtimeJoined,
   resetConnectionState,
 } from '@/features/connection/connectionStore';
+import { resetOutbox } from '@/features/chats/messages/outbox';
 import { removeUploadedMedia, uploadAllMedia } from '@/features/media';
 
 // Только путь с медиа: остальное поведение (текст, повтор, догрузка после
@@ -23,6 +24,12 @@ jest.mock('@/api/chats', () => ({
   sendMessage: jest.fn(),
   sendVoiceMessage: jest.fn(),
   subscribeToChat: jest.fn(),
+  deleteMessages: jest.fn(),
+  listDeletedMessageIds: jest.fn(),
+  MESSAGE_PAGE_SIZE: 30,
+}));
+jest.mock('@/api/pins', () => ({
+  listPinnedMessages: jest.fn(() => Promise.resolve([])),
 }));
 jest.mock('@/features/media', () => ({
   assetPreviewUri: jest.fn((asset) => asset.id),
@@ -69,6 +76,8 @@ function wrapper({ children }: { children: ReactNode }) {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  // Исходящие живут вне экрана, в сторе, — между тестами их надо чистить.
+  resetOutbox();
   mockedListMessages.mockResolvedValue({ items: [], nextCursor: null });
   mockedSubscribe.mockReturnValue({ broadcastTyping: jest.fn(), unsubscribe: jest.fn() });
 });
@@ -527,13 +536,63 @@ describe('useChatMessages voice messages', () => {
     const { result } = await renderHook(() => useChatMessages('chat-1', 'user-1'), { wrapper });
 
     await waitFor(() => expect(result.current.isLoading).toBe(false));
-    act(() => result.current.notifyTyping());
-    act(() => result.current.notifyRecordingVoice());
-    act(() => result.current.notifyRecordingVoice());
+    await act(async () => result.current.notifyTyping());
+    await act(async () => result.current.notifyRecordingVoice());
+    await act(async () => result.current.notifyRecordingVoice());
 
     expect(broadcastTyping.mock.calls).toEqual([
       ['user-1', 'typing'],
       ['user-1', 'recording_voice'],
     ]);
+  });
+});
+
+describe('useChatMessages removing own unsent messages', () => {
+  const { deleteMessages: mockedDeleteMessages } = jest.requireMock('@/api/chats') as {
+    deleteMessages: jest.Mock;
+  };
+  const saved = {
+    id: 'm-saved',
+    chatId: 'chat-1',
+    authorId: 'user-1',
+    kind: 'text' as const,
+    text: 'передумал',
+    createdAt: '2026-09-27T10:00:00Z',
+    attachments: [],
+  };
+
+  it('drops a failed message locally without asking the server', async () => {
+    mockedSendMessage.mockRejectedValue(new Error('not a member'));
+
+    const { result } = await renderHook(() => useChatMessages('chat-1', 'user-1'), { wrapper });
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    await act(() => result.current.send('передумал'));
+    await waitFor(() => expect(result.current.messages[0].status).toBe('failed'));
+
+    await act(() => result.current.discard(result.current.messages[0].localId!));
+
+    expect(result.current.messages).toEqual([]);
+    expect(mockedDeleteMessages).not.toHaveBeenCalled();
+  });
+
+  it('deletes on the server a message discarded while it was on its way', async () => {
+    let answer: (message: typeof saved) => void = () => undefined;
+    mockedSendMessage.mockReturnValue(new Promise((resolve) => (answer = resolve)));
+    mockedDeleteMessages.mockResolvedValue(undefined);
+
+    const { result } = await renderHook(() => useChatMessages('chat-1', 'user-1'), { wrapper });
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    await act(() => result.current.send('передумал'));
+    await act(() => result.current.discard(result.current.messages[0].localId!));
+
+    expect(result.current.messages).toEqual([]);
+
+    await act(async () => answer(saved));
+
+    // Сообщение уже в базе и разослано — убрать его можно только удалением для всех.
+    await waitFor(() => expect(mockedDeleteMessages).toHaveBeenCalledWith(['m-saved']));
+    expect(result.current.messages).toEqual([]);
   });
 });

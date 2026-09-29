@@ -42,7 +42,7 @@ function ConfirmDialogCard() {
       {/* Отдельный Pressable без обработчика перехватывает нажатие на карточку
           раньше, чем оно дойдёт до фона позади — тап по самому диалогу не
           должен закрывать его как тап мимо. */}
-      <Pressable onPress={() => {}}>
+      <Pressable onPress={() => {}} style={styles.cardSlot}>
         <View style={[styles.card, { backgroundColor: theme.background }]}>
           <Text variant="subtitle" style={styles.title}>
             {title}

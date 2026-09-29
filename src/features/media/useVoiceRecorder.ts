@@ -355,9 +355,21 @@ export function useVoiceRecorder({ onInterrupted }: VoiceRecorderOptions = {}): 
   // подготовленный файл тоже убираем: он пустой и никому не нужен.
   useEffect(() => {
     return () => {
-      const uri = recorder.uri;
+      // `useAudioRecorder` освобождает нативный объект в своей очистке, и она
+      // может отработать раньше этой: тогда любое обращение к рекордеру
+      // бросает, а брошенное при размонтировании роняет всё дерево экрана.
+      // Освобождённый рекордер и так уже не пишет — убирать нечего.
+      let uri: string | null;
+      let isRecording: boolean;
 
-      if (recorder.isRecording) {
+      try {
+        uri = recorder.uri;
+        isRecording = recorder.isRecording;
+      } catch {
+        return;
+      }
+
+      if (isRecording) {
         recorder
           .stop()
           .catch(() => undefined)

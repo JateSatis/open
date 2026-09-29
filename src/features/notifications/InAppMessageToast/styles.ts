@@ -26,4 +26,11 @@ export const styles = StyleSheet.create({
   body: {
     flex: 1,
   },
+  /** Короткая фраза — по центру и по размеру текста, а не во всю ширину. */
+  noticeWrapper: {
+    alignItems: 'center',
+  },
+  notice: {
+    paddingVertical: Spacing.two,
+  },
 });

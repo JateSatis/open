@@ -13,10 +13,13 @@ import { Spacing } from '@/theme';
 
 /** Сколько карточка висит, если её не трогают. */
 const VISIBLE_MS = 4500;
+/** Короткий ответ на действие читается за секунду — дольше он только мешает. */
+const NOTICE_VISIBLE_MS = 2000;
 const SLIDE_MS = 220;
 
 /**
- * Карточка о новом сообщении или заявке поверх любого экрана. Живёт в корневом layout,
+ * Карточка о новом сообщении, заявке или короткий ответ на действие («Скопировано»)
+ * поверх любого экрана. Живёт в корневом layout,
  * потому что уведомление не принадлежит ни одной вкладке.
  */
 export function InAppMessageToast() {
@@ -39,12 +42,42 @@ export function InAppMessageToast() {
       useNativeDriver: true,
     }).start();
 
-    const timer = setTimeout(dismiss, VISIBLE_MS);
+    const timer = setTimeout(dismiss, alert.kind === 'notice' ? NOTICE_VISIBLE_MS : VISIBLE_MS);
 
     return () => clearTimeout(timer);
   }, [alert, dismiss, slide]);
 
   if (!alert) return null;
+
+  const slideStyle = {
+    top: insets.top + Spacing.two,
+    opacity: slide,
+    transform: [
+      {
+        translateY: slide.interpolate({
+          inputRange: [0, 1],
+          outputRange: [-Spacing.five, 0],
+        }),
+      },
+    ],
+  };
+  const cardColors = { backgroundColor: theme.backgroundElement, borderColor: theme.border };
+
+  if (alert.kind === 'notice') {
+    return (
+      <Animated.View style={[styles.wrapper, styles.noticeWrapper, slideStyle]}>
+        <Pressable
+          accessibilityRole="alert"
+          onPress={dismiss}
+          style={[styles.card, styles.notice, cardColors]}
+        >
+          <Text variant="small" color={alert.tone === 'error' ? 'danger' : 'text'}>
+            {alert.text}
+          </Text>
+        </Pressable>
+      </Animated.View>
+    );
+  }
 
   const open = () => {
     dismiss();
@@ -61,33 +94,14 @@ export function InAppMessageToast() {
         : 'Зовёт вас в чат';
 
   return (
-    <Animated.View
-      style={[
-        styles.wrapper,
-        {
-          top: insets.top + Spacing.two,
-          opacity: slide,
-          transform: [
-            {
-              translateY: slide.interpolate({
-                inputRange: [0, 1],
-                outputRange: [-Spacing.five, 0],
-              }),
-            },
-          ],
-        },
-      ]}
-    >
+    <Animated.View style={[styles.wrapper, slideStyle]}>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={
           alert.kind === 'message' ? `Новое сообщение от ${who}` : `Заявка в чат от ${who}`
         }
         onPress={open}
-        style={[
-          styles.card,
-          { backgroundColor: theme.backgroundElement, borderColor: theme.border },
-        ]}
+        style={[styles.card, cardColors]}
       >
         <Avatar uri={null} name={who} size={Spacing.five} />
 

@@ -1,6 +1,7 @@
 import type { QueryClient } from '@tanstack/react-query';
 
 import { resetMediaSheet } from '@/features/chats/MediaPickerSheet/sheetStore';
+import { resetOutbox } from '@/features/chats/messages/outbox';
 import { useMediaSelection } from '@/features/media/selectionStore';
 import { setActiveChatId } from '@/store/activeChat';
 
@@ -20,5 +21,6 @@ export function resetClientState(queryClient: QueryClient) {
   queryClient.clear();
   useMediaSelection.getState().clear();
   resetMediaSheet();
+  resetOutbox();
   setActiveChatId(null);
 }
