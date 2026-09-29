@@ -13,6 +13,8 @@ function message(id: string, overrides: Partial<ChatMessage> = {}): ChatMessage 
     text: id,
     createdAt: `2026-09-27T10:0${id.length}:00Z`,
     attachments: [],
+    replies: [],
+    forward: null,
     status: 'sent',
     ...overrides,
   };

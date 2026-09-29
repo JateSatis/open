@@ -5,6 +5,7 @@
 // Видимость пункта — вежливость интерфейса. Права всегда проверяет сервер:
 // скрытая кнопка лишь не предлагает того, что он всё равно отвергнет.
 
+import { MAX_FORWARD, MAX_QUOTES } from '@/features/chats/messageQuote';
 import type { ChatMessage } from '@/features/chats/messages/types';
 
 /** Всё, от чего зависит, какие пункты показать у конкретного сообщения. */
@@ -17,7 +18,15 @@ export type MessageActionContext = {
   isPinned: boolean;
 };
 
-export type MessageActionId = 'retry' | 'copy' | 'pin' | 'unpin' | 'select' | 'delete';
+export type MessageActionId =
+  | 'retry'
+  | 'reply'
+  | 'copy'
+  | 'pin'
+  | 'unpin'
+  | 'forward'
+  | 'select'
+  | 'delete';
 
 export type MessageAction = {
   id: MessageActionId;
@@ -44,6 +53,12 @@ export const MESSAGE_ACTIONS: readonly MessageAction[] = [
     isVisible: ({ message }) => message.status === 'failed',
   },
   {
+    id: 'reply',
+    label: 'Ответить',
+    // Ответ — это отправка: писать в чат может только участник.
+    isVisible: ({ message, isMember }) => isMember && !isLocalMessage(message),
+  },
+  {
     id: 'copy',
     label: 'Копировать',
     isVisible: ({ message }) => !isLocalMessage(message) && hasCopyableText(message),
@@ -59,6 +74,13 @@ export const MESSAGE_ACTIONS: readonly MessageAction[] = [
     label: 'Открепить',
     isVisible: ({ message, isMember, isPinned }) =>
       isMember && isPinned && !isLocalMessage(message),
+  },
+  {
+    id: 'forward',
+    label: 'Переслать',
+    // Переслать чужую переписку в свой чат может и посетитель — так она и
+    // расходится.
+    isVisible: ({ message }) => !isLocalMessage(message),
   },
   {
     id: 'select',
@@ -84,9 +106,10 @@ export function visibleMessageActions(context: MessageActionContext): MessageAct
 export type SelectionActionContext = {
   selected: ChatMessage[];
   currentUserId: string | null;
+  isMember: boolean;
 };
 
-export type SelectionActionId = 'copy' | 'delete';
+export type SelectionActionId = 'reply' | 'forward' | 'copy' | 'delete';
 
 export type SelectionAction = {
   id: SelectionActionId;
@@ -97,6 +120,18 @@ export type SelectionAction = {
 
 /** Кнопки панели внизу в режиме выбора — слева направо. */
 export const SELECTION_ACTIONS: readonly SelectionAction[] = [
+  {
+    id: 'reply',
+    label: 'Ответить',
+    // У посетителя кнопка есть, но неактивна — как «Удалить» у чужих.
+    isEnabled: ({ selected, isMember }) =>
+      isMember && selected.length > 0 && selected.length <= MAX_QUOTES,
+  },
+  {
+    id: 'forward',
+    label: 'Переслать',
+    isEnabled: ({ selected }) => selected.length > 0 && selected.length <= MAX_FORWARD,
+  },
   {
     id: 'copy',
     label: 'Копировать',

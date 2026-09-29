@@ -104,3 +104,40 @@ export function attachmentThumbnail(attachments: MessageAttachment[]): string | 
 
   return first.url;
 }
+
+/**
+ * До какого момента переписку прочитали остальные. В групповом чате берём
+ * самого отстающего: «прочитано» должно значить «прочитали все».
+ */
+export function readUpTo(chat: ChatSummary | null, currentUserId: string | null): string | null {
+  const others = (chat?.participants ?? []).filter(
+    (participant) => participant.id !== currentUserId,
+  );
+
+  if (others.length === 0) return null;
+
+  return others.reduce(
+    (earliest, participant) =>
+      participant.lastReadAt < earliest ? participant.lastReadAt : earliest,
+    others[0].lastReadAt,
+  );
+}
+
+/** Поиск чата по названию и по именам участников — для выбора, куда переслать. */
+export function matchesChatQuery(
+  chat: ChatSummary,
+  query: string,
+  currentUserId: string | null,
+): boolean {
+  const needle = query.trim().toLocaleLowerCase('ru');
+
+  if (!needle) return true;
+
+  const haystack = [
+    chatTitle(chat, currentUserId),
+    chat.title ?? '',
+    ...chat.participants.map((participant) => participant.displayName),
+  ];
+
+  return haystack.some((value) => value.toLocaleLowerCase('ru').includes(needle));
+}

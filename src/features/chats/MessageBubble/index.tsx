@@ -5,9 +5,11 @@ import { styles } from './styles';
 
 import { Avatar } from '@/components/Avatar';
 import { Text } from '@/components/Text';
+import { ForwardedFrom } from '@/features/chats/ForwardedFrom';
 import { computeMosaicLayout, type MosaicBounds } from '@/features/chats/lib/mosaicLayout';
 import { MediaAttachmentGrid } from '@/features/chats/MediaAttachmentGrid';
 import { MessageMeta } from '@/features/chats/MessageMeta';
+import { ReplyQuote } from '@/features/chats/ReplyQuote';
 import type { ChatMessage } from '@/features/chats/useChatMessages';
 import { VoiceMessage } from '@/features/chats/VoiceMessage';
 import { MediaViewer, type MediaViewerItem } from '@/features/media';
@@ -30,6 +32,10 @@ export type MessageBubbleProps = {
   onRetry: (localId: string) => void;
   /** Тап по аватару или имени автора — его профиль. Нет автора (удалён) — нет и перехода. */
   onAuthorPress?: () => void;
+  /** Тап по цитате ответа — к оригиналу. */
+  onQuotePress?: () => void;
+  /** Тап по «Переслано от» — к оригиналу в исходном чате. */
+  onForwardPress?: () => void;
 };
 
 export function MessageBubble({
@@ -41,6 +47,8 @@ export function MessageBubble({
   mediaBounds,
   onRetry,
   onAuthorPress,
+  onQuotePress,
+  onForwardPress,
 }: MessageBubbleProps) {
   const theme = useTheme();
   const isMediaMessage = message.kind === 'media' && message.attachments.length > 0;
@@ -67,6 +75,21 @@ export function MessageBubble({
     kind: attachment.mimeType?.startsWith('video/') ? 'video' : 'photo',
     url: attachment.url,
   }));
+
+  const hasAnnotations = message.forward !== null || message.replies.length > 0;
+
+  // Откуда сообщение и на что оно отвечает — над содержимым, и у текста, и
+  // у голосового, и у альбома.
+  const annotations = hasAnnotations ? (
+    <>
+      {message.forward ? (
+        <ForwardedFrom forward={message.forward} isOwn={isOwn} onPress={onForwardPress} />
+      ) : null}
+      {message.replies.length > 0 ? (
+        <ReplyQuote quotes={message.replies} isOwn={isOwn} onPress={onQuotePress} />
+      ) : null}
+    </>
+  ) : null;
 
   const meta = (variant: 'inline' | 'overlay') => (
     <MessageMeta
@@ -100,9 +123,10 @@ export function MessageBubble({
             styles.mediaBubble,
             {
               width: layout.width,
-              // Без подписи и имени облачка нет — только мозаика, и в её
-              // зазорах виден фон чата, как в Telegram.
-              backgroundColor: !message.text && isOwn ? 'transparent' : bubbleColor,
+              // Без подписи, имени и цитаты облачка нет — только мозаика, и в
+              // её зазорах виден фон чата, как в Telegram.
+              backgroundColor:
+                !message.text && isOwn && !hasAnnotations ? 'transparent' : bubbleColor,
             },
           ]}
         >
@@ -117,6 +141,12 @@ export function MessageBubble({
               {authorName}
             </Text>
           )}
+
+          {annotations ? (
+            <View style={[styles.mediaAnnotations, isOwn && styles.mediaAnnotationsOwn]}>
+              {annotations}
+            </View>
+          ) : null}
 
           <MediaAttachmentGrid
             attachments={message.attachments}
@@ -146,6 +176,8 @@ export function MessageBubble({
               {authorName}
             </Text>
           )}
+
+          {annotations}
 
           {voice ? (
             <VoiceMessage attachment={voice} localUri={message.localPreviews?.[0]} isOwn={isOwn} />

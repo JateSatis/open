@@ -1,40 +1,36 @@
-import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { impactAsync, ImpactFeedbackStyle } from 'expo-haptics';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   ActivityIndicator,
   BackHandler,
   FlatList,
   Keyboard,
-  Pressable,
   StyleSheet,
   useWindowDimensions,
   View,
+  type TextInput,
 } from 'react-native';
-import { useWindowDimensions as useKeyboardWindow } from 'react-native-keyboard-controller';
-import Animated, { useAnimatedStyle } from 'react-native-reanimated';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Animated from 'react-native-reanimated';
 
 import { Text } from '@/components/Text';
-import { ChatHeaderTitle } from '@/features/chats/ChatHeaderTitle';
-import {
-  armMediaSheet,
-  MediaPickerSheet,
-  openMediaSheet,
-  releaseMediaSheetArm,
-} from '@/features/chats/MediaPickerSheet';
-import { InviteResponseBar } from '@/features/chats/InviteResponseBar';
+import { ChatFooter, modePlate } from '@/features/chats/ChatFooter';
+import { ChatScreenHeader } from '@/features/chats/ChatScreenHeader';
+import { MediaPickerSheet } from '@/features/chats/MediaPickerSheet';
 import { MessageBubble } from '@/features/chats/MessageBubble';
-import { MessageComposer } from '@/features/chats/MessageComposer';
-import { MessageContextMenu, type AnchorRect } from '@/features/chats/MessageContextMenu';
+import { MessageContextMenu } from '@/features/chats/MessageContextMenu';
 import { MessageRow } from '@/features/chats/MessageRow';
-import { setLiftedMessage } from '@/features/chats/MessageRow/liftedStore';
 import { PinnedBar } from '@/features/chats/PinnedBar';
-import { SelectionActionBar } from '@/features/chats/SelectionActionBar';
 import { isLocalMessage, visibleMessageActions } from '@/features/chats/messageActions';
-import { activityLabel, chatTitle, counterpart, isChatMember } from '@/features/chats/chatDisplay';
-import { claimKeyboardForChat, useOwnKeyboardHeight } from '@/features/chats/composerKeyboard';
+import { DELETED_ACCOUNT } from '@/features/chats/messageQuote';
+import {
+  activityLabel,
+  chatTitle,
+  counterpart,
+  isChatMember,
+  readUpTo as readUpToOf,
+} from '@/features/chats/chatDisplay';
 import { mosaicBounds } from '@/features/chats/lib/mosaicLayout';
+import { useChatKeyboardInset } from '@/features/chats/useChatKeyboardInset';
 import { useComposerDraft } from '@/features/chats/useComposerDraft';
 import { useChat } from '@/features/chats/useChat';
 import { useChatMessages, type ChatMessage } from '@/features/chats/useChatMessages';
@@ -42,10 +38,13 @@ import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
 import { useJumpToMessage } from '@/features/chats/useJumpToMessage';
 import { useMarkChatRead } from '@/features/chats/useMarkChatRead';
 import { useMessageActionHandlers } from '@/features/chats/useMessageActionHandlers';
+import { useMessageMenu } from '@/features/chats/useMessageMenu';
 import { useMessageSelection } from '@/features/chats/useMessageSelection';
 import { useMyInvite } from '@/features/chats/useMyInvite';
 import { usePinnedCursor } from '@/features/chats/usePinnedCursor';
 import { usePinnedMessages } from '@/features/chats/usePinnedMessages';
+import { useQuoteNavigation } from '@/features/chats/useQuoteNavigation';
+import { useReplyForward } from '@/features/chats/useReplyForward';
 import { useRespondToInvite } from '@/features/chats/useRespondToInvite';
 import { WaitingBanner } from '@/features/chats/WaitingBanner';
 import { stopVoice } from '@/features/media';
@@ -58,46 +57,30 @@ import { Spacing } from '@/theme';
 /** Облачко чужого сообщения начинается после аватара и зазора (`MessageBubble`). */
 const BUBBLE_LEADING_INSET = Spacing.five + Spacing.two;
 
-type MenuTarget = { message: ChatMessage; anchor: AnchorRect };
-
 export default function ChatScreen() {
   const { chatId } = useLocalSearchParams<{ chatId: string }>();
   const router = useRouter();
   const theme = useTheme();
-  const insets = useSafeAreaInsets();
-  const keyboardHeight = useOwnKeyboardHeight('chat');
-  // Размер окна целиком, от края до края, — от него же меряется клавиатура.
-  const { height: windowHeight } = useKeyboardWindow();
-  const containerRef = useRef<View | null>(null);
-  const [bottomOffset, setBottomOffset] = useState(0);
+  const {
+    containerRef,
+    onLayout: measureBottomOffset,
+    style: keyboardInsetStyle,
+  } = useChatKeyboardInset();
   const { width: windowWidth } = useWindowDimensions();
   // Ширина списка — окно минус его боковые поля (`styles.list`).
   const mediaBounds = useMemo(() => mosaicBounds(windowWidth - Spacing.three * 2), [windowWidth]);
   const currentUserId = useCurrentUserId();
   const { chat, isLoading: isChatLoading, error: chatError } = useChat(chatId);
-  const {
-    messages,
-    isLoading,
-    isLoadingMore,
-    hasMore,
-    error,
-    activities,
-    loadMore,
-    loadUntil,
-    send,
-    sendVoice,
-    retry,
-    discard,
-    deleteMessages,
-    notifyTyping,
-    notifyRecordingVoice,
-  } = useChatMessages(chatId, currentUserId);
+  const chatMessages = useChatMessages(chatId, currentUserId);
+  const { messages, isLoading, isLoadingMore, hasMore, error, activities } = chatMessages;
+  const { loadMore, retry, notifyTyping, notifyRecordingVoice } = chatMessages;
   const listRef = useRef<FlatList<ChatMessage>>(null);
+  const composerRef = useRef<TextInput>(null);
   const pins = usePinnedMessages(chatId);
   const pinCursor = usePinnedCursor(pins.pins);
   const selection = useMessageSelection(messages);
-  const jump = useJumpToMessage(listRef, messages, loadUntil);
-  const [menu, setMenu] = useState<MenuTarget | null>(null);
+  const jump = useJumpToMessage(listRef, messages, chatMessages.loadUntil);
+  const menu = useMessageMenu();
   const draft = useComposerDraft(chatId);
   const isMember = chat ? isChatMember(chat, currentUserId) : false;
   // Заявку спрашиваем только у не-участника: участнику отвечать уже не на что.
@@ -107,11 +90,7 @@ export default function ChatScreen() {
     () => (chat?.waiting ?? []).filter((person) => person.id !== currentUserId),
     [chat, currentUserId],
   );
-
-  const submitDraft = useCallback(() => {
-    send(draft.text, draft.media());
-    draft.clear();
-  }, [draft, send]);
+  const navigation = useQuoteNavigation(chatId, jump.jump, !isLoading && !isChatLoading);
 
   // Пока чат открыт, уведомления о нём не нужны: человек и так смотрит сюда.
   useEffect(() => {
@@ -126,21 +105,7 @@ export default function ChatScreen() {
 
   useMarkChatRead(chatId, messages.length > 0 ? messages[0].id : null);
 
-  // Диалог прочитан собеседником до этого момента. В групповом чате берём
-  // самого отстающего: «прочитано» должно значить «прочитали все».
-  const readUpTo = useMemo(() => {
-    const others = (chat?.participants ?? []).filter(
-      (participant) => participant.id !== currentUserId,
-    );
-
-    if (others.length === 0) return null;
-
-    return others.reduce(
-      (earliest, participant) =>
-        participant.lastReadAt < earliest ? participant.lastReadAt : earliest,
-      others[0].lastReadAt,
-    );
-  }, [chat, currentUserId]);
+  const readUpTo = useMemo(() => readUpToOf(chat, currentUserId), [chat, currentUserId]);
 
   // Собеседник личного диалога: его статус — в шапке, тап по шапке — его профиль.
   const other = chat ? counterpart(chat, currentUserId) : null;
@@ -165,30 +130,31 @@ export default function ChatScreen() {
 
   const authorName = useCallback(
     (authorId: string | null) =>
-      (authorId ? participantsById.get(authorId)?.displayName : undefined) ?? 'Удалённый аккаунт',
+      (authorId ? participantsById.get(authorId)?.displayName : undefined) ?? DELETED_ACCOUNT,
     [participantsById],
   );
+
+  const replyForward = useReplyForward({
+    chatId,
+    draft,
+    authorName,
+    composerRef,
+    send: chatMessages.send,
+    sendVoice: chatMessages.sendVoice,
+    forward: chatMessages.forward,
+  });
+  const { startReply } = replyForward;
 
   const { runMessageAction, runSelectionAction } = useMessageActionHandlers({
     selection,
     pins,
     retry,
-    discard,
-    deleteMessages,
+    discard: chatMessages.discard,
+    deleteMessages: chatMessages.deleteMessages,
     authorName,
+    reply: startReply,
+    forward: replyForward.startForward,
   });
-
-  const openMenu = useCallback((message: ChatMessage, anchor: AnchorRect) => {
-    impactAsync(ImpactFeedbackStyle.Medium).catch(() => undefined);
-    Keyboard.dismiss();
-    setLiftedMessage(message.id);
-    setMenu({ message, anchor });
-  }, []);
-
-  const closeMenu = useCallback(() => {
-    setLiftedMessage(null);
-    setMenu(null);
-  }, []);
 
   // Системный «назад» в режиме выбора выходит из выбора, а не из чата.
   const { isActive: isSelecting, clear: clearSelection } = selection;
@@ -206,6 +172,8 @@ export default function ChatScreen() {
     return () => subscription.remove();
   }, [clearSelection, isSelecting]);
 
+  const { openQuote, openForwardOrigin } = navigation;
+
   const bubbleFor = useCallback(
     (item: ChatMessage, interactive: boolean) => {
       const { authorId } = item;
@@ -216,19 +184,31 @@ export default function ChatScreen() {
           message={item}
           isOwn={item.authorId === currentUserId}
           isRead={readUpTo !== null && item.createdAt <= readUpTo}
-          authorName={author?.displayName ?? 'Удалённый аккаунт'}
+          authorName={author?.displayName ?? DELETED_ACCOUNT}
           authorAvatarUrl={author?.avatarUrl ?? null}
           mediaBounds={mediaBounds}
           onRetry={retry}
           onAuthorPress={interactive && authorId ? () => openPerson(authorId) : undefined}
+          onQuotePress={interactive ? () => openQuote(item) : undefined}
+          onForwardPress={interactive ? () => openForwardOrigin(item) : undefined}
         />
       );
     },
-    [currentUserId, mediaBounds, openPerson, participantsById, readUpTo, retry],
+    [
+      currentUserId,
+      mediaBounds,
+      openForwardOrigin,
+      openPerson,
+      openQuote,
+      participantsById,
+      readUpTo,
+      retry,
+    ],
   );
 
   const { isSelected, toggle: toggleSelected } = selection;
   const { highlight } = jump;
+  const { open: openMenu } = menu;
 
   const renderItem = useCallback(
     ({ item }: { item: ChatMessage }) => (
@@ -240,24 +220,28 @@ export default function ChatScreen() {
         messageId={item.id}
         onLongPress={(anchor) => openMenu(item, anchor)}
         onToggle={() => toggleSelected(item.id)}
+        // Ответ — это отправка: свайп есть только у участника и только у
+        // сообщений, которые уже на сервере.
+        onSwipeReply={isMember && !isLocalMessage(item) ? () => startReply([item]) : undefined}
       >
         {bubbleFor(item, true)}
       </MessageRow>
     ),
-    [bubbleFor, highlight, isSelected, isSelecting, openMenu, toggleSelected],
+    [bubbleFor, highlight, isMember, isSelected, isSelecting, openMenu, startReply, toggleSelected],
   );
 
+  const menuMessage = menu.target?.message ?? null;
   const menuActions = useMemo(
     () =>
-      menu
+      menuMessage
         ? visibleMessageActions({
-            message: menu.message,
-            isOwn: menu.message.authorId === currentUserId,
+            message: menuMessage,
+            isOwn: menuMessage.authorId === currentUserId,
             isMember,
-            isPinned: pins.isPinned(menu.message.id),
+            isPinned: pins.isPinned(menuMessage.id),
           })
         : [],
-    [currentUserId, isMember, menu, pins],
+    [currentUserId, isMember, menuMessage, pins],
   );
 
   const { jump: jumpTo } = jump;
@@ -278,28 +262,8 @@ export default function ChatScreen() {
     (userId) => participantsById.get(userId)?.displayName ?? 'Кто-то',
   );
 
-  /**
-   * Что лежит под экраном чата до низа окна — таб-бар. Его клавиатура
-   * перекрывает, и на его высоту поле подниматься не должно. Измеряется, а не
-   * подбирается: таб-бар разный на разных устройствах и платформах.
-   */
-  const measureBottomOffset = useCallback(() => {
-    containerRef.current?.measureInWindow((_x, y, _width, height) =>
-      setBottomOffset(Math.max(0, windowHeight - (y + height))),
-    );
-  }, [windowHeight]);
-
-  /**
-   * Клавиатуру приходится обходить вручную на обеих платформах: iOS рисует её
-   * поверх экрана, а на Android с edge-to-edge окно под неё не сжимается.
-   * Высота клавиатуры меряется от низа окна и уже покрывает и таб-бар, и
-   * полосу системной навигации — поэтому отступ не сумма, а большее из двух.
-   * Считается только от клавиатуры этого поля: поле в шите медиа двигает
-   * себя, а не чат под шитом (см. `composerKeyboard`).
-   */
-  const keyboardInsetStyle = useAnimatedStyle(() => ({
-    paddingBottom: Math.max(keyboardHeight.value - bottomOffset, insets.bottom),
-  }));
+  const { setMode } = draft;
+  const closeMode = useCallback(() => setMode(null), [setMode]);
 
   return (
     <View
@@ -307,36 +271,12 @@ export default function ChatScreen() {
       onLayout={measureBottomOffset}
       style={[styles.flex, { backgroundColor: theme.background }]}
     >
-      <Stack.Screen
-        options={
-          isSelecting
-            ? {
-                headerBackVisible: false,
-                headerTitle: () => (
-                  <ChatHeaderTitle title={`Выбрано: ${selection.selected.length}`} />
-                ),
-                headerRight: () => (
-                  <Pressable
-                    accessibilityRole="button"
-                    onPress={clearSelection}
-                    hitSlop={Spacing.two}
-                  >
-                    <Text color="primary">Отмена</Text>
-                  </Pressable>
-                ),
-              }
-            : {
-                headerBackVisible: true,
-                headerRight: undefined,
-                headerTitle: () => (
-                  <ChatHeaderTitle
-                    title={chat ? chatTitle(chat, currentUserId) : 'Чат'}
-                    subtitle={otherProfile?.status}
-                    onPress={other ? () => openPerson(other.id) : undefined}
-                  />
-                ),
-              }
-        }
+      <ChatScreenHeader
+        title={chat ? chatTitle(chat, currentUserId) : 'Чат'}
+        subtitle={otherProfile?.status}
+        onTitlePress={other ? () => openPerson(other.id) : undefined}
+        selectedCount={selection.selected.length}
+        onCancelSelection={clearSelection}
       />
 
       <Animated.View testID="chat-keyboard-area" style={[styles.flex, keyboardInsetStyle]}>
@@ -392,54 +332,53 @@ export default function ChatScreen() {
           </View>
         ) : null}
 
-        {isSelecting ? (
-          <SelectionActionBar
-            context={{ selected: selection.selected, currentUserId }}
-            onAction={runSelectionAction}
-          />
-        ) : null}
-
-        {!isMember && myInvite && myInvite.status !== 'accepted' ? (
-          isSelecting ? null : (
-            <InviteResponseBar
-              invite={myInvite}
-              responding={invite.pending?.chatId === chatId ? invite.pending.answer : null}
-              error={invite.error}
-              onAccept={() => invite.respond(chatId, 'accept')}
-              onDecline={() => invite.respond(chatId, 'decline')}
-            />
-          )
-        ) : (
-          // На время выбора поле ввода прячется, а не размонтируется: черновик
-          // и заранее подготовленный рекордер голосовых остаются как были.
-          <View style={isSelecting ? styles.hidden : undefined}>
-            <MessageComposer
-              text={draft.text}
-              onChangeText={draft.setText}
-              canSend={isMember}
-              onSend={submitDraft}
-              onTyping={notifyTyping}
-              onFieldActivate={claimKeyboardForChat}
-              onAttachPressIn={armMediaSheet}
-              onAttachPressOut={releaseMediaSheetArm}
-              onAttachPress={openMediaSheet}
-              onSendVoice={sendVoice}
-              onRecordingVoice={notifyRecordingVoice}
-            />
-          </View>
-        )}
+        <ChatFooter
+          selection={{
+            isActive: isSelecting,
+            context: { selected: selection.selected, currentUserId, isMember },
+            onAction: runSelectionAction,
+          }}
+          invite={
+            !isMember && myInvite && myInvite.status !== 'accepted'
+              ? {
+                  value: myInvite,
+                  responding: invite.pending?.chatId === chatId ? invite.pending.answer : null,
+                  error: invite.error,
+                  onAccept: () => invite.respond(chatId, 'accept'),
+                  onDecline: () => invite.respond(chatId, 'decline'),
+                }
+              : null
+          }
+          composer={{
+            text: draft.text,
+            onChangeText: draft.setText,
+            mode: draft.mode,
+            onCloseMode: closeMode,
+            canSend: isMember,
+            onSend: replyForward.submit,
+            onTyping: notifyTyping,
+            onSendVoice: replyForward.sendVoice,
+            onRecordingVoice: notifyRecordingVoice,
+            inputRef: composerRef,
+          }}
+        />
       </Animated.View>
 
-      <MediaPickerSheet draft={draft} onTyping={notifyTyping} onSend={submitDraft} />
+      <MediaPickerSheet
+        draft={draft}
+        plate={draft.mode?.type === 'reply' ? modePlate(draft.mode, closeMode) : null}
+        onTyping={notifyTyping}
+        onSend={replyForward.submit}
+      />
 
       <MessageContextMenu
-        anchor={menu?.anchor ?? null}
-        preview={menu ? bubbleFor(menu.message, false) : null}
+        anchor={menu.target?.anchor ?? null}
+        preview={menuMessage ? bubbleFor(menuMessage, false) : null}
         actions={menuActions}
-        alignEnd={menu?.message.authorId === currentUserId}
+        alignEnd={menuMessage?.authorId === currentUserId}
         leadingInset={BUBBLE_LEADING_INSET}
-        onAction={(id) => menu && runMessageAction(id, menu.message)}
-        onClose={closeMenu}
+        onAction={(id) => menuMessage && runMessageAction(id, menuMessage)}
+        onClose={menu.close}
       />
     </View>
   );
@@ -462,8 +401,5 @@ const styles = StyleSheet.create({
   banner: {
     paddingHorizontal: Spacing.three,
     paddingBottom: Spacing.one,
-  },
-  hidden: {
-    display: 'none',
   },
 });

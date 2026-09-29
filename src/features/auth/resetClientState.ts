@@ -1,5 +1,6 @@
 import type { QueryClient } from '@tanstack/react-query';
 
+import { resetComposerDrafts } from '@/features/chats/composerDraftStore';
 import { resetMediaSheet } from '@/features/chats/MediaPickerSheet/sheetStore';
 import { resetOutbox } from '@/features/chats/messages/outbox';
 import { useMediaSelection } from '@/features/media/selectionStore';
@@ -12,7 +13,8 @@ import { setActiveChatId } from '@/store/activeChat';
  * начинается с чистого листа: ни чатов, ни профиля, ни выбранных файлов
  * прежнего.
  *
- * Черновики сообщений — состояние экрана чата и уходят вместе с ним.
+ * Черновики сообщений — тоже: с ответом и пересылкой в них лежат чужие
+ * сообщения.
  */
 export function resetClientState(queryClient: QueryClient) {
   // cancel до clear: запрос, начатый под прежним пользователем, не должен
@@ -22,5 +24,6 @@ export function resetClientState(queryClient: QueryClient) {
   useMediaSelection.getState().clear();
   resetMediaSheet();
   resetOutbox();
+  resetComposerDrafts();
   setActiveChatId(null);
 }

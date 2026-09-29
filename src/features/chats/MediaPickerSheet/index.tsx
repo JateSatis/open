@@ -2,7 +2,15 @@
 // штатный способ им пользоваться, а не нарушение чистоты, которое видит в
 // этом React Compiler.
 /* eslint-disable react-hooks/immutability */
-import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentType,
+  type ReactNode,
+} from 'react';
 import {
   InteractionManager,
   Keyboard,
@@ -71,6 +79,8 @@ const LIST_MOUNT_DISTANCE = 2;
 
 export type MediaPickerSheetProps = {
   draft: ComposerDraft;
+  /** Плашка ответа над полем шита: альбом тоже может быть ответом. */
+  plate?: ReactNode;
   onTyping: () => void;
   onSend: () => void;
 };
@@ -134,7 +144,7 @@ type SheetWindowProps = MediaPickerSheetProps & { phase: Exclude<MediaSheetPhase
  *   проигрывалась бы вхолостую, за невидимым окном;
  * - тяжёлый список монтируется под готовой оболочкой, уже на ходу.
  */
-function SheetWindow({ phase, draft, onTyping, onSend }: SheetWindowProps) {
+function SheetWindow({ phase, draft, plate, onTyping, onSend }: SheetWindowProps) {
   countRender('MediaPickerSheet');
 
   const theme = useTheme();
@@ -379,6 +389,7 @@ function SheetWindow({ phase, draft, onTyping, onSend }: SheetWindowProps) {
               onSend={submit}
               onTyping={onTyping}
               onFieldActivate={claimKeyboardForSheet}
+              plate={plate}
               canSend
             />
           </Animated.View>

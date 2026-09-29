@@ -11,6 +11,8 @@ function message(id: string, text: string | null, authorId: string, createdAt: s
     text,
     createdAt,
     attachments: [],
+    replies: [],
+    forward: null,
     status: 'sent',
   };
 }

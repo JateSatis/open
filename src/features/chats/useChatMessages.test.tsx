@@ -118,6 +118,8 @@ describe('useChatMessages sending media', () => {
           waveform: null,
         },
       ],
+      replies: [],
+      forward: null,
     });
 
     const { result } = await renderHook(() => useChatMessages('chat-1', 'user-1'), { wrapper });
@@ -201,6 +203,8 @@ describe('useChatMessages sending media', () => {
       text: null,
       createdAt: '2026-09-22T10:00:00Z',
       attachments: [],
+      replies: [],
+      forward: null,
     });
 
     const { result } = await renderHook(() => useChatMessages('chat-1', 'user-1'), { wrapper });
@@ -259,6 +263,8 @@ describe('useChatMessages sending media', () => {
       text: 'привет',
       createdAt: '2026-09-16T10:05:00Z',
       attachments: [],
+      replies: [],
+      forward: null,
     });
 
     await waitFor(() => expect(result.current.messages[0].status).toBe('sent'));
@@ -287,6 +293,8 @@ describe('useChatMessages sending media', () => {
           text: 'до этого',
           createdAt: '2026-09-22T09:00:00Z',
           attachments: [],
+          replies: [],
+          forward: null,
         },
       ],
       nextCursor: null,
@@ -300,6 +308,8 @@ describe('useChatMessages sending media', () => {
       text: 'привет',
       createdAt: '2026-09-22T10:00:00Z',
       attachments: [],
+      replies: [],
+      forward: null,
     };
 
     const { listMessagesSince } = jest.requireMock('@/api/chats') as {
@@ -390,6 +400,8 @@ describe('useChatMessages large albums', () => {
           text: null,
           createdAt: '2026-09-26T10:00:00Z',
           attachments: [],
+          replies: [],
+          forward: null,
         },
       ],
       nextCursor: null,
@@ -444,6 +456,8 @@ describe('useChatMessages voice messages', () => {
         waveform: [0, 10, 31],
       },
     ],
+    replies: [],
+    forward: null,
   };
 
   it('shows the voice bubble at once and sends exactly one voice message', async () => {
@@ -476,13 +490,18 @@ describe('useChatMessages voice messages', () => {
 
     await waitFor(() => expect(result.current.messages[0].status).toBe('sent'));
     expect(mockedSendVoice).toHaveBeenCalledTimes(1);
-    expect(mockedSendVoice).toHaveBeenCalledWith('chat-1', {
-      url: 'https://cdn.example/voice.m4a',
-      mimeType: 'audio/mp4',
-      durationMs: 4200,
-      sizeBytes: 3000,
-      waveform: [0, 10, 31],
-    });
+    // Третий аргумент — цитаты ответа; это голосовое ни на что не отвечает.
+    expect(mockedSendVoice).toHaveBeenCalledWith(
+      'chat-1',
+      {
+        url: 'https://cdn.example/voice.m4a',
+        mimeType: 'audio/mp4',
+        durationMs: 4200,
+        sizeBytes: 3000,
+        waveform: [0, 10, 31],
+      },
+      [],
+    );
     expect(mockedSendMessage).not.toHaveBeenCalled();
     // Своё голосовое и дальше играет из локального файла.
     expect(result.current.messages[0].localPreviews).toEqual(['file:///cache/voice.m4a']);
@@ -559,6 +578,8 @@ describe('useChatMessages removing own unsent messages', () => {
     text: 'передумал',
     createdAt: '2026-09-27T10:00:00Z',
     attachments: [],
+    replies: [],
+    forward: null,
   };
 
   it('drops a failed message locally without asking the server', async () => {

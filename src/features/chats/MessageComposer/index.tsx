@@ -1,3 +1,4 @@
+import type { ReactNode, Ref } from 'react';
 import { TextInput, View } from 'react-native';
 
 import { styles } from './styles';
@@ -45,6 +46,12 @@ export type MessageComposerProps = {
   onSendVoice?: (voice: LocalMedia) => void;
   /** Идёт запись голосового — для «записывает голосовое…» у собеседников. */
   onRecordingVoice?: () => void;
+  /** Плашка режима над полем: ответ, пересылка. */
+  plate?: ReactNode;
+  /** Поле — чтобы отдать ему фокус, когда человек выбрал «Ответить». */
+  inputRef?: Ref<TextInput>;
+  /** Отправить можно и с пустым полем: например, пересылку без подписи. */
+  canSendEmpty?: boolean;
 };
 
 export function MessageComposer({
@@ -59,6 +66,9 @@ export function MessageComposer({
   onFieldActivate,
   onSendVoice,
   onRecordingVoice,
+  plate,
+  inputRef,
+  canSendEmpty = false,
 }: MessageComposerProps) {
   const theme = useTheme();
   // Счётчик берётся из стора выбора, а не приходит пропом: иначе выбор файла
@@ -75,8 +85,10 @@ export function MessageComposer({
     );
   }
 
+  const isEmpty = !text.trim() && mediaCount === 0 && !canSendEmpty;
+
   const submit = () => {
-    if (!text.trim() && mediaCount === 0) return;
+    if (isEmpty) return;
 
     onSend();
   };
@@ -84,6 +96,7 @@ export function MessageComposer({
   const inputs = (
     <>
       <TextInput
+        ref={inputRef}
         accessibilityLabel="Сообщение"
         placeholder="Сообщение"
         placeholderTextColor={theme.textSecondary}
@@ -105,7 +118,7 @@ export function MessageComposer({
           label="О"
           accessibilityLabel="Отправить"
           size="sm"
-          disabled={!text.trim() && mediaCount === 0}
+          disabled={isEmpty}
           onPress={submit}
         />
 
@@ -146,6 +159,7 @@ export function MessageComposer({
 
   return (
     <View style={[styles.container, { borderTopColor: theme.border }]}>
+      {plate}
       {onSendVoice ? (
         <HoldToRecordRow style={styles.row} onSend={onSendVoice} onActivity={onRecordingVoice}>
           {inputs}

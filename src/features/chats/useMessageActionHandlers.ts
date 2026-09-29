@@ -3,6 +3,7 @@ import { useCallback } from 'react';
 
 import { confirm } from '@/components/ConfirmDialog';
 import { formatMessagesForCopy } from '@/features/chats/copyMessages';
+import { messagesCount } from '@/features/chats/messageQuote';
 import {
   isLocalMessage,
   type MessageActionId,
@@ -13,20 +14,6 @@ import type { MessageSelection } from '@/features/chats/useMessageSelection';
 import type { PinnedMessagesState } from '@/features/chats/usePinnedMessages';
 import { showNotice } from '@/features/notifications/alertsStore';
 import { isNetworkError } from '@/lib/network';
-
-/** «1 сообщение», «3 сообщения», «11 сообщений». */
-export function messagesCount(n: number): string {
-  const mod10 = n % 10;
-  const mod100 = n % 100;
-  const word =
-    mod10 === 1 && mod100 !== 11
-      ? 'сообщение'
-      : mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)
-        ? 'сообщения'
-        : 'сообщений';
-
-  return `${n} ${word}`;
-}
 
 function failure(action: string, cause: unknown): string {
   return isNetworkError(cause) ? `${action}: нет связи` : action;
@@ -44,6 +31,10 @@ type Options = {
   discard: (localId: string) => void;
   deleteMessages: (messageIds: string[]) => Promise<void>;
   authorName: (authorId: string | null) => string;
+  /** Ответить: сообщения встают в плашку над полем ввода. */
+  reply: (messages: ChatMessage[]) => void;
+  /** Переслать: дальше — выбор чата. */
+  forward: (messages: ChatMessage[]) => void;
 };
 
 export type MessageActionHandlers = {
@@ -59,6 +50,8 @@ export function useMessageActionHandlers({
   discard,
   deleteMessages,
   authorName,
+  reply,
+  forward,
 }: Options): MessageActionHandlers {
   const removeForEveryone = useCallback(
     async (messageIds: string[]) => {
@@ -98,6 +91,12 @@ export function useMessageActionHandlers({
         case 'retry':
           if (message.localId) retry(message.localId);
           return;
+        case 'reply':
+          reply([message]);
+          return;
+        case 'forward':
+          forward([message]);
+          return;
         case 'copy':
           void copyText(message.text ?? '');
           return;
@@ -125,12 +124,21 @@ export function useMessageActionHandlers({
           return;
       }
     },
-    [discard, pins, removeForEveryone, retry, selection],
+    [discard, forward, pins, removeForEveryone, reply, retry, selection],
   );
 
   const runSelectionAction = useCallback(
     (id: SelectionActionId) => {
       switch (id) {
+        case 'reply':
+          // Выбор закрывается раньше плашки: поле ввода на время выбора спрятано.
+          reply(selection.selected);
+          selection.clear();
+          return;
+        case 'forward':
+          forward(selection.selected);
+          selection.clear();
+          return;
         case 'copy':
           void copyText(formatMessagesForCopy(selection.selected, authorName));
           selection.clear();
@@ -140,7 +148,7 @@ export function useMessageActionHandlers({
           return;
       }
     },
-    [authorName, removeForEveryone, selection],
+    [authorName, forward, removeForEveryone, reply, selection],
   );
 
   return { runMessageAction, runSelectionAction };

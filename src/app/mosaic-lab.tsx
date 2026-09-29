@@ -64,6 +64,8 @@ function fakeMessages(): ChatMessage[] {
       height: SHAPES[shape][1],
       durationMs: shape === 'V' ? 12_000 : null,
     })),
+    replies: [],
+    forward: null,
   })).reverse();
 }
 
