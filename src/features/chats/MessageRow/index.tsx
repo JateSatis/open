@@ -12,6 +12,7 @@ import Animated, {
 
 import { useIsLifted } from './liftedStore';
 import { styles } from './styles';
+import { useSwipeReply } from './useSwipeReply';
 
 import { Text } from '@/components/Text';
 import type { AnchorRect } from '@/features/chats/MessageContextMenu';
@@ -45,6 +46,8 @@ export type MessageRowProps = {
   messageId: string;
   onLongPress: (anchor: AnchorRect) => void;
   onToggle: () => void;
+  /** Свайп влево — ответить. Без обработчика (посетитель, неотправленное) жеста нет. */
+  onSwipeReply?: () => void;
 };
 
 /**
@@ -64,10 +67,12 @@ export function MessageRow({
   messageId,
   onLongPress,
   onToggle,
+  onSwipeReply,
 }: MessageRowProps) {
   const theme = useTheme();
   const highlight = useSharedValue(0);
   const lifted = useIsLifted(messageId);
+  const swipe = useSwipeReply(messageId, !selectionMode, onSwipeReply);
 
   useEffect(() => () => void rowSizes.delete(messageId), [messageId]);
 
@@ -110,6 +115,13 @@ export function MessageRow({
     [messageId, openMenu, selectionMode],
   );
 
+  // Кто первым узнал себя, тот и ведёт: сдвиг пальца отменяет долгое
+  // нажатие, а удержание на месте не даёт начаться свайпу.
+  const gesture = useMemo(
+    () => Gesture.Race(swipe.gesture, longPress),
+    [longPress, swipe.gesture],
+  );
+
   // Дерево строки одно и то же в обоих режимах: переключение выбора меняет
   // лишь кружок и то, кому достаются касания. Иначе вход в выбор пересоздавал
   // бы каждое облачко в списке — с картинками и плеерами, — и первые касания
@@ -128,7 +140,16 @@ export function MessageRow({
         />
       ) : null}
 
-      <GestureDetector gesture={longPress}>
+      {onSwipeReply ? (
+        <Animated.View
+          pointerEvents="none"
+          style={[styles.swipeIcon, { backgroundColor: theme.backgroundElement }, swipe.iconStyle]}
+        >
+          <Text color="textSecondary">↩</Text>
+        </Animated.View>
+      ) : null}
+
+      <GestureDetector gesture={gesture}>
         <View collapsable={false}>
           <Pressable
             accessibilityRole={selectionMode ? 'checkbox' : undefined}
@@ -160,9 +181,9 @@ export function MessageRow({
 
             {/* В режиме выбора облачко не живёт своей жизнью: тап не открывает
                 просмотрщик, не запускает голосовое и не ведёт в профиль. */}
-            <View
+            <Animated.View
               pointerEvents={selectionMode ? 'none' : 'auto'}
-              style={[styles.content, lifted && styles.lifted]}
+              style={[styles.content, lifted && styles.lifted, swipe.contentStyle]}
               onLayout={({ nativeEvent }) =>
                 rowSizes.set(messageId, {
                   width: nativeEvent.layout.width,
@@ -171,7 +192,7 @@ export function MessageRow({
               }
             >
               {children}
-            </View>
+            </Animated.View>
           </Pressable>
         </View>
       </GestureDetector>

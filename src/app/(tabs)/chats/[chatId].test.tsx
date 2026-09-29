@@ -9,6 +9,7 @@ import { acceptInvite, declineInvite, getMyInvite } from '@/api/invites';
 import { getProfile } from '@/api/profile';
 import { useSession } from '@/features/auth/useSession';
 import { formatMessageTime } from '@/features/chats/chatDisplay';
+import { resetComposerDrafts } from '@/features/chats/composerDraftStore';
 import { resetOutbox } from '@/features/chats/messages/outbox';
 import { reportRealtimeJoined, resetConnectionState } from '@/features/connection/connectionStore';
 import { renderWithQuery } from '@/test/renderWithQuery';
@@ -19,6 +20,7 @@ const mockNavigate = jest.fn();
 // Шапку экран ставит через Stack.Screen — мок рисует её прямо в дереве, чтобы
 // статус собеседника и тап по шапке можно было проверить.
 jest.mock('expo-router', () => ({
+  useNavigation: () => ({ getState: () => ({ index: 0, routes: [] }), dispatch: jest.fn() }),
   useLocalSearchParams: () => ({ chatId: 'chat-1' }),
   useRouter: () => ({ push: mockPush, navigate: mockNavigate }),
   Stack: {
@@ -117,6 +119,8 @@ function message(id: string, text: string, authorId: string): Message {
     text,
     createdAt: SENT_AT,
     attachments: [],
+    replies: [],
+    forward: null,
   };
 }
 
@@ -127,8 +131,9 @@ const unsubscribe = jest.fn();
 beforeEach(() => {
   jest.clearAllMocks();
   handlers = null;
-  // Исходящие живут вне экрана, в сторе, — между тестами их надо чистить.
+  // Исходящие и черновики живут вне экрана, в сторах, — между тестами их надо чистить.
   resetOutbox();
+  resetComposerDrafts();
   mockedSession.mockReturnValue({
     session: { user: { id: 'user-1' } } as unknown as SupabaseSession,
     isAuthenticated: true,

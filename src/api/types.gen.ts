@@ -274,6 +274,52 @@ export type Database = {
           },
         ]
       }
+      message_forwards: {
+        Row: {
+          created_at: string
+          id: string
+          message_id: string
+          origin_author_id: string | null
+          origin_message_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          message_id: string
+          origin_author_id?: string | null
+          origin_message_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          message_id?: string
+          origin_author_id?: string | null
+          origin_message_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "message_forwards_message_fkey"
+            columns: ["message_id"]
+            isOneToOne: true
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_forwards_origin_author_id_fkey"
+            columns: ["origin_author_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_forwards_origin_fkey"
+            columns: ["origin_message_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       message_pins: {
         Row: {
           chat_id: string
@@ -320,6 +366,55 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      message_replies: {
+        Row: {
+          chat_id: string
+          created_at: string
+          id: string
+          message_id: string
+          position: number
+          quoted_id: string
+        }
+        Insert: {
+          chat_id: string
+          created_at?: string
+          id?: string
+          message_id: string
+          position: number
+          quoted_id: string
+        }
+        Update: {
+          chat_id?: string
+          created_at?: string
+          id?: string
+          message_id?: string
+          position?: number
+          quoted_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "message_replies_chat_id_fkey"
+            columns: ["chat_id"]
+            isOneToOne: false
+            referencedRelation: "chats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_replies_message_fkey"
+            columns: ["message_id", "chat_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id", "chat_id"]
+          },
+          {
+            foreignKeyName: "message_replies_quoted_fkey"
+            columns: ["quoted_id", "chat_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id", "chat_id"]
           },
         ]
       }
@@ -434,6 +529,10 @@ export type Database = {
     }
     Functions: {
       accept_chat_invite: { Args: { target_chat: string }; Returns: undefined }
+      add_message_replies: {
+        Args: { new_message: string; reply_to: string[]; target_chat: string }
+        Returns: undefined
+      }
       create_chat: {
         Args: { chat_title?: string; invitee_ids: string[] }
         Returns: Json
@@ -443,6 +542,10 @@ export type Database = {
       delete_messages: { Args: { message_ids: string[] }; Returns: undefined }
       end_device_session: { Args: { p_device_id: string }; Returns: undefined }
       end_other_sessions: { Args: never; Returns: undefined }
+      forward_messages: {
+        Args: { message_ids: string[]; target_chat: string }
+        Returns: string[]
+      }
       latest_chat_messages: {
         Args: { chat_ids: string[]; per_chat?: number }
         Returns: {
@@ -490,11 +593,16 @@ export type Database = {
         Returns: string
       }
       send_media_message: {
-        Args: { media: Json; message_text: string; target_chat: string }
+        Args: {
+          media: Json
+          message_text: string
+          reply_to?: string[]
+          target_chat: string
+        }
         Returns: string
       }
       send_voice_message: {
-        Args: { target_chat: string; voice: Json }
+        Args: { reply_to?: string[]; target_chat: string; voice: Json }
         Returns: string
       }
       touch_device: { Args: { p_installation_id: string }; Returns: boolean }

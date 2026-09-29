@@ -18,6 +18,7 @@ import {
 import { listPinnedMessages, pinMessage, type PinnedMessage } from '@/api/pins';
 import { confirm } from '@/components/ConfirmDialog';
 import { useSession } from '@/features/auth/useSession';
+import { resetComposerDrafts } from '@/features/chats/composerDraftStore';
 import { resetOutbox } from '@/features/chats/messages/outbox';
 import { useInAppAlert } from '@/features/notifications/alertsStore';
 import { reportRealtimeJoined, resetConnectionState } from '@/features/connection/connectionStore';
@@ -26,6 +27,7 @@ import { renderWithQuery } from '@/test/renderWithQuery';
 // Шапку экран ставит через Stack.Screen — мок рисует и заголовок, и правую
 // кнопку прямо в дереве: так видно «Выбрано: N» и «Отмена».
 jest.mock('expo-router', () => ({
+  useNavigation: () => ({ getState: () => ({ index: 0, routes: [] }), dispatch: jest.fn() }),
   useLocalSearchParams: () => ({ chatId: 'chat-1' }),
   useRouter: () => ({ push: jest.fn(), navigate: jest.fn() }),
   Stack: {
@@ -122,6 +124,8 @@ function message(id: string, text: string, authorId: string, minute = 0): Messag
     text,
     createdAt: `2026-09-27T10:0${minute}:00Z`,
     attachments: [],
+    replies: [],
+    forward: null,
   };
 }
 
@@ -158,6 +162,7 @@ beforeEach(() => {
   handlers = null;
   backHandler = null;
   resetOutbox();
+  resetComposerDrafts();
   resetConnectionState();
   reportRealtimeJoined();
   useInAppAlert.setState({ alert: null });
@@ -195,7 +200,14 @@ describe('message menu', () => {
 
     await longPress('m3');
 
-    expect(await menuItems()).toEqual(['Копировать', 'Закрепить', 'Выбрать', 'Удалить']);
+    expect(await menuItems()).toEqual([
+      'Ответить',
+      'Копировать',
+      'Закрепить',
+      'Переслать',
+      'Выбрать',
+      'Удалить',
+    ]);
   });
 
   it('never offers to delete somebody else’s message', async () => {
@@ -204,10 +216,16 @@ describe('message menu', () => {
 
     await longPress('m2');
 
-    expect(await menuItems()).toEqual(['Копировать', 'Закрепить', 'Выбрать']);
+    expect(await menuItems()).toEqual([
+      'Ответить',
+      'Копировать',
+      'Закрепить',
+      'Переслать',
+      'Выбрать',
+    ]);
   });
 
-  it('lets a visitor only copy and select', async () => {
+  it('lets a visitor copy, forward and select — but not reply', async () => {
     mockedGetChat.mockResolvedValue(
       chatWith([other, { ...member, id: 'user-3', displayName: 'Пётр' }]),
     );
@@ -217,7 +235,7 @@ describe('message menu', () => {
 
     await longPress('m2');
 
-    expect(await menuItems()).toEqual(['Копировать', 'Выбрать']);
+    expect(await menuItems()).toEqual(['Копировать', 'Переслать', 'Выбрать']);
   });
 
   it('closes on a tap outside and on the system back button', async () => {

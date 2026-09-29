@@ -36,4 +36,16 @@ export const styles = StyleSheet.create({
   markHidden: {
     opacity: 0,
   },
+  /** Стрелка ответа у правого края, против середины строки: из-под неё уезжает облачко. */
+  swipeIcon: {
+    position: 'absolute',
+    right: Spacing.three,
+    top: '50%',
+    marginTop: -Sizes.swipeReplyIcon / 2,
+    width: Sizes.swipeReplyIcon,
+    height: Sizes.swipeReplyIcon,
+    borderRadius: Radii.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });

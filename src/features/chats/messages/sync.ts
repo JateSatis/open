@@ -12,6 +12,7 @@ import {
 } from '@/api/chats';
 import {
   mergeMessages,
+  quotedIds,
   readHistory,
   removeMessages,
   toSent,
@@ -95,7 +96,10 @@ export async function loadHistory(queryClient: QueryClient, chatId: string): Pro
 
   if (!cached || !since) return firstPage(chatId);
 
-  const loadedIds = cached.items.map((message) => message.id).slice(0, MAX_TOMBSTONE_IDS);
+  const loadedIds = [...cached.items.map((message) => message.id), ...quotedIds(cached)].slice(
+    0,
+    MAX_TOMBSTONE_IDS,
+  );
   const [newer, deleted] = await Promise.all([
     fetchNewer(chatId, since),
     listDeletedMessageIds(loadedIds),
@@ -114,7 +118,12 @@ export async function dropDeletedMessages(
   chatId: string,
   candidates: string[],
 ): Promise<void> {
-  const loaded = new Set(readHistory(queryClient, chatId)?.items.map((message) => message.id));
+  const history = readHistory(queryClient, chatId);
+  // Удалённое может быть и не загружено, но процитировано в загруженном ответе.
+  const loaded = new Set([
+    ...(history?.items.map((message) => message.id) ?? []),
+    ...quotedIds(history),
+  ]);
   const ids = candidates.filter((id) => loaded.has(id)).slice(0, MAX_TOMBSTONE_IDS);
 
   if (ids.length === 0) return;

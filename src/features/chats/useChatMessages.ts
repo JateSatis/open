@@ -6,6 +6,7 @@ import {
   deliver,
   discardLocal,
   outgoingOf,
+  sendForward,
   sendPost,
   sendVoice as sendVoiceMessage,
 } from '@/features/chats/messages/delivery';
@@ -16,7 +17,12 @@ import {
   updateHistory,
 } from '@/features/chats/messages/historyCache';
 import { outboxMessages, useOutboxMessages } from '@/features/chats/messages/outbox';
-import type { ChatMessage, UserActivity } from '@/features/chats/messages/types';
+import type {
+  ChatMessage,
+  ForwardItem,
+  LiveQuote,
+  UserActivity,
+} from '@/features/chats/messages/types';
 import { useChatChannel } from '@/features/chats/messages/useChatChannel';
 import { useChatHistory } from '@/features/chats/messages/useChatHistory';
 import { chatsQueryKey } from '@/features/chats/useChats';
@@ -24,7 +30,13 @@ import { pinsQueryKey } from '@/features/chats/usePinnedMessages';
 import { useConnectionStatus } from '@/features/connection/useConnectionStatus';
 import type { LocalMedia, MediaLibraryItem } from '@/features/media';
 
-export type { ChatMessage, DeliveryStatus, UserActivity } from '@/features/chats/messages/types';
+export type {
+  ChatMessage,
+  DeliveryStatus,
+  ForwardItem,
+  LiveQuote,
+  UserActivity,
+} from '@/features/chats/messages/types';
 export { splitIntoAlbums } from '@/features/chats/messages/delivery';
 
 export type ChatMessagesState = {
@@ -39,8 +51,11 @@ export type ChatMessagesState = {
   loadMore: () => void;
   /** Догружает историю назад до сообщения с этим временем. Отвечает, дошли ли. */
   loadUntil: (createdAt: string) => Promise<boolean>;
-  send: (text: string, media?: MediaLibraryItem[]) => void;
-  sendVoice: (voice: LocalMedia) => void;
+  /** Текст с альбомом; с цитатами — это ответ. */
+  send: (text: string, media?: MediaLibraryItem[], replies?: LiveQuote[]) => void;
+  sendVoice: (voice: LocalMedia, replies?: LiveQuote[]) => void;
+  /** Пересылка сюда; текст из поля уходит перед пересланными. */
+  forward: (text: string, items: ForwardItem[]) => void;
   retry: (localId: string) => void;
   /** Своё неотправленное или упавшее — убрать. На сервер ничего не уходит. */
   discard: (localId: string) => void;
@@ -107,11 +122,20 @@ export function useChatMessages(chatId: string, currentUserId: string | null): C
   }, [chatId, connection, currentUserId, queryClient]);
 
   const send = useCallback(
-    (text: string, media: MediaLibraryItem[] = []) => sendPost(context, text, media),
+    (text: string, media: MediaLibraryItem[] = [], replies: LiveQuote[] = []) =>
+      sendPost(context, text, media, replies),
     [context],
   );
 
-  const sendVoice = useCallback((voice: LocalMedia) => sendVoiceMessage(context, voice), [context]);
+  const sendVoice = useCallback(
+    (voice: LocalMedia, replies: LiveQuote[] = []) => sendVoiceMessage(context, voice, replies),
+    [context],
+  );
+
+  const forward = useCallback(
+    (text: string, items: ForwardItem[]) => sendForward(context, text, items),
+    [context],
+  );
 
   const retry = useCallback(
     (localId: string) => {
@@ -162,6 +186,7 @@ export function useChatMessages(chatId: string, currentUserId: string | null): C
     loadUntil: history.loadUntil,
     send,
     sendVoice,
+    forward,
     retry,
     discard,
     deleteMessages,

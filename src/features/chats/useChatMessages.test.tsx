@@ -23,6 +23,7 @@ jest.mock('@/api/chats', () => ({
   listMessagesSince: jest.fn(),
   sendMessage: jest.fn(),
   sendVoiceMessage: jest.fn(),
+  forwardMessages: jest.fn(),
   subscribeToChat: jest.fn(),
   deleteMessages: jest.fn(),
   listDeletedMessageIds: jest.fn(),
@@ -118,6 +119,8 @@ describe('useChatMessages sending media', () => {
           waveform: null,
         },
       ],
+      replies: [],
+      forward: null,
     });
 
     const { result } = await renderHook(() => useChatMessages('chat-1', 'user-1'), { wrapper });
@@ -201,6 +204,8 @@ describe('useChatMessages sending media', () => {
       text: null,
       createdAt: '2026-09-22T10:00:00Z',
       attachments: [],
+      replies: [],
+      forward: null,
     });
 
     const { result } = await renderHook(() => useChatMessages('chat-1', 'user-1'), { wrapper });
@@ -259,6 +264,8 @@ describe('useChatMessages sending media', () => {
       text: 'привет',
       createdAt: '2026-09-16T10:05:00Z',
       attachments: [],
+      replies: [],
+      forward: null,
     });
 
     await waitFor(() => expect(result.current.messages[0].status).toBe('sent'));
@@ -287,6 +294,8 @@ describe('useChatMessages sending media', () => {
           text: 'до этого',
           createdAt: '2026-09-22T09:00:00Z',
           attachments: [],
+          replies: [],
+          forward: null,
         },
       ],
       nextCursor: null,
@@ -300,6 +309,8 @@ describe('useChatMessages sending media', () => {
       text: 'привет',
       createdAt: '2026-09-22T10:00:00Z',
       attachments: [],
+      replies: [],
+      forward: null,
     };
 
     const { listMessagesSince } = jest.requireMock('@/api/chats') as {
@@ -390,6 +401,8 @@ describe('useChatMessages large albums', () => {
           text: null,
           createdAt: '2026-09-26T10:00:00Z',
           attachments: [],
+          replies: [],
+          forward: null,
         },
       ],
       nextCursor: null,
@@ -444,6 +457,8 @@ describe('useChatMessages voice messages', () => {
         waveform: [0, 10, 31],
       },
     ],
+    replies: [],
+    forward: null,
   };
 
   it('shows the voice bubble at once and sends exactly one voice message', async () => {
@@ -476,13 +491,18 @@ describe('useChatMessages voice messages', () => {
 
     await waitFor(() => expect(result.current.messages[0].status).toBe('sent'));
     expect(mockedSendVoice).toHaveBeenCalledTimes(1);
-    expect(mockedSendVoice).toHaveBeenCalledWith('chat-1', {
-      url: 'https://cdn.example/voice.m4a',
-      mimeType: 'audio/mp4',
-      durationMs: 4200,
-      sizeBytes: 3000,
-      waveform: [0, 10, 31],
-    });
+    // Третий аргумент — цитаты ответа; это голосовое ни на что не отвечает.
+    expect(mockedSendVoice).toHaveBeenCalledWith(
+      'chat-1',
+      {
+        url: 'https://cdn.example/voice.m4a',
+        mimeType: 'audio/mp4',
+        durationMs: 4200,
+        sizeBytes: 3000,
+        waveform: [0, 10, 31],
+      },
+      [],
+    );
     expect(mockedSendMessage).not.toHaveBeenCalled();
     // Своё голосовое и дальше играет из локального файла.
     expect(result.current.messages[0].localPreviews).toEqual(['file:///cache/voice.m4a']);
@@ -559,6 +579,8 @@ describe('useChatMessages removing own unsent messages', () => {
     text: 'передумал',
     createdAt: '2026-09-27T10:00:00Z',
     attachments: [],
+    replies: [],
+    forward: null,
   };
 
   it('drops a failed message locally without asking the server', async () => {
@@ -594,5 +616,172 @@ describe('useChatMessages removing own unsent messages', () => {
     // Сообщение уже в базе и разослано — убрать его можно только удалением для всех.
     await waitFor(() => expect(mockedDeleteMessages).toHaveBeenCalledWith(['m-saved']));
     expect(result.current.messages).toEqual([]);
+  });
+});
+
+describe('useChatMessages replies and forwards', () => {
+  const { forwardMessages: mockedForward } = jest.requireMock('@/api/chats') as {
+    forwardMessages: jest.Mock;
+  };
+
+  const quote = {
+    messageId: 'orig',
+    state: 'live' as const,
+    authorId: 'user-2',
+    authorName: 'Марина',
+    createdAt: '2026-09-29T09:00:00Z',
+    preview: {
+      kind: 'text' as const,
+      text: 'оригинал',
+      thumbnailUrl: null,
+      mediaCount: 0,
+      firstMediaIsVideo: false,
+      durationMs: null,
+    },
+  };
+
+  function source(id: string, minute: number, overrides: Record<string, unknown> = {}) {
+    return {
+      id,
+      chatId: 'chat-src',
+      authorId: 'user-2',
+      kind: 'text' as const,
+      text: `текст ${id}`,
+      createdAt: `2026-09-29T09:0${minute}:00Z`,
+      attachments: [],
+      replies: [],
+      forward: null,
+      status: 'sent' as const,
+      ...overrides,
+    };
+  }
+
+  function originOf(id: string, minute: number) {
+    return {
+      authorId: 'user-2',
+      authorName: 'Марина',
+      original: { messageId: id, chatId: 'chat-src', createdAt: `2026-09-29T09:0${minute}:00Z` },
+    };
+  }
+
+  it('shows a reply at once with its quote and sends the quoted ids', async () => {
+    let answer: (value: Awaited<ReturnType<typeof sendMessage>>) => void = () => undefined;
+    mockedSendMessage.mockReturnValue(new Promise((resolve) => (answer = resolve)));
+
+    const { result } = await renderHook(() => useChatMessages('chat-1', 'user-1'), { wrapper });
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    await act(() => result.current.send('согласен', [], [quote]));
+
+    expect(result.current.messages[0]).toMatchObject({
+      text: 'согласен',
+      status: 'sending',
+      replies: [quote],
+    });
+    expect(mockedSendMessage).toHaveBeenCalledWith('chat-1', {
+      text: 'согласен',
+      media: undefined,
+      replyTo: ['orig'],
+    });
+
+    await act(async () =>
+      answer({
+        id: 'm-reply',
+        chatId: 'chat-1',
+        authorId: 'user-1',
+        kind: 'text',
+        text: 'согласен',
+        createdAt: '2026-09-29T10:00:00Z',
+        attachments: [],
+        replies: [quote],
+        forward: null,
+      }),
+    );
+
+    await waitFor(() => expect(result.current.messages[0].status).toBe('sent'));
+  });
+
+  it('sends the typed text first and the forwarded messages after it, in chat order', async () => {
+    const calls: string[] = [];
+    let openServer: () => void = () => undefined;
+    const server = new Promise<void>((resolve) => (openServer = resolve));
+
+    mockedSendMessage.mockImplementation(async (_chatId, input) => {
+      await server;
+      calls.push(`text:${input.text}`);
+      return {
+        id: 'm-text',
+        chatId: 'chat-1',
+        authorId: 'user-1',
+        kind: 'text',
+        text: input.text ?? null,
+        createdAt: '2026-09-29T10:00:00Z',
+        attachments: [],
+        replies: [],
+        forward: null,
+      };
+    });
+    mockedForward.mockImplementation(async (_chatId: string, ids: string[]) => {
+      calls.push(`forward:${ids.join(',')}`);
+      return ids.map((id, index) => ({
+        ...source(`copy-${id}`, 0),
+        chatId: 'chat-1',
+        authorId: 'user-1',
+        text: `текст ${id}`,
+        createdAt: `2026-09-29T10:00:0${index + 1}Z`,
+        forward: originOf(id, id === 'early' ? 1 : 5),
+      }));
+    });
+
+    const { result } = await renderHook(() => useChatMessages('chat-1', 'user-1'), { wrapper });
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    // Отмечены вразнобой — уйти должны в порядке переписки.
+    await act(() =>
+      result.current.forward('смотри', [
+        { message: source('late', 5), origin: originOf('late', 5) },
+        { message: source('early', 1), origin: originOf('early', 1) },
+      ]),
+    );
+
+    // Сразу: подпись снизу, над ней копии со строкой «Переслано от».
+    const shown = [...result.current.messages].reverse();
+
+    expect(shown.map((message) => message.text)).toEqual(['смотри', 'текст early', 'текст late']);
+    expect(shown[1].forward).toEqual(originOf('early', 1));
+    expect(shown.every((message) => message.status === 'sending')).toBe(true);
+
+    await act(async () => openServer());
+
+    await waitFor(() => expect(result.current.messages.every((m) => m.status === 'sent')).toBe(true));
+    expect(calls).toEqual(['text:смотри', 'forward:early,late']);
+  });
+
+  it('forwards without text when the field is empty, as one call', async () => {
+    mockedForward.mockRejectedValueOnce(new Error('сеть пропала'));
+    mockedForward.mockImplementation(async (_chatId: string, ids: string[]) =>
+      ids.map((id) => ({ ...source(`copy-${id}`, 0), chatId: 'chat-1', forward: originOf(id, 0) })),
+    );
+
+    const { result } = await renderHook(() => useChatMessages('chat-1', 'user-1'), { wrapper });
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    await act(() =>
+      result.current.forward('  ', [
+        { message: source('a', 1), origin: originOf('a', 1) },
+        { message: source('b', 2), origin: originOf('b', 2) },
+      ]),
+    );
+
+    await waitFor(() => expect(result.current.messages.map((m) => m.status)).toEqual(['failed', 'failed']));
+    expect(mockedSendMessage).not.toHaveBeenCalled();
+
+    // Повтор одного — повтор всей пересылки, одним вызовом.
+    await act(() => result.current.retry(result.current.messages[0].localId!));
+
+    await waitFor(() => expect(result.current.messages.map((m) => m.status)).toEqual(['sent', 'sent']));
+    expect(mockedForward).toHaveBeenCalledTimes(2);
+    expect(mockedForward).toHaveBeenLastCalledWith('chat-1', ['a', 'b']);
   });
 });

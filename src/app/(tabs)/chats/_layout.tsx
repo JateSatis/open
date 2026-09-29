@@ -15,6 +15,7 @@ export default function ChatsLayout() {
       />
       <Stack.Screen name="new" options={{ title: 'Новый чат' }} />
       <Stack.Screen name="invites" options={{ title: 'Заявки' }} />
+      <Stack.Screen name="forward" options={{ title: 'Переслать' }} />
       {/* Имя человека ставит сам экран, когда профиль загрузится. */}
       <Stack.Screen name="people/[userId]" options={{ title: 'Профиль' }} />
       {/* Заголовок диалога ставит сам экран: он знает имя собеседника. */}

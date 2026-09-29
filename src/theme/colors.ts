@@ -27,6 +27,10 @@ export const Colors = {
     waveformRestOnPrimary: 'rgba(255, 255, 255, 0.45)',
     /** Фон строки выбранного сообщения и короткая подсветка того, к которому прыгнули. */
     messageHighlight: 'rgba(60, 135, 247, 0.18)',
+    /** Подложка цитаты в чужом облачке. */
+    quoteBackground: 'rgba(60, 135, 247, 0.10)',
+    /** То же в своём облачке, на `primary`. */
+    quoteBackgroundOnPrimary: 'rgba(255, 255, 255, 0.18)',
   },
   dark: {
     text: '#ffffff',
@@ -47,6 +51,8 @@ export const Colors = {
     waveformRest: 'rgba(176, 180, 186, 0.35)',
     waveformRestOnPrimary: 'rgba(255, 255, 255, 0.45)',
     messageHighlight: 'rgba(60, 135, 247, 0.28)',
+    quoteBackground: 'rgba(60, 135, 247, 0.18)',
+    quoteBackgroundOnPrimary: 'rgba(255, 255, 255, 0.18)',
   },
 } as const;
 

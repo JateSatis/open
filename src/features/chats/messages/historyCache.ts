@@ -58,10 +58,53 @@ export function mergeMessages(
   return { ...history, items: items.sort(byNewest) };
 }
 
-export function removeMessages(history: ChatHistory, ids: ReadonlySet<string>): ChatHistory {
-  const items = history.items.filter((message) => !ids.has(message.id));
+/** Цитаты удалённых сообщений в ответах — «Сообщение удалено», ответ остаётся. */
+function markQuotesDeleted(message: ChatMessage, ids: ReadonlySet<string>): ChatMessage {
+  if (!message.replies.some((quote) => quote.state === 'live' && ids.has(quote.messageId))) {
+    return message;
+  }
 
-  return items.length === history.items.length ? history : { ...history, items };
+  return {
+    ...message,
+    replies: message.replies.map((quote) =>
+      quote.state === 'live' && ids.has(quote.messageId)
+        ? { messageId: quote.messageId, state: 'deleted' }
+        : quote,
+    ),
+  };
+}
+
+export function removeMessages(history: ChatHistory, ids: ReadonlySet<string>): ChatHistory {
+  let changed = false;
+  const items: ChatMessage[] = [];
+
+  for (const message of history.items) {
+    if (ids.has(message.id)) {
+      changed = true;
+      continue;
+    }
+
+    const marked = markQuotesDeleted(message, ids);
+
+    if (marked !== message) changed = true;
+
+    items.push(marked);
+  }
+
+  return changed ? { ...history, items } : history;
+}
+
+/** id сообщений, процитированных в загруженных ответах и ещё живых. */
+export function quotedIds(history: ChatHistory | undefined): string[] {
+  const ids = new Set<string>();
+
+  for (const message of history?.items ?? []) {
+    for (const quote of message.replies) {
+      if (quote.state === 'live') ids.add(quote.messageId);
+    }
+  }
+
+  return [...ids];
 }
 
 /** Возвращает на место сообщения, которые сервер отказался удалять. */

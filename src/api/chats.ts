@@ -6,7 +6,10 @@
 
 import type { QueryData, RealtimeChannel } from '@supabase/supabase-js';
 
+import { toPreview, type MessagePreview } from '@/api/messagePreview';
 import { supabase } from '@/api/supabase';
+
+export { toPreview, type MessagePreview } from '@/api/messagePreview';
 
 export const MESSAGE_PAGE_SIZE = 30;
 
@@ -61,6 +64,32 @@ export type MessageAttachment = {
   waveform: number[] | null;
 };
 
+/**
+ * Цитата в ответе — ссылка на сообщение того же чата, а не копия: правки
+ * оригинала видны в ней сразу. Удалённый оригинал база не отдаёт, и цитата
+ * помнит только его id.
+ */
+export type QuotedMessage =
+  | { messageId: string; state: 'deleted' }
+  | {
+      messageId: string;
+      state: 'live';
+      authorId: string | null;
+      /** `null` — аккаунт автора удалён. */
+      authorName: string | null;
+      createdAt: string;
+      preview: MessagePreview;
+    };
+
+/** Откуда пересланное: первоисточник, а не промежуточное звено. */
+export type ForwardOrigin = {
+  authorId: string | null;
+  /** `null` — аккаунт автора оригинала удалён. */
+  authorName: string | null;
+  /** Где оригинал сейчас. `null` — его удалили, копия при этом живёт. */
+  original: { messageId: string; chatId: string; createdAt: string } | null;
+};
+
 export type Message = {
   id: string;
   chatId: string;
@@ -69,6 +98,10 @@ export type Message = {
   text: string | null;
   createdAt: string;
   attachments: MessageAttachment[];
+  /** На что это ответ — по порядку. Пусто у обычного сообщения. */
+  replies: QuotedMessage[];
+  /** Пересланное: чьё оно на самом деле. `null` у своего сообщения. */
+  forward: ForwardOrigin | null;
 };
 
 /**
@@ -89,6 +122,8 @@ export type SendMessageMedia = {
 export type SendMessageInput = {
   text?: string;
   media?: SendMessageMedia[];
+  /** Ответ: id сообщений того же чата, по порядку. */
+  replyTo?: string[];
 };
 
 /** Загруженное голосовое: файл, длительность и форма волны. */
@@ -109,8 +144,13 @@ const CHAT_COLUMNS = 'id, kind, title, last_message_at, last_message_text, last_
 const MEMBER_COLUMNS =
   'chat_id, user_id, last_read_at, profile:profiles(id, display_name, avatar_url)';
 const WAITING_COLUMNS = 'chat_id, user_id, display_name, avatar_url';
+// Цитаты и «переслано от» приходят той же выборкой, что и сами сообщения:
+// страница переписки — один запрос, без догрузки на каждое облачко, и облачко
+// не прыгает по высоте, когда цитата подтянулась. Подсказки внешних ключей
+// нужны, потому что `messages` связана с `profiles` и сама с собой через
+// несколько таблиц сразу.
 export const MESSAGE_COLUMNS =
-  'id, chat_id, author_id, kind, text, created_at, attachments(id, url, poster_url, mime_type, width, height, duration_ms, waveform)';
+  'id, chat_id, author_id, kind, text, created_at, attachments(id, url, poster_url, mime_type, width, height, duration_ms, waveform), replies:message_replies!message_replies_message_fkey(position, quoted_id, quoted:messages!message_replies_quoted_fkey(id, author_id, kind, text, created_at, author:profiles!messages_author_id_fkey(display_name), attachments(url, poster_url, mime_type, duration_ms, position))), forward:message_forwards!message_forwards_message_fkey(origin_message_id, origin_author_id, origin_author:profiles(display_name), origin:messages!message_forwards_origin_fkey(id, chat_id, created_at))';
 
 // Заготовки запросов. Они же задают типы рядов: клиент разбирает select-строку
 // вместе со встроенными таблицами, поэтому форма ответа выводится из самого
@@ -179,6 +219,40 @@ function toWaiting(row: WaitingRow): Person | null {
   };
 }
 
+type ReplyRow = NonNullable<MessageRow['replies']>[number];
+
+function toQuoted(row: ReplyRow): QuotedMessage {
+  const quoted = row.quoted;
+
+  // Оригинал приходит, только пока он жив: удалённое SELECT-политика не
+  // отдаёт, а из другого чата цитаты не бывает (внешний ключ с chat_id).
+  if (!quoted) return { messageId: row.quoted_id, state: 'deleted' };
+
+  return {
+    messageId: quoted.id,
+    state: 'live',
+    authorId: quoted.author_id,
+    authorName: quoted.author_id ? (quoted.author?.display_name ?? 'Без имени') : null,
+    createdAt: quoted.created_at,
+    preview: toPreview(toMessageKind(quoted.kind), quoted.text, quoted.attachments ?? []),
+  };
+}
+
+function toForward(row: MessageRow['forward'] | undefined): ForwardOrigin | null {
+  if (!row) return null;
+
+  // Аккаунт удалён — ссылка обнулилась; скрытый профиль база тоже не отдаёт.
+  const hasAuthor = row.origin_author_id !== null && row.origin_author !== null;
+
+  return {
+    authorId: row.origin_author_id,
+    authorName: hasAuthor ? (row.origin_author?.display_name ?? 'Без имени') : null,
+    original: row.origin
+      ? { messageId: row.origin.id, chatId: row.origin.chat_id, createdAt: row.origin.created_at }
+      : null,
+  };
+}
+
 export function toMessage(row: MessageRow): Message {
   return {
     id: row.id,
@@ -197,6 +271,8 @@ export function toMessage(row: MessageRow): Message {
       durationMs: attachment.duration_ms,
       waveform: attachment.waveform,
     })),
+    replies: [...(row.replies ?? [])].sort((a, b) => a.position - b.position).map(toQuoted),
+    forward: toForward(row.forward),
   };
 }
 
@@ -432,6 +508,7 @@ async function sendMediaMessage(
   chatId: string,
   text: string | null,
   media: SendMessageMedia[],
+  replyTo: string[],
 ): Promise<Message> {
   const { data: newMessageId, error } = await supabase.rpc('send_media_message', {
     target_chat: chatId,
@@ -447,6 +524,7 @@ async function sendMediaMessage(
       duration_ms: item.durationMs,
       size_bytes: item.sizeBytes,
     })),
+    reply_to: replyTo.length > 0 ? replyTo : undefined,
   });
 
   if (error) throw error;
@@ -462,12 +540,15 @@ async function sendMediaMessage(
 export async function sendMessage(chatId: string, input: SendMessageInput): Promise<Message> {
   const text = input.text?.trim() || null;
   const media = input.media ?? [];
+  const replyTo = input.replyTo ?? [];
 
   if (!text && media.length === 0) throw new Error('Пустое сообщение нельзя отправить');
 
-  return media.length === 0
+  // Ответ идёт через функцию и у текста: цитаты база принимает только в той
+  // же транзакции, что и само сообщение (см. политику `message_replies`).
+  return media.length === 0 && replyTo.length === 0
     ? sendTextMessage(chatId, text!)
-    : sendMediaMessage(chatId, text, media);
+    : sendMediaMessage(chatId, text, media, replyTo);
 }
 
 /**
@@ -475,7 +556,11 @@ export async function sendMessage(chatId: string, input: SendMessageInput): Prom
  * вложение одной транзакцией. Что вложение ровно одно, что это звук и что у
  * него есть длительность, проверяет база (миграция голосовых), не клиент.
  */
-export async function sendVoiceMessage(chatId: string, voice: SendVoiceInput): Promise<Message> {
+export async function sendVoiceMessage(
+  chatId: string,
+  voice: SendVoiceInput,
+  replyTo: string[] = [],
+): Promise<Message> {
   const { data: newMessageId, error } = await supabase.rpc('send_voice_message', {
     target_chat: chatId,
     voice: {
@@ -485,6 +570,7 @@ export async function sendVoiceMessage(chatId: string, voice: SendVoiceInput): P
       size_bytes: voice.sizeBytes,
       waveform: voice.waveform,
     },
+    reply_to: replyTo.length > 0 ? replyTo : undefined,
   });
 
   if (error) throw error;
@@ -495,6 +581,33 @@ export async function sendVoiceMessage(chatId: string, voice: SendVoiceInput): P
   if (fetchError) throw fetchError;
 
   return toMessage(data);
+}
+
+/**
+ * Пересылает сообщения в чат одной транзакцией — функцией `forward_messages`.
+ * Она же проверяет, что я участник целевого чата, и ставит «переслано от»:
+ * выставить атрибуцию сам клиент не может (миграция
+ * `20260929100000_replies_and_forwards.sql`). Копии — в исходном порядке.
+ */
+export async function forwardMessages(chatId: string, messageIds: string[]): Promise<Message[]> {
+  const { data: ids, error } = await supabase.rpc('forward_messages', {
+    target_chat: chatId,
+    message_ids: messageIds,
+  });
+
+  if (error) throw error;
+
+  const created = (ids ?? []).filter((id): id is string => typeof id === 'string');
+
+  if (created.length === 0) throw new Error('Не удалось переслать сообщения');
+
+  const { data, error: fetchError } = await messagesSelect()
+    .in('id', created)
+    .order('created_at', { ascending: true });
+
+  if (fetchError) throw fetchError;
+
+  return (data ?? []).map(toMessage);
 }
 
 /**

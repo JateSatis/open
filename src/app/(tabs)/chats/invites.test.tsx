@@ -68,6 +68,8 @@ function invite(overrides: Partial<ChatInvite> = {}): ChatInvite {
         text: 'берём палатку?',
         createdAt: '2026-09-16T10:00:00Z',
         attachments: [],
+        replies: [],
+        forward: null,
       },
     ],
     ...overrides,
