@@ -20,7 +20,11 @@ const mockNavigate = jest.fn();
 // Шапку экран ставит через Stack.Screen — мок рисует её прямо в дереве, чтобы
 // статус собеседника и тап по шапке можно было проверить.
 jest.mock('expo-router', () => ({
-  useNavigation: () => ({ getState: () => ({ index: 0, routes: [] }), dispatch: jest.fn() }),
+  useNavigation: () => ({
+    getState: () => ({ index: 0, routes: [] }),
+    dispatch: jest.fn(),
+    addListener: () => () => undefined,
+  }),
   useLocalSearchParams: () => ({ chatId: 'chat-1' }),
   useRouter: () => ({ push: mockPush, navigate: mockNavigate }),
   Stack: {
@@ -44,6 +48,9 @@ jest.mock('@/api/chats', () => ({
   subscribeToChat: jest.fn(),
   deleteMessages: jest.fn(),
   listDeletedMessageIds: jest.fn(),
+  listMessageEdits: jest.fn(() => Promise.resolve([])),
+  listMessagesByIds: jest.fn(() => Promise.resolve([])),
+  editMessage: jest.fn(),
   MESSAGE_PAGE_SIZE: 30,
 }));
 
@@ -118,6 +125,7 @@ function message(id: string, text: string, authorId: string): Message {
     kind: 'text',
     text,
     createdAt: SENT_AT,
+    editedAt: null,
     attachments: [],
     replies: [],
     forward: null,

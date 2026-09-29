@@ -15,6 +15,7 @@ function message(overrides: Partial<ChatMessage> = {}): ChatMessage {
     kind: 'text',
     text: 'привет',
     createdAt: '2026-09-27T10:00:00Z',
+    editedAt: null,
     attachments: [],
     replies: [],
     forward: null,
@@ -31,7 +32,15 @@ describe('message menu', () => {
   it('shows a member everything for their own message', () => {
     expect(
       labels({ message: message({ authorId: 'user-1' }), isOwn: true, isMember: true, isPinned: false }),
-    ).toEqual(['Ответить', 'Копировать', 'Закрепить', 'Переслать', 'Выбрать', 'Удалить']);
+    ).toEqual([
+      'Ответить',
+      'Копировать',
+      'Изменить',
+      'Закрепить',
+      'Переслать',
+      'Выбрать',
+      'Удалить',
+    ]);
   });
 
   it('never offers a member to delete somebody else’s message', () => {

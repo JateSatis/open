@@ -11,6 +11,7 @@
 import type { QueryClient } from '@tanstack/react-query';
 
 import type { Message } from '@/api/chats';
+import { previewOf as previewOfMessage } from '@/features/chats/messageQuote';
 import type { ChatMessage } from '@/features/chats/messages/types';
 
 export type ChatHistory = {
@@ -92,6 +93,75 @@ export function removeMessages(history: ChatHistory, ids: ReadonlySet<string>): 
   }
 
   return changed ? { ...history, items } : history;
+}
+
+/**
+ * Кладёт свежие версии сообщений на место загруженных — после правки. Новое
+ * в историю не добавляется: сообщение из другого места переписки, которое
+ * процитировано здесь, меняет только цитаты. Цитаты этих сообщений в
+ * ответах показывают новую версию.
+ *
+ * Локальные превью у заменённого не переживают правку: вложения могли
+ * смениться, а превью привязаны к позициям. Своё только что отправленное
+ * правка получает с превью явно, через `localPreviews`.
+ */
+export function replaceMessages(
+  history: ChatHistory,
+  fresh: Message[],
+  localPreviews: ReadonlyMap<string, string[]> = new Map(),
+): ChatHistory {
+  const byId = new Map(fresh.map((message) => [message.id, message]));
+
+  if (byId.size === 0) return history;
+
+  let changed = false;
+
+  const items = history.items.map((message) => {
+    const next = byId.get(message.id);
+    const quotes = message.replies.some(
+      (quote) => quote.state === 'live' && byId.has(quote.messageId),
+    );
+
+    if (!next && !quotes) return message;
+
+    changed = true;
+
+    const base: ChatMessage = next
+      ? { ...message, ...next, status: 'sent', localPreviews: localPreviews.get(next.id) }
+      : message;
+
+    if (!quotes) return base;
+
+    return {
+      ...base,
+      replies: base.replies.map((quote) => {
+        const quoted = quote.state === 'live' ? byId.get(quote.messageId) : undefined;
+
+        return quoted && quote.state === 'live'
+          ? { ...quote, editedAt: quoted.editedAt, preview: previewOfMessage(quoted) }
+          : quote;
+      }),
+    };
+  });
+
+  return changed ? { ...history, items } : history;
+}
+
+/** Правленые версии, известные на экране, — чтобы знать, что уже устарело. */
+export function knownEdits(history: ChatHistory | undefined): Map<string, string | null> {
+  const known = new Map<string, string | null>();
+
+  for (const message of history?.items ?? []) {
+    known.set(message.id, message.editedAt);
+
+    for (const quote of message.replies) {
+      if (quote.state === 'live' && !known.has(quote.messageId)) {
+        known.set(quote.messageId, quote.editedAt);
+      }
+    }
+  }
+
+  return known;
 }
 
 /** id сообщений, процитированных в загруженных ответах и ещё живых. */

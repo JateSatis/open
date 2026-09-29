@@ -42,7 +42,9 @@ export function InAppMessageToast() {
       useNativeDriver: true,
     }).start();
 
-    const timer = setTimeout(dismiss, alert.kind === 'notice' ? NOTICE_VISIBLE_MS : VISIBLE_MS);
+    // Фраза с действием висит как карточка: на кнопку нужно успеть нажать.
+    const short = alert.kind === 'notice' && !alert.action;
+    const timer = setTimeout(dismiss, short ? NOTICE_VISIBLE_MS : VISIBLE_MS);
 
     return () => clearTimeout(timer);
   }, [alert, dismiss, slide]);
@@ -64,6 +66,8 @@ export function InAppMessageToast() {
   const cardColors = { backgroundColor: theme.backgroundElement, borderColor: theme.border };
 
   if (alert.kind === 'notice') {
+    const { action } = alert;
+
     return (
       <Animated.View style={[styles.wrapper, styles.noticeWrapper, slideStyle]}>
         <Pressable
@@ -74,6 +78,21 @@ export function InAppMessageToast() {
           <Text variant="small" color={alert.tone === 'error' ? 'danger' : 'text'}>
             {alert.text}
           </Text>
+
+          {action ? (
+            <Pressable
+              accessibilityRole="button"
+              hitSlop={Spacing.two}
+              onPress={() => {
+                dismiss();
+                action.run();
+              }}
+            >
+              <Text variant="smallBold" color="primary">
+                {action.label}
+              </Text>
+            </Pressable>
+          ) : null}
         </Pressable>
       </Animated.View>
     );

@@ -12,6 +12,7 @@ function message(id: string, overrides: Partial<ChatMessage> = {}): ChatMessage 
     kind: 'text',
     text: id,
     createdAt: `2026-09-27T10:0${id.length}:00Z`,
+    editedAt: null,
     attachments: [],
     replies: [],
     forward: null,

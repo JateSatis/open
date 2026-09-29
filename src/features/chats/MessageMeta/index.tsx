@@ -44,8 +44,18 @@ export function MessageMeta({ message, isOwn, isRead, variant, onRetry }: Messag
             Не отправлено. Повторить
           </Text>
         </Pressable>
+      ) : message.editStatus === 'saving' ? (
+        <Text variant="caption" color={color}>
+          изменено · Сохраняется…
+        </Text>
       ) : (
         <>
+          {message.editedAt ? (
+            <Text variant="caption" color={color}>
+              изменено
+            </Text>
+          ) : null}
+
           <Text variant="caption" color={color}>
             {formatMessageTime(message.createdAt)}
           </Text>

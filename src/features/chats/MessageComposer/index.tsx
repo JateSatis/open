@@ -52,6 +52,17 @@ export type MessageComposerProps = {
   inputRef?: Ref<TextInput>;
   /** Отправить можно и с пустым полем: например, пересылку без подписи. */
   canSendEmpty?: boolean;
+  /**
+   * Правка: «О» сохраняет, а активна ли она — решает итог правки целиком
+   * (текст, оставленные вложения, запись), а не одно поле.
+   */
+  edit?: {
+    canSave: boolean;
+    /** Под плашкой голосовое: подписи у него не бывает. */
+    textLocked: boolean;
+    attachDisabled: boolean;
+    recordDisabled: boolean;
+  };
 };
 
 export function MessageComposer({
@@ -69,6 +80,7 @@ export function MessageComposer({
   plate,
   inputRef,
   canSendEmpty = false,
+  edit,
 }: MessageComposerProps) {
   const theme = useTheme();
   // Счётчик берётся из стора выбора, а не приходит пропом: иначе выбор файла
@@ -85,7 +97,7 @@ export function MessageComposer({
     );
   }
 
-  const isEmpty = !text.trim() && mediaCount === 0 && !canSendEmpty;
+  const isEmpty = edit ? !edit.canSave : !text.trim() && mediaCount === 0 && !canSendEmpty;
 
   const submit = () => {
     if (isEmpty) return;
@@ -98,9 +110,10 @@ export function MessageComposer({
       <TextInput
         ref={inputRef}
         accessibilityLabel="Сообщение"
-        placeholder="Сообщение"
+        placeholder={edit?.textLocked ? 'Голосовое — без подписи' : 'Сообщение'}
         placeholderTextColor={theme.textSecondary}
         value={text}
+        editable={!edit?.textLocked}
         multiline
         onPressIn={onFieldActivate}
         onFocus={onFieldActivate}
@@ -116,7 +129,7 @@ export function MessageComposer({
             съедало ширину поля на крупном шрифте. */}
         <Button
           label="О"
-          accessibilityLabel="Отправить"
+          accessibilityLabel={edit ? 'Сохранить' : 'Отправить'}
           size="sm"
           disabled={isEmpty}
           onPress={submit}
@@ -141,8 +154,10 @@ export function MessageComposer({
         // дизайн заменит эту кнопку на нормальную, не трогая остальной код.
         <Button
           label="M"
+          accessibilityLabel="Фото и видео"
           variant="secondary"
           size="sm"
+          disabled={edit?.attachDisabled}
           onPressIn={() => {
             perfMarkStart('M: касание');
             onAttachPressIn?.();
@@ -161,7 +176,12 @@ export function MessageComposer({
     <View style={[styles.container, { borderTopColor: theme.border }]}>
       {plate}
       {onSendVoice ? (
-        <HoldToRecordRow style={styles.row} onSend={onSendVoice} onActivity={onRecordingVoice}>
+        <HoldToRecordRow
+          style={styles.row}
+          onSend={onSendVoice}
+          onActivity={onRecordingVoice}
+          recordDisabled={edit?.recordDisabled}
+        >
           {inputs}
         </HoldToRecordRow>
       ) : (

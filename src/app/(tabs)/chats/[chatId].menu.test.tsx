@@ -27,7 +27,11 @@ import { renderWithQuery } from '@/test/renderWithQuery';
 // Шапку экран ставит через Stack.Screen — мок рисует и заголовок, и правую
 // кнопку прямо в дереве: так видно «Выбрано: N» и «Отмена».
 jest.mock('expo-router', () => ({
-  useNavigation: () => ({ getState: () => ({ index: 0, routes: [] }), dispatch: jest.fn() }),
+  useNavigation: () => ({
+    getState: () => ({ index: 0, routes: [] }),
+    dispatch: jest.fn(),
+    addListener: () => () => undefined,
+  }),
   useLocalSearchParams: () => ({ chatId: 'chat-1' }),
   useRouter: () => ({ push: jest.fn(), navigate: jest.fn() }),
   Stack: {
@@ -55,6 +59,9 @@ jest.mock('@/api/chats', () => ({
   subscribeToChat: jest.fn(),
   deleteMessages: jest.fn(),
   listDeletedMessageIds: jest.fn(),
+  listMessageEdits: jest.fn(() => Promise.resolve([])),
+  listMessagesByIds: jest.fn(() => Promise.resolve([])),
+  editMessage: jest.fn(),
   MESSAGE_PAGE_SIZE: 30,
 }));
 jest.mock('@/api/pins', () => ({
@@ -123,6 +130,7 @@ function message(id: string, text: string, authorId: string, minute = 0): Messag
     kind: 'text',
     text,
     createdAt: `2026-09-27T10:0${minute}:00Z`,
+    editedAt: null,
     attachments: [],
     replies: [],
     forward: null,
@@ -203,6 +211,7 @@ describe('message menu', () => {
     expect(await menuItems()).toEqual([
       'Ответить',
       'Копировать',
+      'Изменить',
       'Закрепить',
       'Переслать',
       'Выбрать',

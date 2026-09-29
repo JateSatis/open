@@ -24,6 +24,7 @@ function textMessage(overrides: Partial<ChatMessage> = {}): ChatMessage {
     kind: 'text',
     text: 'привет',
     createdAt: '2026-09-22T10:00:00Z',
+    editedAt: null,
     attachments: [],
     replies: [],
     forward: null,

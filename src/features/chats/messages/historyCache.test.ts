@@ -10,6 +10,7 @@ function message(id: string, overrides: Partial<ChatMessage> = {}): ChatMessage 
     kind: 'text',
     text: id,
     createdAt: '2026-09-29T10:00:00Z',
+    editedAt: null,
     attachments: [],
     replies: [],
     forward: null,
@@ -24,6 +25,7 @@ const liveQuote = (messageId: string) => ({
   authorId: 'user-2',
   authorName: 'Марина',
   createdAt: '2026-09-29T09:00:00Z',
+  editedAt: null,
   preview: {
     kind: 'text' as const,
     text: 'оригинал',

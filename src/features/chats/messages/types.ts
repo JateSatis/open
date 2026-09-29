@@ -1,4 +1,10 @@
-import type { ChatActivity, ForwardOrigin, Message, QuotedMessage } from '@/api/chats';
+import type {
+  ChatActivity,
+  ForwardOrigin,
+  Message,
+  MessageAttachment,
+  QuotedMessage,
+} from '@/api/chats';
 import type { LocalMedia, MediaLibraryItem } from '@/features/media';
 
 export type DeliveryStatus = 'sending' | 'sent' | 'failed';
@@ -22,6 +28,23 @@ export type ChatMessage = Message & {
    * пока грузится удалённая, и не мигает пустотой.
    */
   localPreviews?: string[];
+  /** Правка ушла на сервер и ещё не подтверждена: облачко уже показывает новую версию. */
+  editStatus?: 'saving';
+};
+
+/** Голосовое итога правки: прежняя запись или новая, ещё на телефоне. */
+export type EditVoice =
+  | { type: 'kept'; attachment: MessageAttachment; localUri?: string }
+  | { type: 'new'; voice: LocalMedia };
+
+/** Итог правки до загрузки новых файлов. */
+export type EditResult = {
+  text: string;
+  /** Оставленные фото и видео — по порядку. */
+  kept: MessageAttachment[];
+  /** Добавленные из шита медиа — в конец альбома. */
+  added: MediaLibraryItem[];
+  voice: EditVoice | null;
 };
 
 /** Цитата, на которую можно ответить: оригинал жив. */

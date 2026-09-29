@@ -65,7 +65,7 @@ const inFlight = new Set<string>();
 const discarded = new Set<string>();
 
 /** Локальный предпросмотр вложения до ответа сервера — облачко не пустует, пока файлы грузятся. */
-function toLocalAttachment(asset: MediaLibraryItem): MessageAttachment {
+export function toLocalAttachment(asset: MediaLibraryItem): MessageAttachment {
   return {
     id: asset.id,
     // Превью берётся по id ассета: путь к файлу для показа не нужен, он
@@ -81,7 +81,7 @@ function toLocalAttachment(asset: MediaLibraryItem): MessageAttachment {
 }
 
 /** Своё голосовое до ответа сервера: играет локальный файл, волна уже есть. */
-function toLocalVoiceAttachment(localId: string, voice: LocalMedia): MessageAttachment {
+export function toLocalVoiceAttachment(localId: string, voice: LocalMedia): MessageAttachment {
   return {
     id: `${localId}-voice`,
     url: voice.uri,
@@ -124,7 +124,7 @@ export function deliveryKey(localId: string, outgoing: Outgoing): string {
   return outgoing.type === 'forward' ? outgoing.batch : localId;
 }
 
-function toSendMedia(item: UploadedMedia): SendMessageMedia {
+export function toSendMedia(item: UploadedMedia): SendMessageMedia {
   return {
     url: item.url,
     posterUrl: item.posterUrl,
@@ -245,7 +245,7 @@ function settle(queryClient: QueryClient, chatId: string, localId: string, saved
   notifyManager.schedule(() => removeFromOutbox(chatId, localId));
 }
 
-function errorCode(cause: unknown): string | null {
+export function errorCode(cause: unknown): string | null {
   if (typeof cause !== 'object' || cause === null) return null;
 
   const { code } = cause as { code?: unknown };
@@ -380,6 +380,7 @@ function textDraft(
     kind: 'text',
     text,
     createdAt: new Date(at).toISOString(),
+    editedAt: null,
     attachments: [],
     replies,
     forward: null,
@@ -419,6 +420,7 @@ export function sendPost(
       text: part.text || null,
       // Миллисекунда между частями держит их порядок в списке.
       createdAt: new Date(now + index).toISOString(),
+      editedAt: null,
       attachments,
       replies: partReplies,
       forward: null,
@@ -458,6 +460,7 @@ export function sendVoice(
     kind: 'voice',
     text: null,
     createdAt: new Date().toISOString(),
+    editedAt: null,
     attachments: [toLocalVoiceAttachment(localId, voice)],
     replies,
     forward: null,
@@ -505,6 +508,7 @@ export function sendForward(context: SendContext, text: string, items: ForwardIt
       kind: message.kind,
       text: message.text,
       createdAt: new Date(now + 1 + index).toISOString(),
+      editedAt: null,
       // Файлы — те же, что у оригинала: они уже в Storage, грузить нечего.
       attachments: message.attachments,
       // Цитата ссылается на сообщения исходного чата и с копией не едет.

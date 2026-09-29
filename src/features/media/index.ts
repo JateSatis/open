@@ -53,6 +53,7 @@ export {
 } from './mediaLibrary';
 export {
   selectedAssets,
+  setSelectionLimit,
   useMediaSelection,
   useHasSelection,
   useSelectionCount,

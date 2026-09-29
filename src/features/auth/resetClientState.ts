@@ -3,6 +3,7 @@ import type { QueryClient } from '@tanstack/react-query';
 import { resetComposerDrafts } from '@/features/chats/composerDraftStore';
 import { resetMediaSheet } from '@/features/chats/MediaPickerSheet/sheetStore';
 import { resetOutbox } from '@/features/chats/messages/outbox';
+import { resetPendingEdits } from '@/features/chats/messages/pendingEdits';
 import { useMediaSelection } from '@/features/media/selectionStore';
 import { setActiveChatId } from '@/store/activeChat';
 
@@ -24,6 +25,7 @@ export function resetClientState(queryClient: QueryClient) {
   useMediaSelection.getState().clear();
   resetMediaSheet();
   resetOutbox();
+  resetPendingEdits();
   resetComposerDrafts();
   setActiveChatId(null);
 }

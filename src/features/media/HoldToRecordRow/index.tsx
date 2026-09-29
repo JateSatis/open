@@ -19,6 +19,8 @@ export type HoldToRecordRowProps = {
   onSend: (media: LocalMedia) => void;
   /** Идёт запись. Зовётся часто — троттлинг на стороне получателя. */
   onActivity?: () => void;
+  /** Кнопка записи есть, но записывать сейчас нельзя. */
+  recordDisabled?: boolean;
   style?: StyleProp<ViewStyle>;
 };
 
@@ -28,7 +30,13 @@ export type HoldToRecordRowProps = {
  * голосового потом. Встраивающему не нужно знать ни про жест, ни про
  * рекордер — он получает готовый `LocalMedia`.
  */
-export function HoldToRecordRow({ children, onSend, onActivity, style }: HoldToRecordRowProps) {
+export function HoldToRecordRow({
+  children,
+  onSend,
+  onActivity,
+  recordDisabled = false,
+  style,
+}: HoldToRecordRowProps) {
   const theme = useTheme();
   const interruptedRef = useRef<() => void>(() => undefined);
   const recorder = useVoiceRecorder({ onInterrupted: () => interruptedRef.current() });
@@ -51,7 +59,8 @@ export function HoldToRecordRow({ children, onSend, onActivity, style }: HoldToR
         {hold.phase === 'idle' ? null : <RecordingBar hold={hold} drag={drag} />}
       </View>
 
-      <RecordButton hold={hold} drag={drag} />
+      {/* Идущая запись доживает до конца, даже если кнопка стала неактивной. */}
+      <RecordButton hold={hold} drag={drag} disabled={recordDisabled && hold.phase === 'idle'} />
 
       {hold.notice ? (
         <View

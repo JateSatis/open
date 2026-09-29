@@ -35,6 +35,8 @@ type Options = {
   reply: (messages: ChatMessage[]) => void;
   /** Переслать: дальше — выбор чата. */
   forward: (messages: ChatMessage[]) => void;
+  /** Изменить: поле ввода переходит в режим правки этого сообщения. */
+  edit: (message: ChatMessage) => void;
 };
 
 export type MessageActionHandlers = {
@@ -52,6 +54,7 @@ export function useMessageActionHandlers({
   authorName,
   reply,
   forward,
+  edit,
 }: Options): MessageActionHandlers {
   const removeForEveryone = useCallback(
     async (messageIds: string[]) => {
@@ -97,6 +100,9 @@ export function useMessageActionHandlers({
         case 'forward':
           forward([message]);
           return;
+        case 'edit':
+          edit(message);
+          return;
         case 'copy':
           void copyText(message.text ?? '');
           return;
@@ -124,7 +130,7 @@ export function useMessageActionHandlers({
           return;
       }
     },
-    [discard, forward, pins, removeForEveryone, reply, retry, selection],
+    [discard, edit, forward, pins, removeForEveryone, reply, retry, selection],
   );
 
   const runSelectionAction = useCallback(

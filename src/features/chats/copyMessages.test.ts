@@ -10,6 +10,7 @@ function message(id: string, text: string | null, authorId: string, createdAt: s
     kind: text === null ? 'voice' : 'text',
     text,
     createdAt,
+    editedAt: null,
     attachments: [],
     replies: [],
     forward: null,

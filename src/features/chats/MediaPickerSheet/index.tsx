@@ -79,8 +79,10 @@ const LIST_MOUNT_DISTANCE = 2;
 
 export type MediaPickerSheetProps = {
   draft: ComposerDraft;
-  /** Плашка ответа над полем шита: альбом тоже может быть ответом. */
+  /** Плашка над полем шита: ответ или правка — альбом бывает и тем и другим. */
   plate?: ReactNode;
+  /** Идёт правка: «О» шита сохраняет её, а не отправляет новое сообщение. */
+  editing?: boolean;
   onTyping: () => void;
   onSend: () => void;
 };
@@ -144,7 +146,15 @@ type SheetWindowProps = MediaPickerSheetProps & { phase: Exclude<MediaSheetPhase
  *   проигрывалась бы вхолостую, за невидимым окном;
  * - тяжёлый список монтируется под готовой оболочкой, уже на ходу.
  */
-function SheetWindow({ phase, draft, plate, onTyping, onSend }: SheetWindowProps) {
+/** Строка шита видна только с выбранными файлами — сохранять правку есть что. */
+const SHEET_EDIT = {
+  canSave: true,
+  textLocked: false,
+  attachDisabled: true,
+  recordDisabled: true,
+} as const;
+
+function SheetWindow({ phase, draft, plate, editing, onTyping, onSend }: SheetWindowProps) {
   countRender('MediaPickerSheet');
 
   const theme = useTheme();
@@ -390,6 +400,7 @@ function SheetWindow({ phase, draft, plate, onTyping, onSend }: SheetWindowProps
               onTyping={onTyping}
               onFieldActivate={claimKeyboardForSheet}
               plate={plate}
+              edit={editing ? SHEET_EDIT : undefined}
               canSend
             />
           </Animated.View>
