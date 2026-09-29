@@ -447,10 +447,18 @@ begin
     perform pg_temp.check('пометку пересылки не снять', sqlstate = '42501', sqlstate || ' ' || sqlerrm);
   end;
 
-  -- Обычное своё сообщение по-прежнему правится: защита только у пересланных.
-  update public.messages set text = 'поправил' where id = reply;
-  get diagnostics n = row_count;
-  perform pg_temp.check('обычное своё сообщение правится как раньше', n = 1, n::text);
+  -- Обычное своё сообщение правится только функцией правки: прямой UPDATE
+  -- закрыт для всех (20260929180000_message_edit.sql).
+  begin
+    update public.messages set text = 'поправил' where id = reply;
+    perform pg_temp.check('обычное своё сообщение прямым UPDATE не правится', false, 'прошло');
+  exception when others then
+    perform pg_temp.check('обычное своё сообщение прямым UPDATE не правится', sqlstate = '42501', sqlstate || ' ' || sqlerrm);
+  end;
+
+  perform public.edit_message(reply, 'поправил');
+  select text into s from public.messages where id = reply;
+  perform pg_temp.check('обычное своё сообщение правится функцией', s = 'поправил', s);
 end;
 $$;
 

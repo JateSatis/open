@@ -101,9 +101,14 @@ begin
     perform pg_temp.check('не автор не удаляет функцией', sqlstate = '42501', sqlstate || ' ' || sqlerrm);
   end;
 
-  update public.messages set deleted_at = now() where id = m1;
-  get diagnostics n = row_count;
-  perform pg_temp.check('не автор не удаляет прямым UPDATE (0 строк)', n = 0, n::text);
+  -- Права на прямой UPDATE `messages` у клиента нет вовсе (20260929180000_message_edit.sql).
+  begin
+    update public.messages set deleted_at = now() where id = m1;
+    get diagnostics n = row_count;
+    perform pg_temp.check('не автор не удаляет прямым UPDATE (0 строк)', n = 0, n::text);
+  exception when others then
+    perform pg_temp.check('не автор не удаляет прямым UPDATE (0 строк)', sqlstate = '42501', sqlstate || ' ' || sqlerrm);
+  end;
 
   perform pg_temp.act_as(d);
 
