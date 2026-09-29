@@ -227,4 +227,60 @@ describe('MessageComposer', () => {
 
     expect(screen.queryByLabelText('Г')).toBeNull();
   });
+
+  describe('while editing', () => {
+    const edit = { canSave: true, textLocked: false, attachDisabled: false, recordDisabled: true };
+
+    it('saves rather than sends, and lets the edit decide whether there is something to save', async () => {
+      const onSend = jest.fn();
+
+      await render(
+        <MessageComposer
+          text=""
+          onChangeText={jest.fn()}
+          onSend={onSend}
+          onTyping={jest.fn()}
+          canSend
+          edit={edit}
+        />,
+      );
+
+      // Поле пустое, но у сообщения остались фото — сохранить есть что.
+      await userEvent.setup().press(screen.getByLabelText('Сохранить'));
+      expect(onSend).toHaveBeenCalledTimes(1);
+      expect(screen.queryByLabelText('Отправить')).toBeNull();
+    });
+
+    it('keeps «О» off when the result would be empty', async () => {
+      await render(
+        <MessageComposer
+          text="  "
+          onChangeText={jest.fn()}
+          onSend={jest.fn()}
+          onTyping={jest.fn()}
+          canSend
+          edit={{ ...edit, canSave: false }}
+        />,
+      );
+
+      expect(screen.getByLabelText('Сохранить')).toBeDisabled();
+    });
+
+    it('locks the caption and the media button while a voice message stays', async () => {
+      await render(
+        <MessageComposer
+          text=""
+          onChangeText={jest.fn()}
+          onSend={jest.fn()}
+          onTyping={jest.fn()}
+          canSend
+          onAttachPress={jest.fn()}
+          edit={{ ...edit, textLocked: true, attachDisabled: true }}
+        />,
+      );
+
+      expect(screen.getByLabelText('Сообщение').props.editable).toBe(false);
+      expect(screen.getByLabelText('Фото и видео')).toBeDisabled();
+    });
+  });
 });

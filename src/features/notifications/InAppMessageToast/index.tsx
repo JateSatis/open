@@ -15,6 +15,8 @@ import { Spacing } from '@/theme';
 const VISIBLE_MS = 4500;
 /** Короткий ответ на действие читается за секунду — дольше он только мешает. */
 const NOTICE_VISIBLE_MS = 2000;
+/** Фраза с действием («Повторить») — дольше: её надо прочитать и успеть нажать. */
+const ACTION_VISIBLE_MS = 8000;
 const SLIDE_MS = 220;
 
 /**
@@ -42,9 +44,10 @@ export function InAppMessageToast() {
       useNativeDriver: true,
     }).start();
 
-    // Фраза с действием висит как карточка: на кнопку нужно успеть нажать.
-    const short = alert.kind === 'notice' && !alert.action;
-    const timer = setTimeout(dismiss, short ? NOTICE_VISIBLE_MS : VISIBLE_MS);
+    // На кнопку фразы с действием нужно успеть нажать: за ней — несохранённая работа.
+    const visibleMs =
+      alert.kind !== 'notice' ? VISIBLE_MS : alert.action ? ACTION_VISIBLE_MS : NOTICE_VISIBLE_MS;
+    const timer = setTimeout(dismiss, visibleMs);
 
     return () => clearTimeout(timer);
   }, [alert, dismiss, slide]);

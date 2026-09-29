@@ -104,7 +104,8 @@ export function useMessageEdit({ chatId, draft, composerRef, saveEdit }: Options
         const end = readChatDraft(chatId).text.length;
 
         input?.focus();
-        input?.setSelection(end, end);
+        // Не у каждой реализации поля есть `setSelection` — в тестовом окружении его нет.
+        input?.setSelection?.(end, end);
       });
     },
     [chatId, clearMedia, composerRef],

@@ -22,7 +22,11 @@ import { clearPendingEdit, setPendingEdit } from '@/features/chats/messages/pend
 import type { ChatMessage, EditResult } from '@/features/chats/messages/types';
 import { chatsQueryKey } from '@/features/chats/useChats';
 import { pinsQueryKey } from '@/features/chats/usePinnedMessages';
-import { reportRequestFailed } from '@/features/connection/connectionStore';
+import {
+  getConnectionStatus,
+  reportRequestFailed,
+  subscribeToConnectionStatus,
+} from '@/features/connection/connectionStore';
 import {
   libraryAssetToLocalMedia,
   removeUploadedMedia,
@@ -110,11 +114,32 @@ function toInput(result: EditResult, uploaded: UploadedMedia[]) {
   return { text: result.voice ? '' : result.text, media, voice };
 }
 
+/**
+ * Связь пропала надолго — карточка с «Повторить» успеет исчезнуть раньше, чем
+ * повтор сможет пройти. Когда связь вернётся, предложение повторяется. Сама
+ * правка без спроса не уходит: облачко уже показало прежнюю версию, и тихо
+ * поменять его снова было бы неожиданно.
+ */
+function offerRetryWhenOnline(retry: () => void) {
+  let offered = false;
+  const unsubscribe = subscribeToConnectionStatus(() => {
+    if (offered || getConnectionStatus() !== 'online') return;
+
+    offered = true;
+    unsubscribe();
+    showNotice('Связь вернулась, но изменения не сохранены', 'error', {
+      label: 'Повторить',
+      run: retry,
+    });
+  });
+}
+
 /** Что сказать человеку, когда правка не прошла. Сырые ошибки базы в интерфейс не попадают. */
 function explainFailure(cause: unknown, retry: () => void) {
   if (isNetworkError(cause)) {
     reportRequestFailed();
     showNotice('Изменения не сохранены: нет связи', 'error', { label: 'Повторить', run: retry });
+    offerRetryWhenOnline(retry);
     return;
   }
 

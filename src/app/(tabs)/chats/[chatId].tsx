@@ -155,20 +155,31 @@ export default function ChatScreen() {
 
   // Плашка над полем одна: ответ посреди правки сначала закрывает правку
   // (с вопросом, если в ней что-то изменено).
-  const startReply = useCallback(
-    (targets: ChatMessage[]) =>
+  const afterEdit = useCallback(
+    (next: () => void) => {
+      // Без идущей правки — сразу, в этом же кадре: меню закрывается, и поле
+      // успевает получить фокус.
+      if (readChatDraft(chatId).mode?.type !== 'edit') {
+        next();
+        return;
+      }
+
       void leaveEdit().then((left) => {
-        if (left) replyForward.startReply(targets);
-      }),
-    [leaveEdit, replyForward],
+        if (left) next();
+      });
+    },
+    [chatId, leaveEdit],
+  );
+
+  const { startReply: beginReply } = replyForward;
+  const startReply = useCallback(
+    (targets: ChatMessage[]) => afterEdit(() => beginReply(targets)),
+    [afterEdit, beginReply],
   );
 
   const startEdit = useCallback(
-    (message: ChatMessage) =>
-      void leaveEdit().then((left) => {
-        if (left) beginEdit(message);
-      }),
-    [beginEdit, leaveEdit],
+    (message: ChatMessage) => afterEdit(() => beginEdit(message)),
+    [afterEdit, beginEdit],
   );
 
   const { runMessageAction, runSelectionAction } = useMessageActionHandlers({

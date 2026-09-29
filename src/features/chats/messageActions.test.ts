@@ -28,6 +28,45 @@ function labels(context: MessageActionContext): string[] {
   return visibleMessageActions(context).map((action) => action.label);
 }
 
+describe('«Изменить»', () => {
+  const own = { isOwn: true, isMember: true, isPinned: false };
+
+  function offersEdit(context: MessageActionContext): boolean {
+    return labels(context).includes('Изменить');
+  }
+
+  it('is there for my own sent text, album and voice message', () => {
+    expect(offersEdit({ ...own, message: message({ authorId: 'user-1' }) })).toBe(true);
+    expect(offersEdit({ ...own, message: message({ kind: 'media' }) })).toBe(true);
+    expect(offersEdit({ ...own, message: message({ kind: 'voice', text: null }) })).toBe(true);
+  });
+
+  it('is never there for somebody else’s message or for a visitor', () => {
+    expect(offersEdit({ ...own, isOwn: false, message: message() })).toBe(false);
+    expect(offersEdit({ ...own, isMember: false, message: message() })).toBe(false);
+  });
+
+  it('is not there while sending, after a failed send or while another edit saves', () => {
+    expect(offersEdit({ ...own, message: message({ status: 'sending', localId: 'l1' }) })).toBe(
+      false,
+    );
+    expect(offersEdit({ ...own, message: message({ status: 'failed', localId: 'l1' }) })).toBe(
+      false,
+    );
+    expect(offersEdit({ ...own, message: message({ editStatus: 'saving' }) })).toBe(false);
+  });
+
+  it('is not there for forwarded and system messages', () => {
+    expect(
+      offersEdit({
+        ...own,
+        message: message({ forward: { authorId: 'user-2', authorName: 'Марина', original: null } }),
+      }),
+    ).toBe(false);
+    expect(offersEdit({ ...own, message: message({ kind: 'system' }) })).toBe(false);
+  });
+});
+
 describe('message menu', () => {
   it('shows a member everything for their own message', () => {
     expect(

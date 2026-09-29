@@ -110,7 +110,7 @@ export function MessageComposer({
       <TextInput
         ref={inputRef}
         accessibilityLabel="Сообщение"
-        placeholder={edit?.textLocked ? 'Голосовое — без подписи' : 'Сообщение'}
+        placeholder={edit?.textLocked ? 'Без подписи' : 'Сообщение'}
         placeholderTextColor={theme.textSecondary}
         value={text}
         editable={!edit?.textLocked}

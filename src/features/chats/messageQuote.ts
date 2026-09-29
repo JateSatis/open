@@ -110,10 +110,12 @@ export function describeMode(mode: ComposerMode): {
   closeLabel: string;
 } {
   if (mode.type === 'edit') {
-    // Миниатюры нет: вложения правки лежат под плашкой целиком.
+    // Миниатюры нет: вложения правки лежат под плашкой целиком — и запись
+    // голосового тоже, поэтому её длительность здесь лишняя.
     return {
       title: 'Редактирование',
-      snippet: describePreview(previewOf(mode.message)),
+      snippet:
+        mode.message.kind === 'voice' ? 'Голосовое' : describePreview(previewOf(mode.message)),
       thumbnailUrl: null,
       closeLabel: 'Отменить редактирование',
     };
