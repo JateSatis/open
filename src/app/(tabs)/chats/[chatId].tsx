@@ -58,6 +58,9 @@ import { Spacing } from '@/theme';
 
 const noop = () => undefined;
 
+/** Ближе этого к самому новому сообщению список держится за низ переписки, а не за прочитанное. */
+const KEEP_READING_POSITION = { minIndexForVisible: 0, autoscrollToTopThreshold: Spacing.six };
+
 /** Облачко чужого сообщения начинается после аватара и зазора (`MessageBubble`). */
 const BUBBLE_LEADING_INSET = Spacing.five + Spacing.two;
 
@@ -394,6 +397,10 @@ export default function ChatScreen() {
             contentContainerStyle={styles.list}
             // The list is inverted, so its "end" is the top of the screen:
             // scrolling up pages further back through the history.
+            // Облачко ниже экрана выросло или сжалось (правка, подгрузка
+            // картинки) — то, что человек читает выше, остаётся на месте.
+            // У самого низа переписки список по-прежнему едет за новым.
+            maintainVisibleContentPosition={KEEP_READING_POSITION}
             onEndReached={hasMore ? loadMore : undefined}
             onEndReachedThreshold={0.4}
             ListFooterComponent={
