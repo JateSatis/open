@@ -485,7 +485,22 @@ export type Database = {
           edited_at: string | null
           id: string
           kind: string
+          member_reactions: Json
+          reactions_count: number
           text: string | null
+          visitor_reactions: Json
+          my_reaction: {
+            audience: string
+            chat_id: string | null
+            created_at: string
+            deleted_at: string | null
+            emoji: string
+            id: string
+            target_id: string
+            target_type: string
+            updated_at: string
+            user_id: string | null
+          } | null
         }
         Insert: {
           author_id?: string | null
@@ -495,7 +510,10 @@ export type Database = {
           edited_at?: string | null
           id?: string
           kind: string
+          member_reactions?: Json
+          reactions_count?: number
           text?: string | null
+          visitor_reactions?: Json
         }
         Update: {
           author_id?: string | null
@@ -505,7 +523,10 @@ export type Database = {
           edited_at?: string | null
           id?: string
           kind?: string
+          member_reactions?: Json
+          reactions_count?: number
           text?: string | null
+          visitor_reactions?: Json
         }
         Relationships: [
           {
@@ -556,6 +577,91 @@ export type Database = {
           username?: string | null
         }
         Relationships: []
+      }
+      reaction_emojis: {
+        Row: {
+          created_at: string
+          emoji: string
+          id: string
+          is_primary: boolean
+          position: number
+        }
+        Insert: {
+          created_at?: string
+          emoji: string
+          id?: string
+          is_primary?: boolean
+          position: number
+        }
+        Update: {
+          created_at?: string
+          emoji?: string
+          id?: string
+          is_primary?: boolean
+          position?: number
+        }
+        Relationships: []
+      }
+      reactions: {
+        Row: {
+          audience: string
+          chat_id: string | null
+          created_at: string
+          deleted_at: string | null
+          emoji: string
+          id: string
+          target_id: string
+          target_type: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          audience?: string
+          chat_id?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          emoji: string
+          id?: string
+          target_id: string
+          target_type: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          audience?: string
+          chat_id?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          emoji?: string
+          id?: string
+          target_id?: string
+          target_type?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reactions_chat_id_fkey"
+            columns: ["chat_id"]
+            isOneToOne: false
+            referencedRelation: "chats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reactions_emoji_fkey"
+            columns: ["emoji"]
+            isOneToOne: false
+            referencedRelation: "reaction_emojis"
+            referencedColumns: ["emoji"]
+          },
+          {
+            foreignKeyName: "reactions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
@@ -624,7 +730,10 @@ export type Database = {
           edited_at: string | null
           id: string
           kind: string
+          member_reactions: Json
+          reactions_count: number
           text: string | null
+          visitor_reactions: Json
         }[]
         SetofOptions: {
           from: "*"
@@ -656,7 +765,32 @@ export type Database = {
           id: string
         }[]
       }
+      my_reaction: {
+        Args: { "": Database["public"]["Tables"]["messages"]["Row"] }
+        Returns: {
+          audience: string
+          chat_id: string | null
+          created_at: string
+          deleted_at: string | null
+          emoji: string
+          id: string
+          target_id: string
+          target_type: string
+          updated_at: string
+          user_id: string | null
+        }
+        SetofOptions: {
+          from: "messages"
+          to: "reactions"
+          isOneToOne: true
+          isSetofReturn: true
+        }
+      }
       pin_message: { Args: { target_message: string }; Returns: undefined }
+      reaction_counts_add: {
+        Args: { counts: Json; delta: number; emoji: string }
+        Returns: Json
+      }
       register_device: {
         Args: {
           p_app_version: string
@@ -679,6 +813,13 @@ export type Database = {
       send_voice_message: {
         Args: { reply_to?: string[]; target_chat: string; voice: Json }
         Returns: string
+      }
+      set_reaction: {
+        Args: { reaction: string; target_id: string; target_type: string }
+        Returns: {
+          audience: string
+          emoji: string
+        }[]
       }
       touch_device: { Args: { p_installation_id: string }; Returns: boolean }
       unpin_message: { Args: { target_message: string }; Returns: undefined }
