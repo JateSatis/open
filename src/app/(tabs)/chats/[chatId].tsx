@@ -53,6 +53,7 @@ import { useQuoteNavigation } from '@/features/chats/useQuoteNavigation';
 import { useReplyForward } from '@/features/chats/useReplyForward';
 import { useRespondToInvite } from '@/features/chats/useRespondToInvite';
 import { WaitingBanner } from '@/features/chats/WaitingBanner';
+import { CommentsPanel, commentsEntry } from '@/features/interactions/CommentsPanel';
 import { useReactToMessage } from '@/features/interactions/useReactToMessage';
 import { stopVoice } from '@/features/media';
 import { showNotice } from '@/features/notifications/alertsStore';
@@ -78,6 +79,7 @@ export default function ChatScreen() {
     containerRef,
     onLayout: measureBottomOffset,
     style: keyboardInsetStyle,
+    top: contentTop,
   } = useChatKeyboardInset();
   const { width: windowWidth } = useWindowDimensions();
   // Ширина списка — окно минус его боковые поля (`styles.list`).
@@ -272,10 +274,12 @@ export default function ChatScreen() {
           onReactionToggle={
             interactive && canReactTo(item) ? (emoji) => toggleReaction(item, emoji) : undefined
           }
+          comments={commentsEntry(item, chatId, interactive)}
         />
       );
     },
     [
+      chatId,
       currentUserId,
       mediaBounds,
       openForwardOrigin,
@@ -517,6 +521,8 @@ export default function ChatScreen() {
         onAction={(id) => menuMessage && runMessageAction(id, menuMessage)}
         onClose={menu.close}
       />
+
+      <CommentsPanel topInset={contentTop} onOpenPerson={openPerson} />
     </View>
   );
 }

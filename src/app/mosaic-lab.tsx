@@ -56,6 +56,7 @@ function fakeMessages(): ChatMessage[] {
     createdAt: new Date(2026, 8, 26, 12, index).toISOString(),
     editedAt: null,
     reactions: NO_REACTIONS,
+    commentsCount: 0,
     status: album.status ?? 'sent',
     attachments: album.shapes.map((shape, i): MessageAttachment => ({
       id: `lab-${index}-${i}`,

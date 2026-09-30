@@ -64,6 +64,7 @@ const original: ChatMessage = {
   replies: [],
   forward: null,
   reactions: { members: {}, visitors: {}, mine: null },
+  commentsCount: 0,
   status: 'sent',
 };
 

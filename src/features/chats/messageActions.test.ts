@@ -1,4 +1,5 @@
 import {
+  canCommentOn,
   canReactTo,
   SELECTION_ACTIONS,
   visibleMessageActions,
@@ -21,6 +22,7 @@ function message(overrides: Partial<ChatMessage> = {}): ChatMessage {
     replies: [],
     forward: null,
     reactions: { members: {}, visitors: {}, mine: null },
+    commentsCount: 0,
     status: 'sent',
     ...overrides,
   };
@@ -199,5 +201,24 @@ describe('reactions', () => {
     expect(canReactTo(message({ status: 'sending' }))).toBe(false);
     expect(canReactTo(message({ status: 'failed' }))).toBe(false);
     expect(canReactTo(message({ kind: 'system' }))).toBe(false);
+  });
+});
+
+describe('comments', () => {
+  it('are there on every sent message of a person, forwarded included', () => {
+    expect(canCommentOn(message())).toBe(true);
+    expect(canCommentOn(message({ kind: 'voice', text: null }))).toBe(true);
+    expect(
+      canCommentOn(message({ forward: { authorId: 'u', authorName: 'Олег', original: null } })),
+    ).toBe(true);
+  });
+
+  it('are not there on a message the server has not confirmed or that failed', () => {
+    expect(canCommentOn(message({ status: 'sending', localId: 'l1' }))).toBe(false);
+    expect(canCommentOn(message({ status: 'failed', localId: 'l1' }))).toBe(false);
+  });
+
+  it('are not there on a system message', () => {
+    expect(canCommentOn(message({ kind: 'system' }))).toBe(false);
   });
 });

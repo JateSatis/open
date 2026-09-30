@@ -3,8 +3,10 @@ import { KeyboardController, useKeyboardHandler } from 'react-native-keyboard-co
 
 import {
   claimKeyboardForChat,
+  claimKeyboardForComments,
   claimKeyboardForSheet,
   getKeyboardOwner,
+  setCommentsKeyboardWindowOpen,
   setSheetKeyboardWindowOpen,
   useOwnKeyboardHeight,
 } from './composerKeyboard';
@@ -30,6 +32,7 @@ beforeEach(() => {
   mockedIsVisible.mockReturnValue(false);
   claimKeyboardForChat();
   setSheetKeyboardWindowOpen(false);
+  setCommentsKeyboardWindowOpen(false);
 });
 
 async function renderBoth() {
@@ -92,6 +95,48 @@ describe('composer keyboard ownership', () => {
     claimKeyboardForSheet();
 
     setSheetKeyboardWindowOpen(false);
+
+    expect(getKeyboardOwner()).toBe('chat');
+  });
+
+  it('keeps the chat still while the comments field owns the keyboard', async () => {
+    const chat = (await renderHook(() => useOwnKeyboardHeight('chat'))).result.current;
+    const comments = (await renderHook(() => useOwnKeyboardHeight('comments'))).result.current;
+
+    setCommentsKeyboardWindowOpen(true);
+    claimKeyboardForComments();
+    keyboard('onMove', 150);
+    keyboard('onEnd', 300);
+
+    expect(comments.value).toBe(300);
+    expect(chat.value).toBe(0);
+  });
+
+  it('gives the keyboard back to the comments field, not the chat, when a sheet above them closes', async () => {
+    setCommentsKeyboardWindowOpen(true);
+    setSheetKeyboardWindowOpen(true);
+    claimKeyboardForSheet();
+
+    setSheetKeyboardWindowOpen(false);
+
+    expect(getKeyboardOwner()).toBe('comments');
+  });
+
+  it('returns the keyboard to the chat once the comments panel is gone and the keyboard is down', async () => {
+    const chat = (await renderHook(() => useOwnKeyboardHeight('chat'))).result.current;
+
+    setCommentsKeyboardWindowOpen(true);
+    claimKeyboardForComments();
+    keyboard('onEnd', 300);
+
+    mockedIsVisible.mockReturnValue(true);
+    setCommentsKeyboardWindowOpen(false);
+    keyboard('onMove', 100);
+
+    expect(getKeyboardOwner()).toBe('comments');
+    expect(chat.value).toBe(0);
+
+    keyboard('onEnd', 0);
 
     expect(getKeyboardOwner()).toBe('chat');
   });

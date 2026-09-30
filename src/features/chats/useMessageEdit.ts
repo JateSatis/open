@@ -76,7 +76,11 @@ export function useMessageEdit({ chatId, draft, composerRef, saveEdit }: Options
   // можно столько, сколько ещё влезает в альбом.
   const room = mode ? editMediaRoom(mode) : null;
 
+  // Вне правки предел не трогается: поле ввода не одно (чат и панель
+  // комментариев), и простаивающее не должно сбивать предел идущей правки.
   useEffect(() => {
+    if (room === null) return;
+
     setSelectionLimit(room);
 
     return () => setSelectionLimit(null);

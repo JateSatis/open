@@ -1,5 +1,11 @@
 import { useMemo, useState } from 'react';
-import { PixelRatio, Pressable, View } from 'react-native';
+import {
+  PixelRatio,
+  Pressable,
+  View,
+  type StyleProp,
+  type TextStyle,
+} from 'react-native';
 
 import { styles } from './styles';
 
@@ -13,6 +19,7 @@ import { MessageMeta } from '@/features/chats/MessageMeta';
 import { ReplyQuote } from '@/features/chats/ReplyQuote';
 import type { ChatMessage } from '@/features/chats/useChatMessages';
 import { VoiceMessage } from '@/features/chats/VoiceMessage';
+import { CommentsButton } from '@/features/interactions/CommentsButton';
 import { MessageReactions, type ReactionsTone } from '@/features/interactions/MessageReactions';
 import { hasReactions } from '@/features/interactions/reactionState';
 import { MediaViewer, type MediaViewerItem } from '@/features/media';
@@ -43,6 +50,15 @@ export type MessageBubbleProps = {
   reactionAudience?: ReactionAudience;
   /** Тап по реакции своего ряда. Нет обработчика (копия в меню) — ряды не нажимаются. */
   onReactionToggle?: (emoji: string) => void;
+  /**
+   * Кружок комментариев с внешней стороны облачка: у чужого справа, у своего
+   * слева. Нет — нет и кружка (неотправленное, системное, сам комментарий).
+   */
+  comments?: { count: number; onPress?: () => void };
+  /** Тихая пометка после имени автора: «участник чата» у комментария. */
+  authorBadge?: string | null;
+  /** «доставлено / прочитано» у своего. У комментариев не показывается. */
+  showReceipt?: boolean;
 };
 
 export function MessageBubble({
@@ -58,6 +74,9 @@ export function MessageBubble({
   onForwardPress,
   reactionAudience,
   onReactionToggle,
+  comments,
+  authorBadge,
+  showReceipt,
 }: MessageBubbleProps) {
   const theme = useTheme();
   const isMediaMessage = message.kind === 'media' && message.attachments.length > 0;
@@ -120,8 +139,30 @@ export function MessageBubble({
       isRead={isRead}
       variant={variant}
       onRetry={onRetry}
+      showReceipt={showReceipt}
     />
   );
+
+  const authorLine = (style?: StyleProp<TextStyle>) => (
+    <Text
+      variant="smallBold"
+      color={textColor}
+      style={style}
+      onPress={onAuthorPress}
+      suppressHighlighting
+    >
+      {authorName}
+      {authorBadge ? (
+        <Text variant="caption" color="textSecondary">
+          {`  ${authorBadge}`}
+        </Text>
+      ) : null}
+    </Text>
+  );
+
+  const commentsButton = comments ? (
+    <CommentsButton count={comments.count} onPress={comments.onPress} />
+  ) : null;
 
   return (
     <View style={[styles.row, isOwn && styles.own]}>
@@ -136,6 +177,8 @@ export function MessageBubble({
         </Pressable>
       )}
 
+      {isOwn ? commentsButton : null}
+
       {layout ? (
         // Медиа — само облачко: мозаика заподлицо с краями, скругление
         // облачка на ней. Подпись и имя автора — в полосах того же облачка.
@@ -148,17 +191,7 @@ export function MessageBubble({
               { width: layout.width, backgroundColor: bareMedia ? 'transparent' : bubbleColor },
             ]}
           >
-            {isOwn ? null : (
-              <Text
-                variant="smallBold"
-                color={textColor}
-                style={styles.mediaAuthor}
-                onPress={onAuthorPress}
-                suppressHighlighting
-              >
-                {authorName}
-              </Text>
-            )}
+            {isOwn ? null : authorLine(styles.mediaAuthor)}
 
             {annotations ? (
               <View style={[styles.mediaAnnotations, isOwn && styles.mediaAnnotationsOwn]}>
@@ -189,16 +222,7 @@ export function MessageBubble({
         </View>
       ) : (
         <View testID="message-bubble" style={[styles.bubble, { backgroundColor: bubbleColor }]}>
-          {isOwn ? null : (
-            <Text
-              variant="smallBold"
-              color={textColor}
-              onPress={onAuthorPress}
-              suppressHighlighting
-            >
-              {authorName}
-            </Text>
-          )}
+          {isOwn ? null : authorLine()}
 
           {annotations}
 
@@ -223,6 +247,8 @@ export function MessageBubble({
           {meta('inline')}
         </View>
       )}
+
+      {isOwn ? null : commentsButton}
 
       {isMediaMessage ? (
         <MediaViewer

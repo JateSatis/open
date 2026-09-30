@@ -218,6 +218,184 @@ export type Database = {
           },
         ]
       }
+      comment_attachments: {
+        Row: {
+          comment_id: string
+          comment_kind: string
+          created_at: string
+          duration_ms: number | null
+          height: number | null
+          id: string
+          mime_type: string | null
+          position: number
+          poster_url: string | null
+          size_bytes: number | null
+          url: string
+          waveform: number[] | null
+          width: number | null
+        }
+        Insert: {
+          comment_id: string
+          comment_kind: string
+          created_at?: string
+          duration_ms?: number | null
+          height?: number | null
+          id?: string
+          mime_type?: string | null
+          position?: number
+          poster_url?: string | null
+          size_bytes?: number | null
+          url: string
+          waveform?: number[] | null
+          width?: number | null
+        }
+        Update: {
+          comment_id?: string
+          comment_kind?: string
+          created_at?: string
+          duration_ms?: number | null
+          height?: number | null
+          id?: string
+          mime_type?: string | null
+          position?: number
+          poster_url?: string | null
+          size_bytes?: number | null
+          url?: string
+          waveform?: number[] | null
+          width?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comment_attachments_comment_fkey"
+            columns: ["comment_id", "comment_kind"]
+            isOneToOne: false
+            referencedRelation: "comments"
+            referencedColumns: ["id", "kind"]
+          },
+        ]
+      }
+      comment_revisions: {
+        Row: {
+          attachments: Json
+          author_id: string | null
+          chat_id: string
+          comment_id: string
+          created_at: string
+          id: string
+          kind: string
+          message_id: string
+          text: string | null
+          version_at: string
+        }
+        Insert: {
+          attachments?: Json
+          author_id?: string | null
+          chat_id: string
+          comment_id: string
+          created_at?: string
+          id?: string
+          kind: string
+          message_id: string
+          text?: string | null
+          version_at: string
+        }
+        Update: {
+          attachments?: Json
+          author_id?: string | null
+          chat_id?: string
+          comment_id?: string
+          created_at?: string
+          id?: string
+          kind?: string
+          message_id?: string
+          text?: string | null
+          version_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comment_revisions_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comment_revisions_chat_id_fkey"
+            columns: ["chat_id"]
+            isOneToOne: false
+            referencedRelation: "chats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comment_revisions_comment_id_fkey"
+            columns: ["comment_id"]
+            isOneToOne: false
+            referencedRelation: "comments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      comments: {
+        Row: {
+          audience: string
+          author_id: string | null
+          chat_id: string
+          created_at: string
+          deleted_at: string | null
+          edited_at: string | null
+          id: string
+          kind: string
+          message_id: string
+          text: string | null
+        }
+        Insert: {
+          audience?: string
+          author_id?: string | null
+          chat_id: string
+          created_at?: string
+          deleted_at?: string | null
+          edited_at?: string | null
+          id?: string
+          kind: string
+          message_id: string
+          text?: string | null
+        }
+        Update: {
+          audience?: string
+          author_id?: string | null
+          chat_id?: string
+          created_at?: string
+          deleted_at?: string | null
+          edited_at?: string | null
+          id?: string
+          kind?: string
+          message_id?: string
+          text?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comments_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comments_chat_id_fkey"
+            columns: ["chat_id"]
+            isOneToOne: false
+            referencedRelation: "chats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comments_message_fkey"
+            columns: ["message_id", "chat_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id", "chat_id"]
+          },
+        ]
+      }
       devices: {
         Row: {
           app_version: string | null
@@ -480,6 +658,7 @@ export type Database = {
         Row: {
           author_id: string | null
           chat_id: string
+          comments_count: number
           created_at: string
           deleted_at: string | null
           edited_at: string | null
@@ -505,6 +684,7 @@ export type Database = {
         Insert: {
           author_id?: string | null
           chat_id: string
+          comments_count?: number
           created_at?: string
           deleted_at?: string | null
           edited_at?: string | null
@@ -518,6 +698,7 @@ export type Database = {
         Update: {
           author_id?: string | null
           chat_id?: string
+          comments_count?: number
           created_at?: string
           deleted_at?: string | null
           edited_at?: string | null
@@ -697,6 +878,7 @@ export type Database = {
         Args: { new_message: string; reply_to: string[]; target_chat: string }
         Returns: undefined
       }
+      check_comment_shape: { Args: { target: string }; Returns: undefined }
       check_message_shape: { Args: { target: string }; Returns: undefined }
       create_chat: {
         Args: { chat_title?: string; invitee_ids: string[] }
@@ -704,7 +886,17 @@ export type Database = {
       }
       current_session_id: { Args: never; Returns: string }
       decline_chat_invite: { Args: { target_chat: string }; Returns: undefined }
+      delete_comment: { Args: { target_comment: string }; Returns: undefined }
       delete_messages: { Args: { message_ids: string[] }; Returns: undefined }
+      edit_comment: {
+        Args: {
+          comment_text: string
+          media?: Json
+          target_comment: string
+          voice?: Json
+        }
+        Returns: undefined
+      }
       edit_message: {
         Args: {
           media?: Json
@@ -725,6 +917,7 @@ export type Database = {
         Returns: {
           author_id: string | null
           chat_id: string
+          comments_count: number
           created_at: string
           deleted_at: string | null
           edited_at: string | null
@@ -801,6 +994,10 @@ export type Database = {
         }
         Returns: string
       }
+      send_comment: {
+        Args: { comment_text: string; media?: Json; target_message: string }
+        Returns: string
+      }
       send_media_message: {
         Args: {
           media: Json
@@ -808,6 +1005,10 @@ export type Database = {
           reply_to?: string[]
           target_chat: string
         }
+        Returns: string
+      }
+      send_voice_comment: {
+        Args: { target_message: string; voice: Json }
         Returns: string
       }
       send_voice_message: {

@@ -107,7 +107,9 @@ export function useChatMessages(chatId: string, currentUserId: string | null): C
     return history.items.map((message) => {
       const pendingEdit = pendingEdits[message.id];
       const intent = pendingReactions[message.id];
-      const base = pendingEdit ? { ...pendingEdit, reactions: message.reactions } : message;
+      const base = pendingEdit
+        ? { ...pendingEdit, reactions: message.reactions, commentsCount: message.commentsCount }
+        : message;
 
       return intent ? { ...base, reactions: withMyReaction(base.reactions, intent) } : base;
     });

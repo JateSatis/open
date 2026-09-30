@@ -45,6 +45,7 @@ import {
   finishMediaSheetClose,
   getMediaSheetPhase,
   useMediaSheetPhase,
+  type MediaSheetOwner,
   type MediaSheetPhase,
 } from './sheetStore';
 import { styles } from './styles';
@@ -72,17 +73,22 @@ export {
   openMediaSheet,
   releaseMediaSheetArm,
   resetMediaSheet,
+  type MediaSheetOwner,
 } from './sheetStore';
 
 /** За сколько dp до рабочего положения монтируется список — см. ниже. */
 const LIST_MOUNT_DISTANCE = 2;
 
 export type MediaPickerSheetProps = {
+  /** Чьё поле открывает этот экземпляр: показывается он только для своего хозяина. */
+  owner?: MediaSheetOwner;
   draft: ComposerDraft;
   /** Плашка над полем шита: ответ или правка — альбом бывает и тем и другим. */
   plate?: ReactNode;
   /** Идёт правка: «О» шита сохраняет её, а не отправляет новое сообщение. */
   editing?: boolean;
+  /** Подсказка в поле шита — как у поля, которое его открыло. */
+  placeholder?: string;
   onTyping: () => void;
   onSend: () => void;
 };
@@ -96,11 +102,12 @@ export type MediaPickerSheetProps = {
  * и рождается вместе с окном, так что сбрасывать между открытиями нечего.
  */
 export function MediaPickerSheet(props: MediaPickerSheetProps) {
-  const phase = useMediaSheetPhase();
+  const owner = props.owner ?? 'chat';
+  const phase = useMediaSheetPhase(owner);
 
   // Уход с экрана посреди открытого шита: окно уходит вместе с экраном, и
   // следующий экран должен застать шит закрытым.
-  useEffect(() => () => finishMediaSheetClose(), []);
+  useEffect(() => () => finishMediaSheetClose(owner), [owner]);
 
   // Пока окно шита существует, клавиатурой может владеть его поле, и чат
   // под шитом на неё не реагирует.
@@ -154,7 +161,15 @@ const SHEET_EDIT = {
   recordDisabled: true,
 } as const;
 
-function SheetWindow({ phase, draft, plate, editing, onTyping, onSend }: SheetWindowProps) {
+function SheetWindow({
+  phase,
+  draft,
+  plate,
+  editing,
+  placeholder,
+  onTyping,
+  onSend,
+}: SheetWindowProps) {
   countRender('MediaPickerSheet');
 
   const theme = useTheme();
@@ -401,6 +416,7 @@ function SheetWindow({ phase, draft, plate, editing, onTyping, onSend }: SheetWi
               onFieldActivate={claimKeyboardForSheet}
               plate={plate}
               edit={editing ? SHEET_EDIT : undefined}
+              placeholder={placeholder}
               canSend
             />
           </Animated.View>

@@ -6,6 +6,7 @@ import { messagesQueryKey } from '@/features/chats/messages/historyCache';
 import {
   dropDeletedMessages,
   pullNewMessages,
+  refreshCommentCounts,
   refreshEditedMessages,
   refreshReactions,
 } from '@/features/chats/messages/sync';
@@ -23,6 +24,8 @@ const TYPING_THROTTLE_MS = 2000;
  * на пачку, а не по запросу на событие.
  */
 const REACTIONS_BATCH_MS = 500;
+
+type Batch = { ids: Set<string>; timer: ReturnType<typeof setTimeout> | null };
 
 export type ChatChannelState = {
   /** Кто сейчас печатает или записывает голосовое, кроме меня. */
@@ -44,10 +47,10 @@ export function useChatChannel(chatId: string, currentUserId: string | null): Ch
   const channelRef = useRef<ChatChannel | null>(null);
   const typingTimersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const lastActivitySentRef = useRef<{ activity: ChatActivity; at: number } | null>(null);
-  const reactionBatchRef = useRef<{
-    ids: Set<string>;
-    timer: ReturnType<typeof setTimeout> | null;
-  }>({ ids: new Set(), timer: null });
+  const reactionBatchRef = useRef<Batch>({ ids: new Set(), timer: null });
+  // Числа комментариев — той же пачкой, что и реакции: горячее сообщение
+  // комментируют так же часто, как на него реагируют.
+  const commentBatchRef = useRef<Batch>({ ids: new Set(), timer: null });
 
   const onNewMessage = useCallback(async () => {
     try {
@@ -85,14 +88,25 @@ export function useChatChannel(chatId: string, currentUserId: string | null): Ch
   useEffect(() => {
     const timers = typingTimersRef.current;
     const reactionBatch = reactionBatchRef.current;
+    const commentBatch = commentBatchRef.current;
 
-    const flushReactions = () => {
-      const ids = [...reactionBatch.ids];
+    // Не вышло перечитать — дочитаем при следующем событии или переподключении.
+    const collect = (
+      batch: Batch,
+      refresh: (client: typeof queryClient, chat: string, ids: string[]) => Promise<void>,
+      messageId: string,
+    ) => {
+      batch.ids.add(messageId);
 
-      reactionBatch.ids.clear();
-      reactionBatch.timer = null;
-      // Не вышло — дочитаем при следующем событии или переподключении.
-      refreshReactions(queryClient, chatId, ids).catch(() => undefined);
+      if (batch.timer) return;
+
+      batch.timer = setTimeout(() => {
+        const ids = [...batch.ids];
+
+        batch.ids.clear();
+        batch.timer = null;
+        refresh(queryClient, chatId, ids).catch(() => undefined);
+      }, REACTIONS_BATCH_MS);
     };
 
     const channel = subscribeToChat(chatId, {
@@ -121,11 +135,8 @@ export function useChatChannel(chatId: string, currentUserId: string | null): Ch
       onPinsChanged: () => {
         void queryClient.invalidateQueries({ queryKey: pinsQueryKey(chatId) });
       },
-      onReactionsChanged: (messageId) => {
-        reactionBatch.ids.add(messageId);
-
-        if (!reactionBatch.timer) reactionBatch.timer = setTimeout(flushReactions, REACTIONS_BATCH_MS);
-      },
+      onReactionsChanged: (messageId) => collect(reactionBatch, refreshReactions, messageId),
+      onCommentsChanged: (messageId) => collect(commentBatch, refreshCommentCounts, messageId),
       onTyping: (userId, activity) => {
         if (userId === currentUserId) return;
 
@@ -159,10 +170,12 @@ export function useChatChannel(chatId: string, currentUserId: string | null): Ch
       timers.forEach(clearTimeout);
       timers.clear();
 
-      if (reactionBatch.timer) clearTimeout(reactionBatch.timer);
+      for (const batch of [reactionBatch, commentBatch]) {
+        if (batch.timer) clearTimeout(batch.timer);
 
-      reactionBatch.timer = null;
-      reactionBatch.ids.clear();
+        batch.timer = null;
+        batch.ids.clear();
+      }
       setActivities([]);
     };
   }, [catchUp, chatId, currentUserId, onNewMessage, queryClient]);

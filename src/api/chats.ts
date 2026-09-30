@@ -109,6 +109,8 @@ export type Message = {
   forward: ForwardOrigin | null;
   /** Реакции по рядам и моя. */
   reactions: MessageReactions;
+  /** Сколько живых комментариев. Денормализовано на сообщении, пишет база. */
+  commentsCount: number;
 };
 
 /**
@@ -172,7 +174,7 @@ const WAITING_COLUMNS = 'chat_id, user_id, display_name, avatar_url';
 // внешних ключей нужны, потому что `messages` связана с `profiles` и сама с
 // собой через несколько таблиц сразу.
 export const MESSAGE_COLUMNS =
-  'id, chat_id, author_id, kind, text, created_at, edited_at, attachments(id, url, poster_url, mime_type, width, height, duration_ms, waveform), replies:message_replies!message_replies_message_fkey(position, quoted_id, quoted:messages!message_replies_quoted_fkey(id, author_id, kind, text, created_at, edited_at, author:profiles!messages_author_id_fkey(display_name), attachments(url, poster_url, mime_type, duration_ms, position))), forward:message_forwards!message_forwards_message_fkey(origin_message_id, origin_author_id, origin_author:profiles(display_name), origin:messages!message_forwards_origin_fkey(id, chat_id, created_at)), member_reactions, visitor_reactions, my_reaction(emoji, audience)';
+  'id, chat_id, author_id, kind, text, created_at, edited_at, attachments(id, url, poster_url, mime_type, width, height, duration_ms, waveform), replies:message_replies!message_replies_message_fkey(position, quoted_id, quoted:messages!message_replies_quoted_fkey(id, author_id, kind, text, created_at, edited_at, author:profiles!messages_author_id_fkey(display_name), attachments(url, poster_url, mime_type, duration_ms, position))), forward:message_forwards!message_forwards_message_fkey(origin_message_id, origin_author_id, origin_author:profiles(display_name), origin:messages!message_forwards_origin_fkey(id, chat_id, created_at)), member_reactions, visitor_reactions, my_reaction(emoji, audience), comments_count';
 
 // Заготовки запросов. Они же задают типы рядов: клиент разбирает select-строку
 // вместе со встроенными таблицами, поэтому форма ответа выводится из самого
@@ -298,6 +300,7 @@ export function toMessage(row: MessageRow): Message {
     replies: [...(row.replies ?? [])].sort((a, b) => a.position - b.position).map(toQuoted),
     forward: toForward(row.forward),
     reactions: toReactions(row),
+    commentsCount: row.comments_count,
   };
 }
 
@@ -685,6 +688,23 @@ export async function editMessage(messageId: string, input: EditMessageInput): P
   return toMessage(data);
 }
 
+/** Сколько комментариев у этих сообщений — свежие числа, пачкой. Удалённые база не отдаёт. */
+export async function listCommentCounts(
+  messageIds: string[],
+): Promise<{ id: string; commentsCount: number }[]> {
+  if (messageIds.length === 0) return [];
+
+  const { data, error } = await supabase
+    .from('messages')
+    .select('id, comments_count')
+    .in('id', messageIds)
+    .is('deleted_at', null);
+
+  if (error) throw error;
+
+  return (data ?? []).map((row) => ({ id: row.id, commentsCount: row.comments_count }));
+}
+
 /** Сообщения по id — живые; удалённые база не отдаёт. */
 export async function listMessagesByIds(messageIds: string[]): Promise<Message[]> {
   if (messageIds.length === 0) return [];
@@ -783,6 +803,8 @@ export type ChatChannelHandlers = {
   onPinsChanged: () => void;
   /** Реакции на сообщение изменились. Payload — подсказка, какое; счётчики — из базы. */
   onReactionsChanged: (messageId: string) => void;
+  /** Число комментариев к сообщению изменилось. Payload — подсказка, какое; число — из базы. */
+  onCommentsChanged: (messageId: string) => void;
   /**
    * Канал заново подключился. Пока его не было, события терялись, поэтому
    * подписчик обязан дочитать пропущенное, а не ждать следующего сообщения.
@@ -848,6 +870,11 @@ export function subscribeToChat(chatId: string, handlers: ChatChannelHandlers): 
       const id = (payload as { message_id?: unknown } | undefined)?.message_id;
 
       if (typeof id === 'string') handlers.onReactionsChanged(id);
+    })
+    .on('broadcast', { event: 'comments_changed' }, ({ payload }) => {
+      const id = (payload as { message_id?: unknown } | undefined)?.message_id;
+
+      if (typeof id === 'string') handlers.onCommentsChanged(id);
     })
     .on('broadcast', { event: 'typing' }, ({ payload }) => {
       const { userId, activity } = (payload ?? {}) as { userId?: unknown; activity?: unknown };

@@ -49,7 +49,7 @@ import { NO_REACTIONS } from '@/api/reactionCounts';
 
 let localIdCounter = 0;
 
-function nextLocalId(): string {
+export function nextLocalId(): string {
   localIdCounter += 1;
   return `local-${Date.now()}-${localIdCounter}`;
 }
@@ -156,7 +156,11 @@ export function splitIntoAlbums(
   return parts;
 }
 
-async function upload(outgoing: Outgoing, currentUserId: string): Promise<UploadedMedia[]> {
+/** Файлы отправки — в Storage, в свой префикс. Ими же пользуются комментарии. */
+export async function uploadOutgoing(
+  outgoing: Outgoing,
+  currentUserId: string,
+): Promise<UploadedMedia[]> {
   if (outgoing.type === 'forward') return [];
   if (outgoing.type === 'voice') return uploadAllMedia([outgoing.voice], currentUserId);
   if (outgoing.media.length === 0) return [];
@@ -301,7 +305,7 @@ export async function deliver(
     // явный сбой лучше, чем сообщение, которое молча потеряло вложения.
     if (hasFiles && !currentUserId) throw new Error('Нет активной сессии');
 
-    uploaded = hasFiles ? await upload(outgoing, currentUserId!) : [];
+    uploaded = hasFiles ? await uploadOutgoing(outgoing, currentUserId!) : [];
 
     if (localIds.every((id) => discarded.has(id))) throw new Error('Отправка отменена');
 
@@ -383,6 +387,7 @@ function textDraft(
     createdAt: new Date(at).toISOString(),
     editedAt: null,
     reactions: NO_REACTIONS,
+    commentsCount: 0,
     attachments: [],
     replies,
     forward: null,
@@ -424,6 +429,7 @@ export function sendPost(
       createdAt: new Date(now + index).toISOString(),
       editedAt: null,
       reactions: NO_REACTIONS,
+      commentsCount: 0,
       attachments,
       replies: partReplies,
       forward: null,
@@ -465,6 +471,7 @@ export function sendVoice(
     createdAt: new Date().toISOString(),
     editedAt: null,
     reactions: NO_REACTIONS,
+    commentsCount: 0,
     attachments: [toLocalVoiceAttachment(localId, voice)],
     replies,
     forward: null,
@@ -514,6 +521,7 @@ export function sendForward(context: SendContext, text: string, items: ForwardIt
       createdAt: new Date(now + 1 + index).toISOString(),
       editedAt: null,
       reactions: NO_REACTIONS,
+      commentsCount: 0,
       // Файлы — те же, что у оригинала: они уже в Storage, грузить нечего.
       attachments: message.attachments,
       // Цитата ссылается на сообщения исходного чата и с копией не едет.

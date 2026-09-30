@@ -4,6 +4,8 @@ import { resetComposerDrafts } from '@/features/chats/composerDraftStore';
 import { resetMediaSheet } from '@/features/chats/MediaPickerSheet/sheetStore';
 import { resetOutbox } from '@/features/chats/messages/outbox';
 import { resetPendingEdits } from '@/features/chats/messages/pendingEdits';
+import { resetCommentOutbox } from '@/features/interactions/comments/commentOutbox';
+import { closeComments } from '@/features/interactions/comments/commentsPanelStore';
 import { resetPendingReactions } from '@/features/interactions/pendingReactions';
 import { useMediaSelection } from '@/features/media/selectionStore';
 import { setActiveChatId } from '@/store/activeChat';
@@ -15,8 +17,8 @@ import { setActiveChatId } from '@/store/activeChat';
  * начинается с чистого листа: ни чатов, ни профиля, ни выбранных файлов
  * прежнего.
  *
- * Черновики сообщений — тоже: с ответом и пересылкой в них лежат чужие
- * сообщения.
+ * Черновики сообщений и комментариев — тоже: с ответом и пересылкой в них
+ * лежат чужие сообщения.
  */
 export function resetClientState(queryClient: QueryClient) {
   // cancel до clear: запрос, начатый под прежним пользователем, не должен
@@ -28,6 +30,8 @@ export function resetClientState(queryClient: QueryClient) {
   resetOutbox();
   resetPendingEdits();
   resetPendingReactions();
+  resetCommentOutbox();
+  closeComments();
   resetComposerDrafts();
   setActiveChatId(null);
 }

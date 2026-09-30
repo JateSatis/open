@@ -65,6 +65,15 @@ export function canReactTo(message: ChatMessage): boolean {
   return !isLocalMessage(message) && message.kind !== 'system';
 }
 
+/**
+ * У сообщения есть комментарии — у каждого отправленного, во всех чатах,
+ * всегда. Кроме системного (это не слова человека) и неподтверждённого
+ * сервером (его там ещё нет): база такие комментарии и не примет.
+ */
+export function canCommentOn(message: ChatMessage): boolean {
+  return !isLocalMessage(message) && message.kind !== 'system';
+}
+
 export function hasCopyableText(message: ChatMessage): boolean {
   return Boolean(message.text?.trim());
 }

@@ -12,7 +12,6 @@ import { computeMenuLayout } from './menuLayout';
 import { styles } from './styles';
 
 import { Text } from '@/components/Text';
-import type { MessageAction, MessageActionId } from '@/features/chats/messageActions';
 import { pickerGeometry, ReactionPicker } from '@/features/interactions/ReactionPicker';
 import { useTheme } from '@/hooks/use-theme';
 import { Sizes, Spacing } from '@/theme';
@@ -31,12 +30,20 @@ export type MenuReactions = {
   onSelect: (emoji: string) => void;
 };
 
-export type MessageContextMenuProps = {
+/** Пункт меню. Меню одно на сообщения и комментарии — пункты у них свои. */
+export type ContextMenuAction<Id extends string = string> = {
+  id: Id;
+  label: string;
+  /** Красным — разрушительное действие. */
+  destructive?: boolean;
+};
+
+export type MessageContextMenuProps<Id extends string = string> = {
   /** Меню открыто, пока есть, над чем. */
   anchor: AnchorRect | null;
   /** Копия облачка, которая поднимается над затемнением. */
   preview: ReactNode;
-  actions: MessageAction[];
+  actions: readonly ContextMenuAction<Id>[];
   /** Нет — нет и блока реакций: у неотправленного и у системного сообщения. */
   reactions: MenuReactions | null;
   /** Своё сообщение — меню у правого края облачка, чужое — у левого. */
@@ -44,7 +51,7 @@ export type MessageContextMenuProps = {
   /** Отступ облачка от левого края строки (аватар у чужих) — меню встаёт под облачко, а не под аватар. */
   leadingInset: number;
   /** Действие выполняется после того, как меню закрылось: диалог подтверждения не ложится поверх меню. */
-  onAction: (id: MessageActionId) => void;
+  onAction: (id: Id) => void;
   onClose: () => void;
 };
 
@@ -55,7 +62,7 @@ export type MessageContextMenuProps = {
  * над ним — блок реакций. Раскрытый блок растёт вниз, поверх облачка, до края
  * экрана; действия на это время прячутся.
  */
-export function MessageContextMenu({
+export function MessageContextMenu<Id extends string>({
   anchor,
   preview,
   actions,
@@ -64,7 +71,7 @@ export function MessageContextMenu({
   leadingInset,
   onAction,
   onClose,
-}: MessageContextMenuProps) {
+}: MessageContextMenuProps<Id>) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
