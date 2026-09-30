@@ -3,6 +3,7 @@ import { PixelRatio, Pressable, View } from 'react-native';
 
 import { styles } from './styles';
 
+import type { ReactionAudience } from '@/api/reactionCounts';
 import { Avatar } from '@/components/Avatar';
 import { Text } from '@/components/Text';
 import { ForwardedFrom } from '@/features/chats/ForwardedFrom';
@@ -12,6 +13,8 @@ import { MessageMeta } from '@/features/chats/MessageMeta';
 import { ReplyQuote } from '@/features/chats/ReplyQuote';
 import type { ChatMessage } from '@/features/chats/useChatMessages';
 import { VoiceMessage } from '@/features/chats/VoiceMessage';
+import { MessageReactions, type ReactionsTone } from '@/features/interactions/MessageReactions';
+import { hasReactions } from '@/features/interactions/reactionState';
 import { MediaViewer, type MediaViewerItem } from '@/features/media';
 import { useTheme } from '@/hooks/use-theme';
 import { Spacing } from '@/theme';
@@ -36,6 +39,10 @@ export type MessageBubbleProps = {
   onQuotePress?: () => void;
   /** Тап по «Переслано от» — к оригиналу в исходном чате. */
   onForwardPress?: () => void;
+  /** Мой ряд реакций: тап по реакции в нём ставит или снимает её. */
+  reactionAudience?: ReactionAudience;
+  /** Тап по реакции своего ряда. Нет обработчика (копия в меню) — ряды не нажимаются. */
+  onReactionToggle?: (emoji: string) => void;
 };
 
 export function MessageBubble({
@@ -49,6 +56,8 @@ export function MessageBubble({
   onAuthorPress,
   onQuotePress,
   onForwardPress,
+  reactionAudience,
+  onReactionToggle,
 }: MessageBubbleProps) {
   const theme = useTheme();
   const isMediaMessage = message.kind === 'media' && message.attachments.length > 0;
@@ -91,6 +100,19 @@ export function MessageBubble({
     </>
   ) : null;
 
+  // Без подписи, имени и цитаты у своего альбома облачка нет — только
+  // мозаика, и в её зазорах виден фон чата, как в Telegram.
+  const bareMedia = !message.text && isOwn && !hasAnnotations;
+
+  const reactions = (tone: ReactionsTone) => (
+    <MessageReactions
+      reactions={message.reactions}
+      tone={tone}
+      audience={reactionAudience}
+      onToggle={onReactionToggle}
+    />
+  );
+
   const meta = (variant: 'inline' | 'overlay') => (
     <MessageMeta
       message={message}
@@ -117,52 +139,53 @@ export function MessageBubble({
       {layout ? (
         // Медиа — само облачко: мозаика заподлицо с краями, скругление
         // облачка на ней. Подпись и имя автора — в полосах того же облачка.
-        <View
-          testID="message-bubble"
-          style={[
-            styles.mediaBubble,
-            {
-              width: layout.width,
-              // Без подписи, имени и цитаты облачка нет — только мозаика, и в
-              // её зазорах виден фон чата, как в Telegram.
-              backgroundColor:
-                !message.text && isOwn && !hasAnnotations ? 'transparent' : bubbleColor,
-            },
-          ]}
-        >
-          {isOwn ? null : (
-            <Text
-              variant="smallBold"
-              color={textColor}
-              style={styles.mediaAuthor}
-              onPress={onAuthorPress}
-              suppressHighlighting
-            >
-              {authorName}
-            </Text>
-          )}
-
-          {annotations ? (
-            <View style={[styles.mediaAnnotations, isOwn && styles.mediaAnnotationsOwn]}>
-              {annotations}
-            </View>
-          ) : null}
-
-          <MediaAttachmentGrid
-            attachments={message.attachments}
-            layout={layout}
-            localPreviews={message.localPreviews}
-            onPress={setViewerIndex}
+        // Без облачка реакции — под ним: внутри их срезало бы скругление.
+        <View style={[styles.mediaColumn, { width: layout.width }]}>
+          <View
+            testID="message-bubble"
+            style={[
+              styles.mediaBubble,
+              { width: layout.width, backgroundColor: bareMedia ? 'transparent' : bubbleColor },
+            ]}
           >
-            {message.text ? null : meta('overlay')}
-          </MediaAttachmentGrid>
+            {isOwn ? null : (
+              <Text
+                variant="smallBold"
+                color={textColor}
+                style={styles.mediaAuthor}
+                onPress={onAuthorPress}
+                suppressHighlighting
+              >
+                {authorName}
+              </Text>
+            )}
 
-          {message.text ? (
-            <View style={styles.caption}>
-              <Text color={textColor}>{message.text}</Text>
-              {meta('inline')}
-            </View>
-          ) : null}
+            {annotations ? (
+              <View style={[styles.mediaAnnotations, isOwn && styles.mediaAnnotationsOwn]}>
+                {annotations}
+              </View>
+            ) : null}
+
+            <MediaAttachmentGrid
+              attachments={message.attachments}
+              layout={layout}
+              localPreviews={message.localPreviews}
+              onPress={setViewerIndex}
+            >
+              {message.text ? null : meta('overlay')}
+            </MediaAttachmentGrid>
+
+            {message.text ? (
+              <View style={styles.caption}>
+                <Text color={textColor}>{message.text}</Text>
+                {reactions(isOwn ? 'own' : 'other')}
+                {meta('inline')}
+              </View>
+            ) : hasReactions(message.reactions) && !bareMedia ? (
+              <View style={styles.mediaReactions}>{reactions(isOwn ? 'own' : 'other')}</View>
+            ) : null}
+          </View>
+          {bareMedia && !message.text ? reactions('bare') : null}
         </View>
       ) : (
         <View testID="message-bubble" style={[styles.bubble, { backgroundColor: bubbleColor }]}>
@@ -194,6 +217,8 @@ export function MessageBubble({
           ) : null}
 
           {message.text ? <Text color={textColor}>{message.text}</Text> : null}
+
+          {reactions(isOwn ? 'own' : 'other')}
 
           {meta('inline')}
         </View>

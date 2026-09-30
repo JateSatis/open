@@ -1,4 +1,5 @@
 import {
+  canReactTo,
   SELECTION_ACTIONS,
   visibleMessageActions,
   type MessageActionContext,
@@ -19,6 +20,7 @@ function message(overrides: Partial<ChatMessage> = {}): ChatMessage {
     attachments: [],
     replies: [],
     forward: null,
+    reactions: { members: {}, visitors: {}, mine: null },
     status: 'sent',
     ...overrides,
   };
@@ -184,5 +186,18 @@ describe('selection panel', () => {
     expect(SELECTION_ACTIONS.some((action) => action.id === 'reply')).toBe(true);
     expect(shown).not.toContain('reply');
     expect(shown).toContain('forward');
+  });
+});
+
+describe('reactions', () => {
+  it('can be put on a sent message, own or not, by anyone', () => {
+    expect(canReactTo(message())).toBe(true);
+    expect(canReactTo(message({ authorId: 'user-1' }))).toBe(true);
+  });
+
+  it('are not offered on an unsent, failed or system message', () => {
+    expect(canReactTo(message({ status: 'sending' }))).toBe(false);
+    expect(canReactTo(message({ status: 'failed' }))).toBe(false);
+    expect(canReactTo(message({ kind: 'system' }))).toBe(false);
   });
 });

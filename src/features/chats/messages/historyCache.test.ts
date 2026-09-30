@@ -1,5 +1,6 @@
 import {
   knownEdits,
+  patchReactions,
   quotedIds,
   removeMessages,
   replaceMessages,
@@ -20,6 +21,7 @@ function message(id: string, overrides: Partial<ChatMessage> = {}): ChatMessage 
     attachments: [],
     replies: [],
     forward: null,
+    reactions: { members: {}, visitors: {}, mine: null },
     status: 'sent',
     ...overrides,
   };
@@ -128,5 +130,27 @@ describe('quotedIds', () => {
     };
 
     expect(quotedIds(history)).toEqual(['old']);
+  });
+});
+
+describe('patchReactions', () => {
+  const history: ChatHistory = { items: [message('m2'), message('m1')], nextCursor: null };
+
+  it('puts fresh counters on loaded messages and leaves the rest as they were', () => {
+    const fresh = { members: { '👍': 3 }, visitors: { '🔥': 1 }, mine: null };
+    const next = patchReactions(history, [
+      { id: 'm1', reactions: fresh },
+      { id: 'not-loaded', reactions: fresh },
+    ]);
+
+    expect(next.items[1].reactions).toEqual(fresh);
+    expect(next.items[0]).toBe(history.items[0]);
+    expect(next.items).toHaveLength(2);
+  });
+
+  it('keeps the same history when nothing changed, so the list does not redraw', () => {
+    expect(
+      patchReactions(history, [{ id: 'm1', reactions: { members: {}, visitors: {}, mine: null } }]),
+    ).toBe(history);
   });
 });

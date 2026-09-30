@@ -31,6 +31,18 @@ export const Colors = {
     quoteBackground: 'rgba(60, 135, 247, 0.10)',
     /** То же в своём облачке, на `primary`. */
     quoteBackgroundOnPrimary: 'rgba(255, 255, 255, 0.18)',
+    /** Чип реакции участников в чужом облачке и под альбомом без подписи. */
+    reactionChip: 'rgba(60, 135, 247, 0.12)',
+    /** То же в своём облачке, на `primary`. */
+    reactionChipOnPrimary: 'rgba(255, 255, 255, 0.2)',
+    /** Моя реакция в своём облачке: чип светлый, число — цветом `primary`. */
+    reactionChipMineOnPrimary: '#ffffff',
+    /** Тихий ряд реакций посетителей в своём облачке. */
+    reactionVisitorsOnPrimary: 'rgba(255, 255, 255, 0.7)',
+    /** Подсветка моей реакции в тихом ряду посетителей. */
+    reactionVisitorMine: 'rgba(60, 135, 247, 0.16)',
+    /** То же в своём облачке. */
+    reactionVisitorMineOnPrimary: 'rgba(255, 255, 255, 0.24)',
   },
   dark: {
     text: '#ffffff',
@@ -53,6 +65,12 @@ export const Colors = {
     messageHighlight: 'rgba(60, 135, 247, 0.28)',
     quoteBackground: 'rgba(60, 135, 247, 0.18)',
     quoteBackgroundOnPrimary: 'rgba(255, 255, 255, 0.18)',
+    reactionChip: 'rgba(60, 135, 247, 0.22)',
+    reactionChipOnPrimary: 'rgba(255, 255, 255, 0.2)',
+    reactionChipMineOnPrimary: '#ffffff',
+    reactionVisitorsOnPrimary: 'rgba(255, 255, 255, 0.7)',
+    reactionVisitorMine: 'rgba(60, 135, 247, 0.28)',
+    reactionVisitorMineOnPrimary: 'rgba(255, 255, 255, 0.24)',
   },
 } as const;
 

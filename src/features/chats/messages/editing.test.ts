@@ -14,6 +14,11 @@ import {
 import { removeUploadedMedia, uploadAllMedia, type MediaLibraryItem } from '@/features/media';
 import { useInAppAlert } from '@/features/notifications/alertsStore';
 
+jest.mock('@/api/reactions', () => ({
+  ...jest.requireActual('@/api/reactionCounts'),
+  listMessageReactions: jest.fn(() => Promise.resolve([])),
+  setMessageReaction: jest.fn(),
+}));
 jest.mock('@/api/chats', () => ({ editMessage: jest.fn() }));
 jest.mock('@/api/pins', () => ({}));
 jest.mock('@/features/media', () => ({
@@ -58,6 +63,7 @@ const original: ChatMessage = {
   attachments: [kept],
   replies: [],
   forward: null,
+  reactions: { members: {}, visitors: {}, mine: null },
   status: 'sent',
 };
 

@@ -33,6 +33,11 @@ import { reportRealtimeJoined, resetConnectionState } from '@/features/connectio
 import { useInAppAlert } from '@/features/notifications/alertsStore';
 import { renderWithQuery } from '@/test/renderWithQuery';
 
+jest.mock('@/api/reactions', () => ({
+  ...jest.requireActual('@/api/reactionCounts'),
+  listMessageReactions: jest.fn(() => Promise.resolve([])),
+  setMessageReaction: jest.fn(),
+}));
 jest.mock('expo-router', () => ({
   useNavigation: () => ({
     getState: () => ({ index: 0, routes: [] }),
@@ -175,6 +180,7 @@ function message(id: string, text: string | null, authorId: string, minute = 0):
     attachments: [],
     replies: [],
     forward: null,
+    reactions: { members: {}, visitors: {}, mine: null },
   };
 }
 

@@ -4,6 +4,7 @@ import { resetComposerDrafts } from '@/features/chats/composerDraftStore';
 import { resetMediaSheet } from '@/features/chats/MediaPickerSheet/sheetStore';
 import { resetOutbox } from '@/features/chats/messages/outbox';
 import { resetPendingEdits } from '@/features/chats/messages/pendingEdits';
+import { resetPendingReactions } from '@/features/interactions/pendingReactions';
 import { useMediaSelection } from '@/features/media/selectionStore';
 import { setActiveChatId } from '@/store/activeChat';
 
@@ -26,6 +27,7 @@ export function resetClientState(queryClient: QueryClient) {
   resetMediaSheet();
   resetOutbox();
   resetPendingEdits();
+  resetPendingReactions();
   resetComposerDrafts();
   setActiveChatId(null);
 }

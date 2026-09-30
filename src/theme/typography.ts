@@ -34,6 +34,8 @@ export const Typography = {
   smallBold: { fontSize: 14, lineHeight: 20, fontWeight: '600' },
   caption: { fontSize: 12, lineHeight: 16, fontWeight: '400' },
   code: { fontSize: 13, lineHeight: 18, fontWeight: '400' },
+  /** Эмодзи в блоке реакций над облачком. */
+  emoji: { fontSize: 26, lineHeight: 32, fontWeight: '400' },
 } as const;
 
 export type TypographyVariant = keyof typeof Typography;

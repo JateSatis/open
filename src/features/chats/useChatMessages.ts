@@ -31,6 +31,8 @@ import { useChatHistory } from '@/features/chats/messages/useChatHistory';
 import { chatsQueryKey } from '@/features/chats/useChats';
 import { pinsQueryKey } from '@/features/chats/usePinnedMessages';
 import { useConnectionStatus } from '@/features/connection/useConnectionStatus';
+import { usePendingReactionsOf } from '@/features/interactions/pendingReactions';
+import { withMyReaction } from '@/features/interactions/reactionState';
 import type { LocalMedia, MediaLibraryItem } from '@/features/media';
 
 export type {
@@ -88,19 +90,28 @@ export function useChatMessages(chatId: string, currentUserId: string | null): C
   const history = useChatHistory(chatId);
   const outbox = useOutboxMessages(chatId);
   const pendingEdits = usePendingEditsOf(chatId);
+  const pendingReactions = usePendingReactionsOf(chatId);
   const { activities, notifyTyping, notifyRecordingVoice } = useChatChannel(chatId, currentUserId);
   const wasOfflineRef = useRef(false);
 
   // Подтверждённое сервером может на кадр оказаться и в исходящих, и в
   // истории — показывается одно, по id.
-  // Сохраняющаяся правка накладывается поверх подтверждённой версии.
-  const edited = useMemo(
-    () =>
-      Object.keys(pendingEdits).length === 0
-        ? history.items
-        : history.items.map((message) => pendingEdits[message.id] ?? message),
-    [history.items, pendingEdits],
-  );
+  // Сохраняющаяся правка накладывается поверх подтверждённой версии, а моя
+  // неподтверждённая реакция — поверх подтверждённых счётчиков. Реакции у
+  // правки — из истории: пока правка едет, счётчики живут своей жизнью.
+  const edited = useMemo(() => {
+    if (Object.keys(pendingEdits).length === 0 && Object.keys(pendingReactions).length === 0) {
+      return history.items;
+    }
+
+    return history.items.map((message) => {
+      const pendingEdit = pendingEdits[message.id];
+      const intent = pendingReactions[message.id];
+      const base = pendingEdit ? { ...pendingEdit, reactions: message.reactions } : message;
+
+      return intent ? { ...base, reactions: withMyReaction(base.reactions, intent) } : base;
+    });
+  }, [history.items, pendingEdits, pendingReactions]);
 
   const messages = useMemo(() => {
     if (outbox.length === 0) return edited;

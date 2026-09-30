@@ -28,6 +28,7 @@ function textMessage(overrides: Partial<ChatMessage> = {}): ChatMessage {
     attachments: [],
     replies: [],
     forward: null,
+    reactions: { members: {}, visitors: {}, mine: null },
     status: 'sent',
     ...overrides,
   };
@@ -198,5 +199,33 @@ describe('MessageBubble', () => {
     );
 
     expect(screen.getByText('плеер file:///cache/v.m4a file:///cache/v.m4a')).toBeTruthy();
+  });
+
+  describe('reactions', () => {
+    const reactions = { members: { '👍': 2 }, visitors: { '🔥': 1 }, mine: null };
+
+    it('keeps both rows inside the bubble of a text message', async () => {
+      await render(<MessageBubble message={textMessage({ reactions })} {...baseProps} />);
+
+      const bubble = screen.getByTestId('message-bubble');
+
+      expect(within(bubble).getByTestId('member-reactions')).toBeTruthy();
+      expect(within(bubble).getByTestId('visitor-reactions')).toBeTruthy();
+    });
+
+    it('puts the rows under my caption-less album, outside the bubble that has no background', async () => {
+      await render(<MessageBubble message={mediaMessage({ reactions })} {...baseProps} isOwn />);
+
+      expect(
+        within(screen.getByTestId('message-bubble')).queryByTestId('message-reactions'),
+      ).toBeNull();
+      expect(screen.getByTestId('message-reactions')).toBeTruthy();
+    });
+
+    it('adds no room at all while there are no reactions', async () => {
+      await render(<MessageBubble message={mediaMessage()} {...baseProps} isOwn />);
+
+      expect(screen.queryByTestId('message-reactions')).toBeNull();
+    });
   });
 });

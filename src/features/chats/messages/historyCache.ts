@@ -11,8 +11,10 @@
 import type { QueryClient } from '@tanstack/react-query';
 
 import type { Message } from '@/api/chats';
+import type { MessageReactions } from '@/api/reactionCounts';
 import { previewOf as previewOfMessage } from '@/features/chats/messageQuote';
 import type { ChatMessage } from '@/features/chats/messages/types';
+import { sameReactions } from '@/features/interactions/reactionState';
 
 export type ChatHistory = {
   /** Newest first — the list that renders them is inverted. */
@@ -142,6 +144,32 @@ export function replaceMessages(
           : quote;
       }),
     };
+  });
+
+  return changed ? { ...history, items } : history;
+}
+
+/**
+ * Кладёт свежие реакции на загруженные сообщения. Всё остальное в облачке не
+ * трогается, и строка, у которой счётчики не изменились, остаётся тем же
+ * объектом — список её не перерисовывает.
+ */
+export function patchReactions(
+  history: ChatHistory,
+  fresh: { id: string; reactions: MessageReactions }[],
+): ChatHistory {
+  if (fresh.length === 0) return history;
+
+  const byId = new Map(fresh.map((row) => [row.id, row.reactions]));
+  let changed = false;
+
+  const items = history.items.map((message) => {
+    const reactions = byId.get(message.id);
+
+    if (!reactions || sameReactions(message.reactions, reactions)) return message;
+
+    changed = true;
+    return { ...message, reactions };
   });
 
   return changed ? { ...history, items } : history;

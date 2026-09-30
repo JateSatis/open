@@ -19,6 +19,11 @@ const mockNavigate = jest.fn();
 
 // Шапку экран ставит через Stack.Screen — мок рисует её прямо в дереве, чтобы
 // статус собеседника и тап по шапке можно было проверить.
+jest.mock('@/api/reactions', () => ({
+  ...jest.requireActual('@/api/reactionCounts'),
+  listMessageReactions: jest.fn(() => Promise.resolve([])),
+  setMessageReaction: jest.fn(),
+}));
 jest.mock('expo-router', () => ({
   useNavigation: () => ({
     getState: () => ({ index: 0, routes: [] }),
@@ -129,6 +134,7 @@ function message(id: string, text: string, authorId: string): Message {
     attachments: [],
     replies: [],
     forward: null,
+    reactions: { members: {}, visitors: {}, mine: null },
   };
 }
 

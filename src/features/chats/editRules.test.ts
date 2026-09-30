@@ -35,6 +35,7 @@ function message(overrides: Partial<ChatMessage>): ChatMessage {
     attachments: [],
     replies: [],
     forward: null,
+    reactions: { members: {}, visitors: {}, mine: null },
     status: 'sent',
     ...overrides,
   };

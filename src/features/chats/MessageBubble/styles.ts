@@ -18,6 +18,10 @@ export const styles = StyleSheet.create({
     borderRadius: Radii.lg,
     gap: Spacing.one,
   },
+  /** Альбом и, если облачка нет, реакции под ним. */
+  mediaColumn: {
+    gap: Spacing.half,
+  },
   /** Ширину задаёт мозаика; скругление облачка обрезает её углы. */
   mediaBubble: {
     borderRadius: Radii.lg,
@@ -41,6 +45,10 @@ export const styles = StyleSheet.create({
     paddingBottom: Spacing.two,
     paddingHorizontal: Spacing.three,
     gap: Spacing.one,
+  },
+  /** Реакции под мозаикой без подписи — внутри облачка, с отступами, как у подписи. */
+  mediaReactions: {
+    padding: Spacing.two,
   },
   attachmentSlot: {
     paddingVertical: Spacing.two,
