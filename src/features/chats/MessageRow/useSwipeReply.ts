@@ -18,7 +18,7 @@ const ICON_START_SCALE = 0.6;
 
 /**
  * Ответ свайпом, как в Telegram: облачко тянется влево за пальцем, из-под
- * него выезжает стрелка, отпустил за порогом — ответ.
+ * него выезжает стрелка, отпустил за порогом или резко бросил влево — ответ.
  *
  * С чем жест не спорит:
  * - системный «назад» на iOS — это свайп от левого края вправо, здесь только влево;
@@ -48,9 +48,10 @@ export function useSwipeReply(
         .activeOffsetX(-Sizes.swipeReplyActivation)
         .failOffsetY([-Spacing.three, Spacing.three])
         .onUpdate((event) => {
-          // Считаем от точки, где жест узнал себя: иначе облачко прыгнуло бы
-          // сразу на порог срабатывания.
-          const shift = Math.min(0, event.translationX + Sizes.swipeReplyActivation);
+          // Сдвиг уже считается от точки, где жест узнал себя, а не от
+          // касания: облачко не прыгает на порог активации. Вычитать его ещё
+          // раз нельзя — палец проходил бы лишние 12 dp вхолостую.
+          const shift = Math.min(0, event.translationX);
           const reached = -shift >= Sizes.swipeReplyThreshold;
 
           if (reached !== armed.get()) {
@@ -61,8 +62,22 @@ export function useSwipeReply(
 
           offset.set(Math.max(shift, -Sizes.swipeReplyMax));
         })
-        .onEnd(() => {
-          if (armed.get()) runOnJS(reply)();
+        .onEnd((event) => {
+          if (armed.get()) {
+            runOnJS(reply)();
+            return;
+          }
+
+          // Бросок: до порога облачко не доехало, но палец явно уходил
+          // влево. Вибро — тем же ударом, что на пороге.
+          const flung =
+            event.velocityX <= -Sizes.swipeReplyFlingVelocity &&
+            -offset.get() >= Sizes.swipeReplyFlingShift;
+
+          if (flung) {
+            runOnJS(buzz)();
+            runOnJS(reply)();
+          }
         })
         .onFinalize(() => {
           armed.set(false);
