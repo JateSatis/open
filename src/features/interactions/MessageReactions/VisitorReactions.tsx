@@ -1,4 +1,5 @@
-import { Pressable, View } from 'react-native';
+import { Fragment } from 'react';
+import { Pressable } from 'react-native';
 import Animated, { FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated';
 
 import { styles } from './styles';
@@ -39,7 +40,7 @@ export function VisitorReactions({ entries, mine, tone, onPress }: VisitorReacti
       </Text>
 
       {entries.map(([emoji, count], index) => (
-        <View key={emoji} style={styles.visitors}>
+        <Fragment key={emoji}>
           {index > 0 ? (
             <Text variant="caption" color={colors.text}>
               ·
@@ -60,7 +61,7 @@ export function VisitorReactions({ entries, mine, tone, onPress }: VisitorReacti
               {count}
             </Text>
           </Pressable>
-        </View>
+        </Fragment>
       ))}
     </Animated.View>
   );

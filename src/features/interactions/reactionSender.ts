@@ -98,4 +98,3 @@ export function sendReaction(
 
   if (!reactionsInFlight.has(messageId)) void drain(queryClient, chatId, messageId);
 }
-

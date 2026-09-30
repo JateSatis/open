@@ -18,6 +18,10 @@ export const styles = StyleSheet.create({
     borderRadius: Radii.lg,
     gap: Spacing.one,
   },
+  /** Альбом и, если облачка нет, реакции под ним. */
+  mediaColumn: {
+    gap: Spacing.half,
+  },
   /** Ширину задаёт мозаика; скругление облачка обрезает её углы. */
   mediaBubble: {
     borderRadius: Radii.lg,

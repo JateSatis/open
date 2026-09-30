@@ -139,52 +139,53 @@ export function MessageBubble({
       {layout ? (
         // Медиа — само облачко: мозаика заподлицо с краями, скругление
         // облачка на ней. Подпись и имя автора — в полосах того же облачка.
-        <View
-          testID="message-bubble"
-          style={[
-            styles.mediaBubble,
-            { width: layout.width, backgroundColor: bareMedia ? 'transparent' : bubbleColor },
-          ]}
-        >
-          {isOwn ? null : (
-            <Text
-              variant="smallBold"
-              color={textColor}
-              style={styles.mediaAuthor}
-              onPress={onAuthorPress}
-              suppressHighlighting
-            >
-              {authorName}
-            </Text>
-          )}
-
-          {annotations ? (
-            <View style={[styles.mediaAnnotations, isOwn && styles.mediaAnnotationsOwn]}>
-              {annotations}
-            </View>
-          ) : null}
-
-          <MediaAttachmentGrid
-            attachments={message.attachments}
-            layout={layout}
-            localPreviews={message.localPreviews}
-            onPress={setViewerIndex}
+        // Без облачка реакции — под ним: внутри их срезало бы скругление.
+        <View style={[styles.mediaColumn, { width: layout.width }]}>
+          <View
+            testID="message-bubble"
+            style={[
+              styles.mediaBubble,
+              { width: layout.width, backgroundColor: bareMedia ? 'transparent' : bubbleColor },
+            ]}
           >
-            {message.text ? null : meta('overlay')}
-          </MediaAttachmentGrid>
+            {isOwn ? null : (
+              <Text
+                variant="smallBold"
+                color={textColor}
+                style={styles.mediaAuthor}
+                onPress={onAuthorPress}
+                suppressHighlighting
+              >
+                {authorName}
+              </Text>
+            )}
 
-          {message.text ? (
-            <View style={styles.caption}>
-              <Text color={textColor}>{message.text}</Text>
-              {reactions(isOwn ? 'own' : 'other')}
-              {meta('inline')}
-            </View>
-          ) : bareMedia ? (
-            // Облачка нет — ряды под мозаикой, на фоне чата.
-            reactions('bare')
-          ) : hasReactions(message.reactions) ? (
-            <View style={styles.mediaReactions}>{reactions(isOwn ? 'own' : 'other')}</View>
-          ) : null}
+            {annotations ? (
+              <View style={[styles.mediaAnnotations, isOwn && styles.mediaAnnotationsOwn]}>
+                {annotations}
+              </View>
+            ) : null}
+
+            <MediaAttachmentGrid
+              attachments={message.attachments}
+              layout={layout}
+              localPreviews={message.localPreviews}
+              onPress={setViewerIndex}
+            >
+              {message.text ? null : meta('overlay')}
+            </MediaAttachmentGrid>
+
+            {message.text ? (
+              <View style={styles.caption}>
+                <Text color={textColor}>{message.text}</Text>
+                {reactions(isOwn ? 'own' : 'other')}
+                {meta('inline')}
+              </View>
+            ) : hasReactions(message.reactions) && !bareMedia ? (
+              <View style={styles.mediaReactions}>{reactions(isOwn ? 'own' : 'other')}</View>
+            ) : null}
+          </View>
+          {bareMedia && !message.text ? reactions('bare') : null}
         </View>
       ) : (
         <View testID="message-bubble" style={[styles.bubble, { backgroundColor: bubbleColor }]}>
