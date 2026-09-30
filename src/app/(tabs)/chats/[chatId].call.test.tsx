@@ -342,8 +342,8 @@ describe('системные сообщения о звонке', () => {
 
     await renderWithQuery(<ChatScreen />);
 
-    expect(await screen.findByText('📞 Звонок начат · Марина')).toBeTruthy();
-    expect(screen.getByText('📞 Звонок завершён · 12 мин')).toBeTruthy();
+    expect(await screen.findByText(/^📞 Звонок начат · Марина/)).toBeTruthy();
+    expect(screen.getByText(/^📞 Звонок завершён · 12 мин/)).toBeTruthy();
   });
 
   it('участник, который так и не вошёл, видит пропущенный звонок', async () => {
@@ -362,7 +362,7 @@ describe('системные сообщения о звонке', () => {
 
     await renderWithQuery(<ChatScreen />);
 
-    expect(await screen.findByText('📞 Пропущенный звонок')).toBeTruthy();
+    expect(await screen.findByText(/^📞 Пропущенный звонок/)).toBeTruthy();
   });
 
   it('посетителю звонок не звонил — для него он просто завершён', async () => {
@@ -382,6 +382,6 @@ describe('системные сообщения о звонке', () => {
 
     await renderWithQuery(<ChatScreen />);
 
-    expect(await screen.findByText('📞 Звонок завершён · 12 мин')).toBeTruthy();
+    expect(await screen.findByText(/^📞 Звонок завершён · 12 мин/)).toBeTruthy();
   });
 });

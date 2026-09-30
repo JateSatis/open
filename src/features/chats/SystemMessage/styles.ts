@@ -8,15 +8,12 @@ export const styles = StyleSheet.create({
     paddingVertical: Spacing.two,
   },
   pill: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: Spacing.two,
-    borderRadius: Radii.full,
+    borderRadius: Radii.lg,
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.one,
     maxWidth: '90%',
   },
   text: {
-    flexShrink: 1,
+    textAlign: 'center',
   },
 });

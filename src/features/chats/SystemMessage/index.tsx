@@ -31,11 +31,13 @@ export function SystemMessage({ message, currentUserId, isMember, hostName }: Sy
   return (
     <View testID="system-message" style={styles.row}>
       <View style={[styles.pill, { backgroundColor: theme.backgroundElement }]}>
+        {/* Время — продолжение строки: при переносе оно идёт за словами, а не висит сбоку. */}
         <Text variant="small" color={missed ? 'danger' : 'textSecondary'} style={styles.text}>
           {text}
-        </Text>
-        <Text variant="caption" color="textSecondary">
-          {formatMessageTime(message.createdAt)}
+          {'  '}
+          <Text variant="caption" color="textSecondary">
+            {formatMessageTime(message.createdAt)}
+          </Text>
         </Text>
       </View>
     </View>

@@ -1,6 +1,8 @@
 package expo.modules.callservice
 
 import android.content.Intent
+import android.os.Handler
+import android.os.Looper
 import androidx.core.content.ContextCompat
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
@@ -10,8 +12,42 @@ import expo.modules.kotlin.modules.ModuleDefinition
  * 14+ отбирает микрофон у свёрнутого приложения, а система может убить процесс.
  */
 class CallServiceModule : Module() {
+  private val handler = Handler(Looper.getMainLooper())
+  private val timers = mutableMapOf<Int, Runnable>()
+
   override fun definition() = ModuleDefinition {
     Name("CallService")
+
+    // Таймеры, которые не засыпают в фоне. Таймеры JS у свёрнутого приложения
+    // Android-версия React Native приостанавливает, а на них держится пинг
+    // LiveKit: без него сервер через несколько секунд считает участника
+    // потерянным. Сработавший таймер будит JS событием.
+    Events("onTimer")
+
+    Function("setTimer") { id: Int, delayMs: Double, repeat: Boolean ->
+      clearTimer(id)
+
+      val runnable = object : Runnable {
+        override fun run() {
+          if (repeat) {
+            handler.postDelayed(this, delayMs.toLong())
+          } else {
+            timers.remove(id)
+          }
+          sendEvent("onTimer", mapOf("id" to id))
+        }
+      }
+
+      timers[id] = runnable
+      handler.postDelayed(runnable, delayMs.toLong())
+    }
+
+    Function("clearTimer") { id: Int -> clearTimer(id) }
+
+    OnDestroy {
+      timers.values.forEach(handler::removeCallbacks)
+      timers.clear()
+    }
 
     Function("start") { title: String, text: String, microphone: Boolean ->
       val context = appContext.reactContext ?: return@Function false
@@ -35,5 +71,9 @@ class CallServiceModule : Module() {
       context.stopService(Intent(context, CallForegroundService::class.java))
       null
     }
+  }
+
+  private fun clearTimer(id: Int) {
+    timers.remove(id)?.let(handler::removeCallbacks)
   }
 }

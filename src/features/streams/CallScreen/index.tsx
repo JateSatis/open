@@ -72,9 +72,10 @@ export function CallScreen() {
     if (router.canGoBack()) router.back();
   };
 
+  // Экран закроет эффект выше, как только звонка не станет: второй «назад»
+  // отсюда увёл бы ещё и с экрана чата.
   const leave = () => {
     void leaveCall();
-    if (router.canGoBack()) router.back();
   };
 
   if (!call) {

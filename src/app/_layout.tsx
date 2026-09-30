@@ -5,7 +5,7 @@ import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from '@ta
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useState } from 'react';
-import { StyleSheet, useColorScheme, View } from 'react-native';
+import { StyleSheet, useColorScheme } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -15,9 +15,8 @@ import { AccountLifecycle } from '@/features/auth/AccountLifecycle';
 import { ConnectionWatcher } from '@/features/connection/ConnectionWatcher';
 import { reportRequestFailed, reportRequestSucceeded } from '@/features/connection/connectionStore';
 import { InAppMessageToast } from '@/features/notifications/InAppMessageToast';
-import { CallInsets } from '@/features/streams/CallInsets';
 import { IncomingCallOverlay } from '@/features/streams/IncomingCallOverlay';
-import { ReturnToCallBar } from '@/features/streams/ReturnToCallBar';
+import { BelowReturnBar, ReturnToCallBar } from '@/features/streams/ReturnToCallBar';
 import { isNetworkError } from '@/lib/network';
 
 SplashScreen.preventAutoHideAsync();
@@ -79,18 +78,16 @@ export default function RootLayout() {
             <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
               <ConnectionWatcher />
               <AccountLifecycle />
-              {/* Свёрнутый звонок сдвигает весь навигатор вниз, а не перекрывает шапки. */}
-              <View style={styles.flex}>
-                <ReturnToCallBar />
-                <CallInsets>
-                  <Stack screenOptions={{ headerShown: false }}>
-                    <Stack.Screen
-                      name="call"
-                      options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }}
-                    />
-                  </Stack>
-                </CallInsets>
-              </View>
+              {/* Свёрнутый звонок сдвигает навигатор вниз, а не перекрывает шапки. */}
+              <BelowReturnBar>
+                <Stack screenOptions={{ headerShown: false }}>
+                  <Stack.Screen
+                    name="call"
+                    options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }}
+                  />
+                </Stack>
+              </BelowReturnBar>
+              <ReturnToCallBar />
               {/* Входящий звонок — своим окном поверх всего, включая нативные вкладки. */}
               <IncomingCallOverlay />
               {/* Поверх навигатора: уведомление не принадлежит ни одному экрану. */}

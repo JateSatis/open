@@ -222,7 +222,9 @@ export async function joinCall(input: JoinCallInput): Promise<void> {
     // телефон у уха.
     const speakerOn = !(speaks && input.isDirect);
 
-    patchCall({ role: join.role, speakerOn });
+    // Говорящий входит с включённым микрофоном — так и показываем с первой
+    // секунды, а не «выключен», пока идёт подключение.
+    patchCall({ role: join.role, speakerOn, micOn: speaks });
 
     await AudioSession.configureAudio({
       android: {

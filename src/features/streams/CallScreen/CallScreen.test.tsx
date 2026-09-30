@@ -84,8 +84,8 @@ describe('экран звонка у говорящего', () => {
 
     expect(toggleMic).toHaveBeenCalled();
     expect(toggleSpeaker).toHaveBeenCalled();
+    // Экран закрывает не кнопка, а конец звонка (тест ниже): иначе вышло бы два «назад».
     expect(leaveCall).toHaveBeenCalled();
-    expect(mockBack).toHaveBeenCalled();
   });
 
   it('«свернуть» уходит с экрана, но из звонка не выходит', async () => {

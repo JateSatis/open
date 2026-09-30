@@ -1,8 +1,9 @@
 import { usePathname, useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Pressable, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { create } from 'zustand';
 
 import { styles } from './styles';
 
@@ -11,6 +12,12 @@ import { useActiveCall } from '@/features/streams/callStore';
 import { formatCallTimer } from '@/features/streams/callText';
 import { useTheme } from '@/hooks/use-theme';
 import { Sizes } from '@/theme';
+
+/**
+ * Высота строки полосы без отступа под строку состояния. Её меряет сама
+ * полоса: высота текста зависит от системного размера шрифта.
+ */
+const useRowHeight = create<{ height: number }>(() => ({ height: 0 }));
 
 /** Звонок свёрнут: полоса видна на любом экране, кроме самого экрана звонка. */
 export function useReturnBarVisible(): boolean {
@@ -26,19 +33,33 @@ function useTicker(active: boolean): number {
   useEffect(() => {
     if (!active) return;
 
-    const timer = setInterval(() => setNow(Date.now()), 1000);
+    const tick = () => setNow(Date.now());
+    // Полоса могла долго быть скрытой — время берём заново сразу, а не через секунду.
+    const first = setTimeout(tick, 0);
+    const timer = setInterval(tick, 1000);
 
-    return () => clearInterval(timer);
+    return () => {
+      clearTimeout(first);
+      clearInterval(timer);
+    };
   }, [active]);
 
   return now;
 }
 
 /**
- * «Вернуться к звонку» над любым экраном, пока звонок свёрнут. Стоит над
- * навигатором и сдвигает его вниз (см. корневой layout), а не перекрывает
- * шапку: иначе под полосой прятались бы «назад» и заголовок.
+ * Навигатор под полосой: сдвинут вниз ровно на высоту её строки. Отступ под
+ * строку состояния нативные шапки делают сами — он и уходит под полосу,
+ * поэтому между полосой и шапкой нет щели, а «назад» и заголовок не спрятаны.
  */
+export function BelowReturnBar({ children }: { children: ReactNode }) {
+  const visible = useReturnBarVisible();
+  const height = useRowHeight((state) => state.height);
+
+  return <View style={[styles.below, { paddingTop: visible ? height : 0 }]}>{children}</View>;
+}
+
+/** «Вернуться к звонку» поверх верхнего края любого экрана, пока звонок свёрнут. */
 export function ReturnToCallBar() {
   const call = useActiveCall();
   const visible = useReturnBarVisible();
@@ -64,7 +85,10 @@ export function ReturnToCallBar() {
       onPress={() => router.push('/call')}
       style={[styles.bar, { backgroundColor: theme.callBar, paddingTop: insets.top }]}
     >
-      <View style={styles.row}>
+      <View
+        style={styles.row}
+        onLayout={(event) => useRowHeight.setState({ height: event.nativeEvent.layout.height })}
+      >
         <SymbolView
           name={{ ios: 'phone.fill', android: 'call', web: 'call' }}
           size={Sizes.callIcon}
