@@ -236,7 +236,11 @@ beforeEach(() => {
   mockedListComments.mockResolvedValue({ items: [], nextCursor: null });
   mockedTarget.mockImplementation(async (messageId) => ({
     state: 'live',
-    message: MESSAGES.find((item) => item.id === messageId)!,
+    // Оригинал островка — внутри островка, а не среди сообщений чата.
+    message: MESSAGES.flatMap((item) => [
+      item,
+      ...(item.forward?.items.flatMap((entry) => (entry.original ? [entry.original] : [])) ?? []),
+    ]).find((item) => item.id === messageId)!,
     authorName: 'Марина',
     authorAvatarUrl: null,
   }));
