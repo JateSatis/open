@@ -666,6 +666,8 @@ export type Database = {
           kind: string
           member_reactions: Json
           reactions_count: number
+          stream_id: string | null
+          system_event: string | null
           text: string | null
           visitor_reactions: Json
           my_reaction: {
@@ -680,6 +682,18 @@ export type Database = {
             updated_at: string
             user_id: string | null
           } | null
+          my_stream_participation: {
+            created_at: string
+            deleted_at: string | null
+            id: string
+            joined_at: string
+            last_event_at: string
+            left_at: string | null
+            livekit_sid: string | null
+            role: string
+            stream_id: string
+            user_id: string | null
+          } | null
         }
         Insert: {
           author_id?: string | null
@@ -692,6 +706,8 @@ export type Database = {
           kind: string
           member_reactions?: Json
           reactions_count?: number
+          stream_id?: string | null
+          system_event?: string | null
           text?: string | null
           visitor_reactions?: Json
         }
@@ -706,6 +722,8 @@ export type Database = {
           kind?: string
           member_reactions?: Json
           reactions_count?: number
+          stream_id?: string | null
+          system_event?: string | null
           text?: string | null
           visitor_reactions?: Json
         }
@@ -722,6 +740,13 @@ export type Database = {
             columns: ["chat_id"]
             isOneToOne: false
             referencedRelation: "chats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "messages_stream_id_fkey"
+            columns: ["stream_id"]
+            isOneToOne: false
+            referencedRelation: "streams"
             referencedColumns: ["id"]
           },
         ]
@@ -844,6 +869,123 @@ export type Database = {
           },
         ]
       }
+      stream_participants: {
+        Row: {
+          created_at: string
+          deleted_at: string | null
+          id: string
+          joined_at: string
+          last_event_at: string
+          left_at: string | null
+          livekit_sid: string | null
+          role: string
+          stream_id: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          joined_at: string
+          last_event_at: string
+          left_at?: string | null
+          livekit_sid?: string | null
+          role: string
+          stream_id: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          joined_at?: string
+          last_event_at?: string
+          left_at?: string | null
+          livekit_sid?: string | null
+          role?: string
+          stream_id?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stream_participants_stream_id_fkey"
+            columns: ["stream_id"]
+            isOneToOne: false
+            referencedRelation: "streams"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stream_participants_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      streams: {
+        Row: {
+          chat_id: string
+          created_at: string
+          deleted_at: string | null
+          end_reason: string | null
+          ended_at: string | null
+          host_id: string | null
+          id: string
+          listeners_count: number
+          room_name: string
+          speakers_changed_at: string
+          speakers_count: number
+          started_at: string
+          status: string
+        }
+        Insert: {
+          chat_id: string
+          created_at?: string
+          deleted_at?: string | null
+          end_reason?: string | null
+          ended_at?: string | null
+          host_id?: string | null
+          id?: string
+          listeners_count?: number
+          room_name: string
+          speakers_changed_at?: string
+          speakers_count?: number
+          started_at?: string
+          status?: string
+        }
+        Update: {
+          chat_id?: string
+          created_at?: string
+          deleted_at?: string | null
+          end_reason?: string | null
+          ended_at?: string | null
+          host_id?: string | null
+          id?: string
+          listeners_count?: number
+          room_name?: string
+          speakers_changed_at?: string
+          speakers_count?: number
+          started_at?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "streams_chat_id_fkey"
+            columns: ["chat_id"]
+            isOneToOne: false
+            referencedRelation: "chats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "streams_host_id_fkey"
+            columns: ["host_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       chat_waiting_invitees: {
@@ -878,6 +1020,10 @@ export type Database = {
         Args: { new_message: string; reply_to: string[]; target_chat: string }
         Returns: undefined
       }
+      call_duration_text: {
+        Args: { ended: string; started: string }
+        Returns: string
+      }
       check_comment_shape: { Args: { target: string }; Returns: undefined }
       check_message_shape: { Args: { target: string }; Returns: undefined }
       create_chat: {
@@ -908,6 +1054,11 @@ export type Database = {
       }
       end_device_session: { Args: { p_device_id: string }; Returns: undefined }
       end_other_sessions: { Args: never; Returns: undefined }
+      finish_abandoned_streams: { Args: never; Returns: number }
+      finish_stream: {
+        Args: { reason: string; target_stream: string }
+        Returns: boolean
+      }
       forward_messages: {
         Args: { message_ids: string[]; target_chat: string }
         Returns: string[]
@@ -925,6 +1076,8 @@ export type Database = {
           kind: string
           member_reactions: Json
           reactions_count: number
+          stream_id: string | null
+          system_event: string | null
           text: string | null
           visitor_reactions: Json
         }[]
@@ -979,10 +1132,35 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      my_stream_participation: {
+        Args: { "": Database["public"]["Tables"]["messages"]["Row"] }
+        Returns: {
+          created_at: string
+          deleted_at: string | null
+          id: string
+          joined_at: string
+          last_event_at: string
+          left_at: string | null
+          livekit_sid: string | null
+          role: string
+          stream_id: string
+          user_id: string | null
+        }
+        SetofOptions: {
+          from: "messages"
+          to: "stream_participants"
+          isOneToOne: true
+          isSetofReturn: true
+        }
+      }
       pin_message: { Args: { target_message: string }; Returns: undefined }
       reaction_counts_add: {
         Args: { counts: Json; delta: number; emoji: string }
         Returns: Json
+      }
+      reconcile_stream: {
+        Args: { connected: Json; room: string }
+        Returns: string
       }
       register_device: {
         Args: {
@@ -1022,8 +1200,29 @@ export type Database = {
           emoji: string
         }[]
       }
+      start_call: { Args: { target_chat: string }; Returns: Json }
+      stream_join_info: {
+        Args: { caller: string; target_stream: string }
+        Returns: Json
+      }
+      stream_participant_joined: {
+        Args: {
+          event_at: string
+          identity: string
+          participant_role: string
+          room: string
+          sid: string
+        }
+        Returns: string
+      }
+      stream_participant_left: {
+        Args: { event_at: string; identity: string; room: string; sid: string }
+        Returns: string
+      }
+      stream_room_finished: { Args: { room: string }; Returns: string }
       touch_device: { Args: { p_installation_id: string }; Returns: boolean }
       unpin_message: { Args: { target_message: string }; Returns: undefined }
+      uuid_or_null: { Args: { value: string }; Returns: string }
     }
     Enums: {
       [_ in never]: never
