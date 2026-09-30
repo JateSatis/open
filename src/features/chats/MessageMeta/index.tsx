@@ -18,7 +18,7 @@ export type MessageMetaProps = {
    */
   variant: 'inline' | 'overlay';
   onRetry: (localId: string) => void;
-  /** «доставлено / прочитано» у своего. Нет — у комментария: его никто не «читает». */
+  /** Кружок «доставлено / прочитано» у своего. Нет — у комментария: его никто не «читает». */
   showReceipt?: boolean;
 };
 
@@ -70,9 +70,16 @@ export function MessageMeta({
           </Text>
 
           {isOwn && showReceipt ? (
-            <Text variant="caption" color={overlay ? color : 'primaryText'}>
-              {isRead ? 'прочитано' : 'доставлено'}
-            </Text>
+            <View
+              testID="message-receipt"
+              accessible
+              accessibilityLabel={isRead ? 'Прочитано' : 'Доставлено'}
+              style={[
+                styles.receipt,
+                { borderColor: theme[color] },
+                isRead && { backgroundColor: theme[color] },
+              ]}
+            />
           ) : null}
         </>
       )}

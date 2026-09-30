@@ -277,8 +277,8 @@ describe('ChatScreen', () => {
 
     await renderWithQuery(<ChatScreen />);
 
-    expect(await screen.findByText('доставлено')).toBeTruthy();
-    expect(screen.queryByText('прочитано')).toBeNull();
+    expect(await screen.findByLabelText('Доставлено')).toBeTruthy();
+    expect(screen.queryByLabelText('Прочитано')).toBeNull();
   });
 
   it('shows an own message as read once the other side has caught up', async () => {
@@ -292,7 +292,7 @@ describe('ChatScreen', () => {
 
     await renderWithQuery(<ChatScreen />);
 
-    expect(await screen.findByText('прочитано')).toBeTruthy();
+    expect(await screen.findByLabelText('Прочитано')).toBeTruthy();
   });
 
   it('never marks an incoming message as read or delivered', async () => {
@@ -304,8 +304,8 @@ describe('ChatScreen', () => {
     await renderWithQuery(<ChatScreen />);
     await screen.findByText('привет');
 
-    expect(screen.queryByText('доставлено')).toBeNull();
-    expect(screen.queryByText('прочитано')).toBeNull();
+    expect(screen.queryByLabelText('Доставлено')).toBeNull();
+    expect(screen.queryByLabelText('Прочитано')).toBeNull();
   });
 
   it('hides the composer from an outsider and says why', async () => {
@@ -484,14 +484,14 @@ describe('ChatScreen', () => {
     });
 
     await renderWithQuery(<ChatScreen />);
-    expect(await screen.findByText('доставлено')).toBeTruthy();
+    expect(await screen.findByLabelText('Доставлено')).toBeTruthy();
 
     mockedGetChat.mockResolvedValue(
       chatWith([member, { ...other, lastReadAt: '2026-09-16T11:00:00Z' }]),
     );
     handlers?.onRead();
 
-    expect(await screen.findByText('прочитано')).toBeTruthy();
+    expect(await screen.findByLabelText('Прочитано')).toBeTruthy();
   });
 
   it('marks the chat read when a message arrives while it is already open', async () => {

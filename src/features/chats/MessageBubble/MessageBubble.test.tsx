@@ -72,6 +72,21 @@ describe('MessageBubble', () => {
     expect(screen.getByText('Марина')).toBeTruthy();
   });
 
+  it('своё доставленное — кружок «Доставлено», прочитанное — «Прочитано»', async () => {
+    const { rerender } = await render(
+      <MessageBubble {...baseProps} isOwn message={textMessage({ authorId: 'me' })} />,
+    );
+
+    expect(screen.getByLabelText('Доставлено')).toBeTruthy();
+    expect(screen.queryByText('доставлено')).toBeNull();
+
+    await rerender(
+      <MessageBubble {...baseProps} isOwn isRead message={textMessage({ authorId: 'me' })} />,
+    );
+
+    expect(screen.getByLabelText('Прочитано')).toBeTruthy();
+  });
+
   it('opens the author profile from the avatar and from the name', async () => {
     const onAuthorPress = jest.fn();
     const user = userEvent.setup();

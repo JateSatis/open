@@ -1,6 +1,6 @@
 import { StyleSheet } from 'react-native';
 
-import { Radii, Spacing } from '@/theme';
+import { Radii, Sizes, Spacing } from '@/theme';
 
 export const styles = StyleSheet.create({
   meta: {
@@ -8,6 +8,13 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'flex-end',
     gap: Spacing.one,
+  },
+  /** Контур — доставлено, заливка того же цвета — прочитано. */
+  receipt: {
+    width: Sizes.receiptDot,
+    height: Sizes.receiptDot,
+    borderRadius: Radii.full,
+    borderWidth: Sizes.receiptDotBorder,
   },
   overlay: {
     position: 'absolute',
