@@ -42,6 +42,18 @@ export const Colors = {
     /** Подсветка моей реакции в тихом ряду посетителей. */
     reactionVisitorMine: 'rgba(60, 135, 247, 0.16)',
     /** То же в своём облачке. */
+    /** Отметка «В эфире» — красная, как запись: её нельзя не заметить. */
+    onAir: '#E5484D',
+    /** Полоса идущего звонка и «Вернуться к звонку». */
+    callBar: '#30A46C',
+    /** Экран звонка и входящего — тёмный в обеих темах, как у системной звонилки. */
+    callBackground: '#101214',
+    /** Круглые кнопки на экране звонка. */
+    callControl: 'rgba(255, 255, 255, 0.14)',
+    /** Включённая кнопка (громкая связь) — светлая. */
+    callControlActive: '#ffffff',
+    /** Приглушённый текст на тёмном экране звонка. */
+    textOnCallSecondary: 'rgba(255, 255, 255, 0.7)',
     reactionVisitorMineOnPrimary: 'rgba(255, 255, 255, 0.24)',
   },
   dark: {
@@ -71,6 +83,12 @@ export const Colors = {
     reactionVisitorsOnPrimary: 'rgba(255, 255, 255, 0.7)',
     reactionVisitorMine: 'rgba(60, 135, 247, 0.28)',
     reactionVisitorMineOnPrimary: 'rgba(255, 255, 255, 0.24)',
+    onAir: '#FF6369',
+    callBar: '#2F9E64',
+    callBackground: '#101214',
+    callControl: 'rgba(255, 255, 255, 0.14)',
+    callControlActive: '#ffffff',
+    textOnCallSecondary: 'rgba(255, 255, 255, 0.7)',
   },
 } as const;
 

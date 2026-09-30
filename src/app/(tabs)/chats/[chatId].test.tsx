@@ -44,6 +44,8 @@ jest.mock('@/features/auth/useSession', () => ({
   useSession: jest.fn(),
 }));
 
+jest.mock('@/api/streams');
+
 jest.mock('@/api/chats', () => ({
   getChat: jest.fn(),
   listMessages: jest.fn(),

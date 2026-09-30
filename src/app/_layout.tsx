@@ -1,3 +1,6 @@
+// Первым: livekit-client ждёт WebRTC в глобальной области с момента загрузки.
+import '@/features/streams/livekitGlobals';
+
 import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
@@ -12,6 +15,8 @@ import { AccountLifecycle } from '@/features/auth/AccountLifecycle';
 import { ConnectionWatcher } from '@/features/connection/ConnectionWatcher';
 import { reportRequestFailed, reportRequestSucceeded } from '@/features/connection/connectionStore';
 import { InAppMessageToast } from '@/features/notifications/InAppMessageToast';
+import { IncomingCallOverlay } from '@/features/streams/IncomingCallOverlay';
+import { BelowReturnBar, ReturnToCallBar } from '@/features/streams/ReturnToCallBar';
 import { isNetworkError } from '@/lib/network';
 
 SplashScreen.preventAutoHideAsync();
@@ -73,7 +78,18 @@ export default function RootLayout() {
             <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
               <ConnectionWatcher />
               <AccountLifecycle />
-              <Stack screenOptions={{ headerShown: false }} />
+              {/* Свёрнутый звонок сдвигает навигатор вниз, а не перекрывает шапки. */}
+              <BelowReturnBar>
+                <Stack screenOptions={{ headerShown: false }}>
+                  <Stack.Screen
+                    name="call"
+                    options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }}
+                  />
+                </Stack>
+              </BelowReturnBar>
+              <ReturnToCallBar />
+              {/* Входящий звонок — своим окном поверх всего, включая нативные вкладки. */}
+              <IncomingCallOverlay />
               {/* Поверх навигатора: уведомление не принадлежит ни одному экрану. */}
               <InAppMessageToast />
               {/* Один диалог подтверждения на всё приложение, см. src/components/ConfirmDialog. */}

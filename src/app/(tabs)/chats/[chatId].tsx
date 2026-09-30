@@ -52,9 +52,13 @@ import { usePinnedMessages } from '@/features/chats/usePinnedMessages';
 import { useQuoteNavigation } from '@/features/chats/useQuoteNavigation';
 import { useReplyForward } from '@/features/chats/useReplyForward';
 import { useRespondToInvite } from '@/features/chats/useRespondToInvite';
+import { SystemMessage } from '@/features/chats/SystemMessage';
 import { WaitingBanner } from '@/features/chats/WaitingBanner';
 import { CommentsPanel, commentsEntry } from '@/features/interactions/CommentsPanel';
 import { useReactToMessage } from '@/features/interactions/useReactToMessage';
+import { CallButton } from '@/features/streams/CallButton';
+import { ChatCallBar } from '@/features/streams/ChatCallBar';
+import { useChatCall } from '@/features/streams/useChatCall';
 import { stopVoice } from '@/features/media';
 import { showNotice } from '@/features/notifications/alertsStore';
 import { useProfile } from '@/features/profile/queries';
@@ -107,6 +111,7 @@ export default function ChatScreen() {
   );
   const navigation = useQuoteNavigation(chatId, jump.jump, !isLoading && !isChatLoading);
   const reactions = useReactToMessage(chatId, isMember);
+  const call = useChatCall(chatId, chat, currentUserId, isMember);
 
   // Пока чат открыт, уведомления о нём не нужны: человек и так смотрит сюда.
   useEffect(() => {
@@ -298,25 +303,36 @@ export default function ChatScreen() {
   const { open: openMenu } = menu;
 
   const renderItem = useCallback(
-    ({ item }: { item: ChatMessage }) => (
-      <MessageRow
-        selectionMode={isSelecting}
-        selectable={!isLocalMessage(item)}
-        selected={isSelected(item.id)}
-        editing={item.id === editingId}
-        highlightKey={highlight?.messageId === item.id ? highlight.key : null}
-        messageId={item.id}
-        onLongPress={(anchor) => openMenu(item, anchor)}
-        onToggle={() => toggleSelected(item.id)}
-        // Ответ — это отправка: свайп есть только у участника и только у
-        // сообщений, которые уже на сервере.
-        onSwipeReply={isMember && !isLocalMessage(item) ? () => startReply([item]) : undefined}
-      >
-        {bubbleFor(item, true)}
-      </MessageRow>
-    ),
+    ({ item }: { item: ChatMessage }) =>
+      // Системное — не чья-то реплика: без меню, выбора и ответа свайпом.
+      item.kind === 'system' ? (
+        <SystemMessage
+          message={item}
+          currentUserId={currentUserId}
+          isMember={isMember}
+          hostName={authorName(item.call?.hostId ?? null)}
+        />
+      ) : (
+        <MessageRow
+          selectionMode={isSelecting}
+          selectable={!isLocalMessage(item)}
+          selected={isSelected(item.id)}
+          editing={item.id === editingId}
+          highlightKey={highlight?.messageId === item.id ? highlight.key : null}
+          messageId={item.id}
+          onLongPress={(anchor) => openMenu(item, anchor)}
+          onToggle={() => toggleSelected(item.id)}
+          // Ответ — это отправка: свайп есть только у участника и только у
+          // сообщений, которые уже на сервере.
+          onSwipeReply={isMember && !isLocalMessage(item) ? () => startReply([item]) : undefined}
+        >
+          {bubbleFor(item, true)}
+        </MessageRow>
+      ),
     [
+      authorName,
       bubbleFor,
+      currentUserId,
       editingId,
       highlight,
       isMember,
@@ -406,9 +422,26 @@ export default function ChatScreen() {
         onTitlePress={other ? () => openPerson(other.id) : undefined}
         selectedCount={selection.selected.length}
         onCancelSelection={clearSelection}
+        right={
+          isMember ? (
+            <CallButton
+              live={call.stream !== null}
+              disabled={call.busy}
+              onPress={call.startOrJoin}
+            />
+          ) : undefined
+        }
       />
 
       <Animated.View testID="chat-keyboard-area" style={[styles.flex, keyboardInsetStyle]}>
+        {/* Звонок срочнее закрепа: он идёт прямо сейчас. */}
+        <ChatCallBar
+          stream={call.stream}
+          isInThisCall={call.isInThisCall}
+          isMember={isMember}
+          onPress={call.openBar}
+        />
+
         <PinnedBar pins={pins.pins} index={pinCursor.index} onPress={openPinned} />
 
         <WaitingBanner waiting={waitingForOthers} />

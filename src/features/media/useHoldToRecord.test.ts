@@ -4,12 +4,15 @@ import { Alert } from 'react-native';
 import type { LocalMedia } from './types';
 import {
   HOLD_HINT,
+  IN_CALL_NOTICE,
   INTERRUPTED_NOTICE,
   useHoldToRecord,
   type HoldRecorder,
 } from './useHoldToRecord';
 import type { StartResult } from './useVoiceRecorder';
 import { stopVoice } from './voicePlayback';
+
+import { setInCall } from '@/store/callPresence';
 
 jest.mock('./voicePlayback', () => ({ stopVoice: jest.fn() }));
 jest.mock('./lib/recordingHaptics', () => ({
@@ -64,9 +67,23 @@ async function press(result: { current: ReturnType<typeof useHoldToRecord> }) {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  setInCall(false);
 });
 
 describe('useHoldToRecord', () => {
+  it('does not record during a call and says why', async () => {
+    setInCall(true);
+    const recorder = makeRecorder();
+    const { result, onSend } = await renderHold(recorder);
+
+    await press(result);
+
+    expect(recorder.start).not.toHaveBeenCalled();
+    expect(result.current.phase).toBe('idle');
+    expect(result.current.notice).toBe(IN_CALL_NOTICE);
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
   it('sends exactly one message after a normal hold and release', async () => {
     const recorder = makeRecorder();
     const { result, onSend } = await renderHold(recorder);

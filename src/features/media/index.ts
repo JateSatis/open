@@ -15,6 +15,11 @@ export { VoicePlayer, voiceDurationLabel, type VoicePlayerProps } from './VoiceP
 export { HoldToRecordRow, type HoldToRecordRowProps } from './HoldToRecordRow';
 export { Waveform, type WaveformProps } from './Waveform';
 export { stopVoice } from './voicePlayback';
+export {
+  getMicrophoneAccess,
+  requestMicrophoneAccess,
+  type MicrophoneAccess,
+} from './microphoneAccess';
 
 export {
   captureMediaWithSystemCamera,

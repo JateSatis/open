@@ -7,6 +7,8 @@ import type { LocalMedia } from './types';
 import type { StartResult, VoiceRecorder } from './useVoiceRecorder';
 import { stopVoice } from './voicePlayback';
 
+import { isInCall } from '@/store/callPresence';
+
 /**
  * `holding` — палец на кнопке, идёт запись (или она вот-вот начнётся);
  * `locked` — запись закреплена свайпом вверх, палец свободен;
@@ -26,6 +28,8 @@ export type HoldRecorder = Pick<
 export const HOLD_HINT = 'Удерживайте, чтобы записать голосовое';
 export const INTERRUPTED_NOTICE = 'Запись прервана';
 const START_FAILED_NOTICE = 'Не удалось начать запись';
+/** Микрофон занят звонком: запись шла бы в обход эфира и перебивала бы его. */
+export const IN_CALL_NOTICE = 'Во время звонка голосовое не записать';
 
 /** Сколько висит подсказка под кнопкой. */
 const NOTICE_MS = 2500;
@@ -173,6 +177,11 @@ export function useHoldToRecord({
 
   const pressIn = useCallback(() => {
     if (phaseRef.current !== 'idle') return;
+
+    if (isInCall()) {
+      showNotice(IN_CALL_NOTICE);
+      return;
+    }
 
     pendingRef.current = null;
     setNotice(null);

@@ -1,4 +1,5 @@
 import { Stack } from 'expo-router';
+import type { ReactNode } from 'react';
 import { Pressable } from 'react-native';
 
 import { Text } from '@/components/Text';
@@ -12,6 +13,8 @@ export type ChatScreenHeaderProps = {
   /** Сколько отмечено; `0` — выбора нет. */
   selectedCount: number;
   onCancelSelection: () => void;
+  /** Справа в обычном режиме — например, «Позвонить». */
+  right?: ReactNode;
 };
 
 /**
@@ -24,6 +27,7 @@ export function ChatScreenHeader({
   onTitlePress,
   selectedCount,
   onCancelSelection,
+  right,
 }: ChatScreenHeaderProps) {
   return (
     <Stack.Screen
@@ -44,7 +48,7 @@ export function ChatScreenHeader({
             }
           : {
               headerBackVisible: true,
-              headerRight: undefined,
+              headerRight: right ? () => right : undefined,
               headerTitle: () => (
                 <ChatHeaderTitle title={title} subtitle={subtitle} onPress={onTitlePress} />
               ),

@@ -13,6 +13,7 @@ import {
 import type { UserActivity } from '@/features/chats/messages/types';
 import { chatQueryKey } from '@/features/chats/useChat';
 import { pinsQueryKey } from '@/features/chats/usePinnedMessages';
+import { liveStreamQueryKey } from '@/features/streams/streamKeys';
 
 /** How long a "печатает…" mark survives without another typing broadcast. */
 const TYPING_TIMEOUT_MS = 4000;
@@ -83,6 +84,7 @@ export function useChatChannel(chatId: string, currentUserId: string | null): Ch
     void queryClient.invalidateQueries({ queryKey: messagesQueryKey(chatId) });
     void queryClient.invalidateQueries({ queryKey: pinsQueryKey(chatId) });
     void queryClient.invalidateQueries({ queryKey: chatQueryKey(chatId) });
+    void queryClient.invalidateQueries({ queryKey: liveStreamQueryKey(chatId) });
   }, [chatId, queryClient]);
 
   useEffect(() => {
@@ -131,6 +133,10 @@ export function useChatChannel(chatId: string, currentUserId: string | null): Ch
         refreshEditedMessages(queryClient, chatId, [messageId]).catch(() => undefined);
         // Правленое могло быть закреплено — полоса показывает его текст.
         void queryClient.invalidateQueries({ queryKey: pinsQueryKey(chatId) });
+      },
+      onStreamChanged: () => {
+        // Числа и сам факт звонка — из базы; payload только будит.
+        void queryClient.invalidateQueries({ queryKey: liveStreamQueryKey(chatId) });
       },
       onPinsChanged: () => {
         void queryClient.invalidateQueries({ queryKey: pinsQueryKey(chatId) });
