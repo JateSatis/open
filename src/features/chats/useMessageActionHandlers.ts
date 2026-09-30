@@ -3,9 +3,11 @@ import { useCallback } from 'react';
 
 import { confirm } from '@/components/ConfirmDialog';
 import { formatMessagesForCopy } from '@/features/chats/copyMessages';
+import { anchorOf, contentOf, islandItemKey, type BubbleRow } from '@/features/chats/islands/rows';
 import { messagesCount } from '@/features/chats/messageQuote';
 import {
   isLocalMessage,
+  type IslandActionId,
   type MessageActionId,
   type SelectionActionId,
 } from '@/features/chats/messageActions';
@@ -25,46 +27,79 @@ async function copyText(text: string) {
 }
 
 type Options = {
+  currentUserId: string | null;
   selection: MessageSelection;
   pins: Pick<PinnedMessagesState, 'pin' | 'unpin'>;
   retry: (localId: string) => void;
   discard: (localId: string) => void;
   deleteMessages: (messageIds: string[]) => Promise<void>;
+  removeFromIsland: (forwardId: string, messageIds: string[]) => Promise<void>;
   authorName: (authorId: string | null) => string;
-  /** Ответить: сообщения встают в плашку над полем ввода. */
-  reply: (messages: ChatMessage[]) => void;
+  /** Ответить: облачка встают в плашку над полем ввода. */
+  reply: (rows: BubbleRow[]) => void;
   /** Переслать: дальше — выбор чата. */
-  forward: (messages: ChatMessage[]) => void;
+  forward: (rows: BubbleRow[]) => void;
   /** Изменить: поле ввода переходит в режим правки этого сообщения. */
   edit: (message: ChatMessage) => void;
+  /** Оригинал облачка островка — в его чате. */
+  openOriginal: (message: ChatMessage) => void;
 };
 
 export type MessageActionHandlers = {
-  runMessageAction: (id: MessageActionId, message: ChatMessage) => void;
+  runMessageAction: (id: MessageActionId, row: BubbleRow) => void;
   runSelectionAction: (id: SelectionActionId) => void;
+  runIslandAction: (id: IslandActionId, island: ChatMessage) => void;
 };
 
-/** Что делает каждый пункт меню и каждая кнопка панели выбора. */
+/** Кто автор облачка — у облачка островка имя из оригинала, его нет среди участников. */
+function namesOf(rows: BubbleRow[], authorName: (authorId: string | null) => string) {
+  const known = new Map<string, string>();
+
+  for (const row of rows) {
+    const original = row.type === 'island-item' ? row.item.original : null;
+
+    if (original?.authorId && original.authorName) known.set(original.authorId, original.authorName);
+  }
+
+  return (authorId: string | null) => (authorId && known.get(authorId)) || authorName(authorId);
+}
+
+/** Что делает каждый пункт меню, каждая кнопка панели выбора и пункт плашки островка. */
 export function useMessageActionHandlers({
+  currentUserId,
   selection,
   pins,
   retry,
   discard,
   deleteMessages,
+  removeFromIsland,
   authorName,
   reply,
   forward,
   edit,
+  openOriginal,
 }: Options): MessageActionHandlers {
+  /**
+   * Удаляет у всех: свои сообщения — функцией удаления, облачка своих
+   * островков — убирает из островков. Оригиналы в островках не трогаются.
+   */
   const removeForEveryone = useCallback(
-    async (messageIds: string[]) => {
+    async (rows: BubbleRow[]) => {
+      const islandOnly = rows.every((row) => row.type === 'island-item');
       const confirmed = await confirm({
-        title:
-          messageIds.length === 1
+        title: islandOnly
+          ? rows.length === 1
+            ? 'Убрать из пересылки?'
+            : `Убрать из пересылки ${messagesCount(rows.length)}?`
+          : rows.length === 1
             ? 'Удалить сообщение?'
-            : `Удалить ${messagesCount(messageIds.length)}?`,
-        message: messageIds.length === 1 ? 'Оно исчезнет у всех.' : 'Они исчезнут у всех.',
-        confirmLabel: 'Удалить',
+            : `Удалить ${messagesCount(rows.length)}?`,
+        message: islandOnly
+          ? 'Их не будет в этом чате ни у кого. В исходных чатах сообщения останутся.'
+          : rows.length === 1
+            ? 'Оно исчезнет у всех.'
+            : 'Они исчезнут у всех.',
+        confirmLabel: islandOnly ? 'Убрать' : 'Удалить',
         cancelLabel: 'Отмена',
         destructive: true,
       });
@@ -73,89 +108,159 @@ export function useMessageActionHandlers({
 
       selection.clear();
 
+      const own = rows.flatMap((row) => (row.type === 'message' ? [row.message.id] : []));
+      const byIsland = new Map<string, string[]>();
+
+      for (const row of rows) {
+        if (row.type !== 'island-item') continue;
+
+        byIsland.set(row.island.id, [...(byIsland.get(row.island.id) ?? []), row.item.messageId]);
+      }
+
       try {
-        await deleteMessages(messageIds);
+        await Promise.all([
+          own.length > 0 ? deleteMessages(own) : Promise.resolve(),
+          ...[...byIsland].map(([forwardId, ids]) => removeFromIsland(forwardId, ids)),
+        ]);
       } catch (cause) {
         showNotice(
           failure(
-            messageIds.length === 1 ? 'Не удалось удалить сообщение' : 'Не удалось удалить сообщения',
+            rows.length === 1 ? 'Не удалось удалить сообщение' : 'Не удалось удалить сообщения',
             cause,
           ),
           'error',
         );
       }
     },
-    [deleteMessages, selection],
+    [deleteMessages, removeFromIsland, selection],
   );
 
   const runMessageAction = useCallback(
-    (id: MessageActionId, message: ChatMessage) => {
+    (id: MessageActionId, row: BubbleRow) => {
+      const message = contentOf(row);
+
       switch (id) {
         case 'retry':
-          if (message.localId) retry(message.localId);
+          if (message?.localId) retry(message.localId);
           return;
         case 'reply':
-          reply([message]);
+          reply([row]);
           return;
         case 'forward':
-          forward([message]);
+          forward([row]);
           return;
         case 'edit':
-          edit(message);
+          if (message) edit(message);
           return;
         case 'copy':
-          void copyText(message.text ?? '');
+          void copyText(message?.text ?? '');
+          return;
+        case 'open_original':
+          if (message) openOriginal(message);
           return;
         case 'pin':
-          pins.pin(message).catch((cause: unknown) =>
+          if (!message) return;
+
+          pins.pin(message, anchorOf(row)).catch((cause: unknown) =>
             showNotice(failure('Не удалось закрепить сообщение', cause), 'error'),
           );
           return;
         case 'unpin':
+          if (!message) return;
+
           pins.unpin(message.id).catch((cause: unknown) =>
             showNotice(failure('Не удалось открепить сообщение', cause), 'error'),
           );
           return;
         case 'select':
-          selection.start(message.id);
+          selection.start(row.key);
+          return;
+        case 'remove_from_island':
+          void removeForEveryone([row]);
           return;
         case 'delete':
-          if (isLocalMessage(message)) {
+          if (message && isLocalMessage(message)) {
             // Неотправленного на сервере нет — и спрашивать «исчезнет у всех» не о чем.
             if (message.localId) discard(message.localId);
             return;
           }
 
-          void removeForEveryone([message.id]);
+          void removeForEveryone([row]);
           return;
       }
     },
-    [discard, edit, forward, pins, removeForEveryone, reply, retry, selection],
+    [discard, edit, forward, openOriginal, pins, removeForEveryone, reply, retry, selection],
   );
 
   const runSelectionAction = useCallback(
     (id: SelectionActionId) => {
+      const rows = selection.selected;
+
       switch (id) {
         case 'reply':
           // Выбор закрывается раньше плашки: поле ввода на время выбора спрятано.
-          reply(selection.selected);
+          reply(rows);
           selection.clear();
           return;
         case 'forward':
-          forward(selection.selected);
+          forward(rows);
           selection.clear();
           return;
         case 'copy':
-          void copyText(formatMessagesForCopy(selection.selected, authorName));
+          void copyText(
+            formatMessagesForCopy(
+              rows.flatMap((row) => contentOf(row) ?? []),
+              namesOf(rows, authorName),
+            ),
+          );
           selection.clear();
           return;
         case 'delete':
-          void removeForEveryone(selection.selected.map((message) => message.id));
+          void removeForEveryone(rows);
           return;
       }
     },
     [authorName, forward, removeForEveryone, reply, selection],
   );
 
-  return { runMessageAction, runSelectionAction };
+  const runIslandAction = useCallback(
+    (id: IslandActionId, island: ChatMessage) => {
+      switch (id) {
+        case 'retry':
+          if (island.localId) retry(island.localId);
+          return;
+        case 'select_all':
+          // Заглушку удалённого отмечает только переславший — чтобы убрать её.
+          selection.start(
+            (island.forward?.items ?? [])
+              .filter((item) => item.original !== null || island.authorId === currentUserId)
+              .map((item) => islandItemKey(island.id, item.messageId)),
+          );
+          return;
+        case 'delete_island':
+          if (isLocalMessage(island)) {
+            if (island.localId) discard(island.localId);
+            return;
+          }
+
+          void confirm({
+            title: 'Удалить пересылку?',
+            message: 'Она исчезнет из этого чата у всех. В исходных чатах сообщения останутся.',
+            confirmLabel: 'Удалить',
+            cancelLabel: 'Отмена',
+            destructive: true,
+          }).then((confirmed) => {
+            if (!confirmed) return;
+
+            deleteMessages([island.id]).catch((cause: unknown) =>
+              showNotice(failure('Не удалось удалить пересылку', cause), 'error'),
+            );
+          });
+          return;
+      }
+    },
+    [currentUserId, deleteMessages, discard, retry, selection],
+  );
+
+  return { runMessageAction, runSelectionAction, runIslandAction };
 }

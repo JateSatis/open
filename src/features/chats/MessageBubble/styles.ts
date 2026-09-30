@@ -33,7 +33,7 @@ export const styles = StyleSheet.create({
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.one,
   },
-  /** Цитата и «Переслано от» над мозаикой — с отступами, как у имени автора. */
+  /** Цитата над мозаикой — с отступами, как у имени автора. */
   mediaAnnotations: {
     paddingHorizontal: Spacing.two,
     paddingBottom: Spacing.two,

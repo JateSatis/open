@@ -2,32 +2,60 @@ import { useRouter } from 'expo-router';
 import { useCallback, type RefObject } from 'react';
 import type { TextInput } from 'react-native';
 
+import type { ChatRef, IslandOriginal } from '@/api/chats';
 import { startForwardPick } from '@/features/chats/composerDraftStore';
 import { claimKeyboardForChat } from '@/features/chats/composerKeyboard';
-import { byOldest, originOf, quoteOf } from '@/features/chats/messageQuote';
+import { anchorOf, contentOf, type BubbleRow } from '@/features/chats/islands/rows';
+import { quoteOf } from '@/features/chats/messageQuote';
 import type { ChatMessage, ForwardItem, LiveQuote } from '@/features/chats/messages/types';
 import type { ComposerDraft } from '@/features/chats/useComposerDraft';
 import type { LocalMedia, MediaLibraryItem } from '@/features/media';
 
 type Options = {
   chatId: string;
+  /** Этот чат — заголовок островка, если пересылать отсюда. */
+  sourceChat: ChatRef;
   draft: ComposerDraft;
   authorName: (authorId: string | null) => string;
+  /** Облачко как оригинал для островка: с автором и чатом. Заглушка — `null`. */
+  originalOf: (row: BubbleRow) => IslandOriginal | null;
   composerRef: RefObject<TextInput | null>;
   send: (text: string, media?: MediaLibraryItem[], replies?: LiveQuote[]) => void;
   sendVoice: (voice: LocalMedia, replies?: LiveQuote[]) => void;
-  forward: (text: string, items: ForwardItem[]) => void;
+  forward: (text: string, sourceChat: ChatRef, items: ForwardItem[]) => void;
 };
 
 export type ReplyForward = {
-  /** «Ответить»: сообщения встают в плашку, фокус — в поле. */
-  startReply: (messages: ChatMessage[]) => void;
+  /** «Ответить»: облачка встают в плашку, фокус — в поле. */
+  startReply: (rows: BubbleRow[]) => void;
   /** «Переслать»: дальше — экран выбора чата. */
-  startForward: (messages: ChatMessage[]) => void;
+  startForward: (rows: BubbleRow[]) => void;
   /** «О»: текст, альбом, ответ или пересылка — смотря что в черновике. */
   submit: () => void;
   sendVoice: (voice: LocalMedia) => void;
 };
+
+function quoteOfRow(
+  row: BubbleRow,
+  authorName: (authorId: string | null) => string,
+): LiveQuote | null {
+  const content: ChatMessage | null = contentOf(row);
+
+  if (!content) return null;
+
+  // Автор облачка островка — не участник этого чата: имя — из оригинала.
+  const name =
+    row.type === 'island-item'
+      ? (row.item.original?.authorName ?? authorName(null))
+      : authorName(content.authorId);
+  const anchor = anchorOf(row);
+
+  return quoteOf(
+    content,
+    name,
+    anchor ? { forwardId: anchor.id, createdAt: anchor.createdAt } : null,
+  );
+}
 
 /**
  * Ответ и пересылка поверх черновика поля ввода. Режим черновика решает,
@@ -35,8 +63,10 @@ export type ReplyForward = {
  */
 export function useReplyForward({
   chatId,
+  sourceChat,
   draft,
   authorName,
+  originalOf,
   composerRef,
   send,
   sendVoice: sendVoiceMessage,
@@ -46,13 +76,11 @@ export function useReplyForward({
   const { mode, setMode } = draft;
 
   const startReply = useCallback(
-    (messages: ChatMessage[]) => {
-      if (messages.length === 0) return;
+    (rows: BubbleRow[]) => {
+      // Цитаты — в порядке переписки: так их отдаёт и выбор.
+      const quotes = rows.flatMap((row) => quoteOfRow(row, authorName) ?? []);
 
-      // Цитаты — в порядке переписки, как бы их ни отмечали.
-      const quotes = [...messages]
-        .sort(byOldest)
-        .map((message) => quoteOf(message, authorName(message.authorId)));
+      if (quotes.length === 0) return;
 
       setMode({ type: 'reply', quotes });
       claimKeyboardForChat();
@@ -64,18 +92,21 @@ export function useReplyForward({
   );
 
   const startForward = useCallback(
-    (messages: ChatMessage[]) => {
-      if (messages.length === 0) return;
+    (rows: BubbleRow[]) => {
+      // Порядок — как облачка стоят на экране, и облачко островка
+      // пересылается ссылкой на свой оригинал.
+      const items = rows.flatMap((row) => {
+        const original = originalOf(row);
 
-      startForwardPick(
-        [...messages].sort(byOldest).map((message) => ({
-          message,
-          origin: originOf(message, authorName(message.authorId)),
-        })),
-      );
+        return original ? [{ original }] : [];
+      });
+
+      if (items.length === 0) return;
+
+      startForwardPick({ sourceChat, items });
       router.push({ pathname: '/chats/forward', params: { from: chatId } });
     },
-    [authorName, chatId, router],
+    [chatId, originalOf, router, sourceChat],
   );
 
   const submit = useCallback(() => {
@@ -84,7 +115,7 @@ export function useReplyForward({
     // Пересылка с подписью. Альбом из шита медиа при этом уходит обычным
     // сообщением, а пересылка ждёт своей очереди в плашке.
     if (mode?.type === 'forward' && media.length === 0) {
-      forward(draft.text, mode.items);
+      forward(draft.text, mode.sourceChat, mode.items);
       draft.clear();
       return;
     }

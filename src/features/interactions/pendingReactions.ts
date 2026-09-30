@@ -2,51 +2,46 @@
 // состояние: в кеше истории лежат счётчики, подтверждённые базой, а желаемая
 // реакция накладывается поверх, пока едет. Отказ сервера — снятие наложения:
 // облачко само возвращается к тому, что знает база.
+//
+// Ключ — сообщение, а не чат: одно сообщение показано и в своём чате, и в
+// островках других, и моя реакция должна появиться сразу везде.
 
 import { create } from 'zustand';
 
 import type { ReactionIntent } from '@/features/interactions/reactionState';
 
 type PendingReactionsState = {
-  /** chatId → messageId → какой я хочу видеть свою реакцию. */
-  byChat: Record<string, Record<string, ReactionIntent>>;
+  /** messageId → какой я хочу видеть свою реакцию. */
+  byMessage: Record<string, ReactionIntent>;
 };
 
-const EMPTY: Record<string, ReactionIntent> = {};
+export const usePendingReactions = create<PendingReactionsState>(() => ({ byMessage: {} }));
 
-export const usePendingReactions = create<PendingReactionsState>(() => ({ byChat: {} }));
-
-export function usePendingReactionsOf(chatId: string): Record<string, ReactionIntent> {
-  return usePendingReactions((state) => state.byChat[chatId] ?? EMPTY);
+/** Все мои неподтверждённые реакции — наложение для любой переписки. */
+export function usePendingReactionMap(): Record<string, ReactionIntent> {
+  return usePendingReactions((state) => state.byMessage);
 }
 
-export function readPendingReaction(chatId: string, messageId: string): ReactionIntent | undefined {
-  return usePendingReactions.getState().byChat[chatId]?.[messageId];
+export function readPendingReaction(messageId: string): ReactionIntent | undefined {
+  return usePendingReactions.getState().byMessage[messageId];
 }
 
-export function setPendingReaction(chatId: string, messageId: string, intent: ReactionIntent) {
+export function setPendingReaction(messageId: string, intent: ReactionIntent) {
   usePendingReactions.setState((state) => ({
-    byChat: {
-      ...state.byChat,
-      [chatId]: { ...(state.byChat[chatId] ?? EMPTY), [messageId]: intent },
-    },
+    byMessage: { ...state.byMessage, [messageId]: intent },
   }));
 }
 
 /** Снимает наложение — только если это всё ещё то же желание: новый тап мог прийти, пока ехал прежний. */
-export function clearPendingReaction(chatId: string, messageId: string, intent?: ReactionIntent) {
+export function clearPendingReaction(messageId: string, intent?: ReactionIntent) {
   usePendingReactions.setState((state) => {
-    const current = state.byChat[chatId];
+    const current = state.byMessage[messageId];
 
-    if (!current?.[messageId] || (intent && current[messageId] !== intent)) return state;
+    if (!current || (intent && current !== intent)) return state;
 
-    const { [messageId]: _removed, ...rest } = current;
-    const byChat = { ...state.byChat };
+    const { [messageId]: _removed, ...rest } = state.byMessage;
 
-    if (Object.keys(rest).length === 0) delete byChat[chatId];
-    else byChat[chatId] = rest;
-
-    return { byChat };
+    return { byMessage: rest };
   });
 }
 
@@ -62,6 +57,6 @@ export const reactionsInFlight = new Set<string>();
  * прийти — очередь не должна считать его сообщения занятыми навсегда.
  */
 export function resetPendingReactions() {
-  usePendingReactions.setState({ byChat: {} });
+  usePendingReactions.setState({ byMessage: {} });
   reactionsInFlight.clear();
 }

@@ -176,6 +176,9 @@ export type Database = {
           last_message_author_id: string | null
           last_message_text: string | null
           title: string | null
+          chat_am_member: boolean | null
+          chat_display_name: string | null
+          chat_read_up_to: string | null
         }
         Insert: {
           created_at?: string
@@ -452,48 +455,103 @@ export type Database = {
           },
         ]
       }
-      message_forwards: {
+      forward_items: {
         Row: {
+          chat_id: string
           created_at: string
+          deleted_at: string | null
+          forward_id: string
+          forward_kind: string
           id: string
           message_id: string
-          origin_author_id: string | null
-          origin_message_id: string | null
+          position: number
         }
         Insert: {
+          chat_id: string
           created_at?: string
+          deleted_at?: string | null
+          forward_id: string
+          forward_kind?: string
           id?: string
           message_id: string
-          origin_author_id?: string | null
-          origin_message_id?: string | null
+          position: number
         }
         Update: {
+          chat_id?: string
           created_at?: string
+          deleted_at?: string | null
+          forward_id?: string
+          forward_kind?: string
           id?: string
           message_id?: string
-          origin_author_id?: string | null
-          origin_message_id?: string | null
+          position?: number
         }
         Relationships: [
           {
-            foreignKeyName: "message_forwards_message_fkey"
+            foreignKeyName: "forward_items_chat_id_fkey"
+            columns: ["chat_id"]
+            isOneToOne: false
+            referencedRelation: "chats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "forward_items_forward_fkey"
+            columns: ["forward_id", "chat_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id", "chat_id"]
+          },
+          {
+            foreignKeyName: "forward_items_forward_kind_fkey"
+            columns: ["forward_id", "forward_kind"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id", "kind"]
+          },
+          {
+            foreignKeyName: "forward_items_message_fkey"
             columns: ["message_id"]
-            isOneToOne: true
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      legacy_forward_copies: {
+        Row: {
+          copy_id: string
+          created_at: string
+          forward_item_id: string | null
+          id: string
+          note: string | null
+        }
+        Insert: {
+          copy_id: string
+          created_at?: string
+          forward_item_id?: string | null
+          id?: string
+          note?: string | null
+        }
+        Update: {
+          copy_id?: string
+          created_at?: string
+          forward_item_id?: string | null
+          id?: string
+          note?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "legacy_forward_copies_copy_id_fkey"
+            columns: ["copy_id"]
+            isOneToOne: false
             referencedRelation: "messages"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "message_forwards_origin_author_id_fkey"
-            columns: ["origin_author_id"]
+            foreignKeyName: "legacy_forward_copies_forward_item_id_fkey"
+            columns: ["forward_item_id"]
             isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "message_forwards_origin_fkey"
-            columns: ["origin_message_id"]
-            isOneToOne: false
-            referencedRelation: "messages"
+            referencedRelation: "forward_items"
             referencedColumns: ["id"]
           },
         ]
@@ -503,6 +561,7 @@ export type Database = {
           chat_id: string
           created_at: string
           deleted_at: string | null
+          forward_id: string | null
           id: string
           message_id: string
           pinned_by: string | null
@@ -511,6 +570,7 @@ export type Database = {
           chat_id: string
           created_at?: string
           deleted_at?: string | null
+          forward_id?: string | null
           id?: string
           message_id: string
           pinned_by?: string | null
@@ -519,6 +579,7 @@ export type Database = {
           chat_id?: string
           created_at?: string
           deleted_at?: string | null
+          forward_id?: string | null
           id?: string
           message_id?: string
           pinned_by?: string | null
@@ -532,11 +593,18 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "message_pins_message_id_chat_id_fkey"
-            columns: ["message_id", "chat_id"]
+            foreignKeyName: "message_pins_forward_fkey"
+            columns: ["forward_id", "chat_id"]
             isOneToOne: false
             referencedRelation: "messages"
             referencedColumns: ["id", "chat_id"]
+          },
+          {
+            foreignKeyName: "message_pins_message_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
           },
           {
             foreignKeyName: "message_pins_pinned_by_fkey"
@@ -554,6 +622,7 @@ export type Database = {
           id: string
           message_id: string
           position: number
+          quoted_forward_id: string | null
           quoted_id: string
         }
         Insert: {
@@ -562,6 +631,7 @@ export type Database = {
           id?: string
           message_id: string
           position: number
+          quoted_forward_id?: string | null
           quoted_id: string
         }
         Update: {
@@ -570,6 +640,7 @@ export type Database = {
           id?: string
           message_id?: string
           position?: number
+          quoted_forward_id?: string | null
           quoted_id?: string
         }
         Relationships: [
@@ -589,7 +660,14 @@ export type Database = {
           },
           {
             foreignKeyName: "message_replies_quoted_fkey"
-            columns: ["quoted_id", "chat_id"]
+            columns: ["quoted_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_replies_quoted_forward_fkey"
+            columns: ["quoted_forward_id", "chat_id"]
             isOneToOne: false
             referencedRelation: "messages"
             referencedColumns: ["id", "chat_id"]
@@ -666,6 +744,7 @@ export type Database = {
           kind: string
           member_reactions: Json
           reactions_count: number
+          source_chat_id: string | null
           stream_id: string | null
           system_event: string | null
           text: string | null
@@ -706,6 +785,7 @@ export type Database = {
           kind: string
           member_reactions?: Json
           reactions_count?: number
+          source_chat_id?: string | null
           stream_id?: string | null
           system_event?: string | null
           text?: string | null
@@ -722,6 +802,7 @@ export type Database = {
           kind?: string
           member_reactions?: Json
           reactions_count?: number
+          source_chat_id?: string | null
           stream_id?: string | null
           system_event?: string | null
           text?: string | null
@@ -738,6 +819,13 @@ export type Database = {
           {
             foreignKeyName: "messages_chat_id_fkey"
             columns: ["chat_id"]
+            isOneToOne: false
+            referencedRelation: "chats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "messages_source_chat_id_fkey"
+            columns: ["source_chat_id"]
             isOneToOne: false
             referencedRelation: "chats"
             referencedColumns: ["id"]
@@ -1024,6 +1112,24 @@ export type Database = {
         Args: { ended: string; started: string }
         Returns: string
       }
+      chat_am_member: {
+        Args: { "": Database["public"]["Tables"]["chats"]["Row"] }
+        Returns: {
+          error: true
+        } & "the function public.chat_am_member with parameter or with a single unnamed json/jsonb parameter, but no matches were found in the schema cache"
+      }
+      chat_display_name: {
+        Args: { "": Database["public"]["Tables"]["chats"]["Row"] }
+        Returns: {
+          error: true
+        } & "the function public.chat_display_name with parameter or with a single unnamed json/jsonb parameter, but no matches were found in the schema cache"
+      }
+      chat_read_up_to: {
+        Args: { "": Database["public"]["Tables"]["chats"]["Row"] }
+        Returns: {
+          error: true
+        } & "the function public.chat_read_up_to with parameter or with a single unnamed json/jsonb parameter, but no matches were found in the schema cache"
+      }
       check_comment_shape: { Args: { target: string }; Returns: undefined }
       check_message_shape: { Args: { target: string }; Returns: undefined }
       create_chat: {
@@ -1059,9 +1165,17 @@ export type Database = {
         Args: { reason: string; target_stream: string }
         Returns: boolean
       }
+      forward_holding: {
+        Args: { target_chat: string; target_message: string }
+        Returns: string
+      }
       forward_messages: {
-        Args: { message_ids: string[]; target_chat: string }
-        Returns: string[]
+        Args: {
+          message_ids: string[]
+          source_chat: string
+          target_chat: string
+        }
+        Returns: string
       }
       latest_chat_messages: {
         Args: { chat_ids: string[]; per_chat?: number }
@@ -1076,6 +1190,7 @@ export type Database = {
           kind: string
           member_reactions: Json
           reactions_count: number
+          source_chat_id: string | null
           stream_id: string | null
           system_event: string | null
           text: string | null
@@ -1103,6 +1218,10 @@ export type Database = {
       message_preview_text: {
         Args: { m: Database["public"]["Tables"]["messages"]["Row"] }
         Returns: string
+      }
+      message_shown_in_chat: {
+        Args: { target_chat: string; target_message: string; via: string }
+        Returns: boolean
       }
       message_tombstones: {
         Args: { message_ids: string[] }
@@ -1153,7 +1272,10 @@ export type Database = {
           isSetofReturn: true
         }
       }
-      pin_message: { Args: { target_message: string }; Returns: undefined }
+      pin_message: {
+        Args: { in_forward?: string; target_message: string }
+        Returns: undefined
+      }
       reaction_counts_add: {
         Args: { counts: Json; delta: number; emoji: string }
         Returns: Json
@@ -1171,6 +1293,10 @@ export type Database = {
           p_platform: string
         }
         Returns: string
+      }
+      remove_forward_items: {
+        Args: { message_ids: string[]; target_forward: string }
+        Returns: undefined
       }
       send_comment: {
         Args: { comment_text: string; media?: Json; target_message: string }
@@ -1221,7 +1347,10 @@ export type Database = {
       }
       stream_room_finished: { Args: { room: string }; Returns: string }
       touch_device: { Args: { p_installation_id: string }; Returns: boolean }
-      unpin_message: { Args: { target_message: string }; Returns: undefined }
+      unpin_message: {
+        Args: { target_chat?: string; target_message: string }
+        Returns: undefined
+      }
       uuid_or_null: { Args: { value: string }; Returns: string }
     }
     Enums: {

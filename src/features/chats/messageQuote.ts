@@ -1,7 +1,7 @@
-// Сообщение одной строкой — для цитаты в облачке, плашки над полем ввода и
-// строки «Переслано от». Правило одно на всех, поэтому и место одно.
+// Сообщение одной строкой — для цитаты в облачке и плашки над полем ввода.
+// Правило одно на всех, поэтому и место одно.
 
-import type { ForwardOrigin, Message } from '@/api/chats';
+import type { IslandAnchor, Message } from '@/api/chats';
 import { toPreview, type MessagePreview } from '@/api/messagePreview';
 import type { ComposerMode } from '@/features/chats/composerDraftStore';
 import type { ChatMessage, LiveQuote } from '@/features/chats/messages/types';
@@ -64,8 +64,15 @@ export function describePreview(preview: MessagePreview): string {
   return 'Сообщение';
 }
 
-/** Цитата из сообщения, которое сейчас на экране. */
-export function quoteOf(message: ChatMessage, authorName: string): LiveQuote {
+/**
+ * Цитата из сообщения, которое сейчас на экране. `via` — островок этого
+ * чата, если сообщение стоит в нём, а живёт в другом чате.
+ */
+export function quoteOf(
+  message: ChatMessage,
+  authorName: string,
+  via: IslandAnchor | null = null,
+): LiveQuote {
   return {
     messageId: message.id,
     state: 'live',
@@ -74,20 +81,7 @@ export function quoteOf(message: ChatMessage, authorName: string): LiveQuote {
     createdAt: message.createdAt,
     editedAt: message.editedAt,
     preview: previewOf(message),
-  };
-}
-
-/**
- * Чьё сообщение пересылается. Пересланное пересылается от первоисточника,
- * а не от промежуточного звена — так же решает и база.
- */
-export function originOf(message: ChatMessage, authorName: string): ForwardOrigin {
-  if (message.forward) return message.forward;
-
-  return {
-    authorId: message.authorId,
-    authorName: message.authorId ? authorName : null,
-    original: { messageId: message.id, chatId: message.chatId, createdAt: message.createdAt },
+    via,
   };
 }
 
@@ -143,14 +137,14 @@ export function describeMode(mode: ComposerMode): {
 
   return mode.items.length === 1
     ? {
-        title: `Переслать: ${first.origin.authorName ?? DELETED_ACCOUNT}`,
-        snippet: describePreview(previewOf(first.message)),
-        thumbnailUrl: previewOf(first.message).thumbnailUrl,
+        title: `Переслать: ${first.original.authorName ?? DELETED_ACCOUNT}`,
+        snippet: describePreview(previewOf(first.original)),
+        thumbnailUrl: previewOf(first.original).thumbnailUrl,
         closeLabel: 'Отменить пересылку',
       }
     : {
         title: `Переслать ${messagesCount(mode.items.length)}`,
-        snippet: authorsOf(mode.items.map((item) => item.origin.authorName)),
+        snippet: authorsOf(mode.items.map((item) => item.original.authorName)),
         thumbnailUrl: null,
         closeLabel: 'Отменить пересылку',
       };

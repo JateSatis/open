@@ -69,7 +69,7 @@ async function renderChat(isMember: boolean) {
   const view = await renderHook(
     () => ({
       chat: useChatMessages('chat-1', 'user-1'),
-      react: useReactToMessage('chat-1', isMember),
+      react: useReactToMessage(isMember),
     }),
     { wrapper },
   );

@@ -344,47 +344,6 @@ describe('quotes in bubbles', () => {
     expect(within(live).getByText('Я')).toBeTruthy();
     expect(within(live).getByText('эй')).toBeTruthy();
   });
-
-  it('says where a forwarded message came from', async () => {
-    mockedListMessages.mockResolvedValue({
-      items: [
-        {
-          ...message('f1', 'чужие слова', 'user-2', 3),
-          forward: {
-            authorId: 'user-9',
-            authorName: 'Автор',
-            original: { messageId: 'o1', chatId: 'chat-9', createdAt: AT },
-          },
-        },
-        {
-          ...message('f2', 'ещё', 'user-2', 4),
-          forward: { authorId: null, authorName: null, original: null },
-        },
-      ],
-      nextCursor: null,
-    });
-
-    await renderWithQuery(<ChatScreen />);
-
-    expect(await screen.findByText('Переслано от Автор')).toBeTruthy();
-    expect(screen.getByText('Переслано от удалённого аккаунта')).toBeTruthy();
-
-    // Оригинал удалён — перехода нет, есть объяснение.
-    fireEvent.press(screen.getByText('Переслано от удалённого аккаунта'));
-    await waitFor(() =>
-      expect(useInAppAlert.getState().alert).toMatchObject({ text: 'Сообщение удалено' }),
-    );
-    expect(mockPush).not.toHaveBeenCalled();
-
-    // Оригинал жив — в исходный чат, к сообщению.
-    fireEvent.press(screen.getByText('Переслано от Автор'));
-    await waitFor(() =>
-      expect(mockPush).toHaveBeenCalledWith({
-        pathname: '/chats/[chatId]',
-        params: { chatId: 'chat-9', jumpTo: 'o1', jumpAt: AT, jumpKey: expect.any(String) },
-      }),
-    );
-  });
 });
 
 describe('forwarding', () => {
@@ -396,11 +355,18 @@ describe('forwarding', () => {
     await choose('Переслать');
 
     expect(mockPush).toHaveBeenCalledWith({ pathname: '/chats/forward', params: { from: 'chat-1' } });
-    expect(useComposerDrafts.getState().forwardPick).toEqual([
-      expect.objectContaining({
-        message: expect.objectContaining({ id: 'm2' }),
-        origin: expect.objectContaining({ authorName: 'Марина' }),
-      }),
-    ]);
+    // Пересылается оригинал целиком — с автором и чатом, откуда пересылают.
+    expect(useComposerDrafts.getState().forwardPick).toEqual({
+      sourceChat: { id: 'chat-1', name: expect.any(String) },
+      items: [
+        {
+          original: expect.objectContaining({
+            id: 'm2',
+            authorName: 'Марина',
+            chat: expect.objectContaining({ id: 'chat-1' }),
+          }),
+        },
+      ],
+    });
   });
 });

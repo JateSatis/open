@@ -1,7 +1,8 @@
-import { describeMode, describePreview, originOf, quoteOf } from './messageQuote';
+import { describeMode, describePreview, quoteOf } from './messageQuote';
 
 import { toPreview } from '@/api/messagePreview';
 import type { ChatMessage } from '@/features/chats/messages/types';
+import { original } from '@/test/islands';
 
 function message(overrides: Partial<ChatMessage> = {}): ChatMessage {
   return {
@@ -77,27 +78,12 @@ describe('describePreview', () => {
   });
 });
 
-describe('originOf', () => {
-  it('points at the message itself when it was written here', () => {
-    expect(originOf(message(), 'Марина')).toEqual({
-      authorId: 'user-2',
-      authorName: 'Марина',
-      original: { messageId: 'm1', chatId: 'chat-1', createdAt: '2026-09-29T10:00:00Z' },
-    });
-  });
+describe('quoteOf', () => {
+  it('remembers the island a quoted original stands in', () => {
+    const via = { forwardId: 'isl', createdAt: '2026-09-30T10:00:00Z' };
 
-  it('keeps the first source when forwarding a forwarded message', () => {
-    const origin = {
-      authorId: 'user-9',
-      authorName: 'Автор',
-      original: { messageId: 'first', chatId: 'chat-9', createdAt: '2026-09-01T10:00:00Z' },
-    };
-
-    expect(originOf(message({ authorId: 'user-2', forward: origin }), 'Марина')).toBe(origin);
-  });
-
-  it('marks a deleted account as nameless', () => {
-    expect(originOf(message({ authorId: null }), 'Удалённый аккаунт').authorName).toBeNull();
+    expect(quoteOf(message(), 'Марина', via)).toMatchObject({ messageId: 'm1', via });
+    expect(quoteOf(message(), 'Марина').via).toBeNull();
   });
 });
 
@@ -124,15 +110,16 @@ describe('describeMode', () => {
     });
   });
 
-  it('names the author of a forwarded message and counts several', () => {
-    const one = { message: message(), origin: originOf(message(), 'Марина') };
-    const other = { message: message({ id: 'b', text: 'ещё' }), origin: originOf(message(), 'Марина') };
+  it('names the author of a forwarded original and counts several', () => {
+    const sourceChat = { id: 'chat-1', name: 'Разговор' };
+    const one = { original: original({ id: 'a', text: 'привет', authorName: 'Марина' }) };
+    const other = { original: original({ id: 'b', text: 'ещё', authorName: 'Марина' }) };
 
-    expect(describeMode({ type: 'forward', items: [one] })).toMatchObject({
+    expect(describeMode({ type: 'forward', sourceChat, items: [one] })).toMatchObject({
       title: 'Переслать: Марина',
       snippet: 'привет',
     });
-    expect(describeMode({ type: 'forward', items: [one, other] }).title).toBe(
+    expect(describeMode({ type: 'forward', sourceChat, items: [one, other] }).title).toBe(
       'Переслать 2 сообщения',
     );
   });

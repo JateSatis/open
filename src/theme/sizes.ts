@@ -55,4 +55,6 @@ export const Sizes = {
   callIcon: 20,
   /** Точка «в эфире». */
   onAirDot: 8,
+  /** Толщина пунктира вокруг островка пересылки. */
+  islandBorder: 1.5,
 } as const;

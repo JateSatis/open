@@ -6,17 +6,33 @@
 
 import type { QueryData, RealtimeChannel } from '@supabase/supabase-js';
 
-import { toPreview, type MessagePreview } from '@/api/messagePreview';
-import { toReactions, type MessageReactions } from '@/api/reactionCounts';
+import { acquireChatTopic, type ChatActivity, type ChatTopicListener } from '@/api/chatTopics';
+import { MESSAGE_COLUMNS, messagesSelect, toMessage, type Message } from '@/api/messageRows';
 import { supabase } from '@/api/supabase';
 
 export { toPreview, type MessagePreview } from '@/api/messagePreview';
+export {
+  MESSAGE_COLUMNS,
+  messagesSelect,
+  toMessage,
+  toMessageKind,
+  type CallMark,
+  type ChatRef,
+  type ForwardIsland,
+  type IslandAnchor,
+  type IslandItem,
+  type IslandOriginal,
+  type Message,
+  type MessageAttachment,
+  type MessageKind,
+  type OriginChat,
+  type QuotedMessage,
+} from '@/api/messageRows';
+export type { ChatActivity } from '@/api/chatTopics';
 
 export const MESSAGE_PAGE_SIZE = 30;
 
 export type ChatKind = 'direct' | 'group';
-
-export type MessageKind = 'text' | 'photo' | 'video' | 'voice' | 'video_note' | 'system' | 'media';
 
 /** Человек, как его показывают в списках: без ролей и состояний. */
 export type Person = {
@@ -45,88 +61,6 @@ export type ChatSummary = {
   lastMessageAuthorId: string | null;
   /** True when the last message is somebody else's and arrived after my read mark. */
   hasUnread: boolean;
-};
-
-/**
- * Shape of a message attachment as the rest of the app consumes it. Recording,
- * upload and playback belong to the `media` feature — the messenger only
- * carries the descriptor through so a message can already be rendered with it.
- */
-export type MessageAttachment = {
-  id: string;
-  url: string;
-  mimeType: string | null;
-  width: number | null;
-  height: number | null;
-  durationMs: number | null;
-  /** Кадр видео для плитки и ленты. У фото и у видео, отправленных до постеров, — `null`. */
-  posterUrl: string | null;
-  /** Форма волны голосового, столбики 0..31. У остального — `null`. */
-  waveform: number[] | null;
-};
-
-/**
- * Цитата в ответе — ссылка на сообщение того же чата, а не копия: правки
- * оригинала видны в ней сразу. Удалённый оригинал база не отдаёт, и цитата
- * помнит только его id.
- */
-export type QuotedMessage =
-  | { messageId: string; state: 'deleted' }
-  | {
-      messageId: string;
-      state: 'live';
-      authorId: string | null;
-      /** `null` — аккаунт автора удалён. */
-      authorName: string | null;
-      createdAt: string;
-      /** Когда оригинал правили в последний раз — чтобы узнать, что цитата устарела. */
-      editedAt: string | null;
-      preview: MessagePreview;
-    };
-
-/** Откуда пересланное: первоисточник, а не промежуточное звено. */
-export type ForwardOrigin = {
-  authorId: string | null;
-  /** `null` — аккаунт автора оригинала удалён. */
-  authorName: string | null;
-  /** Где оригинал сейчас. `null` — его удалили, копия при этом живёт. */
-  original: { messageId: string; chatId: string; createdAt: string } | null;
-};
-
-/**
- * Системное сообщение о звонке: начат или завершён. Кто начал, сколько шёл и
- * был ли я в нём — из самого звонка, а не из текста сообщения.
- */
-export type CallMark = {
-  streamId: string;
-  event: 'call_started' | 'call_ended';
-  hostId: string | null;
-  startedAt: string;
-  endedAt: string | null;
-  /** Я входил в этот звонок (хоть раз). */
-  joinedByMe: boolean;
-};
-
-export type Message = {
-  id: string;
-  chatId: string;
-  authorId: string | null;
-  kind: MessageKind;
-  text: string | null;
-  createdAt: string;
-  /** Время последней правки, серверное. `null` — сообщение не правили. */
-  editedAt: string | null;
-  attachments: MessageAttachment[];
-  /** На что это ответ — по порядку. Пусто у обычного сообщения. */
-  replies: QuotedMessage[];
-  /** Пересланное: чьё оно на самом деле. `null` у своего сообщения. */
-  forward: ForwardOrigin | null;
-  /** Реакции по рядам и моя. */
-  reactions: MessageReactions;
-  /** Сколько живых комментариев. Денормализовано на сообщении, пишет база. */
-  commentsCount: number;
-  /** Метка звонка у системного сообщения; нет — это не звонок. */
-  call?: CallMark | null;
 };
 
 /**
@@ -183,59 +117,16 @@ const CHAT_COLUMNS = 'id, kind, title, last_message_at, last_message_text, last_
 const MEMBER_COLUMNS =
   'chat_id, user_id, last_read_at, profile:profiles(id, display_name, avatar_url)';
 const WAITING_COLUMNS = 'chat_id, user_id, display_name, avatar_url';
-// Цитаты и «переслано от» приходят той же выборкой, что и сами сообщения:
-// страница переписки — один запрос, без догрузки на каждое облачко, и облачко
-// не прыгает по высоте, когда цитата подтянулась. Реакции — там же: счётчики
-// лежат на самом сообщении, своя — вычисляемой связью `my_reaction`. Подсказки
-// внешних ключей нужны, потому что `messages` связана с `profiles` и сама с
-// собой через несколько таблиц сразу.
-export const MESSAGE_COLUMNS =
-  'id, chat_id, author_id, kind, text, created_at, edited_at, attachments(id, url, poster_url, mime_type, width, height, duration_ms, waveform), replies:message_replies!message_replies_message_fkey(position, quoted_id, quoted:messages!message_replies_quoted_fkey(id, author_id, kind, text, created_at, edited_at, author:profiles!messages_author_id_fkey(display_name), attachments(url, poster_url, mime_type, duration_ms, position))), forward:message_forwards!message_forwards_message_fkey(origin_message_id, origin_author_id, origin_author:profiles(display_name), origin:messages!message_forwards_origin_fkey(id, chat_id, created_at)), member_reactions, visitor_reactions, my_reaction(emoji, audience), comments_count, stream_id, system_event, stream:streams!messages_stream_id_fkey(host_id, started_at, ended_at), my_call:my_stream_participation(id)';
-
-// Заготовки запросов. Они же задают типы рядов: клиент разбирает select-строку
-// вместе со встроенными таблицами, поэтому форма ответа выводится из самого
-// запроса и не может разойтись со схемой — описывать ряды руками не нужно.
 export const chatsSelect = () => supabase.from('chats').select(CHAT_COLUMNS);
 const membersSelect = () => supabase.from('chat_members').select(MEMBER_COLUMNS);
 const waitingSelect = () => supabase.from('chat_waiting_invitees').select(WAITING_COLUMNS);
-// Мозаика в облачке должна собираться в порядке выбора файлов, а PostgREST
-// не гарантирует порядок вложенной выборки сам по себе — нужен явный order
-// по `position` (см. attachments_message_id_position_key в миграции).
-export const messagesSelect = () =>
-  supabase
-    .from('messages')
-    .select(MESSAGE_COLUMNS)
-    .order('position', { referencedTable: 'attachments' });
 
 type ChatRow = QueryData<ReturnType<typeof chatsSelect>>[number];
 type MemberRow = QueryData<ReturnType<typeof membersSelect>>[number];
 type WaitingRow = QueryData<ReturnType<typeof waitingSelect>>[number];
-type MessageRow = QueryData<ReturnType<typeof messagesSelect>>[number];
-
-// `kind` в базе — текст с CHECK-ограничением, и генератор типов видит его как
-// строку: сузить её больше негде, поэтому расхождение схемы с доменными
-// типами живёт ровно в этих двух функциях.
-const MESSAGE_KINDS = new Set<string>([
-  'text',
-  'photo',
-  'video',
-  'voice',
-  'video_note',
-  'system',
-  'media',
-]);
 
 function toChatKind(kind: string): ChatKind {
   return kind === 'group' ? 'group' : 'direct';
-}
-
-/**
- * Вид, которого клиент не знает, показывается как системное сообщение: так
- * старое приложение переживает появление нового типа контента, не притворяясь,
- * что перед ним текст.
- */
-export function toMessageKind(kind: string): MessageKind {
-  return MESSAGE_KINDS.has(kind) ? (kind as MessageKind) : 'system';
 }
 
 function toParticipant(row: MemberRow): ChatParticipant {
@@ -256,82 +147,6 @@ function toWaiting(row: WaitingRow): Person | null {
     id: row.user_id,
     displayName: row.display_name ?? 'Без имени',
     avatarUrl: row.avatar_url,
-  };
-}
-
-type ReplyRow = NonNullable<MessageRow['replies']>[number];
-
-function toQuoted(row: ReplyRow): QuotedMessage {
-  const quoted = row.quoted;
-
-  // Оригинал приходит, только пока он жив: удалённое SELECT-политика не
-  // отдаёт, а из другого чата цитаты не бывает (внешний ключ с chat_id).
-  if (!quoted) return { messageId: row.quoted_id, state: 'deleted' };
-
-  return {
-    messageId: quoted.id,
-    state: 'live',
-    authorId: quoted.author_id,
-    authorName: quoted.author_id ? (quoted.author?.display_name ?? 'Без имени') : null,
-    createdAt: quoted.created_at,
-    editedAt: quoted.edited_at,
-    preview: toPreview(toMessageKind(quoted.kind), quoted.text, quoted.attachments ?? []),
-  };
-}
-
-function toForward(row: MessageRow['forward'] | undefined): ForwardOrigin | null {
-  if (!row) return null;
-
-  // Аккаунт удалён — ссылка обнулилась; скрытый профиль база тоже не отдаёт.
-  const hasAuthor = row.origin_author_id !== null && row.origin_author !== null;
-
-  return {
-    authorId: row.origin_author_id,
-    authorName: hasAuthor ? (row.origin_author?.display_name ?? 'Без имени') : null,
-    original: row.origin
-      ? { messageId: row.origin.id, chatId: row.origin.chat_id, createdAt: row.origin.created_at }
-      : null,
-  };
-}
-
-function toCallMark(row: MessageRow): CallMark | null {
-  if (!row.stream_id || !row.stream) return null;
-  if (row.system_event !== 'call_started' && row.system_event !== 'call_ended') return null;
-
-  return {
-    streamId: row.stream_id,
-    event: row.system_event,
-    hostId: row.stream.host_id,
-    startedAt: row.stream.started_at,
-    endedAt: row.stream.ended_at,
-    joinedByMe: row.my_call !== null && row.my_call !== undefined,
-  };
-}
-
-export function toMessage(row: MessageRow): Message {
-  return {
-    id: row.id,
-    chatId: row.chat_id,
-    authorId: row.author_id,
-    kind: toMessageKind(row.kind),
-    text: row.text,
-    createdAt: row.created_at,
-    editedAt: row.edited_at,
-    attachments: (row.attachments ?? []).map((attachment) => ({
-      id: attachment.id,
-      url: attachment.url,
-      posterUrl: attachment.poster_url,
-      mimeType: attachment.mime_type,
-      width: attachment.width,
-      height: attachment.height,
-      durationMs: attachment.duration_ms,
-      waveform: attachment.waveform,
-    })),
-    replies: [...(row.replies ?? [])].sort((a, b) => a.position - b.position).map(toQuoted),
-    forward: toForward(row.forward),
-    reactions: toReactions(row),
-    commentsCount: row.comments_count,
-    call: toCallMark(row),
   };
 }
 
@@ -473,6 +288,22 @@ export async function listPeople(): Promise<Person[]> {
     displayName: row.display_name ?? 'Без имени',
     avatarUrl: row.avatar_url,
   }));
+}
+
+/**
+ * До какого момента чат прочитали все, кроме меня. Нужно облачку островка:
+ * «прочитано» у своего сообщения там — по прочтению чата оригинала.
+ */
+export async function getChatReadUpTo(chatId: string): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('chats')
+    .select('id, chat_read_up_to')
+    .eq('id', chatId)
+    .maybeSingle();
+
+  if (error) throw error;
+
+  return data?.chat_read_up_to ?? null;
 }
 
 /**
@@ -643,30 +474,48 @@ export async function sendVoiceMessage(
 }
 
 /**
- * Пересылает сообщения в чат одной транзакцией — функцией `forward_messages`.
- * Она же проверяет, что я участник целевого чата, и ставит «переслано от»:
- * выставить атрибуцию сам клиент не может (миграция
- * `20260929100000_replies_and_forwards.sql`). Копии — в исходном порядке.
+ * Пересылает сообщения в чат — функцией `forward_messages`: в целевом чате
+ * появляется островок со ссылками на оригиналы в переданном порядке. Она же
+ * проверяет, что я участник целевого чата и что каждое сообщение правда было
+ * в `sourceChatId` — заголовок островка клиент подделать не может (миграция
+ * `20261002100000_forward_islands.sql`). `messageIds` — оригиналы: у облачка
+ * островка это id оригинала, а не позиции.
  */
-export async function forwardMessages(chatId: string, messageIds: string[]): Promise<Message[]> {
-  const { data: ids, error } = await supabase.rpc('forward_messages', {
+export async function forwardMessages(
+  chatId: string,
+  sourceChatId: string,
+  messageIds: string[],
+): Promise<Message> {
+  const { data: forwardId, error } = await supabase.rpc('forward_messages', {
     target_chat: chatId,
+    source_chat: sourceChatId,
     message_ids: messageIds,
   });
 
   if (error) throw error;
+  if (typeof forwardId !== 'string') throw new Error('Не удалось переслать сообщения');
 
-  const created = (ids ?? []).filter((id): id is string => typeof id === 'string');
-
-  if (created.length === 0) throw new Error('Не удалось переслать сообщения');
-
-  const { data, error: fetchError } = await messagesSelect()
-    .in('id', created)
-    .order('created_at', { ascending: true });
+  const { data, error: fetchError } = await messagesSelect().eq('id', forwardId).single();
 
   if (fetchError) throw fetchError;
 
-  return (data ?? []).map(toMessage);
+  return toMessage(data);
+}
+
+/**
+ * Убирает сообщения из своего островка — у всех. Оригиналы не трогаются;
+ * убрано последнее — островок удаляется целиком. Что островок мой, проверяет
+ * база.
+ */
+export async function removeForwardItems(forwardId: string, messageIds: string[]): Promise<void> {
+  if (messageIds.length === 0) return;
+
+  const { error } = await supabase.rpc('remove_forward_items', {
+    target_forward: forwardId,
+    message_ids: messageIds,
+  });
+
+  if (error) throw error;
 }
 
 function isKept(item: EditMediaItem | EditVoiceItem): item is { attachmentId: string } {
@@ -675,7 +524,7 @@ function isKept(item: EditMediaItem | EditVoiceItem): item is { attachmentId: st
 
 /**
  * Правит своё сообщение — функцией `edit_message`, одной транзакцией: текст,
- * набор вложений и вид. Что сообщение моё, не переслано, не удалено и что
+ * набор вложений и вид. Что сообщение моё, не удалено и что
  * итог допустим (голосовое без подписи, непустое, альбом в пределах), решает
  * база (миграция `20260929180000_message_edit.sql`); время правки ставит она
  * же. Отдаёт сообщение, каким оно стало.
@@ -815,9 +664,6 @@ export type IncomingMessage = {
   createdAt: string;
 };
 
-/** Что человек делает прямо сейчас — для «печатает…» и «записывает голосовое…». */
-export type ChatActivity = 'typing' | 'recording_voice';
-
 export type ChatChannelHandlers = {
   onMessage: () => void;
   onTyping: (userId: string, activity: ChatActivity) => void;
@@ -840,6 +686,8 @@ export type ChatChannelHandlers = {
   onCommentsChanged: (messageId: string) => void;
   /** Звонок в чате начался, изменился его состав или он завершился. */
   onStreamChanged?: () => void;
+  /** Из островка этого чата убрали сообщения. Payload — подсказка, какой островок. */
+  onForwardChanged?: (forwardId: string) => void;
   /**
    * Канал заново подключился. Пока его не было, события терялись, поэтому
    * подписчик обязан дочитать пропущенное, а не ждать следующего сообщения.
@@ -870,75 +718,28 @@ function toIncoming(payload: unknown): IncomingMessage | null {
   };
 }
 
-function toActivity(value: unknown): ChatActivity {
-  return value === 'recording_voice' ? value : 'typing';
-}
-
+/**
+ * Канал чата — через общий реестр топиков (`chatTopics`): тот же топик слушают
+ * и островки других чатов, и второй экран этого же чата, и отписка одного не
+ * глушит остальных.
+ */
 export function subscribeToChat(chatId: string, handlers: ChatChannelHandlers): ChatChannel {
-  // Private channels carry the user's token, which is what the policies on
-  // realtime.messages check; without this the subscription is rejected.
-  void supabase.realtime.setAuth();
-
-  const channel: RealtimeChannel = supabase.channel(`chat:${chatId}`, {
-    config: { private: true },
-  });
-
-  let joinedBefore = false;
-
-  channel
-    .on('broadcast', { event: 'new_message' }, () => handlers.onMessage())
-    .on('broadcast', { event: 'read' }, () => handlers.onRead())
-    .on('broadcast', { event: 'member_joined' }, () => handlers.onMembersChanged())
-    .on('broadcast', { event: 'messages_deleted' }, ({ payload }) => {
-      const ids = (payload as { message_ids?: unknown } | undefined)?.message_ids;
-
-      handlers.onMessagesDeleted(
-        Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string') : [],
-      );
-    })
-    .on('broadcast', { event: 'message_edited' }, ({ payload }) => {
-      const id = (payload as { message_id?: unknown } | undefined)?.message_id;
-
-      if (typeof id === 'string') handlers.onMessageEdited(id);
-    })
-    .on('broadcast', { event: 'pins_changed' }, () => handlers.onPinsChanged())
-    .on('broadcast', { event: 'reactions_changed' }, ({ payload }) => {
-      const id = (payload as { message_id?: unknown } | undefined)?.message_id;
-
-      if (typeof id === 'string') handlers.onReactionsChanged(id);
-    })
-    .on('broadcast', { event: 'comments_changed' }, ({ payload }) => {
-      const id = (payload as { message_id?: unknown } | undefined)?.message_id;
-
-      if (typeof id === 'string') handlers.onCommentsChanged(id);
-    })
-    .on('broadcast', { event: 'stream_changed' }, () => handlers.onStreamChanged?.())
-    .on('broadcast', { event: 'typing' }, ({ payload }) => {
-      const { userId, activity } = (payload ?? {}) as { userId?: unknown; activity?: unknown };
-
-      // Событие без `activity` — от версии приложения до голосовых: это набор текста.
-      if (typeof userId === 'string') handlers.onTyping(userId, toActivity(activity));
-    })
-    .subscribe((status) => {
-      // Первая подписка — не переподключение: историю в этот момент грузит
-      // сам экран, и дочитывать нечего. Любая следующая — после обрыва, и
-      // флаг при ошибке не сбрасывается: иначе повторное подключение
-      // выглядело бы первым и пропущенное так и осталось бы пропущенным.
-      if (status !== 'SUBSCRIBED') return;
-
-      if (joinedBefore) handlers.onReconnected?.();
-
-      joinedBefore = true;
-    });
+  const topic = acquireChatTopic(chatId, handlers);
 
   return {
-    broadcastTyping: (userId: string, activity: ChatActivity = 'typing') => {
-      void channel.send({ type: 'broadcast', event: 'typing', payload: { userId, activity } });
-    },
-    unsubscribe: () => {
-      void supabase.removeChannel(channel);
-    },
+    broadcastTyping: (userId: string, activity: ChatActivity = 'typing') =>
+      topic.broadcastTyping(userId, activity),
+    unsubscribe: topic.release,
   };
+}
+
+/**
+ * Сигналы топика чужого чата — для островков: правки, удаления, реакции и
+ * комментарии оригинала уходят в топик его чата. Через тот же общий реестр,
+ * что и канал экрана чата. Отдаёт отписку.
+ */
+export function subscribeToChatSignals(chatId: string, listener: ChatTopicListener): () => void {
+  return acquireChatTopic(chatId, listener).release;
 }
 
 export type IncomingInvite = {

@@ -9,17 +9,16 @@ import {
   forwardMessages,
   sendMessage,
   sendVoiceMessage,
+  type ChatRef,
   type Message,
   type MessageAttachment,
   type SendMessageMedia,
 } from '@/api/chats';
 import { MAX_ALBUM_SIZE } from '@/features/chats/lib/mosaicLayout';
-import { byOldest } from '@/features/chats/messageQuote';
 import { mergeMessages, updateHistory } from '@/features/chats/messages/historyCache';
 import {
   addToOutbox,
   findOutboxMessage,
-  outboxMessages,
   removeFromOutbox,
   setOutboxStatus,
   useOutbox,
@@ -58,10 +57,8 @@ export function nextLocalId(): string {
 // с медиа — загрузка файлов идёт заметно дольше вставки текста), и тогда
 // повтор по «связь вернулась» стартовал бы поверх ещё не завершившейся
 // попытки той же отправки — сообщение ушло бы в чат дважды. Ключ отправки —
-// localId, у пересылки — её пачка.
+// localId.
 const delivering = new Set<string>();
-/** Локальные id сообщений, которые сейчас едут на сервер. */
-const inFlight = new Set<string>();
 // Человек удалил своё неотправленное, пока оно ещё ехало на сервер.
 const discarded = new Set<string>();
 
@@ -95,22 +92,11 @@ export function toLocalVoiceAttachment(localId: string, voice: LocalMedia): Mess
   };
 }
 
-/**
- * Что повторить для упавшего сообщения. Пересылка повторяется пачкой: все
- * ещё не ушедшие сообщения той же пересылки, одним вызовом.
- */
+/** Что повторить для упавшего сообщения. Пересылка повторяется целиком, одним вызовом. */
 export function outgoingOf(message: ChatMessage): Outgoing | null {
   const replyTo = message.replies.map((quote) => quote.messageId);
 
-  if (message.pendingForward) {
-    const { batch } = message.pendingForward;
-    const items = outboxMessages(message.chatId)
-      .filter((entry) => entry.pendingForward?.batch === batch && entry.status !== 'sent')
-      .sort(byOldest)
-      .map((entry) => ({ localId: entry.localId!, sourceId: entry.pendingForward!.sourceId }));
-
-    return items.length > 0 ? { type: 'forward', batch, items } : null;
-  }
+  if (message.pendingForward) return { type: 'forward', ...message.pendingForward };
 
   if (message.pendingVoice) return { type: 'voice', voice: message.pendingVoice, replyTo };
 
@@ -118,11 +104,6 @@ export function outgoingOf(message: ChatMessage): Outgoing | null {
   const media = message.pendingMedia ?? [];
 
   return text || media.length > 0 ? { type: 'post', text, media, replyTo } : null;
-}
-
-/** Под каким ключом идёт отправка — чтобы не запустить одну и ту же дважды. */
-export function deliveryKey(localId: string, outgoing: Outgoing): string {
-  return outgoing.type === 'forward' ? outgoing.batch : localId;
 }
 
 export function toSendMedia(item: UploadedMedia): SendMessageMedia {
@@ -176,40 +157,33 @@ async function insert(
   chatId: string,
   outgoing: Outgoing,
   uploaded: UploadedMedia[],
-): Promise<Message[]> {
+): Promise<Message> {
   if (outgoing.type === 'forward') {
-    // Пересланные файлы уже лежат в Storage: копия ссылается на те же.
-    return forwardMessages(
-      chatId,
-      outgoing.items.map((item) => item.sourceId),
-    );
+    // Островок ничего не копирует: ссылки на оригиналы, файлы — их.
+    return forwardMessages(chatId, outgoing.sourceChatId, outgoing.messageIds);
   }
 
   if (outgoing.type === 'voice') {
     const [file] = uploaded;
 
-    return [
-      await sendVoiceMessage(
-        chatId,
-        {
-          url: file.url,
-          mimeType: file.mimeType,
-          durationMs: file.durationMs ?? 0,
-          sizeBytes: file.sizeBytes,
-          waveform: file.waveform,
-        },
-        outgoing.replyTo,
-      ),
-    ];
+    return sendVoiceMessage(
+      chatId,
+      {
+        url: file.url,
+        mimeType: file.mimeType,
+        durationMs: file.durationMs ?? 0,
+        sizeBytes: file.sizeBytes,
+        waveform: file.waveform,
+      },
+      outgoing.replyTo,
+    );
   }
 
-  return [
-    await sendMessage(chatId, {
-      text: outgoing.text || undefined,
-      media: uploaded.length > 0 ? uploaded.map(toSendMedia) : undefined,
-      replyTo: outgoing.replyTo.length > 0 ? outgoing.replyTo : undefined,
-    }),
-  ];
+  return sendMessage(chatId, {
+    text: outgoing.text || undefined,
+    media: uploaded.length > 0 ? uploaded.map(toSendMedia) : undefined,
+    replyTo: outgoing.replyTo.length > 0 ? outgoing.replyTo : undefined,
+  });
 }
 
 /** Подтверждённое сервером переезжает из исходящих в историю. */
@@ -273,6 +247,12 @@ function explainRejection(outgoing: Outgoing, cause: unknown) {
       'error',
     );
   }
+
+  // Пересылаемое ушло из исходного чата раньше, чем островок доехал: его
+  // убрали из островка, откуда пересылали.
+  if (code === '42501' && outgoing.type === 'forward') {
+    showNotice('Не удалось переслать: этих сообщений больше нет в чате', 'error');
+  }
 }
 
 export async function deliver(
@@ -282,20 +262,13 @@ export async function deliver(
   localId: string,
   outgoing: Outgoing,
 ): Promise<void> {
-  const key = deliveryKey(localId, outgoing);
+  if (delivering.has(localId)) return;
 
-  if (delivering.has(key)) return;
-
-  const localIds = outgoing.type === 'forward' ? outgoing.items.map((item) => item.localId) : [localId];
-
-  delivering.add(key);
-  localIds.forEach((id) => {
-    inFlight.add(id);
-    setOutboxStatus(chatId, id, 'sending');
-  });
+  delivering.add(localId);
+  setOutboxStatus(chatId, localId, 'sending');
 
   let uploaded: UploadedMedia[] = [];
-  let saved: Message[] | null = null;
+  let saved: Message | null = null;
 
   try {
     const hasFiles =
@@ -307,23 +280,17 @@ export async function deliver(
 
     uploaded = hasFiles ? await uploadOutgoing(outgoing, currentUserId!) : [];
 
-    if (localIds.every((id) => discarded.has(id))) throw new Error('Отправка отменена');
+    if (discarded.has(localId)) throw new Error('Отправка отменена');
 
     saved = await insert(chatId, outgoing, uploaded);
 
     // Уже в базе, но человек его удалил — удаляем и там. Удаление мягкое и
     // разослано всем, так что у собеседника оно тоже исчезнет.
-    const unwanted = saved.filter((_, index) => discarded.has(localIds[index]));
-
-    if (unwanted.length > 0) {
-      void deleteMessages(unwanted.map((message) => message.id)).catch(() => undefined);
+    if (discarded.has(localId)) {
+      void deleteMessages([saved.id]).catch(() => undefined);
+    } else {
+      settle(queryClient, chatId, localId, saved);
     }
-
-    saved.forEach((message, index) => {
-      const id = localIds[index];
-
-      if (id && !discarded.has(id)) settle(queryClient, chatId, id, message);
-    });
 
     // Список чатов держит последнее сообщение и порядок — после отправки он
     // устарел, хотя сама переписка на экране уже верна.
@@ -335,9 +302,7 @@ export async function deliver(
       void Promise.all(uploaded.map((item) => removeUploadedMedia(storedPaths(item))));
     }
 
-    const wanted = localIds.filter((id) => !discarded.has(id));
-
-    if (wanted.length === 0) return;
+    if (discarded.has(localId)) return;
 
     // Не дошло до сервера — это факт о связи, а не только об этом сообщении:
     // с него и начинается ожидание сети.
@@ -347,13 +312,10 @@ export async function deliver(
     // The insert policy on `messages` is what decides whether this user may
     // write here; a rejection lands the message in "failed", it is never
     // dropped silently.
-    wanted.forEach((id) => setOutboxStatus(chatId, id, 'failed'));
+    setOutboxStatus(chatId, localId, 'failed');
   } finally {
-    delivering.delete(key);
-    localIds.forEach((id) => {
-      inFlight.delete(id);
-      discarded.delete(id);
-    });
+    delivering.delete(localId);
+    discarded.delete(localId);
   }
 }
 
@@ -362,7 +324,7 @@ export async function deliver(
  * как раз едет туда, оно будет удалено сразу по прибытии.
  */
 export function discardLocal(chatId: string, localId: string) {
-  if (inFlight.has(localId)) discarded.add(localId);
+  if (delivering.has(localId)) discarded.add(localId);
 
   removeFromOutbox(chatId, localId);
 }
@@ -493,46 +455,52 @@ export function sendVoice(
 
 /**
  * Пересылка, как в Telegram: текст из поля, если он есть, уходит отдельным
- * сообщением перед пересланными. Пересланные — копии с тем же содержимым и
- * строкой «Переслано от», появляются сразу и уходят на сервер одним вызовом.
+ * сообщением перед островком. Островок появляется сразу — с оригиналами, как
+ * их видно в исходном чате, — и уходит на сервер одним вызовом. Порядок
+ * облачков — порядок `items`: как сообщения стояли на экране.
  */
-export function sendForward(context: SendContext, text: string, items: ForwardItem[]) {
+export function sendForward(
+  context: SendContext,
+  text: string,
+  sourceChat: ChatRef,
+  items: ForwardItem[],
+) {
   const { queryClient, chatId, currentUserId } = context;
 
   if (items.length === 0) return;
 
   const trimmed = text.trim();
-  const batch = nextLocalId();
   const now = Date.now();
   const lead = trimmed ? textDraft(context, trimmed, now) : null;
-  // Копии идут в том порядке, в каком оригиналы шли в переписке, — как их
-  // расставит и база.
-  const sources = [...items].sort((a, b) => byOldest(a.message, b.message));
-  const copies: ChatMessage[] = sources.map(({ message, origin }, index) => {
-    const localId = nextLocalId();
+  const localId = nextLocalId();
+  const messageIds = items.map((item) => item.original.id);
+  const island: ChatMessage = {
+    id: localId,
+    localId,
+    chatId,
+    authorId: currentUserId,
+    kind: 'forward',
+    text: null,
+    createdAt: new Date(now + 1).toISOString(),
+    editedAt: null,
+    reactions: NO_REACTIONS,
+    commentsCount: 0,
+    attachments: [],
+    replies: [],
+    forward: {
+      sourceChat,
+      items: items.map((item, position) => ({
+        id: `${localId}-${position}`,
+        position,
+        messageId: item.original.id,
+        original: item.original,
+      })),
+    },
+    pendingForward: { sourceChatId: sourceChat.id, messageIds },
+    status: 'sending',
+  };
 
-    return {
-      id: localId,
-      localId,
-      chatId,
-      authorId: currentUserId,
-      kind: message.kind,
-      text: message.text,
-      createdAt: new Date(now + 1 + index).toISOString(),
-      editedAt: null,
-      reactions: NO_REACTIONS,
-      commentsCount: 0,
-      // Файлы — те же, что у оригинала: они уже в Storage, грузить нечего.
-      attachments: message.attachments,
-      // Цитата ссылается на сообщения исходного чата и с копией не едет.
-      replies: [],
-      forward: origin,
-      pendingForward: { batch, sourceId: message.id },
-      status: 'sending',
-    };
-  });
-
-  addToOutbox(chatId, [...copies].reverse().concat(lead ? [lead] : []));
+  addToOutbox(chatId, lead ? [island, lead] : [island]);
 
   void (async () => {
     if (lead) {
@@ -544,10 +512,10 @@ export function sendForward(context: SendContext, text: string, items: ForwardIt
       });
     }
 
-    await deliver(queryClient, chatId, currentUserId, batch, {
+    await deliver(queryClient, chatId, currentUserId, localId, {
       type: 'forward',
-      batch,
-      items: copies.map((copy) => ({ localId: copy.localId!, sourceId: copy.pendingForward!.sourceId })),
+      sourceChatId: sourceChat.id,
+      messageIds,
     });
   })();
 }

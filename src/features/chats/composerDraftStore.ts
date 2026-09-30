@@ -6,7 +6,7 @@
 
 import { create } from 'zustand';
 
-import type { MessageAttachment } from '@/api/chats';
+import type { ChatRef, MessageAttachment } from '@/api/chats';
 import type {
   ChatMessage,
   EditVoice,
@@ -31,7 +31,7 @@ export type EditMode = {
 /** Режим поля ввода — плашка над ним. Режим один: новый заменяет прежний. */
 export type ComposerMode =
   | { type: 'reply'; quotes: LiveQuote[] }
-  | { type: 'forward'; items: ForwardItem[] }
+  | { type: 'forward'; sourceChat: ChatRef; items: ForwardItem[] }
   | EditMode;
 
 export type ChatDraft = {
@@ -39,10 +39,13 @@ export type ChatDraft = {
   mode: ComposerMode | null;
 };
 
+/** Что пересылается, пока выбирают, куда: откуда и какие оригиналы, по порядку на экране. */
+export type ForwardPick = { sourceChat: ChatRef; items: ForwardItem[] };
+
 type DraftsState = {
   byChat: Record<string, ChatDraft>;
   /** Выбрано «Переслать», но чат, куда, ещё не выбран. */
-  forwardPick: ForwardItem[] | null;
+  forwardPick: ForwardPick | null;
 };
 
 const EMPTY: ChatDraft = { text: '', mode: null };
@@ -127,20 +130,20 @@ export function clearDraft(chatId: string) {
 }
 
 /** Запоминает, что пересылать, пока человек выбирает чат. */
-export function startForwardPick(items: ForwardItem[]) {
-  useComposerDrafts.setState({ forwardPick: items });
+export function startForwardPick(pick: ForwardPick) {
+  useComposerDrafts.setState({ forwardPick: pick });
 }
 
 /** Чат выбран: пересылка становится черновиком этого чата. */
 export function finishForwardPick(chatId: string): boolean {
-  const items = useComposerDrafts.getState().forwardPick;
+  const pick = useComposerDrafts.getState().forwardPick;
 
-  if (!items || items.length === 0) return false;
+  if (!pick || pick.items.length === 0) return false;
 
   useComposerDrafts.setState({ forwardPick: null });
   // Пересылка в чат, где шла правка, правку прерывает: плашка одна.
   finishEditDraft(chatId);
-  setDraftMode(chatId, { type: 'forward', items });
+  setDraftMode(chatId, { type: 'forward', sourceChat: pick.sourceChat, items: pick.items });
 
   return true;
 }

@@ -2,7 +2,9 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import type { ChatSummary } from '@/api/chats';
 import { getCommentTarget, type CommentTarget } from '@/api/comments';
-import { readHistory } from '@/features/chats/messages/historyCache';
+import { originalAsMessage } from '@/features/chats/islands/rows';
+import { findOriginals } from '@/features/chats/islands/islandCache';
+import { readAllHistories, readHistory } from '@/features/chats/messages/historyCache';
 import { chatQueryKey } from '@/features/chats/useChat';
 
 export function commentTargetQueryKey(messageId: string) {
@@ -18,6 +20,20 @@ function fromChatCache(
   messageId: string,
   chatId: string | undefined,
 ): CommentTarget | undefined {
+  // Оригинал, открытый из островка, лежит в кеше не своего чата, а в островке.
+  const inIsland = readAllHistories(queryClient)
+    .flatMap((history) => findOriginals(history.items, new Set([messageId])))
+    .at(0);
+
+  if (inIsland) {
+    return {
+      state: 'live',
+      message: originalAsMessage(inIsland),
+      authorName: inIsland.authorName,
+      authorAvatarUrl: inIsland.authorAvatarUrl,
+    };
+  }
+
   if (!chatId) return undefined;
 
   const message = readHistory(queryClient, chatId)?.items.find((item) => item.id === messageId);

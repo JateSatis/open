@@ -143,8 +143,8 @@ begin
   perform public.delete_messages(array[gone]);
   perform public.pin_message(plain);
 
-  -- Пересланная копия альбома в чат A–C — до правки оригинала.
-  copy := (select f from public.forward_messages(chat_ac, array[album]) as f limit 1);
+  -- Альбом, пересланный в чат A–C, — островок со ссылкой на оригинал.
+  copy := public.forward_messages(chat_ac, chat_ab, array[album]);
 
   -- ============================================ прямая запись закрыта
   begin
@@ -301,9 +301,9 @@ begin
   -- ======================================= что не правится вообще
   begin
     perform public.edit_message(copy, 'подмена пересланного');
-    perform pg_temp.check('пересланное не правится', false, 'прошло');
+    perform pg_temp.check('островок пересылки не правится', false, 'прошло');
   exception when others then
-    perform pg_temp.check('пересланное не правится', sqlstate = '42501', sqlstate || ' ' || sqlerrm);
+    perform pg_temp.check('островок пересылки не правится', sqlstate = '22023', sqlstate || ' ' || sqlerrm);
   end;
 
   begin
@@ -477,13 +477,10 @@ begin
   where message_id = album and id = kept_id and poster_url = 'https://x/2p.jpg' and duration_ms = 5000;
   perform pg_temp.check('оставленное вложение сохранило id и поля', n = 1, n::text);
 
-  -- Пересланная копия прежней версии живёт со своими файлами.
-  select pg_temp.files(copy) || '|' || text into s from public.messages where id = copy;
-  perform pg_temp.check(
-    'пересланная копия прежней версии не изменилась',
-    s = 'media:https://x/1.jpg,media:https://x/2.mp4,media:https://x/3.jpg|подпись',
-    s
-  );
+  -- Островок не хранит копию: он показывает оригинал, каким тот стал.
+  select count(*) into n from public.forward_items i
+  where i.forward_id = copy and i.message_id = album and i.deleted_at is null;
+  perform pg_temp.check('островок ссылается на правленый оригинал, а не на копию', n = 1, n::text);
 
   perform pg_temp.as_service();
   select jsonb_array_length(attachments) || '|' || (attachments -> 0 ->> 'url') into s

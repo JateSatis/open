@@ -14,19 +14,23 @@ import {
   type Message,
 } from '@/api/chats';
 import { listMessageReactions } from '@/api/reactions';
+import { originalIds } from '@/features/chats/islands/islandCache';
 import {
   knownEdits,
   mergeMessages,
   patchCommentCounts,
   patchReactions,
   quotedIds,
+  readAllHistories,
   readHistory,
   removeMessages,
   replaceMessages,
   toSent,
+  updateAllHistories,
   updateHistory,
   type ChatHistory,
 } from '@/features/chats/messages/historyCache';
+import type { ChatMessage } from '@/features/chats/messages/types';
 
 /** Сколько страниц новых сообщений дочитывать за раз, прежде чем начать заново. */
 const MAX_CATCH_UP_PAGES = 5;
@@ -104,15 +108,28 @@ export async function loadHistory(queryClient: QueryClient, chatId: string): Pro
 
   if (!cached || !since) return firstPage(chatId);
 
-  const loadedIds = [...cached.items.map((message) => message.id), ...quotedIds(cached)].slice(
+  // Оригиналы в островках — тоже загруженное: их правки, удаления, реакции и
+  // комментарии за время обрыва дочитываются вместе с остальным.
+  const originals = originalIds(cached.items);
+  const loadedIds = [
+    ...cached.items.map((message) => message.id),
+    ...quotedIds(cached),
+    ...originals,
+  ].slice(0, MAX_TOMBSTONE_IDS);
+  const loadedMessageIds = [...cached.items.map((message) => message.id), ...originals].slice(
     0,
     MAX_TOMBSTONE_IDS,
   );
-  const loadedMessageIds = cached.items.slice(0, MAX_TOMBSTONE_IDS).map((message) => message.id);
-  const [newer, deleted, edited, reactions, commentCounts] = await Promise.all([
+  // Островки перечитываются целиком: из них могли убрать облачка.
+  const islandIds = cached.items
+    .filter((message) => message.kind === 'forward')
+    .map((message) => message.id)
+    .slice(0, MAX_TOMBSTONE_IDS);
+  const [newer, deleted, edited, islands, reactions, commentCounts] = await Promise.all([
     fetchNewer(chatId, since),
     listDeletedMessageIds(loadedIds),
     fetchStaleEdits(cached, loadedIds),
+    listMessagesByIds(islandIds),
     // Счётчики пропущенных реакций. Не вышло — не повод ронять дочитывание:
     // их принесёт следующее событие или вход в чат.
     listMessageReactions(loadedMessageIds).catch(() => []),
@@ -128,7 +145,7 @@ export async function loadHistory(queryClient: QueryClient, chatId: string): Pro
     patchReactions(
       replaceMessages(
         removeMessages(mergeMessages(latest, newer, 'newer'), new Set(deleted)),
-        edited,
+        [...edited, ...islands],
       ),
       reactions,
     ),
@@ -145,17 +162,39 @@ async function fetchStaleEdits(history: ChatHistory, ids: string[]): Promise<Mes
   return listMessagesByIds(stale);
 }
 
+/** Всё загруженное во всех историях: сообщения, цитаты и оригиналы в островках. */
+function loadedEverywhere(queryClient: QueryClient): Set<string> {
+  const loaded = new Set<string>();
+
+  for (const history of readAllHistories(queryClient)) {
+    history.items.forEach((message) => loaded.add(message.id));
+    quotedIds(history).forEach((id) => loaded.add(id));
+    originalIds(history.items).forEach((id) => loaded.add(id));
+  }
+
+  return loaded;
+}
+
+function editsEverywhere(queryClient: QueryClient): Map<string, string | null> {
+  const known = new Map<string, string | null>();
+
+  for (const history of readAllHistories(queryClient)) {
+    knownEdits(history).forEach((editedAt, id) => known.set(id, editedAt));
+  }
+
+  return known;
+}
+
 /**
- * Сообщение отредактировали — перечитать его, если оно на экране или
- * процитировано в том, что на экране. Иначе и читать незачем: придёт
+ * Сообщение отредактировали — перечитать его, если оно на экране, процитировано
+ * или стоит в островке где угодно в кеше. Иначе и читать незачем: придёт
  * свежим со страницей истории.
  */
 export async function refreshEditedMessages(
   queryClient: QueryClient,
-  chatId: string,
   candidates: string[],
 ): Promise<void> {
-  const known = knownEdits(readHistory(queryClient, chatId));
+  const known = editsEverywhere(queryClient);
   const ids = candidates.filter((id) => known.has(id)).slice(0, MAX_TOMBSTONE_IDS);
 
   if (ids.length === 0) return;
@@ -164,21 +203,18 @@ export async function refreshEditedMessages(
 
   if (fresh.length === 0) return;
 
-  updateHistory(queryClient, chatId, (current) => replaceMessages(current, fresh));
+  updateAllHistories(queryClient, (current) => replaceMessages(current, fresh));
 }
 
-/** Убирает с экрана то, что база подтверждает удалённым, — среди `candidates`. */
+/**
+ * Убирает с экрана то, что база подтверждает удалённым, — среди `candidates`.
+ * Удалённый оригинал в островке становится заглушкой во всех чатах.
+ */
 export async function dropDeletedMessages(
   queryClient: QueryClient,
-  chatId: string,
   candidates: string[],
 ): Promise<void> {
-  const history = readHistory(queryClient, chatId);
-  // Удалённое может быть и не загружено, но процитировано в загруженном ответе.
-  const loaded = new Set([
-    ...(history?.items.map((message) => message.id) ?? []),
-    ...quotedIds(history),
-  ]);
+  const loaded = loadedEverywhere(queryClient);
   const ids = candidates.filter((id) => loaded.has(id)).slice(0, MAX_TOMBSTONE_IDS);
 
   if (ids.length === 0) return;
@@ -187,40 +223,93 @@ export async function dropDeletedMessages(
 
   if (deleted.length === 0) return;
 
-  updateHistory(queryClient, chatId, (current) => removeMessages(current, new Set(deleted)));
+  updateAllHistories(queryClient, (current) => removeMessages(current, new Set(deleted)));
 }
 
 /**
  * Реакции на эти сообщения изменились — перечитать счётчики пачкой, одним
  * запросом, и только у загруженных: остальные придут свежими со страницей.
+ * Оригинал в островках получает их там же.
  */
 export async function refreshReactions(
   queryClient: QueryClient,
-  chatId: string,
   candidates: string[],
 ): Promise<void> {
-  const loaded = new Set(readHistory(queryClient, chatId)?.items.map((message) => message.id));
+  const loaded = loadedEverywhere(queryClient);
   const ids = candidates.filter((id) => loaded.has(id)).slice(0, MAX_TOMBSTONE_IDS);
 
   if (ids.length === 0) return;
 
   const fresh = await listMessageReactions(ids);
 
-  updateHistory(queryClient, chatId, (current) => patchReactions(current, fresh));
+  updateAllHistories(queryClient, (current) => patchReactions(current, fresh));
 }
 
 /** Число комментариев у этих сообщений изменилось — перечитать пачкой, только у загруженных. */
 export async function refreshCommentCounts(
   queryClient: QueryClient,
-  chatId: string,
   candidates: string[],
 ): Promise<void> {
-  const loaded = new Set(readHistory(queryClient, chatId)?.items.map((message) => message.id));
+  const loaded = loadedEverywhere(queryClient);
   const ids = candidates.filter((id) => loaded.has(id)).slice(0, MAX_TOMBSTONE_IDS);
 
   if (ids.length === 0) return;
 
   const fresh = await listCommentCounts(ids);
 
-  updateHistory(queryClient, chatId, (current) => patchCommentCounts(current, fresh));
+  updateAllHistories(queryClient, (current) => patchCommentCounts(current, fresh));
+}
+
+/**
+ * Из островка убрали облачка — перечитать его. Не вернулся — удалён: убрано
+ * последнее.
+ */
+export async function refreshIsland(
+  queryClient: QueryClient,
+  chatId: string,
+  forwardId: string,
+): Promise<void> {
+  const loaded = readHistory(queryClient, chatId)?.items.some((message) => message.id === forwardId);
+
+  if (!loaded) return;
+
+  const [fresh] = await listMessagesByIds([forwardId]);
+
+  updateHistory(queryClient, chatId, (current) =>
+    fresh ? replaceMessages(current, [fresh]) : removeMessages(current, new Set([forwardId])),
+  );
+}
+
+/**
+ * В чате оригиналов прочитали дальше — «прочитано» у своих облачек в островках
+ * этого чата, где бы они ни были загружены.
+ */
+export function patchOriginChat(
+  queryClient: QueryClient,
+  originChatId: string,
+  readUpTo: string | null,
+) {
+  const touch = (message: ChatMessage): ChatMessage => {
+    if (message.kind !== 'forward' || !message.forward) return message;
+
+    let changed = false;
+    const items = message.forward.items.map((item) => {
+      const chat = item.original?.chat;
+
+      if (!item.original || chat?.id !== originChatId || chat.readUpTo === readUpTo) return item;
+
+      changed = true;
+      return { ...item, original: { ...item.original, chat: { ...chat, readUpTo } } };
+    });
+
+    return changed ? { ...message, forward: { ...message.forward, items } } : message;
+  };
+
+  updateAllHistories(queryClient, (history) => {
+    const items = history.items.map(touch);
+
+    return items.some((message, index) => message !== history.items[index])
+      ? { ...history, items }
+      : history;
+  });
 }

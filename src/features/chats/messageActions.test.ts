@@ -1,12 +1,15 @@
 import {
   canCommentOn,
   canReactTo,
+  deletedOriginalActions,
+  islandActions,
   SELECTION_ACTIONS,
   visibleMessageActions,
   type MessageActionContext,
   type SelectionActionId,
 } from './messageActions';
 
+import type { BubbleRow } from '@/features/chats/islands/rows';
 import type { ChatMessage } from '@/features/chats/messages/types';
 
 function message(overrides: Partial<ChatMessage> = {}): ChatMessage {
@@ -60,13 +63,10 @@ describe('«Изменить»', () => {
     expect(offersEdit({ ...own, message: message({ editStatus: 'saving' }) })).toBe(false);
   });
 
-  it('is not there for forwarded and system messages', () => {
-    expect(
-      offersEdit({
-        ...own,
-        message: message({ forward: { authorId: 'user-2', authorName: 'Марина', original: null } }),
-      }),
-    ).toBe(false);
+  it('is not there for a forward island, an original shown in one, or a system message', () => {
+    expect(offersEdit({ ...own, message: message({ kind: 'forward' }) })).toBe(false);
+    // Своё сообщение в островке правят там, где оно живёт.
+    expect(offersEdit({ ...own, message: message(), island: { isMine: false } })).toBe(false);
     expect(offersEdit({ ...own, message: message({ kind: 'system' }) })).toBe(false);
   });
 });
@@ -145,12 +145,92 @@ describe('message menu', () => {
   });
 });
 
+describe('message menu of a bubble in a forward island', () => {
+  const inIsland = (isMine: boolean, isOwn = false) =>
+    labels({ message: message(), isOwn, isMember: true, isPinned: false, island: { isMine } });
+
+  it('acts on the original: reply, copy, pin, forward, go to it — never edit or delete it', () => {
+    expect(inIsland(false, true)).toEqual([
+      'Ответить',
+      'Копировать',
+      'Закрепить',
+      'Переслать',
+      'Перейти к оригиналу',
+      'Выбрать',
+    ]);
+  });
+
+  it('lets only the forwarder take a bubble out of the island', () => {
+    expect(inIsland(true)).toContain('Убрать из пересылки');
+    expect(inIsland(false)).not.toContain('Убрать из пересылки');
+  });
+
+  it('offers only removal on a deleted original, and only to the forwarder', () => {
+    expect(deletedOriginalActions(true).map((action) => action.label)).toEqual([
+      'Выбрать',
+      'Убрать из пересылки',
+    ]);
+    expect(deletedOriginalActions(false)).toEqual([]);
+  });
+
+  it('gives the island itself no reactions or comments — only select, retry and delete', () => {
+    const sent = message({ kind: 'forward', authorId: 'user-1' });
+
+    expect(islandActions(sent, true).map((action) => action.id)).toEqual([
+      'select_all',
+      'delete_island',
+    ]);
+    expect(islandActions(sent, false).map((action) => action.id)).toEqual(['select_all']);
+    expect(
+      islandActions(message({ kind: 'forward', status: 'failed', localId: 'l1' }), true).map(
+        (action) => action.id,
+      ),
+    ).toEqual(['retry', 'delete_island']);
+  });
+});
+
 describe('selection panel', () => {
-  function enabled(selected: ChatMessage[], isMember = true): SelectionActionId[] {
+  const asRow = (item: ChatMessage): BubbleRow => ({ type: 'message', key: item.id, message: item });
+
+  function islandRow(authorId: string, withOriginal = true): BubbleRow {
+    const forward = message({ id: 'isl', kind: 'forward', authorId });
+
+    return {
+      type: 'island-item',
+      key: 'isl/o1',
+      island: forward,
+      item: {
+        id: 'i1',
+        position: 0,
+        messageId: 'o1',
+        original: withOriginal
+          ? { ...message({ id: 'o1', authorId: 'user-9' }), authorName: 'Джиган', authorAvatarUrl: null, chat: null }
+          : null,
+      },
+      isLast: true,
+    };
+  }
+
+  function enabled(selected: (ChatMessage | BubbleRow)[], isMember = true): SelectionActionId[] {
+    const rows = selected.map((item) => ('type' in item && 'key' in item ? item : asRow(item as ChatMessage)));
+
     return SELECTION_ACTIONS.filter((action) =>
-      action.isEnabled({ selected, currentUserId: 'user-1', isMember }),
+      action.isEnabled({ selected: rows as BubbleRow[], currentUserId: 'user-1', isMember }),
     ).map((action) => action.id);
   }
+
+  it('deletes a bubble of my own island with my messages, but not of somebody else\'s', () => {
+    const mine = message({ id: 'a', authorId: 'user-1' });
+
+    expect(enabled([mine, islandRow('user-1')])).toContain('delete');
+    expect(enabled([mine, islandRow('user-2')])).not.toContain('delete');
+  });
+
+  it('neither quotes nor forwards a deleted original', () => {
+    expect(enabled([islandRow('user-1')])).toEqual(expect.arrayContaining(['reply', 'forward']));
+    expect(enabled([islandRow('user-1', false)])).not.toContain('forward');
+    expect(enabled([islandRow('user-1', false)])).not.toContain('reply');
+  });
 
   it('puts reply and forward next to copy and delete', () => {
     expect(SELECTION_ACTIONS.map((action) => action.label)).toEqual([
@@ -197,20 +277,19 @@ describe('reactions', () => {
     expect(canReactTo(message({ authorId: 'user-1' }))).toBe(true);
   });
 
-  it('are not offered on an unsent, failed or system message', () => {
+  it('are not offered on an unsent, failed or system message, or on a forward island', () => {
     expect(canReactTo(message({ status: 'sending' }))).toBe(false);
     expect(canReactTo(message({ status: 'failed' }))).toBe(false);
     expect(canReactTo(message({ kind: 'system' }))).toBe(false);
+    expect(canReactTo(message({ kind: 'forward' }))).toBe(false);
   });
 });
 
 describe('comments', () => {
-  it('are there on every sent message of a person, forwarded included', () => {
+  it('are there on every sent message of a person — but not on a forward island itself', () => {
     expect(canCommentOn(message())).toBe(true);
     expect(canCommentOn(message({ kind: 'voice', text: null }))).toBe(true);
-    expect(
-      canCommentOn(message({ forward: { authorId: 'u', authorName: 'Олег', original: null } })),
-    ).toBe(true);
+    expect(canCommentOn(message({ kind: 'forward' }))).toBe(false);
   });
 
   it('are not there on a message the server has not confirmed or that failed', () => {

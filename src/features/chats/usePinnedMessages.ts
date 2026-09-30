@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useMemo } from 'react';
 
 import {
+  byPlaceInChat,
   listPinnedMessages,
   pinMessage,
   unpinMessage,
@@ -20,19 +21,20 @@ export type PinnedMessagesState = {
   /** От самого старого сообщения к самому новому. */
   pins: PinnedMessage[];
   isPinned: (messageId: string) => boolean;
-  /** Отказ сервера откатывает закреп и пробрасывается вызвавшему — ему решать, что сказать. */
-  pin: (message: Message) => Promise<void>;
+  /**
+   * Отказ сервера откатывает закреп и пробрасывается вызвавшему — ему решать,
+   * что сказать. `island` — островок этого чата, где стоит сообщение из другого.
+   */
+  pin: (message: Message, island?: { id: string; createdAt: string } | null) => Promise<void>;
   unpin: (messageId: string) => Promise<void>;
 };
 
-function byMessageTime(a: PinnedMessage, b: PinnedMessage): number {
-  return a.messageCreatedAt < b.messageCreatedAt ? -1 : 1;
-}
-
-function toPinned(message: Message): PinnedMessage {
+function toPinned(message: Message, island: { id: string; createdAt: string } | null): PinnedMessage {
   return {
     messageId: message.id,
-    messageCreatedAt: message.createdAt,
+    forwardId: island?.id ?? null,
+    messageCreatedAt: island?.createdAt ?? message.createdAt,
+    originalCreatedAt: message.createdAt,
     kind: message.kind,
     text: message.text,
     thumbnailUrl: attachmentThumbnail(message.attachments),
@@ -77,13 +79,13 @@ export function usePinnedMessages(chatId: string): PinnedMessagesState {
   );
 
   const pin = useCallback(
-    (message: Message) =>
+    (message: Message, island: { id: string; createdAt: string } | null = null) =>
       change(
         (current) =>
           current.some((pinned) => pinned.messageId === message.id)
             ? current
-            : [...current, toPinned(message)].sort(byMessageTime),
-        () => pinMessage(message.id),
+            : [...current, toPinned(message, island)].sort(byPlaceInChat),
+        () => pinMessage(message.id, island?.id ?? null),
       ),
     [change],
   );
@@ -92,9 +94,9 @@ export function usePinnedMessages(chatId: string): PinnedMessagesState {
     (messageId: string) =>
       change(
         (current) => current.filter((pinned) => pinned.messageId !== messageId),
-        () => unpinMessage(messageId),
+        () => unpinMessage(messageId, chatId),
       ),
-    [change],
+    [change, chatId],
   );
 
   return { pins, isPinned, pin, unpin };

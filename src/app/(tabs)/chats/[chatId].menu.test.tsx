@@ -297,12 +297,12 @@ describe('message menu', () => {
     await screen.findByText('привет');
 
     mockedPins.mockResolvedValue([
-      { messageId: 'm2', messageCreatedAt: AT, kind: 'text', text: 'привет', thumbnailUrl: null },
+      { messageId: 'm2', forwardId: null, messageCreatedAt: AT, originalCreatedAt: AT, kind: 'text', text: 'привет', thumbnailUrl: null },
     ]);
     await longPress('m2');
     await choose('Закрепить');
 
-    expect(mockedPin).toHaveBeenCalledWith('m2');
+    expect(mockedPin).toHaveBeenCalledWith('m2', null);
     expect(await screen.findByText('Закреплённое сообщение')).toBeTruthy();
   });
 });
@@ -363,7 +363,7 @@ describe('deleting', () => {
     await screen.findByText('привет');
 
     mockedPins.mockResolvedValue([
-      { messageId: 'm1', messageCreatedAt: AT, kind: 'text', text: 'эй', thumbnailUrl: null },
+      { messageId: 'm1', forwardId: null, messageCreatedAt: AT, originalCreatedAt: AT, kind: 'text', text: 'эй', thumbnailUrl: null },
     ]);
     await act(async () => handlers?.onPinsChanged());
 
@@ -500,8 +500,8 @@ describe('selection', () => {
 
 describe('pinned bar', () => {
   const pins: PinnedMessage[] = [
-    { messageId: 'm1', messageCreatedAt: '2026-09-27T10:01:00Z', kind: 'text', text: 'эй', thumbnailUrl: null },
-    { messageId: 'm2', messageCreatedAt: '2026-09-27T10:02:00Z', kind: 'voice', text: null, thumbnailUrl: null },
+    { messageId: 'm1', forwardId: null, messageCreatedAt: '2026-09-27T10:01:00Z', originalCreatedAt: '2026-09-27T10:01:00Z', kind: 'text', text: 'эй', thumbnailUrl: null },
+    { messageId: 'm2', forwardId: null, messageCreatedAt: '2026-09-27T10:02:00Z', originalCreatedAt: '2026-09-27T10:02:00Z', kind: 'voice', text: null, thumbnailUrl: null },
   ];
 
   it('shows the newest pin with its number and steps back on each tap', async () => {
@@ -519,7 +519,7 @@ describe('pinned bar', () => {
 
   it('loads older pages until the pinned message is there', async () => {
     mockedPins.mockResolvedValue([
-      { messageId: 'm0', messageCreatedAt: '2026-09-27T09:00:00Z', kind: 'text', text: 'давнее', thumbnailUrl: null },
+      { messageId: 'm0', forwardId: null, messageCreatedAt: '2026-09-27T09:00:00Z', originalCreatedAt: '2026-09-27T09:00:00Z', kind: 'text', text: 'давнее', thumbnailUrl: null },
     ]);
     mockedListMessages
       .mockResolvedValueOnce({ items: [message('m3', 'как дела?', 'user-1', 3)], nextCursor: '2026-09-27T10:03:00Z' })

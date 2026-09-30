@@ -1,4 +1,5 @@
--- Ответы и пересылка: кто может, кто нет, что копируется и что нельзя подделать.
+-- Ответы: кто может, кто нет и что нельзя подделать. Пересылка — в
+-- forward_islands_access.sql.
 --
 -- Запуск против облачной базы, ничего не оставляет после себя — всё внутри
 -- транзакции с rollback:
@@ -69,8 +70,6 @@ declare
   reply uuid;
   album uuid;
   voice uuid;
-  copies uuid[];
-  second_copies uuid[];
   n int;
   s text;
   ok boolean;
@@ -226,14 +225,15 @@ begin
     perform pg_temp.check('функцией цитату к старому сообщению не дописать', sqlstate = '42501', sqlstate || ' ' || sqlerrm);
   end;
 
-  -- Та же проверка без RLS — «только тот же чат» держит схема, а не политика.
+  -- Та же проверка без RLS — «тот же чат или его островок» держит схема
+  -- (триггер), а не политика.
   perform set_config('role', 'postgres', true);
   begin
     insert into public.message_replies (chat_id, message_id, quoted_id, position)
     values (chat_ab, m2, other_chat_msg, 0);
-    perform pg_temp.check('схема: цитата из другого чата отвергается внешним ключом', false, 'прошло');
+    perform pg_temp.check('схема: цитата из другого чата без островка отвергается', false, 'прошло');
   exception when others then
-    perform pg_temp.check('схема: цитата из другого чата отвергается внешним ключом', sqlstate = '23503', sqlstate || ' ' || sqlerrm);
+    perform pg_temp.check('схема: цитата из другого чата без островка отвергается', sqlstate = '23503', sqlstate || ' ' || sqlerrm);
   end;
 
   perform pg_temp.act_as(b);
@@ -266,186 +266,8 @@ begin
   select count(*) into n from public.message_replies where message_id = reply;
   perform pg_temp.check('цитата удалённого: ссылка видна и посетителю', n = 1, n::text);
 
-  -- ===================================================== пересылка: разрешено
-  -- Посетитель D пересылает чужую переписку A–B в свой чат с C.
-  perform pg_temp.act_as(d);
-  select array_agg(id) into copies
-  from public.forward_messages(chat_dc, array[voice, m1, album]) as f(id);
-  set constraints all immediate;
-  set constraints all deferred;
-  perform pg_temp.check('посетитель пересылает из чужого чата в свой', cardinality(copies) = 3, cardinality(copies)::text);
-
-  select bool_and(m.author_id = d and m.chat_id = chat_dc) into ok
-  from public.messages m where m.id = any (copies);
-  perform pg_temp.check('автор копий — переславший, чат — целевой', ok, null);
-
-  -- Порядок — как у оригиналов в переписке, а не как в запросе.
-  select string_agg(coalesce(text, kind), ',' order by created_at) into s
-  from public.messages where id = any (copies);
-  perform pg_temp.check('копии в исходном порядке', s = 'первое A,подпись альбома,voice', s);
-
-  select string_agg(f.origin_author_id::text, ',') into s
-  from public.message_forwards f where f.message_id = any (copies);
-  select bool_and(f.origin_author_id = a) into ok
-  from public.message_forwards f where f.message_id = any (copies);
-  perform pg_temp.check('атрибуция: автор оригинала', ok, s);
-
-  select count(*) into n
-  from public.message_forwards f
-  where f.message_id = copies[2] and f.origin_message_id = album;
-  perform pg_temp.check('атрибуция: ссылка на оригинал', n = 1, n::text);
-
-  select string_agg(a.url || '|' || coalesce(a.poster_url, '-') || '|' || a.position, ';' order by a.position) into s
-  from public.attachments a where a.message_id = copies[2];
-  perform pg_temp.check(
-    'альбом: те же файлы, постеры и порядок',
-    s = 'https://x/1.jpg|-|0;https://x/2.mp4|https://x/2.jpg|1;https://x/3.jpg|-|2',
-    s
-  );
-
-  select kind into s from public.messages where id = copies[2];
-  perform pg_temp.check('альбом остаётся альбомом', s = 'media', s);
-
-  select a.waveform::text || '|' || a.duration_ms || '|' || m.kind into s
-  from public.attachments a join public.messages m on m.id = a.message_id
-  where a.message_id = copies[3];
-  perform pg_temp.check('голосовое: волна, длительность, вид', s = '{1,5,31,0,7}|4200|voice', s);
-
-  select last_message_text into s from public.chats where id = chat_dc;
-  perform pg_temp.check('превью пересланного — как у обычного', s = '🎤 Голосовое сообщение (0:04)', s);
-
-  select count(*) into n from public.message_replies where message_id = any (copies);
-  perform pg_temp.check('цитаты ответа при пересылке не переносятся', n = 0, n::text);
-
-  -- Пересылка пересланного указывает первоисточник.
-  perform pg_temp.act_as(c);
-  select array_agg(id) into second_copies
-  from public.forward_messages(chat_ac, array[copies[1]]) as f(id);
-  select count(*) into n
-  from public.message_forwards f
-  where f.message_id = second_copies[1] and f.origin_message_id = m1 and f.origin_author_id = a;
-  perform pg_temp.check('пересылка пересланного — первоисточник', n = 1, n::text);
-
-  -- Пересылать можно и в тот же чат.
   perform pg_temp.act_as(b);
-  select array_agg(id) into second_copies
-  from public.forward_messages(chat_ab, array[m1]) as f(id);
-  perform pg_temp.check('пересылка в тот же чат', cardinality(second_copies) = 1, null);
-
-  -- Пересланный ответ: цитата не переезжает.
-  select array_agg(id) into second_copies
-  from public.forward_messages(chat_ab, array[(select message_id from public.message_replies where quoted_id = m1 limit 1)]) as f(id);
-  select count(*) into n from public.message_replies where message_id = second_copies[1];
-  perform pg_temp.check('пересланный ответ — без цитаты', n = 0, n::text);
-
-  -- Оригинал удалили — копия живёт.
-  perform pg_temp.act_as(a);
-  perform public.delete_messages(array[m1]);
-  perform pg_temp.act_as(c);
-  select count(*) into n from public.messages where id = copies[1];
-  perform pg_temp.check('копия живёт после удаления оригинала', n = 1, n::text);
-
-  -- ======================================================= пересылка: запреты
-  perform pg_temp.act_as(d);
-  begin
-    perform public.forward_messages(chat_ab, array[album]);
-    perform pg_temp.check('в чат, где не участник, переслать нельзя', false, 'прошло');
-  exception when others then
-    perform pg_temp.check('в чат, где не участник, переслать нельзя', sqlstate = '42501', sqlstate || ' ' || sqlerrm);
-  end;
-
-  perform pg_temp.act_as(e);
-  begin
-    perform public.forward_messages(chat_ab, array[album]);
-    perform pg_temp.check('в чат, куда только приглашён, переслать нельзя', false, 'прошло');
-  exception when others then
-    perform pg_temp.check('в чат, куда только приглашён, переслать нельзя', sqlstate = '42501', sqlstate || ' ' || sqlerrm);
-  end;
-
-  perform pg_temp.act_as(b);
-  begin
-    perform public.forward_messages(chat_ab, array[gone]);
-    perform pg_temp.check('удалённое переслать нельзя', false, 'прошло');
-  exception when others then
-    perform pg_temp.check('удалённое переслать нельзя', sqlstate = 'P0002', sqlstate || ' ' || sqlerrm);
-  end;
-
-  begin
-    perform public.forward_messages(chat_ab, array[album, gone]);
-    perform pg_temp.check('пачка с удалённым отвергается целиком', false, 'прошло');
-  exception when others then
-    perform pg_temp.check('пачка с удалённым отвергается целиком', sqlstate = 'P0002', sqlstate || ' ' || sqlerrm);
-  end;
-
-  perform pg_temp.act_as_anon();
-  begin
-    perform public.forward_messages(chat_ab, array[album]);
-    perform pg_temp.check('anon не вызывает forward_messages', false, 'прошло');
-  exception when others then
-    perform pg_temp.check('anon не вызывает forward_messages', sqlstate = '42501', sqlstate || ' ' || sqlerrm);
-  end;
-
-  -- ================================================= подделка атрибуции
-  perform pg_temp.act_as(b);
-
-  -- Своё сообщение, выданное за пересланное от A с выдуманным текстом.
-  reply := pg_temp.say(chat_ab, b, 'выдуманные слова A', now());
-  begin
-    insert into public.message_forwards (message_id, origin_message_id, origin_author_id)
-    values (reply, album, a);
-    perform pg_temp.check('подделка: прямая вставка «переслано от» отвергается', false, 'прошло');
-  exception when others then
-    perform pg_temp.check('подделка: прямая вставка «переслано от» отвергается', sqlstate = '42501', sqlstate || ' ' || sqlerrm);
-  end;
-
-  -- Только автор без ссылки на сообщение.
-  begin
-    insert into public.message_forwards (message_id, origin_author_id) values (reply, a);
-    perform pg_temp.check('подделка: «переслано от» без оригинала отвергается', false, 'прошло');
-  exception when others then
-    perform pg_temp.check('подделка: «переслано от» без оригинала отвергается', sqlstate = '42501', sqlstate || ' ' || sqlerrm);
-  end;
-
-  -- Настоящую пересылку не переписать на другого автора или оригинал.
-  select array_agg(id) into second_copies
-  from public.forward_messages(chat_ab, array[album]) as f(id);
-
-  begin
-    update public.message_forwards set origin_author_id = c where message_id = second_copies[1];
-    get diagnostics n = row_count;
-    perform pg_temp.check('подделка: автора оригинала не переписать', n = 0, n::text);
-  exception when others then
-    perform pg_temp.check('подделка: автора оригинала не переписать', sqlstate = '42501', sqlstate || ' ' || sqlerrm);
-  end;
-
-  -- Текст пересланного не поменять: «Переслано от A» над чужими словами.
-  begin
-    update public.messages set text = 'выдуманные слова A' where id = second_copies[1];
-    get diagnostics n = row_count;
-    perform pg_temp.check('подделка: текст пересланного не поменять', n = 0, n::text || ' строк изменено');
-  exception when others then
-    perform pg_temp.check('подделка: текст пересланного не поменять', sqlstate = '42501', sqlstate || ' ' || sqlerrm);
-  end;
-
-  select text into s from public.messages where id = second_copies[1];
-  perform pg_temp.check('текст пересланного совпадает с оригиналом', s = 'подпись альбома', s);
-
-  -- И файлы к нему не дописать.
-  begin
-    insert into public.attachments (message_id, message_kind, url, mime_type, position)
-    values (second_copies[1], 'media', 'https://x/fake.jpg', 'image/jpeg', 10);
-    perform pg_temp.check('подделка: файл к пересланному не дописать', false, 'прошло');
-  exception when others then
-    perform pg_temp.check('подделка: файл к пересланному не дописать', sqlstate = '42501', sqlstate || ' ' || sqlerrm);
-  end;
-
-  begin
-    delete from public.message_forwards where message_id = second_copies[1];
-    get diagnostics n = row_count;
-    perform pg_temp.check('пометку пересылки не снять', n = 0, n::text);
-  exception when others then
-    perform pg_temp.check('пометку пересылки не снять', sqlstate = '42501', sqlstate || ' ' || sqlerrm);
-  end;
+  reply := pg_temp.say(chat_ab, b, 'своё B', now());
 
   -- Обычное своё сообщение правится только функцией правки: прямой UPDATE
   -- закрыт для всех (20260929180000_message_edit.sql).
