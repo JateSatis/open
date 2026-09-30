@@ -12,7 +12,7 @@ export type IslandBorderProps = {
 };
 
 /**
- * Кусок пунктирной рамки островка на высоту одной строки списка. Островок
+ * Кусок пунктирной рамки островка с заливкой на высоту одной строки списка. Островок
  * разложен на строки (плашка и облачка), и каждая рисует свою часть: одна и
  * та же скруглённая рамка, выходящая за край строки там, где островок
  * продолжается, и обрезанная по строке. Состыкованные строки дают сплошной
@@ -27,7 +27,7 @@ export function IslandBorder({ top, bottom }: IslandBorderProps) {
       <View
         style={[
           styles.border,
-          { borderColor: theme.islandBorder },
+          { borderColor: theme.islandBorder, backgroundColor: theme.islandBackground },
           top ? styles.top : styles.openTop,
           bottom ? styles.bottom : styles.openBottom,
         ]}
