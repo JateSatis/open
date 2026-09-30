@@ -51,6 +51,8 @@ jest.mock('expo-router', () => ({
 
 jest.mock('@/api/profile', () => ({ getProfile: jest.fn(() => Promise.resolve(null)) }));
 jest.mock('@/features/auth/useSession', () => ({ useSession: jest.fn() }));
+jest.mock('@/api/streams');
+
 jest.mock('@/api/chats', () => ({
   getChat: jest.fn(),
   listMessages: jest.fn(),

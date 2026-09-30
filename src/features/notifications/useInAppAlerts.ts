@@ -13,6 +13,8 @@ import {
   useInAppAlert,
   type InAppAlert,
 } from '@/features/notifications/alertsStore';
+import { ring, resetRinging, stopRinging } from '@/features/streams/incomingCall';
+import { liveStreamQueryKey } from '@/features/streams/streamKeys';
 import { useActiveChatId } from '@/store/activeChat';
 
 export type { InAppAlert } from '@/features/notifications/alertsStore';
@@ -34,7 +36,10 @@ export function useInAppAlerts(): InAppAlertsState {
   const alert = useInAppAlert((state) => state.alert);
 
   // Карточка прежнего пользователя не должна пережить выход.
-  useEffect(() => dismissAlert(), [currentUserId]);
+  useEffect(() => {
+    dismissAlert();
+    resetRinging();
+  }, [currentUserId]);
 
   useEffect(() => {
     if (!currentUserId) return;
@@ -49,8 +54,9 @@ export function useInAppAlerts(): InAppAlertsState {
         refreshChat(incoming.chatId);
 
         // Показывать карточку о чате, который человек прямо сейчас читает, —
-        // значит перекрывать уведомлением то самое сообщение.
-        if (incoming.chatId === activeChatId) return;
+        // значит перекрывать уведомлением то самое сообщение. О звонке
+        // сообщает сам входящий, а не карточка системного сообщения.
+        if (incoming.chatId === activeChatId || incoming.messageKind === 'system') return;
 
         showAlert({ kind: 'message', ...incoming });
       },
@@ -70,6 +76,14 @@ export function useInAppAlerts(): InAppAlertsState {
         refreshChat(chatId);
       },
       onMemberJoined: refreshChat,
+      onIncomingCall: (call) => {
+        void queryClient.invalidateQueries({ queryKey: liveStreamQueryKey(call.chatId) });
+        ring(call);
+      },
+      onStreamEnded: (streamId, chatId) => {
+        stopRinging(streamId);
+        void queryClient.invalidateQueries({ queryKey: liveStreamQueryKey(chatId) });
+      },
       // Превью откатилось — например, последнее сообщение удалили.
       onChatChanged: refreshChat,
       onReconnected: () => {

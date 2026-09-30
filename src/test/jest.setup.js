@@ -16,3 +16,50 @@ jest.mock('react-native-safe-area-context', () => {
 jest.mock('react-native-keyboard-controller', () =>
   require('react-native-keyboard-controller/jest'),
 );
+
+// LiveKit — нативный WebRTC: в тестах его нет и быть не должно. Звонок
+// проверяется через состояние (`callStore`) и замоканный `callSession`.
+jest.mock('@livekit/react-native', () => ({
+  registerGlobals: jest.fn(),
+  AudioSession: {
+    configureAudio: jest.fn(() => Promise.resolve()),
+    startAudioSession: jest.fn(() => Promise.resolve()),
+    stopAudioSession: jest.fn(() => Promise.resolve()),
+    selectAudioOutput: jest.fn(() => Promise.resolve()),
+    getAudioOutputs: jest.fn(() => Promise.resolve(['speaker', 'earpiece'])),
+  },
+  AndroidAudioTypePresets: { communication: {}, media: {} },
+}));
+
+jest.mock('livekit-client', () => {
+  const { EventEmitter } = require('events');
+
+  class Room extends EventEmitter {
+    static instances = [];
+
+    constructor() {
+      super();
+      Room.instances.push(this);
+      this.remoteParticipants = new Map();
+      this.localParticipant = {
+        identity: 'me',
+        name: 'Я',
+        metadata: undefined,
+        isSpeaking: false,
+        isMicrophoneEnabled: false,
+        setMicrophoneEnabled: jest.fn(function (enabled) {
+          this.isMicrophoneEnabled = enabled;
+          return Promise.resolve();
+        }),
+      };
+      this.connect = jest.fn(() => Promise.resolve());
+      this.disconnect = jest.fn(() => Promise.resolve());
+    }
+  }
+
+  return {
+    Room,
+    RoomEvent: new Proxy({}, { get: (_target, key) => String(key) }),
+    DisconnectReason: { CLIENT_INITIATED: 1, DUPLICATE_IDENTITY: 2, ROOM_DELETED: 5 },
+  };
+});

@@ -93,6 +93,20 @@ export type ForwardOrigin = {
   original: { messageId: string; chatId: string; createdAt: string } | null;
 };
 
+/**
+ * Системное сообщение о звонке: начат или завершён. Кто начал, сколько шёл и
+ * был ли я в нём — из самого звонка, а не из текста сообщения.
+ */
+export type CallMark = {
+  streamId: string;
+  event: 'call_started' | 'call_ended';
+  hostId: string | null;
+  startedAt: string;
+  endedAt: string | null;
+  /** Я входил в этот звонок (хоть раз). */
+  joinedByMe: boolean;
+};
+
 export type Message = {
   id: string;
   chatId: string;
@@ -111,6 +125,8 @@ export type Message = {
   reactions: MessageReactions;
   /** Сколько живых комментариев. Денормализовано на сообщении, пишет база. */
   commentsCount: number;
+  /** Метка звонка у системного сообщения; нет — это не звонок. */
+  call?: CallMark | null;
 };
 
 /**
@@ -174,7 +190,7 @@ const WAITING_COLUMNS = 'chat_id, user_id, display_name, avatar_url';
 // внешних ключей нужны, потому что `messages` связана с `profiles` и сама с
 // собой через несколько таблиц сразу.
 export const MESSAGE_COLUMNS =
-  'id, chat_id, author_id, kind, text, created_at, edited_at, attachments(id, url, poster_url, mime_type, width, height, duration_ms, waveform), replies:message_replies!message_replies_message_fkey(position, quoted_id, quoted:messages!message_replies_quoted_fkey(id, author_id, kind, text, created_at, edited_at, author:profiles!messages_author_id_fkey(display_name), attachments(url, poster_url, mime_type, duration_ms, position))), forward:message_forwards!message_forwards_message_fkey(origin_message_id, origin_author_id, origin_author:profiles(display_name), origin:messages!message_forwards_origin_fkey(id, chat_id, created_at)), member_reactions, visitor_reactions, my_reaction(emoji, audience), comments_count';
+  'id, chat_id, author_id, kind, text, created_at, edited_at, attachments(id, url, poster_url, mime_type, width, height, duration_ms, waveform), replies:message_replies!message_replies_message_fkey(position, quoted_id, quoted:messages!message_replies_quoted_fkey(id, author_id, kind, text, created_at, edited_at, author:profiles!messages_author_id_fkey(display_name), attachments(url, poster_url, mime_type, duration_ms, position))), forward:message_forwards!message_forwards_message_fkey(origin_message_id, origin_author_id, origin_author:profiles(display_name), origin:messages!message_forwards_origin_fkey(id, chat_id, created_at)), member_reactions, visitor_reactions, my_reaction(emoji, audience), comments_count, stream_id, system_event, stream:streams!messages_stream_id_fkey(host_id, started_at, ended_at), my_call:my_stream_participation(id)';
 
 // Заготовки запросов. Они же задают типы рядов: клиент разбирает select-строку
 // вместе со встроенными таблицами, поэтому форма ответа выводится из самого
@@ -278,6 +294,20 @@ function toForward(row: MessageRow['forward'] | undefined): ForwardOrigin | null
   };
 }
 
+function toCallMark(row: MessageRow): CallMark | null {
+  if (!row.stream_id || !row.stream) return null;
+  if (row.system_event !== 'call_started' && row.system_event !== 'call_ended') return null;
+
+  return {
+    streamId: row.stream_id,
+    event: row.system_event,
+    hostId: row.stream.host_id,
+    startedAt: row.stream.started_at,
+    endedAt: row.stream.ended_at,
+    joinedByMe: row.my_call !== null && row.my_call !== undefined,
+  };
+}
+
 export function toMessage(row: MessageRow): Message {
   return {
     id: row.id,
@@ -301,6 +331,7 @@ export function toMessage(row: MessageRow): Message {
     forward: toForward(row.forward),
     reactions: toReactions(row),
     commentsCount: row.comments_count,
+    call: toCallMark(row),
   };
 }
 
@@ -778,6 +809,8 @@ export type IncomingMessage = {
   chatId: string;
   authorId: string | null;
   authorName: string;
+  /** Вид сообщения; у старой базы — нет. О звонке сообщает входящий, а не карточка. */
+  messageKind: string | null;
   text: string | null;
   createdAt: string;
 };
@@ -805,6 +838,8 @@ export type ChatChannelHandlers = {
   onReactionsChanged: (messageId: string) => void;
   /** Число комментариев к сообщению изменилось. Payload — подсказка, какое; число — из базы. */
   onCommentsChanged: (messageId: string) => void;
+  /** Звонок в чате начался, изменился его состав или он завершился. */
+  onStreamChanged?: () => void;
   /**
    * Канал заново подключился. Пока его не было, события терялись, поэтому
    * подписчик обязан дочитать пропущенное, а не ждать следующего сообщения.
@@ -829,6 +864,7 @@ function toIncoming(payload: unknown): IncomingMessage | null {
     chatId: row.chat_id,
     authorId: typeof row.author_id === 'string' ? row.author_id : null,
     authorName: typeof row.author_name === 'string' ? row.author_name : 'Без имени',
+    messageKind: typeof row.kind === 'string' ? row.kind : null,
     text: typeof row.text === 'string' ? row.text : null,
     createdAt: typeof row.created_at === 'string' ? row.created_at : new Date().toISOString(),
   };
@@ -876,6 +912,7 @@ export function subscribeToChat(chatId: string, handlers: ChatChannelHandlers): 
 
       if (typeof id === 'string') handlers.onCommentsChanged(id);
     })
+    .on('broadcast', { event: 'stream_changed' }, () => handlers.onStreamChanged?.())
     .on('broadcast', { event: 'typing' }, ({ payload }) => {
       const { userId, activity } = (payload ?? {}) as { userId?: unknown; activity?: unknown };
 
@@ -947,8 +984,40 @@ export type UserChannelHandlers = {
   onMemberJoined: (chatId: string) => void;
   /** Превью чата изменилось не из-за нового сообщения — например, последнее удалили. */
   onChatChanged: (chatId: string) => void;
+  /** Мне звонят: в чате, где я участник, начали звонок. */
+  onIncomingCall?: (call: IncomingCall) => void;
+  /** Звонок в чате, где я участник, завершился — входящий пора погасить. */
+  onStreamEnded?: (streamId: string, chatId: string) => void;
   onReconnected?: () => void;
 };
+
+export type IncomingCall = {
+  streamId: string;
+  chatId: string;
+  chatTitle: string | null;
+  chatKind: ChatKind;
+  hostId: string | null;
+  hostName: string;
+  startedAt: string;
+};
+
+function toIncomingCall(payload: unknown): IncomingCall | null {
+  if (typeof payload !== 'object' || payload === null) return null;
+
+  const row = payload as Record<string, unknown>;
+
+  if (typeof row.stream_id !== 'string' || typeof row.chat_id !== 'string') return null;
+
+  return {
+    streamId: row.stream_id,
+    chatId: row.chat_id,
+    chatTitle: typeof row.chat_title === 'string' ? row.chat_title : null,
+    chatKind: row.chat_kind === 'group' ? 'group' : 'direct',
+    hostId: typeof row.host_id === 'string' ? row.host_id : null,
+    hostName: typeof row.host_name === 'string' ? row.host_name : 'Без имени',
+    startedAt: typeof row.started_at === 'string' ? row.started_at : new Date().toISOString(),
+  };
+}
 
 /**
  * Everything addressed to this user personally: messages in any chat, invites
@@ -995,6 +1064,17 @@ export function subscribeToUserEvents(userId: string, handlers: UserChannelHandl
       const chatId = chatIdOf(payload);
 
       if (chatId) handlers.onChatChanged(chatId);
+    })
+    .on('broadcast', { event: 'incoming_call' }, ({ payload }) => {
+      const call = toIncomingCall(payload);
+
+      if (call) handlers.onIncomingCall?.(call);
+    })
+    .on('broadcast', { event: 'stream_ended' }, ({ payload }) => {
+      const chatId = chatIdOf(payload);
+      const streamId = (payload as { stream_id?: unknown } | undefined)?.stream_id;
+
+      if (chatId && typeof streamId === 'string') handlers.onStreamEnded?.(streamId, chatId);
     })
     .subscribe((status) => {
       if (status === 'SUBSCRIBED') {

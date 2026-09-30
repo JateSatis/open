@@ -42,6 +42,7 @@ const incoming: IncomingMessage = {
   chatId: 'chat-1',
   authorId: 'user-2',
   authorName: 'Марина',
+  messageKind: 'text',
   text: 'ты где',
   createdAt: '2026-09-16T10:00:00Z',
 };
