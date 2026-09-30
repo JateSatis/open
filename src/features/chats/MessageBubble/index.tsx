@@ -61,6 +61,11 @@ export type MessageBubbleProps = {
   authorBadge?: string | null;
   /** «доставлено / прочитано» у своего. У комментариев не показывается. */
   showReceipt?: boolean;
+  /**
+   * Аватар слева от чужого облачка. В личном диалоге его нет — и места под
+   * него тоже: собеседник один, автора видно по имени над облачком.
+   */
+  showAvatar?: boolean;
 };
 
 export function MessageBubble({
@@ -79,6 +84,7 @@ export function MessageBubble({
   comments,
   authorBadge,
   showReceipt,
+  showAvatar = true,
 }: MessageBubbleProps) {
   const theme = useTheme();
   const isMediaMessage = message.kind === 'media' && message.attachments.length > 0;
@@ -177,7 +183,7 @@ export function MessageBubble({
 
   return (
     <View style={[styles.row, isOwn && styles.own]}>
-      {isOwn ? null : (
+      {isOwn || !showAvatar ? null : (
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={`Профиль: ${authorName}`}

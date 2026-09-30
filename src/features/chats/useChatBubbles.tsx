@@ -31,6 +31,12 @@ type Options = {
   openPerson: (personId: string) => void;
   navigation: QuoteNavigation;
   reactions: ReactToMessage;
+  /**
+   * Аватары у чужих облачков. В личном диалоге их нет вовсе — и у облачков
+   * островка тоже, даже если автор оригинала третий человек: его видно по
+   * строке имени, а ряд облачков не пляшет по ширине.
+   */
+  showAvatars: boolean;
 };
 
 /** Облачко и то, в какой ряд в нём лягут мои реакции. */
@@ -58,6 +64,7 @@ export function useChatBubbles({
   openPerson,
   navigation,
   reactions,
+  showAvatars,
 }: Options): ChatBubbles {
   const { openQuote, openOriginal } = navigation;
   const { audience: myAudience, toggle } = reactions;
@@ -95,6 +102,7 @@ export function useChatBubbles({
             interactive && canReactTo(item) ? (emoji) => toggle(item, emoji) : undefined
           }
           comments={commentsEntry(item, chatId, interactive)}
+          showAvatar={showAvatars}
         />
       );
     },
@@ -108,6 +116,7 @@ export function useChatBubbles({
       participantsById,
       readUpTo,
       retry,
+      showAvatars,
       toggle,
     ],
   );
@@ -154,6 +163,7 @@ export function useChatBubbles({
           }
           // Комментарии — к оригиналу: панель открывается на него, из его чата.
           comments={commentsEntry(message, original.chatId, interactive)}
+          showAvatar={showAvatars}
         />
       );
     },
@@ -166,6 +176,7 @@ export function useChatBubbles({
       openPerson,
       openQuote,
       readUpTo,
+      showAvatars,
       toggle,
     ],
   );

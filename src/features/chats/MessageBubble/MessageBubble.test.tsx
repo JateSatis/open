@@ -65,6 +65,13 @@ const baseProps = {
 };
 
 describe('MessageBubble', () => {
+  it('в личном диалоге у чужого облачка нет аватара, но имя автора видно', async () => {
+    await render(<MessageBubble {...baseProps} message={textMessage()} showAvatar={false} />);
+
+    expect(screen.queryByLabelText('Профиль: Марина')).toBeNull();
+    expect(screen.getByText('Марина')).toBeTruthy();
+  });
+
   it('opens the author profile from the avatar and from the name', async () => {
     const onAuthorPress = jest.fn();
     const user = userEvent.setup();

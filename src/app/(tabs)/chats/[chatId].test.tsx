@@ -1,5 +1,5 @@
 import type { Session as SupabaseSession } from '@supabase/supabase-js';
-import { act, fireEvent, screen, userEvent, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, screen, userEvent, waitFor, within } from '@testing-library/react-native';
 
 import ChatScreen from './[chatId]';
 
@@ -199,7 +199,8 @@ describe('ChatScreen', () => {
     expect(mockPush).toHaveBeenCalledWith('/chats/people/user-2');
   });
 
-  it('opens the author profile from a tap on their avatar', async () => {
+  it('opens the author profile from a tap on their avatar in a group', async () => {
+    mockedGetChat.mockResolvedValue({ ...chatWith([member, other]), kind: 'group' });
     mockedListMessages.mockResolvedValue({
       items: [message('m1', 'привет', 'user-2')],
       nextCursor: null,
@@ -209,6 +210,23 @@ describe('ChatScreen', () => {
     await renderWithQuery(<ChatScreen />);
     await screen.findByText('привет');
     await user.press(screen.getByLabelText('Профиль: Марина'));
+
+    expect(mockPush).toHaveBeenCalledWith('/chats/people/user-2');
+  });
+
+  it('в личном диалоге аватаров нет, профиль автора открывается по имени', async () => {
+    mockedListMessages.mockResolvedValue({
+      items: [message('m1', 'привет', 'user-2')],
+      nextCursor: null,
+    });
+    const user = userEvent.setup();
+
+    await renderWithQuery(<ChatScreen />);
+    await screen.findByText('привет');
+
+    expect(screen.queryByLabelText('Профиль: Марина')).toBeNull();
+
+    await user.press(within(screen.getByTestId('message-bubble')).getByText('Марина'));
 
     expect(mockPush).toHaveBeenCalledWith('/chats/people/user-2');
   });

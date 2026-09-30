@@ -84,7 +84,10 @@ const rowKey = (row: ChatListRow) => row.key;
 /** Ближе этого к самому новому сообщению список держится за низ переписки, а не за прочитанное. */
 const KEEP_READING_POSITION = { minIndexForVisible: 0, autoscrollToTopThreshold: Spacing.six };
 
-/** Облачко чужого сообщения начинается после аватара и зазора (`MessageBubble`). */
+/**
+ * Облачко чужого сообщения начинается после аватара и зазора (`MessageBubble`).
+ * В личном диалоге аватаров нет — облачко у самого края.
+ */
 const BUBBLE_LEADING_INSET = Spacing.five + Spacing.two;
 
 export default function ChatScreen() {
@@ -314,6 +317,7 @@ export default function ChatScreen() {
     openPerson,
     navigation,
     reactions,
+    showAvatars: chat?.kind !== 'direct',
   });
 
   const { renderItem, islandHeader } = useChatRowRenderer({
@@ -571,7 +575,9 @@ export default function ChatScreen() {
         actions={menuActions}
         reactions={menuReactions}
         alignEnd={menuContent?.authorId === currentUserId}
-        leadingInset={menuRow?.type === 'island-header' ? 0 : BUBBLE_LEADING_INSET}
+        leadingInset={
+          menuRow?.type === 'island-header' || chat?.kind === 'direct' ? 0 : BUBBLE_LEADING_INSET
+        }
         onAction={runMenuAction}
         onClose={menu.close}
       />
