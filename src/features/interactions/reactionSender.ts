@@ -9,7 +9,8 @@
 import type { QueryClient } from '@tanstack/react-query';
 
 import { setMessageReaction, type MyReaction } from '@/api/reactions';
-import { readHistory, updateHistory } from '@/features/chats/messages/historyCache';
+import { mapOriginals } from '@/features/chats/islands/islandCache';
+import { updateAllHistories } from '@/features/chats/messages/historyCache';
 import {
   clearPendingReaction,
   reactionsInFlight,
@@ -21,55 +22,57 @@ import { showNotice } from '@/features/notifications/alertsStore';
 import { isNetworkError } from '@/lib/network';
 
 /**
- * Подтверждённое базой — в кеш истории. Ряд берётся из ответа: он мог
- * разойтись с догадкой клиента, например, заявку приняли, пока экран этого
- * не знал. Чужие реакции, пришедшие тем временем, догонит событие канала.
+ * Подтверждённое базой — в кеш истории, везде, где сообщение показано: в
+ * своём чате и в островках других. Ряд берётся из ответа: он мог разойтись с
+ * догадкой клиента, например, заявку приняли, пока экран этого не знал. Чужие
+ * реакции, пришедшие тем временем, догонит событие канала.
  */
-function confirm(
-  queryClient: QueryClient,
-  chatId: string,
-  messageId: string,
-  mine: MyReaction | null,
-) {
-  updateHistory(queryClient, chatId, (history) => {
-    const index = history.items.findIndex((message) => message.id === messageId);
+function confirm(queryClient: QueryClient, messageId: string, mine: MyReaction | null) {
+  updateAllHistories(queryClient, (history) => {
+    let changed = false;
 
-    if (index < 0) return history;
+    const items = history.items.map((message) => {
+      const own =
+        message.id === messageId
+          ? { ...message, reactions: replaceMine(message.reactions, mine) }
+          : message;
+      const next = mapOriginals(own, (original) =>
+        original.id === messageId
+          ? { ...original, reactions: replaceMine(original.reactions, mine) }
+          : original,
+      );
 
-    const message = history.items[index];
-    const reactions = replaceMine(message.reactions, mine);
+      if (next !== message) changed = true;
 
-    if (reactions === message.reactions) return history;
+      return next;
+    });
 
-    const items = [...history.items];
-
-    items[index] = { ...message, reactions };
-    return { ...history, items };
+    return changed ? { ...history, items } : history;
   });
 }
 
-async function drain(queryClient: QueryClient, chatId: string, messageId: string) {
+async function drain(queryClient: QueryClient, messageId: string) {
   reactionsInFlight.add(messageId);
 
   try {
     for (;;) {
-      const wanted = readPendingReaction(chatId, messageId);
+      const wanted = readPendingReaction(messageId);
 
       if (!wanted) return;
 
       const mine = await setMessageReaction(messageId, wanted.emoji);
 
-      confirm(queryClient, chatId, messageId, mine);
+      confirm(queryClient, messageId, mine);
 
       // Пока ехал запрос, человек передумал — отправляем новое желаемое.
-      if (readPendingReaction(chatId, messageId) !== wanted) continue;
+      if (readPendingReaction(messageId) !== wanted) continue;
 
-      clearPendingReaction(chatId, messageId, wanted);
+      clearPendingReaction(messageId, wanted);
       return;
     }
   } catch (cause) {
     // Откат — снятие наложения: облачко возвращается к тому, что знает база.
-    clearPendingReaction(chatId, messageId);
+    clearPendingReaction(messageId);
     showNotice(
       isNetworkError(cause)
         ? 'Не удалось поставить реакцию: нет связи'
@@ -83,18 +86,10 @@ async function drain(queryClient: QueryClient, chatId: string, messageId: string
 
 /**
  * Ставит, меняет или снимает мою реакцию на сообщение. На экране — сразу,
- * наложением; в базу — очередью (см. выше). Сообщение должно быть загружено:
- * реакцию ставят на то, что видно.
+ * наложением, везде, где сообщение показано; в базу — очередью (см. выше).
  */
-export function sendReaction(
-  queryClient: QueryClient,
-  chatId: string,
-  messageId: string,
-  intent: ReactionIntent,
-) {
-  if (!readHistory(queryClient, chatId)) return;
+export function sendReaction(queryClient: QueryClient, messageId: string, intent: ReactionIntent) {
+  setPendingReaction(messageId, intent);
 
-  setPendingReaction(chatId, messageId, intent);
-
-  if (!reactionsInFlight.has(messageId)) void drain(queryClient, chatId, messageId);
+  if (!reactionsInFlight.has(messageId)) void drain(queryClient, messageId);
 }

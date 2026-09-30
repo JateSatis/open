@@ -20,6 +20,7 @@ import {
   toSendMedia,
   uploadOutgoing,
 } from '@/features/chats/messages/delivery';
+import { bumpCommentsCount, updateAllHistories } from '@/features/chats/messages/historyCache';
 import type { Outgoing } from '@/features/chats/messages/types';
 import { reportRequestFailed } from '@/features/connection/connectionStore';
 import {
@@ -147,6 +148,9 @@ export async function deliverComment(
 
   delivering.add(localId);
   setOutboxCommentStatus(messageId, localId, 'sending');
+  // Кружок у облачка — сразу, во всех местах, где сообщение показано: в его
+  // чате и в островках других. Не дошло — число возвращается.
+  updateAllHistories(queryClient, (history) => bumpCommentsCount(history, messageId, 1));
 
   let uploaded: UploadedMedia[] = [];
   let saved: Comment | null = null;
@@ -176,6 +180,8 @@ export async function deliverComment(
     if (!saved && uploaded.length > 0) {
       void Promise.all(uploaded.map((item) => removeUploadedMedia(storedPaths(item))));
     }
+
+    if (!saved) updateAllHistories(queryClient, (history) => bumpCommentsCount(history, messageId, -1));
 
     if (discarded.has(localId)) return;
 

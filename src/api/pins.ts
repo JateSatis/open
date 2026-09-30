@@ -9,8 +9,19 @@ import { supabase } from '@/api/supabase';
 
 export type PinnedMessage = {
   messageId: string;
-  /** Время самого сообщения — по нему закрепы идут по порядку, как в переписке. */
+  /**
+   * Островок этого чата, где стоит закреплённое, — у сообщения из другого
+   * чата. `null` — сообщение живёт в этом чате.
+   */
+  forwardId: string | null;
+  /**
+   * Где сообщение стоит в переписке этого чата — его время или время
+   * островка. По нему закрепы идут по порядку, как в переписке, и по нему же
+   * к закрепу прыгают.
+   */
   messageCreatedAt: string;
+  /** Время самого сообщения — порядок внутри одного островка. */
+  originalCreatedAt: string;
   kind: MessageKind;
   text: string | null;
   /** Картинка для миниатюры: фото или постер видео из первого вложения. */
@@ -21,7 +32,7 @@ const pinsSelect = () =>
   supabase
     .from('message_pins')
     .select(
-      'message_id, message:messages(id, created_at, kind, text, attachments(url, poster_url, mime_type, position))',
+      'message_id, forward_id, message:messages!message_pins_message_fkey(id, created_at, kind, text, attachments(url, poster_url, mime_type, position)), forward:messages!message_pins_forward_fkey(created_at)',
     );
 
 type PinRow = QueryData<ReturnType<typeof pinsSelect>>[number];
@@ -43,7 +54,9 @@ function toPinned(row: PinRow): PinnedMessage | null {
 
   return {
     messageId: row.message_id,
-    messageCreatedAt: row.message.created_at,
+    forwardId: row.forward_id,
+    messageCreatedAt: row.forward?.created_at ?? row.message.created_at,
+    originalCreatedAt: row.message.created_at,
     kind: toMessageKind(row.message.kind),
     text: row.message.text,
     thumbnailUrl: thumbnailOf(row.message),
@@ -59,17 +72,33 @@ export async function listPinnedMessages(chatId: string): Promise<PinnedMessage[
   return (data ?? [])
     .map(toPinned)
     .filter((pin): pin is PinnedMessage => pin !== null)
-    .sort((a, b) => (a.messageCreatedAt < b.messageCreatedAt ? -1 : 1));
+    .sort(byPlaceInChat);
 }
 
-export async function pinMessage(messageId: string): Promise<void> {
-  const { error } = await supabase.rpc('pin_message', { target_message: messageId });
+/** Порядок закрепов — как в переписке: по месту в чате, внутри островка — по времени оригинала. */
+export function byPlaceInChat(a: PinnedMessage, b: PinnedMessage): number {
+  if (a.messageCreatedAt !== b.messageCreatedAt) return a.messageCreatedAt < b.messageCreatedAt ? -1 : 1;
+  if (a.originalCreatedAt === b.originalCreatedAt) return 0;
+
+  return a.originalCreatedAt < b.originalCreatedAt ? -1 : 1;
+}
+
+/** Закрепляет сообщение; `forwardId` — островок этого чата, где стоит сообщение из другого. */
+export async function pinMessage(messageId: string, forwardId: string | null = null): Promise<void> {
+  const { error } = await supabase.rpc('pin_message', {
+    target_message: messageId,
+    in_forward: forwardId ?? undefined,
+  });
 
   if (error) throw error;
 }
 
-export async function unpinMessage(messageId: string): Promise<void> {
-  const { error } = await supabase.rpc('unpin_message', { target_message: messageId });
+/** Открепляет сообщение в чате `chatId` — закреп сообщения из островка живёт в чате островка. */
+export async function unpinMessage(messageId: string, chatId: string): Promise<void> {
+  const { error } = await supabase.rpc('unpin_message', {
+    target_message: messageId,
+    target_chat: chatId,
+  });
 
   if (error) throw error;
 }

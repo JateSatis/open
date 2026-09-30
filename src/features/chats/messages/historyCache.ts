@@ -12,6 +12,11 @@ import type { QueryClient } from '@tanstack/react-query';
 
 import type { Message } from '@/api/chats';
 import type { MessageReactions } from '@/api/reactionCounts';
+import {
+  mapOriginals,
+  withFreshContent,
+  withoutItems,
+} from '@/features/chats/islands/islandCache';
 import { previewOf as previewOfMessage } from '@/features/chats/messageQuote';
 import type { ChatMessage } from '@/features/chats/messages/types';
 import { sameReactions } from '@/features/interactions/reactionState';
@@ -77,6 +82,11 @@ function markQuotesDeleted(message: ChatMessage, ids: ReadonlySet<string>): Chat
   };
 }
 
+/**
+ * Убирает удалённые сообщения. Удалённый оригинал в островке становится
+ * заглушкой — островок не рассыпается, — а цитата удалённого в ответе —
+ * «Сообщение удалено».
+ */
 export function removeMessages(history: ChatHistory, ids: ReadonlySet<string>): ChatHistory {
   let changed = false;
   const items: ChatMessage[] = [];
@@ -87,7 +97,9 @@ export function removeMessages(history: ChatHistory, ids: ReadonlySet<string>): 
       continue;
     }
 
-    const marked = markQuotesDeleted(message, ids);
+    const marked = mapOriginals(markQuotesDeleted(message, ids), (original) =>
+      ids.has(original.id) ? null : original,
+    );
 
     if (marked !== message) changed = true;
 
@@ -100,8 +112,8 @@ export function removeMessages(history: ChatHistory, ids: ReadonlySet<string>): 
 /**
  * Кладёт свежие версии сообщений на место загруженных — после правки. Новое
  * в историю не добавляется: сообщение из другого места переписки, которое
- * процитировано здесь, меняет только цитаты. Цитаты этих сообщений в
- * ответах показывают новую версию.
+ * процитировано здесь или стоит в островке, меняет только цитаты и облачко
+ * островка.
  *
  * Локальные превью у заменённого не переживают правку: вложения могли
  * смениться, а превью привязаны к позициям. Своё только что отправленное
@@ -124,27 +136,52 @@ export function replaceMessages(
       (quote) => quote.state === 'live' && byId.has(quote.messageId),
     );
 
-    if (!next && !quotes) return message;
-
-    changed = true;
-
-    const base: ChatMessage = next
+    let base: ChatMessage = next
       ? { ...message, ...next, status: 'sent', localPreviews: localPreviews.get(next.id) }
       : message;
 
-    if (!quotes) return base;
+    if (quotes) {
+      base = {
+        ...base,
+        replies: base.replies.map((quote) => {
+          const quoted = quote.state === 'live' ? byId.get(quote.messageId) : undefined;
 
-    return {
-      ...base,
-      replies: base.replies.map((quote) => {
-        const quoted = quote.state === 'live' ? byId.get(quote.messageId) : undefined;
+          return quoted && quote.state === 'live'
+            ? { ...quote, editedAt: quoted.editedAt, preview: previewOfMessage(quoted) }
+            : quote;
+        }),
+      };
+    }
 
-        return quoted && quote.state === 'live'
-          ? { ...quote, editedAt: quoted.editedAt, preview: previewOfMessage(quoted) }
-          : quote;
-      }),
-    };
+    base = mapOriginals(base, (original) => {
+      const version = byId.get(original.id);
+
+      return version ? withFreshContent(original, version) : original;
+    });
+
+    if (base !== message) changed = true;
+
+    return base;
   });
+
+  return changed ? { ...history, items } : history;
+}
+
+/** Переславший убрал облачка из островка — у нас их тоже больше нет. */
+export function removeIslandItems(
+  history: ChatHistory,
+  forwardId: string,
+  messageIds: ReadonlySet<string>,
+): ChatHistory {
+  let changed = false;
+  const items: ChatMessage[] = [];
+
+  for (const message of history.items) {
+    const next = message.id === forwardId ? withoutItems(message, messageIds) : message;
+
+    if (next !== message) changed = true;
+    if (next) items.push(next);
+  }
 
   return changed ? { ...history, items } : history;
 }
@@ -165,11 +202,19 @@ export function patchReactions(
 
   const items = history.items.map((message) => {
     const reactions = byId.get(message.id);
+    const own =
+      !reactions || sameReactions(message.reactions, reactions) ? message : { ...message, reactions };
+    const next = mapOriginals(own, (original) => {
+      const fresh = byId.get(original.id);
 
-    if (!reactions || sameReactions(message.reactions, reactions)) return message;
+      return !fresh || sameReactions(original.reactions, fresh)
+        ? original
+        : { ...original, reactions: fresh };
+    });
 
-    changed = true;
-    return { ...message, reactions };
+    if (next !== message) changed = true;
+
+    return next;
   });
 
   return changed ? { ...history, items } : history;
@@ -187,11 +232,48 @@ export function patchCommentCounts(
 
   const items = history.items.map((message) => {
     const count = byId.get(message.id);
+    const own =
+      count === undefined || count === message.commentsCount
+        ? message
+        : { ...message, commentsCount: count };
+    const next = mapOriginals(own, (original) => {
+      const fresh = byId.get(original.id);
 
-    if (count === undefined || count === message.commentsCount) return message;
+      return fresh === undefined || fresh === original.commentsCount
+        ? original
+        : { ...original, commentsCount: fresh };
+    });
 
-    changed = true;
-    return { ...message, commentsCount: count };
+    if (next !== message) changed = true;
+
+    return next;
+  });
+
+  return changed ? { ...history, items } : history;
+}
+
+/**
+ * Прибавляет к числу комментариев сообщения — везде, где оно показано: в
+ * своём чате и в островках. Свой комментарий виден в кружке сразу, до ответа
+ * сервера; точное число потом кладёт `patchCommentCounts`.
+ */
+export function bumpCommentsCount(history: ChatHistory, messageId: string, delta: number): ChatHistory {
+  let changed = false;
+
+  const items = history.items.map((message) => {
+    const own =
+      message.id === messageId
+        ? { ...message, commentsCount: Math.max(0, message.commentsCount + delta) }
+        : message;
+    const next = mapOriginals(own, (original) =>
+      original.id === messageId
+        ? { ...original, commentsCount: Math.max(0, original.commentsCount + delta) }
+        : original,
+    );
+
+    if (next !== message) changed = true;
+
+    return next;
   });
 
   return changed ? { ...history, items } : history;
@@ -203,6 +285,10 @@ export function knownEdits(history: ChatHistory | undefined): Map<string, string
 
   for (const message of history?.items ?? []) {
     known.set(message.id, message.editedAt);
+
+    for (const item of message.forward?.items ?? []) {
+      if (item.original) known.set(item.original.id, item.original.editedAt);
+    }
 
     for (const quote of message.replies) {
       if (quote.state === 'live' && !known.has(quote.messageId)) {
@@ -239,6 +325,23 @@ export function restoreMessages(history: ChatHistory, messages: ChatMessage[]): 
 
 export function readHistory(queryClient: QueryClient, chatId: string): ChatHistory | undefined {
   return queryClient.getQueryData<ChatHistory>(messagesQueryKey(chatId));
+}
+
+/** Все загруженные истории — у оригинала бывают копии в островках чужих чатов. */
+export function readAllHistories(queryClient: QueryClient): ChatHistory[] {
+  return queryClient
+    .getQueriesData<ChatHistory>({ queryKey: ['messages'] })
+    .flatMap(([, history]) => (history ? [history] : []));
+}
+
+/** Меняет все загруженные истории разом — оригинал везде, где он показан. */
+export function updateAllHistories(
+  queryClient: QueryClient,
+  update: (history: ChatHistory) => ChatHistory,
+) {
+  queryClient.setQueriesData<ChatHistory>({ queryKey: ['messages'] }, (history) =>
+    history ? update(history) : history,
+  );
 }
 
 /**

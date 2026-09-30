@@ -13,6 +13,7 @@ import {
 } from '@/features/connection/connectionStore';
 import { resetOutbox } from '@/features/chats/messages/outbox';
 import { removeUploadedMedia, uploadAllMedia } from '@/features/media';
+import { island, original } from '@/test/islands';
 
 // Только путь с медиа: остальное поведение (текст, повтор, догрузка после
 // обрыва связи) уже проверено через экран чата в
@@ -674,32 +675,7 @@ describe('useChatMessages replies and forwards', () => {
     },
   };
 
-  function source(id: string, minute: number, overrides: Record<string, unknown> = {}) {
-    return {
-      id,
-      chatId: 'chat-src',
-      authorId: 'user-2',
-      kind: 'text' as const,
-      text: `текст ${id}`,
-      createdAt: `2026-09-29T09:0${minute}:00Z`,
-      editedAt: null,
-      attachments: [],
-      replies: [],
-      forward: null,
-      reactions: { members: {}, visitors: {}, mine: null },
-      commentsCount: 0,
-      status: 'sent' as const,
-      ...overrides,
-    };
-  }
-
-  function originOf(id: string, minute: number) {
-    return {
-      authorId: 'user-2',
-      authorName: 'Марина',
-      original: { messageId: id, chatId: 'chat-src', createdAt: `2026-09-29T09:0${minute}:00Z` },
-    };
-  }
+  const SOURCE = { id: 'chat-src', name: 'Хейтеры Джигана' };
 
   it('shows a reply at once with its quote and sends the quoted ids', async () => {
     let answer: (value: Awaited<ReturnType<typeof sendMessage>>) => void = () => undefined;
@@ -741,7 +717,7 @@ describe('useChatMessages replies and forwards', () => {
     await waitFor(() => expect(result.current.messages[0].status).toBe('sent'));
   });
 
-  it('sends the typed text first and the forwarded messages after it, in chat order', async () => {
+  it('shows the island at once, after the typed text, and sends it as one call in screen order', async () => {
     const calls: string[] = [];
     let openServer: () => void = () => undefined;
     const server = new Promise<void>((resolve) => (openServer = resolve));
@@ -764,68 +740,67 @@ describe('useChatMessages replies and forwards', () => {
         commentsCount: 0,
       };
     });
-    mockedForward.mockImplementation(async (_chatId: string, ids: string[]) => {
-      calls.push(`forward:${ids.join(',')}`);
-      return ids.map((id, index) => ({
-        ...source(`copy-${id}`, 0),
-        chatId: 'chat-1',
+    mockedForward.mockImplementation(async (_chatId: string, sourceId: string, ids: string[]) => {
+      calls.push(`forward:${sourceId}:${ids.join(',')}`);
+      return island('isl-1', '2026-09-29T10:00:01Z', ids.map((id) => original({ id })), {
         authorId: 'user-1',
-        text: `текст ${id}`,
-        createdAt: `2026-09-29T10:00:0${index + 1}Z`,
-        editedAt: null,
-        forward: originOf(id, id === 'early' ? 1 : 5),
-      }));
+        sourceChat: SOURCE,
+      });
     });
 
     const { result } = await renderHook(() => useChatMessages('chat-1', 'user-1'), { wrapper });
 
     await waitFor(() => expect(result.current.isLoading).toBe(false));
 
-    // Отмечены вразнобой — уйти должны в порядке переписки.
+    // Порядок — как облачка стояли на экране исходного чата, а не по времени
+    // оригиналов: «late» стоял выше, хоть и написан позже.
     await act(() =>
-      result.current.forward('смотри', [
-        { message: source('late', 5), origin: originOf('late', 5) },
-        { message: source('early', 1), origin: originOf('early', 1) },
+      result.current.forward('смотри', SOURCE, [
+        { original: original({ id: 'late', createdAt: '2026-09-29T09:05:00Z' }) },
+        { original: original({ id: 'early', createdAt: '2026-09-29T09:01:00Z' }) },
       ]),
     );
 
-    // Сразу: подпись снизу, над ней копии со строкой «Переслано от».
+    // Сразу: подпись снизу, над ней островок — с заголовком и оригиналами.
     const shown = [...result.current.messages].reverse();
 
-    expect(shown.map((message) => message.text)).toEqual(['смотри', 'текст early', 'текст late']);
-    expect(shown[1].forward).toEqual(originOf('early', 1));
+    expect(shown.map((message) => message.kind)).toEqual(['text', 'forward']);
+    expect(shown[1].forward?.sourceChat).toEqual(SOURCE);
+    expect(shown[1].forward?.items.map((item) => item.messageId)).toEqual(['late', 'early']);
     expect(shown.every((message) => message.status === 'sending')).toBe(true);
 
     await act(async () => openServer());
 
     await waitFor(() => expect(result.current.messages.every((m) => m.status === 'sent')).toBe(true));
-    expect(calls).toEqual(['text:смотри', 'forward:early,late']);
+    expect(calls).toEqual(['text:смотри', 'forward:chat-src:late,early']);
+    expect(result.current.messages[0].id).toBe('isl-1');
   });
 
-  it('forwards without text when the field is empty, as one call', async () => {
+  it('forwards without text when the field is empty and retries the island as one call', async () => {
     mockedForward.mockRejectedValueOnce(new Error('сеть пропала'));
-    mockedForward.mockImplementation(async (_chatId: string, ids: string[]) =>
-      ids.map((id) => ({ ...source(`copy-${id}`, 0), chatId: 'chat-1', forward: originOf(id, 0) })),
+    mockedForward.mockImplementation(async (_chatId: string, _sourceId: string, ids: string[]) =>
+      island('isl-2', '2026-09-29T10:00:01Z', ids.map((id) => original({ id })), {
+        authorId: 'user-1',
+      }),
     );
 
     const { result } = await renderHook(() => useChatMessages('chat-1', 'user-1'), { wrapper });
 
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     await act(() =>
-      result.current.forward('  ', [
-        { message: source('a', 1), origin: originOf('a', 1) },
-        { message: source('b', 2), origin: originOf('b', 2) },
+      result.current.forward('  ', SOURCE, [
+        { original: original({ id: 'a' }) },
+        { original: original({ id: 'b' }) },
       ]),
     );
 
-    await waitFor(() => expect(result.current.messages.map((m) => m.status)).toEqual(['failed', 'failed']));
+    await waitFor(() => expect(result.current.messages.map((m) => m.status)).toEqual(['failed']));
     expect(mockedSendMessage).not.toHaveBeenCalled();
 
-    // Повтор одного — повтор всей пересылки, одним вызовом.
     await act(() => result.current.retry(result.current.messages[0].localId!));
 
-    await waitFor(() => expect(result.current.messages.map((m) => m.status)).toEqual(['sent', 'sent']));
+    await waitFor(() => expect(result.current.messages.map((m) => m.status)).toEqual(['sent']));
     expect(mockedForward).toHaveBeenCalledTimes(2);
-    expect(mockedForward).toHaveBeenLastCalledWith('chat-1', ['a', 'b']);
+    expect(mockedForward).toHaveBeenLastCalledWith('chat-1', 'chat-src', ['a', 'b']);
   });
 });

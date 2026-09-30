@@ -1,6 +1,6 @@
 import type {
   ChatActivity,
-  ForwardOrigin,
+  IslandOriginal,
   Message,
   MessageAttachment,
   QuotedMessage,
@@ -18,10 +18,10 @@ export type ChatMessage = Message & {
   /** Записанное голосовое до ответа сервера — для повтора неудачной отправки. */
   pendingVoice?: LocalMedia;
   /**
-   * Пересылаемое до ответа сервера: какое сообщение копируется и в какой
-   * пересылке. Сообщения одной пересылки уходят на сервер одним вызовом.
+   * Островок до ответа сервера: откуда пересылают и какие оригиналы, по
+   * порядку. Уходит на сервер одним вызовом — и повторяется им же.
    */
-  pendingForward?: { batch: string; sourceId: string };
+  pendingForward?: { sourceChatId: string; messageIds: string[] };
   /**
    * Локальные превью вложений своего только что отправленного сообщения, по
    * позициям. Переживают ответ сервера: плитка держит локальную картинку,
@@ -50,13 +50,16 @@ export type EditResult = {
 /** Цитата, на которую можно ответить: оригинал жив. */
 export type LiveQuote = Extract<QuotedMessage, { state: 'live' }>;
 
-/** Что пересылается: сообщение и его первоисточник. */
-export type ForwardItem = { message: ChatMessage; origin: ForwardOrigin };
+/**
+ * Что пересылается — оригинал целиком, с автором и чатом: островок в целевом
+ * чате появляется сразу, до ответа сервера, и рисует его как есть.
+ */
+export type ForwardItem = { original: IslandOriginal };
 
 /** Что уходит на сервер одной отправкой: текст с альбомом, голосовое или пересылка. */
 export type Outgoing =
   | { type: 'post'; text: string; media: MediaLibraryItem[]; replyTo: string[] }
   | { type: 'voice'; voice: LocalMedia; replyTo: string[] }
-  | { type: 'forward'; batch: string; items: { localId: string; sourceId: string }[] };
+  | { type: 'forward'; sourceChatId: string; messageIds: string[] };
 
 export type UserActivity = { userId: string; activity: ChatActivity };

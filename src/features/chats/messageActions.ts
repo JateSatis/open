@@ -5,17 +5,24 @@
 // Видимость пункта — вежливость интерфейса. Права всегда проверяет сервер:
 // скрытая кнопка лишь не предлагает того, что он всё равно отвергнет.
 
+import { contentOf, type BubbleRow } from '@/features/chats/islands/rows';
 import { MAX_FORWARD, MAX_QUOTES } from '@/features/chats/messageQuote';
 import type { ChatMessage } from '@/features/chats/messages/types';
 
 /** Всё, от чего зависит, какие пункты показать у конкретного сообщения. */
 export type MessageActionContext = {
+  /** Сообщение облачка — у облачка островка это оригинал. */
   message: ChatMessage;
   /** Сообщение моё. */
   isOwn: boolean;
   /** Я участник чата, а не посетитель. */
   isMember: boolean;
   isPinned: boolean;
+  /**
+   * Облачко стоит в островке: действия — над оригиналом, правки нет, а
+   * «удалить» — убрать из островка, и только переславшему.
+   */
+  island?: { isMine: boolean } | null;
 };
 
 export type MessageActionId =
@@ -26,8 +33,10 @@ export type MessageActionId =
   | 'pin'
   | 'unpin'
   | 'forward'
+  | 'open_original'
   | 'select'
-  | 'delete';
+  | 'delete'
+  | 'remove_from_island';
 
 export type MessageAction = {
   id: MessageActionId;
@@ -44,34 +53,34 @@ export function isLocalMessage(message: ChatMessage): boolean {
 
 /**
  * Правится только подтверждённое сервером и не сохраняющее другую правку.
- * Пересланное — копия чужих слов, системное — не слова человека: их база
- * править и не даст.
+ * Системное — не слова человека, островок — не сообщение: их база править и
+ * не даст.
  */
 export function isEditable(message: ChatMessage): boolean {
   return (
     !isLocalMessage(message) &&
     !message.editStatus &&
-    message.forward === null &&
     (message.kind === 'text' || message.kind === 'media' || message.kind === 'voice')
   );
 }
 
 /**
  * На сообщение можно поставить реакцию — и участнику, и посетителю. Не на
- * неподтверждённое сервером (его там ещё нет) и не на системное: это не
- * слова человека. Своё отправленное — можно, как в Telegram.
+ * неподтверждённое сервером (его там ещё нет), не на системное (это не слова
+ * человека) и не на островок: реакции — у оригиналов внутри. Своё
+ * отправленное — можно, как в Telegram.
  */
 export function canReactTo(message: ChatMessage): boolean {
-  return !isLocalMessage(message) && message.kind !== 'system';
+  return !isLocalMessage(message) && message.kind !== 'system' && message.kind !== 'forward';
 }
 
 /**
  * У сообщения есть комментарии — у каждого отправленного, во всех чатах,
- * всегда. Кроме системного (это не слова человека) и неподтверждённого
- * сервером (его там ещё нет): база такие комментарии и не примет.
+ * всегда. Кроме системного, островка (комментируют оригиналы внутри) и
+ * неподтверждённого сервером: база такие комментарии и не примет.
  */
 export function canCommentOn(message: ChatMessage): boolean {
-  return !isLocalMessage(message) && message.kind !== 'system';
+  return !isLocalMessage(message) && message.kind !== 'system' && message.kind !== 'forward';
 }
 
 export function hasCopyableText(message: ChatMessage): boolean {
@@ -99,7 +108,9 @@ export const MESSAGE_ACTIONS: readonly MessageAction[] = [
   {
     id: 'edit',
     label: 'Изменить',
-    isVisible: ({ message, isOwn, isMember }) => isMember && isOwn && isEditable(message),
+    // Оригинал правят там, где он живёт, — в островке его только показывают.
+    isVisible: ({ message, isOwn, isMember, island }) =>
+      !island && isMember && isOwn && isEditable(message),
   },
   {
     id: 'pin',
@@ -121,6 +132,11 @@ export const MESSAGE_ACTIONS: readonly MessageAction[] = [
     isVisible: ({ message }) => !isLocalMessage(message),
   },
   {
+    id: 'open_original',
+    label: 'Перейти к оригиналу',
+    isVisible: ({ island }) => Boolean(island),
+  },
+  {
     id: 'select',
     label: 'Выбрать',
     isVisible: ({ message }) => !isLocalMessage(message),
@@ -131,8 +147,15 @@ export const MESSAGE_ACTIONS: readonly MessageAction[] = [
     destructive: true,
     // Своё неотправленное удаляется только у себя — на сервере его нет. Своё
     // отправленное — для всех, и тогда нужно ещё быть автором (это проверит
-    // и база).
-    isVisible: ({ isOwn }) => isOwn,
+    // и база). Оригинал из островка отсюда не удаляется никогда — только в
+    // своём чате его автором.
+    isVisible: ({ isOwn, island }) => !island && isOwn,
+  },
+  {
+    id: 'remove_from_island',
+    label: 'Убрать из пересылки',
+    destructive: true,
+    isVisible: ({ island }) => Boolean(island?.isMine),
   },
 ];
 
@@ -140,9 +163,37 @@ export function visibleMessageActions(context: MessageActionContext): MessageAct
   return MESSAGE_ACTIONS.filter((action) => action.isVisible(context));
 }
 
+/** Пункты облачка-заглушки: оригинал удалён, остаётся только убрать его из своего островка. */
+export function deletedOriginalActions(isMine: boolean): MessageAction[] {
+  if (!isMine) return [];
+
+  return MESSAGE_ACTIONS.filter(
+    (action) => action.id === 'select' || action.id === 'remove_from_island',
+  );
+}
+
+export type IslandActionId = 'retry' | 'select_all' | 'delete_island';
+
+export type IslandAction = { id: IslandActionId; label: string; destructive?: boolean };
+
+/**
+ * Пункты островка целиком — по долгому нажатию на плашку. Реакций и
+ * комментариев здесь нет: островок не сообщение.
+ */
+export function islandActions(island: ChatMessage, isMine: boolean): IslandAction[] {
+  const actions: IslandAction[] = [];
+
+  if (island.status === 'failed') actions.push({ id: 'retry', label: 'Повторить' });
+  if (!isLocalMessage(island)) actions.push({ id: 'select_all', label: 'Выбрать все' });
+  if (isMine) actions.push({ id: 'delete_island', label: 'Удалить пересылку', destructive: true });
+
+  return actions;
+}
+
 /** Что известно о выбранных сообщениях, чтобы решить, какие кнопки панели доступны. */
 export type SelectionActionContext = {
-  selected: ChatMessage[];
+  /** Выбранные облачка — в порядке переписки. */
+  selected: BubbleRow[];
   currentUserId: string | null;
   isMember: boolean;
 };
@@ -156,6 +207,18 @@ export type SelectionAction = {
   isEnabled: (context: SelectionActionContext) => boolean;
 };
 
+/** У всех выбранных есть сообщение: заглушку удалённого не процитировать и не переслать. */
+function allHaveContent(selected: BubbleRow[]): boolean {
+  return selected.every((row) => contentOf(row) !== null);
+}
+
+/** Удалить у всех можно своё сообщение и облачко своего островка — из островка. */
+function isRemovableBy(row: BubbleRow, currentUserId: string): boolean {
+  return row.type === 'message'
+    ? row.message.authorId === currentUserId
+    : row.island.authorId === currentUserId && !isLocalMessage(row.island);
+}
+
 /** Кнопки панели внизу в режиме выбора — слева направо. */
 export const SELECTION_ACTIONS: readonly SelectionAction[] = [
   {
@@ -163,17 +226,23 @@ export const SELECTION_ACTIONS: readonly SelectionAction[] = [
     label: 'Ответить',
     // У посетителя кнопка есть, но неактивна — как «Удалить» у чужих.
     isEnabled: ({ selected, isMember }) =>
-      isMember && selected.length > 0 && selected.length <= MAX_QUOTES,
+      isMember && selected.length > 0 && selected.length <= MAX_QUOTES && allHaveContent(selected),
   },
   {
     id: 'forward',
     label: 'Переслать',
-    isEnabled: ({ selected }) => selected.length > 0 && selected.length <= MAX_FORWARD,
+    isEnabled: ({ selected }) =>
+      selected.length > 0 && selected.length <= MAX_FORWARD && allHaveContent(selected),
   },
   {
     id: 'copy',
     label: 'Копировать',
-    isEnabled: ({ selected }) => selected.some(hasCopyableText),
+    isEnabled: ({ selected }) =>
+      selected.some((row) => {
+        const content = contentOf(row);
+
+        return content !== null && hasCopyableText(content);
+      }),
   },
   {
     id: 'delete',
@@ -183,6 +252,6 @@ export const SELECTION_ACTIONS: readonly SelectionAction[] = [
     isEnabled: ({ selected, currentUserId }) =>
       selected.length > 0 &&
       currentUserId !== null &&
-      selected.every((message) => message.authorId === currentUserId),
+      selected.every((row) => isRemovableBy(row, currentUserId)),
   },
 ];

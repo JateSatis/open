@@ -44,12 +44,21 @@ export type MessageRowProps = {
   editing?: boolean;
   /** Меняется при каждом прыжке к сообщению — подсветка вспыхивает заново. */
   highlightKey: number | null;
-  /** Над строкой может быть открыто меню: её копия поднята над затемнением, а сама строка прячется. */
+  /**
+   * Ключ строки: id сообщения, у облачка островка — ключ облачка. Над строкой
+   * может быть открыто меню: её копия поднята над затемнением, а сама строка
+   * прячется.
+   */
   messageId: string;
   onLongPress: (anchor: AnchorRect) => void;
   onToggle: () => void;
   /** Свайп влево — ответить. Без обработчика (посетитель, неотправленное) жеста нет. */
   onSwipeReply?: () => void;
+  /**
+   * Слой за облачком, который не уезжает со свайпом и не прячется под
+   * меню, — кусок рамки островка: облачко отъезжает, рамка стоит на месте.
+   */
+  frame?: ReactNode;
 };
 
 /**
@@ -71,6 +80,7 @@ export function MessageRow({
   onLongPress,
   onToggle,
   onSwipeReply,
+  frame,
 }: MessageRowProps) {
   const theme = useTheme();
   const highlight = useSharedValue(0);
@@ -182,20 +192,24 @@ export function MessageRow({
               </View>
             ) : null}
 
-            {/* В режиме выбора облачко не живёт своей жизнью: тап не открывает
-                просмотрщик, не запускает голосовое и не ведёт в профиль. */}
-            <Animated.View
-              pointerEvents={selectionMode ? 'none' : 'auto'}
-              style={[styles.content, lifted && styles.lifted, swipe.contentStyle]}
-              onLayout={({ nativeEvent }) =>
-                rowSizes.set(messageId, {
-                  width: nativeEvent.layout.width,
-                  height: nativeEvent.layout.height,
-                })
-              }
-            >
-              {children}
-            </Animated.View>
+            <View style={styles.content}>
+              {frame}
+
+              {/* В режиме выбора облачко не живёт своей жизнью: тап не открывает
+                  просмотрщик, не запускает голосовое и не ведёт в профиль. */}
+              <Animated.View
+                pointerEvents={selectionMode ? 'none' : 'auto'}
+                style={[lifted && styles.lifted, swipe.contentStyle]}
+                onLayout={({ nativeEvent }) =>
+                  rowSizes.set(messageId, {
+                    width: nativeEvent.layout.width,
+                    height: nativeEvent.layout.height,
+                  })
+                }
+              >
+                {children}
+              </Animated.View>
+            </View>
           </Pressable>
         </View>
       </GestureDetector>

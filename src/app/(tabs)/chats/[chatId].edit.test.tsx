@@ -31,6 +31,7 @@ import { resetOutbox } from '@/features/chats/messages/outbox';
 import { resetPendingEdits } from '@/features/chats/messages/pendingEdits';
 import { reportRealtimeJoined, resetConnectionState } from '@/features/connection/connectionStore';
 import { useInAppAlert } from '@/features/notifications/alertsStore';
+import { island, original } from '@/test/islands';
 import { renderWithQuery } from '@/test/renderWithQuery';
 
 jest.mock('@/api/reactions', () => ({
@@ -54,6 +55,9 @@ jest.mock('@/features/auth/useSession', () => ({ useSession: jest.fn() }));
 jest.mock('@/api/streams');
 
 jest.mock('@/api/chats', () => ({
+  // Островок из другого чата слушает топик того чата — здесь без сети.
+  subscribeToChatSignals: jest.fn(() => () => undefined),
+  getChatReadUpTo: jest.fn(() => Promise.resolve(null)),
   getChat: jest.fn(),
   listMessages: jest.fn(),
   listMessagesSince: jest.fn(() => Promise.resolve([])),
@@ -297,21 +301,21 @@ describe('who can edit', () => {
     expect(screen.queryByRole('menuitem', { name: 'Изменить' })).toBeNull();
   });
 
-  it('never offers it on a forwarded message', async () => {
+  it('never offers it on an original shown in a forward island — even my own', async () => {
+    // Своё сообщение, пересланное сюда из другого чата: правят его там, где оно живёт.
     mockedListMessages.mockResolvedValue({
       items: [
-        {
-          ...message('f1', 'чужие слова', 'user-1', 3),
-          forward: { authorId: 'user-2', authorName: 'Марина', original: null },
-        },
+        island('f1', '2026-09-16T10:03:00Z', [
+          original({ id: 'o1', text: 'мои слова', authorId: 'user-1', authorName: 'Я' }),
+        ]),
       ],
       nextCursor: null,
     });
 
     await renderWithQuery(<ChatScreen />);
-    await screen.findByText('чужие слова');
+    await screen.findByText('мои слова');
 
-    await longPress('f1');
+    await longPress('f1/o1');
     await screen.findByTestId('message-menu');
     expect(screen.queryByRole('menuitem', { name: 'Изменить' })).toBeNull();
   });

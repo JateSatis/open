@@ -1,7 +1,12 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 
-import { deleteMessages as deleteOnServer } from '@/api/chats';
+import {
+  deleteMessages as deleteOnServer,
+  removeForwardItems,
+  type ChatRef,
+} from '@/api/chats';
+import { mapOriginals } from '@/features/chats/islands/islandCache';
 import {
   deliver,
   discardLocal,
@@ -11,7 +16,9 @@ import {
   sendVoice as sendVoiceMessage,
 } from '@/features/chats/messages/delivery';
 import {
+  messagesQueryKey,
   readHistory,
+  removeIslandItems,
   removeMessages,
   restoreMessages,
   updateHistory,
@@ -31,7 +38,7 @@ import { useChatHistory } from '@/features/chats/messages/useChatHistory';
 import { chatsQueryKey } from '@/features/chats/useChats';
 import { pinsQueryKey } from '@/features/chats/usePinnedMessages';
 import { useConnectionStatus } from '@/features/connection/useConnectionStatus';
-import { usePendingReactionsOf } from '@/features/interactions/pendingReactions';
+import { usePendingReactionMap } from '@/features/interactions/pendingReactions';
 import { withMyReaction } from '@/features/interactions/reactionState';
 import type { LocalMedia, MediaLibraryItem } from '@/features/media';
 
@@ -61,8 +68,8 @@ export type ChatMessagesState = {
   /** Текст с альбомом; с цитатами — это ответ. */
   send: (text: string, media?: MediaLibraryItem[], replies?: LiveQuote[]) => void;
   sendVoice: (voice: LocalMedia, replies?: LiveQuote[]) => void;
-  /** Пересылка сюда; текст из поля уходит перед пересланными. */
-  forward: (text: string, items: ForwardItem[]) => void;
+  /** Пересылка сюда из `sourceChat`; текст из поля уходит перед островком. */
+  forward: (text: string, sourceChat: ChatRef, items: ForwardItem[]) => void;
   retry: (localId: string) => void;
   /** Своё неотправленное или упавшее — убрать. На сервер ничего не уходит. */
   discard: (localId: string) => void;
@@ -73,6 +80,12 @@ export type ChatMessagesState = {
    * отказал, возвращаются на место, а ошибка пробрасывается вызвавшему.
    */
   deleteMessages: (messageIds: string[]) => Promise<void>;
+  /**
+   * Убирает облачка из своего островка — у всех. Оригиналы не трогаются. С
+   * экрана уходят сразу; отказ сервера возвращает островок, каким его знает
+   * база, и пробрасывается вызвавшему.
+   */
+  removeFromIsland: (forwardId: string, messageIds: string[]) => Promise<void>;
   notifyTyping: () => void;
   notifyRecordingVoice: () => void;
 };
@@ -90,15 +103,16 @@ export function useChatMessages(chatId: string, currentUserId: string | null): C
   const history = useChatHistory(chatId);
   const outbox = useOutboxMessages(chatId);
   const pendingEdits = usePendingEditsOf(chatId);
-  const pendingReactions = usePendingReactionsOf(chatId);
+  const pendingReactions = usePendingReactionMap();
   const { activities, notifyTyping, notifyRecordingVoice } = useChatChannel(chatId, currentUserId);
   const wasOfflineRef = useRef(false);
 
   // Подтверждённое сервером может на кадр оказаться и в исходящих, и в
   // истории — показывается одно, по id.
   // Сохраняющаяся правка накладывается поверх подтверждённой версии, а моя
-  // неподтверждённая реакция — поверх подтверждённых счётчиков. Реакции у
-  // правки — из истории: пока правка едет, счётчики живут своей жизнью.
+  // неподтверждённая реакция — поверх подтверждённых счётчиков, и у
+  // оригиналов в островках тоже. Реакции у правки — из истории: пока правка
+  // едет, счётчики живут своей жизнью.
   const edited = useMemo(() => {
     if (Object.keys(pendingEdits).length === 0 && Object.keys(pendingReactions).length === 0) {
       return history.items;
@@ -110,8 +124,15 @@ export function useChatMessages(chatId: string, currentUserId: string | null): C
       const base = pendingEdit
         ? { ...pendingEdit, reactions: message.reactions, commentsCount: message.commentsCount }
         : message;
+      const own = intent ? { ...base, reactions: withMyReaction(base.reactions, intent) } : base;
 
-      return intent ? { ...base, reactions: withMyReaction(base.reactions, intent) } : base;
+      return mapOriginals(own, (original) => {
+        const wanted = pendingReactions[original.id];
+
+        return wanted
+          ? { ...original, reactions: withMyReaction(original.reactions, wanted) }
+          : original;
+      });
     });
   }, [history.items, pendingEdits, pendingReactions]);
 
@@ -163,7 +184,8 @@ export function useChatMessages(chatId: string, currentUserId: string | null): C
   );
 
   const forward = useCallback(
-    (text: string, items: ForwardItem[]) => sendForward(context, text, items),
+    (text: string, sourceChat: ChatRef, items: ForwardItem[]) =>
+      sendForward(context, text, sourceChat, items),
     [context],
   );
 
@@ -207,6 +229,26 @@ export function useChatMessages(chatId: string, currentUserId: string | null): C
     [chatId, queryClient],
   );
 
+  const removeFromIsland = useCallback(
+    async (forwardId: string, messageIds: string[]) => {
+      updateHistory(queryClient, chatId, (current) =>
+        removeIslandItems(current, forwardId, new Set(messageIds)),
+      );
+
+      try {
+        await removeForwardItems(forwardId, messageIds);
+      } catch (cause) {
+        // Откат — перечитать: островок таков, каким его знает база.
+        void queryClient.invalidateQueries({ queryKey: messagesQueryKey(chatId) });
+        throw cause;
+      }
+
+      void queryClient.invalidateQueries({ queryKey: chatsQueryKey });
+      void queryClient.invalidateQueries({ queryKey: pinsQueryKey(chatId) });
+    },
+    [chatId, queryClient],
+  );
+
   const { loadMore: loadMoreHistory } = history;
   const loadMore = useCallback(() => void loadMoreHistory(), [loadMoreHistory]);
 
@@ -226,6 +268,7 @@ export function useChatMessages(chatId: string, currentUserId: string | null): C
     discard,
     saveEdit,
     deleteMessages,
+    removeFromIsland,
     notifyTyping,
     notifyRecordingVoice,
   };

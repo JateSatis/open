@@ -23,6 +23,7 @@ import { resetOutbox } from '@/features/chats/messages/outbox';
 import { reportRealtimeJoined, resetConnectionState } from '@/features/connection/connectionStore';
 import { resetCommentOutbox } from '@/features/interactions/comments/commentOutbox';
 import { closeComments } from '@/features/interactions/comments/commentsPanelStore';
+import { island, original } from '@/test/islands';
 import { renderWithQuery } from '@/test/renderWithQuery';
 
 jest.mock('expo-router', () => ({
@@ -178,10 +179,15 @@ const voice = {
 
 const MESSAGES = [
   message('m5', 5, { kind: 'system', text: 'служебное', authorId: null }),
-  message('m4', 4, {
-    commentsCount: 1,
-    forward: { authorId: 'user-2', authorName: 'Олег', original: null },
-  }),
+  // Островок: кружок комментариев — у оригинала внутри, не у самого островка.
+  island('m4', '2026-09-30T10:04:00Z', [
+    original({
+      id: 'o4',
+      chatId: 'chat-1',
+      commentsCount: 1,
+      chat: { id: 'chat-1', name: 'Разговор', readUpTo: null, amMember: true },
+    }),
+  ]),
   message('m3', 3, { kind: 'voice', text: null, attachments: [voice], commentsCount: 5 }),
   message('m2', 2, { kind: 'media', text: null, attachments: [photo], commentsCount: 2 }),
   message('m1', 1),
@@ -263,10 +269,11 @@ function commentField() {
 }
 
 describe('comments button next to the bubble', () => {
-  it('sits next to text, a bare album, a voice note and a forwarded message — not a system one', async () => {
+  it('sits next to text, a bare album, a voice note and a forwarded original — not a system one', async () => {
     await renderChat();
 
-    // m4 переслано, m3 голосовое, m2 альбом без подписи, m1 текст; m5 — системное.
+    // m4 — островок с одним оригиналом, m3 голосовое, m2 альбом без подписи,
+    // m1 текст; m5 — системное.
     expect(buttons()).toHaveLength(4);
     expect(within(buttons()[0]).getByText('1')).toBeTruthy();
     expect(within(buttons()[1]).getByText('5')).toBeTruthy();

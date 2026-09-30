@@ -1,19 +1,23 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import type { FlatList } from 'react-native';
 
-import type { ChatMessage } from '@/features/chats/messages/types';
+import type { ChatListRow } from '@/features/chats/islands/rows';
 
-/** Сообщение, которое сейчас подсвечено; `key` меняется при каждом прыжке. */
+/**
+ * Строка, которая сейчас подсвечена: сообщение или облачко островка. `key`
+ * меняется при каждом прыжке.
+ */
 export type JumpHighlight = { messageId: string; key: number };
 
 type ScrollFailure = { index: number; averageItemLength: number };
 
 export type JumpToMessage = {
   /**
-   * Прокручивает к сообщению и подсвечивает его. Если оно ещё не загружено,
-   * сначала догружает историю до него — по страницам. Отвечает, нашлось ли.
+   * Прокручивает к строке и подсвечивает её. Если она ещё не загружена,
+   * сначала догружает историю до `createdAt` — времени сообщения или
+   * островка, где оно стоит, — по страницам. Отвечает, нашлось ли.
    */
-  jump: (messageId: string, createdAt: string) => Promise<boolean>;
+  jump: (rowKey: string, createdAt: string) => Promise<boolean>;
   highlight: JumpHighlight | null;
   /** Для `onScrollToIndexFailed` списка: строки разной высоты, и до далёкой списку не долистать с первого раза. */
   onScrollToIndexFailed: (info: ScrollFailure) => void;
@@ -28,8 +32,8 @@ const RETRY_SCROLL_MS = 120;
  * столько страниц назад, сколько нужно до цели.
  */
 export function useJumpToMessage(
-  listRef: RefObject<FlatList<ChatMessage> | null>,
-  messages: ChatMessage[],
+  listRef: RefObject<FlatList<ChatListRow> | null>,
+  rows: ChatListRow[],
   loadUntil: (createdAt: string) => Promise<boolean>,
 ): JumpToMessage {
   const [highlight, setHighlight] = useState<JumpHighlight | null>(null);
@@ -45,13 +49,13 @@ export function useJumpToMessage(
 
     if (!target) return;
 
-    const index = messages.findIndex((message) => message.id === target);
+    const index = rows.findIndex((row) => row.key === target);
 
     if (index === -1) return;
 
     targetRef.current = null;
     listRef.current?.scrollToIndex({ index, viewPosition: 0.5, animated: true });
-  }, [highlight, listRef, messages]);
+  }, [highlight, listRef, rows]);
 
   useEffect(
     () => () => {
@@ -61,13 +65,13 @@ export function useJumpToMessage(
   );
 
   const jump = useCallback(
-    async (messageId: string, createdAt: string) => {
+    async (rowKey: string, createdAt: string) => {
       const found = await loadUntil(createdAt);
 
       if (!found) return false;
 
-      targetRef.current = messageId;
-      setHighlight({ messageId, key: Date.now() });
+      targetRef.current = rowKey;
+      setHighlight({ messageId: rowKey, key: Date.now() });
 
       return true;
     },

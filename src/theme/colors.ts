@@ -55,6 +55,10 @@ export const Colors = {
     /** Приглушённый текст на тёмном экране звонка. */
     textOnCallSecondary: 'rgba(255, 255, 255, 0.7)',
     reactionVisitorMineOnPrimary: 'rgba(255, 255, 255, 0.24)',
+    /** Пунктир вокруг островка пересылки — акцентный, но тише облачков внутри. */
+    islandBorder: 'rgba(60, 135, 247, 0.6)',
+    /** Плашка с чатом, откуда переслали. */
+    islandPlate: 'rgba(60, 135, 247, 0.12)',
   },
   dark: {
     text: '#ffffff',
@@ -89,6 +93,8 @@ export const Colors = {
     callControl: 'rgba(255, 255, 255, 0.14)',
     callControlActive: '#ffffff',
     textOnCallSecondary: 'rgba(255, 255, 255, 0.7)',
+    islandBorder: 'rgba(60, 135, 247, 0.7)',
+    islandPlate: 'rgba(60, 135, 247, 0.22)',
   },
 } as const;
 

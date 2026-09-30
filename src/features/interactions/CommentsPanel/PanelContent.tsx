@@ -30,6 +30,7 @@ import { Spacing } from '@/theme';
 const BUBBLE_LEADING_INSET = Spacing.five + Spacing.two;
 const MEMBER_BADGE = 'участник чата';
 const noop = () => undefined;
+const commentKey = (comment: CommentItem) => comment.id;
 
 export type PanelContentProps = {
   target: CommentsPanelTarget;
@@ -58,7 +59,7 @@ export function PanelContent({
   const draft = useComposerDraft(commentThreadKey(messageId));
   const inputRef = useRef<TextInput>(null);
   const listRef = useRef<FlatList<CommentItem>>(null);
-  const menu = useMessageMenu();
+  const menu = useMessageMenu<CommentItem>(commentKey);
 
   const { saveEdit: saveCommentEdit } = thread;
   // Правка — общая с сообщениями: поле знает только `ChatMessage`, а в ветке
@@ -142,7 +143,7 @@ export function PanelContent({
 
   const count = live?.message.commentsCount ?? 0;
   const closed = about?.state === 'deleted' || about?.state === 'missing';
-  const menuComment = (menu.target?.message ?? null) as CommentItem | null;
+  const menuComment = menu.target?.item ?? null;
   const menuActions = menuComment
     ? visibleCommentActions({
         comment: menuComment,

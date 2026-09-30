@@ -8,6 +8,7 @@ import {
   pullNewMessages,
   refreshCommentCounts,
   refreshEditedMessages,
+  refreshIsland,
   refreshReactions,
 } from '@/features/chats/messages/sync';
 import type { UserActivity } from '@/features/chats/messages/types';
@@ -95,7 +96,7 @@ export function useChatChannel(chatId: string, currentUserId: string | null): Ch
     // Не вышло перечитать — дочитаем при следующем событии или переподключении.
     const collect = (
       batch: Batch,
-      refresh: (client: typeof queryClient, chat: string, ids: string[]) => Promise<void>,
+      refresh: (client: typeof queryClient, ids: string[]) => Promise<void>,
       messageId: string,
     ) => {
       batch.ids.add(messageId);
@@ -107,7 +108,7 @@ export function useChatChannel(chatId: string, currentUserId: string | null): Ch
 
         batch.ids.clear();
         batch.timer = null;
-        refresh(queryClient, chatId, ids).catch(() => undefined);
+        refresh(queryClient, ids).catch(() => undefined);
       }, REACTIONS_BATCH_MS);
     };
 
@@ -127,10 +128,10 @@ export function useChatChannel(chatId: string, currentUserId: string | null): Ch
       },
       onMessagesDeleted: (messageIds) => {
         // Не вышло сверить — сверим при следующем событии или переподключении.
-        dropDeletedMessages(queryClient, chatId, messageIds).catch(() => undefined);
+        dropDeletedMessages(queryClient, messageIds).catch(() => undefined);
       },
       onMessageEdited: (messageId) => {
-        refreshEditedMessages(queryClient, chatId, [messageId]).catch(() => undefined);
+        refreshEditedMessages(queryClient, [messageId]).catch(() => undefined);
         // Правленое могло быть закреплено — полоса показывает его текст.
         void queryClient.invalidateQueries({ queryKey: pinsQueryKey(chatId) });
       },
@@ -139,6 +140,11 @@ export function useChatChannel(chatId: string, currentUserId: string | null): Ch
         void queryClient.invalidateQueries({ queryKey: liveStreamQueryKey(chatId) });
       },
       onPinsChanged: () => {
+        void queryClient.invalidateQueries({ queryKey: pinsQueryKey(chatId) });
+      },
+      onForwardChanged: (forwardId) => {
+        refreshIsland(queryClient, chatId, forwardId).catch(() => undefined);
+        // Закреп убранного облачка база уже сняла.
         void queryClient.invalidateQueries({ queryKey: pinsQueryKey(chatId) });
       },
       onReactionsChanged: (messageId) => collect(reactionBatch, refreshReactions, messageId),

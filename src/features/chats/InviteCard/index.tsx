@@ -28,6 +28,7 @@ function previewText(message: Message): string {
   if (message.kind === 'video') return 'Видео';
   if (message.kind === 'media') return 'Медиа';
   if (message.kind === 'voice') return 'Голосовое';
+  if (message.kind === 'forward') return 'Пересланные сообщения';
 
   return 'Вложение';
 }

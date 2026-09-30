@@ -15,15 +15,26 @@ import Animated from 'react-native-reanimated';
 import { Text } from '@/components/Text';
 import { ChatFooter, modePlate } from '@/features/chats/ChatFooter';
 import { ChatScreenHeader } from '@/features/chats/ChatScreenHeader';
+import type { IslandOriginal } from '@/api/chats';
+import { DeletedOriginal } from '@/features/chats/DeletedOriginal';
+import {
+  contentOf,
+  islandItemKey,
+  toChatRows,
+  type BubbleRow,
+  type ChatListRow,
+} from '@/features/chats/islands/rows';
+import { useIslandSources } from '@/features/chats/islands/useIslandSources';
 import { MediaPickerSheet } from '@/features/chats/MediaPickerSheet';
-import { MessageBubble } from '@/features/chats/MessageBubble';
 import { MessageContextMenu } from '@/features/chats/MessageContextMenu';
-import { MessageRow } from '@/features/chats/MessageRow';
 import { PinnedBar } from '@/features/chats/PinnedBar';
 import {
   canReactTo,
-  isLocalMessage,
+  deletedOriginalActions,
+  islandActions,
   visibleMessageActions,
+  type IslandActionId,
+  type MessageActionId,
 } from '@/features/chats/messageActions';
 import { DELETED_ACCOUNT } from '@/features/chats/messageQuote';
 import {
@@ -34,10 +45,12 @@ import {
   readUpTo as readUpToOf,
 } from '@/features/chats/chatDisplay';
 import { mosaicBounds } from '@/features/chats/lib/mosaicLayout';
+import { useChatBubbles } from '@/features/chats/useChatBubbles';
 import { useChatKeyboardInset } from '@/features/chats/useChatKeyboardInset';
+import { useChatRowRenderer } from '@/features/chats/useChatRowRenderer';
 import { useComposerDraft } from '@/features/chats/useComposerDraft';
 import { useChat } from '@/features/chats/useChat';
-import { useChatMessages, type ChatMessage } from '@/features/chats/useChatMessages';
+import { useChatMessages } from '@/features/chats/useChatMessages';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
 import { useJumpToMessage } from '@/features/chats/useJumpToMessage';
 import { useMarkChatRead } from '@/features/chats/useMarkChatRead';
@@ -52,9 +65,8 @@ import { usePinnedMessages } from '@/features/chats/usePinnedMessages';
 import { useQuoteNavigation } from '@/features/chats/useQuoteNavigation';
 import { useReplyForward } from '@/features/chats/useReplyForward';
 import { useRespondToInvite } from '@/features/chats/useRespondToInvite';
-import { SystemMessage } from '@/features/chats/SystemMessage';
 import { WaitingBanner } from '@/features/chats/WaitingBanner';
-import { CommentsPanel, commentsEntry } from '@/features/interactions/CommentsPanel';
+import { CommentsPanel } from '@/features/interactions/CommentsPanel';
 import { useReactToMessage } from '@/features/interactions/useReactToMessage';
 import { CallButton } from '@/features/streams/CallButton';
 import { ChatCallBar } from '@/features/streams/ChatCallBar';
@@ -67,6 +79,7 @@ import { setActiveChatId } from '@/store/activeChat';
 import { Spacing } from '@/theme';
 
 const noop = () => undefined;
+const rowKey = (row: ChatListRow) => row.key;
 
 /** Ближе этого к самому новому сообщению список держится за низ переписки, а не за прочитанное. */
 const KEEP_READING_POSITION = { minIndexForVisible: 0, autoscrollToTopThreshold: Spacing.six };
@@ -93,13 +106,15 @@ export default function ChatScreen() {
   const chatMessages = useChatMessages(chatId, currentUserId);
   const { messages, isLoading, isLoadingMore, hasMore, error, activities } = chatMessages;
   const { loadMore, retry, notifyTyping, notifyRecordingVoice } = chatMessages;
-  const listRef = useRef<FlatList<ChatMessage>>(null);
+  const listRef = useRef<FlatList<ChatListRow>>(null);
   const composerRef = useRef<TextInput>(null);
+  // Островок раскладывается на строки: плашка и облачка — по строке.
+  const rows = useMemo(() => toChatRows(messages), [messages]);
   const pins = usePinnedMessages(chatId);
   const pinCursor = usePinnedCursor(pins.pins);
-  const selection = useMessageSelection(messages);
-  const jump = useJumpToMessage(listRef, messages, chatMessages.loadUntil);
-  const menu = useMessageMenu();
+  const selection = useMessageSelection(rows, currentUserId);
+  const jump = useJumpToMessage(listRef, rows, chatMessages.loadUntil);
+  const menu = useMessageMenu(rowKey);
   const draft = useComposerDraft(chatId);
   const isMember = chat ? isChatMember(chat, currentUserId) : false;
   // Заявку спрашиваем только у не-участника: участнику отвечать уже не на что.
@@ -110,8 +125,12 @@ export default function ChatScreen() {
     [chat, currentUserId],
   );
   const navigation = useQuoteNavigation(chatId, jump.jump, !isLoading && !isChatLoading);
-  const reactions = useReactToMessage(chatId, isMember);
+  const reactions = useReactToMessage(isMember);
   const call = useChatCall(chatId, chat, currentUserId, isMember);
+
+  // Правки, удаления, реакции и комментарии оригиналов в островках приходят
+  // в топики их чатов — слушаем и их.
+  useIslandSources(chatId, messages);
 
   // Пока чат открыт, уведомления о нём не нужны: человек и так смотрит сюда.
   useEffect(() => {
@@ -155,10 +174,36 @@ export default function ChatScreen() {
     [participantsById],
   );
 
+  // Этот чат глазами смотрящего — заголовок островка, если пересылать отсюда,
+  // и чат оригинала для сообщений отсюда.
+  const thisChat = useMemo(
+    () => ({ id: chatId, name: chat ? chatTitle(chat, currentUserId) : 'Чат' }),
+    [chat, chatId, currentUserId],
+  );
+
+  const originalOf = useCallback(
+    (row: BubbleRow): IslandOriginal | null => {
+      if (row.type === 'island-item') return row.item.original;
+
+      const { message } = row;
+      const author = message.authorId ? participantsById.get(message.authorId) : undefined;
+
+      return {
+        ...message,
+        authorName: author?.displayName ?? null,
+        authorAvatarUrl: author?.avatarUrl ?? null,
+        chat: { ...thisChat, readUpTo, amMember: isMember },
+      };
+    },
+    [isMember, participantsById, readUpTo, thisChat],
+  );
+
   const replyForward = useReplyForward({
     chatId,
+    sourceChat: thisChat,
     draft,
     authorName,
+    originalOf,
     composerRef,
     send: chatMessages.send,
     sendVoice: chatMessages.sendVoice,
@@ -189,25 +234,28 @@ export default function ChatScreen() {
 
   const { startReply: beginReply } = replyForward;
   const startReply = useCallback(
-    (targets: ChatMessage[]) => afterEdit(() => beginReply(targets)),
+    (targets: BubbleRow[]) => afterEdit(() => beginReply(targets)),
     [afterEdit, beginReply],
   );
 
   const startEdit = useCallback(
-    (message: ChatMessage) => afterEdit(() => beginEdit(message)),
+    (message: Parameters<typeof beginEdit>[0]) => afterEdit(() => beginEdit(message)),
     [afterEdit, beginEdit],
   );
 
-  const { runMessageAction, runSelectionAction } = useMessageActionHandlers({
+  const { runMessageAction, runSelectionAction, runIslandAction } = useMessageActionHandlers({
+    currentUserId,
     selection,
     pins,
     retry,
     discard: chatMessages.discard,
     deleteMessages: chatMessages.deleteMessages,
+    removeFromIsland: chatMessages.removeFromIsland,
     authorName,
     reply: startReply,
     forward: replyForward.startForward,
     edit: startEdit,
+    openOriginal: navigation.openOriginal,
   });
 
   // Системный «назад» в правке выходит из правки, а не из чата.
@@ -255,131 +303,104 @@ export default function ChatScreen() {
     return () => subscription.remove();
   }, [clearSelection, isSelecting]);
 
-  const { openQuote, openForwardOrigin } = navigation;
-  const { audience: reactionAudience, toggle: toggleReaction } = reactions;
+  const { bubbleFor, audienceFor } = useChatBubbles({
+    chatId,
+    currentUserId,
+    isMember,
+    readUpTo,
+    participantsById,
+    mediaBounds,
+    retry,
+    openPerson,
+    navigation,
+    reactions,
+  });
 
-  const bubbleFor = useCallback(
-    (item: ChatMessage, interactive: boolean) => {
-      const { authorId } = item;
-      const author = authorId ? participantsById.get(authorId) : undefined;
+  const { renderItem, islandHeader } = useChatRowRenderer({
+    currentUserId,
+    isMember,
+    isSelecting,
+    isSelected: selection.isSelected,
+    toggleSelected: selection.toggle,
+    editingId,
+    highlight: jump.highlight,
+    bubbleFor,
+    openMenu: menu.open,
+    startReply,
+    retry,
+    openChat: navigation.openChat,
+    hostName: authorName,
+  });
 
-      return (
-        <MessageBubble
-          message={item}
-          isOwn={item.authorId === currentUserId}
-          isRead={readUpTo !== null && item.createdAt <= readUpTo}
-          authorName={author?.displayName ?? DELETED_ACCOUNT}
-          authorAvatarUrl={author?.avatarUrl ?? null}
-          mediaBounds={mediaBounds}
-          onRetry={retry}
-          onAuthorPress={interactive && authorId ? () => openPerson(authorId) : undefined}
-          onQuotePress={interactive ? () => openQuote(item) : undefined}
-          onForwardPress={interactive ? () => openForwardOrigin(item) : undefined}
-          reactionAudience={reactionAudience}
-          onReactionToggle={
-            interactive && canReactTo(item) ? (emoji) => toggleReaction(item, emoji) : undefined
-          }
-          comments={commentsEntry(item, chatId, interactive)}
-        />
-      );
-    },
-    [
-      chatId,
-      currentUserId,
-      mediaBounds,
-      openForwardOrigin,
-      openPerson,
-      openQuote,
-      participantsById,
-      reactionAudience,
-      readUpTo,
-      retry,
-      toggleReaction,
-    ],
-  );
+  const { toggle: toggleReaction } = reactions;
+  const menuRow = menu.target?.item ?? null;
+  const menuContent = menuRow && menuRow.type !== 'island-header' ? contentOf(menuRow) : null;
+  const menuActions = useMemo(() => {
+    if (!menuRow) return [];
 
-  const { isSelected, toggle: toggleSelected } = selection;
-  const { highlight } = jump;
-  const { open: openMenu } = menu;
+    if (menuRow.type === 'island-header') {
+      return islandActions(menuRow.island, menuRow.island.authorId === currentUserId);
+    }
 
-  const renderItem = useCallback(
-    ({ item }: { item: ChatMessage }) =>
-      // Системное — не чья-то реплика: без меню, выбора и ответа свайпом.
-      item.kind === 'system' ? (
-        <SystemMessage
-          message={item}
-          currentUserId={currentUserId}
-          isMember={isMember}
-          hostName={authorName(item.call?.hostId ?? null)}
-        />
-      ) : (
-        <MessageRow
-          selectionMode={isSelecting}
-          selectable={!isLocalMessage(item)}
-          selected={isSelected(item.id)}
-          editing={item.id === editingId}
-          highlightKey={highlight?.messageId === item.id ? highlight.key : null}
-          messageId={item.id}
-          onLongPress={(anchor) => openMenu(item, anchor)}
-          onToggle={() => toggleSelected(item.id)}
-          // Ответ — это отправка: свайп есть только у участника и только у
-          // сообщений, которые уже на сервере.
-          onSwipeReply={isMember && !isLocalMessage(item) ? () => startReply([item]) : undefined}
-        >
-          {bubbleFor(item, true)}
-        </MessageRow>
-      ),
-    [
-      authorName,
-      bubbleFor,
-      currentUserId,
-      editingId,
-      highlight,
+    const islandMine =
+      menuRow.type === 'island-item' ? menuRow.island.authorId === currentUserId : false;
+
+    if (!menuContent) return deletedOriginalActions(islandMine);
+
+    return visibleMessageActions({
+      message: menuContent,
+      isOwn: menuContent.authorId === currentUserId,
       isMember,
-      isSelected,
-      isSelecting,
-      openMenu,
-      startReply,
-      toggleSelected,
-    ],
-  );
-
-  const menuMessage = menu.target?.message ?? null;
-  const menuActions = useMemo(
-    () =>
-      menuMessage
-        ? visibleMessageActions({
-            message: menuMessage,
-            isOwn: menuMessage.authorId === currentUserId,
-            isMember,
-            isPinned: pins.isPinned(menuMessage.id),
-          })
-        : [],
-    [currentUserId, isMember, menuMessage, pins],
-  );
+      isPinned: pins.isPinned(menuContent.id),
+      island: menuRow.type === 'island-item' ? { isMine: islandMine } : null,
+    });
+  }, [currentUserId, isMember, menuContent, menuRow, pins]);
 
   // Реакция из меню — на сообщение, каким оно стало к моменту тапа: пока меню
   // было открыто, моя прежняя реакция могла доехать или откатиться.
   const menuReactions = useMemo(() => {
-    if (!menuMessage || !canReactTo(menuMessage)) return null;
+    if (!menuRow || menuRow.type === 'island-header' || !menuContent) return null;
+    if (!canReactTo(menuContent)) return null;
 
     return {
-      selected: menuMessage.reactions.mine?.emoji ?? null,
-      onSelect: (emoji: string) =>
-        toggleReaction(
-          messages.find((message) => message.id === menuMessage.id) ?? menuMessage,
-          emoji,
-        ),
+      selected: menuContent.reactions.mine?.emoji ?? null,
+      onSelect: (emoji: string) => {
+        const fresh = rows.find((row) => row.key === menuRow.key);
+        const latest = fresh && fresh.type !== 'island-header' ? contentOf(fresh) : null;
+
+        toggleReaction(latest ?? menuContent, emoji, audienceFor(menuRow));
+      },
     };
-  }, [menuMessage, messages, toggleReaction]);
+  }, [audienceFor, menuContent, menuRow, rows, toggleReaction]);
+
+  const menuPreview = !menuRow ? null : menuRow.type === 'island-header' ? (
+    islandHeader(menuRow, false)
+  ) : menuContent ? (
+    bubbleFor(menuRow, false)
+  ) : (
+    <DeletedOriginal />
+  );
+
+  const runMenuAction = useCallback(
+    (id: string) => {
+      if (!menuRow) return;
+
+      if (menuRow.type === 'island-header') runIslandAction(id as IslandActionId, menuRow.island);
+      else runMessageAction(id as MessageActionId, menuRow);
+    },
+    [menuRow, runIslandAction, runMessageAction],
+  );
 
   const { jump: jumpTo } = jump;
   const { advance: advancePin } = pinCursor;
 
   const openPinned = useCallback(
-    (pin: { messageId: string; messageCreatedAt: string }) => {
+    (pin: { messageId: string; forwardId: string | null; messageCreatedAt: string }) => {
       advancePin();
-      void jumpTo(pin.messageId, pin.messageCreatedAt).then((found) => {
+      // Закреп облачка островка — к его строке в островке.
+      const key = pin.forwardId ? islandItemKey(pin.forwardId, pin.messageId) : pin.messageId;
+
+      void jumpTo(key, pin.messageCreatedAt).then((found) => {
         if (!found) showNotice('Не удалось найти сообщение', 'error');
       });
     },
@@ -455,9 +476,9 @@ export default function ChatScreen() {
             ref={listRef}
             testID="messages-list"
             inverted
-            data={messages}
+            data={rows}
             onScrollToIndexFailed={jump.onScrollToIndexFailed}
-            keyExtractor={(message) => message.id}
+            keyExtractor={rowKey}
             renderItem={renderItem}
             contentContainerStyle={styles.list}
             // The list is inverted, so its "end" is the top of the screen:
@@ -546,12 +567,12 @@ export default function ChatScreen() {
 
       <MessageContextMenu
         anchor={menu.target?.anchor ?? null}
-        preview={menuMessage ? bubbleFor(menuMessage, false) : null}
+        preview={menuPreview}
         actions={menuActions}
         reactions={menuReactions}
-        alignEnd={menuMessage?.authorId === currentUserId}
-        leadingInset={BUBBLE_LEADING_INSET}
-        onAction={(id) => menuMessage && runMessageAction(id, menuMessage)}
+        alignEnd={menuContent?.authorId === currentUserId}
+        leadingInset={menuRow?.type === 'island-header' ? 0 : BUBBLE_LEADING_INSET}
+        onAction={runMenuAction}
         onClose={menu.close}
       />
 

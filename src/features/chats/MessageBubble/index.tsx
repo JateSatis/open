@@ -12,7 +12,6 @@ import { styles } from './styles';
 import type { ReactionAudience } from '@/api/reactionCounts';
 import { Avatar } from '@/components/Avatar';
 import { Text } from '@/components/Text';
-import { ForwardedFrom } from '@/features/chats/ForwardedFrom';
 import { computeMosaicLayout, type MosaicBounds } from '@/features/chats/lib/mosaicLayout';
 import { MediaAttachmentGrid } from '@/features/chats/MediaAttachmentGrid';
 import { MessageMeta } from '@/features/chats/MessageMeta';
@@ -44,8 +43,11 @@ export type MessageBubbleProps = {
   onAuthorPress?: () => void;
   /** Тап по цитате ответа — к оригиналу. */
   onQuotePress?: () => void;
-  /** Тап по «Переслано от» — к оригиналу в исходном чате. */
-  onForwardPress?: () => void;
+  /**
+   * Облачко островка, чей оригинал из другого чата, чем заголовок островка:
+   * над текстом — «<автор> из <чат>». Тап по чату — туда, к этому сообщению.
+   */
+  sourceChat?: { name: string; onPress?: () => void } | null;
   /** Мой ряд реакций: тап по реакции в нём ставит или снимает её. */
   reactionAudience?: ReactionAudience;
   /** Тап по реакции своего ряда. Нет обработчика (копия в меню) — ряды не нажимаются. */
@@ -71,7 +73,7 @@ export function MessageBubble({
   onRetry,
   onAuthorPress,
   onQuotePress,
-  onForwardPress,
+  sourceChat,
   reactionAudience,
   onReactionToggle,
   comments,
@@ -104,24 +106,20 @@ export function MessageBubble({
     url: attachment.url,
   }));
 
-  const hasAnnotations = message.forward !== null || message.replies.length > 0;
+  const hasAnnotations = message.replies.length > 0;
 
-  // Откуда сообщение и на что оно отвечает — над содержимым, и у текста, и
-  // у голосового, и у альбома.
+  // На что сообщение отвечает — над содержимым, и у текста, и у голосового,
+  // и у альбома.
   const annotations = hasAnnotations ? (
-    <>
-      {message.forward ? (
-        <ForwardedFrom forward={message.forward} isOwn={isOwn} onPress={onForwardPress} />
-      ) : null}
-      {message.replies.length > 0 ? (
-        <ReplyQuote quotes={message.replies} isOwn={isOwn} onPress={onQuotePress} />
-      ) : null}
-    </>
+    <ReplyQuote quotes={message.replies} isOwn={isOwn} onPress={onQuotePress} />
   ) : null;
+
+  // Своё облачко имени не показывает, но «из <чат>» у него остаётся.
+  const showAuthorLine = !isOwn || Boolean(sourceChat);
 
   // Без подписи, имени и цитаты у своего альбома облачка нет — только
   // мозаика, и в её зазорах виден фон чата, как в Telegram.
-  const bareMedia = !message.text && isOwn && !hasAnnotations;
+  const bareMedia = !message.text && isOwn && !hasAnnotations && !sourceChat;
 
   const reactions = (tone: ReactionsTone) => (
     <MessageReactions
@@ -144,14 +142,27 @@ export function MessageBubble({
   );
 
   const authorLine = (style?: StyleProp<TextStyle>) => (
-    <Text
-      variant="smallBold"
-      color={textColor}
-      style={style}
-      onPress={onAuthorPress}
-      suppressHighlighting
-    >
-      {authorName}
+    <Text variant="smallBold" color={textColor} style={style}>
+      {isOwn ? null : (
+        <Text variant="smallBold" color={textColor} onPress={onAuthorPress} suppressHighlighting>
+          {authorName}
+        </Text>
+      )}
+      {sourceChat ? (
+        <Text variant="small" color={textColor}>
+          {isOwn ? 'из ' : ' из '}
+          <Text
+            testID="message-source-chat"
+            accessibilityRole={sourceChat.onPress ? 'link' : undefined}
+            variant="smallBold"
+            color={textColor}
+            onPress={sourceChat.onPress}
+            suppressHighlighting
+          >
+            {sourceChat.name}
+          </Text>
+        </Text>
+      ) : null}
       {authorBadge ? (
         <Text variant="caption" color="textSecondary">
           {`  ${authorBadge}`}
@@ -191,7 +202,7 @@ export function MessageBubble({
               { width: layout.width, backgroundColor: bareMedia ? 'transparent' : bubbleColor },
             ]}
           >
-            {isOwn ? null : authorLine(styles.mediaAuthor)}
+            {showAuthorLine ? authorLine(styles.mediaAuthor) : null}
 
             {annotations ? (
               <View style={[styles.mediaAnnotations, isOwn && styles.mediaAnnotationsOwn]}>
@@ -222,7 +233,7 @@ export function MessageBubble({
         </View>
       ) : (
         <View testID="message-bubble" style={[styles.bubble, { backgroundColor: bubbleColor }]}>
-          {isOwn ? null : authorLine()}
+          {showAuthorLine ? authorLine() : null}
 
           {annotations}
 

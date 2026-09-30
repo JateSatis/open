@@ -1,63 +1,95 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { isBubbleRow, type BubbleRow, type ChatListRow } from '@/features/chats/islands/rows';
 import { isLocalMessage } from '@/features/chats/messageActions';
-import type { ChatMessage } from '@/features/chats/messages/types';
 
 export type MessageSelection = {
   /** Режим выбора включён — есть хоть одно отмеченное сообщение. */
   isActive: boolean;
-  /** Отмеченные, в порядке переписки: от старого к новому. */
-  selected: ChatMessage[];
-  isSelected: (messageId: string) => boolean;
-  /** Отмечает первое сообщение и тем включает режим выбора. */
-  start: (messageId: string) => void;
+  /** Отмеченные облачка, в порядке переписки: от старого к новому. */
+  selected: BubbleRow[];
+  isSelected: (rowKey: string) => boolean;
+  /** Отмечает первые облачка и тем включает режим выбора. */
+  start: (rowKeys: string | string[]) => void;
   /** Снятие последней отметки выключает режим выбора. */
-  toggle: (messageId: string) => void;
+  toggle: (rowKey: string) => void;
   clear: () => void;
 };
 
 /**
- * Выбор сообщений на экране чата. Хранятся только id: догрузка истории и
- * новые сообщения выбор не трогают, а удалённое сообщение (его больше нет в
+ * Облачко можно отметить, если оно на сервере. Облачко островка — по одному,
+ * как обычное сообщение: заглушку удалённого — только переславшему, чтобы
+ * убрать её из островка.
+ */
+export function isSelectableRow(row: BubbleRow, currentUserId: string | null): boolean {
+  if (row.type === 'message') return !isLocalMessage(row.message);
+  if (isLocalMessage(row.island)) return false;
+
+  return row.item.original !== null || row.island.authorId === currentUserId;
+}
+
+/**
+ * Выбор облачков на экране чата. Хранятся только ключи строк: догрузка
+ * истории и новые сообщения выбор не трогают, а удалённое (его больше нет в
  * списке) тихо из выбора выпадает — и режим выключается, если выпало всё.
  */
-export function useMessageSelection(messages: ChatMessage[]): MessageSelection {
-  const [ids, setIds] = useState<ReadonlySet<string>>(() => new Set());
+export function useMessageSelection(
+  rows: ChatListRow[],
+  currentUserId: string | null,
+): MessageSelection {
+  const [keys, setKeys] = useState<ReadonlySet<string>>(() => new Set());
 
+  // Список новыми вперёд — перевёрнутый он и есть порядок переписки.
   const selected = useMemo(() => {
-    if (ids.size === 0) return [];
+    if (keys.size === 0) return [];
 
-    return messages.filter((message) => ids.has(message.id)).reverse();
-  }, [ids, messages]);
+    return rows
+      .filter((row): row is BubbleRow => isBubbleRow(row) && keys.has(row.key))
+      .reverse();
+  }, [keys, rows]);
 
-  const selectedIds = useMemo(() => new Set(selected.map((message) => message.id)), [selected]);
+  const selectedKeys = useMemo(() => new Set(selected.map((row) => row.key)), [selected]);
 
-  const isSelected = useCallback((messageId: string) => selectedIds.has(messageId), [selectedIds]);
+  const isSelected = useCallback((rowKey: string) => selectedKeys.has(rowKey), [selectedKeys]);
 
-  const start = useCallback((messageId: string) => setIds(new Set([messageId])), []);
+  // Строки — в ref: переключение не должно зависеть от замыкания строки,
+  // которую список ещё не перерисовал, иначе две быстрые отметки подряд
+  // теряли бы первую.
+  const latestRef = useRef({ rows });
+
+  useEffect(() => {
+    latestRef.current = { rows };
+  }, [rows]);
+
+  const start = useCallback(
+    (rowKeys: string | string[]) =>
+      setKeys(new Set(typeof rowKeys === 'string' ? [rowKeys] : rowKeys)),
+    [],
+  );
 
   const toggle = useCallback(
-    (messageId: string) => {
-      const message = messages.find((item) => item.id === messageId);
+    (rowKey: string) => {
+      const row = latestRef.current.rows.find((item) => item.key === rowKey);
 
       // Неотправленное выбрать нельзя: у него нет настоящего id, и ни одно
       // действие панели к нему не применимо.
-      if (!message || isLocalMessage(message)) return;
+      if (!row || !isBubbleRow(row) || !isSelectableRow(row, currentUserId)) return;
 
-      setIds((current) => {
+      setKeys((current) => {
+        const present = new Set(latestRef.current.rows.map((item) => item.key));
         // Удалённое без нас выпадает и отсюда, чтобы не всплыть обратно.
-        const next = new Set([...current].filter((id) => selectedIds.has(id)));
+        const next = new Set([...current].filter((key) => present.has(key)));
 
-        if (next.has(messageId)) next.delete(messageId);
-        else next.add(messageId);
+        if (next.has(rowKey)) next.delete(rowKey);
+        else next.add(rowKey);
 
         return next;
       });
     },
-    [messages, selectedIds],
+    [currentUserId],
   );
 
-  const clear = useCallback(() => setIds(new Set()), []);
+  const clear = useCallback(() => setKeys(new Set()), []);
 
   return { isActive: selected.length > 0, selected, isSelected, start, toggle, clear };
 }
