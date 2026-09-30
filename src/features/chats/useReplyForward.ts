@@ -10,6 +10,7 @@ import { quoteOf } from '@/features/chats/messageQuote';
 import type { ChatMessage, ForwardItem, LiveQuote } from '@/features/chats/messages/types';
 import type { ComposerDraft } from '@/features/chats/useComposerDraft';
 import type { LocalMedia, MediaLibraryItem } from '@/features/media';
+import { focusWithKeyboard } from '@/lib/windowFocus';
 
 type Options = {
   chatId: string;
@@ -86,7 +87,7 @@ export function useReplyForward({
       claimKeyboardForChat();
       // Меню и выбор закрываются в этом же кадре — поле успевает стать
       // видимым, прежде чем получить фокус.
-      requestAnimationFrame(() => composerRef.current?.focus());
+      focusWithKeyboard(composerRef);
     },
     [authorName, composerRef, setMode],
   );

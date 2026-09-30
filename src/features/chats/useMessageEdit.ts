@@ -19,6 +19,7 @@ import {
 import type { ChatMessage, EditResult } from '@/features/chats/messages/types';
 import type { ComposerDraft } from '@/features/chats/useComposerDraft';
 import { selectedAssets, setSelectionLimit, type LocalMedia } from '@/features/media';
+import { focusWithKeyboard } from '@/lib/windowFocus';
 
 type Options = {
   chatId: string;
@@ -103,13 +104,11 @@ export function useMessageEdit({ chatId, draft, composerRef, saveEdit }: Options
       claimKeyboardForChat();
       // Меню закрывается в этом же кадре — поле успевает стать видимым,
       // прежде чем получить фокус. Курсор — в конец текста.
-      requestAnimationFrame(() => {
-        const input = composerRef.current;
+      focusWithKeyboard(composerRef, (input) => {
         const end = readChatDraft(chatId).text.length;
 
-        input?.focus();
         // Не у каждой реализации поля есть `setSelection` — в тестовом окружении его нет.
-        input?.setSelection?.(end, end);
+        input.setSelection?.(end, end);
       });
     },
     [chatId, clearMedia, composerRef],
