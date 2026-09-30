@@ -20,7 +20,11 @@ import { MessageBubble } from '@/features/chats/MessageBubble';
 import { MessageContextMenu } from '@/features/chats/MessageContextMenu';
 import { MessageRow } from '@/features/chats/MessageRow';
 import { PinnedBar } from '@/features/chats/PinnedBar';
-import { isLocalMessage, visibleMessageActions } from '@/features/chats/messageActions';
+import {
+  canReactTo,
+  isLocalMessage,
+  visibleMessageActions,
+} from '@/features/chats/messageActions';
 import { DELETED_ACCOUNT } from '@/features/chats/messageQuote';
 import {
   activityLabel,
@@ -49,6 +53,7 @@ import { useQuoteNavigation } from '@/features/chats/useQuoteNavigation';
 import { useReplyForward } from '@/features/chats/useReplyForward';
 import { useRespondToInvite } from '@/features/chats/useRespondToInvite';
 import { WaitingBanner } from '@/features/chats/WaitingBanner';
+import { useReactToMessage } from '@/features/interactions/useReactToMessage';
 import { stopVoice } from '@/features/media';
 import { showNotice } from '@/features/notifications/alertsStore';
 import { useProfile } from '@/features/profile/queries';
@@ -99,6 +104,7 @@ export default function ChatScreen() {
     [chat, currentUserId],
   );
   const navigation = useQuoteNavigation(chatId, jump.jump, !isLoading && !isChatLoading);
+  const reactions = useReactToMessage(chatId, isMember);
 
   // Пока чат открыт, уведомления о нём не нужны: человек и так смотрит сюда.
   useEffect(() => {
@@ -243,6 +249,7 @@ export default function ChatScreen() {
   }, [clearSelection, isSelecting]);
 
   const { openQuote, openForwardOrigin } = navigation;
+  const { audience: reactionAudience, toggle: toggleReaction } = reactions;
 
   const bubbleFor = useCallback(
     (item: ChatMessage, interactive: boolean) => {
@@ -261,6 +268,10 @@ export default function ChatScreen() {
           onAuthorPress={interactive && authorId ? () => openPerson(authorId) : undefined}
           onQuotePress={interactive ? () => openQuote(item) : undefined}
           onForwardPress={interactive ? () => openForwardOrigin(item) : undefined}
+          reactionAudience={reactionAudience}
+          onReactionToggle={
+            interactive && canReactTo(item) ? (emoji) => toggleReaction(item, emoji) : undefined
+          }
         />
       );
     },
@@ -271,8 +282,10 @@ export default function ChatScreen() {
       openPerson,
       openQuote,
       participantsById,
+      reactionAudience,
       readUpTo,
       retry,
+      toggleReaction,
     ],
   );
 
@@ -324,6 +337,21 @@ export default function ChatScreen() {
         : [],
     [currentUserId, isMember, menuMessage, pins],
   );
+
+  // Реакция из меню — на сообщение, каким оно стало к моменту тапа: пока меню
+  // было открыто, моя прежняя реакция могла доехать или откатиться.
+  const menuReactions = useMemo(() => {
+    if (!menuMessage || !canReactTo(menuMessage)) return null;
+
+    return {
+      selected: menuMessage.reactions.mine?.emoji ?? null,
+      onSelect: (emoji: string) =>
+        toggleReaction(
+          messages.find((message) => message.id === menuMessage.id) ?? menuMessage,
+          emoji,
+        ),
+    };
+  }, [menuMessage, messages, toggleReaction]);
 
   const { jump: jumpTo } = jump;
   const { advance: advancePin } = pinCursor;
@@ -483,6 +511,7 @@ export default function ChatScreen() {
         anchor={menu.target?.anchor ?? null}
         preview={menuMessage ? bubbleFor(menuMessage, false) : null}
         actions={menuActions}
+        reactions={menuReactions}
         alignEnd={menuMessage?.authorId === currentUserId}
         leadingInset={BUBBLE_LEADING_INSET}
         onAction={(id) => menuMessage && runMessageAction(id, menuMessage)}

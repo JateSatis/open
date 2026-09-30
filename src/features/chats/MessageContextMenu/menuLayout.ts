@@ -3,10 +3,7 @@ export type MenuLayoutInput = {
   anchorTop: number;
   anchorHeight: number;
   menuHeight: number;
-  /**
-   * Блок над облачком (реакции). Пока его нет — 0; раскладка уже оставляет
-   * под него место, когда он появится.
-   */
+  /** Блок над облачком — свёрнутые реакции. Нет блока — 0. */
   accessoryHeight: number;
   windowHeight: number;
   safeTop: number;

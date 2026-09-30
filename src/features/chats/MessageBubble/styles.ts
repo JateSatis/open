@@ -42,6 +42,10 @@ export const styles = StyleSheet.create({
     paddingHorizontal: Spacing.three,
     gap: Spacing.one,
   },
+  /** Реакции под мозаикой без подписи — внутри облачка, с отступами, как у подписи. */
+  mediaReactions: {
+    padding: Spacing.two,
+  },
   attachmentSlot: {
     paddingVertical: Spacing.two,
     paddingHorizontal: Spacing.two,

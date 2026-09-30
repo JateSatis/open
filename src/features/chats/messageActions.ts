@@ -56,6 +56,15 @@ export function isEditable(message: ChatMessage): boolean {
   );
 }
 
+/**
+ * На сообщение можно поставить реакцию — и участнику, и посетителю. Не на
+ * неподтверждённое сервером (его там ещё нет) и не на системное: это не
+ * слова человека. Своё отправленное — можно, как в Telegram.
+ */
+export function canReactTo(message: ChatMessage): boolean {
+  return !isLocalMessage(message) && message.kind !== 'system';
+}
+
 export function hasCopyableText(message: ChatMessage): boolean {
   return Boolean(message.text?.trim());
 }
