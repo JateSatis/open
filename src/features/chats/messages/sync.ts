@@ -12,9 +12,11 @@ import {
   MESSAGE_PAGE_SIZE,
   type Message,
 } from '@/api/chats';
+import { listMessageReactions } from '@/api/reactions';
 import {
   knownEdits,
   mergeMessages,
+  patchReactions,
   quotedIds,
   readHistory,
   removeMessages,
@@ -104,19 +106,27 @@ export async function loadHistory(queryClient: QueryClient, chatId: string): Pro
     0,
     MAX_TOMBSTONE_IDS,
   );
-  const [newer, deleted, edited] = await Promise.all([
+  const [newer, deleted, edited, reactions] = await Promise.all([
     fetchNewer(chatId, since),
     listDeletedMessageIds(loadedIds),
     fetchStaleEdits(cached, loadedIds),
+    // Счётчики пропущенных реакций. Не вышло — не повод ронять дочитывание:
+    // их принесёт следующее событие или вход в чат.
+    listMessageReactions(cached.items.slice(0, MAX_TOMBSTONE_IDS).map((message) => message.id)).catch(
+      () => [],
+    ),
   ]);
 
   if (newer === null) return firstPage(chatId);
 
   const latest = readHistory(queryClient, chatId) ?? cached;
 
-  return replaceMessages(
-    removeMessages(mergeMessages(latest, newer, 'newer'), new Set(deleted)),
-    edited,
+  return patchReactions(
+    replaceMessages(
+      removeMessages(mergeMessages(latest, newer, 'newer'), new Set(deleted)),
+      edited,
+    ),
+    reactions,
   );
 }
 
@@ -172,4 +182,23 @@ export async function dropDeletedMessages(
   if (deleted.length === 0) return;
 
   updateHistory(queryClient, chatId, (current) => removeMessages(current, new Set(deleted)));
+}
+
+/**
+ * Реакции на эти сообщения изменились — перечитать счётчики пачкой, одним
+ * запросом, и только у загруженных: остальные придут свежими со страницей.
+ */
+export async function refreshReactions(
+  queryClient: QueryClient,
+  chatId: string,
+  candidates: string[],
+): Promise<void> {
+  const loaded = new Set(readHistory(queryClient, chatId)?.items.map((message) => message.id));
+  const ids = candidates.filter((id) => loaded.has(id)).slice(0, MAX_TOMBSTONE_IDS);
+
+  if (ids.length === 0) return;
+
+  const fresh = await listMessageReactions(ids);
+
+  updateHistory(queryClient, chatId, (current) => patchReactions(current, fresh));
 }

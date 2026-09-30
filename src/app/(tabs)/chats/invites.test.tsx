@@ -71,6 +71,7 @@ function invite(overrides: Partial<ChatInvite> = {}): ChatInvite {
         attachments: [],
         replies: [],
         forward: null,
+        reactions: { members: {}, visitors: {}, mine: null },
       },
     ],
     ...overrides,

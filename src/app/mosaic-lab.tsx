@@ -7,6 +7,7 @@ import { MessageBubble } from '@/features/chats/MessageBubble';
 import type { ChatMessage } from '@/features/chats/useChatMessages';
 import { useTheme } from '@/hooks/use-theme';
 import { Spacing } from '@/theme';
+import { NO_REACTIONS } from '@/api/reactionCounts';
 
 /**
  * Стенд раскладки альбомов: фиктивные сообщения с медиа всех размеров и
@@ -54,6 +55,7 @@ function fakeMessages(): ChatMessage[] {
     text: album.text ?? null,
     createdAt: new Date(2026, 8, 26, 12, index).toISOString(),
     editedAt: null,
+    reactions: NO_REACTIONS,
     status: album.status ?? 'sent',
     attachments: album.shapes.map((shape, i): MessageAttachment => ({
       id: `lab-${index}-${i}`,

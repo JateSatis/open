@@ -7,6 +7,7 @@ import {
   dropDeletedMessages,
   pullNewMessages,
   refreshEditedMessages,
+  refreshReactions,
 } from '@/features/chats/messages/sync';
 import type { UserActivity } from '@/features/chats/messages/types';
 import { chatQueryKey } from '@/features/chats/useChat';
@@ -16,6 +17,12 @@ import { pinsQueryKey } from '@/features/chats/usePinnedMessages';
 const TYPING_TIMEOUT_MS = 4000;
 /** Lower bound between two typing broadcasts, so a fast typist sends a few. */
 const TYPING_THROTTLE_MS = 2000;
+/**
+ * Столько копить события реакций, прежде чем перечитать счётчики. На горячее
+ * сообщение реакции сыплются десятками в секунду — база получает один запрос
+ * на пачку, а не по запросу на событие.
+ */
+const REACTIONS_BATCH_MS = 500;
 
 export type ChatChannelState = {
   /** Кто сейчас печатает или записывает голосовое, кроме меня. */
@@ -25,7 +32,8 @@ export type ChatChannelState = {
 };
 
 /**
- * Канал чата: новые сообщения, удаления, закрепы, прочтения, «печатает».
+ * Канал чата: новые сообщения, удаления, правки, закрепы, реакции, прочтения,
+ * «печатает».
  * Payload любого события — только сигнал: строки всегда перечитываются из
  * базы, где видимость решает RLS, так что поддельное событие ничего не
  * добавит в чужую переписку и ничего из неё не уберёт.
@@ -36,6 +44,10 @@ export function useChatChannel(chatId: string, currentUserId: string | null): Ch
   const channelRef = useRef<ChatChannel | null>(null);
   const typingTimersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const lastActivitySentRef = useRef<{ activity: ChatActivity; at: number } | null>(null);
+  const reactionBatchRef = useRef<{
+    ids: Set<string>;
+    timer: ReturnType<typeof setTimeout> | null;
+  }>({ ids: new Set(), timer: null });
 
   const onNewMessage = useCallback(async () => {
     try {
@@ -72,6 +84,16 @@ export function useChatChannel(chatId: string, currentUserId: string | null): Ch
 
   useEffect(() => {
     const timers = typingTimersRef.current;
+    const reactionBatch = reactionBatchRef.current;
+
+    const flushReactions = () => {
+      const ids = [...reactionBatch.ids];
+
+      reactionBatch.ids.clear();
+      reactionBatch.timer = null;
+      // Не вышло — дочитаем при следующем событии или переподключении.
+      refreshReactions(queryClient, chatId, ids).catch(() => undefined);
+    };
 
     const channel = subscribeToChat(chatId, {
       onMessage: () => {
@@ -98,6 +120,11 @@ export function useChatChannel(chatId: string, currentUserId: string | null): Ch
       },
       onPinsChanged: () => {
         void queryClient.invalidateQueries({ queryKey: pinsQueryKey(chatId) });
+      },
+      onReactionsChanged: (messageId) => {
+        reactionBatch.ids.add(messageId);
+
+        if (!reactionBatch.timer) reactionBatch.timer = setTimeout(flushReactions, REACTIONS_BATCH_MS);
       },
       onTyping: (userId, activity) => {
         if (userId === currentUserId) return;
@@ -131,6 +158,11 @@ export function useChatChannel(chatId: string, currentUserId: string | null): Ch
       channel.unsubscribe();
       timers.forEach(clearTimeout);
       timers.clear();
+
+      if (reactionBatch.timer) clearTimeout(reactionBatch.timer);
+
+      reactionBatch.timer = null;
+      reactionBatch.ids.clear();
       setActivities([]);
     };
   }, [catchUp, chatId, currentUserId, onNewMessage, queryClient]);

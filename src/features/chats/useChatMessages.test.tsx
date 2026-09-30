@@ -18,6 +18,11 @@ import { removeUploadedMedia, uploadAllMedia } from '@/features/media';
 // обрыва связи) уже проверено через экран чата в
 // `src/app/(tabs)/chats/[chatId].test.tsx`, который использует этот хук как
 // есть.
+jest.mock('@/api/reactions', () => ({
+  ...jest.requireActual('@/api/reactionCounts'),
+  listMessageReactions: jest.fn(() => Promise.resolve([])),
+  setMessageReaction: jest.fn(),
+}));
 jest.mock('@/api/chats', () => ({
   listMessages: jest.fn(),
   listMessagesSince: jest.fn(),
@@ -125,6 +130,7 @@ describe('useChatMessages sending media', () => {
       ],
       replies: [],
       forward: null,
+      reactions: { members: {}, visitors: {}, mine: null },
     });
 
     const { result } = await renderHook(() => useChatMessages('chat-1', 'user-1'), { wrapper });
@@ -211,6 +217,7 @@ describe('useChatMessages sending media', () => {
       attachments: [],
       replies: [],
       forward: null,
+      reactions: { members: {}, visitors: {}, mine: null },
     });
 
     const { result } = await renderHook(() => useChatMessages('chat-1', 'user-1'), { wrapper });
@@ -272,6 +279,7 @@ describe('useChatMessages sending media', () => {
       attachments: [],
       replies: [],
       forward: null,
+      reactions: { members: {}, visitors: {}, mine: null },
     });
 
     await waitFor(() => expect(result.current.messages[0].status).toBe('sent'));
@@ -303,6 +311,7 @@ describe('useChatMessages sending media', () => {
           attachments: [],
           replies: [],
           forward: null,
+          reactions: { members: {}, visitors: {}, mine: null },
         },
       ],
       nextCursor: null,
@@ -319,6 +328,7 @@ describe('useChatMessages sending media', () => {
       attachments: [],
       replies: [],
       forward: null,
+      reactions: { members: {}, visitors: {}, mine: null },
     };
 
     const { listMessagesSince } = jest.requireMock('@/api/chats') as {
@@ -412,6 +422,7 @@ describe('useChatMessages large albums', () => {
           attachments: [],
           replies: [],
           forward: null,
+          reactions: { members: {}, visitors: {}, mine: null },
         },
       ],
       nextCursor: null,
@@ -469,6 +480,7 @@ describe('useChatMessages voice messages', () => {
     ],
     replies: [],
     forward: null,
+    reactions: { members: {}, visitors: {}, mine: null },
   };
 
   it('shows the voice bubble at once and sends exactly one voice message', async () => {
@@ -592,6 +604,7 @@ describe('useChatMessages removing own unsent messages', () => {
     attachments: [],
     replies: [],
     forward: null,
+    reactions: { members: {}, visitors: {}, mine: null },
   };
 
   it('drops a failed message locally without asking the server', async () => {
@@ -664,6 +677,7 @@ describe('useChatMessages replies and forwards', () => {
       attachments: [],
       replies: [],
       forward: null,
+      reactions: { members: {}, visitors: {}, mine: null },
       status: 'sent' as const,
       ...overrides,
     };
@@ -709,6 +723,7 @@ describe('useChatMessages replies and forwards', () => {
         attachments: [],
         replies: [quote],
         forward: null,
+        reactions: { members: {}, visitors: {}, mine: null },
       }),
     );
 
@@ -734,6 +749,7 @@ describe('useChatMessages replies and forwards', () => {
         attachments: [],
         replies: [],
         forward: null,
+        reactions: { members: {}, visitors: {}, mine: null },
       };
     });
     mockedForward.mockImplementation(async (_chatId: string, ids: string[]) => {

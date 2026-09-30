@@ -45,6 +45,7 @@ import {
 } from '@/features/media';
 import { showNotice } from '@/features/notifications/alertsStore';
 import { isNetworkError } from '@/lib/network';
+import { NO_REACTIONS } from '@/api/reactionCounts';
 
 let localIdCounter = 0;
 
@@ -381,6 +382,7 @@ function textDraft(
     text,
     createdAt: new Date(at).toISOString(),
     editedAt: null,
+    reactions: NO_REACTIONS,
     attachments: [],
     replies,
     forward: null,
@@ -421,6 +423,7 @@ export function sendPost(
       // Миллисекунда между частями держит их порядок в списке.
       createdAt: new Date(now + index).toISOString(),
       editedAt: null,
+      reactions: NO_REACTIONS,
       attachments,
       replies: partReplies,
       forward: null,
@@ -461,6 +464,7 @@ export function sendVoice(
     text: null,
     createdAt: new Date().toISOString(),
     editedAt: null,
+    reactions: NO_REACTIONS,
     attachments: [toLocalVoiceAttachment(localId, voice)],
     replies,
     forward: null,
@@ -509,6 +513,7 @@ export function sendForward(context: SendContext, text: string, items: ForwardIt
       text: message.text,
       createdAt: new Date(now + 1 + index).toISOString(),
       editedAt: null,
+      reactions: NO_REACTIONS,
       // Файлы — те же, что у оригинала: они уже в Storage, грузить нечего.
       attachments: message.attachments,
       // Цитата ссылается на сообщения исходного чата и с копией не едет.
