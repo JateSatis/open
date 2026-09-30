@@ -98,7 +98,10 @@ jest.mock('@/features/media', () => ({
   ...jest.requireActual('@/features/media/selectionStore'),
   assetPreviewUri: (asset: { id: string }) => asset.id,
   MediaGrid: () => null,
-  MediaViewer: () => null,
+  MediaViewer: ({ visible }: { visible: boolean }) => {
+    const { Text } = require('react-native');
+    return visible ? <Text>Просмотр открыт</Text> : null;
+  },
   stopVoice: jest.fn(),
 }));
 jest.mock('@/features/media/HoldToRecordRow', () => ({
@@ -156,14 +159,10 @@ function message(id: string, text: string, authorId: string, minute = 0): Messag
 let handlers: ChatChannelHandlers | null = null;
 let backHandler: Parameters<typeof BackHandler.addEventListener>[1] | null = null;
 
-/** Долгое нажатие на сообщение — так, как его видит жест-обработчик. */
-async function longPress(messageId: string) {
+/** Тап по облачку — так открывается его меню. */
+async function tapMessage(messageId: string) {
   await act(async () => {
-    fireGestureHandler(getByGestureTestId(`message-long-press-${messageId}`), [
-      { state: State.BEGAN, x: 10, y: 10, absoluteX: 20, absoluteY: 200 },
-      { state: State.ACTIVE, x: 10, y: 10, absoluteX: 20, absoluteY: 200 },
-      { state: State.END, x: 10, y: 10, absoluteX: 20, absoluteY: 200 },
-    ]);
+    fireEvent.press(screen.getByTestId(`message-row-${messageId}`));
   });
 }
 
@@ -222,7 +221,7 @@ describe('message menu', () => {
     await renderWithQuery(<ChatScreen />);
     await screen.findByText('как дела?');
 
-    await longPress('m3');
+    await tapMessage('m3');
 
     expect(await menuItems()).toEqual([
       'Ответить',
@@ -239,7 +238,7 @@ describe('message menu', () => {
     await renderWithQuery(<ChatScreen />);
     await screen.findByText('привет');
 
-    await longPress('m2');
+    await tapMessage('m2');
 
     expect(await menuItems()).toEqual([
       'Ответить',
@@ -258,7 +257,7 @@ describe('message menu', () => {
     await renderWithQuery(<ChatScreen />);
     await screen.findByText('привет');
 
-    await longPress('m2');
+    await tapMessage('m2');
 
     expect(await menuItems()).toEqual(['Копировать', 'Переслать', 'Выбрать']);
   });
@@ -267,11 +266,11 @@ describe('message menu', () => {
     await renderWithQuery(<ChatScreen />);
     await screen.findByText('привет');
 
-    await longPress('m2');
+    await tapMessage('m2');
     fireEvent.press(await screen.findByTestId('message-menu-backdrop'));
     await waitFor(() => expect(screen.queryByTestId('message-menu')).toBeNull());
 
-    await longPress('m2');
+    await tapMessage('m2');
     // Системный «назад» у окна Modal приходит как requestClose.
     await act(async () => fireEvent(screen.getByTestId('message-menu'), 'requestClose'));
     await waitFor(() => expect(screen.queryByTestId('message-menu')).toBeNull());
@@ -281,7 +280,7 @@ describe('message menu', () => {
     await renderWithQuery(<ChatScreen />);
     await screen.findByText('привет');
 
-    await longPress('m2');
+    await tapMessage('m2');
     await choose('Копировать');
 
     await waitFor(() => expect(Clipboard.setStringAsync).toHaveBeenCalledWith('привет'));
@@ -299,7 +298,7 @@ describe('message menu', () => {
     mockedPins.mockResolvedValue([
       { messageId: 'm2', forwardId: null, messageCreatedAt: AT, originalCreatedAt: AT, kind: 'text', text: 'привет', thumbnailUrl: null },
     ]);
-    await longPress('m2');
+    await tapMessage('m2');
     await choose('Закрепить');
 
     expect(mockedPin).toHaveBeenCalledWith('m2', null);
@@ -315,7 +314,7 @@ describe('deleting', () => {
     await renderWithQuery(<ChatScreen />);
     await screen.findByText('как дела?');
 
-    await longPress('m3');
+    await tapMessage('m3');
     await choose('Удалить');
 
     expect(mockedConfirm).toHaveBeenCalledWith(
@@ -334,7 +333,7 @@ describe('deleting', () => {
     await renderWithQuery(<ChatScreen />);
     await screen.findByText('как дела?');
 
-    await longPress('m3');
+    await tapMessage('m3');
     await choose('Удалить');
 
     expect(await screen.findByText('как дела?')).toBeTruthy();
@@ -373,7 +372,7 @@ describe('deleting', () => {
 
 describe('selection', () => {
   async function startSelecting(messageId: string) {
-    longPress(messageId);
+    tapMessage(messageId);
     await choose('Выбрать');
     await screen.findByText('Выбрано: 1');
   }
@@ -540,5 +539,82 @@ describe('pinned bar', () => {
     expect(mockedListMessages).toHaveBeenLastCalledWith('chat-1', {
       cursor: '2026-09-27T10:02:00Z',
     });
+  });
+});
+
+describe('gestures on a message', () => {
+  /** Долгое нажатие — так, как его видит жест-обработчик. */
+  async function longPress(messageId: string) {
+    await act(async () => {
+      fireGestureHandler(getByGestureTestId(`message-long-press-${messageId}`), [
+        { state: State.BEGAN },
+        { state: State.ACTIVE },
+        { state: State.END },
+      ]);
+    });
+  }
+
+  it('a tap opens the menu at once', async () => {
+    await renderWithQuery(<ChatScreen />);
+    await screen.findByText('привет');
+
+    await tapMessage('m2');
+
+    expect(await screen.findByTestId('message-menu')).toBeTruthy();
+  });
+
+  it('a long press starts selection with that message already marked, without the menu', async () => {
+    await renderWithQuery(<ChatScreen />);
+    await screen.findByText('привет');
+
+    await longPress('m2');
+
+    expect(await screen.findByText('Выбрано: 1')).toBeTruthy();
+    expect(screen.queryByTestId('message-menu')).toBeNull();
+    expect(
+      screen.getAllByRole('checkbox').filter((box) => box.props.accessibilityState?.checked),
+    ).toHaveLength(1);
+  });
+
+  it('in selection a tap toggles the mark instead of opening the menu', async () => {
+    await renderWithQuery(<ChatScreen />);
+    await screen.findByText('привет');
+
+    await longPress('m2');
+    await tapMessage('m3');
+
+    expect(await screen.findByText('Выбрано: 2')).toBeTruthy();
+    expect(screen.queryByTestId('message-menu')).toBeNull();
+  });
+
+  it('a tap on a photo tile opens the viewer, not the menu', async () => {
+    mockedListMessages.mockResolvedValue({
+      items: [
+        {
+          ...message('m4', '', 'user-2', 4),
+          kind: 'media',
+          text: null,
+          attachments: [
+            {
+              id: 'a1',
+              url: 'https://cdn.example/a.jpg',
+              posterUrl: null,
+              mimeType: 'image/jpeg',
+              width: 800,
+              height: 600,
+              durationMs: null,
+              waveform: null,
+            },
+          ],
+        },
+      ],
+      nextCursor: null,
+    });
+
+    await renderWithQuery(<ChatScreen />);
+    fireEvent.press(await screen.findByLabelText('Открыть фото'));
+
+    expect(await screen.findByText('Просмотр открыт')).toBeTruthy();
+    expect(screen.queryByTestId('message-menu')).toBeNull();
   });
 });

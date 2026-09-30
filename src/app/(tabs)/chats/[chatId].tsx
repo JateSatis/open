@@ -259,6 +259,7 @@ export default function ChatScreen() {
     forward: replyForward.startForward,
     edit: startEdit,
     openOriginal: navigation.openOriginal,
+    openChat: navigation.openChat,
   });
 
   // Системный «назад» в правке выходит из правки, а не из чата.
@@ -306,6 +307,11 @@ export default function ChatScreen() {
     return () => subscription.remove();
   }, [clearSelection, isSelecting]);
 
+  const selectIsland = useCallback(
+    (island: Parameters<typeof runIslandAction>[1]) => runIslandAction('select_all', island),
+    [runIslandAction],
+  );
+
   const { bubbleFor, audienceFor } = useChatBubbles({
     chatId,
     currentUserId,
@@ -326,13 +332,14 @@ export default function ChatScreen() {
     isSelecting,
     isSelected: selection.isSelected,
     toggleSelected: selection.toggle,
+    startSelection: selection.start,
+    selectIsland,
     editingId,
     highlight: jump.highlight,
     bubbleFor,
     openMenu: menu.open,
     startReply,
     retry,
-    openChat: navigation.openChat,
     hostName: authorName,
   });
 
@@ -493,6 +500,9 @@ export default function ChatScreen() {
             maintainVisibleContentPosition={KEEP_READING_POSITION}
             onEndReached={hasMore ? loadMore : undefined}
             onEndReachedThreshold={0.4}
+            // Тап по облачку при открытой клавиатуре сразу открывает меню, а
+            // не только прячет клавиатуру; тап по пустому месту — прячет.
+            keyboardShouldPersistTaps="handled"
             ListFooterComponent={
               isLoadingMore ? <ActivityIndicator accessibilityLabel="Загрузка истории" /> : null
             }

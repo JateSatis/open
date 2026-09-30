@@ -19,7 +19,7 @@ export type CommentListProps = {
   /** Сообщение удалено — новых не будет, и пустое состояние этого не обещает. */
   closed: boolean;
   loadMore: () => void;
-  onLongPress: (comment: CommentItem, anchor: AnchorRect) => void;
+  onOpenMenu: (comment: CommentItem, anchor: AnchorRect) => void;
   /** Облачко комментария — то же, что у сообщения в переписке. */
   renderBubble: (comment: CommentItem) => ReactNode;
 };
@@ -41,7 +41,7 @@ export function CommentList({
   editingId,
   closed,
   loadMore,
-  onLongPress,
+  onOpenMenu,
   renderBubble,
 }: CommentListProps) {
   const renderItem = useCallback(
@@ -53,13 +53,13 @@ export function CommentList({
         editing={item.id === editingId}
         highlightKey={null}
         messageId={item.id}
-        onLongPress={(anchor) => onLongPress(item, anchor)}
+        onOpenMenu={(anchor) => onOpenMenu(item, anchor)}
         onToggle={noop}
       >
         {renderBubble(item)}
       </MessageRow>
     ),
-    [editingId, onLongPress, renderBubble],
+    [editingId, onOpenMenu, renderBubble],
   );
 
   if (isLoading) {

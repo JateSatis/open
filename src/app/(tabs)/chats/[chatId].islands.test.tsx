@@ -1,7 +1,5 @@
 import type { Session as SupabaseSession } from '@supabase/supabase-js';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react-native';
-import { State } from 'react-native-gesture-handler';
-import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils';
 
 import ChatScreen from './[chatId]';
 
@@ -179,13 +177,10 @@ const ISLAND = island('isl', AT, [o1, o2, o3, null], {
   sourceChat: { id: 'chat-hate', name: 'Хейтеры Джигана' },
 });
 
-async function longPress(rowKey: string) {
+/** Тап по облачку — так открывается его меню. */
+async function tapMessage(rowKey: string) {
   await act(async () => {
-    fireGestureHandler(getByGestureTestId(`message-long-press-${rowKey}`), [
-      { state: State.BEGAN, x: 10, y: 10, absoluteX: 20, absoluteY: 200 },
-      { state: State.ACTIVE, x: 10, y: 10, absoluteX: 20, absoluteY: 200 },
-      { state: State.END, x: 10, y: 10, absoluteX: 20, absoluteY: 200 },
-    ]);
+    fireEvent.press(screen.getByTestId(`message-row-${rowKey}`));
   });
 }
 
@@ -259,15 +254,19 @@ describe('forward island', () => {
     expect(screen.getAllByTestId('island-border')).toHaveLength(5);
   });
 
-  it('opens the chat it was forwarded from on a tap on the plate', async () => {
+  it('tap on the plate opens its menu, and the first item opens the chat it was forwarded from', async () => {
     await renderChat();
 
-    fireEvent.press(screen.getByLabelText('Переслано из чата «Хейтеры Джигана»'));
+    await tapMessage('isl/header');
+    fireEvent.press(await screen.findByRole('menuitem', { name: 'Перейти в «Хейтеры Джигана»' }));
 
-    expect(mockPush).toHaveBeenCalledWith({
-      pathname: '/chats/[chatId]',
-      params: { chatId: 'chat-hate' },
-    });
+    // Действие — следующим кадром после закрытия меню.
+    await waitFor(() =>
+      expect(mockPush).toHaveBeenCalledWith({
+        pathname: '/chats/[chatId]',
+        params: { chatId: 'chat-hate' },
+      }),
+    );
   });
 
   it('adds «<author> из <chat>» only to bubbles from another chat than the plate', async () => {
@@ -320,7 +319,7 @@ describe('forward island', () => {
     mockedSetReaction.mockReturnValue(new Promise(() => undefined));
 
     await renderChat();
-    await longPress('isl/o1');
+    await tapMessage('isl/o1');
     fireEvent.press(await screen.findByTestId('reaction-option-👍'));
 
     // Я не участник «Джигана и Самойловой» — ряд посетителей, хоть в этом чате
@@ -360,7 +359,7 @@ describe('forward island', () => {
 
   it('offers no edit and no delete of the original, but lets the forwarder take it out', async () => {
     await renderChat();
-    await longPress('isl/o3');
+    await tapMessage('isl/o3');
 
     await screen.findByTestId('message-menu');
     expect(screen.queryByRole('menuitem', { name: 'Изменить' })).toBeNull();
@@ -371,7 +370,7 @@ describe('forward island', () => {
 
   it('forwards a mixed selection in the order it stands on screen, from this chat', async () => {
     await renderChat();
-    await longPress('isl/o2');
+    await tapMessage('isl/o2');
     await choose('Выбрать');
 
     // Отмечаю вразнобой: сначала обычное снизу, потом верхнее облачко островка.

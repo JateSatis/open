@@ -137,13 +137,10 @@ function message(id: string, text: string, authorId: string, minute = 0): Messag
   };
 }
 
-async function longPress(messageId: string) {
+/** Тап по облачку — так открывается его меню. */
+async function tapMessage(messageId: string) {
   await act(async () => {
-    fireGestureHandler(getByGestureTestId(`message-long-press-${messageId}`), [
-      { state: State.BEGAN, x: 10, y: 10, absoluteX: 20, absoluteY: 200 },
-      { state: State.ACTIVE, x: 10, y: 10, absoluteX: 20, absoluteY: 200 },
-      { state: State.END, x: 10, y: 10, absoluteX: 20, absoluteY: 200 },
-    ]);
+    fireEvent.press(screen.getByTestId(`message-row-${messageId}`));
   });
 }
 
@@ -189,7 +186,7 @@ describe('replying', () => {
     await renderWithQuery(<ChatScreen />);
     await screen.findByText('привет');
 
-    await longPress('m2');
+    await tapMessage('m2');
     await choose('Ответить');
 
     const plate = await screen.findByTestId('composer-plate');
@@ -219,7 +216,7 @@ describe('replying', () => {
     await screen.findByText('привет');
 
     await userEvent.setup().type(screen.getByLabelText('Сообщение'), 'черновик');
-    await longPress('m2');
+    await tapMessage('m2');
     await choose('Ответить');
     fireEvent.press(await screen.findByRole('button', { name: 'Отменить ответ' }));
 
@@ -231,7 +228,7 @@ describe('replying', () => {
     const view = await renderWithQuery(<ChatScreen />);
     await screen.findByText('привет');
 
-    await longPress('m2');
+    await tapMessage('m2');
     await choose('Ответить');
     await userEvent.setup().type(screen.getByLabelText('Сообщение'), 'допишу потом');
     await view.unmount();
@@ -246,7 +243,7 @@ describe('replying', () => {
     await renderWithQuery(<ChatScreen />);
     await screen.findByText('привет');
 
-    await longPress('m2');
+    await tapMessage('m2');
     await choose('Выбрать');
     fireEvent.press(screen.getAllByRole('checkbox')[1]);
     fireEvent.press(await screen.findByRole('button', { name: 'Ответить' }));
@@ -295,7 +292,7 @@ describe('replying', () => {
     // У посетителя нет поля ввода, поэтому смотрим в сам черновик.
     expect(readChatDraft('chat-1').mode).toBeNull();
 
-    await longPress('m2');
+    await tapMessage('m2');
     await screen.findByTestId('message-menu');
     expect(screen.queryByRole('menuitem', { name: 'Ответить' })).toBeNull();
 
@@ -351,7 +348,7 @@ describe('forwarding', () => {
     await renderWithQuery(<ChatScreen />);
     await screen.findByText('привет');
 
-    await longPress('m2');
+    await tapMessage('m2');
     await choose('Переслать');
 
     expect(mockPush).toHaveBeenCalledWith({ pathname: '/chats/forward', params: { from: 'chat-1' } });

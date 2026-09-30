@@ -172,7 +172,7 @@ export function PanelContent({
         editingId={edit.mode?.message.id ?? null}
         closed={closed}
         loadMore={thread.loadMore}
-        onLongPress={menu.open}
+        onOpenMenu={menu.open}
         renderBubble={renderBubble}
       />
 

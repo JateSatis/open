@@ -43,6 +43,8 @@ type Options = {
   edit: (message: ChatMessage) => void;
   /** Оригинал облачка островка — в его чате. */
   openOriginal: (message: ChatMessage) => void;
+  /** Чат, откуда переслан островок. */
+  openChat: (chatId: string) => void;
 };
 
 export type MessageActionHandlers = {
@@ -78,6 +80,7 @@ export function useMessageActionHandlers({
   forward,
   edit,
   openOriginal,
+  openChat,
 }: Options): MessageActionHandlers {
   /**
    * Удаляет у всех: свои сообщения — функцией удаления, облачка своих
@@ -226,6 +229,9 @@ export function useMessageActionHandlers({
   const runIslandAction = useCallback(
     (id: IslandActionId, island: ChatMessage) => {
       switch (id) {
+        case 'open_source':
+          if (island.forward?.sourceChat) openChat(island.forward.sourceChat.id);
+          return;
         case 'retry':
           if (island.localId) retry(island.localId);
           return;
@@ -259,7 +265,7 @@ export function useMessageActionHandlers({
           return;
       }
     },
-    [currentUserId, deleteMessages, discard, retry, selection],
+    [currentUserId, deleteMessages, discard, openChat, retry, selection],
   );
 
   return { runMessageAction, runSelectionAction, runIslandAction };
