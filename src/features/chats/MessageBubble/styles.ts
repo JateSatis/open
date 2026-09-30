@@ -13,6 +13,8 @@ export const styles = StyleSheet.create({
   },
   bubble: {
     maxWidth: '78%',
+    // Рядом бывает кружок комментариев: облачко уступает ему, а не выталкивает за край.
+    flexShrink: 1,
     paddingVertical: Spacing.two,
     paddingHorizontal: Spacing.three,
     borderRadius: Radii.lg,

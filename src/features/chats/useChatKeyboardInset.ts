@@ -23,6 +23,7 @@ export function useChatKeyboardInset() {
   const { height: windowHeight } = useKeyboardWindow();
   const containerRef = useRef<View | null>(null);
   const [bottomOffset, setBottomOffset] = useState(0);
+  const [top, setTop] = useState(0);
 
   /**
    * Что лежит под экраном чата до низа окна — таб-бар. Его клавиатура
@@ -30,14 +31,16 @@ export function useChatKeyboardInset() {
    * подбирается: таб-бар разный на разных устройствах и платформах.
    */
   const onLayout = useCallback(() => {
-    containerRef.current?.measureInWindow((_x, y, _width, height) =>
-      setBottomOffset(Math.max(0, windowHeight - (y + height))),
-    );
+    containerRef.current?.measureInWindow((_x, y, _width, height) => {
+      setBottomOffset(Math.max(0, windowHeight - (y + height)));
+      setTop(y);
+    });
   }, [windowHeight]);
 
   const style = useAnimatedStyle(() => ({
     paddingBottom: Math.max(keyboardHeight.value - bottomOffset, insets.bottom),
   }));
 
-  return { containerRef, onLayout, style };
+  /** `top` — верх экрана чата в окне, то есть низ его шапки: под ней встаёт панель комментариев. */
+  return { containerRef, onLayout, style, top };
 }

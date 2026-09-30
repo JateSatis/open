@@ -52,6 +52,8 @@ export type MessageComposerProps = {
   inputRef?: Ref<TextInput>;
   /** Отправить можно и с пустым полем: например, пересылку без подписи. */
   canSendEmpty?: boolean;
+  /** Подсказка в пустом поле: «Сообщение» в чате, «Комментарий» в панели комментариев. */
+  placeholder?: string;
   /**
    * Правка: «О» сохраняет, а активна ли она — решает итог правки целиком
    * (текст, оставленные вложения, запись), а не одно поле.
@@ -80,6 +82,7 @@ export function MessageComposer({
   plate,
   inputRef,
   canSendEmpty = false,
+  placeholder = 'Сообщение',
   edit,
 }: MessageComposerProps) {
   const theme = useTheme();
@@ -109,8 +112,8 @@ export function MessageComposer({
     <>
       <TextInput
         ref={inputRef}
-        accessibilityLabel="Сообщение"
-        placeholder={edit?.textLocked ? 'Без подписи' : 'Сообщение'}
+        accessibilityLabel={placeholder}
+        placeholder={edit?.textLocked ? 'Без подписи' : placeholder}
         placeholderTextColor={theme.textSecondary}
         value={text}
         editable={!edit?.textLocked}

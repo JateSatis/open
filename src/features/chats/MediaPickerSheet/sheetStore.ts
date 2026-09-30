@@ -11,18 +11,28 @@ import { create } from 'zustand';
  */
 export type MediaSheetPhase = 'closed' | 'armed' | 'open' | 'closing';
 
+/**
+ * Чьё поле открыло шит: строка под чатом или строка панели комментариев.
+ * Шит на экране один, но выбранные в нём файлы уходят туда, откуда его
+ * открыли, — поэтому каждое поле держит свой экземпляр шита, а показывается
+ * только экземпляр хозяина.
+ */
+export type MediaSheetOwner = 'chat' | 'comments';
+
 type MediaSheetState = {
   phase: MediaSheetPhase;
+  owner: MediaSheetOwner;
 };
 
 /**
  * Флаг живёт в сторе, а не в state экрана чата: касание и отпускание кнопки
  * перерисовывают только шит, а не всю переписку.
  */
-const useMediaSheetStore = create<MediaSheetState>(() => ({ phase: 'closed' }));
+const useMediaSheetStore = create<MediaSheetState>(() => ({ phase: 'closed', owner: 'chat' }));
 
-export function useMediaSheetPhase(): MediaSheetPhase {
-  return useMediaSheetStore((state) => state.phase);
+/** Фаза шита для экземпляра `owner`: чужой шит для него закрыт. */
+export function useMediaSheetPhase(owner: MediaSheetOwner = 'chat'): MediaSheetPhase {
+  return useMediaSheetStore((state) => (state.owner === owner ? state.phase : 'closed'));
 }
 
 export function getMediaSheetPhase(): MediaSheetPhase {
@@ -30,15 +40,15 @@ export function getMediaSheetPhase(): MediaSheetPhase {
 }
 
 /** Касание кнопки: подготовить окно, ничего не показывая. */
-export function armMediaSheet() {
-  if (getMediaSheetPhase() === 'closed') useMediaSheetStore.setState({ phase: 'armed' });
+export function armMediaSheet(owner: MediaSheetOwner = 'chat') {
+  if (getMediaSheetPhase() === 'closed') useMediaSheetStore.setState({ phase: 'armed', owner });
 }
 
 /** Отпускание кнопки: показать шит. */
-export function openMediaSheet() {
+export function openMediaSheet(owner: MediaSheetOwner = 'chat') {
   const phase = getMediaSheetPhase();
 
-  if (phase === 'closed' || phase === 'armed') useMediaSheetStore.setState({ phase: 'open' });
+  if (phase === 'closed' || phase === 'armed') useMediaSheetStore.setState({ phase: 'open', owner });
 }
 
 /**
@@ -60,11 +70,14 @@ export function closeMediaSheet() {
   else if (phase === 'armed') useMediaSheetStore.setState({ phase: 'closed' });
 }
 
-export function finishMediaSheetClose() {
+/** Шит уехал. С `owner` — только если шит его: чужой открытый шит не трогается. */
+export function finishMediaSheetClose(owner?: MediaSheetOwner) {
+  if (owner && useMediaSheetStore.getState().owner !== owner) return;
+
   useMediaSheetStore.setState({ phase: 'closed' });
 }
 
 /** Только для тестов и для ухода с экрана: без анимаций, сразу в исходное. */
 export function resetMediaSheet() {
-  useMediaSheetStore.setState({ phase: 'closed' });
+  useMediaSheetStore.setState({ phase: 'closed', owner: 'chat' });
 }

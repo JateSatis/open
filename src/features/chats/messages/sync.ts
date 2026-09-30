@@ -4,6 +4,7 @@
 import type { QueryClient } from '@tanstack/react-query';
 
 import {
+  listCommentCounts,
   listDeletedMessageIds,
   listMessageEdits,
   listMessages,
@@ -16,6 +17,7 @@ import { listMessageReactions } from '@/api/reactions';
 import {
   knownEdits,
   mergeMessages,
+  patchCommentCounts,
   patchReactions,
   quotedIds,
   readHistory,
@@ -106,27 +108,31 @@ export async function loadHistory(queryClient: QueryClient, chatId: string): Pro
     0,
     MAX_TOMBSTONE_IDS,
   );
-  const [newer, deleted, edited, reactions] = await Promise.all([
+  const loadedMessageIds = cached.items.slice(0, MAX_TOMBSTONE_IDS).map((message) => message.id);
+  const [newer, deleted, edited, reactions, commentCounts] = await Promise.all([
     fetchNewer(chatId, since),
     listDeletedMessageIds(loadedIds),
     fetchStaleEdits(cached, loadedIds),
     // Счётчики пропущенных реакций. Не вышло — не повод ронять дочитывание:
     // их принесёт следующее событие или вход в чат.
-    listMessageReactions(cached.items.slice(0, MAX_TOMBSTONE_IDS).map((message) => message.id)).catch(
-      () => [],
-    ),
+    listMessageReactions(loadedMessageIds).catch(() => []),
+    // Числа комментариев — так же: пропущенное принесёт следующее событие.
+    listCommentCounts(loadedMessageIds).catch(() => []),
   ]);
 
   if (newer === null) return firstPage(chatId);
 
   const latest = readHistory(queryClient, chatId) ?? cached;
 
-  return patchReactions(
-    replaceMessages(
-      removeMessages(mergeMessages(latest, newer, 'newer'), new Set(deleted)),
-      edited,
+  return patchCommentCounts(
+    patchReactions(
+      replaceMessages(
+        removeMessages(mergeMessages(latest, newer, 'newer'), new Set(deleted)),
+        edited,
+      ),
+      reactions,
     ),
-    reactions,
+    commentCounts,
   );
 }
 
@@ -201,4 +207,20 @@ export async function refreshReactions(
   const fresh = await listMessageReactions(ids);
 
   updateHistory(queryClient, chatId, (current) => patchReactions(current, fresh));
+}
+
+/** Число комментариев у этих сообщений изменилось — перечитать пачкой, только у загруженных. */
+export async function refreshCommentCounts(
+  queryClient: QueryClient,
+  chatId: string,
+  candidates: string[],
+): Promise<void> {
+  const loaded = new Set(readHistory(queryClient, chatId)?.items.map((message) => message.id));
+  const ids = candidates.filter((id) => loaded.has(id)).slice(0, MAX_TOMBSTONE_IDS);
+
+  if (ids.length === 0) return;
+
+  const fresh = await listCommentCounts(ids);
+
+  updateHistory(queryClient, chatId, (current) => patchCommentCounts(current, fresh));
 }

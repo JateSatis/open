@@ -175,6 +175,28 @@ export function patchReactions(
   return changed ? { ...history, items } : history;
 }
 
+/** Кладёт свежие числа комментариев на загруженные сообщения — как `patchReactions`. */
+export function patchCommentCounts(
+  history: ChatHistory,
+  fresh: { id: string; commentsCount: number }[],
+): ChatHistory {
+  if (fresh.length === 0) return history;
+
+  const byId = new Map(fresh.map((row) => [row.id, row.commentsCount]));
+  let changed = false;
+
+  const items = history.items.map((message) => {
+    const count = byId.get(message.id);
+
+    if (count === undefined || count === message.commentsCount) return message;
+
+    changed = true;
+    return { ...message, commentsCount: count };
+  });
+
+  return changed ? { ...history, items } : history;
+}
+
 /** Правленые версии, известные на экране, — чтобы знать, что уже устарело. */
 export function knownEdits(history: ChatHistory | undefined): Map<string, string | null> {
   const known = new Map<string, string | null>();

@@ -61,9 +61,16 @@ jest.mock('@/api/chats', () => ({
   deleteMessages: jest.fn(),
   listDeletedMessageIds: jest.fn(),
   listMessageEdits: jest.fn(() => Promise.resolve([])),
+  listCommentCounts: jest.fn(() => Promise.resolve([])),
   listMessagesByIds: jest.fn(() => Promise.resolve([])),
   editMessage: jest.fn(),
   MESSAGE_PAGE_SIZE: 30,
+}));
+// Панель комментариев в этих тестах не открывается — её сеть здесь не нужна.
+jest.mock('@/api/comments', () => ({
+  listComments: jest.fn(() => Promise.resolve({ items: [], nextCursor: null })),
+  getCommentTarget: jest.fn(() => Promise.resolve({ state: 'missing' })),
+  subscribeToComments: jest.fn(() => () => undefined),
 }));
 jest.mock('@/api/pins', () => ({
   listPinnedMessages: jest.fn(),
@@ -136,6 +143,7 @@ function message(id: string, text: string, authorId: string, minute = 0): Messag
     replies: [],
     forward: null,
     reactions: { members: {}, visitors: {}, mine: null },
+    commentsCount: 0,
   };
 }
 

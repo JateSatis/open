@@ -78,7 +78,11 @@ export function optimisticEdit(original: ChatMessage, result: EditResult): ChatM
   };
 }
 
-async function uploadNew(result: EditResult, userId: string): Promise<UploadedMedia[]> {
+/** Новые файлы правки — в Storage. Ими же пользуется правка комментариев. */
+export async function uploadEditFiles(
+  result: EditResult,
+  userId: string,
+): Promise<UploadedMedia[]> {
   if (result.voice?.type === 'new') return uploadAllMedia([result.voice.voice], userId);
   if (result.added.length === 0) return [];
 
@@ -87,7 +91,8 @@ async function uploadNew(result: EditResult, userId: string): Promise<UploadedMe
   return uploadAllMedia(resolved.map(libraryAssetToLocalMedia), userId);
 }
 
-function toInput(result: EditResult, uploaded: UploadedMedia[]) {
+/** Итог правки в том виде, в каком его принимает база: оставленное по id, новое — загруженным. */
+export function toEditInput(result: EditResult, uploaded: UploadedMedia[]) {
   let voice: EditVoiceItem | null = null;
 
   if (result.voice?.type === 'kept') voice = { attachmentId: result.voice.attachment.id };
@@ -181,9 +186,9 @@ export async function saveEdit(
 
     if (hasFiles && !currentUserId) throw new Error('Нет активной сессии');
 
-    uploaded = hasFiles ? await uploadNew(result, currentUserId!) : [];
+    uploaded = hasFiles ? await uploadEditFiles(result, currentUserId!) : [];
 
-    const saved = await editMessage(original.id, toInput(result, uploaded));
+    const saved = await editMessage(original.id, toEditInput(result, uploaded));
 
     // Новые файлы продолжают показываться с телефона, пока грузятся
     // удалённые, — как у только что отправленного.

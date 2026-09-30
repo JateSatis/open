@@ -22,6 +22,7 @@ jest.mock('@/api/chats', () => ({
   subscribeToChat: jest.fn(),
   listDeletedMessageIds: jest.fn(() => Promise.resolve([])),
   listMessageEdits: jest.fn(() => Promise.resolve([])),
+  listCommentCounts: jest.fn(() => Promise.resolve([])),
   listMessagesByIds: jest.fn(() => Promise.resolve([])),
   MESSAGE_PAGE_SIZE: 30,
 }));
@@ -52,6 +53,7 @@ function message(id: string, reactions: MessageReactions = EMPTY): Message {
     replies: [],
     forward: null,
     reactions,
+    commentsCount: 0,
   };
 }
 

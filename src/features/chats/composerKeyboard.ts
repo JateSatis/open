@@ -2,20 +2,25 @@ import { KeyboardController, useKeyboardHandler } from 'react-native-keyboard-co
 import { makeMutable, useSharedValue, type SharedValue } from 'react-native-reanimated';
 
 /**
- * Чьё поле ввода сейчас владеет клавиатурой: строки под чатом или строки
- * внутри шита выбора медиа.
+ * Чьё поле ввода сейчас владеет клавиатурой: строки под чатом, строки
+ * внутри шита выбора медиа или строки панели комментариев.
  *
  * Клавиатура на экране одна, и её события глобальны: им всё равно, какой
  * `TextInput` в фокусе. Поэтому без явного владельца поле в шите поднимало
- * бы заодно и чат под шитом. Черновик у полей общий намеренно (см.
- * `useComposerDraft`), а клавиатура — нет: каждое двигает только себя.
+ * бы заодно и чат под шитом. Черновик у полей чата и шита общий намеренно
+ * (см. `useComposerDraft`), а клавиатура — нет: каждое двигает только себя.
  */
-export type KeyboardOwner = 'chat' | 'sheet';
+export type KeyboardOwner = 'chat' | 'sheet' | 'comments';
 
 /** Живёт на UI-потоке: её читает каждый кадр анимации клавиатуры. */
 const owner = makeMutable<KeyboardOwner>('chat');
 /** Окно шита существует (фаза не `closed`). */
 const sheetOpen = makeMutable(false);
+/**
+ * Чьё поле лежит под шитом: чат или открытая над ним панель комментариев.
+ * Ему клавиатура и возвращается, когда шит закрыт.
+ */
+const base = makeMutable<'chat' | 'comments'>('chat');
 
 /**
  * Касание поля в шите. Приходит раньше фокуса, а значит и раньше первого
@@ -30,15 +35,42 @@ export function claimKeyboardForChat() {
   owner.value = 'chat';
 }
 
+/** Касание поля панели комментариев: переписка под панелью стоит на месте. */
+export function claimKeyboardForComments() {
+  owner.value = 'comments';
+}
+
 /**
- * Шит открылся или закрылся. Закрытие возвращает клавиатуру чату, только
- * если она уже спрятана: если она ещё уезжает, чат подхватил бы остаток её
- * хода и дёрнулся. Тогда клавиатуру вернёт конец её анимации (см. ниже).
+ * Окно владельца ещё на экране: у чата оно есть всегда, у шита и панели —
+ * пока они открыты.
  */
+function windowOpen(who: KeyboardOwner): boolean {
+  'worklet';
+  if (who === 'sheet') return sheetOpen.value;
+  if (who === 'comments') return base.value === 'comments';
+
+  return true;
+}
+
+/**
+ * Окно закрылось. Клавиатура возвращается нижнему полю, только если она уже
+ * спрятана: если она ещё уезжает, нижнее поле подхватило бы остаток её хода
+ * и дёрнулось. Тогда клавиатуру вернёт конец её анимации (см. ниже).
+ */
+function releaseIfHidden() {
+  if (!windowOpen(owner.value) && !KeyboardController.isVisible()) owner.value = base.value;
+}
+
+/** Шит открылся или закрылся. */
 export function setSheetKeyboardWindowOpen(open: boolean) {
   sheetOpen.value = open;
+  releaseIfHidden();
+}
 
-  if (!open && !KeyboardController.isVisible()) owner.value = 'chat';
+/** Панель комментариев открылась или закрылась. */
+export function setCommentsKeyboardWindowOpen(open: boolean) {
+  base.value = open ? 'comments' : 'chat';
+  releaseIfHidden();
 }
 
 /** Только для тестов. */
@@ -68,11 +100,9 @@ export function useOwnKeyboardHeight(who: KeyboardOwner): SharedValue<number> {
       },
       onEnd: (event) => {
         'worklet';
-        // Шит закрыт, и клавиатура, которую он открывал, доехала вниз —
-        // она снова принадлежит чату.
-        if (event.height === 0 && owner.value === 'sheet' && !sheetOpen.value) {
-          owner.value = 'chat';
-        }
+        // Окно владельца закрыто, и клавиатура, которую оно открывало,
+        // доехала вниз — она снова принадлежит нижнему полю.
+        if (event.height === 0 && !windowOpen(owner.value)) owner.value = base.value;
 
         // Спрятанная клавиатура — ноль для всех полей, кто бы ей ни владел:
         // порядок обработчиков не должен оставить чьё-то поле поднятым.

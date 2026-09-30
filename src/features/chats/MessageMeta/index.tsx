@@ -18,10 +18,19 @@ export type MessageMetaProps = {
    */
   variant: 'inline' | 'overlay';
   onRetry: (localId: string) => void;
+  /** «доставлено / прочитано» у своего. Нет — у комментария: его никто не «читает». */
+  showReceipt?: boolean;
 };
 
 /** Время и состояние доставки сообщения. */
-export function MessageMeta({ message, isOwn, isRead, variant, onRetry }: MessageMetaProps) {
+export function MessageMeta({
+  message,
+  isOwn,
+  isRead,
+  variant,
+  onRetry,
+  showReceipt = true,
+}: MessageMetaProps) {
   const theme = useTheme();
   const overlay = variant === 'overlay';
   const color: ThemeColor = overlay ? 'textOnMedia' : isOwn ? 'primaryText' : 'textSecondary';
@@ -60,7 +69,7 @@ export function MessageMeta({ message, isOwn, isRead, variant, onRetry }: Messag
             {formatMessageTime(message.createdAt)}
           </Text>
 
-          {isOwn ? (
+          {isOwn && showReceipt ? (
             <Text variant="caption" color={overlay ? color : 'primaryText'}>
               {isRead ? 'прочитано' : 'доставлено'}
             </Text>
