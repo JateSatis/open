@@ -3,7 +3,6 @@ import { useCallback, useEffect, useRef } from 'react';
 
 import { listDeletedMessageIds, type QuotedMessage } from '@/api/chats';
 import { islandItemKey } from '@/features/chats/islands/rows';
-import type { ChatMessage } from '@/features/chats/messages/types';
 import { showNotice } from '@/features/notifications/alertsStore';
 
 type Jump = (rowKey: string, createdAt: string) => Promise<boolean>;
@@ -13,11 +12,10 @@ export type JumpTarget = { key: string; createdAt: string };
 
 export type QuoteNavigation = {
   /**
-   * Тап по цитате: к оригиналу; у ответа на несколько — по очереди.
-   * `inChatId` — чат, в котором живёт ответ: у облачка островка это чат
-   * оригинала, и прыгать надо туда.
+   * Тап по цитате — к её оригиналу. `inChatId` — чат, в котором живёт ответ:
+   * у облачка островка это чат оригинала, и прыгать надо туда.
    */
-  openQuote: (message: ChatMessage, inChatId?: string) => void;
+  openQuote: (quote: QuotedMessage, inChatId?: string) => void;
   /** Чат целиком — плашка островка: откуда пересылали. */
   openChat: (chatId: string) => void;
   /** Сообщение в его чате — «из <чат>» и «Перейти к оригиналу» у облачка островка. */
@@ -53,8 +51,6 @@ export function useQuoteNavigation(
     jumpAt?: string;
     jumpKey?: string;
   }>();
-  // Какая цитата следующая у каждого ответа — как у полосы закрепов.
-  const cursorsRef = useRef(new Map<string, number>());
   const handledJumpRef = useRef<string | null>(null);
 
   // Ключ, а не id сообщения: к тому же оригиналу могут прийти и второй раз,
@@ -113,17 +109,11 @@ export function useQuoteNavigation(
   );
 
   const openQuote = useCallback(
-    (message: ChatMessage, inChatId: string = chatId) => {
-      const live = message.replies.filter((quote) => quote.state === 'live');
-
+    (quote: QuotedMessage, inChatId: string = chatId) => {
       // По удалённому оригиналу тап ничего не делает.
-      if (live.length === 0) return;
+      if (quote.state !== 'live') return;
 
-      const cursors = cursorsRef.current;
-      const index = (cursors.get(message.id) ?? 0) % live.length;
-
-      cursors.set(message.id, index + 1);
-      goToChat(inChatId, quoteTarget(live[index]));
+      goToChat(inChatId, quoteTarget(quote));
     },
     [chatId, goToChat],
   );

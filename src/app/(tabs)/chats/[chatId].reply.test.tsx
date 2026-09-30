@@ -1,5 +1,6 @@
 import type { Session as SupabaseSession } from '@supabase/supabase-js';
 import { act, fireEvent, screen, userEvent, waitFor, within } from '@testing-library/react-native';
+import { FlatList } from 'react-native';
 import { State } from 'react-native-gesture-handler';
 import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils';
 
@@ -340,6 +341,44 @@ describe('quotes in bubbles', () => {
     expect(deleted).toBeDisabled();
     expect(within(live).getByText('Я')).toBeTruthy();
     expect(within(live).getByText('эй')).toBeTruthy();
+  });
+
+  it('lists every quote of a reply to several, oldest on top, and each leads to its own original', async () => {
+    const second: QuotedMessage = {
+      ...liveQuote,
+      messageId: 'm2',
+      authorId: 'user-2',
+      authorName: 'Марина',
+      createdAt: '2026-09-29T10:02:00Z',
+      preview: { ...liveQuote.preview, text: 'привет' },
+    };
+    mockedListMessages.mockResolvedValue({
+      items: [
+        { ...message('r1', 'на оба', 'user-2', 3), replies: [liveQuote, second] },
+        message('m2', 'привет', 'user-2', 2),
+        message('m1', 'эй', 'user-1', 1),
+      ],
+      nextCursor: null,
+    });
+    const scrollToIndex = jest.spyOn(FlatList.prototype, 'scrollToIndex');
+
+    await renderWithQuery(<ChatScreen />);
+    await screen.findByText('на оба');
+
+    const quotes = screen.getAllByTestId('reply-quote');
+
+    expect(quotes).toHaveLength(2);
+    expect(within(quotes[0]).getByText('эй')).toBeTruthy();
+    expect(within(quotes[1]).getByText('привет')).toBeTruthy();
+
+    // Строки списка — новыми вперёд: r1, m2, m1.
+    fireEvent.press(quotes[1]);
+    await waitFor(() => expect(scrollToIndex).toHaveBeenLastCalledWith(expect.objectContaining({ index: 1 })));
+
+    fireEvent.press(quotes[0]);
+    await waitFor(() => expect(scrollToIndex).toHaveBeenLastCalledWith(expect.objectContaining({ index: 2 })));
+
+    scrollToIndex.mockRestore();
   });
 });
 

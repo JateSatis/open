@@ -3,6 +3,9 @@ import { StyleSheet } from 'react-native';
 import { Radii, Sizes, Spacing, Typography } from '@/theme';
 
 export const styles = StyleSheet.create({
+  list: {
+    gap: Spacing.one,
+  },
   quote: {
     flexDirection: 'row',
     alignItems: 'center',

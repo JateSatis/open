@@ -96,7 +96,7 @@ export function useChatBubbles({
           mediaBounds={mediaBounds}
           onRetry={retry}
           onAuthorPress={interactive && authorId ? () => openPerson(authorId) : undefined}
-          onQuotePress={interactive ? () => openQuote(item) : undefined}
+          onQuotePress={interactive ? openQuote : undefined}
           reactionAudience={myAudience}
           onReactionToggle={
             interactive && canReactTo(item) ? (emoji) => toggle(item, emoji) : undefined
@@ -146,7 +146,7 @@ export function useChatBubbles({
           onRetry={noop}
           onAuthorPress={interactive && authorId ? () => openPerson(authorId) : undefined}
           // Цитаты оригинала — из его чата: туда и прыжок.
-          onQuotePress={interactive ? () => openQuote(message, original.chatId) : undefined}
+          onQuotePress={interactive ? (quote) => openQuote(quote, original.chatId) : undefined}
           sourceChat={
             fromHeaderChat
               ? null

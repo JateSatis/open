@@ -9,6 +9,7 @@ import {
 
 import { styles } from './styles';
 
+import type { QuotedMessage } from '@/api/chats';
 import type { ReactionAudience } from '@/api/reactionCounts';
 import { Avatar } from '@/components/Avatar';
 import { Text } from '@/components/Text';
@@ -41,8 +42,8 @@ export type MessageBubbleProps = {
   onRetry: (localId: string) => void;
   /** Тап по аватару или имени автора — его профиль. Нет автора (удалён) — нет и перехода. */
   onAuthorPress?: () => void;
-  /** Тап по цитате ответа — к оригиналу. */
-  onQuotePress?: () => void;
+  /** Тап по цитате ответа — к её оригиналу. */
+  onQuotePress?: (quote: QuotedMessage) => void;
   /**
    * Облачко островка, чей оригинал из другого чата, чем заголовок островка:
    * над текстом — «<автор> из <чат>». Тап по чату — туда, к этому сообщению.
