@@ -11,17 +11,45 @@ import {
   openMediaSheet,
   releaseMediaSheetArm,
 } from '@/features/chats/MediaPickerSheet';
-import { MessageComposer } from '@/features/chats/MessageComposer';
+import { EditAttachments } from '@/features/chats/EditAttachments';
+import { MessageComposer, type MessageComposerProps } from '@/features/chats/MessageComposer';
 import { describeMode } from '@/features/chats/messageQuote';
 import type { SelectionActionContext, SelectionActionId } from '@/features/chats/messageActions';
 import { SelectionActionBar } from '@/features/chats/SelectionActionBar';
 import type { LocalMedia } from '@/features/media';
 
-/** Плашка режима — ответ или пересылка — с крестиком, снимающим режим. */
-export function modePlate(mode: ComposerMode | null, onClose: () => void) {
+/** Что можно сделать с вложениями правки прямо под плашкой. */
+export type EditPlateHandlers = {
+  onRemoveAttachment: (attachmentId: string) => void;
+  onRemoveVoice: () => void;
+};
+
+/**
+ * Плашка режима — ответ, пересылка или правка — с крестиком, снимающим режим.
+ * У правки под плашкой её вложения.
+ */
+export function modePlate(
+  mode: ComposerMode | null,
+  onClose: () => void,
+  edit?: EditPlateHandlers,
+) {
   if (!mode) return null;
 
-  return <ComposerPlate {...describeMode(mode)} onClose={onClose} />;
+  const plate = <ComposerPlate {...describeMode(mode)} onClose={onClose} />;
+
+  if (mode.type !== 'edit' || !edit) return plate;
+
+  return (
+    <>
+      {plate}
+      <EditAttachments
+        kept={mode.kept}
+        voice={mode.voice}
+        onRemoveAttachment={edit.onRemoveAttachment}
+        onRemoveVoice={edit.onRemoveVoice}
+      />
+    </>
+  );
 }
 
 export type ChatFooterProps = {
@@ -43,6 +71,8 @@ export type ChatFooterProps = {
     onChangeText: (text: string) => void;
     mode: ComposerMode | null;
     onCloseMode: () => void;
+    /** Правка: что можно сделать с вложениями и что доступно в поле. */
+    edit?: EditPlateHandlers & { state: NonNullable<MessageComposerProps['edit']> };
     canSend: boolean;
     onSend: () => void;
     onTyping: () => void;
@@ -83,7 +113,8 @@ export function ChatFooter({ selection, invite, composer }: ChatFooterProps) {
             onChangeText={composer.onChangeText}
             canSend={composer.canSend}
             canSendEmpty={composer.mode?.type === 'forward'}
-            plate={modePlate(composer.mode, composer.onCloseMode)}
+            plate={modePlate(composer.mode, composer.onCloseMode, composer.edit)}
+            edit={composer.edit?.state}
             inputRef={composer.inputRef}
             onSend={composer.onSend}
             onTyping={composer.onTyping}

@@ -78,6 +78,8 @@ export type QuotedMessage =
       /** `null` — аккаунт автора удалён. */
       authorName: string | null;
       createdAt: string;
+      /** Когда оригинал правили в последний раз — чтобы узнать, что цитата устарела. */
+      editedAt: string | null;
       preview: MessagePreview;
     };
 
@@ -97,6 +99,8 @@ export type Message = {
   kind: MessageKind;
   text: string | null;
   createdAt: string;
+  /** Время последней правки, серверное. `null` — сообщение не правили. */
+  editedAt: string | null;
   attachments: MessageAttachment[];
   /** На что это ответ — по порядку. Пусто у обычного сообщения. */
   replies: QuotedMessage[];
@@ -135,6 +139,20 @@ export type SendVoiceInput = {
   waveform: number[] | null;
 };
 
+/** Вложение итога правки: оставленное как есть или новый, уже загруженный файл. */
+export type EditMediaItem = { attachmentId: string } | SendMessageMedia;
+export type EditVoiceItem = { attachmentId: string } | SendVoiceInput;
+
+/**
+ * Итог правки целиком. Вид сообщения следует из содержимого: голосовое —
+ * `voice`, есть файлы — `media`, иначе `text` (так решает и база).
+ */
+export type EditMessageInput = {
+  text: string;
+  media: EditMediaItem[];
+  voice: EditVoiceItem | null;
+};
+
 export type Page<T> = {
   items: T[];
   nextCursor: string | null;
@@ -150,7 +168,7 @@ const WAITING_COLUMNS = 'chat_id, user_id, display_name, avatar_url';
 // нужны, потому что `messages` связана с `profiles` и сама с собой через
 // несколько таблиц сразу.
 export const MESSAGE_COLUMNS =
-  'id, chat_id, author_id, kind, text, created_at, attachments(id, url, poster_url, mime_type, width, height, duration_ms, waveform), replies:message_replies!message_replies_message_fkey(position, quoted_id, quoted:messages!message_replies_quoted_fkey(id, author_id, kind, text, created_at, author:profiles!messages_author_id_fkey(display_name), attachments(url, poster_url, mime_type, duration_ms, position))), forward:message_forwards!message_forwards_message_fkey(origin_message_id, origin_author_id, origin_author:profiles(display_name), origin:messages!message_forwards_origin_fkey(id, chat_id, created_at))';
+  'id, chat_id, author_id, kind, text, created_at, edited_at, attachments(id, url, poster_url, mime_type, width, height, duration_ms, waveform), replies:message_replies!message_replies_message_fkey(position, quoted_id, quoted:messages!message_replies_quoted_fkey(id, author_id, kind, text, created_at, edited_at, author:profiles!messages_author_id_fkey(display_name), attachments(url, poster_url, mime_type, duration_ms, position))), forward:message_forwards!message_forwards_message_fkey(origin_message_id, origin_author_id, origin_author:profiles(display_name), origin:messages!message_forwards_origin_fkey(id, chat_id, created_at))';
 
 // Заготовки запросов. Они же задают типы рядов: клиент разбирает select-строку
 // вместе со встроенными таблицами, поэтому форма ответа выводится из самого
@@ -234,6 +252,7 @@ function toQuoted(row: ReplyRow): QuotedMessage {
     authorId: quoted.author_id,
     authorName: quoted.author_id ? (quoted.author?.display_name ?? 'Без имени') : null,
     createdAt: quoted.created_at,
+    editedAt: quoted.edited_at,
     preview: toPreview(toMessageKind(quoted.kind), quoted.text, quoted.attachments ?? []),
   };
 }
@@ -261,6 +280,7 @@ export function toMessage(row: MessageRow): Message {
     kind: toMessageKind(row.kind),
     text: row.text,
     createdAt: row.created_at,
+    editedAt: row.edited_at,
     attachments: (row.attachments ?? []).map((attachment) => ({
       id: attachment.id,
       url: attachment.url,
@@ -610,6 +630,83 @@ export async function forwardMessages(chatId: string, messageIds: string[]): Pro
   return (data ?? []).map(toMessage);
 }
 
+function isKept(item: EditMediaItem | EditVoiceItem): item is { attachmentId: string } {
+  return 'attachmentId' in item;
+}
+
+/**
+ * Правит своё сообщение — функцией `edit_message`, одной транзакцией: текст,
+ * набор вложений и вид. Что сообщение моё, не переслано, не удалено и что
+ * итог допустим (голосовое без подписи, непустое, альбом в пределах), решает
+ * база (миграция `20260929180000_message_edit.sql`); время правки ставит она
+ * же. Отдаёт сообщение, каким оно стало.
+ */
+export async function editMessage(messageId: string, input: EditMessageInput): Promise<Message> {
+  const { error } = await supabase.rpc('edit_message', {
+    target_message: messageId,
+    message_text: input.text.trim(),
+    media: input.media.map((item) =>
+      isKept(item)
+        ? { attachment_id: item.attachmentId }
+        : {
+            url: item.url,
+            poster_url: item.posterUrl,
+            mime_type: item.mimeType,
+            width: item.width,
+            height: item.height,
+            duration_ms: item.durationMs,
+            size_bytes: item.sizeBytes,
+          },
+    ),
+    voice: input.voice
+      ? isKept(input.voice)
+        ? { attachment_id: input.voice.attachmentId }
+        : {
+            url: input.voice.url,
+            mime_type: input.voice.mimeType,
+            duration_ms: Math.round(input.voice.durationMs),
+            size_bytes: input.voice.sizeBytes,
+            waveform: input.voice.waveform,
+          }
+      : undefined,
+  });
+
+  if (error) throw error;
+
+  const { data, error: fetchError } = await messagesSelect().eq('id', messageId).single();
+
+  if (fetchError) throw fetchError;
+
+  return toMessage(data);
+}
+
+/** Сообщения по id — живые; удалённые база не отдаёт. */
+export async function listMessagesByIds(messageIds: string[]): Promise<Message[]> {
+  if (messageIds.length === 0) return [];
+
+  const { data, error } = await messagesSelect().in('id', messageIds).is('deleted_at', null);
+
+  if (error) throw error;
+
+  return (data ?? []).map(toMessage);
+}
+
+/**
+ * Время правки тех из этих сообщений, которые правили. Нужна, чтобы после
+ * обрыва Realtime перечитать только изменившееся, а не всё загруженное.
+ */
+export async function listMessageEdits(
+  messageIds: string[],
+): Promise<{ id: string; editedAt: string }[]> {
+  if (messageIds.length === 0) return [];
+
+  const { data, error } = await supabase.rpc('message_edits', { message_ids: messageIds });
+
+  if (error) throw error;
+
+  return (data ?? []).map((row) => ({ id: row.id, editedAt: row.edited_at }));
+}
+
 /**
  * Удаляет свои сообщения для всех — мягко, строки остаются с `deleted_at`.
  * Что все они мои и из одного чата, проверяет база: чужое в пачке отвергает
@@ -675,6 +772,8 @@ export type ChatChannelHandlers = {
    * базы.
    */
   onMessagesDeleted: (messageIds: string[]) => void;
+  /** Сообщение отредактировано. Как и у удаления, payload — только подсказка, какое. */
+  onMessageEdited: (messageId: string) => void;
   /** Закрепы чата изменились — полосу пора перечитать. */
   onPinsChanged: () => void;
   /**
@@ -731,6 +830,11 @@ export function subscribeToChat(chatId: string, handlers: ChatChannelHandlers): 
       handlers.onMessagesDeleted(
         Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string') : [],
       );
+    })
+    .on('broadcast', { event: 'message_edited' }, ({ payload }) => {
+      const id = (payload as { message_id?: unknown } | undefined)?.message_id;
+
+      if (typeof id === 'string') handlers.onMessageEdited(id);
     })
     .on('broadcast', { event: 'pins_changed' }, () => handlers.onPinsChanged())
     .on('broadcast', { event: 'typing' }, ({ payload }) => {

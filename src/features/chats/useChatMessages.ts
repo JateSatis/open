@@ -16,9 +16,12 @@ import {
   restoreMessages,
   updateHistory,
 } from '@/features/chats/messages/historyCache';
+import { saveEdit as saveEditOnServer } from '@/features/chats/messages/editing';
 import { outboxMessages, useOutboxMessages } from '@/features/chats/messages/outbox';
+import { usePendingEditsOf } from '@/features/chats/messages/pendingEdits';
 import type {
   ChatMessage,
+  EditResult,
   ForwardItem,
   LiveQuote,
   UserActivity,
@@ -33,6 +36,8 @@ import type { LocalMedia, MediaLibraryItem } from '@/features/media';
 export type {
   ChatMessage,
   DeliveryStatus,
+  EditResult,
+  EditVoice,
   ForwardItem,
   LiveQuote,
   UserActivity,
@@ -59,6 +64,8 @@ export type ChatMessagesState = {
   retry: (localId: string) => void;
   /** Своё неотправленное или упавшее — убрать. На сервер ничего не уходит. */
   discard: (localId: string) => void;
+  /** Сохраняет правку своего сообщения: новая версия на экране сразу. */
+  saveEdit: (original: ChatMessage, result: EditResult) => void;
   /**
    * Удаляет свои сообщения для всех. С экрана они уходят сразу; если сервер
    * отказал, возвращаются на место, а ошибка пробрасывается вызвавшему.
@@ -80,19 +87,29 @@ export function useChatMessages(chatId: string, currentUserId: string | null): C
   const connection = useConnectionStatus();
   const history = useChatHistory(chatId);
   const outbox = useOutboxMessages(chatId);
+  const pendingEdits = usePendingEditsOf(chatId);
   const { activities, notifyTyping, notifyRecordingVoice } = useChatChannel(chatId, currentUserId);
   const wasOfflineRef = useRef(false);
 
   // Подтверждённое сервером может на кадр оказаться и в исходящих, и в
   // истории — показывается одно, по id.
-  const messages = useMemo(() => {
-    if (outbox.length === 0) return history.items;
+  // Сохраняющаяся правка накладывается поверх подтверждённой версии.
+  const edited = useMemo(
+    () =>
+      Object.keys(pendingEdits).length === 0
+        ? history.items
+        : history.items.map((message) => pendingEdits[message.id] ?? message),
+    [history.items, pendingEdits],
+  );
 
-    const known = new Set(history.items.map((message) => message.id));
+  const messages = useMemo(() => {
+    if (outbox.length === 0) return edited;
+
+    const known = new Set(edited.map((message) => message.id));
     const pending = outbox.filter((message) => !known.has(message.id));
 
-    return pending.length === 0 ? history.items : [...pending, ...history.items];
-  }, [history.items, outbox]);
+    return pending.length === 0 ? edited : [...pending, ...edited];
+  }, [edited, outbox]);
 
   const context = useMemo(
     () => ({ queryClient, chatId, currentUserId }),
@@ -151,6 +168,11 @@ export function useChatMessages(chatId: string, currentUserId: string | null): C
 
   const discard = useCallback((localId: string) => discardLocal(chatId, localId), [chatId]);
 
+  const saveEdit = useCallback(
+    (original: ChatMessage, result: EditResult) => void saveEditOnServer(context, original, result),
+    [context],
+  );
+
   const deleteMessages = useCallback(
     async (messageIds: string[]) => {
       const ids = new Set(messageIds);
@@ -189,6 +211,7 @@ export function useChatMessages(chatId: string, currentUserId: string | null): C
     forward,
     retry,
     discard,
+    saveEdit,
     deleteMessages,
     notifyTyping,
     notifyRecordingVoice,

@@ -22,6 +22,7 @@ export type MessageActionId =
   | 'retry'
   | 'reply'
   | 'copy'
+  | 'edit'
   | 'pin'
   | 'unpin'
   | 'forward'
@@ -39,6 +40,20 @@ export type MessageAction = {
 /** Ещё не подтверждено сервером: отправляется или упало. */
 export function isLocalMessage(message: ChatMessage): boolean {
   return message.status !== 'sent';
+}
+
+/**
+ * Правится только подтверждённое сервером и не сохраняющее другую правку.
+ * Пересланное — копия чужих слов, системное — не слова человека: их база
+ * править и не даст.
+ */
+export function isEditable(message: ChatMessage): boolean {
+  return (
+    !isLocalMessage(message) &&
+    !message.editStatus &&
+    message.forward === null &&
+    (message.kind === 'text' || message.kind === 'media' || message.kind === 'voice')
+  );
 }
 
 export function hasCopyableText(message: ChatMessage): boolean {
@@ -62,6 +77,11 @@ export const MESSAGE_ACTIONS: readonly MessageAction[] = [
     id: 'copy',
     label: 'Копировать',
     isVisible: ({ message }) => !isLocalMessage(message) && hasCopyableText(message),
+  },
+  {
+    id: 'edit',
+    label: 'Изменить',
+    isVisible: ({ message, isOwn, isMember }) => isMember && isOwn && isEditable(message),
   },
   {
     id: 'pin',

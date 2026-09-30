@@ -32,13 +32,15 @@ export function useRecordDrag(): RecordDrag {
 export type RecordButtonProps = {
   hold: HoldToRecord;
   drag: RecordDrag;
+  /** Записывать сейчас нельзя — например, в правке, где уже есть текст. */
+  disabled?: boolean;
 };
 
 /**
  * Кнопка записи «Г». Буква вместо иконки намеренно, как «M»: набор иконок
  * ещё не выбран. Сам жест — в `useRecordGesture`.
  */
-export function RecordButton({ hold, drag }: RecordButtonProps) {
+export function RecordButton({ hold, drag, disabled = false }: RecordButtonProps) {
   const theme = useTheme();
   const active = hold.phase !== 'idle';
   const locked = hold.phase === 'locked';
@@ -82,6 +84,22 @@ export function RecordButton({ hold, drag }: RecordButtonProps) {
       transform: [{ translateY: lockedShared.value ? 0 : drag.y.value * 0.4 }],
     };
   });
+
+  if (disabled) {
+    return (
+      <View
+        testID="record-voice-button"
+        accessibilityRole="button"
+        accessibilityLabel="Голосовое сообщение: удерживайте, чтобы записать"
+        accessibilityState={{ disabled: true }}
+        style={[styles.slot, styles.disabled]}
+      >
+        <View style={[styles.button, { backgroundColor: theme.backgroundElement }]}>
+          <Text variant="bodyBold">Г</Text>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <GestureDetector gesture={gesture}>

@@ -16,6 +16,10 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  /** Как у неактивной `Button`. */
+  disabled: {
+    opacity: 0.5,
+  },
   button: {
     alignItems: 'center',
     justifyContent: 'center',

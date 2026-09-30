@@ -27,6 +27,9 @@ jest.mock('@/api/chats', () => ({
   subscribeToChat: jest.fn(),
   deleteMessages: jest.fn(),
   listDeletedMessageIds: jest.fn(),
+  listMessageEdits: jest.fn(() => Promise.resolve([])),
+  listMessagesByIds: jest.fn(() => Promise.resolve([])),
+  editMessage: jest.fn(),
   MESSAGE_PAGE_SIZE: 30,
 }));
 jest.mock('@/api/pins', () => ({
@@ -107,6 +110,7 @@ describe('useChatMessages sending media', () => {
       kind: 'media',
       text: null,
       createdAt: '2026-09-22T10:00:00Z',
+      editedAt: null,
       attachments: [
         {
           id: 'att-1',
@@ -203,6 +207,7 @@ describe('useChatMessages sending media', () => {
       kind: 'media',
       text: null,
       createdAt: '2026-09-22T10:00:00Z',
+      editedAt: null,
       attachments: [],
       replies: [],
       forward: null,
@@ -263,6 +268,7 @@ describe('useChatMessages sending media', () => {
       kind: 'text',
       text: 'привет',
       createdAt: '2026-09-16T10:05:00Z',
+      editedAt: null,
       attachments: [],
       replies: [],
       forward: null,
@@ -293,6 +299,7 @@ describe('useChatMessages sending media', () => {
           kind: 'text' as const,
           text: 'до этого',
           createdAt: '2026-09-22T09:00:00Z',
+          editedAt: null,
           attachments: [],
           replies: [],
           forward: null,
@@ -308,6 +315,7 @@ describe('useChatMessages sending media', () => {
       kind: 'text' as const,
       text: 'привет',
       createdAt: '2026-09-22T10:00:00Z',
+      editedAt: null,
       attachments: [],
       replies: [],
       forward: null,
@@ -400,6 +408,7 @@ describe('useChatMessages large albums', () => {
           kind: 'media',
           text: null,
           createdAt: '2026-09-26T10:00:00Z',
+          editedAt: null,
           attachments: [],
           replies: [],
           forward: null,
@@ -445,6 +454,7 @@ describe('useChatMessages voice messages', () => {
     kind: 'voice' as const,
     text: null,
     createdAt: '2026-09-26T10:00:00Z',
+    editedAt: null,
     attachments: [
       {
         id: 'att-voice',
@@ -578,6 +588,7 @@ describe('useChatMessages removing own unsent messages', () => {
     kind: 'text' as const,
     text: 'передумал',
     createdAt: '2026-09-27T10:00:00Z',
+    editedAt: null,
     attachments: [],
     replies: [],
     forward: null,
@@ -630,6 +641,7 @@ describe('useChatMessages replies and forwards', () => {
     authorId: 'user-2',
     authorName: 'Марина',
     createdAt: '2026-09-29T09:00:00Z',
+    editedAt: null,
     preview: {
       kind: 'text' as const,
       text: 'оригинал',
@@ -648,6 +660,7 @@ describe('useChatMessages replies and forwards', () => {
       kind: 'text' as const,
       text: `текст ${id}`,
       createdAt: `2026-09-29T09:0${minute}:00Z`,
+      editedAt: null,
       attachments: [],
       replies: [],
       forward: null,
@@ -692,6 +705,7 @@ describe('useChatMessages replies and forwards', () => {
         kind: 'text',
         text: 'согласен',
         createdAt: '2026-09-29T10:00:00Z',
+        editedAt: null,
         attachments: [],
         replies: [quote],
         forward: null,
@@ -716,6 +730,7 @@ describe('useChatMessages replies and forwards', () => {
         kind: 'text',
         text: input.text ?? null,
         createdAt: '2026-09-29T10:00:00Z',
+        editedAt: null,
         attachments: [],
         replies: [],
         forward: null,
@@ -729,6 +744,7 @@ describe('useChatMessages replies and forwards', () => {
         authorId: 'user-1',
         text: `текст ${id}`,
         createdAt: `2026-09-29T10:00:0${index + 1}Z`,
+        editedAt: null,
         forward: originOf(id, id === 'early' ? 1 : 5),
       }));
     });

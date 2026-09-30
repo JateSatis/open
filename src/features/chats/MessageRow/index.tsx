@@ -40,6 +40,8 @@ export type MessageRowProps = {
   /** Сообщение можно отметить (неотправленное — нельзя). */
   selectable: boolean;
   selected: boolean;
+  /** Это сообщение сейчас правится — облачко подсвечено, пока поле в режиме правки. */
+  editing?: boolean;
   /** Меняется при каждом прыжке к сообщению — подсветка вспыхивает заново. */
   highlightKey: number | null;
   /** Над строкой может быть открыто меню: её копия поднята над затемнением, а сама строка прячется. */
@@ -63,6 +65,7 @@ export function MessageRow({
   selectionMode,
   selectable,
   selected,
+  editing = false,
   highlightKey,
   messageId,
   onLongPress,
@@ -133,7 +136,7 @@ export function MessageRow({
         style={[styles.fill, { backgroundColor: theme.messageHighlight }, highlightStyle]}
       />
 
-      {selected ? (
+      {selected || editing ? (
         <View
           pointerEvents="none"
           style={[styles.fill, { backgroundColor: theme.messageHighlight }]}

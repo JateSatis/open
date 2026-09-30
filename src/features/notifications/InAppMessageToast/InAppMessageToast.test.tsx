@@ -1,5 +1,5 @@
 import type { Session as SupabaseSession } from '@supabase/supabase-js';
-import { screen, userEvent, waitFor } from '@testing-library/react-native';
+import { act, screen, userEvent, waitFor } from '@testing-library/react-native';
 
 import { InAppMessageToast } from './index';
 
@@ -10,6 +10,7 @@ import {
   type UserChannelHandlers,
 } from '@/api/chats';
 import { useSession } from '@/features/auth/useSession';
+import { showNotice } from '@/features/notifications/alertsStore';
 import { setActiveChatId } from '@/store/activeChat';
 import { renderWithQuery } from '@/test/renderWithQuery';
 
@@ -123,6 +124,18 @@ describe('InAppMessageToast', () => {
     await user.press(screen.getByText('Зовёт вас в чат «Поход»'));
 
     expect(mockPush).toHaveBeenCalledWith('/chats/chat-7');
+  });
+
+  it('runs the action of a notice that carries one and closes', async () => {
+    const retry = jest.fn();
+
+    await renderWithQuery(<InAppMessageToast />);
+    await act(async () => showNotice('Изменения не сохранены', 'error', { label: 'Повторить', run: retry }));
+
+    await userEvent.setup().press(await screen.findByRole('button', { name: 'Повторить' }));
+
+    expect(retry).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(screen.queryByText('Изменения не сохранены')).toBeNull());
   });
 
   it('leaves no channel behind on unmount', async () => {

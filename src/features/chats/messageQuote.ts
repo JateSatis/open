@@ -1,7 +1,7 @@
 // Сообщение одной строкой — для цитаты в облачке, плашки над полем ввода и
 // строки «Переслано от». Правило одно на всех, поэтому и место одно.
 
-import type { ForwardOrigin } from '@/api/chats';
+import type { ForwardOrigin, Message } from '@/api/chats';
 import { toPreview, type MessagePreview } from '@/api/messagePreview';
 import type { ComposerMode } from '@/features/chats/composerDraftStore';
 import type { ChatMessage, LiveQuote } from '@/features/chats/messages/types';
@@ -29,7 +29,7 @@ export function messagesCount(n: number): string {
   return `${n} ${word}`;
 }
 
-export function previewOf(message: ChatMessage): MessagePreview {
+export function previewOf(message: Message): MessagePreview {
   return toPreview(
     message.kind,
     message.text,
@@ -72,6 +72,7 @@ export function quoteOf(message: ChatMessage, authorName: string): LiveQuote {
     authorId: message.authorId,
     authorName: message.authorId ? authorName : null,
     createdAt: message.createdAt,
+    editedAt: message.editedAt,
     preview: previewOf(message),
   };
 }
@@ -108,6 +109,18 @@ export function describeMode(mode: ComposerMode): {
   thumbnailUrl: string | null;
   closeLabel: string;
 } {
+  if (mode.type === 'edit') {
+    // Миниатюры нет: вложения правки лежат под плашкой целиком — и запись
+    // голосового тоже, поэтому её длительность здесь лишняя.
+    return {
+      title: 'Редактирование',
+      snippet:
+        mode.message.kind === 'voice' ? 'Голосовое' : describePreview(previewOf(mode.message)),
+      thumbnailUrl: null,
+      closeLabel: 'Отменить редактирование',
+    };
+  }
+
   if (mode.type === 'reply') {
     const [first] = mode.quotes;
 

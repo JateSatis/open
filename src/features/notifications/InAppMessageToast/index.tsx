@@ -15,6 +15,8 @@ import { Spacing } from '@/theme';
 const VISIBLE_MS = 4500;
 /** Короткий ответ на действие читается за секунду — дольше он только мешает. */
 const NOTICE_VISIBLE_MS = 2000;
+/** Фраза с действием («Повторить») — дольше: её надо прочитать и успеть нажать. */
+const ACTION_VISIBLE_MS = 8000;
 const SLIDE_MS = 220;
 
 /**
@@ -42,7 +44,10 @@ export function InAppMessageToast() {
       useNativeDriver: true,
     }).start();
 
-    const timer = setTimeout(dismiss, alert.kind === 'notice' ? NOTICE_VISIBLE_MS : VISIBLE_MS);
+    // На кнопку фразы с действием нужно успеть нажать: за ней — несохранённая работа.
+    const visibleMs =
+      alert.kind !== 'notice' ? VISIBLE_MS : alert.action ? ACTION_VISIBLE_MS : NOTICE_VISIBLE_MS;
+    const timer = setTimeout(dismiss, visibleMs);
 
     return () => clearTimeout(timer);
   }, [alert, dismiss, slide]);
@@ -64,6 +69,8 @@ export function InAppMessageToast() {
   const cardColors = { backgroundColor: theme.backgroundElement, borderColor: theme.border };
 
   if (alert.kind === 'notice') {
+    const { action } = alert;
+
     return (
       <Animated.View style={[styles.wrapper, styles.noticeWrapper, slideStyle]}>
         <Pressable
@@ -74,6 +81,21 @@ export function InAppMessageToast() {
           <Text variant="small" color={alert.tone === 'error' ? 'danger' : 'text'}>
             {alert.text}
           </Text>
+
+          {action ? (
+            <Pressable
+              accessibilityRole="button"
+              hitSlop={Spacing.two}
+              onPress={() => {
+                dismiss();
+                action.run();
+              }}
+            >
+              <Text variant="smallBold" color="primary">
+                {action.label}
+              </Text>
+            </Pressable>
+          ) : null}
         </Pressable>
       </Animated.View>
     );

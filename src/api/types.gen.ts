@@ -418,6 +418,64 @@ export type Database = {
           },
         ]
       }
+      message_revisions: {
+        Row: {
+          attachments: Json
+          author_id: string | null
+          chat_id: string
+          created_at: string
+          id: string
+          kind: string
+          message_id: string
+          text: string | null
+          version_at: string
+        }
+        Insert: {
+          attachments?: Json
+          author_id?: string | null
+          chat_id: string
+          created_at?: string
+          id?: string
+          kind: string
+          message_id: string
+          text?: string | null
+          version_at: string
+        }
+        Update: {
+          attachments?: Json
+          author_id?: string | null
+          chat_id?: string
+          created_at?: string
+          id?: string
+          kind?: string
+          message_id?: string
+          text?: string | null
+          version_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "message_revisions_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_revisions_chat_id_fkey"
+            columns: ["chat_id"]
+            isOneToOne: false
+            referencedRelation: "chats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_revisions_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       messages: {
         Row: {
           author_id: string | null
@@ -533,6 +591,7 @@ export type Database = {
         Args: { new_message: string; reply_to: string[]; target_chat: string }
         Returns: undefined
       }
+      check_message_shape: { Args: { target: string }; Returns: undefined }
       create_chat: {
         Args: { chat_title?: string; invitee_ids: string[] }
         Returns: Json
@@ -540,6 +599,15 @@ export type Database = {
       current_session_id: { Args: never; Returns: string }
       decline_chat_invite: { Args: { target_chat: string }; Returns: undefined }
       delete_messages: { Args: { message_ids: string[] }; Returns: undefined }
+      edit_message: {
+        Args: {
+          media?: Json
+          message_text: string
+          target_message: string
+          voice?: Json
+        }
+        Returns: undefined
+      }
       end_device_session: { Args: { p_device_id: string }; Returns: undefined }
       end_other_sessions: { Args: never; Returns: undefined }
       forward_messages: {
@@ -569,6 +637,13 @@ export type Database = {
       mark_device_signed_out: {
         Args: { p_installation_id: string }
         Returns: undefined
+      }
+      message_edits: {
+        Args: { message_ids: string[] }
+        Returns: {
+          edited_at: string
+          id: string
+        }[]
       }
       message_preview_text: {
         Args: { m: Database["public"]["Tables"]["messages"]["Row"] }

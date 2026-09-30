@@ -24,7 +24,11 @@ import { renderWithQuery } from '@/test/renderWithQuery';
 const mockPush = jest.fn();
 
 jest.mock('expo-router', () => ({
-  useNavigation: () => ({ getState: () => ({ index: 0, routes: [] }), dispatch: jest.fn() }),
+  useNavigation: () => ({
+    getState: () => ({ index: 0, routes: [] }),
+    dispatch: jest.fn(),
+    addListener: () => () => undefined,
+  }),
   useLocalSearchParams: () => ({ chatId: 'chat-1' }),
   useRouter: () => ({ push: mockPush, navigate: jest.fn() }),
   Stack: { Screen: () => null },
@@ -42,6 +46,9 @@ jest.mock('@/api/chats', () => ({
   subscribeToChat: jest.fn(),
   deleteMessages: jest.fn(),
   listDeletedMessageIds: jest.fn(),
+  listMessageEdits: jest.fn(() => Promise.resolve([])),
+  listMessagesByIds: jest.fn(() => Promise.resolve([])),
+  editMessage: jest.fn(),
   MESSAGE_PAGE_SIZE: 30,
 }));
 jest.mock('@/api/pins', () => ({
@@ -107,6 +114,7 @@ function message(id: string, text: string, authorId: string, minute = 0): Messag
     kind: 'text',
     text,
     createdAt: `2026-09-29T10:0${minute}:00Z`,
+    editedAt: null,
     attachments: [],
     replies: [],
     forward: null,
@@ -289,6 +297,7 @@ describe('quotes in bubbles', () => {
     authorId: 'user-1',
     authorName: 'Я',
     createdAt: '2026-09-29T10:01:00Z',
+    editedAt: null,
     preview: {
       kind: 'text',
       text: 'эй',

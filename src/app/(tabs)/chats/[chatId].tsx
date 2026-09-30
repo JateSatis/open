@@ -1,4 +1,4 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   ActivityIndicator,
@@ -37,7 +37,9 @@ import { useChatMessages, type ChatMessage } from '@/features/chats/useChatMessa
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
 import { useJumpToMessage } from '@/features/chats/useJumpToMessage';
 import { useMarkChatRead } from '@/features/chats/useMarkChatRead';
+import { readChatDraft } from '@/features/chats/composerDraftStore';
 import { useMessageActionHandlers } from '@/features/chats/useMessageActionHandlers';
+import { useMessageEdit } from '@/features/chats/useMessageEdit';
 import { useMessageMenu } from '@/features/chats/useMessageMenu';
 import { useMessageSelection } from '@/features/chats/useMessageSelection';
 import { useMyInvite } from '@/features/chats/useMyInvite';
@@ -54,12 +56,18 @@ import { useTheme } from '@/hooks/use-theme';
 import { setActiveChatId } from '@/store/activeChat';
 import { Spacing } from '@/theme';
 
+const noop = () => undefined;
+
+/** Ближе этого к самому новому сообщению список держится за низ переписки, а не за прочитанное. */
+const KEEP_READING_POSITION = { minIndexForVisible: 0, autoscrollToTopThreshold: Spacing.six };
+
 /** Облачко чужого сообщения начинается после аватара и зазора (`MessageBubble`). */
 const BUBBLE_LEADING_INSET = Spacing.five + Spacing.two;
 
 export default function ChatScreen() {
   const { chatId } = useLocalSearchParams<{ chatId: string }>();
   const router = useRouter();
+  const nav = useNavigation();
   const theme = useTheme();
   const {
     containerRef,
@@ -143,7 +151,39 @@ export default function ChatScreen() {
     sendVoice: chatMessages.sendVoice,
     forward: chatMessages.forward,
   });
-  const { startReply } = replyForward;
+  const edit = useMessageEdit({ chatId, draft, composerRef, saveEdit: chatMessages.saveEdit });
+  const { leave: leaveEdit, start: beginEdit } = edit;
+  const editingId = edit.mode?.message.id ?? null;
+  const isEditing = editingId !== null;
+
+  // Плашка над полем одна: ответ посреди правки сначала закрывает правку
+  // (с вопросом, если в ней что-то изменено).
+  const afterEdit = useCallback(
+    (next: () => void) => {
+      // Без идущей правки — сразу, в этом же кадре: меню закрывается, и поле
+      // успевает получить фокус.
+      if (readChatDraft(chatId).mode?.type !== 'edit') {
+        next();
+        return;
+      }
+
+      void leaveEdit().then((left) => {
+        if (left) next();
+      });
+    },
+    [chatId, leaveEdit],
+  );
+
+  const { startReply: beginReply } = replyForward;
+  const startReply = useCallback(
+    (targets: ChatMessage[]) => afterEdit(() => beginReply(targets)),
+    [afterEdit, beginReply],
+  );
+
+  const startEdit = useCallback(
+    (message: ChatMessage) => afterEdit(() => beginEdit(message)),
+    [afterEdit, beginEdit],
+  );
 
   const { runMessageAction, runSelectionAction } = useMessageActionHandlers({
     selection,
@@ -154,7 +194,37 @@ export default function ChatScreen() {
     authorName,
     reply: startReply,
     forward: replyForward.startForward,
+    edit: startEdit,
   });
+
+  // Системный «назад» в правке выходит из правки, а не из чата.
+  // На время выбора «назад» принадлежит выбору.
+  const selectionActive = selection.isActive;
+
+  useEffect(() => {
+    if (!isEditing || selectionActive) return;
+
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      void leaveEdit();
+      return true;
+    });
+
+    return () => subscription.remove();
+  }, [isEditing, leaveEdit, selectionActive]);
+
+  // Уход из чата посреди правки — тем же выходом: с вопросом, если что-то изменено.
+  useEffect(
+    () =>
+      nav.addListener('beforeRemove', (event) => {
+        if (readChatDraft(chatId).mode?.type !== 'edit') return;
+
+        event.preventDefault();
+        void leaveEdit().then((left) => {
+          if (left) nav.dispatch(event.data.action);
+        });
+      }),
+    [chatId, leaveEdit, nav],
+  );
 
   // Системный «назад» в режиме выбора выходит из выбора, а не из чата.
   const { isActive: isSelecting, clear: clearSelection } = selection;
@@ -216,6 +286,7 @@ export default function ChatScreen() {
         selectionMode={isSelecting}
         selectable={!isLocalMessage(item)}
         selected={isSelected(item.id)}
+        editing={item.id === editingId}
         highlightKey={highlight?.messageId === item.id ? highlight.key : null}
         messageId={item.id}
         onLongPress={(anchor) => openMenu(item, anchor)}
@@ -227,7 +298,17 @@ export default function ChatScreen() {
         {bubbleFor(item, true)}
       </MessageRow>
     ),
-    [bubbleFor, highlight, isMember, isSelected, isSelecting, openMenu, startReply, toggleSelected],
+    [
+      bubbleFor,
+      editingId,
+      highlight,
+      isMember,
+      isSelected,
+      isSelecting,
+      openMenu,
+      startReply,
+      toggleSelected,
+    ],
   );
 
   const menuMessage = menu.target?.message ?? null;
@@ -263,7 +344,23 @@ export default function ChatScreen() {
   );
 
   const { setMode } = draft;
-  const closeMode = useCallback(() => setMode(null), [setMode]);
+  const closeMode = useCallback(() => {
+    if (isEditing) {
+      void leaveEdit();
+      return;
+    }
+
+    setMode(null);
+  }, [isEditing, leaveEdit, setMode]);
+
+  const editPlate = edit.composer
+    ? {
+        onRemoveAttachment: edit.removeAttachment,
+        onRemoveVoice: edit.removeVoice,
+        state: edit.composer,
+      }
+    : undefined;
+  const submit = isEditing ? edit.save : replyForward.submit;
 
   return (
     <View
@@ -300,6 +397,10 @@ export default function ChatScreen() {
             contentContainerStyle={styles.list}
             // The list is inverted, so its "end" is the top of the screen:
             // scrolling up pages further back through the history.
+            // Облачко ниже экрана выросло или сжалось (правка, подгрузка
+            // картинки) — то, что человек читает выше, остаётся на месте.
+            // У самого низа переписки список по-прежнему едет за новым.
+            maintainVisibleContentPosition={KEEP_READING_POSITION}
             onEndReached={hasMore ? loadMore : undefined}
             onEndReachedThreshold={0.4}
             ListFooterComponent={
@@ -354,11 +455,13 @@ export default function ChatScreen() {
             onChangeText: draft.setText,
             mode: draft.mode,
             onCloseMode: closeMode,
+            edit: editPlate,
             canSend: isMember,
-            onSend: replyForward.submit,
+            onSend: submit,
             onTyping: notifyTyping,
-            onSendVoice: replyForward.sendVoice,
-            onRecordingVoice: notifyRecordingVoice,
+            onSendVoice: isEditing ? edit.recorded : replyForward.sendVoice,
+            // Запись в правке не уходит в чат — и «записывает голосовое…» не правда.
+            onRecordingVoice: isEditing ? noop : notifyRecordingVoice,
             inputRef: composerRef,
           }}
         />
@@ -366,9 +469,14 @@ export default function ChatScreen() {
 
       <MediaPickerSheet
         draft={draft}
-        plate={draft.mode?.type === 'reply' ? modePlate(draft.mode, closeMode) : null}
+        plate={
+          draft.mode?.type === 'reply' || draft.mode?.type === 'edit'
+            ? modePlate(draft.mode, closeMode, editPlate)
+            : null
+        }
+        editing={isEditing}
         onTyping={notifyTyping}
-        onSend={replyForward.submit}
+        onSend={submit}
       />
 
       <MessageContextMenu

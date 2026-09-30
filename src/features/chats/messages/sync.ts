@@ -5,16 +5,20 @@ import type { QueryClient } from '@tanstack/react-query';
 
 import {
   listDeletedMessageIds,
+  listMessageEdits,
   listMessages,
+  listMessagesByIds,
   listMessagesSince,
   MESSAGE_PAGE_SIZE,
   type Message,
 } from '@/api/chats';
 import {
+  knownEdits,
   mergeMessages,
   quotedIds,
   readHistory,
   removeMessages,
+  replaceMessages,
   toSent,
   updateHistory,
   type ChatHistory,
@@ -100,16 +104,51 @@ export async function loadHistory(queryClient: QueryClient, chatId: string): Pro
     0,
     MAX_TOMBSTONE_IDS,
   );
-  const [newer, deleted] = await Promise.all([
+  const [newer, deleted, edited] = await Promise.all([
     fetchNewer(chatId, since),
     listDeletedMessageIds(loadedIds),
+    fetchStaleEdits(cached, loadedIds),
   ]);
 
   if (newer === null) return firstPage(chatId);
 
   const latest = readHistory(queryClient, chatId) ?? cached;
 
-  return removeMessages(mergeMessages(latest, newer, 'newer'), new Set(deleted));
+  return replaceMessages(
+    removeMessages(mergeMessages(latest, newer, 'newer'), new Set(deleted)),
+    edited,
+  );
+}
+
+/** Свежие версии тех из `ids`, что правили после того, как их показали. */
+async function fetchStaleEdits(history: ChatHistory, ids: string[]): Promise<Message[]> {
+  const known = knownEdits(history);
+  const edits = await listMessageEdits(ids);
+  const stale = edits.filter((edit) => known.get(edit.id) !== edit.editedAt).map((edit) => edit.id);
+
+  return listMessagesByIds(stale);
+}
+
+/**
+ * Сообщение отредактировали — перечитать его, если оно на экране или
+ * процитировано в том, что на экране. Иначе и читать незачем: придёт
+ * свежим со страницей истории.
+ */
+export async function refreshEditedMessages(
+  queryClient: QueryClient,
+  chatId: string,
+  candidates: string[],
+): Promise<void> {
+  const known = knownEdits(readHistory(queryClient, chatId));
+  const ids = candidates.filter((id) => known.has(id)).slice(0, MAX_TOMBSTONE_IDS);
+
+  if (ids.length === 0) return;
+
+  const fresh = await listMessagesByIds(ids);
+
+  if (fresh.length === 0) return;
+
+  updateHistory(queryClient, chatId, (current) => replaceMessages(current, fresh));
 }
 
 /** Убирает с экрана то, что база подтверждает удалённым, — среди `candidates`. */

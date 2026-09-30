@@ -7,6 +7,11 @@ type SelectionState = {
   /** Порядок выбора — он же нумерация кружков. */
   order: string[];
   items: Record<string, MediaLibraryItem>;
+  /**
+   * Сколько можно выбрать. Обычно — предел альбома при отправке; при правке
+   * меньше: выбранное добавляется к тому, что в сообщении уже есть.
+   */
+  limit: number;
   toggle: (asset: MediaLibraryItem) => void;
   clear: () => void;
 };
@@ -27,6 +32,7 @@ type SelectionState = {
 export const useMediaSelection = create<SelectionState>((set) => ({
   order: [],
   items: {},
+  limit: MediaLimits.gallery.maxSelection,
 
   toggle: (asset) =>
     set((state) => {
@@ -36,7 +42,7 @@ export const useMediaSelection = create<SelectionState>((set) => ({
         return { order: state.order.filter((id) => id !== asset.id), items };
       }
 
-      if (state.order.length >= MediaLimits.gallery.maxSelection) return state;
+      if (state.order.length >= state.limit) return state;
 
       return {
         order: [...state.order, asset.id],
@@ -67,8 +73,13 @@ export function useSelectionSlot(id: string): number {
 
     if (index !== -1) return index + 1;
 
-    return state.order.length >= MediaLimits.gallery.maxSelection ? SLOT_BLOCKED : SLOT_FREE;
+    return state.order.length >= state.limit ? SLOT_BLOCKED : SLOT_FREE;
   });
+}
+
+/** Меняет предел выбора; `null` — обычный предел отправки. Выбор не трогает. */
+export function setSelectionLimit(limit: number | null) {
+  useMediaSelection.setState({ limit: limit ?? MediaLimits.gallery.maxSelection });
 }
 
 /** Сколько файлов выбрано. Подписываться на число дешевле, чем на сам список. */

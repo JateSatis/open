@@ -3,7 +3,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { subscribeToChat, type ChatActivity, type ChatChannel } from '@/api/chats';
 import { messagesQueryKey } from '@/features/chats/messages/historyCache';
-import { dropDeletedMessages, pullNewMessages } from '@/features/chats/messages/sync';
+import {
+  dropDeletedMessages,
+  pullNewMessages,
+  refreshEditedMessages,
+} from '@/features/chats/messages/sync';
 import type { UserActivity } from '@/features/chats/messages/types';
 import { chatQueryKey } from '@/features/chats/useChat';
 import { pinsQueryKey } from '@/features/chats/usePinnedMessages';
@@ -86,6 +90,11 @@ export function useChatChannel(chatId: string, currentUserId: string | null): Ch
       onMessagesDeleted: (messageIds) => {
         // Не вышло сверить — сверим при следующем событии или переподключении.
         dropDeletedMessages(queryClient, chatId, messageIds).catch(() => undefined);
+      },
+      onMessageEdited: (messageId) => {
+        refreshEditedMessages(queryClient, chatId, [messageId]).catch(() => undefined);
+        // Правленое могло быть закреплено — полоса показывает его текст.
+        void queryClient.invalidateQueries({ queryKey: pinsQueryKey(chatId) });
       },
       onPinsChanged: () => {
         void queryClient.invalidateQueries({ queryKey: pinsQueryKey(chatId) });
