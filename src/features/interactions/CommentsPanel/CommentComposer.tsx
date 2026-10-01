@@ -26,6 +26,8 @@ export type CommentComposerProps = {
   closed: boolean;
   onSend: () => void;
   onSendVoice: (voice: LocalMedia) => void;
+  /** Касание поля — шит разворачивается. */
+  onFieldActivate?: () => void;
 };
 
 const noop = () => undefined;
@@ -46,6 +48,7 @@ export function CommentComposer({
   closed,
   onSend,
   onSendVoice,
+  onFieldActivate,
 }: CommentComposerProps) {
   const theme = useTheme();
 
@@ -82,7 +85,10 @@ export function CommentComposer({
         inputRef={inputRef}
         onSend={onSend}
         onTyping={noop}
-        onFieldActivate={claimKeyboardForComments}
+        onFieldActivate={() => {
+          claimKeyboardForComments();
+          onFieldActivate?.();
+        }}
         onAttachPressIn={armSheet}
         onAttachPressOut={releaseMediaSheetArm}
         onAttachPress={openSheet}

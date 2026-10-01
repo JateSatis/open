@@ -1,11 +1,21 @@
-import { useCallback, useEffect, useMemo, useRef, type MutableRefObject } from 'react';
-import { useWindowDimensions, type FlatList, type TextInput } from 'react-native';
-import type { GestureType } from 'react-native-gesture-handler';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentProps,
+  type MutableRefObject,
+} from 'react';
+import { View, useWindowDimensions, type FlatList, type TextInput } from 'react-native';
+import { GestureDetector, type PanGesture } from 'react-native-gesture-handler';
+import Animated from 'react-native-reanimated';
 
 import { CommentComposer } from './CommentComposer';
 import { CommentList } from './CommentList';
 import { CommentTargetView } from './CommentTargetView';
 import { PanelHeader } from './PanelHeader';
+import { styles } from './styles';
 
 import { mosaicBounds } from '@/features/chats/lib/mosaicLayout';
 import { MessageBubble } from '@/features/chats/MessageBubble';
@@ -34,7 +44,19 @@ const commentKey = (comment: CommentItem) => comment.id;
 
 export type PanelContentProps = {
   target: CommentsPanelTarget;
-  dismissGesture: GestureType;
+  /**
+   * Жест шита — фабрикой: тянут и за шапку, и за исходное сообщение, а один
+   * объект жеста нельзя отдать двум детекторам.
+   */
+  makeDragGesture: () => PanGesture;
+  /** Потолок высоты исходного сообщения — от места, что осталось в шите. */
+  targetStyle: ComponentProps<typeof Animated.View>['style'];
+  /** Низ исходного сообщения от верха шита — по нему шит встаёт в половину. */
+  onRegionLayout: (bottom: number) => void;
+  onHeaderLayout: (height: number) => void;
+  onComposerLayout: (height: number) => void;
+  /** Касание поля ввода: шит разворачивается. */
+  onFieldActivate: () => void;
   onClose: () => void;
   onOpenPerson: (userId: string) => void;
   /** «Назад» сначала спрашивает содержимое: идущая правка выходит из правки, а не из панели. */
@@ -44,7 +66,12 @@ export type PanelContentProps = {
 /** Всё, что внутри панели: сообщение сверху, комментарии, поле ввода и меню. */
 export function PanelContent({
   target,
-  dismissGesture,
+  makeDragGesture,
+  targetStyle,
+  onRegionLayout,
+  onHeaderLayout,
+  onComposerLayout,
+  onFieldActivate,
   onClose,
   onOpenPerson,
   backRef,
@@ -60,6 +87,13 @@ export function PanelContent({
   const inputRef = useRef<TextInput>(null);
   const listRef = useRef<FlatList<CommentItem>>(null);
   const menu = useMessageMenu<CommentItem>(commentKey);
+  // Раскрытое сообщение листается само — тянуть шит за него нельзя.
+  const [targetExpanded, setTargetExpanded] = useState(false);
+  const headerGesture = useMemo(() => makeDragGesture(), [makeDragGesture]);
+  const targetGesture = useMemo(
+    () => makeDragGesture().enabled(!targetExpanded),
+    [makeDragGesture, targetExpanded],
+  );
 
   const { saveEdit: saveCommentEdit } = thread;
   // Правка — общая с сообщениями: поле знает только `ChatMessage`, а в ветке
@@ -154,13 +188,28 @@ export function PanelContent({
 
   return (
     <>
-      <PanelHeader
-        title={count > 0 ? commentsCountLabel(count) : 'Комментарии'}
-        dismissGesture={dismissGesture}
-        onClose={onClose}
-      />
+      {/* Шапка и сообщение — та часть шита, за которую его тянут. */}
+      <View onLayout={(event) => onRegionLayout(event.nativeEvent.layout.height)}>
+        <View onLayout={(event) => onHeaderLayout(event.nativeEvent.layout.height)}>
+          <PanelHeader
+            title={count > 0 ? commentsCountLabel(count) : 'Комментарии'}
+            dragGesture={headerGesture}
+            onClose={onClose}
+          />
+        </View>
 
-      <CommentTargetView target={about} bubble={targetBubble} />
+        <GestureDetector gesture={targetGesture}>
+          <Animated.View style={styles.targetFrame}>
+            <Animated.View style={[styles.targetClip, targetStyle]}>
+              <CommentTargetView
+                target={about}
+                bubble={targetBubble}
+                onExpandedChange={setTargetExpanded}
+              />
+            </Animated.View>
+          </Animated.View>
+        </GestureDetector>
+      </View>
 
       <CommentList
         listRef={listRef}
@@ -176,14 +225,17 @@ export function PanelContent({
         renderBubble={renderBubble}
       />
 
-      <CommentComposer
-        draft={draft}
-        edit={edit}
-        inputRef={inputRef}
-        closed={closed}
-        onSend={submit}
-        onSendVoice={sendVoice}
-      />
+      <View onLayout={(event) => onComposerLayout(event.nativeEvent.layout.height)}>
+        <CommentComposer
+          draft={draft}
+          edit={edit}
+          inputRef={inputRef}
+          closed={closed}
+          onSend={submit}
+          onSendVoice={sendVoice}
+          onFieldActivate={onFieldActivate}
+        />
+      </View>
 
       <MessageContextMenu
         anchor={menu.target?.anchor ?? null}
