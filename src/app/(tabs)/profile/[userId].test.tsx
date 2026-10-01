@@ -10,6 +10,7 @@ import { renderWithQuery } from '@/features/profile/renderWithQuery';
 const mockPush = jest.fn();
 
 jest.mock('expo-router', () => ({
+  useIsFocused: () => true,
   Stack: { Screen: () => null },
   useLocalSearchParams: jest.fn(),
   useRouter: () => ({ push: mockPush }),

@@ -9,6 +9,7 @@ import { renderWithQuery } from '@/test/renderWithQuery';
 const mockBack = jest.fn();
 
 jest.mock('expo-router', () => ({
+  useIsFocused: () => true,
   useRouter: () => ({ back: mockBack, canGoBack: () => true, push: jest.fn() }),
 }));
 jest.mock('@/api/streams');

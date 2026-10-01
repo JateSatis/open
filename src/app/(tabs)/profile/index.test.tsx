@@ -7,6 +7,7 @@ import { getMyProfile } from '@/api/profile';
 import { renderWithQuery } from '@/features/profile/renderWithQuery';
 
 jest.mock('expo-router', () => ({
+  useIsFocused: () => true,
   router: { push: jest.fn(), back: jest.fn() },
 }));
 

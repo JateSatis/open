@@ -1,4 +1,4 @@
-import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
+import { useIsFocused, useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   ActivityIndicator,
@@ -120,6 +120,7 @@ export default function ChatScreen() {
   const menu = useMessageMenu(rowKey);
   const draft = useComposerDraft(chatId);
   const isMember = chat ? isChatMember(chat, currentUserId) : false;
+  const isFocused = useIsFocused();
   // Заявку спрашиваем только у не-участника: участнику отвечать уже не на что.
   const myInvite = useMyInvite(chatId, chat !== null && !isMember);
   const invite = useRespondToInvite();
@@ -567,17 +568,22 @@ export default function ChatScreen() {
         />
       </Animated.View>
 
-      <MediaPickerSheet
-        draft={draft}
-        plate={
-          draft.mode?.type === 'reply' || draft.mode?.type === 'edit'
-            ? modePlate(draft.mode, closeMode, editPlate)
-            : null
-        }
-        editing={isEditing}
-        onTyping={notifyTyping}
-        onSend={submit}
-      />
+      {/* Сторы шитов общие: в стеке бывает два экрана чата (переход по
+          цитате, островку, из профиля), и окно рисует только верхний — иначе
+          под закрывающимся шитом на миг показывался его двойник. */}
+      {isFocused ? (
+        <MediaPickerSheet
+          draft={draft}
+          plate={
+            draft.mode?.type === 'reply' || draft.mode?.type === 'edit'
+              ? modePlate(draft.mode, closeMode, editPlate)
+              : null
+          }
+          editing={isEditing}
+          onTyping={notifyTyping}
+          onSend={submit}
+        />
+      ) : null}
 
       <MessageContextMenu
         anchor={menu.target?.anchor ?? null}

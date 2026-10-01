@@ -25,6 +25,7 @@ jest.mock('@/api/reactions', () => ({
   setMessageReaction: jest.fn(),
 }));
 jest.mock('expo-router', () => ({
+  useIsFocused: () => true,
   useNavigation: () => ({
     getState: () => ({ index: 0, routes: [] }),
     dispatch: jest.fn(),

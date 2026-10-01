@@ -27,7 +27,10 @@ import { closeComments } from '@/features/interactions/comments/commentsPanelSto
 import { island, original } from '@/test/islands';
 import { renderWithQuery } from '@/test/renderWithQuery';
 
+let mockFocused = true;
+
 jest.mock('expo-router', () => ({
+  useIsFocused: () => mockFocused,
   useNavigation: () => ({
     getState: () => ({ index: 0, routes: [] }),
     dispatch: jest.fn(),
@@ -220,6 +223,7 @@ let commentHandlers: CommentChannelHandlers | null = null;
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockFocused = true;
   commentHandlers = null;
   resetOutbox();
   resetCommentOutbox();
@@ -488,5 +492,16 @@ describe('a visitor in the comments', () => {
     expect(screen.queryByRole('menuitem', { name: 'Изменить' })).toBeNull();
     expect(screen.queryByRole('menuitem', { name: 'Удалить' })).toBeNull();
     expect(screen.queryByRole('menuitem', { name: 'Переслать' })).toBeNull();
+  });
+});
+
+describe('two chat screens in the stack', () => {
+  it('only the focused one draws the panel window — no twin under a closing panel', async () => {
+    await renderChat();
+    mockFocused = false;
+
+    await fireEvent.press(buttons()[3]);
+
+    expect(screen.queryByTestId('comments-panel')).toBeNull();
   });
 });
