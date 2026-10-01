@@ -16,6 +16,7 @@ jest.mock('@/api/reactions', () => ({
   listMessageReactions: jest.fn(),
   setMessageReaction: jest.fn(),
 }));
+jest.mock('@/api/comments', () => ({ setCommentReaction: jest.fn() }));
 jest.mock('@/api/chats', () => ({
   listMessages: jest.fn(),
   listMessagesSince: jest.fn(() => Promise.resolve([])),
