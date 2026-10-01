@@ -55,6 +55,16 @@ describe('focusWithKeyboard', () => {
     expect(input.focus).not.toHaveBeenCalled();
   });
 
+  it('поле в своём окне Modal не ждёт фокуса главного окна — его там не будет', () => {
+    const input = field(false);
+
+    setWindowFocusedForTests(false);
+    focusWithKeyboard({ current: input }, undefined, true);
+    nextFrame();
+
+    expect(input.focus).toHaveBeenCalled();
+  });
+
   it('после фокуса отдаёт поле — например, чтобы поставить курсор', () => {
     const input = field(false);
     const after = jest.fn();

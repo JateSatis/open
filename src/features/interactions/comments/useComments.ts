@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { deleteComment, listComments, subscribeToComments } from '@/api/comments';
 import { usePendingEditsOf } from '@/features/chats/messages/pendingEdits';
-import type { EditResult } from '@/features/chats/messages/types';
+import type { EditResult, LiveQuote } from '@/features/chats/messages/types';
 import { useConnectionStatus } from '@/features/connection/useConnectionStatus';
 import {
   deliverComment,
@@ -23,10 +23,21 @@ import {
   removeComments,
   updateComments,
 } from '@/features/interactions/comments/commentsCache';
-import { loadComments, syncComments } from '@/features/interactions/comments/commentSync';
+import {
+  loadComments,
+  syncCommentReactions,
+  syncComments,
+} from '@/features/interactions/comments/commentSync';
 import { commentTargetQueryKey } from '@/features/interactions/comments/useCommentTarget';
 import { outgoingOf } from '@/features/chats/messages/delivery';
 import type { LocalMedia, MediaLibraryItem } from '@/features/media';
+import { usePendingReactionMap } from '@/features/interactions/pendingReactions';
+import { sendReaction } from '@/features/interactions/reactionSender';
+import {
+  audienceOf,
+  nextReaction,
+  withMyReaction,
+} from '@/features/interactions/reactionState';
 import { useMyProfile } from '@/features/profile/queries';
 import { describeLoadError } from '@/lib/network';
 
@@ -46,9 +57,15 @@ export type CommentsState = {
   isLoadingMore: boolean;
   hasMore: boolean;
   error: string | null;
-  loadMore: () => void;
-  send: (text: string, media?: MediaLibraryItem[]) => void;
-  sendVoice: (voice: LocalMedia) => void;
+  /** Догружает страницу старее; промис — когда она легла в кеш (или нечего грузить). */
+  loadMore: () => Promise<void>;
+  send: (text: string, media?: MediaLibraryItem[], replies?: LiveQuote[]) => void;
+  sendVoice: (voice: LocalMedia, replies?: LiveQuote[]) => void;
+  /**
+   * Тап по реакции: та же, что стоит, — снять, другая — поставить. Ряд —
+   * догадка для мгновенного отклика по участию в чате; решит база.
+   */
+  react: (comment: CommentItem, emoji: string) => void;
   retry: (localId: string) => void;
   /** Своё неотправленное — убрать с экрана; на сервер ничего не уходит. */
   discard: (localId: string) => void;
@@ -67,12 +84,14 @@ export function useComments(
   messageId: string,
   chatId: string,
   currentUserId: string | null,
+  amMember = false,
 ): CommentsState {
   const queryClient = useQueryClient();
   const connection = useConnectionStatus();
   const { data: me } = useMyProfile();
   const outbox = useOutboxComments(messageId);
   const pendingEdits = usePendingEditsOf(commentThreadKey(messageId));
+  const pendingReactions = usePendingReactionMap();
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const loadingMoreRef = useRef(false);
   const wasOfflineRef = useRef(false);
@@ -98,14 +117,24 @@ export function useComments(
   useEffect(() => {
     let pullNewer = false;
     const ids = new Set<string>();
+    const reacted = new Set<string>();
     let timer: ReturnType<typeof setTimeout> | null = null;
 
     const flush = () => {
       const batch = { pullNewer, ids: [...ids] };
+      const reactedIds = [...reacted];
 
       pullNewer = false;
       ids.clear();
+      reacted.clear();
       timer = null;
+
+      if (reactedIds.length > 0) {
+        syncCommentReactions(queryClient, messageId, reactedIds).catch(() => undefined);
+      }
+
+      if (!batch.pullNewer && batch.ids.length === 0) return;
+
       // Число в шапке панели живёт на сообщении — перечитываем его той же пачкой.
       void queryClient.invalidateQueries({ queryKey: commentTargetQueryKey(messageId) });
       // Не вышло — дочитаем при следующем событии или переподключении.
@@ -127,6 +156,10 @@ export function useComments(
       },
       onEdited: (id) => {
         ids.add(id);
+        schedule();
+      },
+      onReactionsChanged: (id) => {
+        reacted.add(id);
         schedule();
       },
       onTargetChanged: () => {
@@ -167,11 +200,21 @@ export function useComments(
   const confirmed = useMemo(() => {
     const items = data?.items ?? NONE;
 
-    if (Object.keys(pendingEdits).length === 0) return items;
+    if (Object.keys(pendingEdits).length === 0 && Object.keys(pendingReactions).length === 0) {
+      return items;
+    }
 
-    // Наложение — копия того же комментария с новой версией содержимого.
-    return items.map((item) => (pendingEdits[item.id] as CommentItem | undefined) ?? item);
-  }, [data, pendingEdits]);
+    // Наложение правки — копия того же комментария с новой версией
+    // содержимого; реакции у неё — из кеша. Моя неподтверждённая реакция —
+    // поверх подтверждённых счётчиков.
+    return items.map((item) => {
+      const edited = pendingEdits[item.id] as CommentItem | undefined;
+      const base = edited ? { ...edited, reactions: item.reactions } : item;
+      const intent = pendingReactions[item.id];
+
+      return intent ? { ...base, reactions: withMyReaction(base.reactions, intent) } : base;
+    });
+  }, [data, pendingEdits, pendingReactions]);
 
   const comments = useMemo(() => {
     if (outbox.length === 0) return confirmed;
@@ -185,12 +228,12 @@ export function useComments(
   const loadMore = useCallback(() => {
     const cursor = readComments(queryClient, messageId)?.nextCursor;
 
-    if (!cursor || loadingMoreRef.current) return;
+    if (!cursor || loadingMoreRef.current) return Promise.resolve();
 
     loadingMoreRef.current = true;
     setIsLoadingMore(true);
 
-    listComments(messageId, { cursor })
+    return listComments(messageId, { cursor })
       .then((page) =>
         updateComments(queryClient, messageId, (current) => ({
           ...mergeComments(current, page.items),
@@ -232,10 +275,24 @@ export function useComments(
     error: data ? null : describeLoadError(error, 'Не удалось загрузить комментарии'),
     loadMore,
     send: useCallback(
-      (text: string, media: MediaLibraryItem[] = []) => sendCommentPost(context, text, media),
+      (text: string, media: MediaLibraryItem[] = [], replies: LiveQuote[] = []) =>
+        sendCommentPost(context, text, media, replies),
       [context],
     ),
-    sendVoice: useCallback((voice: LocalMedia) => sendCommentVoice(context, voice), [context]),
+    sendVoice: useCallback(
+      (voice: LocalMedia, replies: LiveQuote[] = []) => sendCommentVoice(context, voice, replies),
+      [context],
+    ),
+    react: useCallback(
+      (comment: CommentItem, emoji: string) =>
+        sendReaction(
+          queryClient,
+          comment.id,
+          { emoji: nextReaction(comment.reactions.mine, emoji), audience: audienceOf(amMember) },
+          'comment',
+        ),
+      [amMember, queryClient],
+    ),
     retry: useCallback((localId: string) => retryComment(context, localId), [context]),
     discard: useCallback((localId: string) => discardComment(messageId, localId), [messageId]),
     saveEdit: useCallback(

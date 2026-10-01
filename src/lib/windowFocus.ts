@@ -28,9 +28,9 @@ if (Platform.OS === 'android') {
  * кадром, а если поверх ещё закрывается окно `Modal`, то сразу после него.
  * Ждёт только последний запрос: новый заменяет прежний.
  */
-function whenWindowFocused(run: () => void) {
+function whenWindowFocused(run: () => void, ownWindow: boolean) {
   requestAnimationFrame(() => {
-    if (windowFocused) {
+    if (windowFocused || ownWindow) {
       pending = null;
       run();
       return;
@@ -51,10 +51,16 @@ function whenWindowFocused(run: () => void) {
  *   последнее поле нативно, и Android показывает клавиатуру;
  * - Android молча не показывает клавиатуру полю в окне без фокуса, а окно
  *   меню уходит позже, чем закрывается само меню. Фокус ждёт его.
+ *
+ * `ownWindow` — поле живёт в своём окне `Modal` (панель комментариев). Фокус
+ * главного окна `AppState` к нему не относится: пока панель открыта, главное
+ * окно не в фокусе всегда, и ожидание его не кончилось бы никогда. Своё окно
+ * панели фокус от меню получает обратно само — проверено на устройстве.
  */
 export function focusWithKeyboard(
   ref: RefObject<TextInput | null>,
   afterFocus?: (input: TextInput) => void,
+  ownWindow = false,
 ) {
   whenWindowFocused(() => {
     const input = ref.current;
@@ -65,7 +71,7 @@ export function focusWithKeyboard(
     else input.focus();
 
     afterFocus?.(input);
-  });
+  }, ownWindow);
 }
 
 /** Только для тестов. */

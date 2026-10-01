@@ -15,13 +15,23 @@ import {
   listDeletedMessageIds,
   MESSAGE_COLUMNS,
   toMessage,
+  toMessageKind,
+  toPreview,
   type EditMessageInput,
   type Message,
   type MessageAttachment,
   type Page,
+  type QuotedMessage,
   type SendMessageMedia,
   type SendVoiceInput,
 } from '@/api/chats';
+import {
+  REACTION_COLUMNS,
+  toAudience,
+  toReactions,
+  type MessageReactions,
+  type MyReaction,
+} from '@/api/reactionCounts';
 import { supabase } from '@/api/supabase';
 
 export const COMMENT_PAGE_SIZE = 30;
@@ -45,6 +55,10 @@ export type Comment = {
   createdAt: string;
   editedAt: string | null;
   attachments: MessageAttachment[];
+  /** Реакции по рядам и моя — как у сообщения. */
+  reactions: MessageReactions;
+  /** Цитаты ответа — комментарии той же ветки, по порядку. `messageId` цитаты — id комментария. */
+  replies: QuotedMessage[];
 };
 
 /** Сообщение, к которому открыты комментарии, — каким оно сейчас. */
@@ -60,7 +74,7 @@ export type CommentTarget =
   | { state: 'missing' };
 
 const COMMENT_COLUMNS =
-  'id, message_id, chat_id, author_id, kind, text, audience, created_at, edited_at, author:profiles(display_name, avatar_url), comment_attachments(id, url, poster_url, mime_type, width, height, duration_ms, waveform)';
+  `id, message_id, chat_id, author_id, kind, text, audience, created_at, edited_at, author:profiles(display_name, avatar_url), comment_attachments(id, url, poster_url, mime_type, width, height, duration_ms, waveform), ${REACTION_COLUMNS}, replies:comment_replies!comment_replies_comment_fkey(position, quoted_id, quoted:comments!comment_replies_quoted_fkey(id, author_id, kind, text, created_at, edited_at, author:profiles(display_name), comment_attachments(url, poster_url, mime_type, duration_ms, position)))` as const;
 
 // Мозаика собирается в порядке выбора файлов, а PostgREST не гарантирует
 // порядок вложенной выборки без явного order.
@@ -77,6 +91,28 @@ const targetSelect = () =>
     .order('position', { referencedTable: 'attachments' });
 
 type CommentRow = NonNullable<Awaited<ReturnType<typeof commentsSelect>>['data']>[number];
+type CommentReplyRow = NonNullable<CommentRow['replies']>[number];
+
+/** Цитата — живой комментарий ветки или «удалён»: удалённого SELECT-политика не отдаёт. */
+function toQuotedComment(row: CommentReplyRow): QuotedMessage {
+  const quoted = row.quoted;
+
+  if (!quoted) return { messageId: row.quoted_id, state: 'deleted' };
+
+  const attachments = [...(quoted.comment_attachments ?? [])].sort(
+    (a, b) => a.position - b.position,
+  );
+
+  return {
+    messageId: quoted.id,
+    state: 'live',
+    authorId: quoted.author_id,
+    authorName: quoted.author_id ? (quoted.author?.display_name ?? 'Без имени') : null,
+    createdAt: quoted.created_at,
+    editedAt: quoted.edited_at,
+    preview: toPreview(toMessageKind(quoted.kind), quoted.text, attachments),
+  };
+}
 
 function toKind(kind: string): CommentKind {
   return kind === 'media' || kind === 'voice' ? kind : 'text';
@@ -106,6 +142,8 @@ export function toComment(row: CommentRow): Comment {
       durationMs: attachment.duration_ms,
       waveform: attachment.waveform,
     })),
+    reactions: toReactions(row),
+    replies: [...(row.replies ?? [])].sort((a, b) => a.position - b.position).map(toQuotedComment),
   };
 }
 
@@ -201,12 +239,13 @@ function toVoiceJson(voice: SendVoiceInput) {
 /** Текст или альбом с подписью — одной транзакцией, функцией `send_comment`. */
 export async function sendComment(
   messageId: string,
-  input: { text?: string; media?: SendMessageMedia[] },
+  input: { text?: string; media?: SendMessageMedia[]; replyTo?: string[] },
 ): Promise<Comment> {
   const { data: id, error } = await supabase.rpc('send_comment', {
     target_message: messageId,
     comment_text: input.text?.trim() ?? '',
     media: (input.media ?? []).map(toMediaJson),
+    reply_to: input.replyTo?.length ? input.replyTo : undefined,
   });
 
   if (error) throw error;
@@ -216,10 +255,15 @@ export async function sendComment(
 }
 
 /** Голосовое — функцией `send_voice_comment`: один файл-звук с длительностью. */
-export async function sendVoiceComment(messageId: string, voice: SendVoiceInput): Promise<Comment> {
+export async function sendVoiceComment(
+  messageId: string,
+  voice: SendVoiceInput,
+  replyTo: string[] = [],
+): Promise<Comment> {
   const { data: id, error } = await supabase.rpc('send_voice_comment', {
     target_message: messageId,
     voice: toVoiceJson(voice),
+    reply_to: replyTo.length ? replyTo : undefined,
   });
 
   if (error) throw error;
@@ -249,6 +293,45 @@ export async function editComment(commentId: string, input: EditMessageInput): P
   if (error) throw error;
 
   return fetchComment(commentId);
+}
+
+/**
+ * Моя реакция на комментарий: ставит, меняет или снимает (`null`). Ряд —
+ * участник или посетитель — решает база по участию в чате комментария.
+ */
+export async function setCommentReaction(
+  commentId: string,
+  emoji: string | null,
+): Promise<MyReaction | null> {
+  const { data, error } = await supabase.rpc('set_reaction', {
+    target_type: 'comment',
+    target_id: commentId,
+    // Снятие — NULL, а генератор типов не размечает скалярные аргументы rpc как nullable.
+    reaction: emoji as string,
+  });
+
+  if (error) throw error;
+
+  const row = data?.[0];
+
+  return row ? { emoji: row.emoji, audience: toAudience(row.audience) } : null;
+}
+
+/** Свежие реакции этих комментариев — пачкой, по сигналу канала. Удалённых база не отдаёт. */
+export async function listCommentReactions(
+  commentIds: string[],
+): Promise<{ id: string; reactions: MessageReactions }[]> {
+  if (commentIds.length === 0) return [];
+
+  const { data, error } = await supabase
+    .from('comments')
+    .select(`id, ${REACTION_COLUMNS}` as const)
+    .in('id', commentIds.slice(0, 500))
+    .is('deleted_at', null);
+
+  if (error) throw error;
+
+  return (data ?? []).map((row) => ({ id: row.id, reactions: toReactions(row) }));
 }
 
 /** Удаляет свой комментарий для всех — мягко. Повтор не ошибка. */
@@ -294,6 +377,8 @@ export type CommentChannelHandlers = {
   onAdded: (commentId: string) => void;
   onDeleted: (commentId: string) => void;
   onEdited: (commentId: string) => void;
+  /** Реакции на комментарий изменились — счётчики дочитываются из базы. */
+  onReactionsChanged?: (commentId: string) => void;
   /** Сообщение, к которому комментарии, правили или удалили. */
   onTargetChanged: () => void;
   /** Канал переподключился: пропущенное надо дочитать. */
@@ -333,6 +418,7 @@ export function subscribeToComments(
   on('comment_added', handlers.onAdded);
   on('comment_deleted', handlers.onDeleted);
   on('comment_edited', handlers.onEdited);
+  on('comment_reactions_changed', (id) => handlers.onReactionsChanged?.(id));
 
   channel
     .on('broadcast', { event: 'target_changed' }, () => handlers.onTargetChanged())

@@ -21,7 +21,7 @@ import {
   uploadOutgoing,
 } from '@/features/chats/messages/delivery';
 import { bumpCommentsCount, updateAllHistories } from '@/features/chats/messages/historyCache';
-import type { Outgoing } from '@/features/chats/messages/types';
+import type { LiveQuote, Outgoing } from '@/features/chats/messages/types';
 import { reportRequestFailed } from '@/features/connection/connectionStore';
 import {
   addOutboxComments,
@@ -60,7 +60,7 @@ function draftOf(
   { messageId, chatId, currentUserId, me }: CommentSendContext,
   at: number,
   content: Pick<CommentItem, 'kind' | 'text' | 'attachments'> &
-    Partial<Pick<CommentItem, 'pendingMedia' | 'pendingVoice' | 'localPreviews'>>,
+    Partial<Pick<CommentItem, 'pendingMedia' | 'pendingVoice' | 'localPreviews' | 'replies'>>,
 ): CommentItem {
   const localId = nextLocalId();
 
@@ -94,13 +94,17 @@ async function insert(
   if (outgoing.type === 'voice') {
     const [file] = uploaded;
 
-    return sendVoiceComment(messageId, {
-      url: file.url,
-      mimeType: file.mimeType,
-      durationMs: file.durationMs ?? 0,
-      sizeBytes: file.sizeBytes,
-      waveform: file.waveform,
-    });
+    return sendVoiceComment(
+      messageId,
+      {
+        url: file.url,
+        mimeType: file.mimeType,
+        durationMs: file.durationMs ?? 0,
+        sizeBytes: file.sizeBytes,
+        waveform: file.waveform,
+      },
+      outgoing.replyTo,
+    );
   }
 
   if (outgoing.type !== 'post') throw new Error('Комментарий не пересылается');
@@ -108,6 +112,7 @@ async function insert(
   return sendComment(messageId, {
     text: outgoing.text || undefined,
     media: uploaded.map(toSendMedia),
+    replyTo: outgoing.replyTo,
   });
 }
 
@@ -196,11 +201,15 @@ export async function deliverComment(
   }
 }
 
-/** Текст с альбомом. Больше одного альбома — несколько комментариев, подпись у первого. */
+/**
+ * Текст с альбомом. Больше одного альбома — несколько комментариев, подпись
+ * и цитаты ответа — у первого.
+ */
 export function sendCommentPost(
   context: CommentSendContext,
   text: string,
   media: MediaLibraryItem[] = [],
+  replies: LiveQuote[] = [],
 ) {
   const trimmed = text.trim();
 
@@ -216,6 +225,7 @@ export function sendCommentPost(
       attachments,
       pendingMedia: part.media.length > 0 ? part.media : undefined,
       localPreviews: part.media.length > 0 ? attachments.map((item) => item.url) : undefined,
+      replies: index === 0 ? replies : [],
     });
   });
 
@@ -231,7 +241,11 @@ export function sendCommentPost(
   })();
 }
 
-export function sendCommentVoice(context: CommentSendContext, voice: LocalMedia) {
+export function sendCommentVoice(
+  context: CommentSendContext,
+  voice: LocalMedia,
+  replies: LiveQuote[] = [],
+) {
   const draft = draftOf(context, Date.now(), {
     kind: 'voice',
     text: null,
@@ -239,11 +253,16 @@ export function sendCommentVoice(context: CommentSendContext, voice: LocalMedia)
     pendingVoice: voice,
     // Своё голосовое играет из файла на телефоне и после отправки.
     localPreviews: [voice.uri],
+    replies,
   });
 
   draft.attachments = [toLocalVoiceAttachment(draft.localId!, voice)];
   addOutboxComments(context.messageId, [draft]);
-  void deliverComment(context, draft.localId!, { type: 'voice', voice, replyTo: [] });
+  void deliverComment(context, draft.localId!, {
+    type: 'voice',
+    voice,
+    replyTo: replies.map((quote) => quote.messageId),
+  });
 }
 
 /** «Повторить» у упавшего. */

@@ -46,6 +46,9 @@ export const styles = StyleSheet.create({
   targetClip: {
     overflow: 'hidden',
   },
+  hidden: {
+    display: 'none',
+  },
   /** Сообщение не ужимается колонкой шита: его высоту держит свой потолок. */
   targetFrame: {
     flexShrink: 0,

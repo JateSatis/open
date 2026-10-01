@@ -8,6 +8,11 @@ export type CommentsPanelTarget = {
   messageId: string;
   /** Чат, из переписки которого открыли, — его кеш сразу даёт облачко сверху. */
   chatId?: string;
+  /**
+   * Я участник чата сообщения — догадка ряда для мгновенного отклика моей
+   * реакции на комментарий. Ряд всё равно решает база.
+   */
+  amMember?: boolean;
 };
 
 const usePanelStore = create<{ target: CommentsPanelTarget | null }>(() => ({ target: null }));
@@ -17,8 +22,8 @@ const usePanelStore = create<{ target: CommentsPanelTarget | null }>(() => ({ ta
  * приложение: переписка открывает её по кружку у облачка, лента — у
  * фрагмента переписки.
  */
-export function openComments(messageId: string, chatId?: string) {
-  usePanelStore.setState({ target: { messageId, chatId } });
+export function openComments(messageId: string, chatId?: string, amMember = false) {
+  usePanelStore.setState({ target: { messageId, chatId, amMember } });
 }
 
 export function closeComments() {
@@ -49,6 +54,6 @@ export function commentsEntry(
   return {
     count: message.commentsCount,
     quiet: amMember && message.commentsCount === 0,
-    onPress: interactive ? () => openComments(message.id, chatId) : undefined,
+    onPress: interactive ? () => openComments(message.id, chatId, amMember) : undefined,
   };
 }

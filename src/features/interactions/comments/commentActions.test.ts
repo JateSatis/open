@@ -31,20 +31,30 @@ function ids(context: Parameters<typeof visibleCommentActions>[0]) {
 }
 
 describe('comment menu', () => {
-  it('offers copy, edit and delete on my own sent comment', () => {
+  it('offers everything a message has except pin and forward on my own sent comment', () => {
     expect(ids({ comment: comment(), isOwn: true, targetLive: true })).toEqual([
+      'reply',
       'copy',
       'edit',
+      'select',
       'delete',
     ]);
   });
 
-  it('offers only copy on somebody else’s comment — no reactions, no delete', () => {
-    expect(ids({ comment: comment(), isOwn: false, targetLive: true })).toEqual(['copy']);
+  it('lets anyone reply to and select somebody else’s comment, but not edit or delete it', () => {
+    expect(ids({ comment: comment(), isOwn: false, targetLive: true })).toEqual([
+      'reply',
+      'copy',
+      'select',
+    ]);
   });
 
-  it('does not offer editing once the message itself is deleted', () => {
-    expect(ids({ comment: comment(), isOwn: true, targetLive: false })).toEqual(['copy', 'delete']);
+  it('takes no replies or edits once the message itself is deleted', () => {
+    expect(ids({ comment: comment(), isOwn: true, targetLive: false })).toEqual([
+      'copy',
+      'select',
+      'delete',
+    ]);
   });
 
   it('offers retry and delete on a failed comment of mine', () => {
@@ -56,6 +66,6 @@ describe('comment menu', () => {
   it('has nothing to copy on a voice comment', () => {
     expect(
       ids({ comment: comment({ kind: 'voice', text: null }), isOwn: false, targetLive: true }),
-    ).toEqual([]);
+    ).toEqual(['reply', 'select']);
   });
 });

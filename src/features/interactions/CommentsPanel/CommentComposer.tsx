@@ -70,8 +70,9 @@ export function CommentComposer({
         state: edit.composer,
       }
     : undefined;
-  const closeEdit = () => void edit.leave();
-  const plate = modePlate(draft.mode, closeEdit, editPlate);
+  // Крестик плашки: правка выходит из правки, ответ просто снимается.
+  const closeMode = () => (isEditing ? void edit.leave() : draft.setMode(null));
+  const plate = modePlate(draft.mode, closeMode, editPlate);
 
   return (
     <>
