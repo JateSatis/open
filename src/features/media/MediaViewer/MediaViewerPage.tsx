@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import { useVideoPlayer, VideoView } from 'expo-video';
-import { useEffect, useState } from 'react';
-import { Pressable, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { View } from 'react-native';
 
 import { styles } from './styles';
 
@@ -13,6 +13,11 @@ export type MediaViewerPageProps = {
   height: number;
   /** Только активная страница играет — соседи по свайпу должны молчать. */
   isActive: boolean;
+  /**
+   * Пауза по тапу. Тап ловит общий жест просмотрщика (он отличает его от
+   * двойного), а страница отдаёт ему свой переключатель. `null` — снят.
+   */
+  onToggleReady: (toggle: (() => void) | null) => void;
 };
 
 function PhotoPage({ item, width, height }: { item: MediaViewerItem; width: number; height: number }) {
@@ -26,11 +31,10 @@ function PhotoPage({ item, width, height }: { item: MediaViewerItem; width: numb
   );
 }
 
-function VideoPage({ item, width, height, isActive }: MediaViewerPageProps) {
-  // Подпись кнопки не обязана отслеживать автопаузу при уходе со страницы
-  // свайпом — пока страница не активна, её всё равно не видно; отражать
-  // реальное состояние она начинает заново с момента, когда пользователь
-  // сам нажимает на видео.
+function VideoPage({ item, width, height, isActive, onToggleReady }: MediaViewerPageProps) {
+  // Подпись не обязана отслеживать автопаузу при уходе со страницы свайпом —
+  // пока страница не активна, её всё равно не видно; отражать реальное
+  // состояние она начинает заново с момента, когда человек сам тапает.
   const [isPlaying, setIsPlaying] = useState(isActive);
   const player = useVideoPlayer(item.url, (instance) => {
     instance.loop = true;
@@ -44,7 +48,7 @@ function VideoPage({ item, width, height, isActive }: MediaViewerPageProps) {
     }
   }, [isActive, player]);
 
-  const toggle = () => {
+  const toggle = useCallback(() => {
     if (player.playing) {
       player.pause();
       setIsPlaying(false);
@@ -52,17 +56,32 @@ function VideoPage({ item, width, height, isActive }: MediaViewerPageProps) {
       player.play();
       setIsPlaying(true);
     }
-  };
+  }, [player]);
+
+  useEffect(() => {
+    onToggleReady(toggle);
+
+    return () => onToggleReady(null);
+  }, [onToggleReady, toggle]);
 
   return (
-    <Pressable
+    <View
+      accessible
       accessibilityRole="button"
       accessibilityLabel={isPlaying ? 'Поставить видео на паузу' : 'Воспроизвести видео'}
-      onPress={toggle}
+      onAccessibilityTap={toggle}
       style={{ width, height }}
     >
-      <VideoView player={player} style={styles.video} contentFit="contain" nativeControls={false} />
-    </Pressable>
+      {/* TextureView: увеличение и сдвиг — трансформации, а SurfaceView их не
+          принимает. */}
+      <VideoView
+        player={player}
+        style={styles.video}
+        contentFit="contain"
+        nativeControls={false}
+        surfaceType="textureView"
+      />
+    </View>
   );
 }
 

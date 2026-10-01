@@ -119,6 +119,8 @@ export function MessageBubble({
     id: attachment.id,
     kind: attachment.mimeType?.startsWith('video/') ? 'video' : 'photo',
     url: attachment.url,
+    width: attachment.width,
+    height: attachment.height,
   }));
 
   const hasAnnotations = message.replies.length > 0;
