@@ -8,7 +8,7 @@ describe('CommentsButton', () => {
   it('shows the count and opens comments on tap', async () => {
     const onPress = jest.fn();
 
-    await render(<CommentsButton count={12} onPress={onPress} />);
+    await render(<CommentsButton tone="other" count={12} onPress={onPress} />);
 
     expect(screen.getByText('12')).toBeTruthy();
     expect(screen.getByLabelText('Комментарии: 12 комментариев')).toBeTruthy();
@@ -19,14 +19,14 @@ describe('CommentsButton', () => {
   });
 
   it('shows just the icon with no comments yet', async () => {
-    await render(<CommentsButton count={0} onPress={jest.fn()} />);
+    await render(<CommentsButton tone="other" count={0} onPress={jest.fn()} />);
 
     expect(screen.queryByText('0')).toBeNull();
     expect(screen.getByLabelText('Комментарии')).toBeTruthy();
   });
 
   it('only shows the count in the copy of the bubble inside the menu', async () => {
-    await render(<CommentsButton count={3} />);
+    await render(<CommentsButton tone="other" count={3} />);
 
     expect(screen.getByTestId('comments-button').props.accessibilityState).toEqual(
       expect.objectContaining({ disabled: true }),
@@ -44,5 +44,16 @@ describe('commentsCountLabel', () => {
     [112, '112 комментариев'],
   ])('%i → %s', (count, label) => {
     expect(commentsCountLabel(count)).toBe(label);
+  });
+});
+
+describe('quiet CommentsButton', () => {
+  it('stays tappable — a member can still write the first comment', async () => {
+    const onPress = jest.fn();
+
+    await render(<CommentsButton tone="own" count={0} quiet onPress={onPress} />);
+    await fireEvent.press(screen.getByLabelText('Комментарии'));
+
+    expect(onPress).toHaveBeenCalledTimes(1);
   });
 });

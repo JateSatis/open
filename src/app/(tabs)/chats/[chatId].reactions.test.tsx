@@ -286,7 +286,7 @@ describe('reactions in the message menu', () => {
 
     expect(await screen.findByTestId('visitor-reaction-🔥')).toBeTruthy();
     expect(screen.queryByTestId('reaction-chip-🔥')).toBeNull();
-    expect(screen.getByText('зрители')).toBeTruthy();
+    expect(screen.getByLabelText('Зрители: 🔥 1')).toBeTruthy();
   });
 
   it('tapping my highlighted reaction in the block takes it off', async () => {

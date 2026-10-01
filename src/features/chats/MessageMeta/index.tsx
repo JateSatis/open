@@ -20,6 +20,11 @@ export type MessageMetaProps = {
   onRetry: (localId: string) => void;
   /** Кружок «доставлено / прочитано» у своего. Нет — у комментария: его никто не «читает». */
   showReceipt?: boolean;
+  /**
+   * Плашка на медиа сама прижимается к углу. `false` — её ставит родитель,
+   * в строку рядом с кнопкой комментариев.
+   */
+  floating?: boolean;
 };
 
 /** Время и состояние доставки сообщения. */
@@ -30,6 +35,7 @@ export function MessageMeta({
   variant,
   onRetry,
   showReceipt = true,
+  floating = true,
 }: MessageMetaProps) {
   const theme = useTheme();
   const overlay = variant === 'overlay';
@@ -38,7 +44,11 @@ export function MessageMeta({
   return (
     <View
       testID="message-meta"
-      style={[styles.meta, overlay && [styles.overlay, { backgroundColor: theme.mediaScrim }]]}
+      style={[
+        styles.meta,
+        overlay && [styles.overlay, { backgroundColor: theme.mediaScrim }],
+        overlay && floating && styles.floating,
+      ]}
     >
       {message.status === 'sending' ? (
         <Text variant="caption" color={color}>

@@ -30,19 +30,25 @@ export function useCommentsPanelTarget(): CommentsPanelTarget | null {
 }
 
 /**
- * Кружок комментариев у облачка переписки: число и открытие панели. Нет —
- * нет и кружка (неотправленное, системное). У копии облачка в меню кружок
+ * Кнопка комментариев в облачке переписки: число и открытие панели. Нет —
+ * нет и кнопки (неотправленное, системное). У копии облачка в меню кнопка
  * только показывает число.
+ *
+ * `amMember` — я участник чата, где живёт сообщение (у облачка островка — чата
+ * оригинала). Участнику на сообщении без комментариев кнопка тихая: главное —
+ * сама переписка. Посетитель пришёл смотреть и обсуждать — ему всегда обычная.
  */
 export function commentsEntry(
   message: ChatMessage,
   chatId: string,
   interactive: boolean,
-): { count: number; onPress?: () => void } | undefined {
+  amMember: boolean,
+): { count: number; quiet: boolean; onPress?: () => void } | undefined {
   if (!canCommentOn(message)) return undefined;
 
   return {
     count: message.commentsCount,
+    quiet: amMember && message.commentsCount === 0,
     onPress: interactive ? () => openComments(message.id, chatId) : undefined,
   };
 }

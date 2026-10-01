@@ -20,8 +20,9 @@ export type VisitorReactionsProps = {
 };
 
 /**
- * Реакции посетителей — одна тихая строка под чипами участников, с явной
- * меткой: это зрители, а не собеседники.
+ * Реакции посетителей — маленькие и тихие, в строке со временем: чипы
+ * участников крупнее, и разница видна без подписи. Кто это, говорит
+ * подпись для экранного чтеца.
  */
 export function VisitorReactions({ entries, mine, tone, onPress }: VisitorReactionsProps) {
   const theme = useTheme();
@@ -35,10 +36,6 @@ export function VisitorReactions({ entries, mine, tone, onPress }: VisitorReacti
       layout={LinearTransition.duration(APPEAR_MS)}
       style={styles.visitors}
     >
-      <Text variant="caption" color={colors.text}>
-        зрители
-      </Text>
-
       {entries.map(([emoji, count], index) => (
         <Fragment key={emoji}>
           {index > 0 ? (

@@ -101,7 +101,7 @@ export function useChatBubbles({
           onReactionToggle={
             interactive && canReactTo(item) ? (emoji) => toggle(item, emoji) : undefined
           }
-          comments={commentsEntry(item, chatId, interactive)}
+          comments={commentsEntry(item, chatId, interactive, isMember)}
           showAvatar={showAvatars}
         />
       );
@@ -109,6 +109,7 @@ export function useChatBubbles({
     [
       chatId,
       currentUserId,
+      isMember,
       mediaBounds,
       myAudience,
       openPerson,
@@ -162,7 +163,12 @@ export function useChatBubbles({
               : undefined
           }
           // Комментарии — к оригиналу: панель открывается на него, из его чата.
-          comments={commentsEntry(message, original.chatId, interactive)}
+          comments={commentsEntry(
+            message,
+            original.chatId,
+            interactive,
+            inThisChat ? isMember : (original.chat?.amMember ?? false),
+          )}
           showAvatar={showAvatars}
         />
       );
@@ -171,6 +177,7 @@ export function useChatBubbles({
       audienceFor,
       chatId,
       currentUserId,
+      isMember,
       mediaBounds,
       openOriginal,
       openPerson,
