@@ -19,8 +19,9 @@ const styles = StyleSheet.create({
 /**
  * Чужой профиль. Один экран на две вкладки: из переписки он открывается
  * внутри «Чатов», чтобы «назад» возвращал в чат, а не в свой профиль.
+ * `stack` — в каком стеке открыт: туда же кладутся его «Диалоги».
  */
-export function UserProfile({ userId }: { userId: string }) {
+export function UserProfile({ userId, stack }: { userId: string; stack: 'chats' | 'profile' }) {
   const router = useRouter();
   const currentUserId = useCurrentUserId();
   const { data: profile, isPending, error, refetch } = useProfile(userId);
@@ -36,12 +37,27 @@ export function UserProfile({ userId }: { userId: string }) {
             profile={profile}
             actions={
               isMe ? null : (
-                <Button
-                  label="Написать"
-                  onPress={() =>
-                    router.push({ pathname: '/chats/new', params: { with: profile.id } })
-                  }
-                />
+                <>
+                  <Button
+                    label="Написать"
+                    onPress={() =>
+                      router.push({ pathname: '/chats/new', params: { with: profile.id } })
+                    }
+                  />
+                  <Button
+                    label="Диалоги"
+                    variant="secondary"
+                    onPress={() =>
+                      router.push({
+                        pathname:
+                          stack === 'chats'
+                            ? '/chats/people/dialogs/[userId]'
+                            : '/profile/dialogs/[userId]',
+                        params: { userId: profile.id },
+                      })
+                    }
+                  />
+                </>
               )
             }
           />

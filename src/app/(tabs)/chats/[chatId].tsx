@@ -146,7 +146,7 @@ export default function ChatScreen() {
   // экран. Но не чат: закрыл переписку — голосовое замолкает.
   useEffect(() => () => stopVoice(), [chatId]);
 
-  useMarkChatRead(chatId, messages.length > 0 ? messages[0].id : null);
+  useMarkChatRead(chatId, messages.length > 0 ? messages[0].id : null, isMember);
 
   const readUpTo = useMemo(() => readUpToOf(chat, currentUserId), [chat, currentUserId]);
 

@@ -152,9 +152,17 @@ function toWaiting(row: WaitingRow): Person | null {
 
 export type ChatPeople = { members: MemberRow[]; waiting: Person[] };
 
-export function toSummary(chat: ChatRow, people: ChatPeople, currentUserId: string): ChatSummary {
+/**
+ * Чат глазами `viewerId`: обычно это я, а в списке чужих чатов — их хозяин.
+ * Непрочитанное — по его отметке прочтения, а не по моей.
+ */
+export function toSummary(
+  chat: ChatRow,
+  people: ChatPeople,
+  viewerId: string,
+): ChatSummary {
   const participants = people.members.map(toParticipant);
-  const mine = participants.find((participant) => participant.id === currentUserId);
+  const mine = participants.find((participant) => participant.id === viewerId);
 
   return {
     id: chat.id,
@@ -167,7 +175,7 @@ export function toSummary(chat: ChatRow, people: ChatPeople, currentUserId: stri
     lastMessageAuthorId: chat.last_message_author_id,
     hasUnread:
       chat.last_message_at !== null &&
-      chat.last_message_author_id !== currentUserId &&
+      chat.last_message_author_id !== viewerId &&
       mine !== undefined &&
       chat.last_message_at > mine.lastReadAt,
   };
@@ -251,6 +259,41 @@ export async function listChats(): Promise<ChatSummary[]> {
   const peopleByChat = await fetchChatPeople(chats.map((chat) => chat.id));
 
   return chats.map((chat) => toSummary(chat, peopleByChat.get(chat.id) ?? NO_PEOPLE, userId));
+}
+
+export const CHATS_OF_PAGE_SIZE = 30;
+
+/**
+ * Чаты другого человека — как этот список видит он сам: те, где он
+ * участник, свежими вперёд, а «непрочитано» — по его отметке прочтения.
+ * `chat_members` и `last_read_at` публичны по RLS, поэтому это обычная
+ * выборка, без функции. Постранично: у человека бывают сотни чатов.
+ *
+ * Позже сюда добавятся чаты, на которые он подписан, — подписок в
+ * приложении пока нет.
+ */
+export async function listChatsOf(
+  userId: string,
+  page: number,
+): Promise<Page<ChatSummary> & { nextPage: number | null }> {
+  const from = page * CHATS_OF_PAGE_SIZE;
+  const { data, error } = await supabase
+    .from('chats')
+    .select(`${CHAT_COLUMNS}, viewer:chat_members!inner(user_id)`)
+    .eq('viewer.user_id', userId)
+    .is('deleted_at', null)
+    .order('last_message_at', { ascending: false, nullsFirst: false })
+    .order('id', { ascending: true })
+    .range(from, from + CHATS_OF_PAGE_SIZE - 1);
+
+  if (error) throw error;
+
+  const chats = data ?? [];
+  const peopleByChat = await fetchChatPeople(chats.map((chat) => chat.id));
+  const items = chats.map((chat) => toSummary(chat, peopleByChat.get(chat.id) ?? NO_PEOPLE, userId));
+  const full = chats.length === CHATS_OF_PAGE_SIZE;
+
+  return { items, nextCursor: null, nextPage: full ? page + 1 : null };
 }
 
 export async function getChat(chatId: string): Promise<ChatSummary> {

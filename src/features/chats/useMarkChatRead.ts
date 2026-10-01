@@ -9,12 +9,15 @@ import { chatsQueryKey } from '@/features/chats/useChats';
  * Пока чат открыт, всё в нём считается прочитанным. Отметка переставляется при
  * входе и на каждое новое сообщение — `newestMessageId` и есть тот сигнал,
  * который отличает «пришло новое» от обычной перерисовки.
+ *
+ * Только у участника: посетитель читает чужой чат, и отметки прочтения у него
+ * там нет (база всё равно тронула бы лишь его строку, а её нет).
  */
-export function useMarkChatRead(chatId: string, newestMessageId: string | null) {
+export function useMarkChatRead(chatId: string, newestMessageId: string | null, isMember: boolean) {
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    if (!newestMessageId) return;
+    if (!newestMessageId || !isMember) return;
 
     let active = true;
 
@@ -33,5 +36,5 @@ export function useMarkChatRead(chatId: string, newestMessageId: string | null) 
     return () => {
       active = false;
     };
-  }, [chatId, newestMessageId, queryClient]);
+  }, [chatId, isMember, newestMessageId, queryClient]);
 }

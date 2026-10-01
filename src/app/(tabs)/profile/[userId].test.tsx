@@ -67,6 +67,18 @@ describe('UserProfileScreen', () => {
     expect(mockPush).toHaveBeenCalledWith({ pathname: '/chats/new', params: { with: 'user-2' } });
   });
 
+  it('opens their dialogs in the same stack, so «back» returns to the profile', async () => {
+    getProfileMock.mockResolvedValue(profile);
+
+    const { findByText } = await renderWithQuery(<UserProfileScreen />);
+    await fireEvent.press(await findByText('Диалоги'));
+
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/profile/dialogs/[userId]',
+      params: { userId: 'user-2' },
+    });
+  });
+
   it('offers no follow button — there are no subscriptions', async () => {
     getProfileMock.mockResolvedValue(profile);
 
