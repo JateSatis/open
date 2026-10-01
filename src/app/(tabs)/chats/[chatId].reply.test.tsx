@@ -1,5 +1,6 @@
 import type { Session as SupabaseSession } from '@supabase/supabase-js';
 import { act, fireEvent, screen, userEvent, waitFor, within } from '@testing-library/react-native';
+import { FlatList } from 'react-native';
 import { State } from 'react-native-gesture-handler';
 import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils';
 
@@ -29,6 +30,7 @@ jest.mock('@/api/reactions', () => ({
   setMessageReaction: jest.fn(),
 }));
 jest.mock('expo-router', () => ({
+  useIsFocused: () => true,
   useNavigation: () => ({
     getState: () => ({ index: 0, routes: [] }),
     dispatch: jest.fn(),
@@ -137,13 +139,10 @@ function message(id: string, text: string, authorId: string, minute = 0): Messag
   };
 }
 
-async function longPress(messageId: string) {
+/** Тап по облачку — так открывается его меню. */
+async function tapMessage(messageId: string) {
   await act(async () => {
-    fireGestureHandler(getByGestureTestId(`message-long-press-${messageId}`), [
-      { state: State.BEGAN, x: 10, y: 10, absoluteX: 20, absoluteY: 200 },
-      { state: State.ACTIVE, x: 10, y: 10, absoluteX: 20, absoluteY: 200 },
-      { state: State.END, x: 10, y: 10, absoluteX: 20, absoluteY: 200 },
-    ]);
+    fireEvent.press(screen.getByTestId(`message-row-${messageId}`));
   });
 }
 
@@ -189,7 +188,7 @@ describe('replying', () => {
     await renderWithQuery(<ChatScreen />);
     await screen.findByText('привет');
 
-    await longPress('m2');
+    await tapMessage('m2');
     await choose('Ответить');
 
     const plate = await screen.findByTestId('composer-plate');
@@ -219,7 +218,7 @@ describe('replying', () => {
     await screen.findByText('привет');
 
     await userEvent.setup().type(screen.getByLabelText('Сообщение'), 'черновик');
-    await longPress('m2');
+    await tapMessage('m2');
     await choose('Ответить');
     fireEvent.press(await screen.findByRole('button', { name: 'Отменить ответ' }));
 
@@ -231,7 +230,7 @@ describe('replying', () => {
     const view = await renderWithQuery(<ChatScreen />);
     await screen.findByText('привет');
 
-    await longPress('m2');
+    await tapMessage('m2');
     await choose('Ответить');
     await userEvent.setup().type(screen.getByLabelText('Сообщение'), 'допишу потом');
     await view.unmount();
@@ -246,7 +245,7 @@ describe('replying', () => {
     await renderWithQuery(<ChatScreen />);
     await screen.findByText('привет');
 
-    await longPress('m2');
+    await tapMessage('m2');
     await choose('Выбрать');
     fireEvent.press(screen.getAllByRole('checkbox')[1]);
     fireEvent.press(await screen.findByRole('button', { name: 'Ответить' }));
@@ -295,7 +294,7 @@ describe('replying', () => {
     // У посетителя нет поля ввода, поэтому смотрим в сам черновик.
     expect(readChatDraft('chat-1').mode).toBeNull();
 
-    await longPress('m2');
+    await tapMessage('m2');
     await screen.findByTestId('message-menu');
     expect(screen.queryByRole('menuitem', { name: 'Ответить' })).toBeNull();
 
@@ -344,6 +343,44 @@ describe('quotes in bubbles', () => {
     expect(within(live).getByText('Я')).toBeTruthy();
     expect(within(live).getByText('эй')).toBeTruthy();
   });
+
+  it('lists every quote of a reply to several, oldest on top, and each leads to its own original', async () => {
+    const second: QuotedMessage = {
+      ...liveQuote,
+      messageId: 'm2',
+      authorId: 'user-2',
+      authorName: 'Марина',
+      createdAt: '2026-09-29T10:02:00Z',
+      preview: { ...liveQuote.preview, text: 'привет' },
+    };
+    mockedListMessages.mockResolvedValue({
+      items: [
+        { ...message('r1', 'на оба', 'user-2', 3), replies: [liveQuote, second] },
+        message('m2', 'привет', 'user-2', 2),
+        message('m1', 'эй', 'user-1', 1),
+      ],
+      nextCursor: null,
+    });
+    const scrollToIndex = jest.spyOn(FlatList.prototype, 'scrollToIndex');
+
+    await renderWithQuery(<ChatScreen />);
+    await screen.findByText('на оба');
+
+    const quotes = screen.getAllByTestId('reply-quote');
+
+    expect(quotes).toHaveLength(2);
+    expect(within(quotes[0]).getByText('эй')).toBeTruthy();
+    expect(within(quotes[1]).getByText('привет')).toBeTruthy();
+
+    // Строки списка — новыми вперёд: r1, m2, m1.
+    fireEvent.press(quotes[1]);
+    await waitFor(() => expect(scrollToIndex).toHaveBeenLastCalledWith(expect.objectContaining({ index: 1 })));
+
+    fireEvent.press(quotes[0]);
+    await waitFor(() => expect(scrollToIndex).toHaveBeenLastCalledWith(expect.objectContaining({ index: 2 })));
+
+    scrollToIndex.mockRestore();
+  });
 });
 
 describe('forwarding', () => {
@@ -351,7 +388,7 @@ describe('forwarding', () => {
     await renderWithQuery(<ChatScreen />);
     await screen.findByText('привет');
 
-    await longPress('m2');
+    await tapMessage('m2');
     await choose('Переслать');
 
     expect(mockPush).toHaveBeenCalledWith({ pathname: '/chats/forward', params: { from: 'chat-1' } });

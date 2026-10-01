@@ -1,3 +1,4 @@
+import { useIsFocused } from 'expo-router';
 import { useEffect } from 'react';
 
 import { PanelWindow } from './PanelWindow';
@@ -27,8 +28,12 @@ export type CommentsPanelProps = {
  * каждого сообщения.
  */
 export function CommentsPanel({ topInset, onOpenPerson }: CommentsPanelProps) {
+  // Стор панели общий, а экранов с панелью в стеке бывает несколько (чат,
+  // открытый из чата): окно рисует только экран в фокусе. Иначе под
+  // закрывающейся панелью на миг показывался её двойник.
+  const isFocused = useIsFocused();
   const target = useCommentsPanelTarget();
-  const open = target !== null;
+  const open = target !== null && isFocused;
 
   // Пока панель открыта, клавиатура под ней — её поля, а не поля переписки.
   useEffect(() => setCommentsKeyboardWindowOpen(open), [open]);
@@ -36,7 +41,7 @@ export function CommentsPanel({ topInset, onOpenPerson }: CommentsPanelProps) {
   // Уход с экрана закрывает панель: следующий экран застанет её закрытой.
   useEffect(() => () => closeComments(), []);
 
-  if (!target) return null;
+  if (!target || !open) return null;
 
   return (
     <PanelWindow

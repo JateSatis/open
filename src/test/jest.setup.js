@@ -8,6 +8,11 @@ jest.mock('react-native-reanimated', () => ({
   makeMutable: (value) => ({ value }),
 }));
 
+// Замер в окне у мока `View` — пустышка без колбэка, и меню строки, которое
+// открывается по замеру, в тестах не открылось бы. Отвечает нулевой рамкой.
+require('@react-native/jest-preset/jest/MockNativeMethods').default.measureInWindow = (callback) =>
+  callback(0, 0, 0, 0);
+
 jest.mock('react-native-safe-area-context', () => {
   const mock = require('react-native-safe-area-context/jest/mock');
   return mock.default ?? mock;

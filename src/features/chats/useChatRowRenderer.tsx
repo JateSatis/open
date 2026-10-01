@@ -26,6 +26,10 @@ type Options = {
   isSelecting: boolean;
   isSelected: (rowKey: string) => boolean;
   toggleSelected: (rowKey: string) => void;
+  /** Долгое нажатие — выбор с этим облачком уже отмеченным. */
+  startSelection: (rowKey: string) => void;
+  /** Долгое нажатие на плашку островка — отмечены все его облачка. */
+  selectIsland: (island: IslandHeaderRow['island']) => void;
   /** Строка, чьё сообщение сейчас правится. */
   editingId: string | null;
   highlight: JumpHighlight | null;
@@ -33,7 +37,6 @@ type Options = {
   openMenu: (row: ChatListRow, anchor: AnchorRect) => void;
   startReply: (rows: BubbleRow[]) => void;
   retry: (localId: string) => void;
-  openChat: (chatId: string) => void;
   hostName: (authorId: string | null) => string;
 };
 
@@ -48,31 +51,33 @@ export function useChatRowRenderer({
   isSelecting,
   isSelected,
   toggleSelected,
+  startSelection,
+  selectIsland,
   editingId,
   highlight,
   bubbleFor,
   openMenu,
   startReply,
   retry,
-  openChat,
   hostName,
 }: Options) {
-  /** Плашка островка — и в строке, и копией в меню. */
+  /**
+   * Плашка островка — и в строке, и копией в меню. Тап по ней — меню
+   * островка, как у облачка; переход в исходный чат — его первый пункт.
+   */
   const islandHeader = useCallback(
     (row: IslandHeaderRow, interactive: boolean) => {
       const { island } = row;
-      const sourceChat = island.forward?.sourceChat ?? null;
 
       return (
         <IslandHeader
-          sourceName={sourceChat?.name ?? null}
+          sourceName={island.forward?.sourceChat?.name ?? null}
           status={island.status}
-          onPress={interactive && sourceChat ? () => openChat(sourceChat.id) : undefined}
           onRetry={interactive && island.localId ? () => retry(island.localId!) : undefined}
         />
       );
     },
-    [openChat, retry],
+    [retry],
   );
 
   const renderItem = useCallback(
@@ -87,7 +92,8 @@ export function useChatRowRenderer({
             selected={false}
             highlightKey={highlightKey}
             messageId={row.key}
-            onLongPress={(anchor) => openMenu(row, anchor)}
+            onOpenMenu={(anchor) => openMenu(row, anchor)}
+            onSelect={isLocalMessage(row.island) ? undefined : () => selectIsland(row.island)}
             onToggle={noop}
             frame={<IslandBorder top bottom={false} />}
           >
@@ -115,16 +121,18 @@ export function useChatRowRenderer({
       const island = row.type === 'island-item' ? row : null;
       // Заглушке удалённого меню нужно только переславшему — убрать её.
       const hasMenu = content !== null || island?.island.authorId === currentUserId;
+      const selectable = isSelectableRow(row, currentUserId);
 
       return (
         <MessageRow
           selectionMode={isSelecting}
-          selectable={isSelectableRow(row, currentUserId)}
+          selectable={selectable}
           selected={isSelected(row.key)}
           editing={row.key === editingId}
           highlightKey={highlightKey}
           messageId={row.key}
-          onLongPress={hasMenu ? (anchor) => openMenu(row, anchor) : noop}
+          onOpenMenu={hasMenu ? (anchor) => openMenu(row, anchor) : undefined}
+          onSelect={selectable ? () => startSelection(row.key) : undefined}
           onToggle={() => toggleSelected(row.key)}
           // Ответ — это отправка: свайп есть только у участника и только у
           // сообщений, которые уже на сервере.
@@ -152,7 +160,9 @@ export function useChatRowRenderer({
       isSelecting,
       islandHeader,
       openMenu,
+      selectIsland,
       startReply,
+      startSelection,
       toggleSelected,
     ],
   );

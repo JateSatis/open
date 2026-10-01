@@ -13,6 +13,8 @@ export type CommentTargetViewProps = {
   target: CommentTarget | undefined;
   /** Облачко сообщения — то же, что в переписке. */
   bubble: ReactNode;
+  /** Раскрытое длинное сообщение листается само, и шит за него не тянут. */
+  onExpandedChange?: (expanded: boolean) => void;
 };
 
 /** Раскрытое длинное сообщение занимает не больше этой доли окна и дальше листается. */
@@ -23,10 +25,15 @@ const EXPANDED_SHARE = 0.4;
  * в переписке. Длинное свёрнуто и раскрывается тапом; удалённое честно
  * названо удалённым.
  */
-export function CommentTargetView({ target, bubble }: CommentTargetViewProps) {
+export function CommentTargetView({ target, bubble, onExpandedChange }: CommentTargetViewProps) {
   const theme = useTheme();
   const { height: windowHeight } = useWindowDimensions();
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpandedState] = useState(false);
+
+  const setExpanded = (next: boolean) => {
+    setExpandedState(next);
+    onExpandedChange?.(next);
+  };
   const [contentHeight, setContentHeight] = useState(0);
   const collapsible = contentHeight > Sizes.commentTargetCollapsed;
 
@@ -66,7 +73,7 @@ export function CommentTargetView({ target, bubble }: CommentTargetViewProps) {
       {collapsible ? (
         <Pressable
           accessibilityRole="button"
-          onPress={() => setExpanded((value) => !value)}
+          onPress={() => setExpanded(!expanded)}
           style={styles.targetToggle}
         >
           <Text variant="small" color="primary">

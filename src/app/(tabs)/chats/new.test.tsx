@@ -13,6 +13,7 @@ const mockReplace = jest.fn();
 const mockSearchParams = jest.fn((): { with?: string } => ({}));
 
 jest.mock('expo-router', () => ({
+  useIsFocused: () => true,
   useRouter: () => ({ replace: mockReplace, push: jest.fn() }),
   useLocalSearchParams: () => mockSearchParams(),
 }));

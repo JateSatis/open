@@ -9,7 +9,7 @@ export const styles = StyleSheet.create({
   fill: {
     ...StyleSheet.absoluteFill,
   },
-  /** Панель от низа шапки экрана до низа окна; верх скруглён, как у шита. */
+  /** Панель от своего верха до низа окна; верх скруглён, как у шита. */
   panel: {
     position: 'absolute',
     left: 0,
@@ -45,6 +45,13 @@ export const styles = StyleSheet.create({
   },
   targetClip: {
     overflow: 'hidden',
+  },
+  hidden: {
+    display: 'none',
+  },
+  /** Сообщение не ужимается колонкой шита: его высоту держит свой потолок. */
+  targetFrame: {
+    flexShrink: 0,
   },
   targetToggle: {
     paddingBottom: Spacing.one,

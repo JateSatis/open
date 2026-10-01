@@ -1,4 +1,5 @@
 import { Image } from 'expo-image';
+import { memo } from 'react';
 import { Pressable, View } from 'react-native';
 
 import { styles } from './styles';
@@ -9,32 +10,33 @@ import { DELETED_ACCOUNT, describePreview } from '@/features/chats/messageQuote'
 import { useTheme } from '@/hooks/use-theme';
 
 export type ReplyQuoteProps = {
-  /** Цитаты ответа по порядку; показывается первая, остальные — «+N». */
+  /** Цитаты ответа в порядке переписки: сверху старые, снизу новые. */
   quotes: QuotedMessage[];
   isOwn: boolean;
-  /** Тап — прыжок к оригиналу. Нет обработчика — цитата не нажимается. */
-  onPress?: () => void;
+  /** Тап по цитате — прыжок к её оригиналу. Нет обработчика — цитаты не нажимаются. */
+  onPress?: (quote: QuotedMessage) => void;
+};
+
+type QuoteLineProps = {
+  quote: QuotedMessage;
+  isOwn: boolean;
+  onPress?: (quote: QuotedMessage) => void;
 };
 
 /**
- * Цитата в облачке ответа: полоска, автор и фрагмент оригинала. Высота
- * всегда одна — две строки, — поэтому облачко не прыгает, чем бы ни
- * оказался оригинал: текстом, фото или удалённым сообщением.
+ * Одна цитата: полоска, автор и фрагмент оригинала. Высота всегда одна — две
+ * строки, — поэтому облачко не прыгает, чем бы ни оказался оригинал: текстом,
+ * фото или удалённым сообщением. Мемо — у ответа их бывает до сотни, а
+ * облачко перерисовывается от каждой реакции.
  */
-export function ReplyQuote({ quotes, isOwn, onPress }: ReplyQuoteProps) {
+const QuoteLine = memo(function QuoteLine({ quote, isOwn, onPress }: QuoteLineProps) {
   const theme = useTheme();
-  const [first] = quotes;
-
-  if (!first) return null;
-
   const accentColor = isOwn ? theme.primaryText : theme.primary;
   const textColor = isOwn ? 'primaryText' : 'text';
-  const more = quotes.length - 1;
-  const live = first.state === 'live' ? first : null;
+  const live = quote.state === 'live' ? quote : null;
   const author = live ? (live.authorName ?? DELETED_ACCOUNT) : null;
   const snippet = live ? describePreview(live.preview) : 'Сообщение удалено';
   const thumbnailUrl = live?.preview.thumbnailUrl ?? null;
-  const anyLive = quotes.some((quote) => quote.state === 'live');
 
   return (
     <Pressable
@@ -42,8 +44,8 @@ export function ReplyQuote({ quotes, isOwn, onPress }: ReplyQuoteProps) {
       accessibilityRole="button"
       accessibilityLabel={author ? `Ответ на сообщение: ${author}. ${snippet}` : snippet}
       // По удалённому оригиналу тап ничего не делает.
-      disabled={!onPress || !anyLive}
-      onPress={onPress}
+      disabled={!onPress || !live}
+      onPress={() => onPress?.(quote)}
       style={[
         styles.quote,
         { backgroundColor: isOwn ? theme.quoteBackgroundOnPrimary : theme.quoteBackground },
@@ -75,12 +77,30 @@ export function ReplyQuote({ quotes, isOwn, onPress }: ReplyQuoteProps) {
           {snippet}
         </Text>
       </View>
-
-      {more > 0 ? (
-        <Text variant="smallBold" style={{ color: accentColor }}>
-          {`+${more}`}
-        </Text>
-      ) : null}
     </Pressable>
+  );
+});
+
+/**
+ * Цитаты в облачке ответа — столбиком, каждая сама по себе: у ответа на
+ * несколько сообщений видно всё, на что он отвечает, и тап по цитате ведёт
+ * к её оригиналу.
+ */
+export function ReplyQuote({ quotes, isOwn, onPress }: ReplyQuoteProps) {
+  if (quotes.length === 0) return null;
+
+  return (
+    <View style={styles.list}>
+      {quotes.map((quote, index) => (
+        <QuoteLine
+          // Цитата может встретиться дважды только как удалённая заглушка —
+          // позиция в ответе и есть её место.
+          key={`${quote.messageId}:${index}`}
+          quote={quote}
+          isOwn={isOwn}
+          onPress={onPress}
+        />
+      ))}
+    </View>
   );
 }

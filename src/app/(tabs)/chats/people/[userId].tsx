@@ -6,5 +6,5 @@ import { UserProfile } from '@/features/profile/UserProfile';
 export default function ChatPersonScreen() {
   const { userId } = useLocalSearchParams<{ userId: string }>();
 
-  return <UserProfile userId={userId} />;
+  return <UserProfile userId={userId} stack="chats" />;
 }

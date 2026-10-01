@@ -1,7 +1,5 @@
 import type { Session as SupabaseSession } from '@supabase/supabase-js';
 import { act, fireEvent, screen, userEvent, waitFor, within } from '@testing-library/react-native';
-import { State } from 'react-native-gesture-handler';
-import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils';
 
 import ChatScreen from './[chatId]';
 
@@ -40,6 +38,7 @@ jest.mock('@/api/reactions', () => ({
   setMessageReaction: jest.fn(),
 }));
 jest.mock('expo-router', () => ({
+  useIsFocused: () => true,
   useNavigation: () => ({
     getState: () => ({ index: 0, routes: [] }),
     dispatch: jest.fn(),
@@ -224,13 +223,10 @@ const voiceFile: MessageAttachment = {
 
 let channel: ChatChannelHandlers | null = null;
 
-async function longPress(messageId: string) {
+/** Тап по облачку — так открывается его меню. */
+async function tapMessage(messageId: string) {
   await act(async () => {
-    fireGestureHandler(getByGestureTestId(`message-long-press-${messageId}`), [
-      { state: State.BEGAN, x: 10, y: 10, absoluteX: 20, absoluteY: 200 },
-      { state: State.ACTIVE, x: 10, y: 10, absoluteX: 20, absoluteY: 200 },
-      { state: State.END, x: 10, y: 10, absoluteX: 20, absoluteY: 200 },
-    ]);
+    fireEvent.press(screen.getByTestId(`message-row-${messageId}`));
   });
 }
 
@@ -240,7 +236,7 @@ async function choose(label: string) {
 }
 
 async function startEditing(messageId: string) {
-  await longPress(messageId);
+  await tapMessage(messageId);
   await choose('Изменить');
   await screen.findByText('Редактирование');
 }
@@ -288,7 +284,7 @@ describe('who can edit', () => {
     await renderWithQuery(<ChatScreen />);
     await screen.findByText('привет');
 
-    await longPress('m1');
+    await tapMessage('m1');
     expect(await screen.findByRole('menuitem', { name: 'Изменить' })).toBeTruthy();
   });
 
@@ -296,7 +292,7 @@ describe('who can edit', () => {
     await renderWithQuery(<ChatScreen />);
     await screen.findByText('привет');
 
-    await longPress('m2');
+    await tapMessage('m2');
     await screen.findByTestId('message-menu');
     expect(screen.queryByRole('menuitem', { name: 'Изменить' })).toBeNull();
   });
@@ -315,7 +311,7 @@ describe('who can edit', () => {
     await renderWithQuery(<ChatScreen />);
     await screen.findByText('мои слова');
 
-    await longPress('f1/o1');
+    await tapMessage('f1/o1');
     await screen.findByTestId('message-menu');
     expect(screen.queryByRole('menuitem', { name: 'Изменить' })).toBeNull();
   });
@@ -327,7 +323,7 @@ describe('who can edit', () => {
     await renderWithQuery(<ChatScreen />);
     await screen.findByText('эй');
 
-    await longPress('m1');
+    await tapMessage('m1');
     await screen.findByTestId('message-menu');
     expect(screen.queryByRole('menuitem', { name: 'Изменить' })).toBeNull();
   });
@@ -439,7 +435,7 @@ describe('leaving an edit', () => {
 
     const user = userEvent.setup();
 
-    await longPress('m2');
+    await tapMessage('m2');
     await choose('Ответить');
     await user.type(field(), 'черновик');
 

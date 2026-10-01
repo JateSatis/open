@@ -1,8 +1,6 @@
 import type { Session as SupabaseSession } from '@supabase/supabase-js';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react-native';
 import { BackHandler } from 'react-native';
-import { State } from 'react-native-gesture-handler';
-import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils';
 
 import ChatScreen from './[chatId]';
 
@@ -19,6 +17,7 @@ import { useInAppAlert } from '@/features/notifications/alertsStore';
 import { reportRealtimeJoined, resetConnectionState } from '@/features/connection/connectionStore';
 import { PRIMARY_REACTIONS } from '@/features/interactions/reactionSet';
 import { renderWithQuery } from '@/test/renderWithQuery';
+import { setLiftedMessage } from '@/features/chats/MessageRow/liftedStore';
 
 // Шапку экран ставит через Stack.Screen — мок рисует и заголовок, и правую
 // кнопку прямо в дереве: так видно «Выбрано: N» и «Отмена».
@@ -28,6 +27,7 @@ jest.mock('@/api/reactions', () => ({
   setMessageReaction: jest.fn(),
 }));
 jest.mock('expo-router', () => ({
+  useIsFocused: () => true,
   useNavigation: () => ({
     getState: () => ({ index: 0, routes: [] }),
     dispatch: jest.fn(),
@@ -151,19 +151,17 @@ function message(id: string, text: string, authorId: string, minute = 0): Messag
 
 let handlers: ChatChannelHandlers | null = null;
 
-/** Долгое нажатие на сообщение — так, как его видит жест-обработчик. */
-async function longPress(messageId: string) {
+/** Тап по облачку — так открывается его меню. */
+async function tapMessage(messageId: string) {
   await act(async () => {
-    fireGestureHandler(getByGestureTestId(`message-long-press-${messageId}`), [
-      { state: State.BEGAN, x: 10, y: 10, absoluteX: 20, absoluteY: 200 },
-      { state: State.ACTIVE, x: 10, y: 10, absoluteX: 20, absoluteY: 200 },
-      { state: State.END, x: 10, y: 10, absoluteX: 20, absoluteY: 200 },
-    ]);
+    fireEvent.press(screen.getByTestId(`message-row-${messageId}`));
   });
 }
 
 beforeEach(() => {
   jest.clearAllMocks();
+  // Меню, оставленное открытым прошлым тестом, не прячет облачко в следующем.
+  setLiftedMessage(null);
   handlers = null;
   resetOutbox();
   resetPendingReactions();
@@ -227,7 +225,7 @@ describe('reactions in the message menu', () => {
   it('shows a member the reaction block: expand button on the left, then the primary set', async () => {
     await renderWithQuery(<ChatScreen />);
     await screen.findByText('привет');
-    await longPress('m2');
+    await tapMessage('m2');
 
     expect(await pickerOptions()).toEqual(BLOCK);
   });
@@ -237,7 +235,7 @@ describe('reactions in the message menu', () => {
 
     await renderWithQuery(<ChatScreen />);
     await screen.findByText('привет');
-    await longPress('m2');
+    await tapMessage('m2');
 
     expect(await pickerOptions()).toEqual(BLOCK);
   });
@@ -245,7 +243,7 @@ describe('reactions in the message menu', () => {
   it('opens the whole set with the button on the left and hides the actions meanwhile', async () => {
     await renderWithQuery(<ChatScreen />);
     await screen.findByText('привет');
-    await longPress('m2');
+    await tapMessage('m2');
 
     expect(screen.queryByTestId('reaction-option-🤯')).toBeNull();
 
@@ -260,7 +258,7 @@ describe('reactions in the message menu', () => {
 
     await renderWithQuery(<ChatScreen />);
     await screen.findByText('привет');
-    await longPress('m2');
+    await tapMessage('m2');
     await react('👍');
 
     expect(mockedSetReaction).toHaveBeenCalledWith('m2', '👍');
@@ -272,7 +270,7 @@ describe('reactions in the message menu', () => {
 
     await renderWithQuery(<ChatScreen />);
     await screen.findByText('как дела?');
-    await longPress('m3');
+    await tapMessage('m3');
     await react('🔥');
 
     expect(mockedSetReaction).toHaveBeenCalledWith('m3', '🔥');
@@ -284,12 +282,12 @@ describe('reactions in the message menu', () => {
 
     await renderWithQuery(<ChatScreen />);
     await screen.findByText('привет');
-    await longPress('m2');
+    await tapMessage('m2');
     await react('🔥');
 
     expect(await screen.findByTestId('visitor-reaction-🔥')).toBeTruthy();
     expect(screen.queryByTestId('reaction-chip-🔥')).toBeNull();
-    expect(screen.getByText('зрители')).toBeTruthy();
+    expect(screen.getByLabelText('Зрители: 🔥 1')).toBeTruthy();
   });
 
   it('tapping my highlighted reaction in the block takes it off', async () => {
@@ -310,7 +308,7 @@ describe('reactions in the message menu', () => {
 
     await renderWithQuery(<ChatScreen />);
     await screen.findByText('привет');
-    await longPress('m2');
+    await tapMessage('m2');
     await react('👍');
 
     expect(mockedSetReaction).toHaveBeenCalledWith('m2', null);
@@ -322,7 +320,7 @@ describe('reactions in the message menu', () => {
 
     await renderWithQuery(<ChatScreen />);
     await screen.findByText('привет');
-    await longPress('m2');
+    await tapMessage('m2');
     await react('😁');
 
     await waitFor(() => expect(screen.queryByTestId('reaction-chip-😁')).toBeNull());
@@ -367,15 +365,20 @@ describe('reactions in the bubble', () => {
     expect(mockedSetReaction).not.toHaveBeenCalled();
   });
 
-  it('a visitor taps the viewers row, and member chips do nothing', async () => {
+  it('a visitor taps the viewers row, and member chips do not react', async () => {
     withReactions();
     asVisitor();
     mockedSetReaction.mockResolvedValue({ emoji: '😁', audience: 'visitor' });
 
     await renderWithQuery(<ChatScreen />);
+    // Чип участников для посетителя не кнопка: тап уходит облачку — его меню.
     fireEvent.press(await screen.findByTestId('reaction-chip-👍'));
 
     expect(mockedSetReaction).not.toHaveBeenCalled();
+    expect(await screen.findByTestId('message-menu')).toBeTruthy();
+
+    fireEvent.press(screen.getByTestId('message-menu-backdrop'));
+    await waitFor(() => expect(screen.queryByTestId('message-menu')).toBeNull());
 
     fireEvent.press(screen.getByTestId('visitor-reaction-😁'));
 

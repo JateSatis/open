@@ -187,6 +187,19 @@ describe('message menu of a bubble in a forward island', () => {
       ),
     ).toEqual(['retry', 'delete_island']);
   });
+
+  it('offers the chat the island came from first — the plate is no longer a link by itself', () => {
+    const fromChat = message({
+      kind: 'forward',
+      authorId: 'user-2',
+      forward: { sourceChat: { id: 'chat-src', name: 'Хейтеры' }, items: [] },
+    });
+
+    expect(islandActions(fromChat, false).map((action) => action.label)).toEqual([
+      'Перейти в «Хейтеры»',
+      'Выбрать все',
+    ]);
+  });
 });
 
 describe('selection panel', () => {

@@ -6,6 +6,7 @@ import type { QueryClient } from '@tanstack/react-query';
 
 import {
   COMMENT_PAGE_SIZE,
+  listCommentReactions,
   listComments,
   listCommentsByIds,
   listCommentsSince,
@@ -61,7 +62,12 @@ function applyFresh(page: CommentsPage, ids: string[], fresh: Comment[]): Commen
   const stale = fresh.filter((comment) => {
     const known = page.items.find((item) => item.id === comment.id);
 
-    return known && known.editedAt !== comment.editedAt;
+    // Правка или реакции, пропущенные, пока канала не было.
+    return (
+      known &&
+      (known.editedAt !== comment.editedAt ||
+        JSON.stringify(known.reactions) !== JSON.stringify(comment.reactions))
+    );
   });
 
   return replaceComments(removeComments(page, gone), stale);
@@ -92,6 +98,30 @@ export async function loadComments(
   const latest = readComments(queryClient, messageId) ?? cached;
 
   return mergeComments(applyFresh(latest, ids, fresh), newer);
+}
+
+/** Свежие счётчики реакций этих комментариев — по сигналу канала, пачкой. */
+export async function syncCommentReactions(
+  queryClient: QueryClient,
+  messageId: string,
+  ids: string[],
+): Promise<void> {
+  const fresh = await listCommentReactions(ids);
+  const byId = new Map(fresh.map((row) => [row.id, row.reactions]));
+
+  updateComments(queryClient, messageId, (page) => {
+    let changed = false;
+    const items = page.items.map((item) => {
+      const reactions = byId.get(item.id);
+
+      if (!reactions) return item;
+
+      changed = true;
+      return { ...item, reactions };
+    });
+
+    return changed ? { ...page, items } : page;
+  });
 }
 
 /**

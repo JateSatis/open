@@ -26,6 +26,8 @@ export type CommentComposerProps = {
   closed: boolean;
   onSend: () => void;
   onSendVoice: (voice: LocalMedia) => void;
+  /** Касание поля — шит разворачивается. */
+  onFieldActivate?: () => void;
 };
 
 const noop = () => undefined;
@@ -46,6 +48,7 @@ export function CommentComposer({
   closed,
   onSend,
   onSendVoice,
+  onFieldActivate,
 }: CommentComposerProps) {
   const theme = useTheme();
 
@@ -67,8 +70,9 @@ export function CommentComposer({
         state: edit.composer,
       }
     : undefined;
-  const closeEdit = () => void edit.leave();
-  const plate = modePlate(draft.mode, closeEdit, editPlate);
+  // Крестик плашки: правка выходит из правки, ответ просто снимается.
+  const closeMode = () => (isEditing ? void edit.leave() : draft.setMode(null));
+  const plate = modePlate(draft.mode, closeMode, editPlate);
 
   return (
     <>
@@ -82,7 +86,10 @@ export function CommentComposer({
         inputRef={inputRef}
         onSend={onSend}
         onTyping={noop}
-        onFieldActivate={claimKeyboardForComments}
+        onFieldActivate={() => {
+          claimKeyboardForComments();
+          onFieldActivate?.();
+        }}
         onAttachPressIn={armSheet}
         onAttachPressOut={releaseMediaSheetArm}
         onAttachPress={openSheet}

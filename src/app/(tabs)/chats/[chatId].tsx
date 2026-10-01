@@ -1,4 +1,4 @@
-import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
+import { useIsFocused, useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   ActivityIndicator,
@@ -84,7 +84,10 @@ const rowKey = (row: ChatListRow) => row.key;
 /** Ближе этого к самому новому сообщению список держится за низ переписки, а не за прочитанное. */
 const KEEP_READING_POSITION = { minIndexForVisible: 0, autoscrollToTopThreshold: Spacing.six };
 
-/** Облачко чужого сообщения начинается после аватара и зазора (`MessageBubble`). */
+/**
+ * Облачко чужого сообщения начинается после аватара и зазора (`MessageBubble`).
+ * В личном диалоге аватаров нет — облачко у самого края.
+ */
 const BUBBLE_LEADING_INSET = Spacing.five + Spacing.two;
 
 export default function ChatScreen() {
@@ -117,6 +120,7 @@ export default function ChatScreen() {
   const menu = useMessageMenu(rowKey);
   const draft = useComposerDraft(chatId);
   const isMember = chat ? isChatMember(chat, currentUserId) : false;
+  const isFocused = useIsFocused();
   // Заявку спрашиваем только у не-участника: участнику отвечать уже не на что.
   const myInvite = useMyInvite(chatId, chat !== null && !isMember);
   const invite = useRespondToInvite();
@@ -143,7 +147,7 @@ export default function ChatScreen() {
   // экран. Но не чат: закрыл переписку — голосовое замолкает.
   useEffect(() => () => stopVoice(), [chatId]);
 
-  useMarkChatRead(chatId, messages.length > 0 ? messages[0].id : null);
+  useMarkChatRead(chatId, messages.length > 0 ? messages[0].id : null, isMember);
 
   const readUpTo = useMemo(() => readUpToOf(chat, currentUserId), [chat, currentUserId]);
 
@@ -256,6 +260,7 @@ export default function ChatScreen() {
     forward: replyForward.startForward,
     edit: startEdit,
     openOriginal: navigation.openOriginal,
+    openChat: navigation.openChat,
   });
 
   // Системный «назад» в правке выходит из правки, а не из чата.
@@ -303,6 +308,11 @@ export default function ChatScreen() {
     return () => subscription.remove();
   }, [clearSelection, isSelecting]);
 
+  const selectIsland = useCallback(
+    (island: Parameters<typeof runIslandAction>[1]) => runIslandAction('select_all', island),
+    [runIslandAction],
+  );
+
   const { bubbleFor, audienceFor } = useChatBubbles({
     chatId,
     currentUserId,
@@ -314,6 +324,7 @@ export default function ChatScreen() {
     openPerson,
     navigation,
     reactions,
+    showAvatars: chat?.kind !== 'direct',
   });
 
   const { renderItem, islandHeader } = useChatRowRenderer({
@@ -322,13 +333,14 @@ export default function ChatScreen() {
     isSelecting,
     isSelected: selection.isSelected,
     toggleSelected: selection.toggle,
+    startSelection: selection.start,
+    selectIsland,
     editingId,
     highlight: jump.highlight,
     bubbleFor,
     openMenu: menu.open,
     startReply,
     retry,
-    openChat: navigation.openChat,
     hostName: authorName,
   });
 
@@ -489,6 +501,9 @@ export default function ChatScreen() {
             maintainVisibleContentPosition={KEEP_READING_POSITION}
             onEndReached={hasMore ? loadMore : undefined}
             onEndReachedThreshold={0.4}
+            // Тап по облачку при открытой клавиатуре сразу открывает меню, а
+            // не только прячет клавиатуру; тап по пустому месту — прячет.
+            keyboardShouldPersistTaps="handled"
             ListFooterComponent={
               isLoadingMore ? <ActivityIndicator accessibilityLabel="Загрузка истории" /> : null
             }
@@ -553,17 +568,22 @@ export default function ChatScreen() {
         />
       </Animated.View>
 
-      <MediaPickerSheet
-        draft={draft}
-        plate={
-          draft.mode?.type === 'reply' || draft.mode?.type === 'edit'
-            ? modePlate(draft.mode, closeMode, editPlate)
-            : null
-        }
-        editing={isEditing}
-        onTyping={notifyTyping}
-        onSend={submit}
-      />
+      {/* Сторы шитов общие: в стеке бывает два экрана чата (переход по
+          цитате, островку, из профиля), и окно рисует только верхний — иначе
+          под закрывающимся шитом на миг показывался его двойник. */}
+      {isFocused ? (
+        <MediaPickerSheet
+          draft={draft}
+          plate={
+            draft.mode?.type === 'reply' || draft.mode?.type === 'edit'
+              ? modePlate(draft.mode, closeMode, editPlate)
+              : null
+          }
+          editing={isEditing}
+          onTyping={notifyTyping}
+          onSend={submit}
+        />
+      ) : null}
 
       <MessageContextMenu
         anchor={menu.target?.anchor ?? null}
@@ -571,7 +591,9 @@ export default function ChatScreen() {
         actions={menuActions}
         reactions={menuReactions}
         alignEnd={menuContent?.authorId === currentUserId}
-        leadingInset={menuRow?.type === 'island-header' ? 0 : BUBBLE_LEADING_INSET}
+        leadingInset={
+          menuRow?.type === 'island-header' || chat?.kind === 'direct' ? 0 : BUBBLE_LEADING_INSET
+        }
         onAction={runMenuAction}
         onClose={menu.close}
       />

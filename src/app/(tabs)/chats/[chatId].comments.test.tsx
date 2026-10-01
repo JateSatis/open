@@ -11,6 +11,7 @@ import {
   listComments,
   listCommentsSince,
   sendComment,
+  setCommentReaction,
   subscribeToComments,
   type Comment,
   type CommentChannelHandlers,
@@ -26,7 +27,10 @@ import { closeComments } from '@/features/interactions/comments/commentsPanelSto
 import { island, original } from '@/test/islands';
 import { renderWithQuery } from '@/test/renderWithQuery';
 
+let mockFocused = true;
+
 jest.mock('expo-router', () => ({
+  useIsFocused: () => mockFocused,
   useNavigation: () => ({
     getState: () => ({ index: 0, routes: [] }),
     dispatch: jest.fn(),
@@ -68,6 +72,8 @@ jest.mock('@/api/comments', () => ({
   sendVoiceComment: jest.fn(),
   deleteComment: jest.fn(),
   editComment: jest.fn(),
+  setCommentReaction: jest.fn(),
+  listCommentReactions: jest.fn(() => Promise.resolve([])),
   subscribeToComments: jest.fn(),
 }));
 jest.mock('@/api/reactions', () => ({
@@ -207,6 +213,8 @@ function comment(id: string, overrides: Partial<Comment> = {}): Comment {
     createdAt: '2026-09-30T11:00:00Z',
     editedAt: null,
     attachments: [],
+    reactions: { members: {}, visitors: {}, mine: null },
+    replies: [],
     ...overrides,
   };
 }
@@ -215,6 +223,7 @@ let commentHandlers: CommentChannelHandlers | null = null;
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockFocused = true;
   commentHandlers = null;
   resetOutbox();
   resetCommentOutbox();
@@ -386,7 +395,11 @@ describe('comments panel', () => {
     expect(await screen.findByText('мой комментарий')).toBeTruthy();
     expect(screen.getByText('Отправляется…')).toBeTruthy();
     expect(commentField().props.value).toBe('');
-    expect(mockedSend).toHaveBeenCalledWith('m1', { text: 'мой комментарий', media: [] });
+    expect(mockedSend).toHaveBeenCalledWith('m1', {
+      text: 'мой комментарий',
+      media: [],
+      replyTo: [],
+    });
 
     await act(async () => refuse({ code: '42501', message: 'denied' }));
 
@@ -415,5 +428,80 @@ describe('comments panel', () => {
     expect(await screen.findByText('Сообщение удалено')).toBeTruthy();
     expect(screen.getByText('Сообщение удалено — новые комментарии не принимаются.')).toBeTruthy();
     expect(screen.queryByPlaceholderText('Комментарий')).toBeNull();
+  });
+});
+
+describe('a visitor in the comments', () => {
+  /** Тап по облачку комментария — его меню. */
+  async function tapComment(id: string) {
+    await act(async () => {
+      fireEvent.press(screen.getByTestId(`message-row-${id}`));
+    });
+  }
+
+  it('puts a reaction on a comment from its menu, and it lands in the viewers row at once', async () => {
+    const mockedReact = setCommentReaction as jest.MockedFunction<typeof setCommentReaction>;
+    mockedReact.mockResolvedValue({ emoji: '🔥', audience: 'visitor' });
+    mockedListComments.mockResolvedValue({ items: [comment('c1')], nextCursor: null });
+
+    await renderChat();
+    await openCommentsOf(3);
+    await screen.findByText('комментарий c1');
+
+    await tapComment('c1');
+    await fireEvent.press(await screen.findByTestId('reaction-option-🔥'));
+
+    await waitFor(() => expect(mockedReact).toHaveBeenCalledWith('c1', '🔥'));
+    expect(await screen.findByLabelText('Зрители: 🔥 1')).toBeTruthy();
+  });
+
+  it('replies to a comment: the quote goes with the new comment', async () => {
+    mockedListComments.mockResolvedValue({ items: [comment('c1')], nextCursor: null });
+    mockedSend.mockReturnValue(new Promise(() => undefined));
+
+    await renderChat();
+    await openCommentsOf(3);
+    await screen.findByText('комментарий c1');
+
+    await tapComment('c1');
+    await fireEvent.press(await screen.findByRole('menuitem', { name: 'Ответить' }));
+    expect(await screen.findByText('В ответ Олег')).toBeTruthy();
+
+    await fireEvent.changeText(commentField(), 'согласен');
+    await fireEvent.press(screen.getByLabelText('Отправить'));
+
+    await waitFor(() =>
+      expect(mockedSend).toHaveBeenCalledWith('m1', {
+        text: 'согласен',
+        media: [],
+        replyTo: ['c1'],
+      }),
+    );
+  });
+
+  it('offers no editing or deleting on somebody else’s comment', async () => {
+    mockedListComments.mockResolvedValue({ items: [comment('c1')], nextCursor: null });
+
+    await renderChat();
+    await openCommentsOf(3);
+    await screen.findByText('комментарий c1');
+
+    await tapComment('c1');
+    await screen.findByTestId('message-menu');
+
+    expect(screen.queryByRole('menuitem', { name: 'Изменить' })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: 'Удалить' })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: 'Переслать' })).toBeNull();
+  });
+});
+
+describe('two chat screens in the stack', () => {
+  it('only the focused one draws the panel window — no twin under a closing panel', async () => {
+    await renderChat();
+    mockFocused = false;
+
+    await fireEvent.press(buttons()[3]);
+
+    expect(screen.queryByTestId('comments-panel')).toBeNull();
   });
 });

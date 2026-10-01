@@ -13,10 +13,14 @@ type Options = {
   thread: Pick<CommentsState, 'retry' | 'discard' | 'remove'>;
   /** «Изменить»: поле панели переходит в правку этого комментария. */
   edit: (comment: CommentItem) => void;
+  /** «Ответить»: комментарий встаёт плашкой над полем. */
+  reply: (comment: CommentItem) => void;
+  /** «Выбрать»: выбор с этим комментарием уже отмеченным. */
+  select: (comment: CommentItem) => void;
 };
 
 /** Что делает каждый пункт меню комментария. */
-export function useCommentActionHandlers({ thread, edit }: Options) {
+export function useCommentActionHandlers({ thread, edit, reply, select }: Options) {
   const { retry, discard, remove } = thread;
 
   return useCallback(
@@ -24,6 +28,12 @@ export function useCommentActionHandlers({ thread, edit }: Options) {
       switch (id) {
         case 'retry':
           if (comment.localId) retry(comment.localId);
+          return;
+        case 'reply':
+          reply(comment);
+          return;
+        case 'select':
+          select(comment);
           return;
         case 'copy':
           void Clipboard.setStringAsync(comment.text ?? '').then(() => showNotice('Скопировано'));
@@ -59,6 +69,6 @@ export function useCommentActionHandlers({ thread, edit }: Options) {
           return;
       }
     },
-    [discard, edit, remove, retry],
+    [discard, edit, remove, reply, retry, select],
   );
 }

@@ -19,7 +19,7 @@ describe('MessageReactions', () => {
     expect(screen.queryByTestId('message-reactions')).toBeNull();
   });
 
-  it('keeps members and visitors in separate rows, visitors labelled as viewers', async () => {
+  it('keeps members and visitors in separate rows, visitors small and without a caption', async () => {
     await render(<MessageReactions reactions={both} tone="other" />);
 
     const members = screen.getByTestId('member-reactions');
@@ -28,7 +28,8 @@ describe('MessageReactions', () => {
     expect(within(members).getByLabelText('🔥 5')).toBeTruthy();
     expect(within(members).getByLabelText('👍 2')).toBeTruthy();
     expect(within(members).queryByText('😁')).toBeNull();
-    expect(within(visitors).getByText('зрители')).toBeTruthy();
+    // Подписи на экране нет — кто это, говорит метка для экранного чтеца.
+    expect(within(visitors).queryByText('зрители')).toBeNull();
     expect(within(visitors).getByLabelText('Зрители: 👀 12')).toBeTruthy();
     expect(within(visitors).queryByText('🔥')).toBeNull();
   });

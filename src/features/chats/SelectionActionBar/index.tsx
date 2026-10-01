@@ -5,6 +5,7 @@ import { styles } from './styles';
 import { Text } from '@/components/Text';
 import {
   SELECTION_ACTIONS,
+  type SelectionAction,
   type SelectionActionContext,
   type SelectionActionId,
 } from '@/features/chats/messageActions';
@@ -16,6 +17,8 @@ const MIN_LABEL_SCALE = 0.8;
 export type SelectionActionBarProps = {
   context: SelectionActionContext;
   onAction: (id: SelectionActionId) => void;
+  /** Свой набор кнопок — у комментариев нет пересылки. По умолчанию — как у сообщений. */
+  actions?: readonly SelectionAction[];
 };
 
 /**
@@ -24,7 +27,11 @@ export type SelectionActionBarProps = {
  * добавляется туда одной записью. Кнопок четыре на ширину телефона, поэтому
  * они компактнее обычных: подпись в одну строку, не ломается посередине слова.
  */
-export function SelectionActionBar({ context, onAction }: SelectionActionBarProps) {
+export function SelectionActionBar({
+  context,
+  onAction,
+  actions = SELECTION_ACTIONS,
+}: SelectionActionBarProps) {
   const theme = useTheme();
 
   return (
@@ -32,7 +39,7 @@ export function SelectionActionBar({ context, onAction }: SelectionActionBarProp
       testID="selection-action-bar"
       style={[styles.bar, { borderTopColor: theme.border, backgroundColor: theme.background }]}
     >
-      {SELECTION_ACTIONS.map((action) => {
+      {actions.map((action) => {
         const enabled = action.isEnabled(context);
 
         return (

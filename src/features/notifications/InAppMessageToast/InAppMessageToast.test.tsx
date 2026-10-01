@@ -17,6 +17,7 @@ import { renderWithQuery } from '@/test/renderWithQuery';
 const mockPush = jest.fn();
 
 jest.mock('expo-router', () => ({
+  useIsFocused: () => true,
   useRouter: () => ({ push: mockPush }),
 }));
 

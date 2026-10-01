@@ -31,6 +31,12 @@ type Options = {
   openPerson: (personId: string) => void;
   navigation: QuoteNavigation;
   reactions: ReactToMessage;
+  /**
+   * Аватары у чужих облачков. В личном диалоге их нет вовсе — и у облачков
+   * островка тоже, даже если автор оригинала третий человек: его видно по
+   * строке имени, а ряд облачков не пляшет по ширине.
+   */
+  showAvatars: boolean;
 };
 
 /** Облачко и то, в какой ряд в нём лягут мои реакции. */
@@ -58,6 +64,7 @@ export function useChatBubbles({
   openPerson,
   navigation,
   reactions,
+  showAvatars,
 }: Options): ChatBubbles {
   const { openQuote, openOriginal } = navigation;
   const { audience: myAudience, toggle } = reactions;
@@ -89,18 +96,20 @@ export function useChatBubbles({
           mediaBounds={mediaBounds}
           onRetry={retry}
           onAuthorPress={interactive && authorId ? () => openPerson(authorId) : undefined}
-          onQuotePress={interactive ? () => openQuote(item) : undefined}
+          onQuotePress={interactive ? openQuote : undefined}
           reactionAudience={myAudience}
           onReactionToggle={
             interactive && canReactTo(item) ? (emoji) => toggle(item, emoji) : undefined
           }
-          comments={commentsEntry(item, chatId, interactive)}
+          comments={commentsEntry(item, chatId, interactive, isMember)}
+          showAvatar={showAvatars}
         />
       );
     },
     [
       chatId,
       currentUserId,
+      isMember,
       mediaBounds,
       myAudience,
       openPerson,
@@ -108,6 +117,7 @@ export function useChatBubbles({
       participantsById,
       readUpTo,
       retry,
+      showAvatars,
       toggle,
     ],
   );
@@ -137,7 +147,7 @@ export function useChatBubbles({
           onRetry={noop}
           onAuthorPress={interactive && authorId ? () => openPerson(authorId) : undefined}
           // Цитаты оригинала — из его чата: туда и прыжок.
-          onQuotePress={interactive ? () => openQuote(message, original.chatId) : undefined}
+          onQuotePress={interactive ? (quote) => openQuote(quote, original.chatId) : undefined}
           sourceChat={
             fromHeaderChat
               ? null
@@ -153,7 +163,13 @@ export function useChatBubbles({
               : undefined
           }
           // Комментарии — к оригиналу: панель открывается на него, из его чата.
-          comments={commentsEntry(message, original.chatId, interactive)}
+          comments={commentsEntry(
+            message,
+            original.chatId,
+            interactive,
+            inThisChat ? isMember : (original.chat?.amMember ?? false),
+          )}
+          showAvatar={showAvatars}
         />
       );
     },
@@ -161,11 +177,13 @@ export function useChatBubbles({
       audienceFor,
       chatId,
       currentUserId,
+      isMember,
       mediaBounds,
       openOriginal,
       openPerson,
       openQuote,
       readUpTo,
+      showAvatars,
       toggle,
     ],
   );

@@ -10,17 +10,17 @@ import { Spacing } from '@/theme';
 
 export type PanelHeaderProps = {
   title: string;
-  /** Свайп вниз по шапке уводит панель. */
-  dismissGesture: GestureType;
+  /** Шит тянут за шапку: вверх — развернуть, вниз — свернуть или закрыть. */
+  dragGesture: GestureType;
   onClose: () => void;
 };
 
 /** Верх панели: ручка, «N комментариев» и крестик. За него панель и тянут вниз. */
-export function PanelHeader({ title, dismissGesture, onClose }: PanelHeaderProps) {
+export function PanelHeader({ title, dragGesture, onClose }: PanelHeaderProps) {
   const theme = useTheme();
 
   return (
-    <GestureDetector gesture={dismissGesture}>
+    <GestureDetector gesture={dragGesture}>
       <View testID="comments-panel-header" style={styles.header}>
         <View style={[styles.handle, { backgroundColor: theme.border }]} />
 

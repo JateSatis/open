@@ -172,16 +172,20 @@ export function deletedOriginalActions(isMine: boolean): MessageAction[] {
   );
 }
 
-export type IslandActionId = 'retry' | 'select_all' | 'delete_island';
+export type IslandActionId = 'open_source' | 'retry' | 'select_all' | 'delete_island';
 
 export type IslandAction = { id: IslandActionId; label: string; destructive?: boolean };
 
 /**
- * Пункты островка целиком — по долгому нажатию на плашку. Реакций и
- * комментариев здесь нет: островок не сообщение.
+ * Пункты островка целиком — по тапу на плашку, как меню облачка. Реакций и
+ * комментариев здесь нет: островок не сообщение. Первым — переход в чат,
+ * откуда переслали: раньше это и был тап по плашке.
  */
 export function islandActions(island: ChatMessage, isMine: boolean): IslandAction[] {
   const actions: IslandAction[] = [];
+  const source = island.forward?.sourceChat;
+
+  if (source) actions.push({ id: 'open_source', label: `Перейти в «${source.name}»` });
 
   if (island.status === 'failed') actions.push({ id: 'retry', label: 'Повторить' });
   if (!isLocalMessage(island)) actions.push({ id: 'select_all', label: 'Выбрать все' });

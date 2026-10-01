@@ -277,6 +277,48 @@ export type Database = {
           },
         ]
       }
+      comment_replies: {
+        Row: {
+          comment_id: string
+          created_at: string
+          id: string
+          message_id: string
+          position: number
+          quoted_id: string
+        }
+        Insert: {
+          comment_id: string
+          created_at?: string
+          id?: string
+          message_id: string
+          position: number
+          quoted_id: string
+        }
+        Update: {
+          comment_id?: string
+          created_at?: string
+          id?: string
+          message_id?: string
+          position?: number
+          quoted_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comment_replies_comment_fkey"
+            columns: ["comment_id", "message_id"]
+            isOneToOne: false
+            referencedRelation: "comments"
+            referencedColumns: ["id", "message_id"]
+          },
+          {
+            foreignKeyName: "comment_replies_quoted_fkey"
+            columns: ["quoted_id", "message_id"]
+            isOneToOne: false
+            referencedRelation: "comments"
+            referencedColumns: ["id", "message_id"]
+          },
+        ]
+      }
       comment_revisions: {
         Row: {
           attachments: Json
@@ -348,8 +390,23 @@ export type Database = {
           edited_at: string | null
           id: string
           kind: string
+          member_reactions: Json
           message_id: string
+          reactions_count: number
           text: string | null
+          visitor_reactions: Json
+          my_reaction: {
+            audience: string
+            chat_id: string | null
+            created_at: string
+            deleted_at: string | null
+            emoji: string
+            id: string
+            target_id: string
+            target_type: string
+            updated_at: string
+            user_id: string | null
+          } | null
         }
         Insert: {
           audience?: string
@@ -360,8 +417,11 @@ export type Database = {
           edited_at?: string | null
           id?: string
           kind: string
+          member_reactions?: Json
           message_id: string
+          reactions_count?: number
           text?: string | null
+          visitor_reactions?: Json
         }
         Update: {
           audience?: string
@@ -372,8 +432,11 @@ export type Database = {
           edited_at?: string | null
           id?: string
           kind?: string
+          member_reactions?: Json
           message_id?: string
+          reactions_count?: number
           text?: string | null
+          visitor_reactions?: Json
         }
         Relationships: [
           {
@@ -1104,6 +1167,14 @@ export type Database = {
     }
     Functions: {
       accept_chat_invite: { Args: { target_chat: string }; Returns: undefined }
+      add_comment_replies: {
+        Args: {
+          new_comment: string
+          reply_to: string[]
+          target_message: string
+        }
+        Returns: undefined
+      }
       add_message_replies: {
         Args: { new_message: string; reply_to: string[]; target_chat: string }
         Returns: undefined
@@ -1230,27 +1301,49 @@ export type Database = {
           id: string
         }[]
       }
-      my_reaction: {
-        Args: { "": Database["public"]["Tables"]["messages"]["Row"] }
-        Returns: {
-          audience: string
-          chat_id: string | null
-          created_at: string
-          deleted_at: string | null
-          emoji: string
-          id: string
-          target_id: string
-          target_type: string
-          updated_at: string
-          user_id: string | null
-        }
-        SetofOptions: {
-          from: "messages"
-          to: "reactions"
-          isOneToOne: true
-          isSetofReturn: true
-        }
-      }
+      my_reaction:
+        | {
+            Args: { "": Database["public"]["Tables"]["comments"]["Row"] }
+            Returns: {
+              audience: string
+              chat_id: string | null
+              created_at: string
+              deleted_at: string | null
+              emoji: string
+              id: string
+              target_id: string
+              target_type: string
+              updated_at: string
+              user_id: string | null
+            }
+            SetofOptions: {
+              from: "comments"
+              to: "reactions"
+              isOneToOne: true
+              isSetofReturn: true
+            }
+          }
+        | {
+            Args: { "": Database["public"]["Tables"]["messages"]["Row"] }
+            Returns: {
+              audience: string
+              chat_id: string | null
+              created_at: string
+              deleted_at: string | null
+              emoji: string
+              id: string
+              target_id: string
+              target_type: string
+              updated_at: string
+              user_id: string | null
+            }
+            SetofOptions: {
+              from: "messages"
+              to: "reactions"
+              isOneToOne: true
+              isSetofReturn: true
+            }
+          }
       my_stream_participation: {
         Args: { "": Database["public"]["Tables"]["messages"]["Row"] }
         Returns: {
@@ -1280,6 +1373,15 @@ export type Database = {
         Args: { counts: Json; delta: number; emoji: string }
         Returns: Json
       }
+      reaction_target: {
+        Args: { kind: string; target: string }
+        Returns: {
+          chat_id: string
+          deleted_at: string
+          message_id: string
+          target_kind: string
+        }[]
+      }
       reconcile_stream: {
         Args: { connected: Json; room: string }
         Returns: string
@@ -1299,7 +1401,12 @@ export type Database = {
         Returns: undefined
       }
       send_comment: {
-        Args: { comment_text: string; media?: Json; target_message: string }
+        Args: {
+          comment_text: string
+          media?: Json
+          reply_to?: string[]
+          target_message: string
+        }
         Returns: string
       }
       send_media_message: {
@@ -1312,7 +1419,7 @@ export type Database = {
         Returns: string
       }
       send_voice_comment: {
-        Args: { target_message: string; voice: Json }
+        Args: { reply_to?: string[]; target_message: string; voice: Json }
         Returns: string
       }
       send_voice_message: {

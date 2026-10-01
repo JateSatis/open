@@ -17,6 +17,8 @@ function comment(id: string, minute: number, overrides: Partial<Comment> = {}): 
     createdAt: `2026-09-30T10:0${minute}:00Z`,
     editedAt: null,
     attachments: [],
+    reactions: { members: {}, visitors: {}, mine: null },
+    replies: [],
     ...overrides,
   };
 }

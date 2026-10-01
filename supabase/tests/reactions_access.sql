@@ -306,10 +306,12 @@ begin
   end;
 
   begin
+    -- Реакции на комментарии принимаются с 20261003100000; id сообщения
+    -- комментарием не прикинуть.
     perform public.set_reaction('comment', ma, '👍');
-    perform pg_temp.check('комментарии — место есть, приёма пока нет', false, 'прошла');
+    perform pg_temp.check('id сообщения не выдать за комментарий', false, 'прошла');
   exception when others then
-    perform pg_temp.check('комментарии — место есть, приёма пока нет', sqlstate = '22023', sqlstate || ' ' || sqlerrm);
+    perform pg_temp.check('id сообщения не выдать за комментарий', sqlstate = 'P0002', sqlstate || ' ' || sqlerrm);
   end;
 
   begin

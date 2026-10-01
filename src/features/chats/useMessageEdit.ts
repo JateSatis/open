@@ -19,12 +19,15 @@ import {
 import type { ChatMessage, EditResult } from '@/features/chats/messages/types';
 import type { ComposerDraft } from '@/features/chats/useComposerDraft';
 import { selectedAssets, setSelectionLimit, type LocalMedia } from '@/features/media';
+import { focusWithKeyboard } from '@/lib/windowFocus';
 
 type Options = {
   chatId: string;
   draft: ComposerDraft;
   composerRef: RefObject<TextInput | null>;
   saveEdit: (original: ChatMessage, result: EditResult) => void;
+  /** Поле живёт в своём окне `Modal` — у панели комментариев (см. `focusWithKeyboard`). */
+  ownWindow?: boolean;
 };
 
 /** Что доступно в поле ввода, пока идёт правка. */
@@ -68,7 +71,13 @@ function resultOf(text: string, mode: EditMode, withSelection: boolean): EditRes
  * (текст, ответ, пересылка) откладывается на время правки и возвращается,
  * как только правка закончена — сохранением или отменой.
  */
-export function useMessageEdit({ chatId, draft, composerRef, saveEdit }: Options): MessageEdit {
+export function useMessageEdit({
+  chatId,
+  draft,
+  composerRef,
+  saveEdit,
+  ownWindow = false,
+}: Options): MessageEdit {
   const mode = draft.mode?.type === 'edit' ? draft.mode : null;
   const { text, clearMedia } = draft;
 
@@ -103,16 +112,14 @@ export function useMessageEdit({ chatId, draft, composerRef, saveEdit }: Options
       claimKeyboardForChat();
       // Меню закрывается в этом же кадре — поле успевает стать видимым,
       // прежде чем получить фокус. Курсор — в конец текста.
-      requestAnimationFrame(() => {
-        const input = composerRef.current;
+      focusWithKeyboard(composerRef, (input) => {
         const end = readChatDraft(chatId).text.length;
 
-        input?.focus();
         // Не у каждой реализации поля есть `setSelection` — в тестовом окружении его нет.
-        input?.setSelection?.(end, end);
-      });
+        input.setSelection?.(end, end);
+      }, ownWindow);
     },
-    [chatId, clearMedia, composerRef],
+    [chatId, clearMedia, composerRef, ownWindow],
   );
 
   const leave = useCallback(async () => {

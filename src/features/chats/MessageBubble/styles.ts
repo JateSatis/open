@@ -13,7 +13,6 @@ export const styles = StyleSheet.create({
   },
   bubble: {
     maxWidth: '78%',
-    // Рядом бывает кружок комментариев: облачко уступает ему, а не выталкивает за край.
     flexShrink: 1,
     paddingVertical: Spacing.two,
     paddingHorizontal: Spacing.three,
@@ -51,6 +50,40 @@ export const styles = StyleSheet.create({
   /** Реакции под мозаикой без подписи — внутри облачка, с отступами, как у подписи. */
   mediaReactions: {
     padding: Spacing.two,
+  },
+  /** Содержимое облачка над низом — шириной по самому широкому, а не по облачку. */
+  content: {
+    alignSelf: 'flex-start',
+    gap: Spacing.one,
+  },
+  /** Строка низа облачка: кнопка комментариев у внешнего края, время справа. */
+  footer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+  },
+  footerShrink: {
+    flexShrink: 1,
+  },
+  footerSpacer: {
+    flexGrow: 1,
+  },
+  /** Время и кнопка комментариев поверх медиа без подписи — у нижнего края мозаики. */
+  mediaOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    padding: Spacing.one + Spacing.half,
+    gap: Spacing.one,
+  },
+  /** Под альбомом без облачка: реакции и кнопка комментариев у правого края. */
+  bareFooter: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: Spacing.two,
   },
   attachmentSlot: {
     paddingVertical: Spacing.two,

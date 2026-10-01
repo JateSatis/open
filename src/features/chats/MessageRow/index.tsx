@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, type ReactNode } from 'react';
+import { impactAsync, ImpactFeedbackStyle } from 'expo-haptics';
+import { useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { Pressable, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
@@ -18,14 +19,7 @@ import { Text } from '@/components/Text';
 import type { AnchorRect } from '@/features/chats/MessageContextMenu';
 import { useTheme } from '@/hooks/use-theme';
 
-/**
- * Размеры строк по id сообщения — вне React и вне shared value: нужны только
- * в момент долгого нажатия, а shared value, прочитанное из замыкания жеста,
- * Reanimated засчитывает как чтение во время рендера каждой строки.
- */
-const rowSizes = new Map<string, { width: number; height: number }>();
-
-/** Столько держать палец, чтобы открылось меню. */
+/** Столько держать палец, чтобы включился выбор. */
 const LONG_PRESS_MS = 350;
 /** Подсветка сообщения, к которому прыгнули: вспыхивает, когда прокрутка доехала, держится секунду. */
 const HIGHLIGHT_DELAY_MS = 300;
@@ -50,7 +44,11 @@ export type MessageRowProps = {
    * прячется.
    */
   messageId: string;
-  onLongPress: (anchor: AnchorRect) => void;
+  /** Тап по облачку — меню у строки. Нет обработчика — тап ничего не делает. */
+  onOpenMenu?: (anchor: AnchorRect) => void;
+  /** Долгое нажатие — выбор с этим облачком уже отмеченным. Нет — долгого нажатия нет. */
+  onSelect?: () => void;
+  /** Тап в режиме выбора — снять или поставить отметку. */
   onToggle: () => void;
   /** Свайп влево — ответить. Без обработчика (посетитель, неотправленное) жеста нет. */
   onSwipeReply?: () => void;
@@ -62,12 +60,16 @@ export type MessageRowProps = {
 };
 
 /**
- * Строка переписки вокруг облачка: долгое нажатие открывает меню, в режиме
- * выбора слева появляется кружок, а тап по строке отмечает сообщение.
+ * Строка переписки вокруг облачка, как в Telegram на Android: тап открывает
+ * меню, долгое нажатие включает выбор, свайп влево — ответ. В режиме выбора
+ * слева появляется кружок, а тап по строке отмечает сообщение.
  *
- * Долгое нажатие ловит жест-обработчик, а не `Pressable`: так оно работает
- * на любом облачке, не мешая тому, что внутри, — плитке альбома, перемотке
- * голосового по волне (сдвиг пальца отменяет долгое нажатие), имени автора.
+ * Тап ловит обычный `Pressable` строки, а не жест-обработчик: касание в RN
+ * достаётся самому глубокому, кто его хочет, — плитка альбома, цитата, имя
+ * автора, реакции и кнопки внутри облачка берут свой тап сами, и меню не
+ * открывается. Перемотку голосового, свайп и долгое нажатие ведут
+ * жест-обработчики: узнав себя, они отменяют касание строки, и тап уже не
+ * случится.
  */
 export function MessageRow({
   children,
@@ -77,7 +79,8 @@ export function MessageRow({
   editing = false,
   highlightKey,
   messageId,
-  onLongPress,
+  onOpenMenu,
+  onSelect,
   onToggle,
   onSwipeReply,
   frame,
@@ -86,8 +89,7 @@ export function MessageRow({
   const highlight = useSharedValue(0);
   const lifted = useIsLifted(messageId);
   const swipe = useSwipeReply(messageId, !selectionMode, onSwipeReply);
-
-  useEffect(() => () => void rowSizes.delete(messageId), [messageId]);
+  const contentRef = useRef<View>(null);
 
   useEffect(() => {
     if (highlightKey === null) return;
@@ -105,27 +107,31 @@ export function MessageRow({
 
   const highlightStyle = useAnimatedStyle(() => ({ opacity: highlight.value }));
 
-  const openMenu = useCallback(
-    (x: number, y: number) => {
-      // Раскладка всегда случается раньше касания; нулевой размер — только
-      // страховка, чтобы меню открылось, даже если её не было.
-      onLongPress({ x, y, ...(rowSizes.get(messageId) ?? { width: 0, height: 0 }) });
-    },
-    [messageId, onLongPress],
-  );
+  const openMenu = useCallback(() => {
+    if (!onOpenMenu) return;
+
+    // Меню встаёт копией облачка ровно на его место — нужен угол и размер
+    // строки в окне.
+    contentRef.current?.measureInWindow((x, y, width, height) =>
+      onOpenMenu({ x, y, width, height }),
+    );
+  }, [onOpenMenu]);
+
+  const select = useCallback(() => {
+    impactAsync(ImpactFeedbackStyle.Light).catch(() => undefined);
+    onSelect?.();
+  }, [onSelect]);
 
   const longPress = useMemo(
     () =>
       Gesture.LongPress()
         .minDuration(LONG_PRESS_MS)
-        .enabled(!selectionMode)
+        .enabled(!selectionMode && onSelect !== undefined)
         .withTestId(`message-long-press-${messageId}`)
-        .onStart((event) => {
-          // Точка касания известна и в окне, и внутри строки — их разность и
-          // есть угол строки в окне, без отдельного замера.
-          runOnJS(openMenu)(event.absoluteX - event.x, event.absoluteY - event.y);
+        .onStart(() => {
+          runOnJS(select)();
         }),
-    [messageId, openMenu, selectionMode],
+    [messageId, onSelect, select, selectionMode],
   );
 
   // Кто первым узнал себя, тот и ведёт: сдвиг пальца отменяет долгое
@@ -171,8 +177,9 @@ export function MessageRow({
               selectionMode ? (selected ? 'Снять отметку' : 'Отметить сообщение') : undefined
             }
             accessible={selectionMode}
-            disabled={!selectionMode || !selectable}
-            onPress={onToggle}
+            testID={`message-row-${messageId}`}
+            disabled={selectionMode ? !selectable : !onOpenMenu}
+            onPress={selectionMode ? onToggle : openMenu}
             style={styles.selectable}
           >
             {selectionMode ? (
@@ -192,7 +199,7 @@ export function MessageRow({
               </View>
             ) : null}
 
-            <View style={styles.content}>
+            <View ref={contentRef} style={styles.content}>
               {frame}
 
               {/* В режиме выбора облачко не живёт своей жизнью: тап не открывает
@@ -200,12 +207,6 @@ export function MessageRow({
               <Animated.View
                 pointerEvents={selectionMode ? 'none' : 'auto'}
                 style={[lifted && styles.lifted, swipe.contentStyle]}
-                onLayout={({ nativeEvent }) =>
-                  rowSizes.set(messageId, {
-                    width: nativeEvent.layout.width,
-                    height: nativeEvent.layout.height,
-                  })
-                }
               >
                 {children}
               </Animated.View>

@@ -8,6 +8,11 @@ export type CommentsPanelTarget = {
   messageId: string;
   /** Чат, из переписки которого открыли, — его кеш сразу даёт облачко сверху. */
   chatId?: string;
+  /**
+   * Я участник чата сообщения — догадка ряда для мгновенного отклика моей
+   * реакции на комментарий. Ряд всё равно решает база.
+   */
+  amMember?: boolean;
 };
 
 const usePanelStore = create<{ target: CommentsPanelTarget | null }>(() => ({ target: null }));
@@ -17,8 +22,8 @@ const usePanelStore = create<{ target: CommentsPanelTarget | null }>(() => ({ ta
  * приложение: переписка открывает её по кружку у облачка, лента — у
  * фрагмента переписки.
  */
-export function openComments(messageId: string, chatId?: string) {
-  usePanelStore.setState({ target: { messageId, chatId } });
+export function openComments(messageId: string, chatId?: string, amMember = false) {
+  usePanelStore.setState({ target: { messageId, chatId, amMember } });
 }
 
 export function closeComments() {
@@ -30,19 +35,25 @@ export function useCommentsPanelTarget(): CommentsPanelTarget | null {
 }
 
 /**
- * Кружок комментариев у облачка переписки: число и открытие панели. Нет —
- * нет и кружка (неотправленное, системное). У копии облачка в меню кружок
+ * Кнопка комментариев в облачке переписки: число и открытие панели. Нет —
+ * нет и кнопки (неотправленное, системное). У копии облачка в меню кнопка
  * только показывает число.
+ *
+ * `amMember` — я участник чата, где живёт сообщение (у облачка островка — чата
+ * оригинала). Участнику на сообщении без комментариев кнопка тихая: главное —
+ * сама переписка. Посетитель пришёл смотреть и обсуждать — ему всегда обычная.
  */
 export function commentsEntry(
   message: ChatMessage,
   chatId: string,
   interactive: boolean,
-): { count: number; onPress?: () => void } | undefined {
+  amMember: boolean,
+): { count: number; quiet: boolean; onPress?: () => void } | undefined {
   if (!canCommentOn(message)) return undefined;
 
   return {
     count: message.commentsCount,
-    onPress: interactive ? () => openComments(message.id, chatId) : undefined,
+    quiet: amMember && message.commentsCount === 0,
+    onPress: interactive ? () => openComments(message.id, chatId, amMember) : undefined,
   };
 }

@@ -1,11 +1,11 @@
 // Комментарий в том виде, в каком его рисует панель. Он нарочно совместим с
-// `ChatMessage`: облачко, строка с долгим нажатием, меню, правка и её плашка
-// у комментариев те же, что у сообщений, — переиспользуются, а не копируются.
-// Цитат, пересылки, реакций и своих комментариев у комментария нет — эти
-// поля всегда пустые.
+// `ChatMessage`: облачко, строка с жестами, меню, реакции, цитаты, правка и
+// её плашка у комментариев те же, что у сообщений, — переиспользуются, а не
+// копируются. Цитата комментария — комментарий той же ветки: `messageId`
+// цитаты здесь — id комментария. Пересылки и своих комментариев у
+// комментария нет — эти поля всегда пустые.
 
 import type { Comment, CommentAudience } from '@/api/comments';
-import { NO_REACTIONS } from '@/api/reactionCounts';
 import type { ChatMessage } from '@/features/chats/messages/types';
 
 export type CommentItem = ChatMessage & {
@@ -40,9 +40,9 @@ export function toCommentItem(comment: Comment): CommentItem {
     createdAt: comment.createdAt,
     editedAt: comment.editedAt,
     attachments: comment.attachments,
-    replies: [],
+    replies: comment.replies,
     forward: null,
-    reactions: NO_REACTIONS,
+    reactions: comment.reactions,
     commentsCount: 0,
     status: 'sent',
   };

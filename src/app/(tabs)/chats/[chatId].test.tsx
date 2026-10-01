@@ -1,5 +1,5 @@
 import type { Session as SupabaseSession } from '@supabase/supabase-js';
-import { act, fireEvent, screen, userEvent, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, screen, userEvent, waitFor, within } from '@testing-library/react-native';
 
 import ChatScreen from './[chatId]';
 
@@ -25,6 +25,7 @@ jest.mock('@/api/reactions', () => ({
   setMessageReaction: jest.fn(),
 }));
 jest.mock('expo-router', () => ({
+  useIsFocused: () => true,
   useNavigation: () => ({
     getState: () => ({ index: 0, routes: [] }),
     dispatch: jest.fn(),
@@ -199,7 +200,8 @@ describe('ChatScreen', () => {
     expect(mockPush).toHaveBeenCalledWith('/chats/people/user-2');
   });
 
-  it('opens the author profile from a tap on their avatar', async () => {
+  it('opens the author profile from a tap on their avatar in a group', async () => {
+    mockedGetChat.mockResolvedValue({ ...chatWith([member, other]), kind: 'group' });
     mockedListMessages.mockResolvedValue({
       items: [message('m1', 'привет', 'user-2')],
       nextCursor: null,
@@ -209,6 +211,23 @@ describe('ChatScreen', () => {
     await renderWithQuery(<ChatScreen />);
     await screen.findByText('привет');
     await user.press(screen.getByLabelText('Профиль: Марина'));
+
+    expect(mockPush).toHaveBeenCalledWith('/chats/people/user-2');
+  });
+
+  it('в личном диалоге аватаров нет, профиль автора открывается по имени', async () => {
+    mockedListMessages.mockResolvedValue({
+      items: [message('m1', 'привет', 'user-2')],
+      nextCursor: null,
+    });
+    const user = userEvent.setup();
+
+    await renderWithQuery(<ChatScreen />);
+    await screen.findByText('привет');
+
+    expect(screen.queryByLabelText('Профиль: Марина')).toBeNull();
+
+    await user.press(within(screen.getByTestId('message-bubble')).getByText('Марина'));
 
     expect(mockPush).toHaveBeenCalledWith('/chats/people/user-2');
   });
@@ -259,8 +278,8 @@ describe('ChatScreen', () => {
 
     await renderWithQuery(<ChatScreen />);
 
-    expect(await screen.findByText('доставлено')).toBeTruthy();
-    expect(screen.queryByText('прочитано')).toBeNull();
+    expect(await screen.findByLabelText('Доставлено')).toBeTruthy();
+    expect(screen.queryByLabelText('Прочитано')).toBeNull();
   });
 
   it('shows an own message as read once the other side has caught up', async () => {
@@ -274,7 +293,7 @@ describe('ChatScreen', () => {
 
     await renderWithQuery(<ChatScreen />);
 
-    expect(await screen.findByText('прочитано')).toBeTruthy();
+    expect(await screen.findByLabelText('Прочитано')).toBeTruthy();
   });
 
   it('never marks an incoming message as read or delivered', async () => {
@@ -286,8 +305,8 @@ describe('ChatScreen', () => {
     await renderWithQuery(<ChatScreen />);
     await screen.findByText('привет');
 
-    expect(screen.queryByText('доставлено')).toBeNull();
-    expect(screen.queryByText('прочитано')).toBeNull();
+    expect(screen.queryByLabelText('Доставлено')).toBeNull();
+    expect(screen.queryByLabelText('Прочитано')).toBeNull();
   });
 
   it('hides the composer from an outsider and says why', async () => {
@@ -466,14 +485,14 @@ describe('ChatScreen', () => {
     });
 
     await renderWithQuery(<ChatScreen />);
-    expect(await screen.findByText('доставлено')).toBeTruthy();
+    expect(await screen.findByLabelText('Доставлено')).toBeTruthy();
 
     mockedGetChat.mockResolvedValue(
       chatWith([member, { ...other, lastReadAt: '2026-09-16T11:00:00Z' }]),
     );
     handlers?.onRead();
 
-    expect(await screen.findByText('прочитано')).toBeTruthy();
+    expect(await screen.findByLabelText('Прочитано')).toBeTruthy();
   });
 
   it('marks the chat read when a message arrives while it is already open', async () => {
