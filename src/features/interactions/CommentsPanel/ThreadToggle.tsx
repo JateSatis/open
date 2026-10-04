@@ -28,7 +28,8 @@ export function repliesLabel(count: number): string {
 
 /**
  * Кнопка треда сбоку от облачка корня: у чужого — справа, у своего — слева.
- * Закрытый тред — число ответов, раскрытый — «Скрыть».
+ * На ней всегда число ответов — раскрытие меняет только стрелку и цвет, а не
+ * ширину: облачко корня рядом не переносит строки.
  */
 export function ThreadToggle({ count, open, onPress }: ThreadToggleProps) {
   const theme = useTheme();
@@ -44,7 +45,7 @@ export function ThreadToggle({ count, open, onPress }: ThreadToggleProps) {
       style={[styles.threadToggle, { backgroundColor: open ? theme.islandPlate : theme.backgroundElement }]}
     >
       <Text variant="caption" color={open ? 'primary' : 'textSecondary'}>
-        {open ? 'Скрыть' : repliesLabel(count)}
+        {repliesLabel(count)}
       </Text>
       <SymbolView
         name={

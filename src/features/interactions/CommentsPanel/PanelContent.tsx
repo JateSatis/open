@@ -32,6 +32,7 @@ import type { CommentsPanelTarget } from '@/features/interactions/comments/comme
 import { useJumpToComment } from '@/features/interactions/comments/useJumpToComment';
 import { audienceOf } from '@/features/interactions/reactionState';
 import { showNotice } from '@/features/notifications/alertsStore';
+import { useTheme } from '@/hooks/use-theme';
 import { Sizes, Spacing } from '@/theme';
 
 /** Облачко чужого начинается после аватара и зазора (`MessageBubble`). */
@@ -51,6 +52,7 @@ export type PanelContentProps = {
 
 /** Всё, что внутри панели: сообщение сверху, комментарии с тредами, поле ввода и меню. */
 export function PanelContent({ target, sheet, onOpenPerson, backRef }: PanelContentProps) {
+  const theme = useTheme();
   const currentUserId = useCurrentUserId();
   const { width } = useWindowDimensions();
   const mediaBounds = useMemo(() => mosaicBounds(width - Spacing.three * 2), [width]);
@@ -243,22 +245,13 @@ export function PanelContent({ target, sheet, onOpenPerson, backRef }: PanelCont
         <Animated.View
           testID="sticky-thread-root"
           pointerEvents={sticky.stuck ? 'box-none' : 'none'}
-          style={[styles.stickyRoot, sticky.style]}
+          // Непрозрачная подложка: под копией листаются ответы, а фон треда
+          // поверх неё полупрозрачный.
+          style={[styles.stickyRoot, { backgroundColor: theme.background }, sticky.style]}
         >
           {renderComment(stickyRoot)}
         </Animated.View>
       ) : null}
-      <SheetHeader
-        travel={geometry.travel}
-        scrollOffset={scrollOffset}
-        onHeight={sheet.setHeaderHeight}
-      >
-        <PanelHeader
-          title={count > 0 ? commentsCountLabel(count) : 'Комментарии'}
-          onClose={closeNow}
-        />
-        <CommentTargetView target={about} bubble={targetBubble} />
-      </SheetHeader>
     </>
   );
 
@@ -295,6 +288,18 @@ export function PanelContent({ target, sheet, onOpenPerson, backRef }: PanelCont
                 onCommitLayout={sticky.onCommitLayout}
               />
             </CommentsSheetContext.Provider>
+            <SheetHeader
+              travel={geometry.travel}
+              scrollOffset={scrollOffset}
+              onHeight={sheet.setHeaderHeight}
+              pan={sheet.headerPan}
+            >
+              <PanelHeader
+                title={count > 0 ? commentsCountLabel(count) : 'Комментарии'}
+                onClose={closeNow}
+              />
+              <CommentTargetView target={about} bubble={targetBubble} />
+            </SheetHeader>
           </View>
         </GestureDetector>
       </Animated.View>
