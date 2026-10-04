@@ -37,7 +37,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { CLOSE_DURATION_MS, OPEN_SPRING, sheetGeometry } from './geometry';
+import { sheetGeometry } from './geometry';
 import { SheetListContext, SheetMediaList, type SheetListContextValue } from './SheetList';
 import { SheetShell } from './SheetShell';
 import {
@@ -49,7 +49,8 @@ import {
   type MediaSheetPhase,
 } from './sheetStore';
 import { styles } from './styles';
-import { useDismissGesture } from './useDismissGesture';
+
+import { CLOSE_DURATION_MS, OPEN_SPRING, useDismissGesture } from '@/components/ScrollSheet';
 
 import { ConfirmDialogSurface, confirm } from '@/components/ConfirmDialog';
 import { dismissTopConfirmDialog } from '@/components/ConfirmDialog/store';
@@ -66,7 +67,8 @@ import { countRender, perfMark } from '@/features/media/perf';
 import { useHasSelection, useMediaSelection } from '@/features/media/selectionStore';
 import { useTheme } from '@/hooks/use-theme';
 
-export { SHEET_PAN_TEST_ID } from './useDismissGesture';
+/** Жест закрытия — снаружи нужен только тестам. */
+export const SHEET_PAN_TEST_ID = 'media-picker-pan';
 export {
   armMediaSheet,
   closeMediaSheet,
@@ -291,6 +293,7 @@ function SheetWindow({
     scrollAttached,
     dismissDistance,
     onRelease: requestClose,
+    testId: SHEET_PAN_TEST_ID,
   });
 
   const markScrollAttached = useCallback(() => setScrollAttached(true), []);

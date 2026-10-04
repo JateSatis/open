@@ -6,11 +6,8 @@ import { Gesture } from 'react-native-gesture-handler';
 import { runOnJS, useSharedValue, withSpring, type SharedValue } from 'react-native-reanimated';
 
 import { followFinger, startFinger } from './followFinger';
-import { OPEN_SPRING } from './geometry';
 import { shouldDismissSheet } from './shouldDismissSheet';
-
-/** Жест закрытия — снаружи нужен только тестам, поэтому лежит рядом с самим жестом. */
-export const SHEET_PAN_TEST_ID = 'media-picker-pan';
+import { OPEN_SPRING } from './springs';
 
 /** Жест считается вертикальным после этого сдвига — иначе тап по кружку не доживал бы до Pressable. */
 const PAN_ACTIVATION_PX = 8;
@@ -31,6 +28,8 @@ type Params = {
   scrollAttached: boolean;
   dismissDistance: number;
   onRelease: () => void;
+  /** Имя жеста для тестов: через него их `fireGestureHandler` находит жест. */
+  testId: string;
 };
 
 /**
@@ -43,7 +42,7 @@ type Params = {
  * - шит вернулся в рабочее положение, а палец идёт вверх — дальше снова едет
  *   список.
  *
- * Поэтому непрерывное движение пальцем проходит через свёрнутое положение, не
+ * Поэтому непрерывное движение пальцем проходит через нижнее положение, не
  * задерживаясь, а бросок, отпущенный над списком, останавливается там, где
  * его остановил скролл: смахивание работает только пока палец на экране.
  *
@@ -59,6 +58,7 @@ export function useDismissGesture({
   scrollAttached,
   dismissDistance,
   onRelease,
+  testId,
 }: Params) {
   const anchor = useSharedValue(0);
   const lastTranslation = useSharedValue(0);
@@ -66,7 +66,7 @@ export function useDismissGesture({
   return useMemo(
     () =>
       Gesture.Pan()
-        .withTestId(SHEET_PAN_TEST_ID)
+        .withTestId(testId)
         .activeOffsetY([-PAN_ACTIVATION_PX, PAN_ACTIVATION_PX])
         .simultaneousWithExternalGesture(scrollGestureRef)
         .onStart((event) => {
@@ -119,6 +119,7 @@ export function useDismissGesture({
       scrollAttached,
       scrollGestureRef,
       scrollOffset,
+      testId,
     ],
   );
 }

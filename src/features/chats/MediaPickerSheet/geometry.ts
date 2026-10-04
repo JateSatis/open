@@ -5,9 +5,6 @@ const COLLAPSED_RATIO = 0.55;
 /** Утащили шит ниже этой доли свёрнутой высоты — отпускание закрывает его. */
 const DISMISS_RATIO = 0.2;
 
-export const OPEN_SPRING = { damping: 32, stiffness: 300, mass: 0.9 };
-export const CLOSE_DURATION_MS = 220;
-
 export type SheetGeometry = {
   collapsedHeight: number;
   /** Ход шита: от свёрнутого положения до верхней безопасной зоны. Он же высота прозрачной шапки списка. */
