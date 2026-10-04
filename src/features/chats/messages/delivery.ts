@@ -6,10 +6,12 @@ import { notifyManager, type QueryClient } from '@tanstack/react-query';
 
 import {
   deleteMessages,
+  forwardComments,
   forwardMessages,
   sendMessage,
   sendVoiceMessage,
   type ChatRef,
+  type ForwardedComment,
   type Message,
   type MessageAttachment,
   type SendMessageMedia,
@@ -98,6 +100,12 @@ export function outgoingOf(message: ChatMessage): Outgoing | null {
 
   if (message.pendingForward) return { type: 'forward', ...message.pendingForward };
 
+  if (message.kind === 'comment_forward') {
+    const commentId = message.commentForward?.commentId;
+
+    return commentId ? { type: 'forward_comment', commentId } : null;
+  }
+
   if (message.pendingVoice) return { type: 'voice', voice: message.pendingVoice, replyTo };
 
   const text = message.text ?? '';
@@ -142,7 +150,7 @@ export async function uploadOutgoing(
   outgoing: Outgoing,
   currentUserId: string,
 ): Promise<UploadedMedia[]> {
-  if (outgoing.type === 'forward') return [];
+  if (outgoing.type === 'forward' || outgoing.type === 'forward_comment') return [];
   if (outgoing.type === 'voice') return uploadAllMedia([outgoing.voice], currentUserId);
   if (outgoing.media.length === 0) return [];
 
@@ -161,6 +169,12 @@ async function insert(
   if (outgoing.type === 'forward') {
     // Островок ничего не копирует: ссылки на оригиналы, файлы — их.
     return forwardMessages(chatId, outgoing.sourceChatId, outgoing.messageIds);
+  }
+
+  if (outgoing.type === 'forward_comment') {
+    const [message] = await forwardComments(chatId, [outgoing.commentId]);
+
+    return message;
   }
 
   if (outgoing.type === 'voice') {
@@ -243,9 +257,15 @@ function explainRejection(outgoing: Outgoing, cause: unknown) {
     showNotice(
       outgoing.type === 'forward'
         ? 'Не удалось переслать: сообщение уже удалено'
-        : 'Не отправлено: сообщение, на которое вы отвечаете, удалено',
+        : outgoing.type === 'forward_comment'
+          ? 'Не удалось переслать: комментарий удалён'
+          : 'Не отправлено: сообщение, на которое вы отвечаете, удалено',
       'error',
     );
+  }
+
+  if (code === '42501' && outgoing.type === 'forward_comment') {
+    showNotice('Переслать сюда может только участник чата', 'error');
   }
 
   // Пересылаемое ушло из исходного чата раньше, чем островок доехал: его
@@ -517,5 +537,63 @@ export function sendForward(
       sourceChatId: sourceChat.id,
       messageIds,
     });
+  })();
+}
+
+/**
+ * Пересылка комментариев: текст из поля, если он есть, — отдельным
+ * сообщением перед ними, затем по облачку на комментарий, в порядке панели.
+ * Облачка появляются сразу, с комментарием как его видно в панели, и уходят
+ * на сервер по очереди: порядок в переписке держит время.
+ */
+export function sendCommentForward(context: SendContext, text: string, comments: ForwardedComment[]) {
+  const { queryClient, chatId, currentUserId } = context;
+
+  if (comments.length === 0) return;
+
+  const trimmed = text.trim();
+  const now = Date.now();
+  const lead = trimmed ? textDraft(context, trimmed, now) : null;
+  const drafts = comments.map((comment, index): ChatMessage => {
+    const localId = nextLocalId();
+
+    return {
+      id: localId,
+      localId,
+      chatId,
+      authorId: currentUserId,
+      kind: 'comment_forward',
+      text: null,
+      createdAt: new Date(now + 1 + index).toISOString(),
+      editedAt: null,
+      reactions: NO_REACTIONS,
+      commentsCount: 0,
+      attachments: [],
+      replies: [],
+      forward: null,
+      commentForward: { commentId: comment.id, comment },
+      status: 'sending',
+    };
+  });
+
+  // Список новыми вперёд: последний пересланный — сверху.
+  addToOutbox(chatId, [...drafts].reverse().concat(lead ? [lead] : []));
+
+  void (async () => {
+    if (lead) {
+      await deliver(queryClient, chatId, currentUserId, lead.localId!, {
+        type: 'post',
+        text: trimmed,
+        media: [],
+        replyTo: [],
+      });
+    }
+
+    for (const draft of drafts) {
+      await deliver(queryClient, chatId, currentUserId, draft.localId!, {
+        type: 'forward_comment',
+        commentId: draft.commentForward!.commentId!,
+      });
+    }
   })();
 }

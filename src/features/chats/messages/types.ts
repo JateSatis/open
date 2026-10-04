@@ -60,6 +60,8 @@ export type ForwardItem = { original: IslandOriginal };
 export type Outgoing =
   | { type: 'post'; text: string; media: MediaLibraryItem[]; replyTo: string[] }
   | { type: 'voice'; voice: LocalMedia; replyTo: string[] }
-  | { type: 'forward'; sourceChatId: string; messageIds: string[] };
+  | { type: 'forward'; sourceChatId: string; messageIds: string[] }
+  /** Пересланный комментарий — по сообщению на комментарий. */
+  | { type: 'forward_comment'; commentId: string };
 
 export type UserActivity = { userId: string; activity: ChatActivity };

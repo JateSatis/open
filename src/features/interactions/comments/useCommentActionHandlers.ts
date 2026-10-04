@@ -17,10 +17,12 @@ type Options = {
   reply: (comment: CommentItem) => void;
   /** «Выбрать»: выбор с этим комментарием уже отмеченным. */
   select: (comment: CommentItem) => void;
+  /** «Переслать»: дальше — выбор чата. */
+  forward: (comment: CommentItem) => void;
 };
 
 /** Что делает каждый пункт меню комментария. */
-export function useCommentActionHandlers({ thread, edit, reply, select }: Options) {
+export function useCommentActionHandlers({ thread, edit, reply, select, forward }: Options) {
   const { retry, discard, remove } = thread;
 
   return useCallback(
@@ -34,6 +36,9 @@ export function useCommentActionHandlers({ thread, edit, reply, select }: Option
           return;
         case 'select':
           select(comment);
+          return;
+        case 'forward':
+          forward(comment);
           return;
         case 'copy':
           void Clipboard.setStringAsync(comment.text ?? '').then(() => showNotice('Скопировано'));
@@ -69,6 +74,6 @@ export function useCommentActionHandlers({ thread, edit, reply, select }: Option
           return;
       }
     },
-    [discard, edit, remove, reply, retry, select],
+    [discard, edit, forward, remove, reply, retry, select],
   );
 }

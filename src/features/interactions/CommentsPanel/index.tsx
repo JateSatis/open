@@ -16,8 +16,6 @@ export {
 } from '@/features/interactions/comments/commentsPanelStore';
 
 export type CommentsPanelProps = {
-  /** Где кончается шапка экрана: панель встаёт под ней, шапка остаётся видна. */
-  topInset: number;
   /** Тап по аватару или имени — профиль человека. Панель перед этим закрывается. */
   onOpenPerson: (userId: string) => void;
 };
@@ -27,7 +25,7 @@ export type CommentsPanelProps = {
  * откуда угодно; окно живёт, пока панель открыта, и рождается заново для
  * каждого сообщения.
  */
-export function CommentsPanel({ topInset, onOpenPerson }: CommentsPanelProps) {
+export function CommentsPanel({ onOpenPerson }: CommentsPanelProps) {
   // Стор панели общий, а экранов с панелью в стеке бывает несколько (чат,
   // открытый из чата): окно рисует только экран в фокусе. Иначе под
   // закрывающейся панелью на миг показывался её двойник.
@@ -44,11 +42,6 @@ export function CommentsPanel({ topInset, onOpenPerson }: CommentsPanelProps) {
   if (!target || !open) return null;
 
   return (
-    <PanelWindow
-      key={target.messageId}
-      target={target}
-      topInset={topInset}
-      onOpenPerson={onOpenPerson}
-    />
+    <PanelWindow key={target.messageId} target={target} onOpenPerson={onOpenPerson} />
   );
 }

@@ -2,7 +2,7 @@ import { useRouter } from 'expo-router';
 import { useCallback, type RefObject } from 'react';
 import type { TextInput } from 'react-native';
 
-import type { ChatRef, IslandOriginal } from '@/api/chats';
+import type { ChatRef, ForwardedComment, IslandOriginal } from '@/api/chats';
 import { startForwardPick } from '@/features/chats/composerDraftStore';
 import { claimKeyboardForChat } from '@/features/chats/composerKeyboard';
 import { anchorOf, contentOf, type BubbleRow } from '@/features/chats/islands/rows';
@@ -24,6 +24,7 @@ type Options = {
   send: (text: string, media?: MediaLibraryItem[], replies?: LiveQuote[]) => void;
   sendVoice: (voice: LocalMedia, replies?: LiveQuote[]) => void;
   forward: (text: string, sourceChat: ChatRef, items: ForwardItem[]) => void;
+  forwardComments: (text: string, comments: ForwardedComment[]) => void;
 };
 
 export type ReplyForward = {
@@ -72,6 +73,7 @@ export function useReplyForward({
   send,
   sendVoice: sendVoiceMessage,
   forward,
+  forwardComments,
 }: Options): ReplyForward {
   const router = useRouter();
   const { mode, setMode } = draft;
@@ -121,16 +123,22 @@ export function useReplyForward({
       return;
     }
 
+    if (mode?.type === 'forward_comments' && media.length === 0) {
+      forwardComments(draft.text, mode.comments);
+      draft.clear();
+      return;
+    }
+
     send(draft.text, media, mode?.type === 'reply' ? mode.quotes : []);
 
-    if (mode?.type === 'forward') {
+    if (mode?.type === 'forward' || mode?.type === 'forward_comments') {
       draft.setText('');
       draft.clearMedia();
       return;
     }
 
     draft.clear();
-  }, [draft, forward, mode, send]);
+  }, [draft, forward, forwardComments, mode, send]);
 
   const sendVoice = useCallback(
     (voice: LocalMedia) => {

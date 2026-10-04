@@ -112,7 +112,9 @@ export function ChatFooter({ selection, invite, composer }: ChatFooterProps) {
             text={composer.text}
             onChangeText={composer.onChangeText}
             canSend={composer.canSend}
-            canSendEmpty={composer.mode?.type === 'forward'}
+            canSendEmpty={
+              composer.mode?.type === 'forward' || composer.mode?.type === 'forward_comments'
+            }
             plate={modePlate(composer.mode, composer.onCloseMode, composer.edit)}
             edit={composer.edit?.state}
             inputRef={composer.inputRef}

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import {
   PixelRatio,
   Pressable,
@@ -70,6 +70,11 @@ export type MessageBubbleProps = {
    * него тоже: собеседник один, автора видно по имени над облачком.
    */
   showAvatar?: boolean;
+  /**
+   * Сбоку от облачка, со стороны середины экрана: у чужого — справа, у
+   * своего — слева. Кнопка треда у корня комментариев.
+   */
+  aside?: ReactNode;
 };
 
 export function MessageBubble({
@@ -89,6 +94,7 @@ export function MessageBubble({
   authorBadge,
   showReceipt,
   showAvatar = true,
+  aside,
 }: MessageBubbleProps) {
   const theme = useTheme();
   const isMediaMessage = message.kind === 'media' && message.attachments.length > 0;
@@ -225,6 +231,8 @@ export function MessageBubble({
         </Pressable>
       )}
 
+      {isOwn ? aside : null}
+
       {layout ? (
         // Медиа — само облачко: мозаика заподлицо с краями, скругление
         // облачка на ней. Подпись и имя автора — в полосах того же облачка.
@@ -310,6 +318,8 @@ export function MessageBubble({
           {footer(isOwn ? 'own' : 'other', contentWidth)}
         </View>
       )}
+
+      {isOwn ? null : aside}
 
       {isMediaMessage ? (
         <MediaViewer

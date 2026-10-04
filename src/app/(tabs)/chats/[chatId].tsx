@@ -212,6 +212,7 @@ export default function ChatScreen() {
     send: chatMessages.send,
     sendVoice: chatMessages.sendVoice,
     forward: chatMessages.forward,
+    forwardComments: chatMessages.forwardComments,
   });
   const edit = useMessageEdit({ chatId, draft, composerRef, saveEdit: chatMessages.saveEdit });
   const { leave: leaveEdit, start: beginEdit } = edit;
@@ -598,7 +599,7 @@ export default function ChatScreen() {
         onClose={menu.close}
       />
 
-      <CommentsPanel topInset={contentTop} onOpenPerson={openPerson} />
+      <CommentsPanel onOpenPerson={openPerson} />
     </View>
   );
 }
