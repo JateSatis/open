@@ -436,6 +436,8 @@ npm run usb:open        # Metro уже запущен — только подц�
 npm start               # Metro без USB
 npm run build:android   # пересобрать dev build в облаке EAS
 npm run build:ios       # то же для iPhone
+npm run device -- help  # агенту: экран, тапы по testID, скриншоты, запись (навык device)
+npm run e2e             # сценарии Maestro из .maestro/ — регресс на эмуляторе
 ```
 
 **Что важно понимать про сборку.** JS прилетает с Metro и обновляется мгновенно. Нативная часть

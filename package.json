@@ -73,6 +73,8 @@
     "start": "expo start --dev-client",
     "usb": "node scripts/usb.mjs",
     "usb:open": "node scripts/usb.mjs --open-only",
+    "device": "node scripts/device.mjs",
+    "e2e": "node scripts/maestro.mjs test .maestro",
     "reset-project": "node ./scripts/reset-project.js",
     "android": "expo start --dev-client --android",
     "ios": "expo start --dev-client --ios",

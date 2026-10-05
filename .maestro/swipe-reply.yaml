@@ -1,0 +1,20 @@
+appId: com.openger.app
+name: Свайп ответа открывает плашку и клавиатуру
+env:
+  CHAT: Plany
+---
+- runFlow: subflows/open-app.yaml
+- tapOn: ${CHAT}
+- swipe:
+    from:
+      id: "message-bubble"
+      index: 0
+    direction: LEFT
+- assertVisible:
+    id: "composer-plate"
+- assertVisible:
+    text: "Сообщение"
+    focused: true
+- tapOn: "Отменить ответ"
+- assertNotVisible:
+    id: "composer-plate"
