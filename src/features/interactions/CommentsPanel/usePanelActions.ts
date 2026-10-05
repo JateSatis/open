@@ -219,8 +219,12 @@ export function usePanelActions({
    * с цитатой из основного списка незаметно ушёл бы в тред.
    */
   const resetRef = useRef(() => {});
+  const resetQuoteRef = useRef(() => {});
 
   useEffect(() => {
+    resetQuoteRef.current = () => {
+      if (draft.mode?.type === 'reply') draft.setMode(null);
+    };
     resetRef.current = () => {
       selection.clear();
       if (edit.mode) void edit.leave();
@@ -236,6 +240,11 @@ export function usePanelActions({
     enteredThread.current = openThread;
     resetRef.current();
   }, [openThread]);
+
+  // Шит закрылся — цитата ответа не переживает его: черновик сообщения
+  // остаётся, а следующее открытие начнётся с основного списка, где эта
+  // цитата незаметно увела бы комментарий в тред.
+  useEffect(() => () => resetQuoteRef.current(), []);
 
   const openThreadOf = useCallback((rootId: string) => setOpenThread(rootId), []);
   const exitThread = useCallback(() => setOpenThread(null), []);

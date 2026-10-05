@@ -802,6 +802,35 @@ describe('threads', () => {
     expect(commentField().props.value).toBe('черновик');
   });
 
+  it('a thread that failed to load offers a retry instead of an endless spinner', async () => {
+    mockedReplies.mockRejectedValueOnce(new Error('offline'));
+
+    await renderChat();
+    await openCommentsOf(3);
+    await screen.findByText('корень');
+    await fireEvent.press(screen.getByLabelText('Показать 2 ответа'));
+
+    await fireEvent.press(await screen.findByText('Не удалось загрузить ответы. Повторить'));
+
+    expect(await screen.findByText('второй ответ')).toBeTruthy();
+  });
+
+  it('a quote picked in the thread does not survive closing the sheet', async () => {
+    await openThread();
+
+    await tapComment('r2');
+    await fireEvent.press(await screen.findByRole('menuitem', { name: 'Ответить' }));
+    expect(await screen.findByText('В ответ Олег')).toBeTruthy();
+
+    // Крестиком, прямо из треда: «назад» сначала вышел бы из треда.
+    await fireEvent.press(screen.getAllByLabelText('Закрыть комментарии')[1]);
+    await waitFor(() => expect(screen.queryByTestId('comments-panel')).toBeNull());
+    await openCommentsOf(3);
+    await screen.findByText('корень');
+
+    expect(screen.queryByText('В ответ Олег')).toBeNull();
+  });
+
   it('will not reply to two top-level comments at once — they are two threads', async () => {
     const { fireGestureHandler, getByGestureTestId } = jest.requireActual(
       'react-native-gesture-handler/jest-utils',

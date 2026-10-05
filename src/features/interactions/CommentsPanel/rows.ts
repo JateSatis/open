@@ -17,7 +17,8 @@ export type CommentRow =
       replies: number;
     }
   | { type: 'thread-gap'; key: string; rootId: string; hidden: number }
-  | { type: 'thread-loading'; key: string; rootId: string };
+  | { type: 'thread-loading'; key: string; rootId: string }
+  | { type: 'thread-failed'; key: string; rootId: string };
 
 export type OpenThread = {
   /** Корень; `null` — его ещё нет среди загруженных. */
@@ -29,6 +30,8 @@ export type OpenThread = {
   pending: CommentItem[];
   hasGap: boolean;
   isLoading: boolean;
+  /** Начало не загрузилось — вместо колеса предложить повтор. */
+  failed?: boolean;
 };
 
 export function gapKey(rootId: string): string {
@@ -77,7 +80,11 @@ export function buildThreadRows(open: OpenThread): CommentRow[] {
 
   if (open.isLoading) {
     // Начало ещё грузится, а хвост уже есть — например, ответ, к которому пришли.
-    rows.push({ type: 'thread-loading', key: loadingKey(rootId), rootId });
+    rows.push(
+      open.failed
+        ? { type: 'thread-failed', key: loadingKey(rootId), rootId }
+        : { type: 'thread-loading', key: loadingKey(rootId), rootId },
+    );
     rows.push(...open.tail.map(reply));
   } else {
     rows.push(...open.head.map(reply));

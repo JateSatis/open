@@ -22,6 +22,10 @@ export type CommentThreadState = {
   hasGap: boolean;
   /** Начало ещё не читали. */
   isLoading: boolean;
+  /** Начало прочитать не удалось — до повтора. */
+  failed: boolean;
+  /** Повторить чтение начала. */
+  retry: () => void;
   isLoadingMore: boolean;
   /** Следующая порция начала; промис — когда она легла в кеш (или нечего грузить). */
   loadMore: () => Promise<void>;
@@ -40,7 +44,7 @@ export function useCommentThread(
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const loadingMoreRef = useRef(false);
 
-  const { data, refetch } = useQuery({
+  const { data, refetch, isError, isFetching } = useQuery({
     queryKey: threadKey(messageId, rootId ?? ''),
     queryFn: () => loadThread(queryClient, messageId, rootId!),
     enabled: rootId !== null,
@@ -90,6 +94,8 @@ export function useCommentThread(
     tail,
     hasGap: Boolean(data && (!data.headLoaded || data.nextCursor !== null)),
     isLoading: rootId !== null && !data?.headLoaded,
+    failed: rootId !== null && isError && !isFetching && !data?.headLoaded,
+    retry: useCallback(() => void refetch(), [refetch]),
     isLoadingMore,
     loadMore,
   };

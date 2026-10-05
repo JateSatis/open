@@ -137,6 +137,7 @@ export function usePanelComments(
             pending: pendingReplies.get(threadRootId) ?? NONE,
             hasGap: thread.hasGap,
             isLoading: thread.isLoading,
+            failed: thread.failed,
           })
         : [],
     [pendingReplies, roots, thread, threadRootId],

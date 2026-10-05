@@ -158,7 +158,7 @@ export function PanelContent({
 
   // В окне треда — когда легло начало треда: до того ответ стоит в хвосте, а
   // потом переезжает на своё место, и прыжок пришёлся бы мимо.
-  const threadSettling = openThread !== null && thread.isLoading;
+  const threadSettling = openThread !== null && thread.isLoading && !thread.failed;
   const jumpedTo = useRef<string | null>(null);
 
   useEffect(() => {
@@ -234,7 +234,8 @@ export function PanelContent({
             <ThreadGapRow
               hidden={item.type === 'thread-gap' ? item.hidden : null}
               isLoading={item.type === 'thread-gap' && thread.isLoadingMore}
-              onPress={() => void thread.loadMore()}
+              failed={item.type === 'thread-failed'}
+              onPress={item.type === 'thread-failed' ? thread.retry : () => void thread.loadMore()}
             />
           );
         }
