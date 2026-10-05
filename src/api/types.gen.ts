@@ -392,8 +392,11 @@ export type Database = {
           kind: string
           member_reactions: Json
           message_id: string
+          rank: number | null
           reactions_count: number
+          replies_count: number
           text: string | null
+          thread_root_id: string | null
           visitor_reactions: Json
           my_reaction: {
             audience: string
@@ -419,8 +422,11 @@ export type Database = {
           kind: string
           member_reactions?: Json
           message_id: string
+          rank?: number | null
           reactions_count?: number
+          replies_count?: number
           text?: string | null
+          thread_root_id?: string | null
           visitor_reactions?: Json
         }
         Update: {
@@ -434,8 +440,11 @@ export type Database = {
           kind?: string
           member_reactions?: Json
           message_id?: string
+          rank?: number | null
           reactions_count?: number
+          replies_count?: number
           text?: string | null
+          thread_root_id?: string | null
           visitor_reactions?: Json
         }
         Relationships: [
@@ -459,6 +468,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "messages"
             referencedColumns: ["id", "chat_id"]
+          },
+          {
+            foreignKeyName: "comments_thread_root_fkey"
+            columns: ["thread_root_id", "message_id"]
+            isOneToOne: false
+            referencedRelation: "comments"
+            referencedColumns: ["id", "message_id"]
           },
         ]
       }
@@ -576,6 +592,48 @@ export type Database = {
             columns: ["message_id"]
             isOneToOne: false
             referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      legacy_comment_quotes: {
+        Row: {
+          comment_id: string
+          created_at: string
+          id: string
+          position: number
+          quoted_at: string
+          quoted_id: string
+        }
+        Insert: {
+          comment_id: string
+          created_at?: string
+          id?: string
+          position: number
+          quoted_at: string
+          quoted_id: string
+        }
+        Update: {
+          comment_id?: string
+          created_at?: string
+          id?: string
+          position?: number
+          quoted_at?: string
+          quoted_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "legacy_comment_quotes_comment_id_fkey"
+            columns: ["comment_id"]
+            isOneToOne: false
+            referencedRelation: "comments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "legacy_comment_quotes_quoted_id_fkey"
+            columns: ["quoted_id"]
+            isOneToOne: false
+            referencedRelation: "comments"
             referencedColumns: ["id"]
           },
         ]
@@ -803,6 +861,7 @@ export type Database = {
           created_at: string
           deleted_at: string | null
           edited_at: string | null
+          forwarded_comment_id: string | null
           id: string
           kind: string
           member_reactions: Json
@@ -844,6 +903,7 @@ export type Database = {
           created_at?: string
           deleted_at?: string | null
           edited_at?: string | null
+          forwarded_comment_id?: string | null
           id?: string
           kind: string
           member_reactions?: Json
@@ -861,6 +921,7 @@ export type Database = {
           created_at?: string
           deleted_at?: string | null
           edited_at?: string | null
+          forwarded_comment_id?: string | null
           id?: string
           kind?: string
           member_reactions?: Json
@@ -884,6 +945,13 @@ export type Database = {
             columns: ["chat_id"]
             isOneToOne: false
             referencedRelation: "chats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "messages_forwarded_comment_fkey"
+            columns: ["forwarded_comment_id"]
+            isOneToOne: false
+            referencedRelation: "comments"
             referencedColumns: ["id"]
           },
           {
@@ -1203,6 +1271,14 @@ export type Database = {
       }
       check_comment_shape: { Args: { target: string }; Returns: undefined }
       check_message_shape: { Args: { target: string }; Returns: undefined }
+      comment_rank: {
+        Args: { created: string; reactions: number; replies: number }
+        Returns: number
+      }
+      comment_thread_of: {
+        Args: { reply_to: string[]; target_message: string }
+        Returns: string
+      }
       create_chat: {
         Args: { chat_title?: string; invitee_ids: string[] }
         Returns: Json
@@ -1236,6 +1312,10 @@ export type Database = {
         Args: { reason: string; target_stream: string }
         Returns: boolean
       }
+      forward_comments: {
+        Args: { comment_ids: string[]; target_chat: string }
+        Returns: string[]
+      }
       forward_holding: {
         Args: { target_chat: string; target_message: string }
         Returns: string
@@ -1257,6 +1337,7 @@ export type Database = {
           created_at: string
           deleted_at: string | null
           edited_at: string | null
+          forwarded_comment_id: string | null
           id: string
           kind: string
           member_reactions: Json
@@ -1270,6 +1351,38 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "messages"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      list_thread_roots: {
+        Args: {
+          after_id?: string
+          after_rank?: number
+          page_size?: number
+          target_message: string
+        }
+        Returns: {
+          audience: string
+          author_id: string | null
+          chat_id: string
+          created_at: string
+          deleted_at: string | null
+          edited_at: string | null
+          id: string
+          kind: string
+          member_reactions: Json
+          message_id: string
+          rank: number | null
+          reactions_count: number
+          replies_count: number
+          text: string | null
+          thread_root_id: string | null
+          visitor_reactions: Json
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "comments"
           isOneToOne: false
           isSetofReturn: true
         }

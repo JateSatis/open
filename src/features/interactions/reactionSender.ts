@@ -18,7 +18,7 @@ import {
   readPendingReaction,
   setPendingReaction,
 } from '@/features/interactions/pendingReactions';
-import type { CommentsPage } from '@/features/interactions/comments/commentsCache';
+import { updateCommentEverywhere } from '@/features/interactions/comments/commentsCache';
 import { replaceMine, type ReactionIntent } from '@/features/interactions/reactionState';
 import { showNotice } from '@/features/notifications/alertsStore';
 import { isNetworkError } from '@/lib/network';
@@ -53,17 +53,34 @@ function confirmMessage(queryClient: QueryClient, messageId: string, mine: MyRea
   });
 }
 
-/** Подтверждённая реакция на комментарий — во все загруженные ветки, где он есть. */
+/**
+ * Подтверждённая реакция на комментарий — во все загруженные ветки, где он
+ * есть, и в пересланные копии в чатах: там облачко показывает реакции
+ * оригинала.
+ */
 function confirmComment(queryClient: QueryClient, commentId: string, mine: MyReaction | null) {
-  queryClient.setQueriesData<CommentsPage>({ queryKey: ['comments'] }, (page) => {
-    if (!page?.items.some((item) => item.id === commentId)) return page;
+  updateCommentEverywhere(queryClient, (item) =>
+    item.id === commentId ? { ...item, reactions: replaceMine(item.reactions, mine) } : item,
+  );
+  updateAllHistories(queryClient, (history) => {
+    let changed = false;
 
-    return {
-      ...page,
-      items: page.items.map((item) =>
-        item.id === commentId ? { ...item, reactions: replaceMine(item.reactions, mine) } : item,
-      ),
-    };
+    const items = history.items.map((message) => {
+      const forwarded = message.commentForward?.comment;
+
+      if (forwarded?.id !== commentId) return message;
+
+      changed = true;
+      return {
+        ...message,
+        commentForward: {
+          ...message.commentForward!,
+          comment: { ...forwarded, reactions: replaceMine(forwarded.reactions, mine) },
+        },
+      };
+    });
+
+    return changed ? { ...history, items } : history;
   });
 }
 

@@ -1,7 +1,7 @@
 // Сообщение одной строкой — для цитаты в облачке и плашки над полем ввода.
 // Правило одно на всех, поэтому и место одно.
 
-import type { IslandAnchor, Message } from '@/api/chats';
+import type { ForwardedComment, IslandAnchor, Message } from '@/api/chats';
 import { toPreview, type MessagePreview } from '@/api/messagePreview';
 import type { ComposerMode } from '@/features/chats/composerDraftStore';
 import type { ChatMessage, LiveQuote } from '@/features/chats/messages/types';
@@ -29,6 +29,20 @@ export function messagesCount(n: number): string {
   return `${n} ${word}`;
 }
 
+/** «1 комментарий», «3 комментария», «11 комментариев». */
+function commentsCount(n: number): string {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  const word =
+    mod10 === 1 && mod100 !== 11
+      ? 'комментарий'
+      : mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)
+        ? 'комментария'
+        : 'комментариев';
+
+  return `${n} ${word}`;
+}
+
 export function previewOf(message: Message): MessagePreview {
   return toPreview(
     message.kind,
@@ -43,11 +57,18 @@ export function previewOf(message: Message): MessagePreview {
   );
 }
 
+/** Пересланный комментарий одной строкой — как сообщение того же вида. */
+export function commentPreviewOf(comment: ForwardedComment): MessagePreview {
+  return previewOf({ ...comment, forward: null, replies: [], commentsCount: 0 } as Message);
+}
+
 /** «Фото», «Альбом», «🎤 Голосовое сообщение (0:12)» — или сам текст. */
 export function describePreview(preview: MessagePreview): string {
   const text = preview.text?.trim();
 
   if (text) return text.replace(/\s+/g, ' ');
+
+  if (preview.kind === 'comment_forward') return '💬 Пересланный комментарий';
 
   if (preview.kind === 'voice') {
     // Как в превью списка чатов: «0:00» у голосового выглядит поломкой.
@@ -130,6 +151,24 @@ export function describeMode(mode: ComposerMode): {
           snippet: authorsOf(mode.quotes.map((quote) => quote.authorName)),
           thumbnailUrl: null,
           closeLabel: 'Отменить ответ',
+        };
+  }
+
+  if (mode.type === 'forward_comments') {
+    const [only] = mode.comments;
+
+    return mode.comments.length === 1
+      ? {
+          title: `Переслать комментарий: ${only.authorName ?? DELETED_ACCOUNT}`,
+          snippet: describePreview(commentPreviewOf(only)),
+          thumbnailUrl: commentPreviewOf(only).thumbnailUrl,
+          closeLabel: 'Отменить пересылку',
+        }
+      : {
+          title: `Переслать ${commentsCount(mode.comments.length)}`,
+          snippet: authorsOf(mode.comments.map((comment) => comment.authorName)),
+          thumbnailUrl: null,
+          closeLabel: 'Отменить пересылку',
         };
   }
 

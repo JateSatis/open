@@ -13,8 +13,6 @@ export type CommentTargetViewProps = {
   target: CommentTarget | undefined;
   /** Облачко сообщения — то же, что в переписке. */
   bubble: ReactNode;
-  /** Раскрытое длинное сообщение листается само, и шит за него не тянут. */
-  onExpandedChange?: (expanded: boolean) => void;
 };
 
 /** Раскрытое длинное сообщение занимает не больше этой доли окна и дальше листается. */
@@ -25,15 +23,10 @@ const EXPANDED_SHARE = 0.4;
  * в переписке. Длинное свёрнуто и раскрывается тапом; удалённое честно
  * названо удалённым.
  */
-export function CommentTargetView({ target, bubble, onExpandedChange }: CommentTargetViewProps) {
+export function CommentTargetView({ target, bubble }: CommentTargetViewProps) {
   const theme = useTheme();
   const { height: windowHeight } = useWindowDimensions();
-  const [expanded, setExpandedState] = useState(false);
-
-  const setExpanded = (next: boolean) => {
-    setExpandedState(next);
-    onExpandedChange?.(next);
-  };
+  const [expanded, setExpanded] = useState(false);
   const [contentHeight, setContentHeight] = useState(0);
   const collapsible = contentHeight > Sizes.commentTargetCollapsed;
 
@@ -56,7 +49,11 @@ export function CommentTargetView({ target, bubble, onExpandedChange }: CommentT
   return (
     <View testID="comment-target" style={[styles.target, { borderBottomColor: theme.border }]}>
       {expanded ? (
-        <ScrollView style={{ maxHeight: windowHeight * EXPANDED_SHARE }}>{content}</ScrollView>
+        // Вложенный в список шита: листается сам, пока есть куда, а дальше
+        // палец достаётся шиту.
+        <ScrollView nestedScrollEnabled style={{ maxHeight: windowHeight * EXPANDED_SHARE }}>
+          {content}
+        </ScrollView>
       ) : (
         // Тап по свёрнутому раскрывает его; плеер голосового и плитки альбома
         // внутри ловят свои касания сами.

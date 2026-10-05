@@ -9,17 +9,41 @@ export const styles = StyleSheet.create({
   fill: {
     ...StyleSheet.absoluteFill,
   },
-  /** Панель от своего верха до низа окна; верх скруглён, как у шита. */
-  panel: {
+  /**
+   * Окно списка — от верхнего положения шита до низа окна. Верх скруглён и
+   * обрезает содержимое: комментарии, ушедшие под прилипшую шапку, не
+   * выглядывают из-за её скруглённых углов.
+   */
+  listWindow: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    overflow: 'hidden',
+    borderTopLeftRadius: Radii.lg,
+    borderTopRightRadius: Radii.lg,
+  },
+  /**
+   * Подложка шита — абсолютный слой в содержимом списка: `top` ей задаёт ход
+   * шита, `bottom: 0` дотягивает её до конца содержимого.
+   */
+  surface: {
     position: 'absolute',
     left: 0,
     right: 0,
     bottom: 0,
     borderTopLeftRadius: Radii.lg,
     borderTopRightRadius: Radii.lg,
-    overflow: 'hidden',
   },
-  /** Верхний край — за него панель тянут вниз. */
+  /** Шапка шита в содержимом: стоит на ходе шита и прилипает к верху окна. */
+  sheetHeader: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    borderTopLeftRadius: Radii.lg,
+    borderTopRightRadius: Radii.lg,
+  },
+  /** Верхний край — за него, как и за весь шит, тянут. */
   header: {
     paddingTop: Spacing.two,
     paddingHorizontal: Spacing.three,
@@ -46,36 +70,107 @@ export const styles = StyleSheet.create({
   targetClip: {
     overflow: 'hidden',
   },
-  hidden: {
-    display: 'none',
-  },
-  /** Сообщение не ужимается колонкой шита: его высоту держит свой потолок. */
-  targetFrame: {
-    flexShrink: 0,
-  },
   targetToggle: {
     paddingBottom: Spacing.one,
   },
   targetGone: {
     paddingVertical: Spacing.two,
   },
-  list: {
-    flexGrow: 1,
+  /** Строки списка — с полями по бокам, как переписка. */
+  row: {
     paddingHorizontal: Spacing.three,
+  },
+  /** Ответ в треде — на «таб» правее корня. */
+  reply: {
+    paddingLeft: Spacing.three + Sizes.threadIndent,
+  },
+  replyBubble: {
+    paddingLeft: Sizes.threadIndent,
+  },
+  /** Заглушка удалённого корня — на месте облачка, с местом под аватар, как у чужого. */
+  deletedRow: {
+    flexDirection: 'row',
+    gap: Spacing.two,
+    marginBottom: Spacing.two,
+  },
+  avatarSlot: {
+    width: Spacing.five,
+  },
+  deletedBubble: {
     paddingVertical: Spacing.two,
+    paddingHorizontal: Spacing.three,
+    borderRadius: Radii.lg,
+  },
+  /** Копия корня треда поверх строк, в координатах содержимого. */
+  stickyRoot: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+  },
+  /** Отступ перед первой строкой под шапкой и пустое состояние. */
+  listTop: {
+    height: Spacing.two,
   },
   centered: {
-    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: Spacing.four,
+    paddingVertical: Spacing.five,
   },
   emptyText: {
     textAlign: 'center',
+  },
+  hidden: {
+    display: 'none',
+  },
+  /** Строка ввода прижата к низу окна и уходит вниз только вместе с шитом. */
+  footer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   closedNotice: {
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.three,
     borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  /** Разрыв треда «Показать ещё» и загрузка — на месте ответа, с тем же отступом. */
+  threadAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    minHeight: Sizes.threadToggle,
+    marginBottom: Spacing.two,
+  },
+  /** Кнопка треда сбоку от облачка корня — внизу, у края облачка. */
+  threadToggle: {
+    alignSelf: 'flex-end',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.one,
+    height: Sizes.threadToggle,
+    paddingHorizontal: Spacing.two + Spacing.half,
+    borderRadius: Radii.full,
+  },
+  /**
+   * Фон раскрытого треда — кусок на высоту строки, как рамка островка: строки
+   * состыкованы, верх скруглён у корня, низ — у последней строки.
+   */
+  threadBackground: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: Spacing.two,
+    right: Spacing.two,
+  },
+  threadBackgroundFirst: {
+    borderTopLeftRadius: Radii.lg,
+    borderTopRightRadius: Radii.lg,
+  },
+  threadBackgroundLast: {
+    borderBottomLeftRadius: Radii.lg,
+    borderBottomRightRadius: Radii.lg,
   },
 });

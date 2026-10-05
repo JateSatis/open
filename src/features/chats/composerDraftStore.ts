@@ -6,7 +6,7 @@
 
 import { create } from 'zustand';
 
-import type { ChatRef, MessageAttachment } from '@/api/chats';
+import type { ChatRef, ForwardedComment, MessageAttachment } from '@/api/chats';
 import type {
   ChatMessage,
   EditVoice,
@@ -32,6 +32,8 @@ export type EditMode = {
 export type ComposerMode =
   | { type: 'reply'; quotes: LiveQuote[] }
   | { type: 'forward'; sourceChat: ChatRef; items: ForwardItem[] }
+  /** Пересылка комментариев — по сообщению на комментарий, в порядке панели. */
+  | { type: 'forward_comments'; comments: ForwardedComment[] }
   | EditMode;
 
 export type ChatDraft = {
@@ -39,8 +41,13 @@ export type ChatDraft = {
   mode: ComposerMode | null;
 };
 
-/** Что пересылается, пока выбирают, куда: откуда и какие оригиналы, по порядку на экране. */
-export type ForwardPick = { sourceChat: ChatRef; items: ForwardItem[] };
+/**
+ * Что пересылается, пока выбирают, куда: откуда и какие оригиналы, по
+ * порядку на экране, — или комментарии из панели.
+ */
+export type ForwardPick =
+  | { sourceChat: ChatRef; items: ForwardItem[] }
+  | { comments: ForwardedComment[] };
 
 type DraftsState = {
   byChat: Record<string, ChatDraft>;
@@ -138,12 +145,17 @@ export function startForwardPick(pick: ForwardPick) {
 export function finishForwardPick(chatId: string): boolean {
   const pick = useComposerDrafts.getState().forwardPick;
 
-  if (!pick || pick.items.length === 0) return false;
+  if (!pick || ('comments' in pick ? pick.comments : pick.items).length === 0) return false;
 
   useComposerDrafts.setState({ forwardPick: null });
   // Пересылка в чат, где шла правка, правку прерывает: плашка одна.
   finishEditDraft(chatId);
-  setDraftMode(chatId, { type: 'forward', sourceChat: pick.sourceChat, items: pick.items });
+  setDraftMode(
+    chatId,
+    'comments' in pick
+      ? { type: 'forward_comments', comments: pick.comments }
+      : { type: 'forward', sourceChat: pick.sourceChat, items: pick.items },
+  );
 
   return true;
 }

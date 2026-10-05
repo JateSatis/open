@@ -16,7 +16,7 @@ import { clearPendingEdit, setPendingEdit } from '@/features/chats/messages/pend
 import type { EditResult } from '@/features/chats/messages/types';
 import { reportRequestFailed } from '@/features/connection/connectionStore';
 import { commentThreadKey, type CommentItem } from '@/features/interactions/comments/commentItem';
-import { replaceComments, updateComments } from '@/features/interactions/comments/commentsCache';
+import { replaceComments } from '@/features/interactions/comments/commentsCache';
 import { removeUploadedMedia, storedPaths, type UploadedMedia } from '@/features/media';
 import { showNotice } from '@/features/notifications/alertsStore';
 import { isNetworkError } from '@/lib/network';
@@ -71,7 +71,7 @@ export async function saveCommentEdit(
       ? new Map([[saved.id, optimistic.localPreviews]])
       : undefined;
 
-    updateComments(queryClient, messageId, (page) => replaceComments(page, [saved], previews));
+    replaceComments(queryClient, messageId, [saved], previews);
     notifyManager.schedule(() => clearPendingEdit(key, optimistic));
   } catch (cause) {
     clearPendingEdit(key, optimistic);

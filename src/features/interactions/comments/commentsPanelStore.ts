@@ -13,25 +13,54 @@ export type CommentsPanelTarget = {
    * реакции на комментарий. Ряд всё равно решает база.
    */
   amMember?: boolean;
+  /**
+   * Комментарий, к которому пришли (тап по пересланному): он встаёт наверх,
+   * его тред раскрыт, а сам он вспыхивает.
+   */
+  focusCommentId?: string;
 };
 
-const usePanelStore = create<{ target: CommentsPanelTarget | null }>(() => ({ target: null }));
+type PanelState = {
+  target: CommentsPanelTarget | null;
+  /** Раскрытый тред — id корня. Раскрыт всегда не больше одного. */
+  openThread: string | null;
+};
+
+const usePanelStore = create<PanelState>(() => ({ target: null, openThread: null }));
 
 /**
  * Открывает панель комментариев к сообщению. Одна функция на всё
  * приложение: переписка открывает её по кружку у облачка, лента — у
- * фрагмента переписки.
+ * фрагмента переписки, пересланный комментарий — у сниппета.
  */
-export function openComments(messageId: string, chatId?: string, amMember = false) {
-  usePanelStore.setState({ target: { messageId, chatId, amMember } });
+export function openComments(
+  messageId: string,
+  chatId?: string,
+  amMember = false,
+  focusCommentId?: string,
+) {
+  usePanelStore.setState({ target: { messageId, chatId, amMember, focusCommentId }, openThread: null });
 }
 
 export function closeComments() {
-  usePanelStore.setState({ target: null });
+  usePanelStore.setState({ target: null, openThread: null });
 }
 
 export function useCommentsPanelTarget(): CommentsPanelTarget | null {
   return usePanelStore((state) => state.target);
+}
+
+export function useOpenThread(): string | null {
+  return usePanelStore((state) => state.openThread);
+}
+
+export function getOpenThread(): string | null {
+  return usePanelStore.getState().openThread;
+}
+
+/** Раскрывает тред этого корня; раскрытый до него закрывается. `null` — закрыть. */
+export function setOpenThread(rootId: string | null) {
+  usePanelStore.setState({ openThread: rootId });
 }
 
 /**

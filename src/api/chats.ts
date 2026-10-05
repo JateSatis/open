@@ -18,6 +18,8 @@ export {
   toMessageKind,
   type CallMark,
   type ChatRef,
+  type CommentForward,
+  type ForwardedComment,
   type ForwardIsland,
   type IslandAnchor,
   type IslandItem,
@@ -543,6 +545,30 @@ export async function forwardMessages(
   if (fetchError) throw fetchError;
 
   return toMessage(data);
+}
+
+/**
+ * Пересылает комментарии в чат — функцией `forward_comments`: по сообщению
+ * на комментарий, в переданном порядке. Что я участник чата, проверяет она
+ * (миграция `20261004110000_comment_forwards.sql`). Отдаёт новые сообщения
+ * старыми вперёд — в том порядке, в каком они встали в переписку.
+ */
+export async function forwardComments(chatId: string, commentIds: string[]): Promise<Message[]> {
+  const { data: ids, error } = await supabase.rpc('forward_comments', {
+    target_chat: chatId,
+    comment_ids: commentIds,
+  });
+
+  if (error) throw error;
+  if (!Array.isArray(ids) || ids.length === 0) throw new Error('Не удалось переслать комментарии');
+
+  const { data, error: fetchError } = await messagesSelect()
+    .in('id', ids)
+    .order('created_at', { ascending: true });
+
+  if (fetchError) throw fetchError;
+
+  return (data ?? []).map(toMessage);
 }
 
 /**

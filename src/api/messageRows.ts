@@ -17,7 +17,8 @@ export type MessageKind =
   | 'video_note'
   | 'system'
   | 'media'
-  | 'forward';
+  | 'forward'
+  | 'comment_forward';
 
 /**
  * Shape of a message attachment as the rest of the app consumes it. Recording,
@@ -113,6 +114,44 @@ export type ForwardIsland = {
   items: IslandItem[];
 };
 
+/**
+ * Пересланный комментарий, как его показывает облачко в чате: сам
+ * комментарий, сообщение, под которым он оставлен, и чат, откуда он. Ссылка,
+ * а не копия: правка и удаление оригинала видны сразу.
+ */
+export type ForwardedComment = {
+  id: string;
+  /** Сообщение, под которым оставлен комментарий. */
+  messageId: string;
+  chatId: string;
+  /** Корень треда; `null` — комментарий верхнеуровневый. */
+  threadRootId: string | null;
+  authorId: string | null;
+  /** `null` — аккаунт автора удалён. */
+  authorName: string | null;
+  authorAvatarUrl: string | null;
+  kind: 'text' | 'media' | 'voice';
+  text: string | null;
+  createdAt: string;
+  editedAt: string | null;
+  attachments: MessageAttachment[];
+  /** Реакции оригинала: на пересланном их ставят ему. */
+  reactions: MessageReactions;
+  /** Сообщение под комментарием; `null` — удалено. */
+  target: {
+    id: string;
+    authorId: string | null;
+    /** `null` — аккаунт автора удалён. */
+    authorName: string | null;
+    preview: MessagePreview;
+  } | null;
+  /** Чат комментария; `null` — удалён. `amMember` — ряд моей реакции. */
+  chat: (ChatRef & { amMember: boolean }) | null;
+};
+
+/** Сообщение вида `comment_forward`. `comment: null` — комментарий удалён, на месте — заглушка. */
+export type CommentForward = { commentId: string | null; comment: ForwardedComment | null };
+
 export type Message = {
   id: string;
   chatId: string;
@@ -133,6 +172,8 @@ export type Message = {
   commentsCount: number;
   /** Метка звонка у системного сообщения; нет — это не звонок. */
   call?: CallMark | null;
+  /** Пересланный комментарий (вид `comment_forward`). У остальных нет. */
+  commentForward?: CommentForward | null;
 };
 
 const ATTACHMENT_COLUMNS = 'id, url, poster_url, mime_type, width, height, duration_ms, waveform, position';
@@ -144,11 +185,13 @@ const REACTION_AND_COMMENT_COLUMNS =
   'member_reactions, visitor_reactions, my_reaction(emoji, audience), comments_count';
 const ORIGINAL_COLUMNS = `id, chat_id, author_id, kind, text, created_at, edited_at, attachments(${ATTACHMENT_COLUMNS}), ${REPLY_COLUMNS}, ${REACTION_AND_COMMENT_COLUMNS}, author:profiles!messages_author_id_fkey(display_name, avatar_url), chat:chats!messages_chat_id_fkey(id, chat_display_name, chat_read_up_to, chat_am_member)`;
 
+const FORWARDED_COMMENT_COLUMNS = `forwarded_comment_id, forwarded:comments!messages_forwarded_comment_fkey(id, message_id, chat_id, thread_root_id, author_id, kind, text, created_at, edited_at, member_reactions, visitor_reactions, my_reaction(emoji, audience), author:profiles(display_name, avatar_url), comment_attachments(${ATTACHMENT_COLUMNS}), chat:chats!comments_chat_id_fkey(id, chat_display_name, chat_am_member), target:messages!comments_message_fkey(id, author_id, kind, text, author:profiles!messages_author_id_fkey(display_name), attachments(url, poster_url, mime_type, duration_ms, position)))`;
+
 // Островок приходит сразу с оригиналами: их текст, файлы, автор, чат,
 // реакции и комментарии — той же выборкой. Своя реакция — вычисляемой связью
 // `my_reaction`, и у оригинала тоже.
 export const MESSAGE_COLUMNS =
-  `id, chat_id, author_id, kind, text, created_at, edited_at, attachments(${ATTACHMENT_COLUMNS}), ${REPLY_COLUMNS}, ${REACTION_AND_COMMENT_COLUMNS}, stream_id, system_event, stream:streams!messages_stream_id_fkey(host_id, started_at, ended_at), my_call:my_stream_participation(id), source_chat:chats!messages_source_chat_id_fkey(id, chat_display_name), items:forward_items!forward_items_forward_fkey(id, position, message_id, original:messages!forward_items_message_fkey(${ORIGINAL_COLUMNS}))` as const;
+  `id, chat_id, author_id, kind, text, created_at, edited_at, attachments(${ATTACHMENT_COLUMNS}), ${REPLY_COLUMNS}, ${REACTION_AND_COMMENT_COLUMNS}, stream_id, system_event, stream:streams!messages_stream_id_fkey(host_id, started_at, ended_at), my_call:my_stream_participation(id), source_chat:chats!messages_source_chat_id_fkey(id, chat_display_name), items:forward_items!forward_items_forward_fkey(id, position, message_id, original:messages!forward_items_message_fkey(${ORIGINAL_COLUMNS})), ${FORWARDED_COMMENT_COLUMNS}` as const;
 
 // Мозаика в облачке должна собираться в порядке выбора файлов, а PostgREST
 // не гарантирует порядок вложенной выборки сам по себе — нужен явный order
@@ -165,6 +208,7 @@ type ReplyRow = NonNullable<MessageRow['replies']>[number];
 type AttachmentRow = NonNullable<MessageRow['attachments']>[number];
 type ItemRow = NonNullable<MessageRow['items']>[number];
 type OriginalRow = NonNullable<ItemRow['original']>;
+type ForwardedRow = NonNullable<MessageRow['forwarded']>;
 
 // `kind` в базе — текст с CHECK-ограничением, и генератор типов видит его как
 // строку: сузить её больше негде, поэтому расхождение схемы с доменными
@@ -178,6 +222,7 @@ const MESSAGE_KINDS = new Set<string>([
   'system',
   'media',
   'forward',
+  'comment_forward',
 ]);
 
 /**
@@ -307,10 +352,57 @@ function toIsland(row: MessageRow): ForwardIsland | null {
   };
 }
 
+function toForwardedComment(row: ForwardedRow): ForwardedComment {
+  const target = row.target;
+
+  return {
+    id: row.id,
+    messageId: row.message_id,
+    chatId: row.chat_id,
+    threadRootId: row.thread_root_id,
+    authorId: row.author_id,
+    authorName: row.author_id && row.author ? (row.author.display_name ?? 'Без имени') : null,
+    authorAvatarUrl: row.author?.avatar_url ?? null,
+    kind: row.kind === 'media' || row.kind === 'voice' ? row.kind : 'text',
+    text: row.text,
+    createdAt: row.created_at,
+    editedAt: row.edited_at,
+    attachments: toAttachments(row.comment_attachments),
+    reactions: toReactions(row),
+    // Удалённое сообщение SELECT-политика не отдаёт.
+    target: target
+      ? {
+          id: target.id,
+          authorId: target.author_id,
+          authorName: target.author_id ? (target.author?.display_name ?? 'Без имени') : null,
+          preview: toPreview(toMessageKind(target.kind), target.text, target.attachments ?? []),
+        }
+      : null,
+    chat: row.chat
+      ? {
+          id: row.chat.id,
+          name: row.chat.chat_display_name ?? 'Чат',
+          amMember: row.chat.chat_am_member === true,
+        }
+      : null,
+  };
+}
+
+function toCommentForward(row: MessageRow): CommentForward | null {
+  if (row.kind !== 'comment_forward') return null;
+
+  return {
+    commentId: row.forwarded_comment_id,
+    // Удалённый комментарий SELECT-политика не отдаёт: заглушка.
+    comment: row.forwarded ? toForwardedComment(row.forwarded) : null,
+  };
+}
+
 export function toMessage(row: MessageRow): Message {
   return {
     ...toContent(row),
     forward: toIsland(row),
     call: toCallMark(row),
+    commentForward: toCommentForward(row),
   };
 }

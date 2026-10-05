@@ -1,7 +1,8 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { deleteComment, listComments, subscribeToComments } from '@/api/comments';
+import { deleteComment, listThreadRoots, subscribeToComments } from '@/api/comments';
+import { outgoingOf } from '@/features/chats/messages/delivery';
 import { usePendingEditsOf } from '@/features/chats/messages/pendingEdits';
 import type { EditResult, LiveQuote } from '@/features/chats/messages/types';
 import { useConnectionStatus } from '@/features/connection/useConnectionStatus';
@@ -12,25 +13,32 @@ import {
   sendCommentPost,
   sendCommentVoice,
   type CommentSendContext,
+  type CommentThreadTarget,
 } from '@/features/interactions/comments/commentDelivery';
 import { saveCommentEdit } from '@/features/interactions/comments/commentEditing';
-import { commentThreadKey, type CommentItem } from '@/features/interactions/comments/commentItem';
+import {
+  asDeletedRoot,
+  commentThreadKey,
+  type CommentItem,
+} from '@/features/interactions/comments/commentItem';
 import { outboxComments, useOutboxComments } from '@/features/interactions/comments/commentOutbox';
 import {
-  commentsQueryKey,
-  mergeComments,
-  readComments,
-  removeComments,
-  updateComments,
+  appendRoots,
+  commentsKey,
+  readRoots,
+  rootsInOrder,
+  rootsKey,
+  updateAllComments,
+  updateRoots,
+  type RootsPage,
 } from '@/features/interactions/comments/commentsCache';
 import {
-  loadComments,
+  loadRoots,
+  resyncComments,
   syncCommentReactions,
   syncComments,
 } from '@/features/interactions/comments/commentSync';
 import { commentTargetQueryKey } from '@/features/interactions/comments/useCommentTarget';
-import { outgoingOf } from '@/features/chats/messages/delivery';
-import type { LocalMedia, MediaLibraryItem } from '@/features/media';
 import { usePendingReactionMap } from '@/features/interactions/pendingReactions';
 import { sendReaction } from '@/features/interactions/reactionSender';
 import {
@@ -38,6 +46,7 @@ import {
   nextReaction,
   withMyReaction,
 } from '@/features/interactions/reactionState';
+import type { LocalMedia, MediaLibraryItem } from '@/features/media';
 import { useMyProfile } from '@/features/profile/queries';
 import { describeLoadError } from '@/lib/network';
 
@@ -49,18 +58,27 @@ import { describeLoadError } from '@/lib/network';
 const BATCH_MS = 300;
 
 const NONE: CommentItem[] = [];
+const NO_REPLIES: ReadonlyMap<string, CommentItem[]> = new Map();
 
 export type CommentsState = {
-  /** Самые новые первыми: свои неотправленные, затем подтверждённые. */
-  comments: CommentItem[];
+  /** Верх на экране: свои неотправленные, свои отправленные за это открытие, затем по рангу. */
+  roots: CommentItem[];
+  /** Свои неотправленные ответы — по тредам, в конец треда. */
+  pendingReplies: ReadonlyMap<string, CommentItem[]>;
   isLoading: boolean;
   isLoadingMore: boolean;
   hasMore: boolean;
   error: string | null;
-  /** Догружает страницу старее; промис — когда она легла в кеш (или нечего грузить). */
+  /** Догружает следующую страницу верха; промис — когда она легла в кеш (или нечего грузить). */
   loadMore: () => Promise<void>;
-  send: (text: string, media?: MediaLibraryItem[], replies?: LiveQuote[]) => void;
-  sendVoice: (voice: LocalMedia, replies?: LiveQuote[]) => void;
+  /** С цитатами — ответ в тред `thread`. */
+  send: (
+    text: string,
+    media?: MediaLibraryItem[],
+    replies?: LiveQuote[],
+    thread?: CommentThreadTarget | null,
+  ) => void;
+  sendVoice: (voice: LocalMedia, replies?: LiveQuote[], thread?: CommentThreadTarget | null) => void;
   /**
    * Тап по реакции: та же, что стоит, — снять, другая — поставить. Ряд —
    * догадка для мгновенного отклика по участию в чате; решит база.
@@ -72,13 +90,52 @@ export type CommentsState = {
   saveEdit: (original: CommentItem, result: EditResult) => void;
   /** Удаляет свой для всех. С экрана сразу; отказ сервера возвращает на место и пробрасывается. */
   remove: (comment: CommentItem) => Promise<void>;
+  /** Правки и мои реакции в полёте — поверх загруженного. Для тредов. */
+  overlay: (items: CommentItem[]) => CommentItem[];
 };
 
+/** Правки и мои реакции в полёте поверх подтверждённых сервером. */
+function useOverlay(messageId: string) {
+  const pendingEdits = usePendingEditsOf(commentThreadKey(messageId));
+  const pendingReactions = usePendingReactionMap();
+
+  return useCallback(
+    (items: CommentItem[]) => {
+      if (Object.keys(pendingEdits).length === 0 && Object.keys(pendingReactions).length === 0) {
+        return items;
+      }
+
+      let changed = false;
+      const next = items.map((item) => {
+        const edited = pendingEdits[item.id] as CommentItem | undefined;
+        const intent = pendingReactions[item.id];
+
+        if (!edited && !intent) return item;
+
+        changed = true;
+        // Наложение правки — копия того же комментария с новой версией
+        // содержимого; реакции и тред у неё — из кеша.
+        const base = edited
+          ? { ...edited, reactions: item.reactions, repliesCount: item.repliesCount }
+          : item;
+
+        return intent ? { ...base, reactions: withMyReaction(base.reactions, intent) } : base;
+      });
+
+      return changed ? next : items;
+    },
+    [pendingEdits, pendingReactions],
+  );
+}
+
 /**
- * Комментарии к одному сообщению — всё, что нужно панели:
- * подтверждённые сервером — в кеше TanStack Query, свои неотправленные — в
+ * Комментарии к одному сообщению — всё, что нужно панели: подтверждённые
+ * сервером — в кеше TanStack Query (верх и треды), свои неотправленные — в
  * Zustand (`commentOutbox`), правки в полёте — наложением поверх, свежесть —
  * топиком Realtime этого сообщения, открытым всем.
+ *
+ * Кеш живёт одно открытие панели: при закрытии он забывается, и следующее
+ * открытие читает свежий ранг. На глазах порядок не меняется.
  */
 export function useComments(
   messageId: string,
@@ -90,17 +147,30 @@ export function useComments(
   const connection = useConnectionStatus();
   const { data: me } = useMyProfile();
   const outbox = useOutboxComments(messageId);
-  const pendingEdits = usePendingEditsOf(commentThreadKey(messageId));
-  const pendingReactions = usePendingReactionMap();
+  const overlay = useOverlay(messageId);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const loadingMoreRef = useRef(false);
   const wasOfflineRef = useRef(false);
+  const meRef = useRef(currentUserId);
+
+  useEffect(() => {
+    meRef.current = currentUserId;
+  }, [currentUserId]);
 
   const { data, isPending, error } = useQuery({
-    queryKey: commentsQueryKey(messageId),
-    queryFn: () => loadComments(queryClient, messageId),
+    queryKey: rootsKey(messageId),
+    queryFn: () => loadRoots(messageId),
+    // Порядок верха меняется только новым открытием: сами по себе страницы не перечитываются.
+    staleTime: Infinity,
     refetchOnReconnect: false,
+    refetchOnWindowFocus: false,
   });
+
+  // Панель закрыта — кеш забывается: следующее открытие — со свежим рангом.
+  useEffect(
+    () => () => queryClient.removeQueries({ queryKey: commentsKey(messageId) }),
+    [messageId, queryClient],
+  );
 
   const context = useMemo<CommentSendContext>(
     () => ({
@@ -115,17 +185,17 @@ export function useComments(
 
   // ----------------------------------------------------------------- Realtime
   useEffect(() => {
-    let pullNewer = false;
-    const ids = new Set<string>();
+    const added = new Set<string>();
+    const changed = new Set<string>();
     const reacted = new Set<string>();
     let timer: ReturnType<typeof setTimeout> | null = null;
 
     const flush = () => {
-      const batch = { pullNewer, ids: [...ids] };
+      const batch = { added: [...added], changed: [...changed] };
       const reactedIds = [...reacted];
 
-      pullNewer = false;
-      ids.clear();
+      added.clear();
+      changed.clear();
       reacted.clear();
       timer = null;
 
@@ -133,12 +203,12 @@ export function useComments(
         syncCommentReactions(queryClient, messageId, reactedIds).catch(() => undefined);
       }
 
-      if (!batch.pullNewer && batch.ids.length === 0) return;
+      if (batch.added.length === 0 && batch.changed.length === 0) return;
 
       // Число в шапке панели живёт на сообщении — перечитываем его той же пачкой.
       void queryClient.invalidateQueries({ queryKey: commentTargetQueryKey(messageId) });
       // Не вышло — дочитаем при следующем событии или переподключении.
-      syncComments(queryClient, messageId, batch).catch(() => undefined);
+      syncComments(queryClient, messageId, meRef.current, batch).catch(() => undefined);
     };
 
     const schedule = () => {
@@ -146,16 +216,16 @@ export function useComments(
     };
 
     const unsubscribe = subscribeToComments(messageId, {
-      onAdded: () => {
-        pullNewer = true;
+      onAdded: (id) => {
+        added.add(id);
         schedule();
       },
       onDeleted: (id) => {
-        ids.add(id);
+        changed.add(id);
         schedule();
       },
       onEdited: (id) => {
-        ids.add(id);
+        changed.add(id);
         schedule();
       },
       onReactionsChanged: (id) => {
@@ -166,7 +236,7 @@ export function useComments(
         void queryClient.invalidateQueries({ queryKey: commentTargetQueryKey(messageId) });
       },
       onReconnected: () => {
-        void queryClient.invalidateQueries({ queryKey: commentsQueryKey(messageId) });
+        resyncComments(queryClient, messageId, meRef.current).catch(() => undefined);
         void queryClient.invalidateQueries({ queryKey: commentTargetQueryKey(messageId) });
       },
     });
@@ -197,50 +267,51 @@ export function useComments(
   }, [connection, context, messageId]);
 
   // ------------------------------------------------------------------ список
-  const confirmed = useMemo(() => {
-    const items = data?.items ?? NONE;
+  const confirmed = useMemo(() => overlay(data ? rootsInOrder(data) : NONE), [data, overlay]);
 
-    if (Object.keys(pendingEdits).length === 0 && Object.keys(pendingReactions).length === 0) {
-      return items;
+  const { pendingRoots, pendingReplies } = useMemo(() => {
+    if (outbox.length === 0) return { pendingRoots: NONE, pendingReplies: NO_REPLIES };
+
+    const roots: CommentItem[] = [];
+    const replies = new Map<string, CommentItem[]>();
+
+    for (const item of outbox) {
+      if (!item.threadRootId) {
+        roots.push(item);
+        continue;
+      }
+
+      // В треде — по порядку: в исходящих новые вперёд.
+      replies.set(item.threadRootId, [item, ...(replies.get(item.threadRootId) ?? [])]);
     }
 
-    // Наложение правки — копия того же комментария с новой версией
-    // содержимого; реакции у неё — из кеша. Моя неподтверждённая реакция —
-    // поверх подтверждённых счётчиков.
-    return items.map((item) => {
-      const edited = pendingEdits[item.id] as CommentItem | undefined;
-      const base = edited ? { ...edited, reactions: item.reactions } : item;
-      const intent = pendingReactions[item.id];
+    return { pendingRoots: roots, pendingReplies: replies };
+  }, [outbox]);
 
-      return intent ? { ...base, reactions: withMyReaction(base.reactions, intent) } : base;
-    });
-  }, [data, pendingEdits, pendingReactions]);
-
-  const comments = useMemo(() => {
-    if (outbox.length === 0) return confirmed;
+  const roots = useMemo(() => {
+    if (pendingRoots.length === 0) return confirmed;
 
     const known = new Set(confirmed.map((item) => item.id));
-    const pending = outbox.filter((item) => !known.has(item.id));
+    const pending = pendingRoots.filter((item) => !known.has(item.id));
 
     return pending.length === 0 ? confirmed : [...pending, ...confirmed];
-  }, [confirmed, outbox]);
+  }, [confirmed, pendingRoots]);
 
   const loadMore = useCallback(() => {
-    const cursor = readComments(queryClient, messageId)?.nextCursor;
+    const cursor = readRoots(queryClient, messageId)?.nextCursor;
 
     if (!cursor || loadingMoreRef.current) return Promise.resolve();
 
     loadingMoreRef.current = true;
     setIsLoadingMore(true);
 
-    return listComments(messageId, { cursor })
+    return listThreadRoots(messageId, { cursor })
       .then((page) =>
-        updateComments(queryClient, messageId, (current) => ({
-          ...mergeComments(current, page.items),
-          nextCursor: page.nextCursor,
-        })),
+        updateRoots(queryClient, messageId, (current: RootsPage) =>
+          appendRoots(current, page.items, page.nextCursor),
+        ),
       )
-      // Не вышло — следующая прокрутка вверх попробует снова.
+      // Не вышло — следующая прокрутка вниз попробует снова.
       .catch(() => undefined)
       .finally(() => {
         loadingMoreRef.current = false;
@@ -250,15 +321,26 @@ export function useComments(
 
   const remove = useCallback(
     async (comment: CommentItem) => {
-      updateComments(queryClient, messageId, (page) => removeComments(page, new Set([comment.id])));
+      // Откат — к тому, что было в кеше до удаления: и верх, и треды.
+      const snapshot = queryClient.getQueriesData({ queryKey: commentsKey(messageId) });
+
+      updateAllComments(queryClient, messageId, (item) => {
+        if (item.id === comment.id) {
+          return !item.threadRootId && item.repliesCount > 0 ? asDeletedRoot(item) : null;
+        }
+
+        if (item.id !== comment.threadRootId) return item;
+
+        const repliesCount = Math.max(0, item.repliesCount - 1);
+
+        // Корень-заглушка без ответов уходит вместе с последним.
+        return item.deleted && repliesCount === 0 ? null : { ...item, repliesCount };
+      });
 
       try {
         await deleteComment(comment.id);
       } catch (cause) {
-        updateComments(queryClient, messageId, (page) => ({
-          ...page,
-          items: [...page.items, comment].sort((a, b) => (a.createdAt > b.createdAt ? -1 : 1)),
-        }));
+        for (const [key, page] of snapshot) queryClient.setQueryData(key, page);
         throw cause;
       }
 
@@ -268,19 +350,25 @@ export function useComments(
   );
 
   return {
-    comments,
+    roots,
+    pendingReplies,
     isLoading: isPending,
     isLoadingMore,
     hasMore: Boolean(data?.nextCursor),
     error: data ? null : describeLoadError(error, 'Не удалось загрузить комментарии'),
     loadMore,
     send: useCallback(
-      (text: string, media: MediaLibraryItem[] = [], replies: LiveQuote[] = []) =>
-        sendCommentPost(context, text, media, replies),
+      (
+        text: string,
+        media: MediaLibraryItem[] = [],
+        replies: LiveQuote[] = [],
+        thread: CommentThreadTarget | null = null,
+      ) => sendCommentPost(context, text, media, replies, thread),
       [context],
     ),
     sendVoice: useCallback(
-      (voice: LocalMedia, replies: LiveQuote[] = []) => sendCommentVoice(context, voice, replies),
+      (voice: LocalMedia, replies: LiveQuote[] = [], thread: CommentThreadTarget | null = null) =>
+        sendCommentVoice(context, voice, replies, thread?.rootId ?? null),
       [context],
     ),
     react: useCallback(
@@ -301,5 +389,6 @@ export function useComments(
       [currentUserId, messageId, queryClient],
     ),
     remove,
+    overlay,
   };
 }

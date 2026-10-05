@@ -1,136 +1,124 @@
-import { useCallback, type ReactNode, type Ref } from 'react';
-import { ActivityIndicator, FlatList, View } from 'react-native';
+import type { FlashListRef, ListRenderItem } from '@shopify/flash-list';
+import { useCallback, useMemo, type RefObject } from 'react';
+import { ActivityIndicator, View } from 'react-native';
 
+import type { CommentRow } from './rows';
+import { CommentsSheetList } from './SheetList';
 import { styles } from './styles';
 
 import { Text } from '@/components/Text';
-import { isLocalMessage } from '@/features/chats/messageActions';
-import type { AnchorRect } from '@/features/chats/MessageContextMenu';
-import { MessageRow } from '@/features/chats/MessageRow';
-import type { CommentItem } from '@/features/interactions/comments/commentItem';
 
 /** Прыжок к комментарию: он и ключ вспышки — новый на каждый прыжок. */
 export type CommentHighlight = { id: string; key: number };
 
 export type CommentListProps = {
-  listRef: Ref<FlatList<CommentItem>>;
-  comments: CommentItem[];
+  listRef: RefObject<FlashListRef<CommentRow> | null>;
+  rows: CommentRow[];
   isLoading: boolean;
   isLoadingMore: boolean;
   hasMore: boolean;
   error: string | null;
-  editingId: string | null;
   /** Сообщение удалено — новых не будет, и пустое состояние этого не обещает. */
   closed: boolean;
   loadMore: () => void;
-  /** Тап по облачку — меню. */
-  onOpenMenu: (comment: CommentItem, anchor: AnchorRect) => void;
-  /** Свайп влево — ответить. Нет — у удалённого сообщения ответов не принимают. */
-  onSwipeReply?: (comment: CommentItem) => void;
-  /** Выбор, как в переписке: долгое нажатие начинает его, тап переключает отметку. */
-  selection: {
-    isActive: boolean;
-    isSelected: (id: string) => boolean;
-    start: (id: string) => void;
-    toggle: (id: string) => void;
-  };
-  highlight: CommentHighlight | null;
-  /** Облачко комментария — то же, что у сообщения в переписке. */
-  renderBubble: (comment: CommentItem) => ReactNode;
+  /** Прозрачное начало содержимого: ход шита и место под его шапку. */
+  headerSpace: number;
+  /** Место под строкой ввода и клавиатурой в конце содержимого. */
+  footerSpace: number;
+  /** Содержимое не короче окна: подложка тянется до его конца, и шит поднимается доверху и с парой комментариев. */
+  minContentHeight: number;
+  renderRow: ListRenderItem<CommentRow>;
+  /** Меняется, когда строкам нужно перерисоваться без смены данных: выбор, правка, вспышка. */
+  extraData: unknown;
+  /** Раскладка списка зафиксирована — по ней меряется раскрытый тред. */
+  onCommitLayout: () => void;
 };
 
+const keyOf = (row: CommentRow) => row.key;
+const typeOf = (row: CommentRow) =>
+  row.type === 'comment' ? (row.comment.threadRootId ? 'reply' : 'root') : row.type;
+
 /**
- * Комментарии в виде чата: свои справа, новые внизу. Список перевёрнут и
- * постраничен, как переписка: открывается у последних, листание вверх
- * догружает старые. Жесты строки — те же, что в переписке.
+ * Комментарии списком сверху вниз: верх по рангу, раскрытый тред — под своим
+ * корнем. Постранично: листание вниз догружает следующую страницу верха.
+ * Список живёт внутри шита — его скролл и есть движение шита.
  */
 export function CommentList({
   listRef,
-  comments,
+  rows,
   isLoading,
   isLoadingMore,
   hasMore,
   error,
-  editingId,
   closed,
   loadMore,
-  onOpenMenu,
-  onSwipeReply,
-  selection,
-  highlight,
-  renderBubble,
+  headerSpace,
+  footerSpace,
+  minContentHeight,
+  renderRow,
+  extraData,
+  onCommitLayout,
 }: CommentListProps) {
-  const renderItem = useCallback(
-    ({ item }: { item: CommentItem }) => {
-      const selectable = !isLocalMessage(item);
-
-      return (
-        <MessageRow
-          selectionMode={selection.isActive}
-          selectable={selectable}
-          selected={selection.isSelected(item.id)}
-          editing={item.id === editingId}
-          highlightKey={highlight?.id === item.id ? highlight.key : null}
-          messageId={item.id}
-          onOpenMenu={(anchor) => onOpenMenu(item, anchor)}
-          onSelect={selectable ? () => selection.start(item.id) : undefined}
-          onToggle={() => selection.toggle(item.id)}
-          onSwipeReply={onSwipeReply && selectable ? () => onSwipeReply(item) : undefined}
-        >
-          {renderBubble(item)}
-        </MessageRow>
-      );
-    },
-    [editingId, highlight, onOpenMenu, onSwipeReply, renderBubble, selection],
+  // Шапка и хвост мемоизированы: `FlashList` сравнивает их по ссылке.
+  const header = useMemo(
+    () => (
+      <View style={{ height: headerSpace }}>
+        <View style={styles.listTop} />
+      </View>
+    ),
+    [headerSpace],
   );
 
-  if (isLoading) {
-    return (
-      <View style={styles.centered}>
-        <ActivityIndicator accessibilityLabel="Загрузка комментариев" />
+  const footer = useMemo(
+    () => (
+      <View style={{ minHeight: footerSpace }}>
+        {isLoadingMore ? <ActivityIndicator accessibilityLabel="Загрузка комментариев" /> : null}
       </View>
-    );
-  }
+    ),
+    [footerSpace, isLoadingMore],
+  );
 
-  if (comments.length === 0) {
-    return (
-      <View style={styles.centered}>
-        <Text color={error ? 'danger' : 'textSecondary'} style={styles.emptyText}>
-          {error ??
-            (closed
-              ? 'Комментариев нет.'
-              : 'Комментариев пока нет. Их увидит каждый, кто откроет этот чат.')}
-        </Text>
-      </View>
-    );
-  }
+  const empty = useMemo(
+    () =>
+      isLoading ? (
+        <View style={styles.centered}>
+          <ActivityIndicator accessibilityLabel="Загрузка комментариев" />
+        </View>
+      ) : (
+        <View style={styles.centered}>
+          <Text color={error ? 'danger' : 'textSecondary'} style={styles.emptyText}>
+            {error ??
+              (closed
+                ? 'Комментариев нет.'
+                : 'Комментариев пока нет. Их увидит каждый, кто откроет этот чат.')}
+          </Text>
+        </View>
+      ),
+    [closed, error, isLoading],
+  );
+
+  const contentContainerStyle = useMemo(() => ({ minHeight: minContentHeight }), [minContentHeight]);
+
+  const onEndReached = useCallback(() => {
+    if (hasMore) loadMore();
+  }, [hasMore, loadMore]);
 
   return (
-    <FlatList
-      ref={listRef}
+    <CommentsSheetList
+      listRef={listRef}
       testID="comments-list"
-      inverted
-      data={comments}
-      keyExtractor={(comment) => comment.id}
-      renderItem={renderItem}
-      extraData={selection}
-      contentContainerStyle={styles.list}
-      keyboardShouldPersistTaps="handled"
-      onEndReached={hasMore ? loadMore : undefined}
-      onEndReachedThreshold={0.4}
-      // Строки разной высоты: до незамеренной сначала грубо, по средней
-      // высоте, потом точно — как прыжок к сообщению в переписке.
-      onScrollToIndexFailed={({ index, averageItemLength }) => {
-        const list = listRef && 'current' in listRef ? listRef.current : null;
-
-        list?.scrollToOffset({ offset: averageItemLength * index, animated: false });
-        requestAnimationFrame(() =>
-          list?.scrollToIndex({ index, viewPosition: 0.5, animated: true }),
-        );
-      }}
-      ListFooterComponent={
-        isLoadingMore ? <ActivityIndicator accessibilityLabel="Загрузка комментариев" /> : null
-      }
+      data={rows}
+      keyExtractor={keyOf}
+      getItemType={typeOf}
+      renderItem={renderRow}
+      extraData={extraData}
+      contentContainerStyle={contentContainerStyle}
+      ListHeaderComponent={header}
+      ListFooterComponent={footer}
+      ListEmptyComponent={empty}
+      onEndReached={onEndReached}
+      onEndReachedThreshold={0.5}
+      onCommitLayoutEffect={onCommitLayout}
     />
   );
 }

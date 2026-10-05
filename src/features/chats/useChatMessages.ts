@@ -5,12 +5,14 @@ import {
   deleteMessages as deleteOnServer,
   removeForwardItems,
   type ChatRef,
+  type ForwardedComment,
 } from '@/api/chats';
 import { mapOriginals } from '@/features/chats/islands/islandCache';
 import {
   deliver,
   discardLocal,
   outgoingOf,
+  sendCommentForward,
   sendForward,
   sendPost,
   sendVoice as sendVoiceMessage,
@@ -70,6 +72,8 @@ export type ChatMessagesState = {
   sendVoice: (voice: LocalMedia, replies?: LiveQuote[]) => void;
   /** Пересылка сюда из `sourceChat`; текст из поля уходит перед островком. */
   forward: (text: string, sourceChat: ChatRef, items: ForwardItem[]) => void;
+  /** Пересылка комментариев — по облачку на комментарий. */
+  forwardComments: (text: string, comments: ForwardedComment[]) => void;
   retry: (localId: string) => void;
   /** Своё неотправленное или упавшее — убрать. На сервер ничего не уходит. */
   discard: (localId: string) => void;
@@ -126,13 +130,26 @@ export function useChatMessages(chatId: string, currentUserId: string | null): C
         : message;
       const own = intent ? { ...base, reactions: withMyReaction(base.reactions, intent) } : base;
 
-      return mapOriginals(own, (original) => {
+      const withOriginals = mapOriginals(own, (original) => {
         const wanted = pendingReactions[original.id];
 
         return wanted
           ? { ...original, reactions: withMyReaction(original.reactions, wanted) }
           : original;
       });
+      // Реакция на пересланный комментарий — его оригиналу, по id комментария.
+      const forwarded = withOriginals.commentForward?.comment;
+      const forComment = forwarded ? pendingReactions[forwarded.id] : undefined;
+
+      return forwarded && forComment
+        ? {
+            ...withOriginals,
+            commentForward: {
+              ...withOriginals.commentForward!,
+              comment: { ...forwarded, reactions: withMyReaction(forwarded.reactions, forComment) },
+            },
+          }
+        : withOriginals;
     });
   }, [history.items, pendingEdits, pendingReactions]);
 
@@ -186,6 +203,11 @@ export function useChatMessages(chatId: string, currentUserId: string | null): C
   const forward = useCallback(
     (text: string, sourceChat: ChatRef, items: ForwardItem[]) =>
       sendForward(context, text, sourceChat, items),
+    [context],
+  );
+
+  const forwardComments = useCallback(
+    (text: string, comments: ForwardedComment[]) => sendCommentForward(context, text, comments),
     [context],
   );
 
@@ -264,6 +286,7 @@ export function useChatMessages(chatId: string, currentUserId: string | null): C
     send,
     sendVoice,
     forward,
+    forwardComments,
     retry,
     discard,
     saveEdit,

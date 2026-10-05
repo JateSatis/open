@@ -8,8 +8,10 @@
 //
 // С сообщениями комментарии не смешиваются: своя таблица, свои вложения, свой
 // топик Realtime (`comments:<message_id>`).
-
-import type { RealtimeChannel } from '@supabase/supabase-js';
+//
+// Треды (миграция `20261004100000_comment_threads.sql`): верхнеуровневые
+// комментарии идут по рангу, ответ ложится в тред своего корня. Тред ответа
+// база выводит из его цитат — отдельного аргумента у отправки нет.
 
 import {
   listDeletedMessageIds,
@@ -25,6 +27,7 @@ import {
   type SendMessageMedia,
   type SendVoiceInput,
 } from '@/api/chats';
+import { acquireCommentTopic, type CommentTopicListener } from '@/api/commentTopics';
 import {
   REACTION_COLUMNS,
   toAudience,
@@ -35,6 +38,8 @@ import {
 import { supabase } from '@/api/supabase';
 
 export const COMMENT_PAGE_SIZE = 30;
+/** Первая порция треда и каждая следующая по «Показать ещё». */
+export const THREAD_PAGE_SIZE = 10;
 
 export type CommentKind = 'text' | 'media' | 'voice';
 
@@ -57,9 +62,23 @@ export type Comment = {
   attachments: MessageAttachment[];
   /** Реакции по рядам и моя — как у сообщения. */
   reactions: MessageReactions;
-  /** Цитаты ответа — комментарии той же ветки, по порядку. `messageId` цитаты — id комментария. */
+  /** Цитаты ответа — комментарии того же треда, по порядку. `messageId` цитаты — id комментария. */
   replies: QuotedMessage[];
+  /** Корень треда; `null` — комментарий сам верхнеуровневый. */
+  threadRootId: string | null;
+  /** Сколько живых ответов в треде. У ответов — 0. */
+  repliesCount: number;
+  /** Ранг верха на момент выборки: по нему идёт следующая страница. */
+  rank: number;
+  /**
+   * Удалённый корень, у которого остались ответы: тред живёт, а на месте
+   * корня — заглушка. Содержимого база не отдаёт.
+   */
+  deleted: boolean;
 };
+
+/** Где кончилась страница верха: keyset по рангу. */
+export type RootCursor = { rank: number; id: string };
 
 /** Сообщение, к которому открыты комментарии, — каким оно сейчас. */
 export type CommentTarget =
@@ -74,7 +93,7 @@ export type CommentTarget =
   | { state: 'missing' };
 
 const COMMENT_COLUMNS =
-  `id, message_id, chat_id, author_id, kind, text, audience, created_at, edited_at, author:profiles(display_name, avatar_url), comment_attachments(id, url, poster_url, mime_type, width, height, duration_ms, waveform), ${REACTION_COLUMNS}, replies:comment_replies!comment_replies_comment_fkey(position, quoted_id, quoted:comments!comment_replies_quoted_fkey(id, author_id, kind, text, created_at, edited_at, author:profiles(display_name), comment_attachments(url, poster_url, mime_type, duration_ms, position)))` as const;
+  `id, message_id, chat_id, author_id, kind, text, audience, created_at, edited_at, deleted_at, thread_root_id, replies_count, rank, author:profiles(display_name, avatar_url), comment_attachments(id, url, poster_url, mime_type, width, height, duration_ms, waveform), ${REACTION_COLUMNS}, replies:comment_replies!comment_replies_comment_fkey(position, quoted_id, quoted:comments!comment_replies_quoted_fkey(id, author_id, kind, text, created_at, edited_at, author:profiles(display_name), comment_attachments(url, poster_url, mime_type, duration_ms, position)))` as const;
 
 // Мозаика собирается в порядке выбора файлов, а PostgREST не гарантирует
 // порядок вложенной выборки без явного order.
@@ -89,6 +108,24 @@ const targetSelect = () =>
     .from('messages')
     .select(`${MESSAGE_COLUMNS}, author:profiles!messages_author_id_fkey(display_name, avatar_url)`)
     .order('position', { referencedTable: 'attachments' });
+
+/**
+ * Верх по рангу — функцией `list_thread_roots`: она же отдаёт заглушки
+ * удалённых корней с живыми ответами. Строки — те же, что у выборки из
+ * таблицы, поэтому и разбор один.
+ */
+const rootsSelect = (messageId: string, cursor: RootCursor | undefined, limit: number) =>
+  supabase
+    .rpc('list_thread_roots', {
+      target_message: messageId,
+      after_rank: cursor?.rank,
+      after_id: cursor?.id,
+      page_size: limit,
+    })
+    .select(COMMENT_COLUMNS)
+    .order('rank', { ascending: false })
+    .order('id', { ascending: false })
+    .order('position', { referencedTable: 'comment_attachments' });
 
 type CommentRow = NonNullable<Awaited<ReturnType<typeof commentsSelect>>['data']>[number];
 type CommentReplyRow = NonNullable<CommentRow['replies']>[number];
@@ -144,26 +181,54 @@ export function toComment(row: CommentRow): Comment {
     })),
     reactions: toReactions(row),
     replies: [...(row.replies ?? [])].sort((a, b) => a.position - b.position).map(toQuotedComment),
+    threadRootId: row.thread_root_id,
+    repliesCount: row.replies_count,
+    rank: row.rank ?? 0,
+    deleted: row.deleted_at !== null,
   };
 }
 
 /**
- * Страница комментариев сообщения, самые новые первыми. `cursor` — время
- * самого старого уже показанного; «загрузить все» не существует.
+ * Страница верхнеуровневых комментариев по рангу — сверху популярные.
+ * `cursor` — ранг и id последнего показанного; «загрузить все» не существует.
+ * Ранг между страницами может вырасти — повторы отсекает клиент.
  */
-export async function listComments(
+export async function listThreadRoots(
   messageId: string,
+  params: { cursor?: RootCursor; limit?: number } = {},
+): Promise<{ items: Comment[]; nextCursor: RootCursor | null }> {
+  const limit = params.limit ?? COMMENT_PAGE_SIZE;
+  const { data, error } = await rootsSelect(messageId, params.cursor, limit);
+
+  if (error) throw error;
+
+  const items = (data ?? []).map(toComment);
+  const last = items[items.length - 1];
+
+  return {
+    items,
+    nextCursor: items.length === limit && last ? { rank: last.rank, id: last.id } : null,
+  };
+}
+
+/**
+ * Ответы треда по порядку — сверху первые. `cursor` — время последнего уже
+ * загруженного ответа: два ответа одного треда за одну транзакцию не
+ * появляются, поэтому времени хватает.
+ */
+export async function listThreadReplies(
+  rootId: string,
   params: { cursor?: string; limit?: number } = {},
 ): Promise<Page<Comment>> {
-  const limit = params.limit ?? COMMENT_PAGE_SIZE;
+  const limit = params.limit ?? THREAD_PAGE_SIZE;
 
   let query = commentsSelect()
-    .eq('message_id', messageId)
+    .eq('thread_root_id', rootId)
     .is('deleted_at', null)
-    .order('created_at', { ascending: false })
+    .order('created_at', { ascending: true })
     .limit(limit);
 
-  if (params.cursor) query = query.lt('created_at', params.cursor);
+  if (params.cursor) query = query.gt('created_at', params.cursor);
 
   const { data, error } = await query;
 
@@ -206,7 +271,7 @@ export async function listCommentsByIds(ids: string[]): Promise<Comment[]> {
   return (data ?? []).map(toComment);
 }
 
-async function fetchComment(id: string): Promise<Comment> {
+export async function fetchComment(id: string): Promise<Comment> {
   const { data, error } = await commentsSelect().eq('id', id).single();
 
   if (error) throw error;
@@ -372,65 +437,14 @@ export async function getCommentTarget(messageId: string): Promise<CommentTarget
 // Realtime
 // =============================================================================
 
-export type CommentChannelHandlers = {
-  /** Появился комментарий. Payload — подсказка: новое клиент дочитывает из базы. */
-  onAdded: (commentId: string) => void;
-  onDeleted: (commentId: string) => void;
-  onEdited: (commentId: string) => void;
-  /** Реакции на комментарий изменились — счётчики дочитываются из базы. */
-  onReactionsChanged?: (commentId: string) => void;
-  /** Сообщение, к которому комментарии, правили или удалили. */
-  onTargetChanged: () => void;
-  /** Канал переподключился: пропущенное надо дочитать. */
-  onReconnected?: () => void;
-};
-
-function commentIdOf(payload: unknown): string | null {
-  const id = (payload as { comment_id?: unknown } | undefined)?.comment_id;
-
-  return typeof id === 'string' ? id : null;
-}
+export type { CommentTopicListener as CommentChannelHandlers } from '@/api/commentTopics';
 
 /**
  * Топик комментариев одного сообщения. Открыт всем аутентифицированным —
- * комментарии публичны, — события в него кладёт только база. Отдаёт отписку:
- * её обязательно звать при закрытии панели.
+ * комментарии публичны, — события в него кладёт только база. Канал общий
+ * (`commentTopics`): его слушают и панель, и чаты с пересланными из этой
+ * ветки комментариями. Отдаёт отписку: её обязательно звать в cleanup.
  */
-export function subscribeToComments(
-  messageId: string,
-  handlers: CommentChannelHandlers,
-): () => void {
-  void supabase.realtime.setAuth();
-
-  const channel: RealtimeChannel = supabase.channel(`comments:${messageId}`, {
-    config: { private: true },
-  });
-
-  let joinedBefore = false;
-
-  const on = (event: string, handler: (id: string) => void) =>
-    channel.on('broadcast', { event }, ({ payload }) => {
-      const id = commentIdOf(payload);
-
-      if (id) handler(id);
-    });
-
-  on('comment_added', handlers.onAdded);
-  on('comment_deleted', handlers.onDeleted);
-  on('comment_edited', handlers.onEdited);
-  on('comment_reactions_changed', (id) => handlers.onReactionsChanged?.(id));
-
-  channel
-    .on('broadcast', { event: 'target_changed' }, () => handlers.onTargetChanged())
-    .subscribe((status) => {
-      if (status !== 'SUBSCRIBED') return;
-
-      if (joinedBefore) handlers.onReconnected?.();
-
-      joinedBefore = true;
-    });
-
-  return () => {
-    void supabase.removeChannel(channel);
-  };
+export function subscribeToComments(messageId: string, handlers: CommentTopicListener): () => void {
+  return acquireCommentTopic(messageId, handlers);
 }

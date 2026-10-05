@@ -1,12 +1,19 @@
 // Что можно сделать с комментарием из меню: то же, что с сообщением, кроме
-// закрепа и пересылки. Видимость пункта — вежливость интерфейса: права
-// всегда проверяет база.
+// закрепа и комментариев к нему. Видимость пункта — вежливость интерфейса:
+// права всегда проверяет база.
 
 import type { ContextMenuAction } from '@/features/chats/MessageContextMenu';
 import { hasCopyableText, isEditable, isLocalMessage } from '@/features/chats/messageActions';
 import type { CommentItem } from '@/features/interactions/comments/commentItem';
 
-export type CommentActionId = 'retry' | 'reply' | 'copy' | 'edit' | 'select' | 'delete';
+export type CommentActionId =
+  | 'retry'
+  | 'reply'
+  | 'copy'
+  | 'edit'
+  | 'forward'
+  | 'select'
+  | 'delete';
 
 export type CommentActionContext = {
   comment: CommentItem;
@@ -41,6 +48,12 @@ export const COMMENT_ACTIONS: readonly CommentAction[] = [
     id: 'edit',
     label: 'Изменить',
     isVisible: ({ comment, isOwn, targetLive }) => isOwn && targetLive && isEditable(comment),
+  },
+  {
+    id: 'forward',
+    label: 'Переслать',
+    // Переслать в свой чат может любой — так разговор и расходится.
+    isVisible: ({ comment }) => !isLocalMessage(comment),
   },
   {
     id: 'select',

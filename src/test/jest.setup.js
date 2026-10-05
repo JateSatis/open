@@ -3,9 +3,26 @@ require('react-native-gesture-handler/jestSetup');
 
 // В моке Reanimated `makeMutable` отдаёт само значение, а не объект с `.value`,
 // как на устройстве, — модульные shared value в тестах иначе не работают.
+// `useAnimatedRef` на устройстве — функция-ссылка с `observe`; в моке —
+// голый объект, и скролл шита на нём не подключился бы.
 jest.mock('react-native-reanimated', () => ({
   ...require('react-native-reanimated/mock'),
   makeMutable: (value) => ({ value }),
+  useAnimatedRef: () => {
+    const holder = require('react').useRef(null);
+
+    if (!holder.current) {
+      const ref = (instance) => {
+        ref.current = instance;
+      };
+
+      ref.current = null;
+      ref.observe = () => () => undefined;
+      holder.current = ref;
+    }
+
+    return holder.current;
+  },
 }));
 
 // Замер в окне у мока `View` — пустышка без колбэка, и меню строки, которое
@@ -21,6 +38,12 @@ jest.mock('react-native-safe-area-context', () => {
 jest.mock('react-native-keyboard-controller', () =>
   require('react-native-keyboard-controller/jest'),
 );
+
+// Топики комментариев — Realtime: в тестах сети нет. Экраны чата слушают
+// ветки пересланных комментариев, панель — свою ветку; подписка — пустышка.
+jest.mock('@/api/commentTopics', () => ({
+  acquireCommentTopic: jest.fn(() => () => undefined),
+}));
 
 // LiveKit — нативный WebRTC: в тестах его нет и быть не должно. Звонок
 // проверяется через состояние (`callStore`) и замоканный `callSession`.

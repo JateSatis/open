@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import {
   PixelRatio,
   Pressable,
@@ -70,6 +70,16 @@ export type MessageBubbleProps = {
    * него тоже: собеседник один, автора видно по имени над облачком.
    */
   showAvatar?: boolean;
+  /**
+   * Сбоку от облачка, со стороны середины экрана: у чужого — справа, у
+   * своего — слева. Кнопка треда у корня комментариев.
+   */
+  aside?: ReactNode;
+  /**
+   * Блок над содержимым облачка, выше цитат: у пересланного комментария —
+   * откуда он и под каким сообщением оставлен.
+   */
+  lead?: ReactNode;
 };
 
 export function MessageBubble({
@@ -89,6 +99,8 @@ export function MessageBubble({
   authorBadge,
   showReceipt,
   showAvatar = true,
+  aside,
+  lead,
 }: MessageBubbleProps) {
   const theme = useTheme();
   const isMediaMessage = message.kind === 'media' && message.attachments.length > 0;
@@ -123,12 +135,17 @@ export function MessageBubble({
     height: attachment.height,
   }));
 
-  const hasAnnotations = message.replies.length > 0;
+  const hasAnnotations = message.replies.length > 0 || Boolean(lead);
 
   // На что сообщение отвечает — над содержимым, и у текста, и у голосового,
   // и у альбома.
   const annotations = hasAnnotations ? (
-    <ReplyQuote quotes={message.replies} isOwn={isOwn} onPress={onQuotePress} />
+    <>
+      {lead}
+      {message.replies.length > 0 ? (
+        <ReplyQuote quotes={message.replies} isOwn={isOwn} onPress={onQuotePress} />
+      ) : null}
+    </>
   ) : null;
 
   // Своё облачко имени не показывает, но «из <чат>» у него остаётся.
@@ -225,6 +242,8 @@ export function MessageBubble({
         </Pressable>
       )}
 
+      {isOwn ? aside : null}
+
       {layout ? (
         // Медиа — само облачко: мозаика заподлицо с краями, скругление
         // облачка на ней. Подпись и имя автора — в полосах того же облачка.
@@ -310,6 +329,8 @@ export function MessageBubble({
           {footer(isOwn ? 'own' : 'other', contentWidth)}
         </View>
       )}
+
+      {isOwn ? null : aside}
 
       {isMediaMessage ? (
         <MediaViewer

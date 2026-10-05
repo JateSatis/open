@@ -2,7 +2,7 @@ import * as Clipboard from 'expo-clipboard';
 import { useCallback } from 'react';
 
 import { confirm } from '@/components/ConfirmDialog';
-import { formatMessagesForCopy } from '@/features/chats/copyMessages';
+import { copyableText, formatMessagesForCopy } from '@/features/chats/copyMessages';
 import { anchorOf, contentOf, islandItemKey, type BubbleRow } from '@/features/chats/islands/rows';
 import { messagesCount } from '@/features/chats/messageQuote';
 import {
@@ -156,7 +156,7 @@ export function useMessageActionHandlers({
           if (message) edit(message);
           return;
         case 'copy':
-          void copyText(message?.text ?? '');
+          void copyText(message ? (copyableText(message) ?? '') : '');
           return;
         case 'open_original':
           if (message) openOriginal(message);

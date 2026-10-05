@@ -1,6 +1,7 @@
-// Отправка своих комментариев: пузырь внизу панели сразу, со статусом
-// доставки; загрузка файлов, вызов функции базы, перенос подтверждённого в
-// кеш. Живёт вне компонентов — закрытая панель отправку не обрывает.
+// Отправка своих комментариев: облачко сразу, со статусом доставки —
+// верхнеуровневое наверху списка, ответ в конце своего треда; загрузка
+// файлов, вызов функции базы, перенос подтверждённого в кеш. Живёт вне
+// компонентов — закрытая панель отправку не обрывает.
 //
 // Собрано из тех же частей, что и отправка сообщений: локальные превью,
 // разбиение альбома, загрузка в Storage, повтор. Своё здесь только то, куда
@@ -31,7 +32,12 @@ import {
 } from '@/features/interactions/comments/commentOutbox';
 import type { CommentItem } from '@/features/interactions/comments/commentItem';
 import { toCommentItem } from '@/features/interactions/comments/commentItem';
-import { mergeComments, updateComments } from '@/features/interactions/comments/commentsCache';
+import {
+  addToThread,
+  pinRoot,
+  updateRoots,
+  updateThread,
+} from '@/features/interactions/comments/commentsCache';
 import {
   removeUploadedMedia,
   storedPaths,
@@ -59,7 +65,7 @@ const discarded = new Set<string>();
 function draftOf(
   { messageId, chatId, currentUserId, me }: CommentSendContext,
   at: number,
-  content: Pick<CommentItem, 'kind' | 'text' | 'attachments'> &
+  content: Pick<CommentItem, 'kind' | 'text' | 'attachments' | 'threadRootId'> &
     Partial<Pick<CommentItem, 'pendingMedia' | 'pendingVoice' | 'localPreviews' | 'replies'>>,
 ): CommentItem {
   const localId = nextLocalId();
@@ -82,6 +88,8 @@ function draftOf(
     reactions: NO_REACTIONS,
     commentsCount: 0,
     status: 'sending',
+    repliesCount: 0,
+    deleted: false,
     ...content,
   };
 }
@@ -116,23 +124,36 @@ async function insert(
   });
 }
 
-/** Подтверждённое переезжает в кеш — в том же проходе, в котором уходит из исходящих. */
+/**
+ * Подтверждённое переезжает в кеш — в том же проходе, в котором уходит из
+ * исходящих. Верхнеуровневое закрепляется наверху до закрытия панели, ответ
+ * встаёт в конец треда: тред создаётся, даже если его ещё не открывали, —
+ * своё начало он дочитает, а ответ уже лежит за разрывом.
+ */
 function settle(queryClient: QueryClient, messageId: string, localId: string, saved: Comment) {
   const localPreviews = outboxComments(messageId).find((item) => item.localId === localId)
     ?.localPreviews;
+  const item: CommentItem = { ...toCommentItem(saved), localPreviews };
 
-  updateComments(queryClient, messageId, (page) => {
-    const merged = mergeComments(page, [saved]);
-
-    return {
-      ...merged,
-      items: merged.items.map((item) =>
-        item.id === saved.id ? { ...toCommentItem(saved), localPreviews } : item,
-      ),
-    };
-  });
+  if (saved.threadRootId) {
+    updateThread(queryClient, messageId, saved.threadRootId, (page) => addToThread(page, item), {
+      create: true,
+    });
+    // Число ответов у корня — сразу; точное догонит сигнал канала.
+    updateRoots(queryClient, messageId, (page) => ({
+      ...page,
+      pinned: page.pinned.map((root) => bumpReplies(root, saved.threadRootId!)),
+      items: page.items.map((root) => bumpReplies(root, saved.threadRootId!)),
+    }));
+  } else {
+    updateRoots(queryClient, messageId, (page) => pinRoot(page, item));
+  }
 
   notifyManager.schedule(() => removeOutboxComment(messageId, localId));
+}
+
+function bumpReplies(root: CommentItem, rootId: string): CommentItem {
+  return root.id === rootId ? { ...root, repliesCount: root.repliesCount + 1 } : root;
 }
 
 /** Отказ, который повтор не исправит, — сказать человеку по-человечески. */
@@ -202,22 +223,33 @@ export async function deliverComment(
 }
 
 /**
+ * Тред ответа: корень и его цитата, если корень жив. Цитата корня нужна
+ * частям длинного альбома — без цитаты часть ушла бы наверх, а не в тред.
+ */
+export type CommentThreadTarget = { rootId: string; rootQuote: LiveQuote | null };
+
+/**
  * Текст с альбомом. Больше одного альбома — несколько комментариев, подпись
- * и цитаты ответа — у первого.
+ * и цитаты ответа — у первого. Остальные части ответа остаются в том же
+ * треде: их цитата — корень, а облачко такую цитату не показывает.
  */
 export function sendCommentPost(
   context: CommentSendContext,
   text: string,
   media: MediaLibraryItem[] = [],
   replies: LiveQuote[] = [],
+  thread: CommentThreadTarget | null = null,
 ) {
   const trimmed = text.trim();
 
   if (!trimmed && media.length === 0) return;
 
   const now = Date.now();
+  const threadRootId = replies.length > 0 ? (thread?.rootId ?? null) : null;
+  const rootQuote = threadRootId ? (thread?.rootQuote ?? null) : null;
   const drafts = splitIntoAlbums(trimmed, media).map((part, index) => {
     const attachments = part.media.map(toLocalAttachment);
+    const partReplies = index === 0 ? replies : rootQuote ? [rootQuote] : [];
 
     return draftOf(context, now + index, {
       kind: part.media.length > 0 ? 'media' : 'text',
@@ -225,7 +257,8 @@ export function sendCommentPost(
       attachments,
       pendingMedia: part.media.length > 0 ? part.media : undefined,
       localPreviews: part.media.length > 0 ? attachments.map((item) => item.url) : undefined,
-      replies: index === 0 ? replies : [],
+      replies: partReplies,
+      threadRootId: partReplies.length > 0 ? threadRootId : null,
     });
   });
 
@@ -241,10 +274,12 @@ export function sendCommentPost(
   })();
 }
 
+/** Голосовое; с цитатами — ответ в тред их корня `threadRootId`. */
 export function sendCommentVoice(
   context: CommentSendContext,
   voice: LocalMedia,
   replies: LiveQuote[] = [],
+  threadRootId: string | null = null,
 ) {
   const draft = draftOf(context, Date.now(), {
     kind: 'voice',
@@ -254,6 +289,7 @@ export function sendCommentVoice(
     // Своё голосовое играет из файла на телефоне и после отправки.
     localPreviews: [voice.uri],
     replies,
+    threadRootId: replies.length > 0 ? threadRootId : null,
   });
 
   draft.attachments = [toLocalVoiceAttachment(draft.localId!, voice)];

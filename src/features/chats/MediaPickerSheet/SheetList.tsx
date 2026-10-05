@@ -9,31 +9,14 @@ import {
   type ComponentType,
   type RefObject,
 } from 'react';
-import { ScrollView, View, type ScrollViewProps } from 'react-native';
-import { createNativeWrapper } from 'react-native-gesture-handler';
+import { View, type ScrollView, type ScrollViewProps } from 'react-native';
 import type { AnimatedRef, SharedValue } from 'react-native-reanimated';
 
 import { styles } from './styles';
-import { useSheetScroll } from './useSheetScroll';
 
+import { GestureScrollView, useSheetScroll } from '@/components/ScrollSheet';
 import { GridSkeleton, type MediaListComponent } from '@/features/media';
 import { useTheme } from '@/hooks/use-theme';
-
-/**
- * Скролл списка, про который жест закрытия знает, что с ним не спорит.
- *
- * `createNativeWrapper` вешает на `ScrollView` нативный жест RNGH и отдаёт
- * наружу сам `ScrollView` с проставленным `handlerTag` — одна и та же ссылка
- * годится и списку, и `simultaneousWithExternalGesture`.
- *
- * Не `GestureDetector` с `Gesture.Native()`: снаружи `FlashList` он цепляется
- * к вью-обёртке, а не к скроллу, и съедает скролл; вокруг самого `ScrollView`
- * он добавляет свою вью, и `FlashList` неверно считает положение содержимого.
- */
-const GestureScrollView = createNativeWrapper<ScrollViewProps>(ScrollView, {
-  disallowInterruption: false,
-  shouldCancelWhenOutside: false,
-});
 
 export type SheetListContextValue = {
   /** Высота прозрачной шапки — отсюда в содержимом начинается шит. */

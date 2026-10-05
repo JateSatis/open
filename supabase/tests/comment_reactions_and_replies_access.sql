@@ -52,6 +52,8 @@ declare
   cd uuid;
   c_other uuid;
   reply uuid;
+  first_reply uuid;
+  others_reply uuid;
   s text;
   n int;
 begin
@@ -123,10 +125,17 @@ begin
 
   -- ================================================================ ответы
   perform pg_temp.act_as(d);
-  reply := public.send_comment(m, 'ответ посетителя', '[]'::jsonb, array[ca, cd]);
+  -- С тредами (20261004100000_comment_threads.sql) цитаты ответа — из одного
+  -- треда: корень и его ответы.
+  first_reply := public.send_comment(m, 'ответ посетителя', '[]'::jsonb, array[ca]);
+  reply := public.send_comment(m, 'второй ответ', '[]'::jsonb, array[first_reply, ca]);
   select string_agg(quoted_id::text, ',' order by position) into s
   from public.comment_replies where comment_id = reply;
-  perform pg_temp.check('посетитель отвечает на комментарии — цитаты по порядку', s = ca::text || ',' || cd::text, s);
+  perform pg_temp.check(
+    'посетитель отвечает на комментарии — цитаты по порядку',
+    s = first_reply::text || ',' || ca::text,
+    s
+  );
 
   begin
     perform public.send_comment(m, 'цитата из чужой ветки', '[]'::jsonb, array[c_other]);
@@ -135,9 +144,15 @@ begin
     perform pg_temp.check('цитата только из той же ветки', sqlstate = 'P0002', sqlstate || ' ' || sqlerrm);
   end;
 
+  -- Чужой ответ в треде: цитаты у него допустимы, отказать может только
+  -- проверка автора. У верхнеуровневого цитат не бывает вовсе (треды).
+  perform pg_temp.act_as(a);
+  others_reply := public.send_comment(m, 'ответ участника', '[]'::jsonb, array[ca]);
+  perform pg_temp.act_as(d);
+
   begin
     insert into public.comment_replies (message_id, comment_id, quoted_id, position)
-    values (m, ca, cd, 0);
+    values (m, others_reply, first_reply, 5);
     perform pg_temp.check('к чужому комментарию цитату не дописать', false, 'прошло');
   exception when others then
     perform pg_temp.check('к чужому комментарию цитату не дописать', sqlstate = '42501', sqlstate || ' ' || sqlerrm);
