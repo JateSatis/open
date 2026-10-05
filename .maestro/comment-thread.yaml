@@ -1,0 +1,56 @@
+appId: com.openger.app
+name: Окно треда — открыть по «N ответов», выйти стрелкой и «назад», ответ из списка открывает тред
+env:
+  # Публичный чат с тредами комментариев; основной аккаунт в нём посетитель.
+  THREAD_CHAT_LINK: "openger://chats/2d929436-099b-4cc9-89ba-e764c0ad8306"
+---
+- runFlow: subflows/open-app.yaml
+- openLink: ${THREAD_CHAT_LINK}
+- tapOn:
+    id: "comments-button"
+    index: 0
+- assertVisible:
+    id: "comments-panel"
+# Тред не раскрывается в списке — открывается отдельным окном.
+- tapOn:
+    id: "thread-open"
+    index: 0
+- assertVisible: "Ответы"
+- assertVisible:
+    id: "thread-root"
+- assertVisible:
+    id: "thread-back"
+- assertVisible: "Ответить в треде"
+# Стрелка назад — основной список, шит открыт.
+- tapOn:
+    id: "thread-back"
+- assertNotVisible: "Ответы"
+- assertVisible:
+    id: "comments-panel"
+# Системное «назад» сначала закрывает тред, потом шит.
+- tapOn:
+    id: "thread-open"
+    index: 0
+- assertVisible: "Ответы"
+- pressKey: back
+- assertNotVisible: "Ответы"
+- assertVisible:
+    id: "comments-panel"
+# «Ответить» на верхнеуровневом в списке — окно его треда с полем в фокусе.
+- swipe:
+    from:
+      text: "Тред: короткий.*"
+    direction: LEFT
+- assertVisible: "Ответы"
+- assertVisible:
+    text: "Ответить в треде"
+    focused: true
+- assertNotVisible:
+    id: "composer-plate"
+- tapOn:
+    id: "thread-back"
+- assertNotVisible: "Ответы"
+- pressKey: back
+- pressKey: back
+- assertNotVisible:
+    id: "comments-panel"
