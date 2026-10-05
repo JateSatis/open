@@ -384,7 +384,6 @@ export default function ChatScreen() {
     chatId,
     currentUserId,
     isMember,
-    readUpTo,
     participantsById,
     mediaBounds,
     retry,

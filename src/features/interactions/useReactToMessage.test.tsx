@@ -11,6 +11,7 @@ import { useChatMessages } from '@/features/chats/useChatMessages';
 import { resetPendingReactions } from '@/features/interactions/pendingReactions';
 import { useInAppAlert } from '@/features/notifications/alertsStore';
 
+jest.mock('@/api/messageViews');
 jest.mock('@/api/reactions', () => ({
   ...jest.requireActual('@/api/reactionCounts'),
   listMessageReactions: jest.fn(),

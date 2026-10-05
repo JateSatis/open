@@ -81,7 +81,9 @@ export function useMessageViews(
   const focusedRef = useRef(isFocused);
   const appActiveRef = useRef(isForeground(AppState.currentState));
 
-  userRef.current = currentUserId;
+  useEffect(() => {
+    userRef.current = currentUserId;
+  }, [currentUserId]);
 
   const flush = useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
@@ -131,7 +133,9 @@ export function useMessageViews(
   // один на всю жизнь списка, свежие значения — через ref.
   const collectRef = useRef(collect);
 
-  collectRef.current = collect;
+  useEffect(() => {
+    collectRef.current = collect;
+  }, [collect]);
 
   const onViewableItemsChanged = useCallback(
     ({ viewableItems }: { viewableItems: ViewToken<ChatListRow>[] }) => {

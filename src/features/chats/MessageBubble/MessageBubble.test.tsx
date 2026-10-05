@@ -74,19 +74,71 @@ describe('MessageBubble', () => {
     expect(screen.getByText('Марина')).toBeTruthy();
   });
 
-  it('своё доставленное — кружок «Доставлено», прочитанное — «Прочитано»', async () => {
+  it('время — серое у отправленного, «прочитано» у своего, которое увидели', async () => {
     const { rerender } = await render(
       <MessageBubble {...baseProps} isOwn message={textMessage({ authorId: 'me' })} />,
     );
 
-    expect(screen.getByLabelText('Доставлено')).toBeTruthy();
-    expect(screen.queryByText('доставлено')).toBeNull();
+    expect(screen.queryByLabelText(/прочитано/)).toBeNull();
+    expect(screen.queryByLabelText('Доставлено')).toBeNull();
 
     await rerender(
       <MessageBubble {...baseProps} isOwn isRead message={textMessage({ authorId: 'me' })} />,
     );
 
-    expect(screen.getByLabelText('Прочитано')).toBeTruthy();
+    expect(screen.getByLabelText(/прочитано/)).toBeTruthy();
+  });
+
+  it('у чужого «прочитано» не показывается', async () => {
+    await render(<MessageBubble {...baseProps} isRead message={textMessage()} />);
+
+    expect(screen.queryByLabelText(/прочитано/)).toBeNull();
+  });
+
+  it('пока сообщение едет — лоадер вместо времени и без просмотров', async () => {
+    await render(
+      <MessageBubble
+        {...baseProps}
+        isOwn
+        message={textMessage({ authorId: 'me', status: 'sending', viewsCount: 3 })}
+      />,
+    );
+
+    expect(screen.getByLabelText('Отправляется')).toBeTruthy();
+    expect(screen.getByTestId('message-sending')).toBeTruthy();
+    expect(screen.queryByText('Отправляется…')).toBeNull();
+    expect(screen.queryByTestId('message-views')).toBeNull();
+  });
+
+  it('правка в пути — «изменено» и лоадер', async () => {
+    await render(
+      <MessageBubble
+        {...baseProps}
+        isOwn
+        message={textMessage({ authorId: 'me', editStatus: 'saving', editedAt: null })}
+      />,
+    );
+
+    expect(screen.getByText('изменено')).toBeTruthy();
+    expect(screen.getByLabelText('Отправляется')).toBeTruthy();
+  });
+
+  it('просмотры — у отправленного с просмотрами; у комментария их нет', async () => {
+    const { rerender } = await render(
+      <MessageBubble {...baseProps} message={textMessage({ viewsCount: 15_400 })} />,
+    );
+
+    expect(screen.getByText('15K')).toBeTruthy();
+
+    await rerender(
+      <MessageBubble
+        {...baseProps}
+        showViews={false}
+        message={textMessage({ viewsCount: 15_400 })}
+      />,
+    );
+
+    expect(screen.queryByTestId('message-views')).toBeNull();
   });
 
   it('opens the author profile from the avatar and from the name', async () => {

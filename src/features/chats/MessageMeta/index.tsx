@@ -1,4 +1,4 @@
-import { Pressable, View } from 'react-native';
+import { ActivityIndicator, Pressable, View } from 'react-native';
 
 import { styles } from './styles';
 
@@ -11,35 +11,41 @@ import type { ThemeColor } from '@/theme';
 export type MessageMetaProps = {
   message: ChatMessage;
   isOwn: boolean;
+  /** Своё сообщение увидел другой участник чата: время синее. У чужого не значит ничего. */
   isRead: boolean;
   /**
    * `overlay` — полупрозрачная плашка поверх медиа без подписи, как в
-   * Telegram; `inline` — строка под текстом в облачке.
+   * Telegram; `inline` — строка в низу облачка.
    */
   variant: 'inline' | 'overlay';
   onRetry: (localId: string) => void;
-  /** Кружок «доставлено / прочитано» у своего. Нет — у комментария: его никто не «читает». */
-  showReceipt?: boolean;
   /**
    * Плашка на медиа сама прижимается к углу. `false` — её ставит родитель,
-   * в строку рядом с кнопкой комментариев.
+   * в строку рядом с просмотрами и кнопкой комментариев.
    */
   floating?: boolean;
 };
 
-/** Время и состояние доставки сообщения. */
+/**
+ * Время сообщения — оно же состояние доставки: пока сообщение едет, на его
+ * месте лоадер; доехало — серое; его увидел другой участник — синее.
+ */
 export function MessageMeta({
   message,
   isOwn,
   isRead,
   variant,
   onRetry,
-  showReceipt = true,
   floating = true,
 }: MessageMetaProps) {
   const theme = useTheme();
   const overlay = variant === 'overlay';
-  const color: ThemeColor = overlay ? 'textOnMedia' : isOwn ? 'primaryText' : 'textSecondary';
+  const tone: ThemeColor = overlay ? 'textOnMedia' : isOwn ? 'metaOnPrimary' : 'textSecondary';
+  const pending = message.status === 'sending' || message.editStatus === 'saving';
+  const read = isOwn && isRead && !pending;
+  // На своём синем облачке синее время читается только в белом контуре.
+  const outlined = read && !overlay;
+  const time = formatMessageTime(message.createdAt);
 
   return (
     <View
@@ -50,11 +56,7 @@ export function MessageMeta({
         overlay && floating && styles.floating,
       ]}
     >
-      {message.status === 'sending' ? (
-        <Text variant="caption" color={color}>
-          Отправляется…
-        </Text>
-      ) : message.status === 'failed' ? (
+      {message.status === 'failed' ? (
         <Pressable
           accessibilityRole="button"
           onPress={() => message.localId && onRetry(message.localId)}
@@ -63,33 +65,39 @@ export function MessageMeta({
             Не отправлено. Повторить
           </Text>
         </Pressable>
-      ) : message.editStatus === 'saving' ? (
-        <Text variant="caption" color={color}>
-          изменено · Сохраняется…
-        </Text>
       ) : (
         <>
-          {message.editedAt ? (
-            <Text variant="caption" color={color}>
+          {/* Лоадер встаёт на место времени, а место держит само время —
+              невидимым: облачко не прыгает, когда сообщение доехало. */}
+          <View
+            testID="message-time"
+            accessible
+            accessibilityLabel={pending ? 'Отправляется' : read ? `${time}, прочитано` : time}
+            style={outlined && styles.readPill}
+          >
+            <Text
+              variant="meta"
+              color={read ? 'primary' : tone}
+              style={[pending && styles.hidden, outlined && styles.readStroke]}
+            >
+              {time}
+            </Text>
+            {pending ? (
+              <View style={styles.spinnerBox}>
+                <ActivityIndicator
+                  testID="message-sending"
+                  size="small"
+                  color={theme[tone]}
+                  style={styles.spinner}
+                />
+              </View>
+            ) : null}
+          </View>
+
+          {message.editedAt || message.editStatus === 'saving' ? (
+            <Text variant="meta" color={tone}>
               изменено
             </Text>
-          ) : null}
-
-          <Text variant="caption" color={color}>
-            {formatMessageTime(message.createdAt)}
-          </Text>
-
-          {isOwn && showReceipt ? (
-            <View
-              testID="message-receipt"
-              accessible
-              accessibilityLabel={isRead ? 'Прочитано' : 'Доставлено'}
-              style={[
-                styles.receipt,
-                { borderColor: theme[color] },
-                isRead && { backgroundColor: theme[color] },
-              ]}
-            />
           ) : null}
         </>
       )}

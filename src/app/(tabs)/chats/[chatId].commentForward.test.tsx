@@ -73,6 +73,7 @@ jest.mock('@/api/comments', () => ({
   listCommentReactions: jest.fn(() => Promise.resolve([])),
   subscribeToComments: jest.fn(() => () => undefined),
 }));
+jest.mock('@/api/messageViews');
 jest.mock('@/api/reactions', () => ({
   ...jest.requireActual('@/api/reactionCounts'),
   listMessageReactions: jest.fn(() => Promise.resolve([])),

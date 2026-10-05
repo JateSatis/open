@@ -9,15 +9,27 @@ async function layout(testID: string, width: number) {
   });
 }
 
-async function renderFooter(contentWidth: number, quiet = false, layoutKey?: string) {
+/** Тексты строки слева направо — в порядке дерева. */
+function order(testID: string): string[] {
+  return within(screen.getByTestId(testID))
+    .getAllByText(/.+/)
+    .map((node) => String(node.props.children));
+}
+
+async function renderFooter(
+  contentWidth: number,
+  quiet = false,
+  layoutKey?: string,
+  extra: { members?: boolean; visitors?: boolean } = {},
+) {
   return render(
     <BubbleFooter
-      isOwn={false}
-      members={<Text>👍 2</Text>}
-      visitors={null}
+      members={extra.members === false ? null : <Text>👍 2</Text>}
+      visitors={extra.visitors ? <Text>🔥 1</Text> : null}
       comments={<Text>💬 4</Text>}
       quiet={quiet}
       meta={<Text>14:45</Text>}
+      views={<Text>👁 12</Text>}
       contentWidth={contentWidth}
       layoutKey={layoutKey}
     />,
@@ -66,6 +78,35 @@ describe('BubbleFooter', () => {
 
     // Копия облачка (над шитом, в меню): замеров у неё ещё не было.
     await renderFooter(300, false, 'message-copy');
+
+    expect(within(screen.getByTestId('bubble-footer-chips')).getByText('💬 4')).toBeTruthy();
+  });
+
+  it('время — слева, просмотры — справа, кнопка комментариев правее всех', async () => {
+    await renderFooter(300, false, undefined, { members: false, visitors: true });
+
+    expect(order('bubble-footer-info')).toEqual(['14:45', '🔥 1', '👁 12', '💬 4']);
+  });
+
+  it('рядом с чипами кнопка стоит справа от них', async () => {
+    await renderFooter(300);
+
+    await layout('bubble-footer-chips-content', 120);
+    await layout('bubble-footer-button', 60);
+    await layout('bubble-footer-meta', 50);
+
+    expect(order('bubble-footer-chips')).toEqual(['👍 2', '💬 4']);
+  });
+
+  it('просмотры входят в ширину нижней строки при выборе места кнопки', async () => {
+    // Содержимое узкое, но нижняя строка со временем и просмотрами широкая —
+    // облачко и так будет её ширины, кнопке рядом с чипами хватает места.
+    await renderFooter(100);
+
+    await layout('bubble-footer-chips-content', 100);
+    await layout('bubble-footer-button', 60);
+    await layout('bubble-footer-meta', 60);
+    await layout('bubble-footer-views', 120);
 
     expect(within(screen.getByTestId('bubble-footer-chips')).getByText('💬 4')).toBeTruthy();
   });

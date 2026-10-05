@@ -214,7 +214,7 @@ export function PanelContent({
           message={quotes === item.replies ? item : { ...item, replies: quotes }}
           isOwn={authorId !== null && authorId === currentUserId}
           isRead={false}
-          showReceipt={false}
+          showViews={false}
           authorName={item.authorName ?? DELETED_ACCOUNT}
           authorAvatarUrl={item.authorAvatarUrl}
           authorBadge={item.audience === 'member' ? MEMBER_BADGE : null}

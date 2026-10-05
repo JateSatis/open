@@ -1,4 +1,4 @@
-import { Pressable, View } from 'react-native';
+import { ActivityIndicator, Pressable, View } from 'react-native';
 
 import { styles } from './styles';
 
@@ -40,9 +40,14 @@ export function IslandHeader({ sourceName, status, onPress, onRetry }: IslandHea
       </Pressable>
 
       {status === 'sending' ? (
-        <Text variant="caption" color="textSecondary">
-          Отправляется…
-        </Text>
+        <View accessible accessibilityLabel="Отправляется" style={styles.spinnerBox}>
+          <ActivityIndicator
+            testID="island-sending"
+            size="small"
+            color={theme.textSecondary}
+            style={styles.spinner}
+          />
+        </View>
       ) : status === 'failed' ? (
         <Pressable accessibilityRole="button" onPress={onRetry}>
           <Text variant="caption" color="danger">

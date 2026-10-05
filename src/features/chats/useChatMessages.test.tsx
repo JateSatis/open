@@ -19,6 +19,7 @@ import { island, original } from '@/test/islands';
 // обрыва связи) уже проверено через экран чата в
 // `src/app/(tabs)/chats/[chatId].test.tsx`, который использует этот хук как
 // есть.
+jest.mock('@/api/messageViews');
 jest.mock('@/api/reactions', () => ({
   ...jest.requireActual('@/api/reactionCounts'),
   listMessageReactions: jest.fn(() => Promise.resolve([])),

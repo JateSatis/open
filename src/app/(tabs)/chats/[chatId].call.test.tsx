@@ -71,6 +71,7 @@ jest.mock('@/api/chats', () => ({
   listMessagesByIds: jest.fn(() => Promise.resolve([])),
   MESSAGE_PAGE_SIZE: 30,
 }));
+jest.mock('@/api/messageViews');
 jest.mock('@/api/reactions', () => ({
   ...jest.requireActual('@/api/reactionCounts'),
   listMessageReactions: jest.fn(() => Promise.resolve([])),

@@ -56,7 +56,7 @@ export const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     gap: Spacing.one,
   },
-  /** Строка низа облачка: кнопка комментариев у внешнего края, время справа. */
+  /** Строка низа облачка: время слева, просмотры и кнопка комментариев справа. */
   footer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -68,7 +68,7 @@ export const styles = StyleSheet.create({
   footerSpacer: {
     flexGrow: 1,
   },
-  /** Время и кнопка комментариев поверх медиа без подписи — у нижнего края мозаики. */
+  /** Время, просмотры и кнопка комментариев поверх медиа без подписи — у нижнего края мозаики. */
   mediaOverlay: {
     position: 'absolute',
     left: 0,

@@ -99,6 +99,7 @@ jest.mock('@/api/comments', () => ({
   listCommentReactions: jest.fn(() => Promise.resolve([])),
   subscribeToComments: jest.fn(),
 }));
+jest.mock('@/api/messageViews');
 jest.mock('@/api/reactions', () => ({
   ...jest.requireActual('@/api/reactionCounts'),
   listMessageReactions: jest.fn(() => Promise.resolve([])),
@@ -437,7 +438,7 @@ describe('comments panel', () => {
     await fireEvent.press(screen.getByLabelText('Отправить'));
 
     expect(await screen.findByText('мой комментарий')).toBeTruthy();
-    expect(screen.getByText('Отправляется…')).toBeTruthy();
+    expect(screen.getByLabelText('Отправляется')).toBeTruthy();
     expect(commentField().props.value).toBe('');
     expect(mockedSend).toHaveBeenCalledWith('m1', {
       text: 'мой комментарий',
