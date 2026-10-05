@@ -1,28 +1,28 @@
-// Строки списка комментариев. Верхнеуровневый комментарий — одна строка;
-// раскрытый тред раскладывается на строки ответов, как островок пересылки в
-// переписке: длинный тред не становится одной гигантской строкой, список
-// виртуализирует ответы по одному, а прыжок к ответу — это прыжок к его
-// строке.
+// Строки двух списков шита комментариев. Основной список — верхнеуровневые
+// комментарии, по одной строке, тред под ними не раскрывается. Окно треда —
+// свой список: корень, под ним ответы по одному, как островок пересылки в
+// переписке. Длинный тред не становится одной гигантской строкой, список
+// виртуализирует ответы, а прыжок к ответу — это прыжок к его строке.
 
 import type { CommentItem } from '@/features/interactions/comments/commentItem';
-
-/** Строка внутри раскрытого треда: фон треда скругляется у первой и последней. */
-export type ThreadPlace = { rootId: string; first: boolean; last: boolean };
 
 export type CommentRow =
   | {
       type: 'comment';
       key: string;
       comment: CommentItem;
-      /** Строка раскрытого треда; `null` — тред закрыт или это не тред. */
-      thread: ThreadPlace | null;
-      /** У корня — сколько ответов на кнопке треда; у ответа — 0. */
+      /** Корень в окне треда: на фоне островка. */
+      threadRoot: boolean;
+      /** В основном списке — число на кнопке «N ответов»; 0 — кнопки нет. */
       replies: number;
     }
-  | { type: 'thread-gap'; key: string; rootId: string; hidden: number; thread: ThreadPlace }
-  | { type: 'thread-loading'; key: string; rootId: string; thread: ThreadPlace };
+  | { type: 'thread-gap'; key: string; rootId: string; hidden: number }
+  | { type: 'thread-loading'; key: string; rootId: string }
+  | { type: 'thread-failed'; key: string; rootId: string };
 
 export type OpenThread = {
+  /** Корень; `null` — его ещё нет среди загруженных. */
+  root: CommentItem | null;
   rootId: string;
   head: CommentItem[];
   tail: CommentItem[];
@@ -30,6 +30,8 @@ export type OpenThread = {
   pending: CommentItem[];
   hasGap: boolean;
   isLoading: boolean;
+  /** Начало не загрузилось — вместо колеса предложить повтор. */
+  failed?: boolean;
 };
 
 export function gapKey(rootId: string): string {
@@ -40,21 +42,50 @@ function loadingKey(rootId: string): string {
   return `${rootId}/loading`;
 }
 
-const place = (rootId: string): ThreadPlace => ({ rootId, first: false, last: false });
+/** Основной список: верх в порядке экрана, с числом ответов у каждого. */
+export function buildCommentRows(
+  roots: CommentItem[],
+  pendingCount: (rootId: string) => number = () => 0,
+): CommentRow[] {
+  const rows: CommentRow[] = [];
 
-/** Строки треда под корнем, без самого корня. */
-function threadRows(root: CommentItem, open: OpenThread): CommentRow[] {
+  for (const root of roots) {
+    const replies = root.repliesCount + pendingCount(root.id);
+
+    // Удалённый корень без ответов показывать незачем.
+    if (root.deleted && replies === 0) continue;
+
+    rows.push({ type: 'comment', key: root.id, comment: root, threadRoot: false, replies });
+  }
+
+  return rows;
+}
+
+/**
+ * Окно треда: корень, под ним ответы хронологически — начало, разрыв
+ * «показать ещё», загруженный хвост и свои неотправленные.
+ */
+export function buildThreadRows(open: OpenThread): CommentRow[] {
+  const { root, rootId } = open;
   const rows: CommentRow[] = [];
   const reply = (comment: CommentItem): CommentRow => ({
     type: 'comment',
     key: comment.id,
     comment,
-    thread: place(root.id),
+    threadRoot: false,
     replies: 0,
   });
 
+  if (root) rows.push({ type: 'comment', key: root.id, comment: root, threadRoot: true, replies: 0 });
+
   if (open.isLoading) {
-    rows.push({ type: 'thread-loading', key: loadingKey(root.id), rootId: root.id, thread: place(root.id) });
+    // Начало ещё грузится, а хвост уже есть — например, ответ, к которому пришли.
+    rows.push(
+      open.failed
+        ? { type: 'thread-failed', key: loadingKey(rootId), rootId }
+        : { type: 'thread-loading', key: loadingKey(rootId), rootId },
+    );
+    rows.push(...open.tail.map(reply));
   } else {
     rows.push(...open.head.map(reply));
 
@@ -63,11 +94,10 @@ function threadRows(root: CommentItem, open: OpenThread): CommentRow[] {
 
       rows.push({
         type: 'thread-gap',
-        key: gapKey(root.id),
-        rootId: root.id,
+        key: gapKey(rootId),
+        rootId,
         // Число у корня может отставать от догруженного — «ещё» всегда хоть один.
-        hidden: Math.max(1, root.repliesCount - loaded),
-        thread: place(root.id),
+        hidden: Math.max(1, (root?.repliesCount ?? 0) - loaded),
       });
     }
 
@@ -79,72 +109,4 @@ function threadRows(root: CommentItem, open: OpenThread): CommentRow[] {
   rows.push(...open.pending.filter((comment) => !known.has(comment.id)).map(reply));
 
   return rows;
-}
-
-/** Фон треда скругляется сверху у корня и снизу у последней строки. */
-function withEnds(rows: CommentRow[]): CommentRow[] {
-  return rows.map((row, index) => {
-    if (!row.thread) return row;
-
-    const first = index === 0;
-    const last = index === rows.length - 1;
-
-    return first || last ? { ...row, thread: { ...row.thread, first, last } } : row;
-  });
-}
-
-/**
- * Список целиком: верх в порядке экрана, под раскрытым корнем — его тред.
- * Ответы в треде — хронологически, начало, разрыв «показать ещё», за ним —
- * загруженный хвост и свои неотправленные.
- */
-export function buildCommentRows(
-  roots: CommentItem[],
-  open: OpenThread | null,
-  pendingCount: (rootId: string) => number = () => 0,
-): CommentRow[] {
-  const rows: CommentRow[] = [];
-
-  for (const root of roots) {
-    const isOpen = open?.rootId === root.id;
-    const replies = root.repliesCount + pendingCount(root.id);
-
-    // Удалённый корень без ответов показывать незачем.
-    if (root.deleted && replies === 0) continue;
-
-    const rootRow: CommentRow = {
-      type: 'comment',
-      key: root.id,
-      comment: root,
-      thread: isOpen ? place(root.id) : null,
-      replies,
-    };
-
-    if (!isOpen || !open) {
-      rows.push(rootRow);
-      continue;
-    }
-
-    rows.push(...withEnds([rootRow, ...threadRows(root, open)]));
-  }
-
-  return rows;
-}
-
-/** Где в строках раскрытый тред: строка корня и последняя строка треда. */
-export function threadBounds(
-  rows: CommentRow[],
-  rootId: string | null,
-): { first: number; last: number } | null {
-  if (!rootId) return null;
-
-  const first = rows.findIndex((row) => row.thread?.rootId === rootId && row.thread.first);
-
-  if (first === -1) return null;
-
-  let last = first;
-
-  while (last + 1 < rows.length && rows[last + 1].thread?.rootId === rootId) last += 1;
-
-  return { first, last };
 }

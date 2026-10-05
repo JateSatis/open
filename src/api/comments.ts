@@ -310,13 +310,20 @@ function toVoiceJson(voice: SendVoiceInput) {
 /** Текст или альбом с подписью — одной транзакцией, функцией `send_comment`. */
 export async function sendComment(
   messageId: string,
-  input: { text?: string; media?: SendMessageMedia[]; replyTo?: string[] },
+  input: {
+    text?: string;
+    media?: SendMessageMedia[];
+    replyTo?: string[];
+    /** Тред ответа; без него — тред по цитатам или верхнеуровневый. */
+    threadRootId?: string | null;
+  },
 ): Promise<Comment> {
   const { data: id, error } = await supabase.rpc('send_comment', {
     target_message: messageId,
     comment_text: input.text?.trim() ?? '',
     media: (input.media ?? []).map(toMediaJson),
     reply_to: input.replyTo?.length ? input.replyTo : undefined,
+    thread_root: input.threadRootId ?? undefined,
   });
 
   if (error) throw error;
@@ -330,11 +337,13 @@ export async function sendVoiceComment(
   messageId: string,
   voice: SendVoiceInput,
   replyTo: string[] = [],
+  threadRootId: string | null = null,
 ): Promise<Comment> {
   const { data: id, error } = await supabase.rpc('send_voice_comment', {
     target_message: messageId,
     voice: toVoiceJson(voice),
     reply_to: replyTo.length ? replyTo : undefined,
+    thread_root: threadRootId ?? undefined,
   });
 
   if (error) throw error;

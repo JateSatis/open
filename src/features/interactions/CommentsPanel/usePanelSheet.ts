@@ -5,7 +5,7 @@
 import type { FlashListRef } from '@shopify/flash-list';
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
 import { PixelRatio, type ScrollView } from 'react-native';
-import { Gesture } from 'react-native-gesture-handler';
+import { Gesture, type PanGesture } from 'react-native-gesture-handler';
 import { KeyboardController } from 'react-native-keyboard-controller';
 import {
   runOnJS,
@@ -15,6 +15,8 @@ import {
   useSharedValue,
   withSpring,
   withTiming,
+  type AnimatedRef,
+  type SharedValue,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -30,8 +32,10 @@ import { useOwnKeyboardHeight } from '@/features/chats/composerKeyboard';
 import { chatFade, liftedRowKey } from '@/features/interactions/comments/commentsLift';
 import { closeComments } from '@/features/interactions/comments/commentsPanelStore';
 
-/** Жест закрытия панели — снаружи нужен только тестам. */
+/** Жест закрытия панели на основном списке — снаружи нужен только тестам. */
 export const PANEL_PAN_TEST_ID = 'comments-panel-pan';
+/** Тот же жест на списке окна треда. */
+export const THREAD_PAN_TEST_ID = 'comments-thread-pan';
 /** Жест шапки панели — для тестов. */
 export const HEADER_PAN_TEST_ID = 'comments-header-pan';
 
@@ -71,6 +75,72 @@ type Options = {
 export type PanelSheet = ReturnType<typeof usePanelSheet>;
 
 /**
+ * Список внутри шита и его связь с жестом закрытия: своя позиция скролла,
+ * своя ссылка на нативный скролл и свой жест. Списков два — основной и окно
+ * треда, — и шит тянет тот, на котором палец: касание по окну треда двигает
+ * шит, только когда докручен до верха список треда.
+ */
+export type SheetPane = {
+  animatedRef: AnimatedRef<ScrollView>;
+  scrollGestureRef: { current: ComponentType | null };
+  scrollOffset: SharedValue<number>;
+  listRef: { current: FlashListRef<unknown> | null };
+  dismissPan: PanGesture;
+  markScrollAttached: () => void;
+  /** К началу списка — без анимации, вместе с позицией для жеста закрытия. */
+  scrollToTop: () => void;
+};
+
+type PaneOptions = {
+  dismissY: SharedValue<number>;
+  dismissing: SharedValue<boolean>;
+  dismissDistance: number;
+  onRelease: () => void;
+  testId: string;
+};
+
+function useSheetPane({
+  dismissY,
+  dismissing,
+  dismissDistance,
+  onRelease,
+  testId,
+}: PaneOptions): SheetPane {
+  const [scrollAttached, setScrollAttached] = useState(false);
+  const scrollOffset = useSharedValue(0);
+  const animatedRef = useAnimatedRef<ScrollView>();
+  const scrollGestureRef = useRef<ComponentType | null>(null);
+  const listRef = useRef<FlashListRef<unknown>>(null);
+
+  const dismissPan = useDismissGesture({
+    dismissY,
+    scrollOffset,
+    dismissing,
+    scrollGestureRef,
+    scrollAttached,
+    dismissDistance,
+    onRelease,
+    testId,
+  });
+
+  const markScrollAttached = useCallback(() => setScrollAttached(true), []);
+  const scrollToTop = useCallback(() => {
+    listRef.current?.scrollToOffset({ offset: 0, animated: false });
+    scrollOffset.value = 0;
+  }, [scrollOffset]);
+
+  return {
+    animatedRef,
+    scrollGestureRef,
+    scrollOffset,
+    listRef,
+    dismissPan,
+    markScrollAttached,
+    scrollToTop,
+  };
+}
+
+/**
  * Механика шита комментариев. Положение одно — верх на четверти экрана
  * (`panelGeometry`); выше шит не поднимается, поэтому свайп вверх сразу
  * листает комментарии. Вниз шит тянет жест закрытия — тот же, что у шита
@@ -83,7 +153,6 @@ export function usePanelSheet({ windowHeight, prepareClose }: Options) {
   const [headerHeight, setHeaderHeight] = useState(0);
   const [shown, setShown] = useState(false);
   const [ready, setReady] = useState(false);
-  const [scrollAttached, setScrollAttached] = useState(false);
 
   const geometry: PanelGeometry = useMemo(
     () => panelGeometry(windowHeight, insets.top, PixelRatio.get()),
@@ -92,12 +161,8 @@ export function usePanelSheet({ windowHeight, prepareClose }: Options) {
 
   /** Насколько шит утащен вниз относительно рабочего положения: 0 — на месте. */
   const dismissY = useSharedValue(windowHeight);
-  const scrollOffset = useSharedValue(0);
   const dismissing = useSharedValue(false);
   const closing = useSharedValue(false);
-  const animatedRef = useAnimatedRef<ScrollView>();
-  const scrollGestureRef = useRef<ComponentType | null>(null);
-  const listRef = useRef<FlashListRef<unknown>>(null);
   const started = useRef(false);
 
   // Выезжает, когда окно на экране и сообщение над шитом готово — копия
@@ -152,15 +217,19 @@ export function usePanelSheet({ windowHeight, prepareClose }: Options) {
   const closeNow = useCallback(() => close(), [close]);
   const prepare = useCallback(() => void prepareClose(), [prepareClose]);
 
-  const dismissPan = useDismissGesture({
+  const main = useSheetPane({
     dismissY,
-    scrollOffset,
     dismissing,
-    scrollGestureRef,
-    scrollAttached,
     dismissDistance: geometry.dismissDistance,
     onRelease: releaseNow,
     testId: PANEL_PAN_TEST_ID,
+  });
+  const thread = useSheetPane({
+    dismissY,
+    dismissing,
+    dismissDistance: geometry.dismissDistance,
+    onRelease: releaseNow,
+    testId: THREAD_PAN_TEST_ID,
   });
 
   // Палец взялся за шит — переписку перемерить, пока он не уехал далеко.
@@ -182,7 +251,7 @@ export function usePanelSheet({ windowHeight, prepareClose }: Options) {
       Gesture.Pan()
         .withTestId(HEADER_PAN_TEST_ID)
         .activeOffsetY([-HEADER_ACTIVATION_PX, HEADER_ACTIVATION_PX])
-        .blocksExternalGesture(dismissPan)
+        .blocksExternalGesture(main.dismissPan, thread.dismissPan)
         .onStart((event) => {
           headerAnchor.value = event.translationY - dismissY.value;
           runOnJS(prepare)();
@@ -202,7 +271,16 @@ export function usePanelSheet({ windowHeight, prepareClose }: Options) {
 
           dismissY.value = withSpring(0, OPEN_SPRING);
         }),
-    [closing, dismissPan, dismissY, geometry.dismissDistance, headerAnchor, prepare, release],
+    [
+      closing,
+      dismissY,
+      geometry.dismissDistance,
+      headerAnchor,
+      main.dismissPan,
+      prepare,
+      release,
+      thread.dismissPan,
+    ],
   );
 
   /** Весь шит целиком: и список, и строка ввода уезжают вместе. */
@@ -219,7 +297,6 @@ export function usePanelSheet({ windowHeight, prepareClose }: Options) {
     transform: [{ translateY: dismissY.value - Math.max(keyboardHeight.value - insets.bottom, 0) }],
   }));
 
-  const markScrollAttached = useCallback(() => setScrollAttached(true), []);
   const markShown = useCallback(() => setShown(true), []);
   const markReady = useCallback(() => setReady(true), []);
 
@@ -228,18 +305,14 @@ export function usePanelSheet({ windowHeight, prepareClose }: Options) {
     headerHeight,
     setHeaderHeight,
     dismissY,
-    scrollOffset,
     dismissing,
-    animatedRef,
-    scrollGestureRef,
-    listRef,
-    dismissPan,
+    main,
+    thread,
     headerPan,
     shiftStyle,
     footerStyle,
     close,
     closeNow,
-    markScrollAttached,
     markShown,
     markReady,
   };

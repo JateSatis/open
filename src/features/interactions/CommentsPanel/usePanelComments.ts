@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import { buildCommentRows, type CommentRow } from './rows';
+import { buildCommentRows, buildThreadRows, type CommentRow } from './rows';
 
 import { fetchComment } from '@/api/comments';
 import {
@@ -31,8 +31,8 @@ const NONE: CommentItem[] = [];
 
 /**
  * Комментарий, к которому пришли (тап по пересланному): он и его корень
- * встают наверх, тред раскрыт. Отдаёт id, к которому прыгнуть, когда он
- * окажется в списке.
+ * встают наверх, у ответа сразу, без въезда, открыто окно его треда. Отдаёт
+ * id, к которому прыгнуть, когда он окажется в списке.
  */
 function useFocusComment(messageId: string, focusId: string | undefined) {
   const queryClient = useQueryClient();
@@ -72,7 +72,7 @@ function useFocusComment(messageId: string, focusId: string | undefined) {
           updateThread(queryClient, messageId, rootId, (page) => addToThread(page, comment), {
             create: true,
           });
-          setOpenThread(rootId);
+          setOpenThread(rootId, true);
         }
 
         setReady(focusId);
@@ -90,10 +90,17 @@ function useFocusComment(messageId: string, focusId: string | undefined) {
 }
 
 /**
- * Всё, что панель рисует списком: сообщение сверху, верх по рангу, раскрытый
- * тред и строки из них.
+ * Всё, что панель рисует списками: верх по рангу — основной список, и окно
+ * треда `threadRootId` — корень и его ответы.
+ *
+ * `threadRootId` — тред в окне, а не в сторе: уезжающее окно рисует свой
+ * тред, хотя в сторе его уже нет.
  */
-export function usePanelComments(target: CommentsPanelTarget, currentUserId: string | null) {
+export function usePanelComments(
+  target: CommentsPanelTarget,
+  currentUserId: string | null,
+  threadRootId: string | null,
+) {
   const { messageId } = target;
   const { data: about } = useCommentTarget(messageId, target.chatId);
   const live = about?.state === 'live' ? about : null;
@@ -105,7 +112,7 @@ export function usePanelComments(target: CommentsPanelTarget, currentUserId: str
     amMember,
   );
   const openThread = useOpenThread();
-  const thread = useCommentThread(messageId, openThread, comments.overlay);
+  const thread = useCommentThread(messageId, threadRootId, comments.overlay);
   const focusReady = useFocusComment(messageId, target.focusCommentId);
   const { roots, pendingReplies } = comments;
 
@@ -115,29 +122,36 @@ export function usePanelComments(target: CommentsPanelTarget, currentUserId: str
   );
 
   const rows = useMemo<CommentRow[]>(
+    () => buildCommentRows(roots, pendingCount),
+    [pendingCount, roots],
+  );
+
+  const threadRows = useMemo<CommentRow[]>(
     () =>
-      buildCommentRows(
-        roots,
-        openThread
-          ? {
-              rootId: openThread,
-              head: thread.head,
-              tail: thread.tail,
-              pending: pendingReplies.get(openThread) ?? NONE,
-              hasGap: thread.hasGap,
-              isLoading: thread.isLoading,
-            }
-          : null,
-        pendingCount,
-      ),
-    [openThread, pendingCount, pendingReplies, roots, thread],
+      threadRootId
+        ? buildThreadRows({
+            root: roots.find((root) => root.id === threadRootId) ?? null,
+            rootId: threadRootId,
+            head: thread.head,
+            tail: thread.tail,
+            pending: pendingReplies.get(threadRootId) ?? NONE,
+            hasGap: thread.hasGap,
+            isLoading: thread.isLoading,
+            failed: thread.failed,
+          })
+        : [],
+    [pendingReplies, roots, thread, threadRootId],
   );
 
-  /** Комментарии на экране — по порядку строк. */
-  const visible = useMemo(
-    () => rows.flatMap((row) => (row.type === 'comment' && !row.comment.deleted ? [row.comment] : [])),
-    [rows],
-  );
-
-  return { about, live, amMember, comments, openThread, thread, rows, visible, focusReady };
+  return {
+    about,
+    live,
+    amMember,
+    comments,
+    openThread,
+    thread,
+    rows,
+    threadRows,
+    focusReady,
+  };
 }

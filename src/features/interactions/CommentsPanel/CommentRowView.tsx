@@ -1,10 +1,8 @@
 import { memo, type ReactNode } from 'react';
 import { View } from 'react-native';
 
-import type { ThreadPlace } from './rows';
+import { RepliesButton } from './RepliesButton';
 import { styles } from './styles';
-import { ThreadBackground } from './ThreadBackground';
-import { ThreadToggle } from './ThreadToggle';
 
 import { Text } from '@/components/Text';
 import { isLocalMessage } from '@/features/chats/messageActions';
@@ -15,27 +13,27 @@ import { useTheme } from '@/hooks/use-theme';
 
 export type CommentRowViewProps = {
   comment: CommentItem;
-  thread: ThreadPlace | null;
-  /** У корня — число на кнопке треда; 0 — кнопки нет. */
+  /** Корень в окне треда — на фоне островка. */
+  threadRoot: boolean;
+  /** Число на кнопке «N ответов» под облачком; 0 — кнопки нет. */
   replies: number;
+  isOwn: boolean;
   selectionMode: boolean;
   selected: boolean;
   editing: boolean;
   highlightKey: number | null;
-  /** Тред этого корня раскрыт. */
-  threadOpen: boolean;
   onOpenMenu: (comment: CommentItem, anchor: AnchorRect) => void;
   onSelect: (comment: CommentItem) => void;
   onToggle: (comment: CommentItem) => void;
   /** Свайп влево — ответить. Нет — у удалённого сообщения ответов не принимают. */
   onSwipeReply?: (comment: CommentItem) => void;
-  onToggleThread: (rootId: string) => void;
-  /** Облачко — то же, что у сообщения в переписке; `aside` — кнопка треда сбоку. */
-  renderBubble: (comment: CommentItem, aside: ReactNode) => ReactNode;
+  onOpenThread: (rootId: string) => void;
+  /** Облачко — то же, что у сообщения в переписке. */
+  renderBubble: (comment: CommentItem) => ReactNode;
 };
 
 /** Облачко удалённого корня: тред живёт, на месте корня — заглушка. */
-function DeletedRoot({ aside }: { aside: ReactNode }) {
+function DeletedRoot() {
   const theme = useTheme();
 
   return (
@@ -49,44 +47,49 @@ function DeletedRoot({ aside }: { aside: ReactNode }) {
           Комментарий удалён
         </Text>
       </View>
-      {aside}
     </View>
   );
 }
 
 /**
  * Строка комментария: облачко с жестами переписки — тап открывает меню,
- * долгое нажатие включает выбор, свайп влево отвечает. Ответ в треде — на
- * «таб» правее корня, раскрытый тред — на общем фоне.
+ * долгое нажатие включает выбор, свайп влево отвечает. Под облачком корня с
+ * ответами — «N ответов»; корень в окне треда — на фоне островка.
  */
 export const CommentRowView = memo(function CommentRowView({
   comment,
-  thread,
+  threadRoot,
   replies,
+  isOwn,
   selectionMode,
   selected,
   editing,
   highlightKey,
-  threadOpen,
   onOpenMenu,
   onSelect,
   onToggle,
   onSwipeReply,
-  onToggleThread,
+  onOpenThread,
   renderBubble,
 }: CommentRowViewProps) {
-  const isReply = comment.threadRootId !== null;
-  const aside =
-    !isReply && replies > 0 ? (
-      <ThreadToggle count={replies} open={threadOpen} onPress={() => onToggleThread(comment.id)} />
+  const theme = useTheme();
+  const button =
+    replies > 0 ? (
+      <RepliesButton
+        count={replies}
+        isOwn={isOwn && !comment.deleted}
+        onPress={() => onOpenThread(comment.id)}
+      />
     ) : null;
-  const background = thread ? <ThreadBackground first={thread.first} last={thread.last} /> : null;
+  const rowStyle = threadRoot
+    ? [styles.threadRoot, { backgroundColor: theme.islandBackground }]
+    : styles.row;
 
   if (comment.deleted) {
     return (
-      <View style={styles.row}>
-        {background}
-        <DeletedRoot aside={aside} />
+      <View testID={threadRoot ? 'thread-root' : undefined} style={rowStyle}>
+        <DeletedRoot />
+        {button}
       </View>
     );
   }
@@ -94,8 +97,7 @@ export const CommentRowView = memo(function CommentRowView({
   const selectable = !isLocalMessage(comment);
 
   return (
-    <View style={styles.row}>
-      {background}
+    <View testID={threadRoot ? 'thread-root' : undefined} style={rowStyle}>
       <MessageRow
         selectionMode={selectionMode}
         selectable={selectable}
@@ -108,8 +110,9 @@ export const CommentRowView = memo(function CommentRowView({
         onToggle={() => onToggle(comment)}
         onSwipeReply={onSwipeReply && selectable ? () => onSwipeReply(comment) : undefined}
       >
-        <View style={isReply ? styles.replyBubble : undefined}>{renderBubble(comment, aside)}</View>
+        {renderBubble(comment)}
       </MessageRow>
+      {button}
     </View>
   );
 });

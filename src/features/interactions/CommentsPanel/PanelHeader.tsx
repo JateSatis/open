@@ -10,10 +10,12 @@ import { Spacing } from '@/theme';
 export type PanelHeaderProps = {
   title: string;
   onClose: () => void;
+  /** Окно треда: стрелка назад к основному списку. */
+  onBack?: () => void;
 };
 
-/** Верх панели: ручка, «N комментариев» и крестик. За него шит тянут вниз. */
-export function PanelHeader({ title, onClose }: PanelHeaderProps) {
+/** Верх панели: ручка, заголовок и крестик, в треде — и стрелка назад. За него шит тянут вниз. */
+export function PanelHeader({ title, onClose, onBack }: PanelHeaderProps) {
   const theme = useTheme();
 
   return (
@@ -21,7 +23,24 @@ export function PanelHeader({ title, onClose }: PanelHeaderProps) {
       <View style={[styles.handle, { backgroundColor: theme.border }]} />
 
       <View style={styles.titleRow}>
-        <Text variant="smallBold">{title}</Text>
+        <View style={styles.titleStart}>
+          {onBack ? (
+            <Pressable
+              testID="thread-back"
+              accessibilityRole="button"
+              accessibilityLabel="Назад к комментариям"
+              hitSlop={Spacing.two}
+              onPress={onBack}
+            >
+              <SymbolView
+                name={{ ios: 'chevron.left', android: 'arrow_back', web: 'arrow_back' }}
+                size={Spacing.four}
+                tintColor={theme.text}
+              />
+            </Pressable>
+          ) : null}
+          <Text variant="smallBold">{title}</Text>
+        </View>
 
         <Pressable
           accessibilityRole="button"

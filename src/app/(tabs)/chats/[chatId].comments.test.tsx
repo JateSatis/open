@@ -30,8 +30,8 @@ import { renderWithQuery } from '@/test/renderWithQuery';
 
 let mockFocused = true;
 const mockPush = jest.fn();
-/** Последние строки, отданные списку комментариев. */
-const mockListRows: { current: { key: string }[] | null } = { current: null };
+/** Последние строки, отданные каждому списку, — по `testID` списка. */
+const mockListRows: Record<string, { key: string }[]> = {};
 
 jest.mock('@shopify/flash-list', () => {
   const actual = jest.requireActual('@shopify/flash-list');
@@ -39,8 +39,8 @@ jest.mock('@shopify/flash-list', () => {
 
   return {
     ...actual,
-    FlashList: forwardRef((props: { data: { key: string }[] }, ref: unknown) => {
-      mockListRows.current = props.data;
+    FlashList: forwardRef((props: { data: { key: string }[]; testID?: string }, ref: unknown) => {
+      mockListRows[props.testID ?? ''] = props.data;
 
       return createElement(actual.FlashList, { ...props, ref });
     }),
@@ -313,8 +313,8 @@ function commentField() {
  * Строки списка комментариев по порядку экрана. Дерево тут не годится:
  * `FlashList` переиспользует ячейки, и порядок узлов не равен порядку строк.
  */
-function rowKeys(): string[] {
-  return (mockListRows.current ?? []).map((row) => row.key);
+function rowKeys(list = 'comments-list'): string[] {
+  return (mockListRows[list] ?? []).map((row) => row.key);
 }
 
 describe('comments button next to the bubble', () => {
@@ -439,6 +439,7 @@ describe('comments panel', () => {
       text: 'мой комментарий',
       media: [],
       replyTo: [],
+      threadRootId: null,
     });
 
     await act(async () => refuse({ code: '42501', message: 'denied' }));
@@ -551,7 +552,7 @@ describe('a visitor in the comments', () => {
     expect(await screen.findByLabelText('Зрители: 🔥 1')).toBeTruthy();
   });
 
-  it('replies to a comment: the quote goes with the new comment', async () => {
+  it('replying to a top-level comment opens its thread: no quote, the message goes into it', async () => {
     mockedListComments.mockResolvedValue({ items: [comment('c1')], nextCursor: null });
     mockedSend.mockReturnValue(new Promise(() => undefined));
 
@@ -561,18 +562,26 @@ describe('a visitor in the comments', () => {
 
     await tapComment('c1');
     await fireEvent.press(await screen.findByRole('menuitem', { name: 'Ответить' }));
-    expect(await screen.findByText('В ответ Олег')).toBeTruthy();
 
-    await fireEvent.changeText(commentField(), 'согласен');
+    // Окно треда — даже у комментария без ответов: в нём один корень.
+    expect(await screen.findByText('Ответы')).toBeTruthy();
+    expect(rowKeys('comments-thread-list')).toEqual(['c1']);
+    expect(screen.queryByText('В ответ Олег')).toBeNull();
+
+    await fireEvent.changeText(screen.getByPlaceholderText('Ответить в треде'), 'согласен');
     await fireEvent.press(screen.getByLabelText('Отправить'));
 
     await waitFor(() =>
       expect(mockedSend).toHaveBeenCalledWith('m1', {
         text: 'согласен',
         media: [],
-        replyTo: ['c1'],
+        replyTo: [],
+        threadRootId: 'c1',
       }),
     );
+    // Остаёмся в треде, свой ответ — в его конце.
+    expect(screen.getByText('Ответы')).toBeTruthy();
+    expect(rowKeys('comments-thread-list')[1]).toMatch(/^local-/);
   });
 
   it('offers no editing or deleting on somebody else’s comment, but lets forward it', async () => {
@@ -658,54 +667,182 @@ describe('threads', () => {
     await screen.findByText('второй ответ');
   }
 
-  it('hides a thread until its button is pressed, then shows the replies in order', async () => {
+  /** Тап по облачку комментария — его меню. */
+  async function tapComment(id: string) {
+    await act(async () => {
+      fireEvent.press(screen.getAllByTestId(`message-row-${id}`).at(-1)!);
+    });
+  }
+
+  it('puts the replies button only under a comment with replies and opens nothing in the list', async () => {
     await renderChat();
     await openCommentsOf(3);
     await screen.findByText('корень');
 
+    expect(screen.getAllByTestId('thread-open')).toHaveLength(1);
     expect(screen.queryByText('первый ответ')).toBeNull();
+    expect(rowKeys()).toEqual(['root', 'other']);
+  });
 
-    await fireEvent.press(screen.getByLabelText('Показать 2 ответа'));
+  it('opens the thread window by the button: the root first on its own background, then the replies', async () => {
+    await openThread();
 
-    expect(await screen.findByText('первый ответ')).toBeTruthy();
-    expect(rowKeys()).toEqual(['root', 'r1', 'r2', 'other']);
+    expect(screen.getByText('Ответы')).toBeTruthy();
+    expect(screen.getByLabelText('Назад к комментариям')).toBeTruthy();
+    expect(rowKeys('comments-thread-list')).toEqual(['root', 'r1', 'r2']);
+    expect(screen.getByTestId('thread-root')).toBeTruthy();
+    // Основной список не тронут — тред под корнем не раскрывается.
+    expect(rowKeys()).toEqual(['root', 'other']);
     expect(mockedReplies).toHaveBeenCalledWith('root');
   });
 
-  it('a reply to a reply goes into the same thread with its quote, at its end', async () => {
+  it('a message without a quote in the thread window goes into the thread, at its end', async () => {
     mockedSend.mockReturnValue(new Promise(() => undefined));
 
     await openThread();
 
-    await act(async () => {
-      fireEvent.press(screen.getAllByTestId('message-row-r2')[0]);
-    });
-    await fireEvent.press(await screen.findByRole('menuitem', { name: 'Ответить' }));
-    await fireEvent.changeText(commentField(), 'и я');
+    await fireEvent.changeText(screen.getByPlaceholderText('Ответить в треде'), 'и я');
     await fireEvent.press(screen.getByLabelText('Отправить'));
 
     await waitFor(() =>
-      expect(mockedSend).toHaveBeenCalledWith('m1', { text: 'и я', media: [], replyTo: ['r2'] }),
+      expect(mockedSend).toHaveBeenCalledWith('m1', {
+        text: 'и я',
+        media: [],
+        replyTo: [],
+        threadRootId: 'root',
+      }),
     );
 
-    const keys = rowKeys();
+    const keys = rowKeys('comments-thread-list');
 
     expect(keys.slice(0, 3)).toEqual(['root', 'r1', 'r2']);
-    // Свой ответ — сразу, в конце треда, до следующего корня.
     expect(keys[3]).toMatch(/^local-/);
-    expect(keys[4]).toBe('other');
+    // Число на кнопке в основном списке считает и неотправленный.
+    expect(screen.getByLabelText('Показать 3 ответа')).toBeTruthy();
   });
 
-  it('will not reply to comments of two different threads at once', async () => {
+  it('a reply to a reply goes into the same thread with its quote', async () => {
+    mockedSend.mockReturnValue(new Promise(() => undefined));
+
+    await openThread();
+
+    await tapComment('r2');
+    await fireEvent.press(await screen.findByRole('menuitem', { name: 'Ответить' }));
+    expect(await screen.findByText('В ответ Олег')).toBeTruthy();
+
+    await fireEvent.changeText(screen.getByPlaceholderText('Ответить в треде'), 'и я');
+    await fireEvent.press(screen.getByLabelText('Отправить'));
+
+    await waitFor(() =>
+      expect(mockedSend).toHaveBeenCalledWith('m1', {
+        text: 'и я',
+        media: [],
+        replyTo: ['r2'],
+        threadRootId: 'root',
+      }),
+    );
+  });
+
+  it('a message in the main list without a quote stays top-level', async () => {
+    mockedSend.mockReturnValue(new Promise(() => undefined));
+
+    await renderChat();
+    await openCommentsOf(3);
+    await screen.findByText('корень');
+
+    await fireEvent.changeText(commentField(), 'наверх');
+    await fireEvent.press(screen.getByLabelText('Отправить'));
+
+    await waitFor(() =>
+      expect(mockedSend).toHaveBeenCalledWith('m1', {
+        text: 'наверх',
+        media: [],
+        replyTo: [],
+        threadRootId: null,
+      }),
+    );
+    expect(rowKeys()[0]).toMatch(/^local-/);
+  });
+
+  it('system back leaves selection first, then the thread, then closes the sheet', async () => {
     const { fireGestureHandler, getByGestureTestId } = jest.requireActual(
       'react-native-gesture-handler/jest-utils',
     ) as typeof import('react-native-gesture-handler/jest-utils');
 
     await openThread();
 
-    // Долгое нажатие — выбор, тап по другому — добавить к выбору.
     await act(async () => {
       fireGestureHandler(getByGestureTestId('message-long-press-r1'), [{ state: 4 }]);
+    });
+    await screen.findByRole('button', { name: 'Ответить' });
+
+    await fireEvent(screen.getByTestId('comments-panel'), 'requestClose');
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Ответить' })).toBeNull());
+    expect(screen.getByText('Ответы')).toBeTruthy();
+
+    await fireEvent(screen.getByTestId('comments-panel'), 'requestClose');
+    await waitFor(() => expect(screen.queryByText('Ответы')).toBeNull());
+    expect(screen.getByTestId('comments-panel')).toBeTruthy();
+
+    await fireEvent(screen.getByTestId('comments-panel'), 'requestClose');
+    await waitFor(() => expect(screen.queryByTestId('comments-panel')).toBeNull());
+  });
+
+  it('leaving the thread by the arrow keeps the typed text but drops the quote', async () => {
+    await openThread();
+
+    await tapComment('r2');
+    await fireEvent.press(await screen.findByRole('menuitem', { name: 'Ответить' }));
+    await fireEvent.changeText(screen.getByPlaceholderText('Ответить в треде'), 'черновик');
+
+    await fireEvent.press(screen.getByLabelText('Назад к комментариям'));
+
+    await waitFor(() => expect(screen.queryByText('Ответы')).toBeNull());
+    expect(screen.queryByText('В ответ Олег')).toBeNull();
+    expect(commentField().props.value).toBe('черновик');
+  });
+
+  it('a thread that failed to load offers a retry instead of an endless spinner', async () => {
+    mockedReplies.mockRejectedValueOnce(new Error('offline'));
+
+    await renderChat();
+    await openCommentsOf(3);
+    await screen.findByText('корень');
+    await fireEvent.press(screen.getByLabelText('Показать 2 ответа'));
+
+    await fireEvent.press(await screen.findByText('Не удалось загрузить ответы. Повторить'));
+
+    expect(await screen.findByText('второй ответ')).toBeTruthy();
+  });
+
+  it('a quote picked in the thread does not survive closing the sheet', async () => {
+    await openThread();
+
+    await tapComment('r2');
+    await fireEvent.press(await screen.findByRole('menuitem', { name: 'Ответить' }));
+    expect(await screen.findByText('В ответ Олег')).toBeTruthy();
+
+    // Крестиком, прямо из треда: «назад» сначала вышел бы из треда.
+    await fireEvent.press(screen.getAllByLabelText('Закрыть комментарии')[1]);
+    await waitFor(() => expect(screen.queryByTestId('comments-panel')).toBeNull());
+    await openCommentsOf(3);
+    await screen.findByText('корень');
+
+    expect(screen.queryByText('В ответ Олег')).toBeNull();
+  });
+
+  it('will not reply to two top-level comments at once — they are two threads', async () => {
+    const { fireGestureHandler, getByGestureTestId } = jest.requireActual(
+      'react-native-gesture-handler/jest-utils',
+    ) as typeof import('react-native-gesture-handler/jest-utils');
+
+    await renderChat();
+    await openCommentsOf(3);
+    await screen.findByText('корень');
+
+    // Долгое нажатие — выбор, тап по другому — добавить к выбору.
+    await act(async () => {
+      fireGestureHandler(getByGestureTestId('message-long-press-root'), [{ state: 4 }]);
     });
     await act(async () => {
       fireEvent.press(screen.getAllByTestId('message-row-other')[0]);

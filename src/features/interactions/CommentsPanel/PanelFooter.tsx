@@ -18,13 +18,15 @@ export type PanelFooterProps = {
   actions: PanelActions;
   /** Сообщение удалено — новые комментарии не принимаются. */
   closed: boolean;
+  /** Подпись пустого поля: в окне треда — куда уйдёт сообщение. */
+  placeholder: string;
 };
 
 /**
  * Низ панели — у края экрана, над клавиатурой своего поля: поле ввода или,
  * в режиме выбора, панель действий над выбранным.
  */
-export function PanelFooter({ style, onHeight, actions, closed }: PanelFooterProps) {
+export function PanelFooter({ style, onHeight, actions, closed, placeholder }: PanelFooterProps) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { selection } = actions;
@@ -49,6 +51,7 @@ export function PanelFooter({ style, onHeight, actions, closed }: PanelFooterPro
           edit={actions.edit}
           inputRef={actions.inputRef}
           closed={closed}
+          placeholder={placeholder}
           onSend={actions.submit}
           onSendVoice={actions.sendVoice}
         />

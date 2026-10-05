@@ -13,7 +13,6 @@ import {
   sendCommentPost,
   sendCommentVoice,
   type CommentSendContext,
-  type CommentThreadTarget,
 } from '@/features/interactions/comments/commentDelivery';
 import { saveCommentEdit } from '@/features/interactions/comments/commentEditing';
 import {
@@ -71,14 +70,14 @@ export type CommentsState = {
   error: string | null;
   /** Догружает следующую страницу верха; промис — когда она легла в кеш (или нечего грузить). */
   loadMore: () => Promise<void>;
-  /** С цитатами — ответ в тред `thread`. */
+  /** С `threadRootId` — ответ в этот тред, с цитатами или без; без него — наверх. */
   send: (
     text: string,
     media?: MediaLibraryItem[],
     replies?: LiveQuote[],
-    thread?: CommentThreadTarget | null,
+    threadRootId?: string | null,
   ) => void;
-  sendVoice: (voice: LocalMedia, replies?: LiveQuote[], thread?: CommentThreadTarget | null) => void;
+  sendVoice: (voice: LocalMedia, replies?: LiveQuote[], threadRootId?: string | null) => void;
   /**
    * Тап по реакции: та же, что стоит, — снять, другая — поставить. Ряд —
    * догадка для мгновенного отклика по участию в чате; решит база.
@@ -262,7 +261,9 @@ export function useComments(
     for (const item of outboxComments(messageId)) {
       const outgoing = item.status === 'failed' ? outgoingOf(item) : null;
 
-      if (outgoing && item.localId) void deliverComment(context, item.localId, outgoing);
+      if (outgoing && item.localId) {
+        void deliverComment(context, item.localId, outgoing, item.threadRootId);
+      }
     }
   }, [connection, context, messageId]);
 
@@ -362,13 +363,13 @@ export function useComments(
         text: string,
         media: MediaLibraryItem[] = [],
         replies: LiveQuote[] = [],
-        thread: CommentThreadTarget | null = null,
-      ) => sendCommentPost(context, text, media, replies, thread),
+        threadRootId: string | null = null,
+      ) => sendCommentPost(context, text, media, replies, threadRootId),
       [context],
     ),
     sendVoice: useCallback(
-      (voice: LocalMedia, replies: LiveQuote[] = [], thread: CommentThreadTarget | null = null) =>
-        sendCommentVoice(context, voice, replies, thread?.rootId ?? null),
+      (voice: LocalMedia, replies: LiveQuote[] = [], threadRootId: string | null = null) =>
+        sendCommentVoice(context, voice, replies, threadRootId),
       [context],
     ),
     react: useCallback(

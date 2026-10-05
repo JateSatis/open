@@ -69,12 +69,20 @@ export const styles = StyleSheet.create({
   row: {
     paddingHorizontal: Spacing.three,
   },
-  /** Ответ в треде — на «таб» правее корня. */
-  reply: {
-    paddingLeft: Spacing.three + Sizes.threadIndent,
+  /**
+   * Корень в окне треда — на фоне островка, без пунктира. Подложка шире
+   * облачка на поле строки, само облачко стоит там же, где в основном списке.
+   */
+  threadRoot: {
+    marginHorizontal: Spacing.two,
+    marginBottom: Spacing.two,
+    paddingHorizontal: Spacing.three - Spacing.two,
+    paddingTop: Spacing.two,
+    borderRadius: Radii.lg,
   },
-  replyBubble: {
-    paddingLeft: Sizes.threadIndent,
+  /** Окно треда — слоем поверх основного списка, въезжает справа. */
+  threadPane: {
+    ...StyleSheet.absoluteFill,
   },
   /** Заглушка удалённого корня — на месте облачка, с местом под аватар, как у чужого. */
   deletedRow: {
@@ -89,13 +97,6 @@ export const styles = StyleSheet.create({
     paddingVertical: Spacing.two,
     paddingHorizontal: Spacing.three,
     borderRadius: Radii.lg,
-  },
-  /** Копия корня треда поверх строк, в координатах содержимого. */
-  stickyRoot: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: 0,
   },
   /** Отступ перед первой строкой под шапкой и пустое состояние. */
   listTop: {
@@ -125,7 +126,7 @@ export const styles = StyleSheet.create({
     paddingVertical: Spacing.three,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
-  /** Разрыв треда «Показать ещё» и загрузка — на месте ответа, с тем же отступом. */
+  /** Разрыв треда «Показать ещё» и загрузка — на месте ответа. */
   threadAction: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -133,33 +134,27 @@ export const styles = StyleSheet.create({
     minHeight: Sizes.threadToggle,
     marginBottom: Spacing.two,
   },
-  /** Кнопка треда сбоку от облачка корня — внизу, у края облачка. */
-  threadToggle: {
-    alignSelf: 'flex-end',
+  /** «N ответов» под облачком корня — вплотную к нему, по его краю. */
+  repliesButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.one,
+    gap: Spacing.half,
     height: Sizes.threadToggle,
-    paddingHorizontal: Spacing.two + Spacing.half,
-    borderRadius: Radii.full,
+    marginTop: -Spacing.one,
+    marginBottom: Spacing.one,
   },
-  /**
-   * Фон раскрытого треда — кусок на высоту строки, как рамка островка: строки
-   * состыкованы, верх скруглён у корня, низ — у последней строки.
-   */
-  threadBackground: {
-    position: 'absolute',
-    top: 0,
-    bottom: 0,
-    left: Spacing.two,
-    right: Spacing.two,
+  /** У чужого — под левым краем облачка, после аватара и зазора. */
+  repliesButtonOther: {
+    alignSelf: 'flex-start',
+    marginLeft: Spacing.five + Spacing.two,
   },
-  threadBackgroundFirst: {
-    borderTopLeftRadius: Radii.lg,
-    borderTopRightRadius: Radii.lg,
+  repliesButtonOwn: {
+    alignSelf: 'flex-end',
   },
-  threadBackgroundLast: {
-    borderBottomLeftRadius: Radii.lg,
-    borderBottomRightRadius: Radii.lg,
+  /** Стрелка назад и «Ответы» в шапке окна треда. */
+  titleStart: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
   },
 });

@@ -1,24 +1,23 @@
 import type { FlashListRef, ListRenderItem } from '@shopify/flash-list';
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, useWindowDimensions, type TextInput } from 'react-native';
 import { GestureDetector } from 'react-native-gesture-handler';
 import { KeyboardEvents } from 'react-native-keyboard-controller';
-import Animated from 'react-native-reanimated';
+import Animated, { type SharedValue } from 'react-native-reanimated';
 
-import { CommentList } from './CommentList';
+import type { CommentHighlight } from './CommentList';
 import { CommentRowView } from './CommentRowView';
+import { PaneList } from './PaneList';
 import { PanelFooter } from './PanelFooter';
 import { PanelHeader } from './PanelHeader';
 import type { CommentRow } from './rows';
 import { SheetHeader } from './SheetHeader';
-import { CommentsSheetContext, type CommentsSheetContextValue } from './SheetList';
-import { headerBottom } from './stickyRoot';
 import { styles } from './styles';
 import { ThreadGapRow } from './ThreadGapRow';
 import { usePanelActions } from './usePanelActions';
 import { usePanelComments } from './usePanelComments';
 import type { PanelSheet } from './usePanelSheet';
-import { useStickyThread } from './useStickyThread';
+import { useThreadPane } from './useThreadPane';
 
 import { mosaicBounds } from '@/features/chats/lib/mosaicLayout';
 import { MessageBubble } from '@/features/chats/MessageBubble';
@@ -28,16 +27,26 @@ import { DELETED_ACCOUNT } from '@/features/chats/messageQuote';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
 import { visibleQuotes, type CommentItem } from '@/features/interactions/comments/commentItem';
 import { commentsCountLabel } from '@/features/interactions/comments/commentsCount';
-import type { CommentsPanelTarget } from '@/features/interactions/comments/commentsPanelStore';
+import {
+  getOpenThread,
+  setOpenThread,
+  useOpenThread,
+  type CommentsPanelTarget,
+} from '@/features/interactions/comments/commentsPanelStore';
 import { useJumpToComment } from '@/features/interactions/comments/useJumpToComment';
 import { audienceOf } from '@/features/interactions/reactionState';
 import { showNotice } from '@/features/notifications/alertsStore';
 import { useTheme } from '@/hooks/use-theme';
-import { Sizes, Spacing } from '@/theme';
+import { Spacing } from '@/theme';
 
 /** Облачко чужого начинается после аватара и зазора (`MessageBubble`). */
 const BUBBLE_LEADING_INSET = Spacing.five + Spacing.two;
 const MEMBER_BADGE = 'участник чата';
+
+const exitThread = () => setOpenThread(null);
+const noop = () => undefined;
+
+type ListRef = React.RefObject<FlashListRef<CommentRow> | null>;
 
 export type PanelContentProps = {
   target: CommentsPanelTarget;
@@ -45,11 +54,18 @@ export type PanelContentProps = {
   onOpenPerson: (userId: string) => void;
   /** Чат экрана под панелью — см. `CommentsPanelProps`. */
   hostChatId?: string;
-  /** «Назад» сначала спрашивает содержимое: правка и выбор выходят первыми. */
+  /** «Назад» сначала спрашивает содержимое: правка, выбор и окно треда выходят первыми. */
   backRef: { current: () => boolean };
 };
 
-/** Всё, что внутри шита: заголовок, комментарии с тредами, поле ввода и меню. */
+/**
+ * Всё, что внутри шита: заголовок, основной список комментариев, окно треда
+ * поверх него, поле ввода и меню.
+ *
+ * Списков два, и оба смонтированы всё время: основной под окном треда не
+ * теряет прокрутку и не строится заново. У каждого свой жест закрытия и своя
+ * позиция скролла (`usePanelSheet`), так что шит тянет тот, что на экране.
+ */
 export function PanelContent({
   target,
   sheet,
@@ -61,36 +77,40 @@ export function PanelContent({
   const currentUserId = useCurrentUserId();
   const { width } = useWindowDimensions();
   const mediaBounds = useMemo(() => mosaicBounds(width - Spacing.three * 2), [width]);
-  const replyBounds = useMemo(
-    () => mosaicBounds(width - Spacing.three * 2 - Sizes.threadIndent),
-    [width],
-  );
-  const data = usePanelComments(target, currentUserId);
-  const { about, live, amMember, comments, openThread, thread, rows } = data;
-  const listRef = sheet.listRef as unknown as React.RefObject<FlashListRef<CommentRow> | null>;
+  const openThread = useOpenThread();
+  const threadPane = useThreadPane({ openThread, width, onExit: exitThread });
+  const data = usePanelComments(target, currentUserId, threadPane.shownRoot);
+  const { about, live, amMember, comments, thread, rows, threadRows } = data;
+  const listRef = sheet.main.listRef as unknown as ListRef;
+  const threadListRef = sheet.thread.listRef as unknown as ListRef;
   const inputRef = useRef<TextInput>(null);
   const [composerHeight, setComposerHeight] = useState(0);
   const [keyboardInset, setKeyboardInset] = useState(0);
   const closed = about?.state === 'deleted' || about?.state === 'missing';
-  const { geometry, headerHeight, scrollOffset, close, closeNow } = sheet;
+  const { geometry, headerHeight, close, closeNow } = sheet;
 
-  const sticky = useStickyThread({
+  const mainJump = useJumpToComment(
     listRef,
-    rows,
-    openThread,
-    scrollOffset,
-    headerHeight,
-  });
-
-  const jumpSource = useMemo(
-    () => ({
-      keys: rows.map((row) => row.key),
-      hasMore: openThread ? thread.hasGap : comments.hasMore,
-      loadMore: openThread ? thread.loadMore : comments.loadMore,
-    }),
-    [comments.hasMore, comments.loadMore, openThread, rows, thread],
+    useMemo(
+      () => ({
+        keys: rows.map((row) => row.key),
+        hasMore: comments.hasMore,
+        loadMore: comments.loadMore,
+      }),
+      [comments.hasMore, comments.loadMore, rows],
+    ),
   );
-  const { jump, highlight } = useJumpToComment(listRef, jumpSource);
+  const threadJump = useJumpToComment(
+    threadListRef,
+    useMemo(
+      () => ({
+        keys: threadRows.map((row) => row.key),
+        hasMore: thread.hasGap,
+        loadMore: thread.loadMore,
+      }),
+      [thread.hasGap, thread.loadMore, threadRows],
+    ),
+  );
 
   const openPerson = useCallback(
     (userId: string) => {
@@ -106,20 +126,21 @@ export function PanelContent({
     live,
     data,
     currentUserId,
+    openThread: openThread?.rootId ?? null,
     inputRef,
     listRef,
+    threadListRef,
     sheet,
-    stickyCollapse: sticky.prepareCollapse,
-    stickySwitch: sticky.prepareSwitch,
-    jump,
+    jump: threadJump.jump,
   });
 
   useEffect(() => {
     backRef.current = actions.back;
   }, [actions.back, backRef]);
 
-  // Пришли к комментарию — он вспыхивает, когда встал в список. Виден и так —
-  // шит не двигается: над ним в переписке стоит сообщение этого комментария.
+  // Пришли к комментарию — он вспыхивает, когда встал в список: ответ — в
+  // окне своего треда, верхнеуровневый — в основном. Виден и так — список не
+  // двигается: над шитом в переписке стоит сообщение этого комментария.
   const { focusReady } = data;
   const sheetLayout = useRef({ headerHeight: 0, visibleHeight: 0 });
 
@@ -130,23 +151,43 @@ export function PanelContent({
     };
   }, [composerHeight, geometry.height, headerHeight, keyboardInset]);
 
-  useEffect(() => {
-    if (!focusReady) return;
+  // Окно треда — один список на все треды: новый тред начинается сверху, и
+  // жест закрытия не опирается на прокрутку прежнего.
+  const enteredRoot = openThread?.rootId ?? null;
+  const { scrollToTop: threadToTop } = sheet.thread;
 
+  useEffect(() => {
+    if (enteredRoot) threadToTop();
+  }, [enteredRoot, threadToTop]);
+
+  const { jump: jumpMain } = mainJump;
+  const { jump: jumpThread } = threadJump;
+  const mainOffset = sheet.main.scrollOffset;
+  const threadOffset = sheet.thread.scrollOffset;
+
+  // В окне треда — когда легло начало треда: до того ответ стоит в хвосте, а
+  // потом переезжает на своё место, и прыжок пришёлся бы мимо.
+  const threadSettling = openThread !== null && thread.isLoading && !thread.failed;
+  const jumpedTo = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!focusReady || threadSettling || jumpedTo.current === focusReady) return;
+
+    jumpedTo.current = focusReady;
+
+    const inThread = getOpenThread() !== null;
+    const offset: SharedValue<number> = inThread ? threadOffset : mainOffset;
     // Видно — между низом шапки шита и полем ввода.
     const visible = () => {
       const { headerHeight: header, visibleHeight } = sheetLayout.current;
 
-      return {
-        top: headerBottom(scrollOffset.value, header),
-        bottom: scrollOffset.value + visibleHeight,
-      };
+      return { top: offset.value + header, bottom: offset.value + visibleHeight };
     };
 
-    void jump(focusReady, { visible }).then((found) => {
+    void (inThread ? jumpThread : jumpMain)(focusReady, { visible }).then((found) => {
       if (!found) showNotice('Не удалось найти комментарий', 'error');
     });
-  }, [focusReady, jump, scrollOffset]);
+  }, [focusReady, jumpMain, jumpThread, mainOffset, threadOffset, threadSettling]);
 
   // Место под клавиатурой в конце списка: последний комментарий виден над ней.
   useEffect(() => {
@@ -164,7 +205,7 @@ export function PanelContent({
   const { retry, react } = comments;
   const myAudience = audienceOf(amMember);
   const renderBubble = useCallback(
-    (item: CommentItem, aside: ReactNode = null, interactive = true) => {
+    (item: CommentItem, interactive = true) => {
       const { authorId } = item;
       const quotes = visibleQuotes(item);
 
@@ -177,7 +218,7 @@ export function PanelContent({
           authorName={item.authorName ?? DELETED_ACCOUNT}
           authorAvatarUrl={item.authorAvatarUrl}
           authorBadge={item.audience === 'member' ? MEMBER_BADGE : null}
-          mediaBounds={item.threadRootId ? replyBounds : mediaBounds}
+          mediaBounds={mediaBounds}
           onRetry={retry}
           onAuthorPress={interactive && authorId ? () => openPerson(authorId) : undefined}
           onQuotePress={interactive ? (quote) => void actions.jumpToQuote(quote.messageId) : undefined}
@@ -185,116 +226,131 @@ export function PanelContent({
           onReactionToggle={
             interactive && canReactTo(item) ? (emoji) => react(item, emoji) : undefined
           }
-          aside={aside}
         />
       );
     },
-    [actions, currentUserId, mediaBounds, myAudience, openPerson, react, replyBounds, retry],
+    [actions, currentUserId, mediaBounds, myAudience, openPerson, react, retry],
   );
 
   const { selection } = actions;
   const editingId = actions.edit.mode?.message.id ?? null;
 
-  const renderComment = useCallback(
-    (row: Extract<CommentRow, { type: 'comment' }>) => (
-      <CommentRowView
-        comment={row.comment}
-        thread={row.thread}
-        replies={row.replies}
-        selectionMode={selection.isActive}
-        selected={selection.isSelected(row.comment.id)}
-        editing={row.comment.id === editingId}
-        highlightKey={highlight?.id === row.comment.id ? highlight.key : null}
-        threadOpen={openThread === row.comment.id}
-        onOpenMenu={actions.openMenu}
-        onSelect={actions.selectOne}
-        onToggle={actions.toggleSelected}
-        onSwipeReply={closed ? undefined : actions.replyTo}
-        onToggleThread={actions.toggleThread}
-        renderBubble={renderBubble}
-      />
-    ),
-    [actions, closed, editingId, highlight, openThread, renderBubble, selection],
+  const rowRenderer = useCallback(
+    (highlight: CommentHighlight | null): ListRenderItem<CommentRow> =>
+      function renderRow({ item }) {
+        if (item.type !== 'comment') {
+          return (
+            <ThreadGapRow
+              hidden={item.type === 'thread-gap' ? item.hidden : null}
+              isLoading={item.type === 'thread-gap' && thread.isLoadingMore}
+              failed={item.type === 'thread-failed'}
+              onPress={item.type === 'thread-failed' ? thread.retry : () => void thread.loadMore()}
+            />
+          );
+        }
+
+        const { comment } = item;
+
+        return (
+          <CommentRowView
+            comment={comment}
+            threadRoot={item.threadRoot}
+            replies={item.replies}
+            isOwn={comment.authorId !== null && comment.authorId === currentUserId}
+            selectionMode={selection.isActive}
+            selected={selection.isSelected(comment.id)}
+            editing={comment.id === editingId}
+            highlightKey={highlight?.id === comment.id ? highlight.key : null}
+            onOpenMenu={actions.openMenu}
+            onSelect={actions.selectOne}
+            onToggle={actions.toggleSelected}
+            onSwipeReply={closed ? undefined : actions.replyTo}
+            onOpenThread={actions.openThread}
+            renderBubble={renderBubble}
+          />
+        );
+      },
+    [actions, closed, currentUserId, editingId, renderBubble, selection, thread],
   );
 
-  const renderRow = useCallback<ListRenderItem<CommentRow>>(
-    ({ item }) =>
-      item.type === 'comment' ? (
-        renderComment(item)
-      ) : (
-        <ThreadGapRow
-          thread={item.thread}
-          hidden={item.type === 'thread-gap' ? item.hidden : null}
-          isLoading={item.type === 'thread-gap' && thread.isLoadingMore}
-          onPress={() => void thread.loadMore()}
-        />
-      ),
-    [renderComment, thread],
+  const renderMainRow = useMemo(
+    () => rowRenderer(mainJump.highlight),
+    [mainJump.highlight, rowRenderer],
+  );
+  const renderThreadRow = useMemo(
+    () => rowRenderer(threadJump.highlight),
+    [rowRenderer, threadJump.highlight],
   );
 
   const count = live?.message.commentsCount ?? 0;
-  const stickyRoot = sticky.rootRow?.type === 'comment' ? sticky.rootRow : null;
-
-  const overlay = (
-    <>
-      {stickyRoot ? (
-        <Animated.View
-          testID="sticky-thread-root"
-          pointerEvents={sticky.stuck ? 'box-none' : 'none'}
-          // Непрозрачная подложка: под копией листаются ответы, а фон треда
-          // поверх неё полупрозрачный.
-          style={[styles.stickyRoot, { backgroundColor: theme.background }, sticky.style]}
-        >
-          {renderComment(stickyRoot)}
-        </Animated.View>
-      ) : null}
-    </>
-  );
-
-  const sheetContext: CommentsSheetContextValue = {
-    animatedRef: sheet.animatedRef,
-    gestureRef: sheet.scrollGestureRef,
-    scrollOffset,
+  const inThread = openThread !== null;
+  const listProps = {
+    closed,
+    headerSpace: headerHeight,
+    footerSpace: composerHeight + keyboardInset,
+    extraData: actions.extraData,
     dismissing: sheet.dismissing,
-    onScrollAttached: sheet.markScrollAttached,
-    overlay,
   };
 
   return (
     <>
       <Animated.View style={[styles.fill, sheet.shiftStyle]} pointerEvents="box-none">
-        <GestureDetector gesture={sheet.dismissPan}>
-          <View
-            style={[
-              styles.listWindow,
-              { top: geometry.top, backgroundColor: theme.background, borderColor: theme.border },
-            ]}
+        <View
+          style={[
+            styles.listWindow,
+            { top: geometry.top, backgroundColor: theme.background, borderColor: theme.border },
+          ]}
+        >
+          <Animated.View
+            style={[styles.fill, threadPane.underlayStyle]}
+            pointerEvents={inThread ? 'none' : 'auto'}
           >
-            <CommentsSheetContext.Provider value={sheetContext}>
-              <CommentList
-                listRef={listRef}
-                rows={rows}
-                isLoading={comments.isLoading}
-                isLoadingMore={comments.isLoadingMore}
-                hasMore={comments.hasMore}
-                error={comments.error}
-                closed={closed}
-                loadMore={comments.loadMore}
-                headerSpace={headerHeight}
-                footerSpace={composerHeight + keyboardInset}
-                renderRow={renderRow}
-                extraData={actions.extraData}
-                onCommitLayout={sticky.onCommitLayout}
+            <PaneList
+              {...listProps}
+              testID="comments-list"
+              pane={sheet.main}
+              listRef={listRef}
+              rows={rows}
+              isLoading={comments.isLoading}
+              isLoadingMore={comments.isLoadingMore}
+              hasMore={comments.hasMore}
+              error={comments.error}
+              loadMore={comments.loadMore}
+              renderRow={renderMainRow}
+            />
+          </Animated.View>
+
+          <GestureDetector gesture={threadPane.edgePan}>
+            <Animated.View
+              testID="comments-thread"
+              style={[styles.threadPane, { backgroundColor: theme.background }, threadPane.paneStyle]}
+              pointerEvents={inThread ? 'auto' : 'none'}
+            >
+              <PaneList
+                {...listProps}
+                testID="comments-thread-list"
+                pane={sheet.thread}
+                listRef={threadListRef}
+                rows={threadRows}
+                silentWhenEmpty
+                isLoading={false}
+                isLoadingMore={false}
+                hasMore={false}
+                error={null}
+                loadMore={noop}
+                renderRow={renderThreadRow}
               />
-            </CommentsSheetContext.Provider>
-            <SheetHeader onHeight={sheet.setHeaderHeight} pan={sheet.headerPan}>
-              <PanelHeader
-                title={count > 0 ? commentsCountLabel(count) : 'Комментарии'}
-                onClose={closeNow}
-              />
-            </SheetHeader>
-          </View>
-        </GestureDetector>
+            </Animated.View>
+          </GestureDetector>
+
+          <SheetHeader onHeight={sheet.setHeaderHeight} pan={sheet.headerPan}>
+            <PanelHeader
+              title={inThread ? 'Ответы' : count > 0 ? commentsCountLabel(count) : 'Комментарии'}
+              onClose={closeNow}
+              onBack={inThread ? exitThread : undefined}
+            />
+          </SheetHeader>
+        </View>
       </Animated.View>
 
       <PanelFooter
@@ -302,11 +358,12 @@ export function PanelContent({
         onHeight={setComposerHeight}
         actions={actions}
         closed={closed}
+        placeholder={inThread ? 'Ответить в треде' : 'Комментарий'}
       />
 
       <MessageContextMenu
         anchor={actions.menuAnchor}
-        preview={actions.menuComment ? renderBubble(actions.menuComment, null, false) : null}
+        preview={actions.menuComment ? renderBubble(actions.menuComment, false) : null}
         actions={actions.menuActions}
         reactions={actions.menuReactions}
         alignEnd={actions.menuComment?.authorId === currentUserId}
