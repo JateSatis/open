@@ -119,7 +119,7 @@ export function usePanelActions({
   const draft = useComposerDraft(commentThreadKey(messageId));
   const menu = useMessageMenu<CommentItem>(commentKey);
   const latestRows = useRef(rows);
-  const { close, expand, scrollOffset, geometry } = sheet;
+  const { close } = sheet;
 
   useEffect(() => {
     latestRows.current = rows;
@@ -169,7 +169,6 @@ export function usePanelActions({
     draft,
     inputRef,
     thread: comments,
-    onFieldActivate: expand,
     onForward: forward,
   });
 
@@ -229,9 +228,14 @@ export function usePanelActions({
   const afterSend = useCallback(
     (thread: CommentThreadTarget | null) => {
       if (!thread) {
-        if (scrollOffset.value > geometry.travel) {
-          listRef.current?.scrollToOffset({ offset: geometry.travel, animated: true });
-        }
+        // После того как строка встала в список: он держит видимые строки на
+        // месте, и новая наверху ушла бы под шапку шита.
+        void (async () => {
+          await nextFrame();
+          await nextFrame();
+
+          listRef.current?.scrollToOffset({ offset: 0, animated: true });
+        })();
         return;
       }
 
@@ -251,7 +255,7 @@ export function usePanelActions({
         if (last !== -1) listRef.current?.scrollToIndex({ index: last, viewPosition: 0.6, animated: true });
       })();
     },
-    [geometry.travel, listRef, scrollOffset],
+    [listRef],
   );
 
   const { mode } = draft;

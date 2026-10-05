@@ -1,6 +1,6 @@
 import type { Session as SupabaseSession } from '@supabase/supabase-js';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react-native';
-import { BackHandler } from 'react-native';
+import { BackHandler, ScrollView, View } from 'react-native';
 
 import ChatScreen from './[chatId]';
 
@@ -61,7 +61,9 @@ jest.mock('expo-router', () => ({
 
 jest.mock('@/api/profile', () => ({
   getProfile: jest.fn(() => Promise.resolve(null)),
-  getMyProfile: jest.fn(() => Promise.resolve({ id: 'user-3', displayName: 'Пётр', avatarUrl: null })),
+  getMyProfile: jest.fn(() =>
+    Promise.resolve({ id: 'user-3', displayName: 'Пётр', avatarUrl: null }),
+  ),
 }));
 jest.mock('@/features/auth/useSession', () => ({ useSession: jest.fn() }));
 jest.mock('@/api/streams');
@@ -352,18 +354,21 @@ describe('comments button next to the bubble', () => {
 });
 
 describe('comments panel', () => {
-  it('opens with the message on top, an honest empty state and a field — for a visitor too', async () => {
+  it('opens with only the comments inside, an honest empty state and a field — for a visitor too', async () => {
     await renderChat();
 
     // В самой переписке посетитель писать не может…
-    expect(screen.getByText('Читать этот чат может кто угодно, писать — только участники.')).toBeTruthy();
+    expect(
+      screen.getByText('Читать этот чат может кто угодно, писать — только участники.'),
+    ).toBeTruthy();
 
     await openCommentsOf(3);
 
     expect(
       await screen.findByText('Комментариев пока нет. Их увидит каждый, кто откроет этот чат.'),
     ).toBeTruthy();
-    expect(within(screen.getByTestId('comment-target')).getByText('текст m1')).toBeTruthy();
+    // Самого сообщения в шите нет — оно поднимается над шитом из переписки.
+    expect(within(screen.getByTestId('comments-panel')).queryByText('текст m1')).toBeNull();
     // …а комментировать — может.
     expect(commentField()).toBeTruthy();
   });
@@ -481,14 +486,43 @@ describe('comments panel', () => {
     await waitFor(() => expect(rowKeys()).toEqual(['mine', 'c1']));
   });
 
+  it('lifts a copy of the message above the sheet and hides nothing else of the chat', async () => {
+    // Строка и окно переписки на экране — с настоящей рамкой, а не нулевой.
+    const measure = (callback: (...rect: number[]) => void) => callback(0, 300, 320, 60);
+    const spies = [View, ScrollView].map((type) =>
+      jest
+        .spyOn(type.prototype as { measureInWindow: typeof measure }, 'measureInWindow')
+        .mockImplementation(measure),
+    );
+
+    try {
+      await renderChat();
+      await openCommentsOf(3);
+      await fireEvent(screen.getByTestId('comments-panel'), 'show');
+
+      const copy = await screen.findByTestId('comments-lifted-message');
+
+      expect(within(copy).getByText('текст m1')).toBeTruthy();
+      // Копия неинтерактивна: кнопка комментариев в ней только показывает число.
+      expect(within(copy).getByTestId('comments-button').props.accessibilityState).toEqual(
+        expect.objectContaining({ disabled: true }),
+      );
+      // Строка в переписке на месте — только прозрачная.
+      expect(screen.getByTestId('message-row-m1')).toBeTruthy();
+    } finally {
+      spies.forEach((spy) => spy.mockRestore());
+    }
+  });
+
   it('says the message is deleted and stops taking new comments', async () => {
     mockedTarget.mockResolvedValue({ state: 'deleted' });
 
     await renderChat();
     await openCommentsOf(3);
 
-    expect(await screen.findByText('Сообщение удалено')).toBeTruthy();
-    expect(screen.getByText('Сообщение удалено — новые комментарии не принимаются.')).toBeTruthy();
+    expect(
+      await screen.findByText('Сообщение удалено — новые комментарии не принимаются.'),
+    ).toBeTruthy();
     expect(screen.queryByPlaceholderText('Комментарий')).toBeNull();
   });
 });
@@ -596,8 +630,16 @@ describe('a visitor in the comments', () => {
 describe('threads', () => {
   const root = comment('root', { repliesCount: 2, text: 'корень' });
   const replies = [
-    comment('r1', { threadRootId: 'root', text: 'первый ответ', createdAt: '2026-09-30T11:01:00Z' }),
-    comment('r2', { threadRootId: 'root', text: 'второй ответ', createdAt: '2026-09-30T11:02:00Z' }),
+    comment('r1', {
+      threadRootId: 'root',
+      text: 'первый ответ',
+      createdAt: '2026-09-30T11:01:00Z',
+    }),
+    comment('r2', {
+      threadRootId: 'root',
+      text: 'второй ответ',
+      createdAt: '2026-09-30T11:02:00Z',
+    }),
   ];
 
   beforeEach(() => {
@@ -669,9 +711,7 @@ describe('threads', () => {
       fireEvent.press(screen.getAllByTestId('message-row-other')[0]);
     });
 
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Ответить' })).toBeDisabled(),
-    );
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Ответить' })).toBeDisabled());
   });
 });
 

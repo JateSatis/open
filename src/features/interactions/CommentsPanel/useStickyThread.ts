@@ -26,7 +26,6 @@ type Options = {
   rows: CommentRow[];
   openThread: string | null;
   scrollOffset: SharedValue<number>;
-  travel: number;
   headerHeight: number;
 };
 
@@ -45,7 +44,6 @@ export function useStickyThread({
   rows,
   openThread,
   scrollOffset,
-  travel,
   headerHeight,
 }: Options) {
   const layout = useSharedValue<ThreadLayout | null>(null);
@@ -82,9 +80,7 @@ export function useStickyThread({
     () => {
       const current = layout.value;
 
-      return current
-        ? isRootStuck(current, headerBottom(scrollOffset.value, travel, headerHeight))
-        : false;
+      return current ? isRootStuck(current, headerBottom(scrollOffset.value, headerHeight)) : false;
     },
     (now, before) => {
       if (now !== before) runOnJS(setStuck)(now);
@@ -96,7 +92,7 @@ export function useStickyThread({
 
     if (!current) return { opacity: 0, transform: [{ translateY: 0 }] };
 
-    const below = headerBottom(scrollOffset.value, travel, headerHeight);
+    const below = headerBottom(scrollOffset.value, headerHeight);
 
     return {
       opacity: isRootStuck(current, below) ? 1 : 0,
@@ -113,12 +109,12 @@ export function useStickyThread({
 
     if (!current) return;
 
-    const below = headerBottom(scrollOffset.value, travel, headerHeight);
+    const below = headerBottom(scrollOffset.value, headerHeight);
 
     if (isRootStuck(current, below)) {
       pendingScroll.current = scrollAfterCollapse(current, scrollOffset.value, below);
     }
-  }, [headerHeight, layout, scrollOffset, travel]);
+  }, [headerHeight, layout, scrollOffset]);
 
   /**
    * Раскрывается другой тред, раскрытый закрывается. Если он выше нового
@@ -137,13 +133,9 @@ export function useStickyThread({
 
       if (next <= bounds.last) return;
 
-      // Шит наверху там и остаётся: если над новым корнем не хватает
-      // содержимого, корень поднимется, но шапка и шит не сдвинутся.
-      const floor = scrollOffset.value >= travel ? travel : 0;
-
-      pendingScroll.current = Math.max(floor, scrollOffset.value - repliesHeight(current));
+      pendingScroll.current = Math.max(0, scrollOffset.value - repliesHeight(current));
     },
-    [bounds, layout, rows, scrollOffset, travel],
+    [bounds, layout, rows, scrollOffset],
   );
 
   return {

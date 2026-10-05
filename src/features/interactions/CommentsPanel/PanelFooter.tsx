@@ -18,15 +18,13 @@ export type PanelFooterProps = {
   actions: PanelActions;
   /** Сообщение удалено — новые комментарии не принимаются. */
   closed: boolean;
-  /** Касание поля — шит наверх. */
-  onFieldActivate: () => void;
 };
 
 /**
  * Низ панели — у края экрана, над клавиатурой своего поля: поле ввода или,
  * в режиме выбора, панель действий над выбранным.
  */
-export function PanelFooter({ style, onHeight, actions, closed, onFieldActivate }: PanelFooterProps) {
+export function PanelFooter({ style, onHeight, actions, closed }: PanelFooterProps) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { selection } = actions;
@@ -53,7 +51,6 @@ export function PanelFooter({ style, onHeight, actions, closed, onFieldActivate 
           closed={closed}
           onSend={actions.submit}
           onSendVoice={actions.sendVoice}
-          onFieldActivate={onFieldActivate}
         />
       </View>
     </Animated.View>

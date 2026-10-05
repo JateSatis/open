@@ -120,11 +120,11 @@ describe('buildCommentRows', () => {
 });
 
 describe('sticky thread root', () => {
-  // Корень на 500, высотой 80; тред кончается на 1500. Шапка 200, ход шита 300.
+  // Корень на 500, высотой 80; тред кончается на 1500. Шапка 200.
   const layout = { rootTop: 500, rootHeight: 80, threadBottom: 1500 };
 
   it('stands on the real root while the root is below the header', () => {
-    const below = headerBottom(100, 300, 200);
+    const below = headerBottom(300, 200);
 
     expect(below).toBe(500);
     expect(stickyRootTop(layout, below)).toBe(500);
@@ -132,21 +132,21 @@ describe('sticky thread root', () => {
   });
 
   it('sticks under the header while the thread scrolls', () => {
-    const below = headerBottom(700, 300, 200);
+    const below = headerBottom(700, 200);
 
     expect(stickyRootTop(layout, below)).toBe(900);
     expect(isRootStuck(layout, below)).toBe(true);
   });
 
   it('leaves with the bottom of the thread', () => {
-    const below = headerBottom(1400, 300, 200);
+    const below = headerBottom(1400, 200);
 
     expect(stickyRootTop(layout, below)).toBe(1420);
   });
 
   it('after hiding the thread puts the real root where the sticky copy was', () => {
     const scroll = 700;
-    const below = headerBottom(scroll, 300, 200);
+    const below = headerBottom(scroll, 200);
     const next = scrollAfterCollapse(layout, scroll, below);
 
     // Копия стояла на 900 − 700 = 200 от верха окна; корень встаёт туда же.
@@ -155,6 +155,6 @@ describe('sticky thread root', () => {
   });
 
   it('does not move the scroll when the root was not stuck', () => {
-    expect(scrollAfterCollapse(layout, 100, headerBottom(100, 300, 200))).toBe(100);
+    expect(scrollAfterCollapse(layout, 100, headerBottom(100, 200))).toBe(100);
   });
 });

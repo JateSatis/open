@@ -18,20 +18,25 @@ export type CommentsPanelTarget = {
    * его тред раскрыт, а сам он вспыхивает.
    */
   focusCommentId?: string;
+  /**
+   * Строка переписки, у которой открыли: её сообщение поднимается над шитом.
+   * Ключ строки, а не id сообщения: в островке одно сообщение бывает дважды.
+   */
+  rowKey?: string;
+  /** Строка ещё едет (прокрутка к ней) — поднимать, когда встанет. */
+  settle?: boolean;
 };
+
+/** Откуда поднимать сообщение над шитом — см. `CommentsPanelTarget`. */
+export type CommentsLiftFrom = { rowKey: string; settle?: boolean };
 
 type PanelState = {
   target: CommentsPanelTarget | null;
   /** Раскрытый тред — id корня. Раскрыт всегда не больше одного. */
   openThread: string | null;
-  /**
-   * Верх шита в среднем положении, в координатах окна. Известен, когда шапка
-   * шита замерена; по нему переписка под шитом ставит сообщение над ним.
-   */
-  restTop: number | null;
 };
 
-const usePanelStore = create<PanelState>(() => ({ target: null, openThread: null, restTop: null }));
+const usePanelStore = create<PanelState>(() => ({ target: null, openThread: null }));
 
 /**
  * Открывает панель комментариев к сообщению. Одна функция на всё
@@ -43,16 +48,16 @@ export function openComments(
   chatId?: string,
   amMember = false,
   focusCommentId?: string,
+  from?: CommentsLiftFrom,
 ) {
   usePanelStore.setState({
-    target: { messageId, chatId, amMember, focusCommentId },
+    target: { messageId, chatId, amMember, focusCommentId, ...from },
     openThread: null,
-    restTop: null,
   });
 }
 
 export function closeComments() {
-  usePanelStore.setState({ target: null, openThread: null, restTop: null });
+  usePanelStore.setState({ target: null, openThread: null });
 }
 
 export function useCommentsPanelTarget(): CommentsPanelTarget | null {
@@ -61,32 +66,6 @@ export function useCommentsPanelTarget(): CommentsPanelTarget | null {
 
 export function getCommentsPanelTarget(): CommentsPanelTarget | null {
   return usePanelStore.getState().target;
-}
-
-/** Шит замерен и встал в положения — или ушёл (`null`). */
-export function setPanelRestTop(restTop: number | null) {
-  usePanelStore.setState({ restTop });
-}
-
-/** Верх шита в среднем положении, как только он известен; `null` — не дождались. */
-export function waitPanelRestTop(timeoutMs: number): Promise<number | null> {
-  const known = usePanelStore.getState().restTop;
-
-  if (known !== null) return Promise.resolve(known);
-
-  return new Promise((resolve) => {
-    const timer = setTimeout(() => {
-      unsubscribe();
-      resolve(null);
-    }, timeoutMs);
-    const unsubscribe = usePanelStore.subscribe((state) => {
-      if (state.restTop === null) return;
-
-      clearTimeout(timer);
-      unsubscribe();
-      resolve(state.restTop);
-    });
-  });
 }
 
 export function useOpenThread(): string | null {
@@ -103,7 +82,8 @@ export function setOpenThread(rootId: string | null) {
 }
 
 /**
- * Кнопка комментариев в облачке переписки: число и открытие панели. Нет —
+ * Кнопка комментариев в облачке переписки: число и открытие панели.
+ * `rowKey` — строка облачка: её сообщение поднимется над шитом. Нет —
  * нет и кнопки (неотправленное, системное). У копии облачка в меню кнопка
  * только показывает число.
  *
@@ -116,12 +96,15 @@ export function commentsEntry(
   chatId: string,
   interactive: boolean,
   amMember: boolean,
+  rowKey?: string,
 ): { count: number; quiet: boolean; onPress?: () => void } | undefined {
   if (!canCommentOn(message)) return undefined;
 
   return {
     count: message.commentsCount,
     quiet: amMember && message.commentsCount === 0,
-    onPress: interactive ? () => openComments(message.id, chatId, amMember) : undefined,
+    onPress: interactive
+      ? () => openComments(message.id, chatId, amMember, undefined, rowKey ? { rowKey } : undefined)
+      : undefined,
   };
 }
