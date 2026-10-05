@@ -238,6 +238,9 @@ begin
     perform pg_temp.check('пересланный комментарий в островок не встаёт', sqlstate = '22023', sqlstate || ' ' || sqlerrm);
   end;
 
+  -- Форма — в обход RLS: прямую вставку пересланного отвергает уже политика
+  -- (comment_forwards_access.sql), схема держит и без неё.
+  perform pg_temp.as_service();
   begin
     insert into public.messages (chat_id, author_id, kind) values (chat_d, a, 'comment_forward');
     set constraints all immediate;
