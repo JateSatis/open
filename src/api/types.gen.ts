@@ -1328,6 +1328,10 @@ export type Database = {
         }
         Returns: string
       }
+      is_comment_thread_root: {
+        Args: { root: string; target_message: string }
+        Returns: boolean
+      }
       latest_chat_messages: {
         Args: { chat_ids: string[]; per_chat?: number }
         Returns: {
@@ -1513,12 +1517,21 @@ export type Database = {
         Args: { message_ids: string[]; target_forward: string }
         Returns: undefined
       }
+      resolve_comment_thread: {
+        Args: {
+          reply_to: string[]
+          target_message: string
+          thread_root: string
+        }
+        Returns: string
+      }
       send_comment: {
         Args: {
           comment_text: string
           media?: Json
           reply_to?: string[]
           target_message: string
+          thread_root?: string
         }
         Returns: string
       }
@@ -1532,7 +1545,12 @@ export type Database = {
         Returns: string
       }
       send_voice_comment: {
-        Args: { reply_to?: string[]; target_message: string; voice: Json }
+        Args: {
+          reply_to?: string[]
+          target_message: string
+          thread_root?: string
+          voice: Json
+        }
         Returns: string
       }
       send_voice_message: {
