@@ -17,18 +17,18 @@ type Source = {
 type JumpOptions = {
   flash?: boolean;
   /**
-   * Низ видимой части списка в координатах содержимого. Строка, которая и так
-   * целиком выше него, не прокручивается: прокрутка списка в шите — это и
-   * подъём шита, а он должен остаться на месте.
+   * Видимая часть списка в координатах содержимого. Строка, которая и так
+   * целиком в ней, не прокручивается: прокрутка списка в шите — это и подъём
+   * шита, а он должен остаться на месте.
    */
-  visibleBottom?: () => number;
+  visible?: () => { top: number; bottom: number };
 };
 
-/** Строка целиком видна, не доходя до `visibleBottom`. Раскладка появляется через кадр. */
+/** Строка целиком в видимой части. Раскладка появляется через кадр. */
 async function isInView<T>(
   listRef: RefObject<FlashListRef<T> | null>,
   index: number,
-  visibleBottom: () => number,
+  visible: () => { top: number; bottom: number },
 ): Promise<boolean> {
   let layout = listRef.current?.getLayout(index);
 
@@ -38,7 +38,15 @@ async function isInView<T>(
     layout = listRef.current?.getLayout(index);
   }
 
-  return layout !== undefined && layout.y + layout.height <= visibleBottom();
+  const list = listRef.current;
+
+  if (!layout || !list) return false;
+
+  // Раскладка строки — от первой строки, без шапки списка (хода шита).
+  const top = list.getFirstItemOffset() + layout.y;
+  const { top: visibleTop, bottom: visibleBottom } = visible();
+
+  return top >= visibleTop && top + layout.height <= visibleBottom;
 }
 
 /**
@@ -55,12 +63,12 @@ export function useJumpToComment<T>(listRef: RefObject<FlashListRef<T> | null>, 
   }, [source]);
 
   const jump = useCallback(
-    async (commentId: string, { flash = true, visibleBottom }: JumpOptions = {}): Promise<boolean> => {
+    async (commentId: string, { flash = true, visible }: JumpOptions = {}): Promise<boolean> => {
       for (let page = 0; page <= MAX_PAGES; page += 1) {
         const index = latest.current.keys.indexOf(commentId);
 
         if (index !== -1) {
-          if (!visibleBottom || !(await isInView(listRef, index, visibleBottom))) {
+          if (!visible || !(await isInView(listRef, index, visible))) {
             listRef.current?.scrollToIndex({ index, viewPosition: 0.5, animated: true });
           }
           if (flash) setHighlight({ id: commentId, key: Date.now() });

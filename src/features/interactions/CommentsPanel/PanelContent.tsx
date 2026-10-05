@@ -13,6 +13,7 @@ import { PanelHeader } from './PanelHeader';
 import type { CommentRow } from './rows';
 import { SheetHeader } from './SheetHeader';
 import { CommentsSheetContext, type CommentsSheetContextValue } from './SheetList';
+import { headerBottom } from './stickyRoot';
 import { styles } from './styles';
 import { ThreadGapRow } from './ThreadGapRow';
 import { usePanelActions } from './usePanelActions';
@@ -139,18 +140,30 @@ export function PanelContent({
   // Пришли к комментарию — он вспыхивает, когда встал в список. Виден и так —
   // шит не двигается: над ним в переписке стоит сообщение этого комментария.
   const { focusReady } = data;
-  const visibleListHeight = useRef(0);
+  const sheetLayout = useRef({ travel: 0, headerHeight: 0, visibleHeight: 0 });
 
   useEffect(() => {
-    visibleListHeight.current = geometry.listHeight - composerHeight - keyboardInset;
-  }, [composerHeight, geometry.listHeight, keyboardInset]);
+    sheetLayout.current = {
+      travel: geometry.travel,
+      headerHeight,
+      visibleHeight: geometry.listHeight - composerHeight - keyboardInset,
+    };
+  }, [composerHeight, geometry.listHeight, geometry.travel, headerHeight, keyboardInset]);
 
   useEffect(() => {
     if (!focusReady) return;
 
-    const visibleBottom = () => scrollOffset.value + visibleListHeight.current;
+    // Видно — между низом шапки шита и полем ввода.
+    const visible = () => {
+      const { travel, headerHeight: header, visibleHeight } = sheetLayout.current;
 
-    void jump(focusReady, { visibleBottom }).then((found) => {
+      return {
+        top: headerBottom(scrollOffset.value, travel, header),
+        bottom: scrollOffset.value + visibleHeight,
+      };
+    };
+
+    void jump(focusReady, { visible }).then((found) => {
       if (!found) showNotice('Не удалось найти комментарий', 'error');
     });
   }, [focusReady, jump, scrollOffset]);
