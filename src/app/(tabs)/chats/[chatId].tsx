@@ -88,6 +88,8 @@ const rowKey = (row: ChatListRow) => row.key;
 
 /** Ближе этого к самому новому сообщению список держится за низ переписки, а не за прочитанное. */
 const KEEP_READING_POSITION = { minIndexForVisible: 0, autoscrollToTopThreshold: Spacing.six };
+/** Положение прокрутки нужно учёту просмотров лишь примерно: у низа или нет. */
+const VIEWS_SCROLL_THROTTLE_MS = 100;
 
 /**
  * Облачко чужого сообщения начинается после аватара и зазора (`MessageBubble`).
@@ -200,7 +202,13 @@ export default function ChatScreen() {
   useEffect(() => () => stopVoice(), [chatId]);
 
   useMarkChatRead(chatId, messages.length > 0 ? messages[0].id : null, isMember);
-  const views = useMessageViews(chatId, currentUserId, isFocused);
+  const views = useMessageViews({
+    chatId,
+    currentUserId,
+    isFocused,
+    rows,
+    autoscrollThreshold: KEEP_READING_POSITION.autoscrollToTopThreshold,
+  });
 
   const readUpTo = useMemo(() => readUpToOf(chat, currentUserId), [chat, currentUserId]);
 
@@ -580,6 +588,8 @@ export default function ChatScreen() {
                 renderItem={renderItem}
                 viewabilityConfig={views.viewabilityConfig}
                 onViewableItemsChanged={views.onViewableItemsChanged}
+                onScroll={views.onScroll}
+                scrollEventThrottle={VIEWS_SCROLL_THROTTLE_MS}
                 contentContainerStyle={styles.list}
                 // The list is inverted, so its "end" is the top of the screen:
                 // scrolling up pages further back through the history.

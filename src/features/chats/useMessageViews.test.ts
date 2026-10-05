@@ -36,6 +36,22 @@ function message(id: string, authorId: string, extra: Partial<ChatMessage> = {})
 const tokens = (rows: ChatListRow[]) =>
   rows.map((item, index) => ({ item, key: item.key, index, isViewable: true }) as ViewToken<ChatListRow>);
 
+function options(extra: Partial<Parameters<typeof useMessageViews>[0]> = {}) {
+  return {
+    chatId: 'chat-1',
+    currentUserId: 'me',
+    isFocused: true,
+    rows: [] as ChatListRow[],
+    autoscrollThreshold: 64,
+    ...extra,
+  };
+}
+
+const scrolledTo = (y: number) =>
+  ({ nativeEvent: { contentOffset: { x: 0, y } } }) as Parameters<
+    ReturnType<typeof useMessageViews>['onScroll']
+  >[0];
+
 let appStateListener: ((state: AppStateStatus) => void) | null = null;
 
 beforeEach(() => {
@@ -81,7 +97,7 @@ describe('viewedMessageOf', () => {
 
 describe('useMessageViews', () => {
   it('копит показанное и отправляет пачкой, каждое — раз за сессию', async () => {
-    const { result } = await renderHook(() => useMessageViews('chat-1', 'me', true));
+    const { result } = await renderHook(() => useMessageViews(options()));
     const rows = toChatRows([message('m2', 'other'), message('m1', 'other')]);
 
     await act(() => result.current.onViewableItemsChanged({ viewableItems: tokens(rows) }));
@@ -103,7 +119,7 @@ describe('useMessageViews', () => {
   });
 
   it('оригиналы островка уходят вызовом на чат оригинала', async () => {
-    const { result } = await renderHook(() => useMessageViews('chat-1', 'me', true));
+    const { result } = await renderHook(() => useMessageViews(options()));
     const rows = toChatRows([
       message('m1', 'other'),
       { ...island('f1', '2026-10-05T10:00:00Z', [original({ id: 'o1' })]), status: 'sent' },
@@ -117,7 +133,7 @@ describe('useMessageViews', () => {
   });
 
   it('уход с экрана отправляет сразу, новый вход — новая сессия', async () => {
-    const first = await renderHook(() => useMessageViews('chat-1', 'me', true));
+    const first = await renderHook(() => useMessageViews(options()));
 
     await act(() =>
       first.result.current.onViewableItemsChanged({
@@ -129,7 +145,7 @@ describe('useMessageViews', () => {
     expect(record).toHaveBeenCalledTimes(1);
     const firstSession = record.mock.calls[0][2];
 
-    const second = await renderHook(() => useMessageViews('chat-1', 'me', true));
+    const second = await renderHook(() => useMessageViews(options()));
 
     await act(() =>
       second.result.current.onViewableItemsChanged({
@@ -143,7 +159,7 @@ describe('useMessageViews', () => {
   });
 
   it('в фоне не засчитывает, а по возвращении засчитывает то, что на экране', async () => {
-    const { result } = await renderHook(() => useMessageViews('chat-1', 'me', true));
+    const { result } = await renderHook(() => useMessageViews(options()));
 
     await act(() => appStateListener?.('background'));
     await act(() =>
@@ -163,7 +179,7 @@ describe('useMessageViews', () => {
 
   it('пока экран чата не наверху, не засчитывает', async () => {
     const { result, rerender } = await renderHook(
-      ({ focused }: { focused: boolean }) => useMessageViews('chat-1', 'me', focused),
+      ({ focused }: { focused: boolean }) => useMessageViews(options({ isFocused: focused })),
       { initialProps: { focused: false } },
     );
 
@@ -183,13 +199,40 @@ describe('useMessageViews', () => {
   });
 
   it('своё не отправляет вовсе', async () => {
-    const { result } = await renderHook(() => useMessageViews('chat-1', 'me', true));
+    const { result } = await renderHook(() => useMessageViews(options()));
 
     await act(() =>
       result.current.onViewableItemsChanged({
         viewableItems: tokens(toChatRows([message('m1', 'me')])),
       }),
     );
+    await act(() => jest.advanceTimersByTime(5000));
+
+    expect(record).not.toHaveBeenCalled();
+  });
+
+  it('новое снизу у низа переписки засчитывается без события видимости', async () => {
+    const old = toChatRows([message('m1', 'other')]);
+    const { rerender } = await renderHook(
+      ({ rows }: { rows: ChatListRow[] }) => useMessageViews(options({ rows })),
+      { initialProps: { rows: old } },
+    );
+
+    await rerender({ rows: toChatRows([message('m2', 'other'), message('m1', 'other')]) });
+    await act(() => jest.advanceTimersByTime(2000));
+
+    expect(record).toHaveBeenCalledWith('chat-1', ['m2'], expect.any(String));
+  });
+
+  it('новое снизу, пока человек читает выше, не засчитывается', async () => {
+    const old = toChatRows([message('m1', 'other')]);
+    const { result, rerender } = await renderHook(
+      ({ rows }: { rows: ChatListRow[] }) => useMessageViews(options({ rows })),
+      { initialProps: { rows: old } },
+    );
+
+    await act(() => result.current.onScroll(scrolledTo(500)));
+    await rerender({ rows: toChatRows([message('m2', 'other'), message('m1', 'other')]) });
     await act(() => jest.advanceTimersByTime(5000));
 
     expect(record).not.toHaveBeenCalled();

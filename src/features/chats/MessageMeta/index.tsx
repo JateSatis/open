@@ -1,12 +1,25 @@
 import { ActivityIndicator, Pressable, View } from 'react-native';
 
-import { styles } from './styles';
+import { READ_OUTLINE, styles } from './styles';
 
 import { Text } from '@/components/Text';
 import { formatMessageTime } from '@/features/chats/chatDisplay';
 import type { ChatMessage } from '@/features/chats/useChatMessages';
 import { useTheme } from '@/hooks/use-theme';
-import type { ThemeColor } from '@/theme';
+import { Sizes, type ThemeColor } from '@/theme';
+
+const W = Sizes.metaReadOutline;
+/** Белые копии времени под синим, сдвинутые во все стороны, — контур вокруг букв. */
+const STROKE_OFFSETS = [
+  [-W, -W],
+  [0, -W],
+  [W, -W],
+  [-W, 0],
+  [W, 0],
+  [-W, W],
+  [0, W],
+  [W, W],
+] as const;
 
 export type MessageMetaProps = {
   message: ChatMessage;
@@ -73,13 +86,21 @@ export function MessageMeta({
             testID="message-time"
             accessible
             accessibilityLabel={pending ? 'Отправляется' : read ? `${time}, прочитано` : time}
-            style={outlined && styles.readPill}
+            style={outlined && READ_OUTLINE === 'pill' && styles.readPill}
           >
-            <Text
-              variant="meta"
-              color={read ? 'primary' : tone}
-              style={[pending && styles.hidden, outlined && styles.readStroke]}
-            >
+            {outlined && READ_OUTLINE === 'stroke'
+              ? STROKE_OFFSETS.map(([x, y]) => (
+                  <Text
+                    key={`${x}:${y}`}
+                    variant="meta"
+                    color="metaReadOutline"
+                    style={[styles.strokeCopy, { left: x, top: y }]}
+                  >
+                    {time}
+                  </Text>
+                ))
+              : null}
+            <Text variant="meta" color={read ? 'primary' : tone} style={pending && styles.hidden}>
               {time}
             </Text>
             {pending ? (

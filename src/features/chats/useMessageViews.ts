@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   AppState,
   type AppStateStatus,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
   type ViewabilityConfig,
   type ViewToken,
 } from 'react-native';
@@ -58,6 +60,7 @@ function newSessionId(): string {
 export type MessageViewTracking = {
   viewabilityConfig: ViewabilityConfig;
   onViewableItemsChanged: (info: { viewableItems: ViewToken<ChatListRow>[] }) => void;
+  onScroll: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
 };
 
 /**
@@ -67,11 +70,21 @@ export type MessageViewTracking = {
  * засчитывается — а вернулись, и то, что сейчас на экране, засчитано.
  * Увиденное копится и уходит пачкой раз в пару секунд и при уходе с экрана.
  */
-export function useMessageViews(
-  chatId: string,
-  currentUserId: string | null,
-  isFocused: boolean,
-): MessageViewTracking {
+export function useMessageViews({
+  chatId,
+  currentUserId,
+  isFocused,
+  rows,
+  autoscrollThreshold,
+}: {
+  chatId: string;
+  currentUserId: string | null;
+  isFocused: boolean;
+  /** Строки переписки — новыми вперёд, как в списке. */
+  rows: ChatListRow[];
+  /** Ближе этого к низу переписки список сам докручивает до нового сообщения. */
+  autoscrollThreshold: number;
+}): MessageViewTracking {
   const sessionId = useMemo(() => newSessionId(), []);
   const userRef = useRef(currentUserId);
   const visibleRef = useRef<ViewedMessage[]>([]);
@@ -149,6 +162,44 @@ export function useMessageViews(
     [],
   );
 
+  // Пришедшее снизу, пока человек у низа переписки, — на экране: список сам
+  // докручивает до него. Но `onViewableItemsChanged` об этом не узнает: после
+  // вставки в начало с `maintainVisibleContentPosition` VirtualizedList ждёт
+  // события прокрутки, а у самого низа его не бывает, и видимость стоит до
+  // первой прокрутки пальцем. Поэтому новые строки внизу засчитываются здесь.
+  const offsetRef = useRef(0);
+  const firstKeyRef = useRef<string | null>(null);
+
+  const onScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    offsetRef.current = event.nativeEvent.contentOffset.y;
+  }, []);
+
+  useEffect(() => {
+    const previous = firstKeyRef.current;
+
+    firstKeyRef.current = rows[0]?.key ?? null;
+
+    if (previous === null || offsetRef.current > autoscrollThreshold) return;
+
+    const end = rows.findIndex((row) => row.key === previous);
+
+    // Прежней первой строки нет — история пересобрана, а не дополнена снизу.
+    if (end <= 0) return;
+
+    const arrived = rows
+      .slice(0, end)
+      .flatMap((row) => {
+        const viewed = viewedMessageOf(row, userRef.current);
+
+        return viewed ? [viewed] : [];
+      });
+
+    if (arrived.length === 0) return;
+
+    visibleRef.current = [...arrived, ...visibleRef.current];
+    collect();
+  }, [autoscrollThreshold, collect, rows]);
+
   useEffect(() => {
     focusedRef.current = isFocused;
 
@@ -170,5 +221,5 @@ export function useMessageViews(
   // Ушли с экрана — увиденное уходит сразу, не дожидаясь таймера.
   useEffect(() => () => flush(), [flush, chatId]);
 
-  return { viewabilityConfig: VIEWABILITY, onViewableItemsChanged };
+  return { viewabilityConfig: VIEWABILITY, onViewableItemsChanged, onScroll };
 }
