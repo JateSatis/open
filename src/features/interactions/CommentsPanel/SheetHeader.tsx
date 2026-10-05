@@ -7,7 +7,7 @@ import { styles } from './styles';
 import { useTheme } from '@/hooks/use-theme';
 
 export type SheetHeaderProps = {
-  /** Ход шита: здесь шапка стоит в содержимом, пока шит не доехал доверху. */
+  /** Ход шита: на этой высоте окна стоит шапка, пока шит не доехал доверху. */
   travel: number;
   scrollOffset: SharedValue<number>;
   onHeight: (height: number) => void;

@@ -13,6 +13,7 @@ import { PanelHeader } from './PanelHeader';
 import type { CommentRow } from './rows';
 import { SheetHeader } from './SheetHeader';
 import { CommentsSheetContext, type CommentsSheetContextValue } from './SheetList';
+import { headerBottom } from './stickyRoot';
 import { styles } from './styles';
 import { ThreadGapRow } from './ThreadGapRow';
 import { usePanelActions } from './usePanelActions';
@@ -46,12 +47,20 @@ export type PanelContentProps = {
   target: CommentsPanelTarget;
   sheet: PanelSheet;
   onOpenPerson: (userId: string) => void;
+  /** Чат экрана под панелью — см. `CommentsPanelProps`. */
+  hostChatId?: string;
   /** «Назад» сначала спрашивает содержимое: правка и выбор выходят первыми. */
   backRef: { current: () => boolean };
 };
 
 /** Всё, что внутри панели: сообщение сверху, комментарии с тредами, поле ввода и меню. */
-export function PanelContent({ target, sheet, onOpenPerson, backRef }: PanelContentProps) {
+export function PanelContent({
+  target,
+  sheet,
+  onOpenPerson,
+  hostChatId,
+  backRef,
+}: PanelContentProps) {
   const theme = useTheme();
   const currentUserId = useCurrentUserId();
   const { width } = useWindowDimensions();
@@ -98,6 +107,7 @@ export function PanelContent({ target, sheet, onOpenPerson, backRef }: PanelCont
 
   const actions = usePanelActions({
     target,
+    hostChatId,
     live,
     data,
     currentUserId,
@@ -127,16 +137,36 @@ export function PanelContent({ target, sheet, onOpenPerson, backRef }: PanelCont
     if (headerHeight > 0 && (about !== undefined || waited)) markReady();
   }, [about, headerHeight, markReady, waited]);
 
-  // Пришли к комментарию — он вспыхивает, когда встал в список.
+  // Пришли к комментарию — он вспыхивает, когда встал в список. Виден и так —
+  // шит не двигается: над ним в переписке стоит сообщение этого комментария.
   const { focusReady } = data;
+  const sheetLayout = useRef({ travel: 0, headerHeight: 0, visibleHeight: 0 });
+
+  useEffect(() => {
+    sheetLayout.current = {
+      travel: geometry.travel,
+      headerHeight,
+      visibleHeight: geometry.listHeight - composerHeight - keyboardInset,
+    };
+  }, [composerHeight, geometry.listHeight, geometry.travel, headerHeight, keyboardInset]);
 
   useEffect(() => {
     if (!focusReady) return;
 
-    void jump(focusReady).then((found) => {
+    // Видно — между низом шапки шита и полем ввода.
+    const visible = () => {
+      const { travel, headerHeight: header, visibleHeight } = sheetLayout.current;
+
+      return {
+        top: headerBottom(scrollOffset.value, travel, header),
+        bottom: scrollOffset.value + visibleHeight,
+      };
+    };
+
+    void jump(focusReady, { visible }).then((found) => {
       if (!found) showNotice('Не удалось найти комментарий', 'error');
     });
-  }, [focusReady, jump]);
+  }, [focusReady, jump, scrollOffset]);
 
   // Место под клавиатурой в конце списка: последний комментарий виден над ней.
   useEffect(() => {

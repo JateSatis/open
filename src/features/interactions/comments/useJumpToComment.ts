@@ -14,6 +14,41 @@ type Source = {
   loadMore: () => Promise<void>;
 };
 
+type JumpOptions = {
+  flash?: boolean;
+  /**
+   * Видимая часть списка в координатах содержимого. Строка, которая и так
+   * целиком в ней, не прокручивается: прокрутка списка в шите — это и подъём
+   * шита, а он должен остаться на месте.
+   */
+  visible?: () => { top: number; bottom: number };
+};
+
+/** Строка целиком в видимой части. Раскладка появляется через кадр. */
+async function isInView<T>(
+  listRef: RefObject<FlashListRef<T> | null>,
+  index: number,
+  visible: () => { top: number; bottom: number },
+): Promise<boolean> {
+  let layout = listRef.current?.getLayout(index);
+
+  if (!layout) {
+    await nextFrame();
+    await nextFrame();
+    layout = listRef.current?.getLayout(index);
+  }
+
+  const list = listRef.current;
+
+  if (!layout || !list) return false;
+
+  // Раскладка строки — от первой строки, без шапки списка (хода шита).
+  const top = list.getFirstItemOffset() + layout.y;
+  const { top: visibleTop, bottom: visibleBottom } = visible();
+
+  return top >= visibleTop && top + layout.height <= visibleBottom;
+}
+
 /**
  * Прыжок к комментарию: если его строки ещё нет — догружаем (открытый тред
  * или следующую страницу верха), пока не найдём, потом прокручиваем к нему и
@@ -28,12 +63,14 @@ export function useJumpToComment<T>(listRef: RefObject<FlashListRef<T> | null>, 
   }, [source]);
 
   const jump = useCallback(
-    async (commentId: string, { flash = true }: { flash?: boolean } = {}): Promise<boolean> => {
+    async (commentId: string, { flash = true, visible }: JumpOptions = {}): Promise<boolean> => {
       for (let page = 0; page <= MAX_PAGES; page += 1) {
         const index = latest.current.keys.indexOf(commentId);
 
         if (index !== -1) {
-          listRef.current?.scrollToIndex({ index, viewPosition: 0.5, animated: true });
+          if (!visible || !(await isInView(listRef, index, visible))) {
+            listRef.current?.scrollToIndex({ index, viewPosition: 0.5, animated: true });
+          }
           if (flash) setHighlight({ id: commentId, key: Date.now() });
           return true;
         }

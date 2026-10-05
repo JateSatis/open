@@ -250,7 +250,18 @@ begin
     perform pg_temp.check('подделка: ссылку позиции не переписать', sqlstate = '42501', sqlstate || ' ' || sqlerrm);
   end;
 
-  -- Островок, вставленный прямо в messages, пуст — и база его не примет.
+  -- Островок прямо в messages участник не вставит: служебные виды создают
+  -- только функции.
+  begin
+    insert into public.messages (chat_id, author_id, kind, source_chat_id)
+    values (chat_vs, v, 'forward', chat_js);
+    perform pg_temp.check('подделка: островок прямой вставкой', false, 'прошло');
+  exception when others then
+    perform pg_temp.check('подделка: островок прямой вставкой', sqlstate = '42501', sqlstate || ' ' || sqlerrm);
+  end;
+
+  -- И в обход RLS пустой островок база не примет — это схема.
+  perform set_config('role', 'postgres', true);
   begin
     insert into public.messages (chat_id, author_id, kind, source_chat_id)
     values (chat_vs, v, 'forward', chat_js);
