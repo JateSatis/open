@@ -87,6 +87,8 @@ export type SheetPane = {
   listRef: { current: FlashListRef<unknown> | null };
   dismissPan: PanGesture;
   markScrollAttached: () => void;
+  /** К началу списка — без анимации, вместе с позицией для жеста закрытия. */
+  scrollToTop: () => void;
 };
 
 type PaneOptions = {
@@ -122,8 +124,20 @@ function useSheetPane({
   });
 
   const markScrollAttached = useCallback(() => setScrollAttached(true), []);
+  const scrollToTop = useCallback(() => {
+    listRef.current?.scrollToOffset({ offset: 0, animated: false });
+    scrollOffset.value = 0;
+  }, [scrollOffset]);
 
-  return { animatedRef, scrollGestureRef, scrollOffset, listRef, dismissPan, markScrollAttached };
+  return {
+    animatedRef,
+    scrollGestureRef,
+    scrollOffset,
+    listRef,
+    dismissPan,
+    markScrollAttached,
+    scrollToTop,
+  };
 }
 
 /**

@@ -151,6 +151,15 @@ export function PanelContent({
     };
   }, [composerHeight, geometry.height, headerHeight, keyboardInset]);
 
+  // Окно треда — один список на все треды: новый тред начинается сверху, и
+  // жест закрытия не опирается на прокрутку прежнего.
+  const enteredRoot = openThread?.rootId ?? null;
+  const { scrollToTop: threadToTop } = sheet.thread;
+
+  useEffect(() => {
+    if (enteredRoot) threadToTop();
+  }, [enteredRoot, threadToTop]);
+
   const { jump: jumpMain } = mainJump;
   const { jump: jumpThread } = threadJump;
   const mainOffset = sheet.main.scrollOffset;
