@@ -36,6 +36,13 @@ function message(id: string, authorId: string, extra: Partial<ChatMessage> = {})
 const tokens = (rows: ChatListRow[]) =>
   rows.map((item, index) => ({ item, key: item.key, index, isViewable: true }) as ViewToken<ChatListRow>);
 
+const VIEWPORT = { x: 0, y: 100, width: 400, height: 800 };
+/** По умолчанию любая строка — внутри рамки списка. */
+const insideViewport = jest.fn((_key: string) =>
+  Promise.resolve<typeof VIEWPORT | null>({ x: 0, y: 500, width: 400, height: 60 }),
+);
+const measureViewport = () => Promise.resolve(VIEWPORT);
+
 function options(extra: Partial<Parameters<typeof useMessageViews>[0]> = {}) {
   return {
     chatId: 'chat-1',
@@ -43,6 +50,8 @@ function options(extra: Partial<Parameters<typeof useMessageViews>[0]> = {}) {
     isFocused: true,
     rows: [] as ChatListRow[],
     autoscrollThreshold: 64,
+    measureRow: insideViewport,
+    measureViewport,
     ...extra,
   };
 }
@@ -219,9 +228,42 @@ describe('useMessageViews', () => {
     );
 
     await rerender({ rows: toChatRows([message('m2', 'other'), message('m1', 'other')]) });
+    await act(async () => {
+      jest.advanceTimersByTime(20);
+    });
     await act(() => jest.advanceTimersByTime(2000));
 
     expect(record).toHaveBeenCalledWith('chat-1', ['m2'], expect.any(String));
+  });
+
+  it('из пачки пришедших снизу засчитываются только легшие в рамку списка', async () => {
+    const rects: Record<string, typeof VIEWPORT | null> = {
+      m4: { x: 0, y: 850, width: 400, height: 60 },
+      // Краем: последний пиксель над рамкой списка.
+      m3: { x: 0, y: 41, width: 400, height: 60 },
+      m2: { x: 0, y: -40, width: 400, height: 60 },
+    };
+    const measureRow = (key: string) => Promise.resolve(rects[key] ?? null);
+    const old = toChatRows([message('m1', 'other')]);
+    const { rerender } = await renderHook(
+      ({ rows }: { rows: ChatListRow[] }) => useMessageViews(options({ rows, measureRow })),
+      { initialProps: { rows: old } },
+    );
+
+    await rerender({
+      rows: toChatRows([
+        message('m4', 'other'),
+        message('m3', 'other'),
+        message('m2', 'other'),
+        message('m1', 'other'),
+      ]),
+    });
+    await act(async () => {
+      jest.advanceTimersByTime(20);
+    });
+    await act(() => jest.advanceTimersByTime(2000));
+
+    expect(record).toHaveBeenCalledWith('chat-1', ['m4', 'm3'], expect.any(String));
   });
 
   it('новое снизу, пока человек читает выше, не засчитывается', async () => {

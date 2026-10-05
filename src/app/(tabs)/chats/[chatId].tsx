@@ -46,7 +46,7 @@ import {
   readUpTo as readUpToOf,
 } from '@/features/chats/chatDisplay';
 import { mosaicBounds } from '@/features/chats/lib/mosaicLayout';
-import { RowRegistryContext } from '@/features/chats/rowRegistry';
+import { measureInWindow, RowRegistryContext } from '@/features/chats/rowRegistry';
 import { useChatBubbles } from '@/features/chats/useChatBubbles';
 import { useChatKeyboardInset } from '@/features/chats/useChatKeyboardInset';
 import { useChatRowRenderer } from '@/features/chats/useChatRowRenderer';
@@ -202,13 +202,6 @@ export default function ChatScreen() {
   useEffect(() => () => stopVoice(), [chatId]);
 
   useMarkChatRead(chatId, messages.length > 0 ? messages[0].id : null, isMember);
-  const views = useMessageViews({
-    chatId,
-    currentUserId,
-    isFocused,
-    rows,
-    autoscrollThreshold: KEEP_READING_POSITION.autoscrollToTopThreshold,
-  });
 
   const readUpTo = useMemo(() => readUpToOf(chat, currentUserId), [chat, currentUserId]);
 
@@ -420,6 +413,17 @@ export default function ChatScreen() {
   });
 
   const commentsLift = useCommentsLiftHost(listRef, rows, bubbleContent);
+  const listFrameRef = useRef<View>(null);
+  const measureListFrame = useCallback(() => measureInWindow(listFrameRef.current), []);
+  const views = useMessageViews({
+    chatId,
+    currentUserId,
+    isFocused,
+    rows,
+    autoscrollThreshold: KEEP_READING_POSITION.autoscrollToTopThreshold,
+    measureRow: commentsLift.registry.measure,
+    measureViewport: measureListFrame,
+  });
 
   // Пока открыт шит комментариев, переписка под ним растворена.
   const fadeStyle = useAnimatedStyle(() => ({ opacity: chatFade.value }));
@@ -576,7 +580,7 @@ export default function ChatScreen() {
             <ActivityIndicator accessibilityLabel="Загрузка переписки" />
           </View>
         ) : (
-          <Animated.View style={[styles.flex, fadeStyle]}>
+          <Animated.View ref={listFrameRef} style={[styles.flex, fadeStyle]}>
             <RowRegistryContext.Provider value={commentsLift.registry}>
               <FlatList
                 ref={listRef}

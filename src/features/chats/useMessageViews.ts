@@ -10,6 +10,7 @@ import {
 
 import { recordMessageViews } from '@/api/messageViews';
 import type { ChatListRow } from '@/features/chats/islands/rows';
+import type { AnchorRect } from '@/features/chats/MessageContextMenu';
 
 /** Как часто увиденное уходит на сервер. */
 const FLUSH_MS = 2000;
@@ -76,6 +77,8 @@ export function useMessageViews({
   isFocused,
   rows,
   autoscrollThreshold,
+  measureRow,
+  measureViewport,
 }: {
   chatId: string;
   currentUserId: string | null;
@@ -84,6 +87,10 @@ export function useMessageViews({
   rows: ChatListRow[];
   /** Ближе этого к низу переписки список сам докручивает до нового сообщения. */
   autoscrollThreshold: number;
+  /** Строка в окне по ключу; `null` — её нет на экране. */
+  measureRow: (rowKey: string) => Promise<AnchorRect | null>;
+  /** Рамка списка в окне — то, что человек видит. */
+  measureViewport: () => Promise<AnchorRect | null>;
 }): MessageViewTracking {
   const sessionId = useMemo(() => newSessionId(), []);
   const userRef = useRef(currentUserId);
@@ -166,7 +173,9 @@ export function useMessageViews({
   // докручивает до него. Но `onViewableItemsChanged` об этом не узнает: после
   // вставки в начало с `maintainVisibleContentPosition` VirtualizedList ждёт
   // события прокрутки, а у самого низа его не бывает, и видимость стоит до
-  // первой прокрутки пальцем. Поэтому новые строки внизу засчитываются здесь.
+  // первой прокрутки пальцем. Поэтому новые строки внизу меряются здесь — и
+  // засчитываются те, что легли в рамку списка хоть пикселем: пачка, пришедшая
+  // за время отсутствия, на экран целиком не помещается.
   const offsetRef = useRef(0);
   const firstKeyRef = useRef<string | null>(null);
 
@@ -186,19 +195,48 @@ export function useMessageViews({
     // Прежней первой строки нет — история пересобрана, а не дополнена снизу.
     if (end <= 0) return;
 
-    const arrived = rows
-      .slice(0, end)
-      .flatMap((row) => {
-        const viewed = viewedMessageOf(row, userRef.current);
+    const arrived = rows.slice(0, end).flatMap((row) => {
+      const viewed = viewedMessageOf(row, userRef.current);
 
-        return viewed ? [viewed] : [];
-      });
+      return viewed ? [{ key: row.key, viewed }] : [];
+    });
 
     if (arrived.length === 0) return;
 
-    visibleRef.current = [...arrived, ...visibleRef.current];
-    collect();
-  }, [autoscrollThreshold, collect, rows]);
+    let cancelled = false;
+
+    // Замерить, когда список разложил новые строки.
+    const frame = requestAnimationFrame(() => {
+      void Promise.all([
+        measureViewport(),
+        ...arrived.map(({ key }) => measureRow(key)),
+      ]).then(([viewport, ...rects]) => {
+        if (cancelled || !viewport) return;
+
+        const onScreen = arrived
+          .filter((_, index) => {
+            const rect = rects[index];
+
+            return (
+              rect !== null &&
+              rect.y < viewport.y + viewport.height &&
+              rect.y + rect.height > viewport.y
+            );
+          })
+          .map(({ viewed }) => viewed);
+
+        if (onScreen.length === 0) return;
+
+        visibleRef.current = [...onScreen, ...visibleRef.current];
+        collect();
+      });
+    });
+
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(frame);
+    };
+  }, [autoscrollThreshold, collect, measureRow, measureViewport, rows]);
 
   useEffect(() => {
     focusedRef.current = isFocused;
