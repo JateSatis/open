@@ -34,7 +34,7 @@ type Options = {
   jump: Jump;
   /** История и чат загружены — можно прыгать. */
   isHistoryReady: boolean;
-  /** Экран наверху стека: шит рисует только он. */
+  /** Экран наверху стека и переход доиграл: шит рисует только он (`useScreenSettled`). */
   isFocused: boolean;
   /** Открыть шит комментария на этом экране и подвинуть переписку к сообщению. */
   focusComment: (focus: CommentFocus) => void;

@@ -136,16 +136,24 @@ export function PanelContent({
     if (headerHeight > 0 && (about !== undefined || waited)) markReady();
   }, [about, headerHeight, markReady, waited]);
 
-  // Пришли к комментарию — он вспыхивает, когда встал в список.
+  // Пришли к комментарию — он вспыхивает, когда встал в список. Виден и так —
+  // шит не двигается: над ним в переписке стоит сообщение этого комментария.
   const { focusReady } = data;
+  const visibleListHeight = useRef(0);
+
+  useEffect(() => {
+    visibleListHeight.current = geometry.listHeight - composerHeight - keyboardInset;
+  }, [composerHeight, geometry.listHeight, keyboardInset]);
 
   useEffect(() => {
     if (!focusReady) return;
 
-    void jump(focusReady).then((found) => {
+    const visibleBottom = () => scrollOffset.value + visibleListHeight.current;
+
+    void jump(focusReady, { visibleBottom }).then((found) => {
       if (!found) showNotice('Не удалось найти комментарий', 'error');
     });
-  }, [focusReady, jump]);
+  }, [focusReady, jump, scrollOffset]);
 
   // Место под клавиатурой в конце списка: последний комментарий виден над ней.
   useEffect(() => {

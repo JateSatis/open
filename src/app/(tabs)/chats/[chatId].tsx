@@ -66,6 +66,7 @@ import { usePinnedCursor } from '@/features/chats/usePinnedCursor';
 import { usePinnedMessages } from '@/features/chats/usePinnedMessages';
 import { useQuoteNavigation, type CommentFocus } from '@/features/chats/useQuoteNavigation';
 import { useReplyForward } from '@/features/chats/useReplyForward';
+import { useScreenSettled } from '@/features/chats/useScreenSettled';
 import { useRespondToInvite } from '@/features/chats/useRespondToInvite';
 import { WaitingBanner } from '@/features/chats/WaitingBanner';
 import { CommentsPanel, openComments } from '@/features/interactions/CommentsPanel';
@@ -144,10 +145,11 @@ export default function ChatScreen() {
     [chatId, isMember, jumpAboveSheet],
   );
 
+  const settled = useScreenSettled(isFocused);
   const navigation = useQuoteNavigation(chatId, {
     jump: jump.jump,
     isHistoryReady: !isLoading && !isChatLoading,
-    isFocused,
+    isFocused: settled,
     focusComment,
   });
   const reactions = useReactToMessage(isMember);
