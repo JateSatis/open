@@ -304,6 +304,7 @@ export function MessageBubble({
           {bareMedia && !message.text ? (
             <View style={styles.bareFooter}>
               <View style={styles.footerShrink}>{reactions('bare')}</View>
+              <View style={styles.footerSpacer} />
               {commentsButton('bare')}
             </View>
           ) : null}

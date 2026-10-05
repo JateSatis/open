@@ -56,8 +56,10 @@ export function MessageMeta({
   const tone: ThemeColor = overlay ? 'textOnMedia' : isOwn ? 'metaOnPrimary' : 'textSecondary';
   const pending = message.status === 'sending' || message.editStatus === 'saving';
   const read = isOwn && isRead && !pending;
-  // На своём синем облачке синее время читается только в белом контуре.
+  // На своём синем облачке синее время читается только в белом контуре; на
+  // плашке медиа пилюля — сама плашка, она белеет.
   const outlined = read && !overlay;
+  const whitePlate = read && overlay && READ_OUTLINE === 'pill';
   const time = formatMessageTime(message.createdAt);
 
   return (
@@ -65,7 +67,10 @@ export function MessageMeta({
       testID="message-meta"
       style={[
         styles.meta,
-        overlay && [styles.overlay, { backgroundColor: theme.mediaScrim }],
+        overlay && [
+          styles.overlay,
+          { backgroundColor: whitePlate ? theme.metaReadOutline : theme.mediaScrim },
+        ],
         overlay && floating && styles.floating,
       ]}
     >
