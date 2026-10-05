@@ -26,6 +26,8 @@ export type ChatTopicListener = {
   onPinsChanged?: () => void;
   onReactionsChanged?: (messageId: string) => void;
   onCommentsChanged?: (messageId: string) => void;
+  /** У этих сообщений выросли просмотры или появилось «прочитано». */
+  onViewsChanged?: (messageIds: string[]) => void;
   onStreamChanged?: () => void;
   /** Из островка этого чата убрали сообщения. */
   onForwardChanged?: (forwardId: string) => void;
@@ -62,6 +64,12 @@ function messageIdOf(payload: unknown): string | null {
   return typeof id === 'string' ? id : null;
 }
 
+function messageIdsOf(payload: unknown): string[] {
+  const ids = (payload as { message_ids?: unknown } | undefined)?.message_ids;
+
+  return Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string') : [];
+}
+
 function toActivity(value: unknown): ChatActivity {
   return value === 'recording_voice' ? value : 'typing';
 }
@@ -82,8 +90,7 @@ function open(chatId: string): Entry {
     .on('broadcast', { event: 'read' }, () => each((l) => l.onRead?.()))
     .on('broadcast', { event: 'member_joined' }, () => each((l) => l.onMembersChanged?.()))
     .on('broadcast', { event: 'messages_deleted' }, ({ payload }) => {
-      const ids = (payload as { message_ids?: unknown } | undefined)?.message_ids;
-      const list = Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string') : [];
+      const list = messageIdsOf(payload);
 
       each((l) => l.onMessagesDeleted?.(list));
     })
@@ -102,6 +109,11 @@ function open(chatId: string): Entry {
       const id = messageIdOf(payload);
 
       if (id) each((l) => l.onCommentsChanged?.(id));
+    })
+    .on('broadcast', { event: 'views_changed' }, ({ payload }) => {
+      const list = messageIdsOf(payload);
+
+      if (list.length > 0) each((l) => l.onViewsChanged?.(list));
     })
     .on('broadcast', { event: 'forward_changed' }, ({ payload }) => {
       const id = messageIdOf(payload);

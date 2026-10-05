@@ -55,6 +55,8 @@ function message(id: string, reactions: MessageReactions = EMPTY): Message {
     forward: null,
     reactions,
     commentsCount: 0,
+    viewsCount: 0,
+    readAt: null,
   };
 }
 

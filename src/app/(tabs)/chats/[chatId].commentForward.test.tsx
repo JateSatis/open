@@ -144,6 +144,8 @@ function message(id: string, minute: number, overrides: Partial<Message> = {}): 
     forward: null,
     reactions: NO_REACTIONS,
     commentsCount: 0,
+    viewsCount: 0,
+    readAt: null,
     ...overrides,
   };
 }

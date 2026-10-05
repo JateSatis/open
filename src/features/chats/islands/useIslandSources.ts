@@ -9,6 +9,7 @@ import {
   refreshCommentCounts,
   refreshEditedMessages,
   refreshReactions,
+  refreshViews,
 } from '@/features/chats/messages/sync';
 import type { ChatMessage } from '@/features/chats/messages/types';
 
@@ -78,6 +79,7 @@ export function useIslandSources(chatId: string, messages: ChatMessage[]) {
 
     const reactions = batcher(queryClient, refreshReactions);
     const comments = batcher(queryClient, refreshCommentCounts);
+    const views = batcher(queryClient, refreshViews);
 
     const releases = sources.split(',').map((sourceId) =>
       subscribeToChatSignals(sourceId, {
@@ -89,6 +91,7 @@ export function useIslandSources(chatId: string, messages: ChatMessage[]) {
         },
         onReactionsChanged: (id) => reactions.add(id),
         onCommentsChanged: (id) => comments.add(id),
+        onViewsChanged: (ids) => ids.forEach((id) => views.add(id)),
         onRead: () => {
           getChatReadUpTo(sourceId)
             .then((readUpTo) => patchOriginChat(queryClient, sourceId, readUpTo))
@@ -106,6 +109,7 @@ export function useIslandSources(chatId: string, messages: ChatMessage[]) {
       releases.forEach((release) => release());
       reactions.stop();
       comments.stop();
+      views.stop();
     };
   }, [chatId, queryClient, sources]);
 }

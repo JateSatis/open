@@ -753,6 +753,11 @@ export type ChatChannelHandlers = {
   onReactionsChanged: (messageId: string) => void;
   /** Число комментариев к сообщению изменилось. Payload — подсказка, какое; число — из базы. */
   onCommentsChanged: (messageId: string) => void;
+  /**
+   * У сообщений выросли просмотры или появилось «прочитано». Payload —
+   * подсказка, у каких; числа — из базы.
+   */
+  onViewsChanged?: (messageIds: string[]) => void;
   /** Звонок в чате начался, изменился его состав или он завершился. */
   onStreamChanged?: () => void;
   /** Из островка этого чата убрали сообщения. Payload — подсказка, какой островок. */

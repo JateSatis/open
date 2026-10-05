@@ -59,7 +59,7 @@ export function previewOf(message: Message): MessagePreview {
 
 /** Пересланный комментарий одной строкой — как сообщение того же вида. */
 export function commentPreviewOf(comment: ForwardedComment): MessagePreview {
-  return previewOf({ ...comment, forward: null, replies: [], commentsCount: 0 } as Message);
+  return previewOf({ ...comment, forward: null, replies: [], commentsCount: 0, viewsCount: 0, readAt: null } as Message);
 }
 
 /** «Фото», «Альбом», «🎤 Голосовое сообщение (0:12)» — или сам текст. */

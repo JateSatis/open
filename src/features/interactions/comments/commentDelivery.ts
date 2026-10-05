@@ -87,6 +87,8 @@ function draftOf(
     forward: null,
     reactions: NO_REACTIONS,
     commentsCount: 0,
+    viewsCount: 0,
+    readAt: null,
     status: 'sending',
     repliesCount: 0,
     deleted: false,

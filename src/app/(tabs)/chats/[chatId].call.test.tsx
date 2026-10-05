@@ -142,6 +142,8 @@ function message(overrides: Partial<Message>): Message {
     forward: null,
     reactions: { members: {}, visitors: {}, mine: null },
     commentsCount: 0,
+    viewsCount: 0,
+    readAt: null,
     ...overrides,
   };
 }

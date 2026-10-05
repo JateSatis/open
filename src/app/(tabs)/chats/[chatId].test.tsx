@@ -146,6 +146,8 @@ function message(id: string, text: string, authorId: string): Message {
     forward: null,
     reactions: { members: {}, visitors: {}, mine: null },
     commentsCount: 0,
+    viewsCount: 0,
+    readAt: null,
   };
 }
 

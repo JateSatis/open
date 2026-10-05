@@ -57,6 +57,7 @@ import { useChatMessages } from '@/features/chats/useChatMessages';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
 import { useJumpToMessage } from '@/features/chats/useJumpToMessage';
 import { useMarkChatRead } from '@/features/chats/useMarkChatRead';
+import { useMessageViews } from '@/features/chats/useMessageViews';
 import { readChatDraft } from '@/features/chats/composerDraftStore';
 import { useMessageActionHandlers } from '@/features/chats/useMessageActionHandlers';
 import { useMessageEdit } from '@/features/chats/useMessageEdit';
@@ -199,6 +200,7 @@ export default function ChatScreen() {
   useEffect(() => () => stopVoice(), [chatId]);
 
   useMarkChatRead(chatId, messages.length > 0 ? messages[0].id : null, isMember);
+  const views = useMessageViews(chatId, currentUserId, isFocused);
 
   const readUpTo = useMemo(() => readUpToOf(chat, currentUserId), [chat, currentUserId]);
 
@@ -577,6 +579,8 @@ export default function ChatScreen() {
                 onScrollToIndexFailed={jump.onScrollToIndexFailed}
                 keyExtractor={rowKey}
                 renderItem={renderItem}
+                viewabilityConfig={views.viewabilityConfig}
+                onViewableItemsChanged={views.onViewableItemsChanged}
                 contentContainerStyle={styles.list}
                 // The list is inverted, so its "end" is the top of the screen:
                 // scrolling up pages further back through the history.

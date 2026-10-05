@@ -194,6 +194,8 @@ function message(id: string, text: string | null, authorId: string, minute = 0):
     forward: null,
     reactions: { members: {}, visitors: {}, mine: null },
     commentsCount: 0,
+    viewsCount: 0,
+    readAt: null,
   };
 }
 

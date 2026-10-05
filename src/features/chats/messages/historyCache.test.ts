@@ -1,6 +1,7 @@
 import {
   knownEdits,
   patchReactions,
+  patchViews,
   quotedIds,
   removeMessages,
   replaceMessages,
@@ -8,6 +9,7 @@ import {
 } from './historyCache';
 
 import type { ChatMessage } from '@/features/chats/messages/types';
+import { island, original } from '@/test/islands';
 
 function message(id: string, overrides: Partial<ChatMessage> = {}): ChatMessage {
   return {
@@ -23,6 +25,8 @@ function message(id: string, overrides: Partial<ChatMessage> = {}): ChatMessage 
     forward: null,
     reactions: { members: {}, visitors: {}, mine: null },
     commentsCount: 0,
+    viewsCount: 0,
+    readAt: null,
     status: 'sent',
     ...overrides,
   };
@@ -153,5 +157,31 @@ describe('patchReactions', () => {
     expect(
       patchReactions(history, [{ id: 'm1', reactions: { members: {}, visitors: {}, mine: null } }]),
     ).toBe(history);
+  });
+});
+
+describe('patchViews', () => {
+  it('кладёт просмотры и «прочитано» сообщению и оригиналу в островке', () => {
+    const history: ChatHistory = {
+      items: [
+        message('m1'),
+        { ...island('f1', '2026-09-29T11:00:00Z', [original({ id: 'o1' })]), status: 'sent' },
+      ],
+      nextCursor: null,
+    };
+
+    const next = patchViews(history, [
+      { id: 'm1', viewsCount: 3, readAt: '2026-09-29T12:00:00Z' },
+      { id: 'o1', viewsCount: 7, readAt: null },
+    ]);
+
+    expect(next.items[0]).toMatchObject({ viewsCount: 3, readAt: '2026-09-29T12:00:00Z' });
+    expect(next.items[1].forward?.items[0].original).toMatchObject({ viewsCount: 7 });
+  });
+
+  it('без изменений отдаёт ту же историю — список не перерисовывается', () => {
+    const history: ChatHistory = { items: [message('m1')], nextCursor: null };
+
+    expect(patchViews(history, [{ id: 'm1', viewsCount: 0, readAt: null }])).toBe(history);
   });
 });

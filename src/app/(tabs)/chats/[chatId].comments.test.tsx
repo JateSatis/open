@@ -181,6 +181,8 @@ function message(id: string, minute: number, overrides: Partial<Message> = {}): 
     forward: null,
     reactions: NO_REACTIONS,
     commentsCount: 0,
+    viewsCount: 0,
+    readAt: null,
     ...overrides,
   };
 }
@@ -215,6 +217,8 @@ const MESSAGES = [
       id: 'o4',
       chatId: 'chat-1',
       commentsCount: 1,
+      viewsCount: 0,
+      readAt: null,
       chat: { id: 'chat-1', name: 'Разговор', readUpTo: null, amMember: true },
     }),
   ]),
@@ -608,6 +612,8 @@ describe('a visitor in the comments', () => {
             id: 'o4',
             chatId: 'chat-2',
             commentsCount: 1,
+            viewsCount: 0,
+            readAt: null,
             chat: { id: 'chat-2', name: 'Другой', readUpTo: null, amMember: false },
           }),
         ]),
