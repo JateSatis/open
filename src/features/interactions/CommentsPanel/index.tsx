@@ -1,12 +1,14 @@
 import { useIsFocused } from 'expo-router';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 
 import { PanelWindow } from './PanelWindow';
 
 import { setCommentsKeyboardWindowOpen } from '@/features/chats/composerKeyboard';
 import {
   closeComments,
+  getCommentsPanelTarget,
   useCommentsPanelTarget,
+  type CommentsPanelTarget,
 } from '@/features/interactions/comments/commentsPanelStore';
 
 export {
@@ -42,8 +44,23 @@ export function CommentsPanel({ onOpenPerson, hostChatId }: CommentsPanelProps) 
   // Пока панель открыта, клавиатура под ней — её поля, а не поля переписки.
   useEffect(() => setCommentsKeyboardWindowOpen(open), [open]);
 
-  // Уход с экрана закрывает панель: следующий экран застанет её закрытой.
-  useEffect(() => () => closeComments(), []);
+  // Уход с экрана закрывает панель, которую показывал он: следующий экран
+  // застанет её закрытой. Чужую — нет: при возврате к чату ниже в стеке тот
+  // открывает свою панель раньше, чем снимаемый экран размонтируется.
+  const shownRef = useRef<CommentsPanelTarget | null>(null);
+
+  useEffect(() => {
+    if (open) shownRef.current = target;
+  }, [open, target]);
+
+  useEffect(
+    () => () => {
+      const current = getCommentsPanelTarget();
+
+      if (current === null || current === shownRef.current) closeComments();
+    },
+    [],
+  );
 
   if (!target || !open) return null;
 

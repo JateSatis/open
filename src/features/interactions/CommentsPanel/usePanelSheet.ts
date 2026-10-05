@@ -27,7 +27,10 @@ import { panelGeometry, type PanelGeometry } from './panelGeometry';
 
 import { CLOSE_DURATION_MS, OPEN_SPRING, useDismissGesture } from '@/components/ScrollSheet';
 import { useOwnKeyboardHeight } from '@/features/chats/composerKeyboard';
-import { closeComments } from '@/features/interactions/comments/commentsPanelStore';
+import {
+  closeComments,
+  setPanelRestTop,
+} from '@/features/interactions/comments/commentsPanelStore';
 
 /** Жест закрытия панели — снаружи нужен только тестам. */
 export const PANEL_PAN_TEST_ID = 'comments-panel-pan';
@@ -205,6 +208,17 @@ export function usePanelSheet(windowHeight: number) {
   const markScrollAttached = useCallback(() => setScrollAttached(true), []);
   const markShown = useCallback(() => setShown(true), []);
   const markReady = useCallback(() => setReady(true), []);
+
+  // Где встанет шит — переписке под ним, чтобы поставить сообщение над ним.
+  const restTop = ready ? geometry.top + geometry.travel : null;
+
+  useEffect(() => {
+    if (restTop === null) return;
+
+    setPanelRestTop(restTop);
+
+    return () => setPanelRestTop(null);
+  }, [restTop]);
 
   return {
     geometry,

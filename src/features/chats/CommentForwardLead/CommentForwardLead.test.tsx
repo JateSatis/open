@@ -23,6 +23,7 @@ const forward: CommentForward = {
     reactions: NO_REACTIONS,
     target: {
       id: 'm1',
+      createdAt: '2026-10-04T09:00:00Z',
       authorId: 'user-1',
       authorName: 'Марина',
       preview: {

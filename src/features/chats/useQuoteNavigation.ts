@@ -10,6 +10,12 @@ type Jump = (rowKey: string, createdAt: string) => Promise<boolean>;
 /** Куда прыгнуть в переписке: ключ строки и время, до которого догрузить историю. */
 export type JumpTarget = { key: string; createdAt: string };
 
+/**
+ * Комментарий, к которому пришли: шит его сообщения и само сообщение в
+ * переписке. `target: null` — сообщение удалено, прыгать некуда.
+ */
+export type CommentFocus = { messageId: string; commentId: string; target: JumpTarget | null };
+
 export type QuoteNavigation = {
   /**
    * Тап по цитате — к её оригиналу. `inChatId` — чат, в котором живёт ответ:
@@ -20,6 +26,18 @@ export type QuoteNavigation = {
   openChat: (chatId: string) => void;
   /** Сообщение в его чате — «из <чат>» и «Перейти к оригиналу» у облачка островка. */
   openOriginal: (message: { id: string; chatId: string; createdAt: string }) => void;
+  /** Пересланный комментарий — в его чат: шит с ним и сообщение под шитом. */
+  openComment: (chatId: string, focus: CommentFocus) => void;
+};
+
+type Options = {
+  jump: Jump;
+  /** История и чат загружены — можно прыгать. */
+  isHistoryReady: boolean;
+  /** Экран наверху стека: шит рисует только он. */
+  isFocused: boolean;
+  /** Открыть шит комментария на этом экране и подвинуть переписку к сообщению. */
+  focusComment: (focus: CommentFocus) => void;
 };
 
 function reportJump(found: boolean) {
@@ -35,21 +53,22 @@ function quoteTarget(quote: Extract<QuotedMessage, { state: 'live' }>): JumpTarg
 
 /**
  * Переходы из облачка: по цитате ответа — в этом же чате, по плашке островка
- * и «из <чат>» — в другой. Приход в чат с `jumpTo` в адресе — это второй
- * случай с другой стороны: как только история загружена, экран прыгает к
- * строке.
+ * и «из <чат>» — в другой, по пересланному комментарию — в его чат с шитом.
+ * Приход в чат с `jumpKey` в адресе — это переход с другой стороны: как
+ * только история загружена, экран прыгает к строке или открывает шит.
  */
 export function useQuoteNavigation(
   chatId: string,
-  jump: Jump,
-  isHistoryReady: boolean,
+  { jump, isHistoryReady, isFocused, focusComment }: Options,
 ): QuoteNavigation {
   const router = useRouter();
   const navigation = useNavigation();
-  const { jumpTo, jumpAt, jumpKey } = useLocalSearchParams<{
+  const { jumpTo, jumpAt, jumpKey, comments, comment } = useLocalSearchParams<{
     jumpTo?: string;
     jumpAt?: string;
     jumpKey?: string;
+    comments?: string;
+    comment?: string;
   }>();
   const handledJumpRef = useRef<string | null>(null);
 
@@ -58,28 +77,55 @@ export function useQuoteNavigation(
   const requestedJump = jumpKey ?? jumpTo;
 
   useEffect(() => {
-    if (!isHistoryReady || !jumpTo || !jumpAt || handledJumpRef.current === requestedJump) return;
+    if (!isHistoryReady || !requestedJump || handledJumpRef.current === requestedJump) return;
 
-    handledJumpRef.current = requestedJump ?? null;
+    if (comments && comment) {
+      // Шит рисует только экран наверху: при возврате к чату ниже в стеке
+      // адрес меняется раньше, чем он снова в фокусе.
+      if (!isFocused) return;
+
+      handledJumpRef.current = requestedJump;
+      focusComment({
+        messageId: comments,
+        commentId: comment,
+        target: jumpTo && jumpAt ? { key: jumpTo, createdAt: jumpAt } : null,
+      });
+      return;
+    }
+
+    if (!jumpTo || !jumpAt) return;
+
+    handledJumpRef.current = requestedJump;
     void jump(jumpTo, jumpAt).then(reportJump);
-  }, [isHistoryReady, jump, jumpAt, jumpTo, requestedJump]);
+  }, [
+    comment,
+    comments,
+    focusComment,
+    isFocused,
+    isHistoryReady,
+    jump,
+    jumpAt,
+    jumpTo,
+    requestedJump,
+  ]);
 
   /** В другой чат: к уже открытому ниже в стеке экрану, а не вторым экземпляром. */
   const goToChat = useCallback(
-    (targetChatId: string, target: JumpTarget | null) => {
+    (targetChatId: string, target: JumpTarget | null, focus?: CommentFocus) => {
       if (targetChatId === chatId) {
-        if (target) void jump(target.key, target.createdAt).then(reportJump);
+        if (focus) focusComment(focus);
+        else if (target) void jump(target.key, target.createdAt).then(reportJump);
         return;
       }
 
-      const params = target
-        ? {
-            chatId: targetChatId,
-            jumpTo: target.key,
-            jumpAt: target.createdAt,
-            jumpKey: String(Date.now()),
-          }
-        : { chatId: targetChatId };
+      const to = focus ? focus.target : target;
+      // Шит открывается по ключу перехода, даже когда прыгать некуда.
+      const params = {
+        chatId: targetChatId,
+        ...(to ? { jumpTo: to.key, jumpAt: to.createdAt } : {}),
+        ...(focus ? { comments: focus.messageId, comment: focus.commentId } : {}),
+        ...(to || focus ? { jumpKey: String(Date.now()) } : {}),
+      };
 
       // Экран ищется по ключу: `dismissTo` сравнивает адрес вместе с
       // параметрами прыжка и не находит его.
@@ -92,10 +138,20 @@ export function useQuoteNavigation(
         ) ?? -1;
 
       if (state && index !== -1) {
-        if (target) {
+        if (to || focus) {
+          // Параметры сливаются с прежними: прыжок и шит прошлого перехода
+          // стираются явно, иначе экран исполнил бы их снова.
           navigation.dispatch({
             type: 'SET_PARAMS',
-            payload: { params },
+            payload: {
+              params: {
+                jumpTo: undefined,
+                jumpAt: undefined,
+                comments: undefined,
+                comment: undefined,
+                ...params,
+              },
+            },
             source: state.routes[index].key,
           });
         }
@@ -105,7 +161,7 @@ export function useQuoteNavigation(
 
       router.push({ pathname: '/chats/[chatId]', params });
     },
-    [chatId, jump, navigation, router],
+    [chatId, focusComment, jump, navigation, router],
   );
 
   const openQuote = useCallback(
@@ -138,5 +194,10 @@ export function useQuoteNavigation(
     [goToChat],
   );
 
-  return { openQuote, openChat, openOriginal };
+  const openComment = useCallback(
+    (targetChatId: string, focus: CommentFocus) => goToChat(targetChatId, null, focus),
+    [goToChat],
+  );
+
+  return { openQuote, openChat, openOriginal, openComment };
 }

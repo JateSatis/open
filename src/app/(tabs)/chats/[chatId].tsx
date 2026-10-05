@@ -53,6 +53,7 @@ import { useComposerDraft } from '@/features/chats/useComposerDraft';
 import { useChat } from '@/features/chats/useChat';
 import { useChatMessages } from '@/features/chats/useChatMessages';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
+import { useJumpAboveSheet } from '@/features/chats/useJumpAboveSheet';
 import { useJumpToMessage } from '@/features/chats/useJumpToMessage';
 import { useMarkChatRead } from '@/features/chats/useMarkChatRead';
 import { readChatDraft } from '@/features/chats/composerDraftStore';
@@ -63,7 +64,7 @@ import { useMessageSelection } from '@/features/chats/useMessageSelection';
 import { useMyInvite } from '@/features/chats/useMyInvite';
 import { usePinnedCursor } from '@/features/chats/usePinnedCursor';
 import { usePinnedMessages } from '@/features/chats/usePinnedMessages';
-import { useQuoteNavigation } from '@/features/chats/useQuoteNavigation';
+import { useQuoteNavigation, type CommentFocus } from '@/features/chats/useQuoteNavigation';
 import { useReplyForward } from '@/features/chats/useReplyForward';
 import { useRespondToInvite } from '@/features/chats/useRespondToInvite';
 import { WaitingBanner } from '@/features/chats/WaitingBanner';
@@ -92,11 +93,7 @@ const KEEP_READING_POSITION = { minIndexForVisible: 0, autoscrollToTopThreshold:
 const BUBBLE_LEADING_INSET = Spacing.five + Spacing.two;
 
 export default function ChatScreen() {
-  const {
-    chatId,
-    comments: commentsOf,
-    comment: focusComment,
-  } = useLocalSearchParams<{ chatId: string; comments?: string; comment?: string }>();
+  const { chatId } = useLocalSearchParams<{ chatId: string }>();
   const router = useRouter();
   const nav = useNavigation();
   const theme = useTheme();
@@ -132,7 +129,27 @@ export default function ChatScreen() {
     () => (chat?.waiting ?? []).filter((person) => person.id !== currentUserId),
     [chat, currentUserId],
   );
-  const navigation = useQuoteNavigation(chatId, jump.jump, !isLoading && !isChatLoading);
+  const aboveSheet = useJumpAboveSheet(listRef, jump.jump);
+  const { jumpAboveSheet } = aboveSheet;
+
+  // Пришли к комментарию (тап по пересланному): его шит — поверх, а
+  // сообщение, под которым он оставлен, — над шитом. Удалённое сообщение —
+  // только шит: прыгать некуда, и это не ошибка.
+  const focusComment = useCallback(
+    (focus: CommentFocus) => {
+      openComments(focus.messageId, chatId, isMember, focus.commentId);
+
+      if (focus.target) void jumpAboveSheet(focus.target.key, focus.target.createdAt);
+    },
+    [chatId, isMember, jumpAboveSheet],
+  );
+
+  const navigation = useQuoteNavigation(chatId, {
+    jump: jump.jump,
+    isHistoryReady: !isLoading && !isChatLoading,
+    isFocused,
+    focusComment,
+  });
   const reactions = useReactToMessage(isMember);
   const call = useChatCall(chatId, chat, currentUserId, isMember);
 
@@ -321,30 +338,17 @@ export default function ChatScreen() {
     [runIslandAction],
   );
 
-  // Пришли из пересланного комментария — его ветка открывается сама, когда
-  // чат загружен и известно, участник ли я (от этого ряд моих реакций).
-  const openedFocus = useRef(false);
-
-  useEffect(() => {
-    if (!commentsOf || !chat || openedFocus.current) return;
-
-    openedFocus.current = true;
-    openComments(commentsOf, chatId, isMember, focusComment);
-  }, [chat, chatId, commentsOf, focusComment, isMember]);
-
+  const { openComment } = navigation;
   const openForwardedComment = useCallback(
-    (comment: ForwardedComment) => {
-      if (comment.chatId === chatId) {
-        openComments(comment.messageId, chatId, isMember, comment.id);
-        return;
-      }
-
-      router.push({
-        pathname: '/chats/[chatId]',
-        params: { chatId: comment.chatId, comments: comment.messageId, comment: comment.id },
-      });
-    },
-    [chatId, isMember, router],
+    (comment: ForwardedComment) =>
+      openComment(comment.chatId, {
+        messageId: comment.messageId,
+        commentId: comment.id,
+        target: comment.target
+          ? { key: comment.target.id, createdAt: comment.target.createdAt }
+          : null,
+      }),
+    [openComment],
   );
 
   const { bubbleFor, audienceFor, reactToComment } = useChatBubbles({
@@ -554,6 +558,13 @@ export default function ChatScreen() {
             keyboardShouldPersistTaps="handled"
             ListFooterComponent={
               isLoadingMore ? <ActivityIndicator accessibilityLabel="Загрузка истории" /> : null
+            }
+            // Список перевёрнут: «шапка» — низ переписки. Место под шитом
+            // комментариев, чтобы и последнее сообщение встало над ним.
+            ListHeaderComponent={
+              aboveSheet.inset > 0 ? (
+                <View testID="messages-sheet-inset" style={{ height: aboveSheet.inset }} />
+              ) : null
             }
           />
         )}

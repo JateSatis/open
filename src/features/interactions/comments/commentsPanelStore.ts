@@ -24,9 +24,14 @@ type PanelState = {
   target: CommentsPanelTarget | null;
   /** Раскрытый тред — id корня. Раскрыт всегда не больше одного. */
   openThread: string | null;
+  /**
+   * Верх шита в среднем положении, в координатах окна. Известен, когда шапка
+   * шита замерена; по нему переписка под шитом ставит сообщение над ним.
+   */
+  restTop: number | null;
 };
 
-const usePanelStore = create<PanelState>(() => ({ target: null, openThread: null }));
+const usePanelStore = create<PanelState>(() => ({ target: null, openThread: null, restTop: null }));
 
 /**
  * Открывает панель комментариев к сообщению. Одна функция на всё
@@ -39,15 +44,49 @@ export function openComments(
   amMember = false,
   focusCommentId?: string,
 ) {
-  usePanelStore.setState({ target: { messageId, chatId, amMember, focusCommentId }, openThread: null });
+  usePanelStore.setState({
+    target: { messageId, chatId, amMember, focusCommentId },
+    openThread: null,
+    restTop: null,
+  });
 }
 
 export function closeComments() {
-  usePanelStore.setState({ target: null, openThread: null });
+  usePanelStore.setState({ target: null, openThread: null, restTop: null });
 }
 
 export function useCommentsPanelTarget(): CommentsPanelTarget | null {
   return usePanelStore((state) => state.target);
+}
+
+export function getCommentsPanelTarget(): CommentsPanelTarget | null {
+  return usePanelStore.getState().target;
+}
+
+/** Шит замерен и встал в положения — или ушёл (`null`). */
+export function setPanelRestTop(restTop: number | null) {
+  usePanelStore.setState({ restTop });
+}
+
+/** Верх шита в среднем положении, как только он известен; `null` — не дождались. */
+export function waitPanelRestTop(timeoutMs: number): Promise<number | null> {
+  const known = usePanelStore.getState().restTop;
+
+  if (known !== null) return Promise.resolve(known);
+
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      unsubscribe();
+      resolve(null);
+    }, timeoutMs);
+    const unsubscribe = usePanelStore.subscribe((state) => {
+      if (state.restTop === null) return;
+
+      clearTimeout(timer);
+      unsubscribe();
+      resolve(state.restTop);
+    });
+  });
 }
 
 export function useOpenThread(): string | null {
