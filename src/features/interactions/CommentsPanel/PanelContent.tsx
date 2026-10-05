@@ -156,8 +156,15 @@ export function PanelContent({
   const mainOffset = sheet.main.scrollOffset;
   const threadOffset = sheet.thread.scrollOffset;
 
+  // В окне треда — когда легло начало треда: до того ответ стоит в хвосте, а
+  // потом переезжает на своё место, и прыжок пришёлся бы мимо.
+  const threadSettling = openThread !== null && thread.isLoading;
+  const jumpedTo = useRef<string | null>(null);
+
   useEffect(() => {
-    if (!focusReady) return;
+    if (!focusReady || threadSettling || jumpedTo.current === focusReady) return;
+
+    jumpedTo.current = focusReady;
 
     const inThread = getOpenThread() !== null;
     const offset: SharedValue<number> = inThread ? threadOffset : mainOffset;
@@ -171,7 +178,7 @@ export function PanelContent({
     void (inThread ? jumpThread : jumpMain)(focusReady, { visible }).then((found) => {
       if (!found) showNotice('Не удалось найти комментарий', 'error');
     });
-  }, [focusReady, jumpMain, jumpThread, mainOffset, threadOffset]);
+  }, [focusReady, jumpMain, jumpThread, mainOffset, threadOffset, threadSettling]);
 
   // Место под клавиатурой в конце списка: последний комментарий виден над ней.
   useEffect(() => {
