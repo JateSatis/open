@@ -1,5 +1,20 @@
 {
   "enabledPlugins": {
     "expo@claude-plugins-official": true
+  },
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc --noEmit*)",
+      "Bash(npx eslint *)",
+      "Bash(npx jest*)",
+      "Bash(npm run device*)",
+      "Bash(npm run e2e*)",
+      "Bash(node scripts/device.mjs *)",
+      "Bash(node scripts/maestro.mjs *)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git show*)"
+    ]
   }
 }
