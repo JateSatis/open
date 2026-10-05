@@ -1,0 +1,18 @@
+appId: com.openger.app
+name: Отправка и удаление своего сообщения
+env:
+  CHAT: Plany
+---
+- runFlow: subflows/open-app.yaml
+- tapOn: ${CHAT}
+- evalScript: ${output.msg = 'maestro-' + Date.now()}
+- tapOn: "Сообщение"
+- inputText: ${output.msg}
+- tapOn: "Отправить"
+- assertVisible: ${output.msg}
+# Одиночный тап по сообщению открывает меню.
+- tapOn: ${output.msg}
+- tapOn: "Удалить"
+- assertVisible: "Удалить сообщение?"
+- tapOn: "Удалить"
+- assertNotVisible: ${output.msg}

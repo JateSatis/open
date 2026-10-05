@@ -1,0 +1,20 @@
+appId: com.openger.app
+name: Шит комментариев открывается и закрывается свайпом
+env:
+  CHAT: Plany
+---
+- runFlow: subflows/open-app.yaml
+- tapOn: ${CHAT}
+- tapOn:
+    id: "comments-button"
+    index: 0
+- assertVisible:
+    id: "comments-panel"
+- assertVisible:
+    id: "comment-target"
+- swipe:
+    from:
+      id: "comments-sheet-header"
+    direction: DOWN
+- assertNotVisible:
+    id: "comments-panel"

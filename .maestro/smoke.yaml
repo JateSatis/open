@@ -1,0 +1,8 @@
+appId: com.openger.app
+name: Запуск и вкладки
+---
+- runFlow: subflows/open-app.yaml
+- tapOn: "Лента"
+- tapOn: "Профиль"
+- tapOn: "Чаты"
+- assertVisible: "Чаты"
