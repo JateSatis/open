@@ -1,5 +1,5 @@
 appId: com.openger.app
-name: Шит комментариев открывается и закрывается свайпом
+name: Шит комментариев — сообщение над шитом, закрытие свайпом и тапом по сообщению
 env:
   CHAT: Plany
 ---
@@ -10,11 +10,24 @@ env:
     index: 0
 - assertVisible:
     id: "comments-panel"
+# Сообщение не внутри шита, а поднято над ним из переписки.
 - assertVisible:
-    id: "comment-target"
+    id: "comments-lifted-message"
 - swipe:
     from:
       id: "comments-sheet-header"
     direction: DOWN
+- assertNotVisible:
+    id: "comments-panel"
+- tapOn:
+    id: "comments-button"
+    index: 0
+- assertVisible:
+    id: "comments-lifted-message"
+# Тап по поднятому сообщению (оно над шитом, верх шита — на четверти
+# экрана) закрывает шит, как «назад». Не по центру элемента: у высокого
+# сообщения центр под шитом.
+- tapOn:
+    point: "50%,20%"
 - assertNotVisible:
     id: "comments-panel"
