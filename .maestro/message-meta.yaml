@@ -1,0 +1,27 @@
+appId: com.openger.app
+name: Низ облачка — просмотры, время вместо «Отправляется…»
+env:
+  CHAT: Plany
+---
+- runFlow: subflows/open-app.yaml
+- tapOn: ${CHAT}
+# Сообщения чата кто-то уже видел — у облачков есть счётчик просмотров.
+- assertVisible:
+    id: "message-views"
+- evalScript: ${output.msg = 'maestro-' + Date.now()}
+- tapOn: "Сообщение"
+- inputText: ${output.msg}
+- tapOn: "Отправить"
+- assertVisible: ${output.msg}
+# Доставку показывает само время: текста «Отправляется…» нет нигде.
+- assertNotVisible: "Отправляется…"
+- extendedWaitUntil:
+    visible:
+      id: "message-time"
+    timeout: 10000
+# Убрать за собой.
+- tapOn: ${output.msg}
+- tapOn: "Удалить"
+- assertVisible: "Удалить сообщение?"
+- tapOn: "Удалить"
+- assertNotVisible: ${output.msg}
