@@ -132,6 +132,17 @@ export default function ChatScreen() {
     [chat, currentUserId],
   );
   const { jump: jumpTo } = jump;
+  // Прыжок к сообщению бывает долгим (догрузка истории): если за это время
+  // ушли с экрана, шит не открывается — он лёг бы поверх чужого.
+  const focusedRef = useRef(isFocused);
+
+  useEffect(() => {
+    focusedRef.current = isFocused;
+
+    return () => {
+      focusedRef.current = false;
+    };
+  }, [isFocused]);
 
   // Пришли к комментарию (тап по пересланному): переписка прокручивается к
   // сообщению, под которым он оставлен, и оно поднимается над шитом с этого
@@ -153,9 +164,9 @@ export default function ChatScreen() {
         return;
       }
 
-      void jumpTo(target.key, target.createdAt).then((found) =>
-        open(found ? target.key : undefined),
-      );
+      void jumpTo(target.key, target.createdAt).then((found) => {
+        if (focusedRef.current) open(found ? target.key : undefined);
+      });
     },
     [chatId, isMember, jumpTo],
   );
