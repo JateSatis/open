@@ -5,6 +5,7 @@
 // Видимость пункта — вежливость интерфейса. Права всегда проверяет сервер:
 // скрытая кнопка лишь не предлагает того, что он всё равно отвергнет.
 
+import { copyableText } from '@/features/chats/copyMessages';
 import { contentOf, type BubbleRow } from '@/features/chats/islands/rows';
 import { MAX_FORWARD, MAX_QUOTES } from '@/features/chats/messageQuote';
 import type { ChatMessage } from '@/features/chats/messages/types';
@@ -84,7 +85,7 @@ export function canCommentOn(message: ChatMessage): boolean {
 }
 
 export function hasCopyableText(message: ChatMessage): boolean {
-  return Boolean(message.text?.trim());
+  return Boolean(copyableText(message)?.trim());
 }
 
 /** Пункты меню в том порядке, в котором их видит человек. */

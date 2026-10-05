@@ -105,6 +105,7 @@ export function PanelContent({ target, sheet, onOpenPerson, backRef }: PanelCont
     listRef,
     sheet,
     stickyCollapse: sticky.prepareCollapse,
+    stickySwitch: sticky.prepareSwitch,
     jump,
   });
 

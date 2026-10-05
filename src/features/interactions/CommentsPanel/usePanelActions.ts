@@ -52,6 +52,8 @@ type Options = {
   sheet: PanelSheet;
   /** Тред скрывается: с липкого корня — со сдвигом скролла (`useStickyThread`). */
   stickyCollapse: () => void;
+  /** Раскрывается другой тред: закрываемый выше не сдвигает экран (`useStickyThread`). */
+  stickySwitch: (nextRootId: string) => void;
   jump: (commentId: string, options?: { flash?: boolean }) => Promise<boolean>;
 };
 
@@ -101,6 +103,7 @@ export function usePanelActions({
   listRef,
   sheet,
   stickyCollapse,
+  stickySwitch,
   jump,
 }: Options) {
   const queryClient = useQueryClient();
@@ -188,9 +191,11 @@ export function usePanelActions({
         return;
       }
 
+      if (getOpenThread()) stickySwitch(rootId);
+
       setOpenThread(rootId);
     },
-    [stickyCollapse],
+    [stickyCollapse, stickySwitch],
   );
 
   /** Куда ляжет ответ с этими цитатами: тред их корня. */

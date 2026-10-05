@@ -1,6 +1,8 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { useCallback } from 'react';
 
-import type { ChatParticipant } from '@/api/chats';
+import type { ChatParticipant, ForwardedComment } from '@/api/chats';
+import { CommentForwardLead } from '@/features/chats/CommentForwardLead';
 import { MessageBubble } from '@/features/chats/MessageBubble';
 import {
   originalAsMessage,
@@ -13,7 +15,8 @@ import { DELETED_ACCOUNT } from '@/features/chats/messageQuote';
 import type { ChatMessage } from '@/features/chats/messages/types';
 import type { QuoteNavigation } from '@/features/chats/useQuoteNavigation';
 import { commentsEntry } from '@/features/interactions/CommentsPanel';
-import { audienceOf } from '@/features/interactions/reactionState';
+import { sendReaction } from '@/features/interactions/reactionSender';
+import { audienceOf, nextReaction } from '@/features/interactions/reactionState';
 import type { ReactToMessage } from '@/features/interactions/useReactToMessage';
 import type { ReactionAudience } from '@/api/reactionCounts';
 
@@ -37,6 +40,8 @@ type Options = {
    * строке имени, а ряд облачков не пляшет по ширине.
    */
   showAvatars: boolean;
+  /** Тап по сниппету пересланного комментария — к нему в его ветке. */
+  openForwardedComment: (comment: ForwardedComment) => void;
 };
 
 /** Облачко и то, в какой ряд в нём лягут мои реакции. */
@@ -45,6 +50,8 @@ export type ChatBubbles = {
   bubbleFor: (row: BubbleRow, interactive: boolean) => React.ReactElement | null;
   /** Ряд моей реакции на облачко: у облачка островка — по участию в чате оригинала. */
   audienceFor: (row: BubbleRow) => ReactionAudience;
+  /** Реакция на пересланный комментарий — его оригиналу. */
+  reactToComment: (comment: ForwardedComment, emoji: string) => void;
 };
 
 /**
@@ -65,12 +72,19 @@ export function useChatBubbles({
   navigation,
   reactions,
   showAvatars,
+  openForwardedComment,
 }: Options): ChatBubbles {
+  const queryClient = useQueryClient();
   const { openQuote, openOriginal } = navigation;
   const { audience: myAudience, toggle } = reactions;
 
   const audienceFor = useCallback(
     (row: BubbleRow): ReactionAudience => {
+      const forwarded = row.type === 'message' ? row.message.commentForward?.comment : null;
+
+      // Реакция на пересланный комментарий — его оригиналу, ряд — по чату комментария.
+      if (forwarded) return audienceOf(forwarded.chat?.amMember ?? false);
+
       const original = row.type === 'island-item' ? row.item.original : null;
 
       // База решает ряд по участию в чате оригинала; это — её же правило.
@@ -81,8 +95,90 @@ export function useChatBubbles({
     [chatId, myAudience],
   );
 
+  /** Реакция на пересланный комментарий ложится оригиналу — как у облачка островка. */
+  const reactToComment = useCallback(
+    (comment: ForwardedComment, emoji: string) =>
+      sendReaction(
+        queryClient,
+        comment.id,
+        {
+          emoji: nextReaction(comment.reactions.mine, emoji),
+          audience: audienceOf(comment.chat?.amMember ?? false),
+        },
+        'comment',
+      ),
+    [queryClient],
+  );
+
+  /**
+   * Пересланный комментарий — сообщение переславшего: его место, цвет, время
+   * и «прочитано». Сверху — откуда комментарий, ниже — сам он, с правкой и
+   * реакциями оригинала.
+   */
+  const commentForwardBubble = useCallback(
+    (item: ChatMessage, interactive: boolean) => {
+      const forward = item.commentForward ?? { commentId: null, comment: null };
+      const { comment } = forward;
+      const author = item.authorId ? participantsById.get(item.authorId) : undefined;
+      const commentAuthorId = comment?.authorId ?? null;
+      const shown: ChatMessage = comment
+        ? {
+            ...item,
+            kind: comment.kind,
+            text: comment.text,
+            attachments: comment.attachments,
+            editedAt: comment.editedAt,
+            reactions: comment.reactions,
+          }
+        : { ...item, kind: 'text', text: null };
+
+      return (
+        <MessageBubble
+          message={shown}
+          isOwn={item.authorId === currentUserId}
+          isRead={readUpTo !== null && item.createdAt <= readUpTo}
+          authorName={author?.displayName ?? DELETED_ACCOUNT}
+          authorAvatarUrl={author?.avatarUrl ?? null}
+          mediaBounds={mediaBounds}
+          onRetry={retry}
+          onAuthorPress={interactive && item.authorId ? () => openPerson(item.authorId!) : undefined}
+          reactionAudience={audienceOf(comment?.chat?.amMember ?? false)}
+          onReactionToggle={
+            interactive && comment && item.status === 'sent'
+              ? (emoji) => reactToComment(comment, emoji)
+              : undefined
+          }
+          showAvatar={showAvatars}
+          lead={
+            <CommentForwardLead
+              forward={forward}
+              isOwn={item.authorId === currentUserId}
+              onOpenSource={interactive && comment ? () => openForwardedComment(comment) : undefined}
+              onOpenAuthor={
+                interactive && commentAuthorId ? () => openPerson(commentAuthorId) : undefined
+              }
+            />
+          }
+        />
+      );
+    },
+    [
+      currentUserId,
+      mediaBounds,
+      openForwardedComment,
+      openPerson,
+      participantsById,
+      reactToComment,
+      readUpTo,
+      retry,
+      showAvatars,
+    ],
+  );
+
   const messageBubble = useCallback(
     (item: ChatMessage, interactive: boolean) => {
+      if (item.kind === 'comment_forward') return commentForwardBubble(item, interactive);
+
       const { authorId } = item;
       const author = authorId ? participantsById.get(authorId) : undefined;
 
@@ -108,6 +204,7 @@ export function useChatBubbles({
     },
     [
       chatId,
+      commentForwardBubble,
       currentUserId,
       isMember,
       mediaBounds,
@@ -194,5 +291,5 @@ export function useChatBubbles({
     [islandBubble, messageBubble],
   );
 
-  return { bubbleFor, audienceFor };
+  return { bubbleFor, audienceFor, reactToComment };
 }

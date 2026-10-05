@@ -50,3 +50,8 @@ export function isRootStuck(layout: ThreadLayout, below: number): boolean {
 export function scrollAfterCollapse(layout: ThreadLayout, scroll: number, below: number): number {
   return Math.max(0, scroll - (stickyRootTop(layout, below) - layout.rootTop));
 }
+
+/** Высота ответов треда — всё, что уходит из содержимого, когда тред закрывается. */
+export function repliesHeight(layout: ThreadLayout): number {
+  return layout.threadBottom - layout.rootTop - layout.rootHeight;
+}

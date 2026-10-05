@@ -14,6 +14,16 @@ function formatStamp(iso: string): string {
 }
 
 /**
+ * Что копируется из сообщения: у пересланного комментария — текст самого
+ * комментария, у остальных — текст сообщения.
+ */
+export function copyableText(message: ChatMessage): string | null {
+  return message.kind === 'comment_forward'
+    ? (message.commentForward?.comment?.text ?? null)
+    : message.text;
+}
+
+/**
  * Текст для буфера обмена. Одно сообщение — как есть. Несколько — в порядке
  * переписки, у каждого автор и время, как в Telegram: иначе вставленная
  * куда-то реплика теряет, кто и когда её сказал. Сообщения без текста
@@ -24,10 +34,10 @@ export function formatMessagesForCopy(
   authorName: (authorId: string | null) => string,
 ): string {
   const withText = messages
-    .filter((message) => message.text?.trim())
+    .filter((message) => copyableText(message)?.trim())
     .sort((a, b) => (a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : 0));
 
-  if (withText.length === 1) return withText[0].text ?? '';
+  if (withText.length === 1) return copyableText(withText[0]) ?? '';
 
   return withText
     .map(

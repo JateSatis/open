@@ -130,13 +130,26 @@ export function useChatMessages(chatId: string, currentUserId: string | null): C
         : message;
       const own = intent ? { ...base, reactions: withMyReaction(base.reactions, intent) } : base;
 
-      return mapOriginals(own, (original) => {
+      const withOriginals = mapOriginals(own, (original) => {
         const wanted = pendingReactions[original.id];
 
         return wanted
           ? { ...original, reactions: withMyReaction(original.reactions, wanted) }
           : original;
       });
+      // Реакция на пересланный комментарий — его оригиналу, по id комментария.
+      const forwarded = withOriginals.commentForward?.comment;
+      const forComment = forwarded ? pendingReactions[forwarded.id] : undefined;
+
+      return forwarded && forComment
+        ? {
+            ...withOriginals,
+            commentForward: {
+              ...withOriginals.commentForward!,
+              comment: { ...forwarded, reactions: withMyReaction(forwarded.reactions, forComment) },
+            },
+          }
+        : withOriginals;
     });
   }, [history.items, pendingEdits, pendingReactions]);
 

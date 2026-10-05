@@ -75,6 +75,11 @@ export type MessageBubbleProps = {
    * своего — слева. Кнопка треда у корня комментариев.
    */
   aside?: ReactNode;
+  /**
+   * Блок над содержимым облачка, выше цитат: у пересланного комментария —
+   * откуда он и под каким сообщением оставлен.
+   */
+  lead?: ReactNode;
 };
 
 export function MessageBubble({
@@ -95,6 +100,7 @@ export function MessageBubble({
   showReceipt,
   showAvatar = true,
   aside,
+  lead,
 }: MessageBubbleProps) {
   const theme = useTheme();
   const isMediaMessage = message.kind === 'media' && message.attachments.length > 0;
@@ -129,12 +135,17 @@ export function MessageBubble({
     height: attachment.height,
   }));
 
-  const hasAnnotations = message.replies.length > 0;
+  const hasAnnotations = message.replies.length > 0 || Boolean(lead);
 
   // На что сообщение отвечает — над содержимым, и у текста, и у голосового,
   // и у альбома.
   const annotations = hasAnnotations ? (
-    <ReplyQuote quotes={message.replies} isOwn={isOwn} onPress={onQuotePress} />
+    <>
+      {lead}
+      {message.replies.length > 0 ? (
+        <ReplyQuote quotes={message.replies} isOwn={isOwn} onPress={onQuotePress} />
+      ) : null}
+    </>
   ) : null;
 
   // Своё облачко имени не показывает, но «из <чат>» у него остаётся.

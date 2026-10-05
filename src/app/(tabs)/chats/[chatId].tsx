@@ -15,7 +15,7 @@ import Animated from 'react-native-reanimated';
 import { Text } from '@/components/Text';
 import { ChatFooter, modePlate } from '@/features/chats/ChatFooter';
 import { ChatScreenHeader } from '@/features/chats/ChatScreenHeader';
-import type { IslandOriginal } from '@/api/chats';
+import type { ForwardedComment, IslandOriginal } from '@/api/chats';
 import { DeletedOriginal } from '@/features/chats/DeletedOriginal';
 import {
   contentOf,
@@ -24,6 +24,7 @@ import {
   type BubbleRow,
   type ChatListRow,
 } from '@/features/chats/islands/rows';
+import { useForwardedCommentSources } from '@/features/chats/islands/useForwardedCommentSources';
 import { useIslandSources } from '@/features/chats/islands/useIslandSources';
 import { MediaPickerSheet } from '@/features/chats/MediaPickerSheet';
 import { MessageContextMenu } from '@/features/chats/MessageContextMenu';
@@ -66,7 +67,7 @@ import { useQuoteNavigation } from '@/features/chats/useQuoteNavigation';
 import { useReplyForward } from '@/features/chats/useReplyForward';
 import { useRespondToInvite } from '@/features/chats/useRespondToInvite';
 import { WaitingBanner } from '@/features/chats/WaitingBanner';
-import { CommentsPanel } from '@/features/interactions/CommentsPanel';
+import { CommentsPanel, openComments } from '@/features/interactions/CommentsPanel';
 import { useReactToMessage } from '@/features/interactions/useReactToMessage';
 import { CallButton } from '@/features/streams/CallButton';
 import { ChatCallBar } from '@/features/streams/ChatCallBar';
@@ -91,7 +92,11 @@ const KEEP_READING_POSITION = { minIndexForVisible: 0, autoscrollToTopThreshold:
 const BUBBLE_LEADING_INSET = Spacing.five + Spacing.two;
 
 export default function ChatScreen() {
-  const { chatId } = useLocalSearchParams<{ chatId: string }>();
+  const {
+    chatId,
+    comments: commentsOf,
+    comment: focusComment,
+  } = useLocalSearchParams<{ chatId: string; comments?: string; comment?: string }>();
   const router = useRouter();
   const nav = useNavigation();
   const theme = useTheme();
@@ -99,7 +104,6 @@ export default function ChatScreen() {
     containerRef,
     onLayout: measureBottomOffset,
     style: keyboardInsetStyle,
-    top: contentTop,
   } = useChatKeyboardInset();
   const { width: windowWidth } = useWindowDimensions();
   // Ширина списка — окно минус его боковые поля (`styles.list`).
@@ -135,6 +139,9 @@ export default function ChatScreen() {
   // Правки, удаления, реакции и комментарии оригиналов в островках приходят
   // в топики их чатов — слушаем и их.
   useIslandSources(chatId, messages);
+  // Пересланные комментарии — ссылки: их правки, удаления и реакции приходят
+  // в топики их веток.
+  useForwardedCommentSources(chatId, messages);
 
   // Пока чат открыт, уведомления о нём не нужны: человек и так смотрит сюда.
   useEffect(() => {
@@ -314,7 +321,33 @@ export default function ChatScreen() {
     [runIslandAction],
   );
 
-  const { bubbleFor, audienceFor } = useChatBubbles({
+  // Пришли из пересланного комментария — его ветка открывается сама, когда
+  // чат загружен и известно, участник ли я (от этого ряд моих реакций).
+  const openedFocus = useRef(false);
+
+  useEffect(() => {
+    if (!commentsOf || !chat || openedFocus.current) return;
+
+    openedFocus.current = true;
+    openComments(commentsOf, chatId, isMember, focusComment);
+  }, [chat, chatId, commentsOf, focusComment, isMember]);
+
+  const openForwardedComment = useCallback(
+    (comment: ForwardedComment) => {
+      if (comment.chatId === chatId) {
+        openComments(comment.messageId, chatId, isMember, comment.id);
+        return;
+      }
+
+      router.push({
+        pathname: '/chats/[chatId]',
+        params: { chatId: comment.chatId, comments: comment.messageId, comment: comment.id },
+      });
+    },
+    [chatId, isMember, router],
+  );
+
+  const { bubbleFor, audienceFor, reactToComment } = useChatBubbles({
     chatId,
     currentUserId,
     isMember,
@@ -326,6 +359,7 @@ export default function ChatScreen() {
     navigation,
     reactions,
     showAvatars: chat?.kind !== 'direct',
+    openForwardedComment,
   });
 
   const { renderItem, islandHeader } = useChatRowRenderer({
@@ -373,6 +407,19 @@ export default function ChatScreen() {
   // было открыто, моя прежняя реакция могла доехать или откатиться.
   const menuReactions = useMemo(() => {
     if (!menuRow || menuRow.type === 'island-header' || !menuContent) return null;
+
+    // Пересланный комментарий: реакция — его оригиналу.
+    const forwarded = menuContent.commentForward?.comment;
+
+    if (menuContent.kind === 'comment_forward') {
+      return forwarded && menuContent.status === 'sent'
+        ? {
+            selected: forwarded.reactions.mine?.emoji ?? null,
+            onSelect: (emoji: string) => reactToComment(forwarded, emoji),
+          }
+        : null;
+    }
+
     if (!canReactTo(menuContent)) return null;
 
     return {
@@ -384,7 +431,7 @@ export default function ChatScreen() {
         toggleReaction(latest ?? menuContent, emoji, audienceFor(menuRow));
       },
     };
-  }, [audienceFor, menuContent, menuRow, rows, toggleReaction]);
+  }, [audienceFor, menuContent, menuRow, reactToComment, rows, toggleReaction]);
 
   const menuPreview = !menuRow ? null : menuRow.type === 'island-header' ? (
     islandHeader(menuRow, false)

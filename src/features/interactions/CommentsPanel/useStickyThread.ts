@@ -15,6 +15,7 @@ import { threadBounds, type CommentRow } from './rows';
 import {
   headerBottom,
   isRootStuck,
+  repliesHeight,
   scrollAfterCollapse,
   stickyRootTop,
   type ThreadLayout,
@@ -119,5 +120,37 @@ export function useStickyThread({
     }
   }, [headerHeight, layout, scrollOffset, travel]);
 
-  return { onCommitLayout, style, stuck, prepareCollapse, rootRow: bounds ? rows[bounds.first] : null };
+  /**
+   * Раскрывается другой тред, раскрытый закрывается. Если он выше нового
+   * корня, его ответы уходят из содержимого над корнем — скролл сдвигается
+   * ровно на их высоту, и новый корень на экране не двигается. Своя поправка
+   * `FlashList` тут не помогает: она держит первую видимую строку, а это
+   * часто ответ закрываемого треда.
+   */
+  const prepareSwitch = useCallback(
+    (nextRootId: string) => {
+      const current = layout.value;
+
+      if (!current || !bounds) return;
+
+      const next = rows.findIndex((row) => row.key === nextRootId);
+
+      if (next <= bounds.last) return;
+
+      pendingScroll.current = Math.max(
+        0,
+        scrollOffset.value - repliesHeight(current),
+      );
+    },
+    [bounds, layout, rows, scrollOffset],
+  );
+
+  return {
+    onCommitLayout,
+    style,
+    stuck,
+    prepareCollapse,
+    prepareSwitch,
+    rootRow: bounds ? rows[bounds.first] : null,
+  };
 }

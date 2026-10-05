@@ -81,4 +81,6 @@ export const Sizes = {
   threadToggle: 28,
   /** Значок на кнопке треда. */
   threadToggleIcon: 14,
+  /** Аватар автора в облачке пересланного комментария. */
+  forwardedAuthorAvatar: 20,
 } as const;

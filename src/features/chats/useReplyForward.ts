@@ -10,6 +10,7 @@ import { quoteOf } from '@/features/chats/messageQuote';
 import type { ChatMessage, ForwardItem, LiveQuote } from '@/features/chats/messages/types';
 import type { ComposerDraft } from '@/features/chats/useComposerDraft';
 import type { LocalMedia, MediaLibraryItem } from '@/features/media';
+import { showNotice } from '@/features/notifications/alertsStore';
 import { focusWithKeyboard } from '@/lib/windowFocus';
 
 type Options = {
@@ -96,6 +97,25 @@ export function useReplyForward({
 
   const startForward = useCallback(
     (rows: BubbleRow[]) => {
+      // Пересланный комментарий пересылается дальше ссылкой на сам
+      // комментарий, а не островком: в островок он не встаёт.
+      const comments = rows.flatMap((row) =>
+        row.type === 'message' && row.message.commentForward?.comment
+          ? [row.message.commentForward.comment]
+          : [],
+      );
+
+      if (comments.length > 0 && comments.length === rows.length) {
+        startForwardPick({ comments });
+        router.push({ pathname: '/chats/forward', params: { from: chatId } });
+        return;
+      }
+
+      if (comments.length > 0) {
+        showNotice('Пересланные комментарии пересылаются отдельно от сообщений', 'error');
+        return;
+      }
+
       // Порядок — как облачка стоят на экране, и облачко островка
       // пересылается ссылкой на свой оригинал.
       const items = rows.flatMap((row) => {
