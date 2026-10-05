@@ -97,11 +97,14 @@ export function MessageRow({
   // Шит комментариев меряет строку снаружи списка — по ключу.
   useEffect(() => registry?.register(messageId, contentRef), [messageId, registry]);
 
-  // Копия строки над шитом комментариев: сама строка пуста, пока копия на
-  // экране. Не удаляется — иначе переписка сдвинулась бы.
-  const commentsLiftStyle = useAnimatedStyle(() => ({
-    opacity: liftedRowKey.value === messageId ? 0 : 1,
-  }));
+  // Копия строки над затемнением меню или над шитом комментариев: сама
+  // строка пуста, пока копия на экране. Не удаляется — иначе переписка
+  // сдвинулась бы. Прозрачность одна на оба случая: анимированный стиль
+  // перекрыл бы статический, где бы тот ни стоял.
+  const hiddenStyle = useAnimatedStyle(
+    () => ({ opacity: lifted || liftedRowKey.value === messageId ? 0 : 1 }),
+    [lifted, messageId],
+  );
 
   useEffect(() => {
     if (highlightKey === null) return;
@@ -218,7 +221,7 @@ export function MessageRow({
                   просмотрщик, не запускает голосовое и не ведёт в профиль. */}
               <Animated.View
                 pointerEvents={selectionMode ? 'none' : 'auto'}
-                style={[lifted && styles.lifted, commentsLiftStyle, swipe.contentStyle]}
+                style={[hiddenStyle, swipe.contentStyle]}
               >
                 {children}
               </Animated.View>
