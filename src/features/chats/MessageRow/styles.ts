@@ -14,9 +14,6 @@ export const styles = StyleSheet.create({
   content: {
     flex: 1,
   },
-  lifted: {
-    opacity: 0,
-  },
   selectable: {
     flexDirection: 'row',
     alignItems: 'center',

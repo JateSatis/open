@@ -50,8 +50,6 @@ type Options = {
   draft: ComposerDraft;
   inputRef: RefObject<TextInput | null>;
   thread: Pick<CommentsState, 'remove'>;
-  /** Поле в фокусе — шит разворачивается. */
-  onFieldActivate: () => void;
   /** «Переслать»: комментарии в порядке экрана — дальше выбор чата. */
   onForward: (comments: CommentItem[]) => void;
 };
@@ -69,7 +67,6 @@ export function useCommentReplySelection({
   draft,
   inputRef,
   thread,
-  onFieldActivate,
   onForward,
 }: Options) {
   // Выбор переписки работает со строками перевёрнутого списка и отдаёт их
@@ -95,10 +92,9 @@ export function useCommentReplySelection({
 
       setMode({ type: 'reply', quotes: picked.map((comment) => quoteOf(comment, nameOf(comment))) });
       claimKeyboardForComments();
-      onFieldActivate();
       focusWithKeyboard(inputRef, undefined, true);
     },
-    [inputRef, onFieldActivate, setMode],
+    [inputRef, setMode],
   );
 
   const selected = useMemo(() => selection.selected.map(commentOf), [selection.selected]);

@@ -10,17 +10,12 @@ import {
   type Ref,
   type RefObject,
 } from 'react';
-import { View, type ScrollView, type ScrollViewProps } from 'react-native';
+import type { ScrollView, ScrollViewProps } from 'react-native';
 import type { AnimatedRef, SharedValue } from 'react-native-reanimated';
 
-import { styles } from './styles';
-
 import { GestureScrollView, useSheetScroll } from '@/components/ScrollSheet';
-import { useTheme } from '@/hooks/use-theme';
 
 export type CommentsSheetContextValue = {
-  /** Ход шита — высота прозрачного начала содержимого: отсюда начинается подложка. */
-  travel: number;
   animatedRef: AnimatedRef<ScrollView>;
   /** Ссылка для `simultaneousWithExternalGesture` жеста закрытия. */
   gestureRef: RefObject<ComponentType | null>;
@@ -53,17 +48,12 @@ function useCommentsSheet(): CommentsSheetContextValue {
   return value;
 }
 
-/**
- * Подложка шита живёт внутри содержимого списка — её двигает тот же
- * нативный скролл, что и строки, поэтому подъём шита и есть скролл, как в
- * шите медиа. Липкий корень — после строк, чтобы рисоваться поверх них.
- */
+/** Скролл списка, связанный с жестом закрытия. Липкий корень — после строк, чтобы рисоваться поверх них. */
 const SheetScrollView = forwardRef<ScrollView, ScrollViewProps>(function SheetScrollView(
   { children, ...rest },
   ref,
 ) {
-  const theme = useTheme();
-  const { travel, animatedRef, gestureRef, overlay } = useCommentsSheet();
+  const { animatedRef, gestureRef, overlay } = useCommentsSheet();
 
   const attach = useCallback(
     (instance: ComponentType | null) => {
@@ -90,10 +80,6 @@ const SheetScrollView = forwardRef<ScrollView, ScrollViewProps>(function SheetSc
       bounces={false}
       keyboardShouldPersistTaps="handled"
     >
-      <View
-        style={[styles.surface, { top: travel, backgroundColor: theme.background }]}
-        pointerEvents="none"
-      />
       {children}
       {overlay}
     </GestureScrollView>

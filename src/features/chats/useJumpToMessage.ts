@@ -11,21 +11,13 @@ export type JumpHighlight = { messageId: string; key: number };
 
 type ScrollFailure = { index: number; averageItemLength: number };
 
-export type JumpOptions = {
-  /**
-   * Сколько низа списка закрыто поверх (шит комментариев): строка встаёт по
-   * центру того, что над ним, а не по центру всего списка.
-   */
-  inset?: number;
-};
-
 export type JumpToMessage = {
   /**
    * Прокручивает к строке и подсвечивает её. Если она ещё не загружена,
    * сначала догружает историю до `createdAt` — времени сообщения или
    * островка, где оно стоит, — по страницам. Отвечает, нашлось ли.
    */
-  jump: (rowKey: string, createdAt: string, options?: JumpOptions) => Promise<boolean>;
+  jump: (rowKey: string, createdAt: string) => Promise<boolean>;
   highlight: JumpHighlight | null;
   /** Для `onScrollToIndexFailed` списка: строки разной высоты, и до далёкой списку не долистать с первого раза. */
   onScrollToIndexFailed: (info: ScrollFailure) => void;
@@ -34,13 +26,9 @@ export type JumpToMessage = {
 /** Сколько ждать, пока список дорисует строки вокруг примерной позиции. */
 const RETRY_SCROLL_MS = 120;
 
-/**
- * Строка по центру видимой части. Список перевёрнут: смещение отсчитывается
- * от низа экрана, и положительный `viewOffset` поднимает строку — на половину
- * закрытого низа, то есть в центр того, что над ним.
- */
-function centerOf(index: number, inset: number) {
-  return { index, viewPosition: 0.5, viewOffset: inset / 2, animated: true };
+/** Строка по центру переписки. */
+function centerOf(index: number) {
+  return { index, viewPosition: 0.5, animated: true };
 }
 
 /**
@@ -56,9 +44,7 @@ export function useJumpToMessage(
   const [highlight, setHighlight] = useState<JumpHighlight | null>(null);
   // Цель — в ref, а не в состоянии: прокрутка — побочное действие, и
   // перерисовку ради неё запускает уже смена подсветки.
-  const targetRef = useRef<{ key: string; inset: number } | null>(null);
-  // Закрытый низ последнего прыжка — для повторной прокрутки после промаха.
-  const insetRef = useRef(0);
+  const targetRef = useRef<string | null>(null);
   const retryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Цель прокручивается, когда она уже в списке: после догрузки строки
@@ -68,12 +54,12 @@ export function useJumpToMessage(
 
     if (!target) return;
 
-    const index = rows.findIndex((row) => row.key === target.key);
+    const index = rows.findIndex((row) => row.key === target);
 
     if (index === -1) return;
 
     targetRef.current = null;
-    listRef.current?.scrollToIndex(centerOf(index, target.inset));
+    listRef.current?.scrollToIndex(centerOf(index));
   }, [highlight, listRef, rows]);
 
   useEffect(
@@ -84,15 +70,12 @@ export function useJumpToMessage(
   );
 
   const jump = useCallback(
-    async (rowKey: string, createdAt: string, options?: JumpOptions) => {
+    async (rowKey: string, createdAt: string) => {
       const found = await loadUntil(createdAt);
 
       if (!found) return false;
 
-      const inset = options?.inset ?? 0;
-
-      insetRef.current = inset;
-      targetRef.current = { key: rowKey, inset };
+      targetRef.current = rowKey;
       setHighlight({ messageId: rowKey, key: Date.now() });
 
       return true;
@@ -109,7 +92,7 @@ export function useJumpToMessage(
       if (retryRef.current) clearTimeout(retryRef.current);
 
       retryRef.current = setTimeout(() => {
-        listRef.current?.scrollToIndex(centerOf(index, insetRef.current));
+        listRef.current?.scrollToIndex(centerOf(index));
       }, RETRY_SCROLL_MS);
     },
     [listRef],

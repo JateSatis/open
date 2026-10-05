@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 
 import { BubbleFooter } from './BubbleFooter';
+import { readFooterLayout, writeFooterLayout } from './footerLayoutCache';
 import { styles } from './styles';
 
 import type { QuotedMessage } from '@/api/chats';
@@ -111,7 +112,9 @@ export function MessageBubble({
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
   // Ширина содержимого облачка — по ней низ решает, встанет ли кнопка
   // комментариев рядом с чипами.
-  const [contentWidth, setContentWidth] = useState<number | null>(null);
+  const [contentWidth, setContentWidth] = useState<number | null>(
+    () => readFooterLayout(message.id).contentWidth ?? null,
+  );
   const hasMemberReactions = Object.keys(message.reactions.members).length > 0;
   const hasVisitorReactions = Object.keys(message.reactions.visitors).length > 0;
   const textColor = isOwn ? 'primaryText' : 'text';
@@ -196,6 +199,7 @@ export function MessageBubble({
       quiet={comments?.quiet ?? false}
       meta={meta('inline')}
       contentWidth={width}
+      layoutKey={message.id}
     />
   );
 
@@ -303,7 +307,10 @@ export function MessageBubble({
           {/* Своей ширины — по самому широкому: её и меряет низ облачка. */}
           <View
             style={styles.content}
-            onLayout={({ nativeEvent }) => setContentWidth(nativeEvent.layout.width)}
+            onLayout={({ nativeEvent }) => {
+              writeFooterLayout(message.id, { contentWidth: nativeEvent.layout.width });
+              setContentWidth(nativeEvent.layout.width);
+            }}
           >
             {showAuthorLine ? authorLine() : null}
 

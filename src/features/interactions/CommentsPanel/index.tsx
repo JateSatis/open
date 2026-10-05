@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react';
 import { PanelWindow } from './PanelWindow';
 
 import { setCommentsKeyboardWindowOpen } from '@/features/chats/composerKeyboard';
+import type { CommentsLiftHost } from '@/features/interactions/comments/commentsLift';
 import {
   closeComments,
   getCommentsPanelTarget,
@@ -11,6 +12,7 @@ import {
   type CommentsPanelTarget,
 } from '@/features/interactions/comments/commentsPanelStore';
 
+export type { CommentsLiftHost } from '@/features/interactions/comments/commentsLift';
 export {
   closeComments,
   commentsEntry,
@@ -26,6 +28,8 @@ export type CommentsPanelProps = {
    * Без чата под панелью — не передаётся.
    */
   hostChatId?: string;
+  /** Переписка под панелью — её сообщение поднимается над шитом. */
+  lift?: CommentsLiftHost;
 };
 
 /**
@@ -33,7 +37,7 @@ export type CommentsPanelProps = {
  * откуда угодно; окно живёт, пока панель открыта, и рождается заново для
  * каждого сообщения.
  */
-export function CommentsPanel({ onOpenPerson, hostChatId }: CommentsPanelProps) {
+export function CommentsPanel({ onOpenPerson, hostChatId, lift }: CommentsPanelProps) {
   // Стор панели общий, а экранов с панелью в стеке бывает несколько (чат,
   // открытый из чата): окно рисует только экран в фокусе. Иначе под
   // закрывающейся панелью на миг показывался её двойник.
@@ -66,10 +70,11 @@ export function CommentsPanel({ onOpenPerson, hostChatId }: CommentsPanelProps) 
 
   return (
     <PanelWindow
-      key={target.messageId}
+      key={`${target.messageId}:${target.rowKey ?? ''}`}
       target={target}
       onOpenPerson={onOpenPerson}
       hostChatId={hostChatId}
+      lift={lift}
     />
   );
 }

@@ -8,16 +8,11 @@ import { PixelRatio, type ScrollView } from 'react-native';
 import { Gesture } from 'react-native-gesture-handler';
 import { KeyboardController } from 'react-native-keyboard-controller';
 import {
-  cancelAnimation,
-  Extrapolation,
-  interpolate,
   runOnJS,
-  scrollTo,
   useAnimatedReaction,
   useAnimatedRef,
   useAnimatedStyle,
   useSharedValue,
-  withDecay,
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
@@ -25,23 +20,28 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { panelGeometry, type PanelGeometry } from './panelGeometry';
 
-import { CLOSE_DURATION_MS, OPEN_SPRING, useDismissGesture } from '@/components/ScrollSheet';
-import { useOwnKeyboardHeight } from '@/features/chats/composerKeyboard';
 import {
-  closeComments,
-  setPanelRestTop,
-} from '@/features/interactions/comments/commentsPanelStore';
+  CLOSE_DURATION_MS,
+  OPEN_SPRING,
+  shouldDismissSheet,
+  useDismissGesture,
+} from '@/components/ScrollSheet';
+import { useOwnKeyboardHeight } from '@/features/chats/composerKeyboard';
+import { chatFade, liftedRowKey } from '@/features/interactions/comments/commentsLift';
+import { closeComments } from '@/features/interactions/comments/commentsPanelStore';
 
 /** Жест закрытия панели — снаружи нужен только тестам. */
 export const PANEL_PAN_TEST_ID = 'comments-panel-pan';
 /** Жест шапки панели — для тестов. */
 export const HEADER_PAN_TEST_ID = 'comments-header-pan';
 
-/** Жест шапки считается вертикальным после этого сдвига — тапы по сообщению доживают до своих кнопок. */
+/** Жест шапки считается вертикальным после этого сдвига — тап по крестику доживает до кнопки. */
 const HEADER_ACTIVATION_PX = 8;
 
 /** Быстрее этого уход вниз не бывает, как бы быстро ни бросили. */
 const MIN_CLOSE_MS = 120;
+/** Дольше этого закрытие не ждёт замера переписки: шит уезжает со старым. */
+const PREPARE_WAIT_MS = 120;
 
 /**
  * Сколько ехать вниз после броска: со скоростью пальца, чтобы уход был одним
@@ -55,17 +55,29 @@ function closeDuration(distance: number, velocityY: number): number {
   return Math.max(MIN_CLOSE_MS, Math.min(CLOSE_DURATION_MS, (distance / velocityY) * 1000));
 }
 
+function withTimeout(task: Promise<void>, ms: number): Promise<void> {
+  return Promise.race([task, new Promise<void>((resolve) => setTimeout(resolve, ms))]);
+}
+
+type Options = {
+  windowHeight: number;
+  /**
+   * Перед тем как шит поедет вниз — перемерить место сообщения в переписке:
+   * пока шит был открыт, могли прийти новые сообщения.
+   */
+  prepareClose: () => Promise<void>;
+};
+
 export type PanelSheet = ReturnType<typeof usePanelSheet>;
 
 /**
- * Механика шита комментариев — та же, что у шита медиа: движением владеет
- * список. Над строками в содержимом лежит прозрачное начало высотой в ход
- * шита: пока скролл внутри него, едет шит, дальше листаются комментарии.
- * Поэтому подъём из середины переходит в листание одним жестом, бросок вверх
- * продолжается инерцией, а бросок вниз останавливается в середине — это одна
- * и та же нативная прокрутка. Ниже середины шит тянет жест закрытия.
+ * Механика шита комментариев. Положение одно — верх на четверти экрана
+ * (`panelGeometry`); выше шит не поднимается, поэтому свайп вверх сразу
+ * листает комментарии. Вниз шит тянет жест закрытия — тот же, что у шита
+ * медиа: список сначала докручивается до верха, и дальше палец без паузы
+ * ведёт шит. За шапку шит тянется вниз сразу.
  */
-export function usePanelSheet(windowHeight: number) {
+export function usePanelSheet({ windowHeight, prepareClose }: Options) {
   const insets = useSafeAreaInsets();
   const keyboardHeight = useOwnKeyboardHeight('comments');
   const [headerHeight, setHeaderHeight] = useState(0);
@@ -74,8 +86,8 @@ export function usePanelSheet(windowHeight: number) {
   const [scrollAttached, setScrollAttached] = useState(false);
 
   const geometry: PanelGeometry = useMemo(
-    () => panelGeometry(windowHeight, insets.top, headerHeight, PixelRatio.get()),
-    [headerHeight, insets.top, windowHeight],
+    () => panelGeometry(windowHeight, insets.top, PixelRatio.get()),
+    [insets.top, windowHeight],
   );
 
   /** Насколько шит утащен вниз относительно рабочего положения: 0 — на месте. */
@@ -88,8 +100,8 @@ export function usePanelSheet(windowHeight: number) {
   const listRef = useRef<FlashListRef<unknown>>(null);
   const started = useRef(false);
 
-  // Выезжает, когда окно на экране и шапка замерена: положения считаются по
-  // её высоте, и шит встаёт в середину сразу, без подскока.
+  // Выезжает, когда окно на экране и сообщение над шитом готово — копия
+  // стоит ровно на месте строки.
   useEffect(() => {
     if (!shown || !ready || started.current) return;
 
@@ -97,31 +109,48 @@ export function usePanelSheet(windowHeight: number) {
     dismissY.value = withSpring(0, OPEN_SPRING);
   }, [dismissY, ready, shown]);
 
-  const close = useCallback(
+  const leave = useCallback(
+    (velocityY: number) => {
+      dismissY.value = withTiming(
+        windowHeight,
+        { duration: closeDuration(windowHeight - dismissY.value, velocityY) },
+        (finished) => {
+          if (!finished) return;
+
+          // Строка возвращается, копия исчезает, переписка видна — в одном кадре.
+          liftedRowKey.value = null;
+          chatFade.value = 1;
+          runOnJS(closeComments)();
+        },
+      );
+    },
+    [dismissY, windowHeight],
+  );
+
+  /** Закрыть: крестик, «назад», тап по фону или по сообщению над шитом. */
+  const close = useCallback(() => {
+    if (closing.value) return;
+
+    closing.value = true;
+    void KeyboardController.dismiss();
+    void withTimeout(prepareClose(), PREPARE_WAIT_MS).then(() => leave(0));
+  }, [closing, leave, prepareClose]);
+
+  /** Отпустили, утащив вниз: место сообщения перемерено, когда палец взялся за шит. */
+  const release = useCallback(
     (velocityY = 0) => {
       if (closing.value) return;
 
       closing.value = true;
       void KeyboardController.dismiss();
-      dismissY.value = withTiming(
-        windowHeight,
-        { duration: closeDuration(windowHeight - dismissY.value, velocityY) },
-        (finished) => {
-          if (finished) runOnJS(closeComments)();
-        },
-      );
+      leave(velocityY);
     },
-    [closing, dismissY, windowHeight],
+    [closing, leave],
   );
 
+  const releaseNow = useCallback(() => release(), [release]);
   const closeNow = useCallback(() => close(), [close]);
-
-  /** Поле ввода в фокусе — шит наверх: комментариям нужно место над клавиатурой. */
-  const expand = useCallback(() => {
-    if (closing.value || scrollOffset.value >= geometry.travel) return;
-
-    listRef.current?.scrollToOffset({ offset: geometry.travel, animated: true });
-  }, [closing, geometry.travel, scrollOffset]);
+  const prepare = useCallback(() => void prepareClose(), [prepareClose]);
 
   const dismissPan = useDismissGesture({
     dismissY,
@@ -130,9 +159,51 @@ export function usePanelSheet(windowHeight: number) {
     scrollGestureRef,
     scrollAttached,
     dismissDistance: geometry.dismissDistance,
-    onRelease: closeNow,
+    onRelease: releaseNow,
     testId: PANEL_PAN_TEST_ID,
   });
+
+  // Палец взялся за шит — переписку перемерить, пока он не уехал далеко.
+  useAnimatedReaction(
+    () => dismissing.value,
+    (now, before) => {
+      if (now && !before) runOnJS(prepare)();
+    },
+  );
+
+  /**
+   * Шапка лежит слоем над списком, и касание по ней до скролла не доходит.
+   * Её жест тянет шит вниз сразу, где бы ни был список, а вверх — никуда:
+   * выше рабочего положения шита нет. Жест закрытия на это время молчит.
+   */
+  const headerAnchor = useSharedValue(0);
+  const headerPan = useMemo(
+    () =>
+      Gesture.Pan()
+        .withTestId(HEADER_PAN_TEST_ID)
+        .activeOffsetY([-HEADER_ACTIVATION_PX, HEADER_ACTIVATION_PX])
+        .blocksExternalGesture(dismissPan)
+        .onStart((event) => {
+          headerAnchor.value = event.translationY - dismissY.value;
+          runOnJS(prepare)();
+        })
+        .onUpdate((event) => {
+          if (closing.value) return;
+
+          dismissY.value = Math.max(0, event.translationY - headerAnchor.value);
+        })
+        .onEnd((event) => {
+          if (closing.value) return;
+
+          if (shouldDismissSheet(dismissY.value, geometry.dismissDistance, event.velocityY)) {
+            runOnJS(release)(event.velocityY);
+            return;
+          }
+
+          dismissY.value = withSpring(0, OPEN_SPRING);
+        }),
+    [closing, dismissPan, dismissY, geometry.dismissDistance, headerAnchor, prepare, release],
+  );
 
   /** Весь шит целиком: и список, и строка ввода уезжают вместе. */
   const shiftStyle = useAnimatedStyle(() => ({
@@ -148,77 +219,9 @@ export function usePanelSheet(windowHeight: number) {
     transform: [{ translateY: dismissY.value - Math.max(keyboardHeight.value - insets.bottom, 0) }],
   }));
 
-  const backdropStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(dismissY.value, [0, geometry.halfHeight], [1, 0], Extrapolation.CLAMP),
-  }));
-
-  /**
-   * Шапка лежит слоем над списком, и касание по ней до скролла не доходит —
-   * её жест ведёт тот же скролл сам: палец двигает шит между серединой и
-   * верхом, бросок продолжается инерцией. Ниже середины шит тянет жест
-   * закрытия — он работает одновременно с этим.
-   */
-  const headerScroll = useSharedValue(0);
-  const headerDriving = useSharedValue(false);
-  const headerStart = useSharedValue(0);
-  const travel = geometry.travel;
-
-  useAnimatedReaction(
-    () => (headerDriving.value ? headerScroll.value : -1),
-    (target) => {
-      if (target >= 0) scrollTo(animatedRef, 0, target, false);
-    },
-  );
-
-  const headerPan = useMemo(
-    () =>
-      Gesture.Pan()
-        .withTestId(HEADER_PAN_TEST_ID)
-        .activeOffsetY([-HEADER_ACTIVATION_PX, HEADER_ACTIVATION_PX])
-        .simultaneousWithExternalGesture(dismissPan)
-        .onBegin(() => {
-          cancelAnimation(headerScroll);
-          headerDriving.value = false;
-        })
-        .onStart(() => {
-          // Листание комментариев шапка не трогает: она ведёт только шит.
-          headerStart.value = Math.min(scrollOffset.value, travel);
-          headerScroll.value = headerStart.value;
-          headerDriving.value = true;
-        })
-        .onUpdate((event) => {
-          headerScroll.value = Math.min(Math.max(headerStart.value - event.translationY, 0), travel);
-        })
-        .onEnd((event) => {
-          if (dismissing.value) {
-            headerDriving.value = false;
-            return;
-          }
-
-          headerScroll.value = withDecay(
-            { velocity: -event.velocityY, clamp: [0, travel] },
-            () => {
-              headerDriving.value = false;
-            },
-          );
-        }),
-    [dismissPan, dismissing, headerDriving, headerScroll, headerStart, scrollOffset, travel],
-  );
-
   const markScrollAttached = useCallback(() => setScrollAttached(true), []);
   const markShown = useCallback(() => setShown(true), []);
   const markReady = useCallback(() => setReady(true), []);
-
-  // Где встанет шит — переписке под ним, чтобы поставить сообщение над ним.
-  const restTop = ready ? geometry.top + geometry.travel : null;
-
-  useEffect(() => {
-    if (restTop === null) return;
-
-    setPanelRestTop(restTop);
-
-    return () => setPanelRestTop(null);
-  }, [restTop]);
 
   return {
     geometry,
@@ -234,10 +237,8 @@ export function usePanelSheet(windowHeight: number) {
     headerPan,
     shiftStyle,
     footerStyle,
-    backdropStyle,
     close,
     closeNow,
-    expand,
     markScrollAttached,
     markShown,
     markReady,

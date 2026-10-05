@@ -176,7 +176,7 @@ export function useChatBubbles({
   );
 
   const messageBubble = useCallback(
-    (item: ChatMessage, interactive: boolean) => {
+    (item: ChatMessage, interactive: boolean, rowKey: string) => {
       if (item.kind === 'comment_forward') return commentForwardBubble(item, interactive);
 
       const { authorId } = item;
@@ -197,7 +197,7 @@ export function useChatBubbles({
           onReactionToggle={
             interactive && canReactTo(item) ? (emoji) => toggle(item, emoji) : undefined
           }
-          comments={commentsEntry(item, chatId, interactive, isMember)}
+          comments={commentsEntry(item, chatId, interactive, isMember, rowKey)}
           showAvatar={showAvatars}
         />
       );
@@ -265,6 +265,7 @@ export function useChatBubbles({
             original.chatId,
             interactive,
             inThisChat ? isMember : (original.chat?.amMember ?? false),
+            row.key,
           )}
           showAvatar={showAvatars}
         />
@@ -287,7 +288,9 @@ export function useChatBubbles({
 
   const bubbleFor = useCallback(
     (row: BubbleRow, interactive: boolean) =>
-      row.type === 'message' ? messageBubble(row.message, interactive) : islandBubble(row, interactive),
+      row.type === 'message'
+        ? messageBubble(row.message, interactive, row.key)
+        : islandBubble(row, interactive),
     [islandBubble, messageBubble],
   );
 

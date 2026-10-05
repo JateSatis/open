@@ -11,15 +11,11 @@ export type ThreadLayout = {
   threadBottom: number;
 };
 
-/**
- * Низ шапки шита в координатах содержимого. Сама шапка — слой над списком:
- * едет вместе с подложкой (в содержимом это `travel`) и встаёт у верха окна,
- * когда шит доехал доверху.
- */
-export function headerBottom(scroll: number, travel: number, headerHeight: number): number {
+/** Низ шапки шита в координатах содержимого: шапка стоит у верха окна списка. */
+export function headerBottom(scroll: number, headerHeight: number): number {
   'worklet';
 
-  return Math.max(travel, scroll) + headerHeight;
+  return scroll + headerHeight;
 }
 
 /**

@@ -10,7 +10,7 @@ import {
   View,
   type TextInput,
 } from 'react-native';
-import Animated from 'react-native-reanimated';
+import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 
 import { Text } from '@/components/Text';
 import { ChatFooter, modePlate } from '@/features/chats/ChatFooter';
@@ -46,14 +46,15 @@ import {
   readUpTo as readUpToOf,
 } from '@/features/chats/chatDisplay';
 import { mosaicBounds } from '@/features/chats/lib/mosaicLayout';
+import { RowRegistryContext } from '@/features/chats/rowRegistry';
 import { useChatBubbles } from '@/features/chats/useChatBubbles';
 import { useChatKeyboardInset } from '@/features/chats/useChatKeyboardInset';
 import { useChatRowRenderer } from '@/features/chats/useChatRowRenderer';
 import { useComposerDraft } from '@/features/chats/useComposerDraft';
 import { useChat } from '@/features/chats/useChat';
+import { useCommentsLiftHost } from '@/features/chats/useCommentsLiftHost';
 import { useChatMessages } from '@/features/chats/useChatMessages';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
-import { useJumpAboveSheet } from '@/features/chats/useJumpAboveSheet';
 import { useJumpToMessage } from '@/features/chats/useJumpToMessage';
 import { useMarkChatRead } from '@/features/chats/useMarkChatRead';
 import { readChatDraft } from '@/features/chats/composerDraftStore';
@@ -69,6 +70,7 @@ import { useReplyForward } from '@/features/chats/useReplyForward';
 import { useRespondToInvite } from '@/features/chats/useRespondToInvite';
 import { WaitingBanner } from '@/features/chats/WaitingBanner';
 import { CommentsPanel, openComments } from '@/features/interactions/CommentsPanel';
+import { chatFade } from '@/features/interactions/comments/commentsLift';
 import { useReactToMessage } from '@/features/interactions/useReactToMessage';
 import { CallButton } from '@/features/streams/CallButton';
 import { ChatCallBar } from '@/features/streams/ChatCallBar';
@@ -129,19 +131,44 @@ export default function ChatScreen() {
     () => (chat?.waiting ?? []).filter((person) => person.id !== currentUserId),
     [chat, currentUserId],
   );
-  const aboveSheet = useJumpAboveSheet(listRef, jump.jump);
-  const { jumpAboveSheet } = aboveSheet;
+  const { jump: jumpTo } = jump;
+  // Прыжок к сообщению бывает долгим (догрузка истории): если за это время
+  // ушли с экрана, шит не открывается — он лёг бы поверх чужого.
+  const focusedRef = useRef(isFocused);
 
-  // Пришли к комментарию (тап по пересланному): его шит — поверх, а
-  // сообщение, под которым он оставлен, — над шитом. Удалённое сообщение —
-  // только шит: прыгать некуда, и это не ошибка.
+  useEffect(() => {
+    focusedRef.current = isFocused;
+
+    return () => {
+      focusedRef.current = false;
+    };
+  }, [isFocused]);
+
+  // Пришли к комментарию (тап по пересланному): переписка прокручивается к
+  // сообщению, под которым он оставлен, и оно поднимается над шитом с этого
+  // места. Удалённого или не найденного нет — только шит, и это не ошибка.
   const focusComment = useCallback(
     (focus: CommentFocus) => {
-      openComments(focus.messageId, chatId, isMember, focus.commentId);
+      const open = (rowKey?: string) =>
+        openComments(
+          focus.messageId,
+          chatId,
+          isMember,
+          focus.commentId,
+          rowKey ? { rowKey, settle: true } : undefined,
+        );
+      const { target } = focus;
 
-      if (focus.target) void jumpAboveSheet(focus.target.key, focus.target.createdAt);
+      if (!target) {
+        open();
+        return;
+      }
+
+      void jumpTo(target.key, target.createdAt).then((found) => {
+        if (focusedRef.current) open(found ? target.key : undefined);
+      });
     },
-    [chatId, isMember, jumpAboveSheet],
+    [chatId, isMember, jumpTo],
   );
 
   const navigation = useQuoteNavigation(chatId, {
@@ -366,7 +393,7 @@ export default function ChatScreen() {
     openForwardedComment,
   });
 
-  const { renderItem, islandHeader } = useChatRowRenderer({
+  const { renderItem, islandHeader, bubbleContent } = useChatRowRenderer({
     currentUserId,
     isMember,
     isSelecting,
@@ -382,6 +409,11 @@ export default function ChatScreen() {
     retry,
     hostName: authorName,
   });
+
+  const commentsLift = useCommentsLiftHost(listRef, rows, bubbleContent);
+
+  // Пока открыт шит комментариев, переписка под ним растворена.
+  const fadeStyle = useAnimatedStyle(() => ({ opacity: chatFade.value }));
 
   const { toggle: toggleReaction } = reactions;
   const menuRow = menu.target?.item ?? null;
@@ -455,7 +487,6 @@ export default function ChatScreen() {
     [menuRow, runIslandAction, runMessageAction],
   );
 
-  const { jump: jumpTo } = jump;
   const { advance: advancePin } = pinCursor;
 
   const openPinned = useCallback(
@@ -536,37 +567,34 @@ export default function ChatScreen() {
             <ActivityIndicator accessibilityLabel="Загрузка переписки" />
           </View>
         ) : (
-          <FlatList
-            ref={listRef}
-            testID="messages-list"
-            inverted
-            data={rows}
-            onScrollToIndexFailed={jump.onScrollToIndexFailed}
-            keyExtractor={rowKey}
-            renderItem={renderItem}
-            contentContainerStyle={styles.list}
-            // The list is inverted, so its "end" is the top of the screen:
-            // scrolling up pages further back through the history.
-            // Облачко ниже экрана выросло или сжалось (правка, подгрузка
-            // картинки) — то, что человек читает выше, остаётся на месте.
-            // У самого низа переписки список по-прежнему едет за новым.
-            maintainVisibleContentPosition={KEEP_READING_POSITION}
-            onEndReached={hasMore ? loadMore : undefined}
-            onEndReachedThreshold={0.4}
-            // Тап по облачку при открытой клавиатуре сразу открывает меню, а
-            // не только прячет клавиатуру; тап по пустому месту — прячет.
-            keyboardShouldPersistTaps="handled"
-            ListFooterComponent={
-              isLoadingMore ? <ActivityIndicator accessibilityLabel="Загрузка истории" /> : null
-            }
-            // Список перевёрнут: «шапка» — низ переписки. Место под шитом
-            // комментариев, чтобы и последнее сообщение встало над ним.
-            ListHeaderComponent={
-              aboveSheet.inset > 0 ? (
-                <View testID="messages-sheet-inset" style={{ height: aboveSheet.inset }} />
-              ) : null
-            }
-          />
+          <Animated.View style={[styles.flex, fadeStyle]}>
+            <RowRegistryContext.Provider value={commentsLift.registry}>
+              <FlatList
+                ref={listRef}
+                testID="messages-list"
+                inverted
+                data={rows}
+                onScrollToIndexFailed={jump.onScrollToIndexFailed}
+                keyExtractor={rowKey}
+                renderItem={renderItem}
+                contentContainerStyle={styles.list}
+                // The list is inverted, so its "end" is the top of the screen:
+                // scrolling up pages further back through the history.
+                // Облачко ниже экрана выросло или сжалось (правка, подгрузка
+                // картинки) — то, что человек читает выше, остаётся на месте.
+                // У самого низа переписки список по-прежнему едет за новым.
+                maintainVisibleContentPosition={KEEP_READING_POSITION}
+                onEndReached={hasMore ? loadMore : undefined}
+                onEndReachedThreshold={0.4}
+                // Тап по облачку при открытой клавиатуре сразу открывает меню, а
+                // не только прячет клавиатуру; тап по пустому месту — прячет.
+                keyboardShouldPersistTaps="handled"
+                ListFooterComponent={
+                  isLoadingMore ? <ActivityIndicator accessibilityLabel="Загрузка истории" /> : null
+                }
+              />
+            </RowRegistryContext.Provider>
+          </Animated.View>
         )}
 
         {!isChatLoading && !isLoading && messages.length === 0 ? (
@@ -657,7 +685,7 @@ export default function ChatScreen() {
         onClose={menu.close}
       />
 
-      <CommentsPanel onOpenPerson={openPerson} hostChatId={chatId} />
+      <CommentsPanel onOpenPerson={openPerson} hostChatId={chatId} lift={commentsLift.host} />
     </View>
   );
 }

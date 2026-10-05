@@ -12,11 +12,7 @@ export type PanelHeaderProps = {
   onClose: () => void;
 };
 
-/**
- * Верх панели: ручка, «N комментариев» и крестик. Тянут за него так же, как
- * за весь шит: он лежит в содержимом списка, и движение пальца достаётся
- * тому же скроллу.
- */
+/** Верх панели: ручка, «N комментариев» и крестик. За него шит тянут вниз. */
 export function PanelHeader({ title, onClose }: PanelHeaderProps) {
   const theme = useTheme();
 

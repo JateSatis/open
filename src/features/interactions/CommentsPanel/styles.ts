@@ -9,10 +9,22 @@ export const styles = StyleSheet.create({
   fill: {
     ...StyleSheet.absoluteFill,
   },
+  /** Окно переписки под шитом: копия сообщения не вылезает на шапку чата и поле ввода. */
+  liftClip: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    overflow: 'hidden',
+  },
+  liftedCopy: {
+    position: 'absolute',
+    top: 0,
+  },
   /**
-   * Окно списка — от верхнего положения шита до низа окна. Верх скруглён и
-   * обрезает содержимое: комментарии, ушедшие под прилипшую шапку, не
-   * выглядывают из-за её скруглённых углов.
+   * Окно списка — сам шит, от его верха до низа окна. Верх скруглён и
+   * обрезает содержимое: комментарии, ушедшие под шапку, не выглядывают из-за
+   * её скруглённых углов. Затемнения под шитом нет, и на фоне чата того же
+   * цвета край шита виден по тонкой рамке.
    */
   listWindow: {
     position: 'absolute',
@@ -22,22 +34,14 @@ export const styles = StyleSheet.create({
     overflow: 'hidden',
     borderTopLeftRadius: Radii.lg,
     borderTopRightRadius: Radii.lg,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    borderRightWidth: StyleSheet.hairlineWidth,
   },
-  /**
-   * Подложка шита — абсолютный слой в содержимом списка: `top` ей задаёт ход
-   * шита, `bottom: 0` дотягивает её до конца содержимого.
-   */
-  surface: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    borderTopLeftRadius: Radii.lg,
-    borderTopRightRadius: Radii.lg,
-  },
-  /** Шапка шита в содержимом: стоит на ходе шита и прилипает к верху окна. */
+  /** Шапка шита — у верха окна списка, комментарии листаются под ней. */
   sheetHeader: {
     position: 'absolute',
+    top: 0,
     left: 0,
     right: 0,
     borderTopLeftRadius: Radii.lg,
@@ -60,21 +64,6 @@ export const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-  },
-  /** Сообщение сверху: свёрнутое длинное обрезается снизу. */
-  target: {
-    paddingHorizontal: Spacing.three,
-    paddingBottom: Spacing.two,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  targetClip: {
-    overflow: 'hidden',
-  },
-  targetToggle: {
-    paddingBottom: Spacing.one,
-  },
-  targetGone: {
-    paddingVertical: Spacing.two,
   },
   /** Строки списка — с полями по бокам, как переписка. */
   row: {

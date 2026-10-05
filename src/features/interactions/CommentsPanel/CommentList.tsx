@@ -21,12 +21,10 @@ export type CommentListProps = {
   /** Сообщение удалено — новых не будет, и пустое состояние этого не обещает. */
   closed: boolean;
   loadMore: () => void;
-  /** Прозрачное начало содержимого: ход шита и место под его шапку. */
+  /** Место под шапкой шита в начале содержимого. */
   headerSpace: number;
   /** Место под строкой ввода и клавиатурой в конце содержимого. */
   footerSpace: number;
-  /** Содержимое не короче окна: подложка тянется до его конца, и шит поднимается доверху и с парой комментариев. */
-  minContentHeight: number;
   renderRow: ListRenderItem<CommentRow>;
   /** Меняется, когда строкам нужно перерисоваться без смены данных: выбор, правка, вспышка. */
   extraData: unknown;
@@ -54,7 +52,6 @@ export function CommentList({
   loadMore,
   headerSpace,
   footerSpace,
-  minContentHeight,
   renderRow,
   extraData,
   onCommitLayout,
@@ -97,8 +94,6 @@ export function CommentList({
     [closed, error, isLoading],
   );
 
-  const contentContainerStyle = useMemo(() => ({ minHeight: minContentHeight }), [minContentHeight]);
-
   const onEndReached = useCallback(() => {
     if (hasMore) loadMore();
   }, [hasMore, loadMore]);
@@ -112,7 +107,6 @@ export function CommentList({
       getItemType={typeOf}
       renderItem={renderRow}
       extraData={extraData}
-      contentContainerStyle={contentContainerStyle}
       ListHeaderComponent={header}
       ListFooterComponent={footer}
       ListEmptyComponent={empty}

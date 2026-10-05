@@ -1,5 +1,5 @@
 import { impactAsync, ImpactFeedbackStyle } from 'expo-haptics';
-import { useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react';
+import { useCallback, useContext, useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { Pressable, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
@@ -17,6 +17,8 @@ import { useSwipeReply } from './useSwipeReply';
 
 import { Text } from '@/components/Text';
 import type { AnchorRect } from '@/features/chats/MessageContextMenu';
+import { RowRegistryContext } from '@/features/chats/rowRegistry';
+import { liftedRowKey } from '@/features/interactions/comments/commentsLift';
 import { useTheme } from '@/hooks/use-theme';
 
 /** Столько держать палец, чтобы включился выбор. */
@@ -90,6 +92,19 @@ export function MessageRow({
   const lifted = useIsLifted(messageId);
   const swipe = useSwipeReply(messageId, !selectionMode, onSwipeReply);
   const contentRef = useRef<View>(null);
+  const registry = useContext(RowRegistryContext);
+
+  // Шит комментариев меряет строку снаружи списка — по ключу.
+  useEffect(() => registry?.register(messageId, contentRef), [messageId, registry]);
+
+  // Копия строки над затемнением меню или над шитом комментариев: сама
+  // строка пуста, пока копия на экране. Не удаляется — иначе переписка
+  // сдвинулась бы. Прозрачность одна на оба случая: анимированный стиль
+  // перекрыл бы статический, где бы тот ни стоял.
+  const hiddenStyle = useAnimatedStyle(
+    () => ({ opacity: lifted || liftedRowKey.value === messageId ? 0 : 1 }),
+    [lifted, messageId],
+  );
 
   useEffect(() => {
     if (highlightKey === null) return;
@@ -206,7 +221,7 @@ export function MessageRow({
                   просмотрщик, не запускает голосовое и не ведёт в профиль. */}
               <Animated.View
                 pointerEvents={selectionMode ? 'none' : 'auto'}
-                style={[lifted && styles.lifted, swipe.contentStyle]}
+                style={[hiddenStyle, swipe.contentStyle]}
               >
                 {children}
               </Animated.View>

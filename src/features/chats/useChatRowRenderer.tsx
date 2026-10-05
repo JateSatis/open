@@ -80,6 +80,19 @@ export function useChatRowRenderer({
     [retry],
   );
 
+  /** Содержимое строки облачка — и в переписке, и копией над шитом комментариев. */
+  const bubbleContent = useCallback(
+    (row: BubbleRow, interactive: boolean) =>
+      row.type === 'island-item' ? (
+        <View style={row.isLast ? styles.lastInIsland : undefined}>
+          {contentOf(row) ? bubbleFor(row, interactive) : <DeletedOriginal />}
+        </View>
+      ) : (
+        bubbleFor(row, interactive)
+      ),
+    [bubbleFor],
+  );
+
   const renderItem = useCallback(
     ({ item: row }: { item: ChatListRow }) => {
       const highlightKey = highlight?.messageId === row.key ? highlight.key : null;
@@ -139,18 +152,12 @@ export function useChatRowRenderer({
           onSwipeReply={isMember && content && !local ? () => startReply([row]) : undefined}
           frame={island ? <IslandBorder top={false} bottom={island.isLast} /> : undefined}
         >
-          {island ? (
-            <View style={island.isLast ? styles.lastInIsland : undefined}>
-              {content ? bubbleFor(row, true) : <DeletedOriginal />}
-            </View>
-          ) : (
-            bubbleFor(row, true)
-          )}
+          {bubbleContent(row, true)}
         </MessageRow>
       );
     },
     [
-      bubbleFor,
+      bubbleContent,
       currentUserId,
       editingId,
       highlight,
@@ -167,7 +174,7 @@ export function useChatRowRenderer({
     ],
   );
 
-  return { renderItem, islandHeader };
+  return { renderItem, islandHeader, bubbleContent };
 }
 
 const styles = StyleSheet.create({

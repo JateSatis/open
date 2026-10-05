@@ -7,7 +7,6 @@ import Animated from 'react-native-reanimated';
 
 import { CommentList } from './CommentList';
 import { CommentRowView } from './CommentRowView';
-import { CommentTargetView } from './CommentTargetView';
 import { PanelFooter } from './PanelFooter';
 import { PanelHeader } from './PanelHeader';
 import type { CommentRow } from './rows';
@@ -39,9 +38,6 @@ import { Sizes, Spacing } from '@/theme';
 /** Облачко чужого начинается после аватара и зазора (`MessageBubble`). */
 const BUBBLE_LEADING_INSET = Spacing.five + Spacing.two;
 const MEMBER_BADGE = 'участник чата';
-/** Дольше этого не ждём сообщение сверху: шит выезжает с заглушкой. */
-const TARGET_WAIT_MS = 1000;
-const noop = () => undefined;
 
 export type PanelContentProps = {
   target: CommentsPanelTarget;
@@ -53,7 +49,7 @@ export type PanelContentProps = {
   backRef: { current: () => boolean };
 };
 
-/** Всё, что внутри панели: сообщение сверху, комментарии с тредами, поле ввода и меню. */
+/** Всё, что внутри шита: заголовок, комментарии с тредами, поле ввода и меню. */
 export function PanelContent({
   target,
   sheet,
@@ -76,14 +72,13 @@ export function PanelContent({
   const [composerHeight, setComposerHeight] = useState(0);
   const [keyboardInset, setKeyboardInset] = useState(0);
   const closed = about?.state === 'deleted' || about?.state === 'missing';
-  const { geometry, headerHeight, scrollOffset, close, closeNow, expand, markReady } = sheet;
+  const { geometry, headerHeight, scrollOffset, close, closeNow } = sheet;
 
   const sticky = useStickyThread({
     listRef,
     rows,
     openThread,
     scrollOffset,
-    travel: geometry.travel,
     headerHeight,
   });
 
@@ -123,42 +118,27 @@ export function PanelContent({
     backRef.current = actions.back;
   }, [actions.back, backRef]);
 
-  // Шит выезжает, когда шапка замерена с настоящим сообщением: положения
-  // считаются по её высоте. Сообщение не пришло за секунду — выезжаем так.
-  const [waited, setWaited] = useState(false);
-
-  useEffect(() => {
-    const timer = setTimeout(() => setWaited(true), TARGET_WAIT_MS);
-
-    return () => clearTimeout(timer);
-  }, []);
-
-  useEffect(() => {
-    if (headerHeight > 0 && (about !== undefined || waited)) markReady();
-  }, [about, headerHeight, markReady, waited]);
-
   // Пришли к комментарию — он вспыхивает, когда встал в список. Виден и так —
   // шит не двигается: над ним в переписке стоит сообщение этого комментария.
   const { focusReady } = data;
-  const sheetLayout = useRef({ travel: 0, headerHeight: 0, visibleHeight: 0 });
+  const sheetLayout = useRef({ headerHeight: 0, visibleHeight: 0 });
 
   useEffect(() => {
     sheetLayout.current = {
-      travel: geometry.travel,
       headerHeight,
-      visibleHeight: geometry.listHeight - composerHeight - keyboardInset,
+      visibleHeight: geometry.height - composerHeight - keyboardInset,
     };
-  }, [composerHeight, geometry.listHeight, geometry.travel, headerHeight, keyboardInset]);
+  }, [composerHeight, geometry.height, headerHeight, keyboardInset]);
 
   useEffect(() => {
     if (!focusReady) return;
 
     // Видно — между низом шапки шита и полем ввода.
     const visible = () => {
-      const { travel, headerHeight: header, visibleHeight } = sheetLayout.current;
+      const { headerHeight: header, visibleHeight } = sheetLayout.current;
 
       return {
-        top: headerBottom(scrollOffset.value, travel, header),
+        top: headerBottom(scrollOffset.value, header),
         bottom: scrollOffset.value + visibleHeight,
       };
     };
@@ -252,21 +232,6 @@ export function PanelContent({
     [renderComment, thread],
   );
 
-  const targetAuthorId = live?.message.authorId ?? null;
-  const targetBubble = live ? (
-    <MessageBubble
-      message={{ ...live.message, status: 'sent' }}
-      isOwn={targetAuthorId !== null && targetAuthorId === currentUserId}
-      isRead={false}
-      showReceipt={false}
-      authorName={live.authorName ?? DELETED_ACCOUNT}
-      authorAvatarUrl={live.authorAvatarUrl}
-      mediaBounds={mediaBounds}
-      onRetry={noop}
-      onAuthorPress={targetAuthorId ? () => openPerson(targetAuthorId) : undefined}
-    />
-  ) : null;
-
   const count = live?.message.commentsCount ?? 0;
   const stickyRoot = sticky.rootRow?.type === 'comment' ? sticky.rootRow : null;
 
@@ -287,7 +252,6 @@ export function PanelContent({
   );
 
   const sheetContext: CommentsSheetContextValue = {
-    travel: geometry.travel,
     animatedRef: sheet.animatedRef,
     gestureRef: sheet.scrollGestureRef,
     scrollOffset,
@@ -300,7 +264,12 @@ export function PanelContent({
     <>
       <Animated.View style={[styles.fill, sheet.shiftStyle]} pointerEvents="box-none">
         <GestureDetector gesture={sheet.dismissPan}>
-          <View style={[styles.listWindow, { top: geometry.top }]}>
+          <View
+            style={[
+              styles.listWindow,
+              { top: geometry.top, backgroundColor: theme.background, borderColor: theme.border },
+            ]}
+          >
             <CommentsSheetContext.Provider value={sheetContext}>
               <CommentList
                 listRef={listRef}
@@ -311,25 +280,18 @@ export function PanelContent({
                 error={comments.error}
                 closed={closed}
                 loadMore={comments.loadMore}
-                headerSpace={geometry.travel + headerHeight}
+                headerSpace={headerHeight}
                 footerSpace={composerHeight + keyboardInset}
-                minContentHeight={geometry.travel + geometry.listHeight}
                 renderRow={renderRow}
                 extraData={actions.extraData}
                 onCommitLayout={sticky.onCommitLayout}
               />
             </CommentsSheetContext.Provider>
-            <SheetHeader
-              travel={geometry.travel}
-              scrollOffset={scrollOffset}
-              onHeight={sheet.setHeaderHeight}
-              pan={sheet.headerPan}
-            >
+            <SheetHeader onHeight={sheet.setHeaderHeight} pan={sheet.headerPan}>
               <PanelHeader
                 title={count > 0 ? commentsCountLabel(count) : 'Комментарии'}
                 onClose={closeNow}
               />
-              <CommentTargetView target={about} bubble={targetBubble} />
             </SheetHeader>
           </View>
         </GestureDetector>
@@ -340,7 +302,6 @@ export function PanelContent({
         onHeight={setComposerHeight}
         actions={actions}
         closed={closed}
-        onFieldActivate={expand}
       />
 
       <MessageContextMenu
