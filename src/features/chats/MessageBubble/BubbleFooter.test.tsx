@@ -9,8 +9,8 @@ async function layout(testID: string, width: number) {
   });
 }
 
-async function renderFooter(contentWidth: number, quiet = false) {
-  await render(
+async function renderFooter(contentWidth: number, quiet = false, layoutKey?: string) {
+  return render(
     <BubbleFooter
       isOwn={false}
       members={<Text>👍 2</Text>}
@@ -19,6 +19,7 @@ async function renderFooter(contentWidth: number, quiet = false) {
       quiet={quiet}
       meta={<Text>14:45</Text>}
       contentWidth={contentWidth}
+      layoutKey={layoutKey}
     />,
   );
 }
@@ -52,6 +53,25 @@ describe('BubbleFooter', () => {
     await layout('bubble-footer-chips-content', 120);
     await layout('bubble-footer-button', 20);
     await layout('bubble-footer-meta', 50);
+
+    expect(within(screen.getByTestId('bubble-footer-info')).getByText('💬 4')).toBeTruthy();
+  });
+
+  it('a fresh copy of the bubble is laid out like the original from its first frame', async () => {
+    const original = await renderFooter(300, false, 'message-copy');
+    await layout('bubble-footer-chips-content', 120);
+    await layout('bubble-footer-button', 60);
+    await layout('bubble-footer-meta', 50);
+    await original.unmount();
+
+    // Копия облачка (над шитом, в меню): замеров у неё ещё не было.
+    await renderFooter(300, false, 'message-copy');
+
+    expect(within(screen.getByTestId('bubble-footer-chips')).getByText('💬 4')).toBeTruthy();
+  });
+
+  it('without a key a fresh footer waits for its own measurements', async () => {
+    await renderFooter(300);
 
     expect(within(screen.getByTestId('bubble-footer-info')).getByText('💬 4')).toBeTruthy();
   });

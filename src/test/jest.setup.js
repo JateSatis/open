@@ -8,6 +8,8 @@ require('react-native-gesture-handler/jestSetup');
 jest.mock('react-native-reanimated', () => ({
   ...require('react-native-reanimated/mock'),
   makeMutable: (value) => ({ value }),
+  // Анимаций раскладки в моке нет — и настройке их пропуска нечего делать.
+  LayoutAnimationConfig: ({ children }) => children,
   useAnimatedRef: () => {
     const holder = require('react').useRef(null);
 

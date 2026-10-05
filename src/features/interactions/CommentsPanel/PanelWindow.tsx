@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Keyboard, Modal, Pressable, useWindowDimensions, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import Animated from 'react-native-reanimated';
+import Animated, { LayoutAnimationConfig } from 'react-native-reanimated';
 
 import { PanelContent } from './PanelContent';
 import { styles } from './styles';
@@ -120,7 +120,11 @@ export function PanelWindow({ target, onOpenPerson, hostChatId, lift }: PanelWin
               ]}
               onLayout={lifted.onCopyLayout}
             >
-              {lift.renderRow(copy.rowKey)}
+              {/* Копия — то же облачко, а не новое: чипы реакций в ней не
+                  проявляются заново, иначе облачко дёргалось бы поверх строки. */}
+              <LayoutAnimationConfig skipEntering>
+                {lift.renderRow(copy.rowKey)}
+              </LayoutAnimationConfig>
             </Animated.View>
           </View>
         ) : null}
