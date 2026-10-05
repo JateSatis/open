@@ -8,8 +8,9 @@ import type { ChatSummary, Message } from '@/api/chats';
 import { getChat, listDeletedMessageIds, listMessages, subscribeToChat } from '@/api/chats';
 import {
   getCommentTarget,
-  listComments,
-  listCommentsSince,
+  listCommentsByIds,
+  listThreadReplies,
+  listThreadRoots,
   sendComment,
   setCommentReaction,
   subscribeToComments,
@@ -28,6 +29,22 @@ import { island, original } from '@/test/islands';
 import { renderWithQuery } from '@/test/renderWithQuery';
 
 let mockFocused = true;
+/** Последние строки, отданные списку комментариев. */
+const mockListRows: { current: { key: string }[] | null } = { current: null };
+
+jest.mock('@shopify/flash-list', () => {
+  const actual = jest.requireActual('@shopify/flash-list');
+  const { forwardRef, createElement } = jest.requireActual('react');
+
+  return {
+    ...actual,
+    FlashList: forwardRef((props: { data: { key: string }[] }, ref: unknown) => {
+      mockListRows.current = props.data;
+
+      return createElement(actual.FlashList, { ...props, ref });
+    }),
+  };
+});
 
 jest.mock('expo-router', () => ({
   useIsFocused: () => mockFocused,
@@ -64,8 +81,10 @@ jest.mock('@/api/chats', () => ({
 }));
 jest.mock('@/api/comments', () => ({
   COMMENT_PAGE_SIZE: 30,
-  listComments: jest.fn(),
-  listCommentsSince: jest.fn(() => Promise.resolve([])),
+  THREAD_PAGE_SIZE: 10,
+  listThreadRoots: jest.fn(),
+  listThreadReplies: jest.fn(() => Promise.resolve({ items: [], nextCursor: null })),
+  fetchComment: jest.fn(),
   listCommentsByIds: jest.fn(() => Promise.resolve([])),
   getCommentTarget: jest.fn(),
   sendComment: jest.fn(),
@@ -119,8 +138,9 @@ const mockedSubscribe = subscribeToChat as jest.MockedFunction<typeof subscribeT
 const mockedTombstones = listDeletedMessageIds as jest.MockedFunction<typeof listDeletedMessageIds>;
 const mockedPins = listPinnedMessages as jest.MockedFunction<typeof listPinnedMessages>;
 const mockedSession = useSession as jest.MockedFunction<typeof useSession>;
-const mockedListComments = listComments as jest.MockedFunction<typeof listComments>;
-const mockedSince = listCommentsSince as jest.MockedFunction<typeof listCommentsSince>;
+const mockedListComments = listThreadRoots as jest.MockedFunction<typeof listThreadRoots>;
+const mockedReplies = listThreadReplies as jest.MockedFunction<typeof listThreadReplies>;
+const mockedByIds = listCommentsByIds as jest.MockedFunction<typeof listCommentsByIds>;
 const mockedTarget = getCommentTarget as jest.MockedFunction<typeof getCommentTarget>;
 const mockedSend = sendComment as jest.MockedFunction<typeof sendComment>;
 const mockedSubscribeComments = subscribeToComments as jest.MockedFunction<
@@ -215,6 +235,10 @@ function comment(id: string, overrides: Partial<Comment> = {}): Comment {
     attachments: [],
     reactions: { members: {}, visitors: {}, mine: null },
     replies: [],
+    threadRootId: null,
+    repliesCount: 0,
+    rank: 0,
+    deleted: false,
     ...overrides,
   };
 }
@@ -281,6 +305,14 @@ function commentField() {
   return screen.getByPlaceholderText('Комментарий');
 }
 
+/**
+ * Строки списка комментариев по порядку экрана. Дерево тут не годится:
+ * `FlashList` переиспользует ячейки, и порядок узлов не равен порядку строк.
+ */
+function rowKeys(): string[] {
+  return (mockListRows.current ?? []).map((row) => row.key);
+}
+
 describe('comments button next to the bubble', () => {
   it('sits next to text, a bare album, a voice note and a forwarded original — not a system one', async () => {
     await renderChat();
@@ -334,7 +366,7 @@ describe('comments panel', () => {
     expect(commentField()).toBeTruthy();
   });
 
-  it('shows comments as a chat with a quiet mark next to chat members', async () => {
+  it('shows top-level comments in rank order with a quiet mark next to chat members', async () => {
     mockedListComments.mockResolvedValue({
       items: [comment('c2', { audience: 'visitor', authorName: 'Гость' }), comment('c1')],
       nextCursor: null,
@@ -344,7 +376,8 @@ describe('comments panel', () => {
     await openCommentsOf(3);
 
     expect(await screen.findByText('комментарий c1')).toBeTruthy();
-    expect(screen.getByText('комментарий c2')).toBeTruthy();
+    // Порядок — как отдала база по рангу, без пересортировки на клиенте.
+    expect(rowKeys()).toEqual(['c2', 'c1']);
     expect(screen.getAllByText(/участник чата/)).toHaveLength(1);
   });
 
@@ -407,16 +440,43 @@ describe('comments panel', () => {
     expect(screen.getByText('мой комментарий')).toBeTruthy();
   });
 
-  it('shows somebody else’s new comment in real time', async () => {
+  it('does not slip somebody else’s new top-level comment into the list — it shows on the next open', async () => {
     await renderChat();
     await openCommentsOf(3);
     await screen.findByText('Комментариев пока нет. Их увидит каждый, кто откроет этот чат.');
 
-    mockedSince.mockResolvedValue([comment('c9', { text: 'только что' })]);
-    mockedListComments.mockResolvedValue({ items: [comment('c9', { text: 'только что' })], nextCursor: null });
-    await act(async () => commentHandlers!.onAdded('c9'));
+    mockedByIds.mockResolvedValue([comment('c9', { text: 'только что' })]);
+    await act(async () => commentHandlers!.onAdded?.('c9', null));
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 500)));
 
-    expect(await screen.findByText('только что', {}, { timeout: 2000 })).toBeTruthy();
+    expect(screen.queryByText('только что')).toBeNull();
+
+    await fireEvent(screen.getByTestId('comments-panel'), 'requestClose');
+    await waitFor(() => expect(screen.queryByTestId('comments-panel')).toBeNull());
+
+    mockedListComments.mockResolvedValue({
+      items: [comment('c9', { text: 'только что' })],
+      nextCursor: null,
+    });
+    await openCommentsOf(3);
+
+    expect(await screen.findByText('только что')).toBeTruthy();
+  });
+
+  it('keeps my freshly sent comment at the very top', async () => {
+    mockedListComments.mockResolvedValue({ items: [comment('c1')], nextCursor: null });
+    mockedSend.mockResolvedValue(
+      comment('mine', { authorId: 'user-3', text: 'мой', authorName: 'Пётр' }),
+    );
+
+    await renderChat();
+    await openCommentsOf(3);
+    await screen.findByText('комментарий c1');
+
+    await fireEvent.changeText(commentField(), 'мой');
+    await fireEvent.press(screen.getByLabelText('Отправить'));
+
+    await waitFor(() => expect(rowKeys()).toEqual(['mine', 'c1']));
   });
 
   it('says the message is deleted and stops taking new comments', async () => {
@@ -479,7 +539,7 @@ describe('a visitor in the comments', () => {
     );
   });
 
-  it('offers no editing or deleting on somebody else’s comment', async () => {
+  it('offers no editing or deleting on somebody else’s comment, but lets forward it', async () => {
     mockedListComments.mockResolvedValue({ items: [comment('c1')], nextCursor: null });
 
     await renderChat();
@@ -491,7 +551,89 @@ describe('a visitor in the comments', () => {
 
     expect(screen.queryByRole('menuitem', { name: 'Изменить' })).toBeNull();
     expect(screen.queryByRole('menuitem', { name: 'Удалить' })).toBeNull();
-    expect(screen.queryByRole('menuitem', { name: 'Переслать' })).toBeNull();
+    expect(screen.getByRole('menuitem', { name: 'Переслать' })).toBeTruthy();
+  });
+});
+
+describe('threads', () => {
+  const root = comment('root', { repliesCount: 2, text: 'корень' });
+  const replies = [
+    comment('r1', { threadRootId: 'root', text: 'первый ответ', createdAt: '2026-09-30T11:01:00Z' }),
+    comment('r2', { threadRootId: 'root', text: 'второй ответ', createdAt: '2026-09-30T11:02:00Z' }),
+  ];
+
+  beforeEach(() => {
+    mockedListComments.mockResolvedValue({
+      items: [root, comment('other', { text: 'другой корень' })],
+      nextCursor: null,
+    });
+    mockedReplies.mockResolvedValue({ items: replies, nextCursor: null });
+  });
+
+  async function openThread() {
+    await renderChat();
+    await openCommentsOf(3);
+    await screen.findByText('корень');
+    await fireEvent.press(screen.getByLabelText('Показать 2 ответа'));
+    await screen.findByText('второй ответ');
+  }
+
+  it('hides a thread until its button is pressed, then shows the replies in order', async () => {
+    await renderChat();
+    await openCommentsOf(3);
+    await screen.findByText('корень');
+
+    expect(screen.queryByText('первый ответ')).toBeNull();
+
+    await fireEvent.press(screen.getByLabelText('Показать 2 ответа'));
+
+    expect(await screen.findByText('первый ответ')).toBeTruthy();
+    expect(rowKeys()).toEqual(['root', 'r1', 'r2', 'other']);
+    expect(mockedReplies).toHaveBeenCalledWith('root');
+  });
+
+  it('a reply to a reply goes into the same thread with its quote, at its end', async () => {
+    mockedSend.mockReturnValue(new Promise(() => undefined));
+
+    await openThread();
+
+    await act(async () => {
+      fireEvent.press(screen.getAllByTestId('message-row-r2')[0]);
+    });
+    await fireEvent.press(await screen.findByRole('menuitem', { name: 'Ответить' }));
+    await fireEvent.changeText(commentField(), 'и я');
+    await fireEvent.press(screen.getByLabelText('Отправить'));
+
+    await waitFor(() =>
+      expect(mockedSend).toHaveBeenCalledWith('m1', { text: 'и я', media: [], replyTo: ['r2'] }),
+    );
+
+    const keys = rowKeys();
+
+    expect(keys.slice(0, 3)).toEqual(['root', 'r1', 'r2']);
+    // Свой ответ — сразу, в конце треда, до следующего корня.
+    expect(keys[3]).toMatch(/^local-/);
+    expect(keys[4]).toBe('other');
+  });
+
+  it('will not reply to comments of two different threads at once', async () => {
+    const { fireGestureHandler, getByGestureTestId } = jest.requireActual(
+      'react-native-gesture-handler/jest-utils',
+    ) as typeof import('react-native-gesture-handler/jest-utils');
+
+    await openThread();
+
+    // Долгое нажатие — выбор, тап по другому — добавить к выбору.
+    await act(async () => {
+      fireGestureHandler(getByGestureTestId('message-long-press-r1'), [{ state: 4 }]);
+    });
+    await act(async () => {
+      fireEvent.press(screen.getAllByTestId('message-row-other')[0]);
+    });
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Ответить' })).toBeDisabled(),
+    );
   });
 });
 

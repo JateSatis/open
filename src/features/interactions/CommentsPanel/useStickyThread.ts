@@ -137,12 +137,13 @@ export function useStickyThread({
 
       if (next <= bounds.last) return;
 
-      pendingScroll.current = Math.max(
-        0,
-        scrollOffset.value - repliesHeight(current),
-      );
+      // Шит наверху там и остаётся: если над новым корнем не хватает
+      // содержимого, корень поднимется, но шапка и шит не сдвинутся.
+      const floor = scrollOffset.value >= travel ? travel : 0;
+
+      pendingScroll.current = Math.max(floor, scrollOffset.value - repliesHeight(current));
     },
-    [bounds, layout, rows, scrollOffset],
+    [bounds, layout, rows, scrollOffset, travel],
   );
 
   return {

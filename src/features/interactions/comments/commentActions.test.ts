@@ -22,6 +22,9 @@ function comment(overrides: Partial<CommentItem> = {}): CommentItem {
     reactions: NO_REACTIONS,
     commentsCount: 0,
     status: 'sent',
+    threadRootId: null,
+    repliesCount: 0,
+    deleted: false,
     ...overrides,
   };
 }
@@ -31,27 +34,32 @@ function ids(context: Parameters<typeof visibleCommentActions>[0]) {
 }
 
 describe('comment menu', () => {
-  it('offers everything a message has except pin and forward on my own sent comment', () => {
+  // Пересылка комментариев включена (треды и пересылка, 04.10.2026): кроме
+  // закрепа, у комментария всё, что у сообщения.
+  it('offers everything a message has except pin on my own sent comment', () => {
     expect(ids({ comment: comment(), isOwn: true, targetLive: true })).toEqual([
       'reply',
       'copy',
       'edit',
+      'forward',
       'select',
       'delete',
     ]);
   });
 
-  it('lets anyone reply to and select somebody else’s comment, but not edit or delete it', () => {
+  it('lets anyone reply to, forward and select somebody else’s comment, but not edit or delete it', () => {
     expect(ids({ comment: comment(), isOwn: false, targetLive: true })).toEqual([
       'reply',
       'copy',
+      'forward',
       'select',
     ]);
   });
 
-  it('takes no replies or edits once the message itself is deleted', () => {
+  it('takes no replies or edits once the message itself is deleted, but still forwards', () => {
     expect(ids({ comment: comment(), isOwn: true, targetLive: false })).toEqual([
       'copy',
+      'forward',
       'select',
       'delete',
     ]);
@@ -66,6 +74,6 @@ describe('comment menu', () => {
   it('has nothing to copy on a voice comment', () => {
     expect(
       ids({ comment: comment({ kind: 'voice', text: null }), isOwn: false, targetLive: true }),
-    ).toEqual(['reply', 'select']);
+    ).toEqual(['reply', 'forward', 'select']);
   });
 });

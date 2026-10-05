@@ -379,7 +379,9 @@ describe('forward island', () => {
     fireEvent.press(markOf('Самойлова, ты дура!'));
     fireEvent.press(await screen.findByRole('button', { name: 'Переслать' }));
 
-    const pick = useComposerDrafts.getState().forwardPick;
+    const forwardPick = useComposerDrafts.getState().forwardPick;
+    // Пересылка сообщений, а не комментариев.
+    const pick = forwardPick && 'items' in forwardPick ? forwardPick : null;
 
     expect(pick?.sourceChat).toEqual({ id: 'chat-1', name: 'Вася и Света' });
     expect(pick?.items.map((item) => item.original.id)).toEqual(['o1', 'o2', 'm1']);
