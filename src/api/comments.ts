@@ -198,16 +198,18 @@ export async function listThreadRoots(
   params: { cursor?: RootCursor; limit?: number } = {},
 ): Promise<{ items: Comment[]; nextCursor: RootCursor | null }> {
   const limit = params.limit ?? COMMENT_PAGE_SIZE;
-  const { data, error } = await rootsSelect(messageId, params.cursor, limit);
+  // Лишняя строка — признак, что дальше ещё есть (как у ответов треда).
+  const { data, error } = await rootsSelect(messageId, params.cursor, limit + 1);
 
   if (error) throw error;
 
-  const items = (data ?? []).map(toComment);
+  const rows = data ?? [];
+  const items = rows.slice(0, limit).map(toComment);
   const last = items[items.length - 1];
 
   return {
     items,
-    nextCursor: items.length === limit && last ? { rank: last.rank, id: last.id } : null,
+    nextCursor: rows.length > limit && last ? { rank: last.rank, id: last.id } : null,
   };
 }
 
@@ -222,11 +224,14 @@ export async function listThreadReplies(
 ): Promise<Page<Comment>> {
   const limit = params.limit ?? THREAD_PAGE_SIZE;
 
+  // На одну строку больше страницы: пришла лишняя — ответы ещё остались.
+  // По `length === limit` тред ровно из 10 ответов показывал пустую кнопку
+  // «Показать ещё».
   let query = commentsSelect()
     .eq('thread_root_id', rootId)
     .is('deleted_at', null)
     .order('created_at', { ascending: true })
-    .limit(limit);
+    .limit(limit + 1);
 
   if (params.cursor) query = query.gt('created_at', params.cursor);
 
@@ -234,11 +239,12 @@ export async function listThreadReplies(
 
   if (error) throw error;
 
-  const items = (data ?? []).map(toComment);
+  const rows = data ?? [];
+  const items = rows.slice(0, limit).map(toComment);
 
   return {
     items,
-    nextCursor: items.length === limit ? items[items.length - 1].createdAt : null,
+    nextCursor: rows.length > limit ? items[items.length - 1].createdAt : null,
   };
 }
 
