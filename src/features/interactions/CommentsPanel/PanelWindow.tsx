@@ -16,6 +16,7 @@ import { useTheme } from '@/hooks/use-theme';
 export type PanelWindowProps = {
   target: CommentsPanelTarget;
   onOpenPerson: (userId: string) => void;
+  hostChatId?: string;
 };
 
 /**
@@ -26,7 +27,7 @@ export type PanelWindowProps = {
  * середине) и закрыто, см. `panelGeometry`; между средним и верхним шит
  * останавливается там, где его отпустили, как шит медиа.
  */
-export function PanelWindow({ target, onOpenPerson }: PanelWindowProps) {
+export function PanelWindow({ target, onOpenPerson, hostChatId }: PanelWindowProps) {
   const theme = useTheme();
   const { height: appWindowHeight } = useWindowDimensions();
   // Окно `Modal` с прозрачными системными полосами — во весь экран, выше окна
@@ -77,6 +78,7 @@ export function PanelWindow({ target, onOpenPerson }: PanelWindowProps) {
           target={target}
           sheet={sheet}
           onOpenPerson={onOpenPerson}
+          hostChatId={hostChatId}
           backRef={backRef}
         />
 

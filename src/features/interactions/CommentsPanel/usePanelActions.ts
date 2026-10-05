@@ -44,6 +44,8 @@ const nextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() 
 
 type Options = {
   target: CommentsPanelTarget;
+  /** Чат экрана под панелью: под выбором чата лежит он, а не чат сообщения. */
+  hostChatId?: string;
   live: Extract<CommentTarget, { state: 'live' }> | null;
   data: ReturnType<typeof usePanelComments>;
   currentUserId: string | null;
@@ -96,6 +98,7 @@ function forwardedOf(
  */
 export function usePanelActions({
   target,
+  hostChatId,
   live,
   data,
   currentUserId,
@@ -151,9 +154,12 @@ export function usePanelActions({
       });
       // Окно панели — поверх экранов: выбор чата открывается за ним.
       close();
-      router.push({ pathname: '/chats/forward', params: { from: target.chatId ?? '' } });
+      router.push({
+        pathname: '/chats/forward',
+        params: hostChatId ? { from: hostChatId } : {},
+      });
     },
-    [amMember, chat, chatId, close, currentUserId, live, router, target.chatId],
+    [amMember, chat, chatId, close, currentUserId, hostChatId, live, router],
   );
 
   const { selection, selectionContext, runSelectionAction, startReply } = useCommentReplySelection({

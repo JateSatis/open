@@ -646,7 +646,7 @@ export default function ChatScreen() {
         onClose={menu.close}
       />
 
-      <CommentsPanel onOpenPerson={openPerson} />
+      <CommentsPanel onOpenPerson={openPerson} hostChatId={chatId} />
     </View>
   );
 }

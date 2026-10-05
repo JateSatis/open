@@ -29,6 +29,7 @@ import { island, original } from '@/test/islands';
 import { renderWithQuery } from '@/test/renderWithQuery';
 
 let mockFocused = true;
+const mockPush = jest.fn();
 /** Последние строки, отданные списку комментариев. */
 const mockListRows: { current: { key: string }[] | null } = { current: null };
 
@@ -54,7 +55,7 @@ jest.mock('expo-router', () => ({
     addListener: () => () => undefined,
   }),
   useLocalSearchParams: () => ({ chatId: 'chat-1' }),
-  useRouter: () => ({ push: jest.fn(), navigate: jest.fn() }),
+  useRouter: () => ({ push: mockPush, navigate: jest.fn() }),
   Stack: { Screen: () => null },
 }));
 
@@ -72,6 +73,7 @@ jest.mock('@/api/chats', () => ({
   markChatRead: jest.fn(() => Promise.resolve()),
   sendMessage: jest.fn(),
   subscribeToChat: jest.fn(),
+  subscribeToChatSignals: jest.fn(() => () => undefined),
   deleteMessages: jest.fn(),
   listDeletedMessageIds: jest.fn(),
   listMessageEdits: jest.fn(() => Promise.resolve([])),
@@ -552,6 +554,42 @@ describe('a visitor in the comments', () => {
     expect(screen.queryByRole('menuitem', { name: 'Изменить' })).toBeNull();
     expect(screen.queryByRole('menuitem', { name: 'Удалить' })).toBeNull();
     expect(screen.getByRole('menuitem', { name: 'Переслать' })).toBeTruthy();
+  });
+
+  it('forwarding from an island original: the chat under the picker is this screen, not the original’s', async () => {
+    // Островок здесь, в chat-1, а оригинал — из chat-2: шит открыт с chatId оригинала.
+    mockedListMessages.mockResolvedValue({
+      items: [
+        island('m4', '2026-09-30T10:04:00Z', [
+          original({
+            id: 'o4',
+            chatId: 'chat-2',
+            commentsCount: 1,
+            chat: { id: 'chat-2', name: 'Другой', readUpTo: null, amMember: false },
+          }),
+        ]),
+        message('m1', 1),
+      ],
+      nextCursor: null,
+    });
+    mockedListComments.mockResolvedValue({
+      items: [comment('c1', { messageId: 'o4', chatId: 'chat-2' })],
+      nextCursor: null,
+    });
+
+    await renderChat();
+    await openCommentsOf(0);
+    await screen.findByText('комментарий c1');
+
+    await tapComment('c1');
+    await fireEvent.press(await screen.findByRole('menuitem', { name: 'Переслать' }));
+
+    await waitFor(() =>
+      expect(mockPush).toHaveBeenCalledWith({
+        pathname: '/chats/forward',
+        params: { from: 'chat-1' },
+      }),
+    );
   });
 });
 

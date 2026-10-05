@@ -18,6 +18,12 @@ export {
 export type CommentsPanelProps = {
   /** Тап по аватару или имени — профиль человека. Панель перед этим закрывается. */
   onOpenPerson: (userId: string) => void;
+  /**
+   * Чат экрана, на котором смонтирована панель, — он лежит под выбором чата
+   * при пересылке. Не чат сообщения: у облачка островка это чат оригинала.
+   * Без чата под панелью — не передаётся.
+   */
+  hostChatId?: string;
 };
 
 /**
@@ -25,7 +31,7 @@ export type CommentsPanelProps = {
  * откуда угодно; окно живёт, пока панель открыта, и рождается заново для
  * каждого сообщения.
  */
-export function CommentsPanel({ onOpenPerson }: CommentsPanelProps) {
+export function CommentsPanel({ onOpenPerson, hostChatId }: CommentsPanelProps) {
   // Стор панели общий, а экранов с панелью в стеке бывает несколько (чат,
   // открытый из чата): окно рисует только экран в фокусе. Иначе под
   // закрывающейся панелью на миг показывался её двойник.
@@ -42,6 +48,11 @@ export function CommentsPanel({ onOpenPerson }: CommentsPanelProps) {
   if (!target || !open) return null;
 
   return (
-    <PanelWindow key={target.messageId} target={target} onOpenPerson={onOpenPerson} />
+    <PanelWindow
+      key={target.messageId}
+      target={target}
+      onOpenPerson={onOpenPerson}
+      hostChatId={hostChatId}
+    />
   );
 }

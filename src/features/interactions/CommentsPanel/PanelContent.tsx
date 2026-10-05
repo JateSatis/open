@@ -46,12 +46,20 @@ export type PanelContentProps = {
   target: CommentsPanelTarget;
   sheet: PanelSheet;
   onOpenPerson: (userId: string) => void;
+  /** Чат экрана под панелью — см. `CommentsPanelProps`. */
+  hostChatId?: string;
   /** «Назад» сначала спрашивает содержимое: правка и выбор выходят первыми. */
   backRef: { current: () => boolean };
 };
 
 /** Всё, что внутри панели: сообщение сверху, комментарии с тредами, поле ввода и меню. */
-export function PanelContent({ target, sheet, onOpenPerson, backRef }: PanelContentProps) {
+export function PanelContent({
+  target,
+  sheet,
+  onOpenPerson,
+  hostChatId,
+  backRef,
+}: PanelContentProps) {
   const theme = useTheme();
   const currentUserId = useCurrentUserId();
   const { width } = useWindowDimensions();
@@ -98,6 +106,7 @@ export function PanelContent({ target, sheet, onOpenPerson, backRef }: PanelCont
 
   const actions = usePanelActions({
     target,
+    hostChatId,
     live,
     data,
     currentUserId,
