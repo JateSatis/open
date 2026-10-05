@@ -1,15 +1,11 @@
 import { ActivityIndicator, Pressable, View } from 'react-native';
 
-import type { ThreadPlace } from './rows';
+import { repliesLabel } from './RepliesButton';
 import { styles } from './styles';
-import { ThreadBackground } from './ThreadBackground';
-import { repliesLabel } from './ThreadToggle';
 
 import { Text } from '@/components/Text';
 
-
 export type ThreadGapRowProps = {
-  thread: ThreadPlace;
   /** Сколько ответов за разрывом; `null` — тред ещё грузится, на месте ответов — колесо. */
   hidden: number | null;
   isLoading: boolean;
@@ -17,10 +13,9 @@ export type ThreadGapRowProps = {
 };
 
 /** Разрыв длинного треда — «Показать ещё N ответов» — или загрузка его начала. */
-export function ThreadGapRow({ thread, hidden, isLoading, onPress }: ThreadGapRowProps) {
+export function ThreadGapRow({ hidden, isLoading, onPress }: ThreadGapRowProps) {
   return (
-    <View style={[styles.row, styles.reply]}>
-      <ThreadBackground first={thread.first} last={thread.last} />
+    <View style={styles.row}>
       {hidden === null || isLoading ? (
         <View style={styles.threadAction}>
           <ActivityIndicator accessibilityLabel="Загрузка ответов" />

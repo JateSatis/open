@@ -24,6 +24,8 @@ export type CommentComposerProps = {
   inputRef: RefObject<TextInput | null>;
   /** Сообщение удалено — новые комментарии не принимаются. */
   closed: boolean;
+  /** Подпись пустого поля. */
+  placeholder: string;
   onSend: () => void;
   onSendVoice: (voice: LocalMedia) => void;
 };
@@ -44,6 +46,7 @@ export function CommentComposer({
   edit,
   inputRef,
   closed,
+  placeholder,
   onSend,
   onSendVoice,
 }: CommentComposerProps) {
@@ -77,7 +80,7 @@ export function CommentComposer({
         text={draft.text}
         onChangeText={draft.setText}
         canSend
-        placeholder="Комментарий"
+        placeholder={placeholder}
         plate={plate}
         edit={editPlate?.state}
         inputRef={inputRef}
@@ -95,7 +98,7 @@ export function CommentComposer({
         draft={draft}
         plate={isEditing ? plate : null}
         editing={isEditing}
-        placeholder="Комментарий"
+        placeholder={placeholder}
         onTyping={noop}
         onSend={onSend}
       />

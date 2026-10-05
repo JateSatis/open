@@ -11,9 +11,10 @@ import type { PanelSheet } from './usePanelSheet';
 import type { CommentTarget } from '@/api/comments';
 import type { ForwardedComment } from '@/api/chats';
 import { startForwardPick } from '@/features/chats/composerDraftStore';
+import { claimKeyboardForComments } from '@/features/chats/composerKeyboard';
 import { canReactTo } from '@/features/chats/messageActions';
 import type { AnchorRect } from '@/features/chats/MessageContextMenu';
-import { DELETED_ACCOUNT, previewOf, quoteOf } from '@/features/chats/messageQuote';
+import { previewOf } from '@/features/chats/messageQuote';
 import type { ChatMessage, EditResult, LiveQuote } from '@/features/chats/messages/types';
 import { useChat } from '@/features/chats/useChat';
 import { useComposerDraft } from '@/features/chats/useComposerDraft';
@@ -21,7 +22,6 @@ import { useMessageEdit } from '@/features/chats/useMessageEdit';
 import { useMessageMenu } from '@/features/chats/useMessageMenu';
 import { chatTitle } from '@/features/chats/chatDisplay';
 import { visibleCommentActions } from '@/features/interactions/comments/commentActions';
-import type { CommentThreadTarget } from '@/features/interactions/comments/commentDelivery';
 import {
   commentThreadKey,
   threadOf,
@@ -37,9 +37,9 @@ import { useCommentActionHandlers } from '@/features/interactions/comments/useCo
 import { useCommentReplySelection } from '@/features/interactions/comments/useCommentReplySelection';
 import { showNotice } from '@/features/notifications/alertsStore';
 import type { LocalMedia } from '@/features/media';
+import { focusWithKeyboard } from '@/lib/windowFocus';
 
 const commentKey = (comment: CommentItem) => comment.id;
-const nameOf = (comment: CommentItem) => comment.authorName ?? DELETED_ACCOUNT;
 const nextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 
 type Options = {
@@ -49,13 +49,13 @@ type Options = {
   live: Extract<CommentTarget, { state: 'live' }> | null;
   data: ReturnType<typeof usePanelComments>;
   currentUserId: string | null;
+  /** Открытое окно треда — id корня. */
+  openThread: string | null;
   inputRef: RefObject<TextInput | null>;
   listRef: RefObject<FlashListRef<CommentRow> | null>;
+  threadListRef: RefObject<FlashListRef<CommentRow> | null>;
   sheet: PanelSheet;
-  /** Тред скрывается: с липкого корня — со сдвигом скролла (`useStickyThread`). */
-  stickyCollapse: () => void;
-  /** Раскрывается другой тред: закрываемый выше не сдвигает экран (`useStickyThread`). */
-  stickySwitch: (nextRootId: string) => void;
+  /** Прыжок к комментарию в окне треда — по тапу на цитату. */
   jump: (commentId: string, options?: { flash?: boolean }) => Promise<boolean>;
 };
 
@@ -93,9 +93,14 @@ function forwardedOf(
   };
 }
 
+/** Комментарии на экране — по порядку строк. */
+function commentsOf(rows: CommentRow[]): CommentItem[] {
+  return rows.flatMap((row) => (row.type === 'comment' && !row.comment.deleted ? [row.comment] : []));
+}
+
 /**
  * Что панель делает по касаниям: меню и выбор, ответ в тред, правка,
- * отправка, пересылка, раскрытие тредов, «назад».
+ * отправка, пересылка, окно треда, «назад».
  */
 export function usePanelActions({
   target,
@@ -103,27 +108,27 @@ export function usePanelActions({
   live,
   data,
   currentUserId,
+  openThread,
   inputRef,
   listRef,
+  threadListRef,
   sheet,
-  stickyCollapse,
-  stickySwitch,
   jump,
 }: Options) {
   const queryClient = useQueryClient();
   const router = useRouter();
   const { messageId } = target;
-  const { comments, visible, rows, amMember } = data;
+  const { comments, rows, threadRows, amMember } = data;
   const chatId = live?.message.chatId ?? target.chatId ?? '';
   const { chat } = useChat(chatId);
   const draft = useComposerDraft(commentThreadKey(messageId));
   const menu = useMessageMenu<CommentItem>(commentKey);
-  const latestRows = useRef(rows);
   const { close } = sheet;
-
-  useEffect(() => {
-    latestRows.current = rows;
-  }, [rows]);
+  // Выбор — среди комментариев того окна, что на экране.
+  const visible = useMemo(
+    () => commentsOf(openThread ? threadRows : rows),
+    [openThread, rows, threadRows],
+  );
 
   const { saveEdit: saveCommentEdit } = comments;
   // Правка — общая с сообщениями: поле знает только `ChatMessage`, а здесь им
@@ -163,6 +168,25 @@ export function usePanelActions({
     [amMember, chat, chatId, close, currentUserId, hostChatId, live, router],
   );
 
+  /**
+   * Ответ на верхнеуровневый в основном списке — это ответ в его тред:
+   * открывается окно треда, поле в фокусе, цитаты нет — в треде любое
+   * сообщение и так ответ.
+   */
+  const replyInThread = useCallback(
+    (picked: CommentItem[]) => {
+      const [only, ...rest] = picked;
+
+      if (getOpenThread() || !only || rest.length > 0 || only.threadRootId) return false;
+
+      setOpenThread(only.id);
+      claimKeyboardForComments();
+      focusWithKeyboard(inputRef, undefined, true);
+      return true;
+    },
+    [inputRef],
+  );
+
   const { selection, selectionContext, runSelectionAction, startReply } = useCommentReplySelection({
     comments: visible,
     currentUserId,
@@ -170,6 +194,7 @@ export function usePanelActions({
     inputRef,
     thread: comments,
     onForward: forward,
+    replyElsewhere: replyInThread,
   });
 
   const replyTo = useCallback((comment: CommentItem) => startReply([comment]), [startReply]);
@@ -188,97 +213,86 @@ export function usePanelActions({
     forward: forwardOne,
   });
 
-  /** Второй тред раскрывается, первый закрывается; свой — скрывается. */
-  const toggleThread = useCallback(
-    (rootId: string) => {
-      if (getOpenThread() === rootId) {
-        stickyCollapse();
-        setOpenThread(null);
-        return;
-      }
+  /**
+   * Смена окна — вход в тред и выход — снимает выбор и правку: они про
+   * строки того окна. Текст поля остаётся, а цитата снимается: иначе ответ
+   * с цитатой из основного списка незаметно ушёл бы в тред.
+   */
+  const resetRef = useRef(() => {});
 
-      if (getOpenThread()) stickySwitch(rootId);
+  useEffect(() => {
+    resetRef.current = () => {
+      selection.clear();
+      if (edit.mode) void edit.leave();
+      else if (draft.mode?.type === 'reply') draft.setMode(null);
+    };
+  });
 
-      setOpenThread(rootId);
-    },
-    [stickyCollapse, stickySwitch],
-  );
+  const enteredThread = useRef(openThread);
 
-  /** Куда ляжет ответ с этими цитатами: тред их корня. */
-  const threadTargetOf = useCallback(
-    (quotes: LiveQuote[]): CommentThreadTarget | null => {
+  useEffect(() => {
+    if (enteredThread.current === openThread) return;
+
+    enteredThread.current = openThread;
+    resetRef.current();
+  }, [openThread]);
+
+  const openThreadOf = useCallback((rootId: string) => setOpenThread(rootId), []);
+  const exitThread = useCallback(() => setOpenThread(null), []);
+
+  /** Тред ответа с цитатами, отправленного не из окна треда: тред первой цитаты. */
+  const threadOfQuotes = useCallback(
+    (quotes: LiveQuote[]): string | null => {
       const [first] = quotes;
 
       if (!first) return null;
 
-      const loaded = loadedComments(queryClient, messageId);
-      const quoted = loaded.get(first.messageId);
-      const rootId = quoted ? threadOf(quoted) : first.messageId;
-      const root = loaded.get(rootId);
+      const quoted = loadedComments(queryClient, messageId).get(first.messageId);
 
-      return { rootId, rootQuote: root && !root.deleted ? quoteOf(root, nameOf(root)) : null };
+      return quoted ? threadOf(quoted) : first.messageId;
     },
     [messageId, queryClient],
   );
 
   /**
-   * После отправки: ответ — тред раскрыт, его конец на виду; свой
-   * верхнеуровневый — наверху списка, туда и листаем, если ушли вниз.
+   * После отправки: ответ — в конце окна треда, туда и листаем; свой
+   * верхнеуровневый — наверху основного списка.
    */
   const afterSend = useCallback(
-    (thread: CommentThreadTarget | null) => {
-      if (!thread) {
-        // После того как строка встала в список: он держит видимые строки на
-        // месте, и новая наверху ушла бы под шапку шита.
-        void (async () => {
-          await nextFrame();
-          await nextFrame();
-
-          listRef.current?.scrollToOffset({ offset: 0, animated: true });
-        })();
-        return;
-      }
-
-      setOpenThread(thread.rootId);
-
+    (threadRootId: string | null) => {
+      // После того как строка встала в список: он держит видимые строки на
+      // месте, и новая наверху ушла бы под шапку шита.
       void (async () => {
         await nextFrame();
         await nextFrame();
 
-        const current = latestRows.current;
-        let last = -1;
-
-        current.forEach((row, index) => {
-          if (row.thread?.rootId === thread.rootId) last = index;
-        });
-
-        if (last !== -1) listRef.current?.scrollToIndex({ index: last, viewPosition: 0.6, animated: true });
+        if (threadRootId) threadListRef.current?.scrollToEnd({ animated: true });
+        else listRef.current?.scrollToOffset({ offset: 0, animated: true });
       })();
     },
-    [listRef],
+    [listRef, threadListRef],
   );
 
   const { mode } = draft;
   const replies = useMemo(() => (mode?.type === 'reply' ? mode.quotes : []), [mode]);
   const { send, sendVoice: sendCommentVoice } = comments;
 
-  const submit = useCallback(() => {
-    const thread = threadTargetOf(replies);
+  // Написанное в окне треда — ответ в этот тред, с цитатой или без.
+  const threadRootId = openThread ?? threadOfQuotes(replies);
 
-    send(draft.text, draft.media(), replies, thread);
+  const submit = useCallback(() => {
+    send(draft.text, draft.media(), replies, threadRootId);
     draft.clear();
-    afterSend(thread);
-  }, [afterSend, draft, replies, send, threadTargetOf]);
+    afterSend(threadRootId);
+  }, [afterSend, draft, replies, send, threadRootId]);
 
   const sendVoice = useCallback(
     (voice: LocalMedia) => {
-      const thread = threadTargetOf(replies);
-
-      sendCommentVoice(voice, replies, thread);
+      sendCommentVoice(voice, replies, threadRootId);
       if (replies.length > 0) draft.setMode(null);
-      afterSend(thread);
+      afterSend(threadRootId);
     },
-    [afterSend, draft, replies, sendCommentVoice, threadTargetOf],
+    [afterSend, draft, replies, sendCommentVoice, threadRootId],
   );
 
   const jumpToQuote = useCallback(
@@ -294,10 +308,17 @@ export function usePanelActions({
       return true;
     }
 
-    if (!edit.mode) return false;
+    if (edit.mode) {
+      void edit.leave();
+      return true;
+    }
 
-    void edit.leave();
-    return true;
+    if (getOpenThread()) {
+      setOpenThread(null);
+      return true;
+    }
+
+    return false;
   }, [edit, selection]);
 
   const closed = data.about?.state === 'deleted' || data.about?.state === 'missing';
@@ -344,7 +365,8 @@ export function usePanelActions({
     replyTo,
     selectOne,
     toggleSelected,
-    toggleThread,
+    openThread: openThreadOf,
+    exitThread,
     submit,
     sendVoice,
     jumpToQuote,

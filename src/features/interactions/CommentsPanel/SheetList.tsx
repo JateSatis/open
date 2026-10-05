@@ -6,7 +6,6 @@ import {
   useContext,
   useEffect,
   type ComponentType,
-  type ReactNode,
   type Ref,
   type RefObject,
 } from 'react';
@@ -23,13 +22,6 @@ export type CommentsSheetContextValue = {
   dismissing: SharedValue<boolean>;
   /** Скролл смонтирован и ссылка на него заполнена. */
   onScrollAttached: () => void;
-  /**
-   * Слой поверх строк, в координатах содержимого: липкий корень раскрытого
-   * треда. Он в содержимом, а не над списком, — касание по нему достаётся
-   * тому же нативному скроллу, что и строки. Шапка шита сюда не входит: она
-   * отдельным слоем над списком со своим жестом (`SheetHeader`).
-   */
-  overlay: ReactNode;
 };
 
 /**
@@ -48,12 +40,12 @@ function useCommentsSheet(): CommentsSheetContextValue {
   return value;
 }
 
-/** Скролл списка, связанный с жестом закрытия. Липкий корень — после строк, чтобы рисоваться поверх них. */
+/** Скролл списка, связанный с жестом закрытия. */
 const SheetScrollView = forwardRef<ScrollView, ScrollViewProps>(function SheetScrollView(
-  { children, ...rest },
+  props,
   ref,
 ) {
-  const { animatedRef, gestureRef, overlay } = useCommentsSheet();
+  const { animatedRef, gestureRef } = useCommentsSheet();
 
   const attach = useCallback(
     (instance: ComponentType | null) => {
@@ -72,17 +64,14 @@ const SheetScrollView = forwardRef<ScrollView, ScrollViewProps>(function SheetSc
 
   return (
     <GestureScrollView
-      {...rest}
+      {...props}
       ref={attach}
       // Список упирается в верх, и дальше палец тянет шит — растяжение
       // содержимого на Android и отскок на iOS спорили бы с ним.
       overScrollMode="never"
       bounces={false}
       keyboardShouldPersistTaps="handled"
-    >
-      {children}
-      {overlay}
-    </GestureScrollView>
+    />
   );
 });
 

@@ -12,6 +12,7 @@ import { Text } from '@/components/Text';
 export type CommentHighlight = { id: string; key: number };
 
 export type CommentListProps = {
+  testID: string;
   listRef: RefObject<FlashListRef<CommentRow> | null>;
   rows: CommentRow[];
   isLoading: boolean;
@@ -20,6 +21,8 @@ export type CommentListProps = {
   error: string | null;
   /** Сообщение удалено — новых не будет, и пустое состояние этого не обещает. */
   closed: boolean;
+  /** Пустому списку нечего сказать — окно треда, пока тред не открыт. */
+  silentWhenEmpty?: boolean;
   loadMore: () => void;
   /** Место под шапкой шита в начале содержимого. */
   headerSpace: number;
@@ -28,20 +31,19 @@ export type CommentListProps = {
   renderRow: ListRenderItem<CommentRow>;
   /** Меняется, когда строкам нужно перерисоваться без смены данных: выбор, правка, вспышка. */
   extraData: unknown;
-  /** Раскладка списка зафиксирована — по ней меряется раскрытый тред. */
-  onCommitLayout: () => void;
 };
 
 const keyOf = (row: CommentRow) => row.key;
 const typeOf = (row: CommentRow) =>
-  row.type === 'comment' ? (row.comment.threadRootId ? 'reply' : 'root') : row.type;
+  row.type === 'comment' ? (row.threadRoot ? 'thread-root' : 'comment') : row.type;
 
 /**
- * Комментарии списком сверху вниз: верх по рангу, раскрытый тред — под своим
- * корнем. Постранично: листание вниз догружает следующую страницу верха.
+ * Комментарии списком сверху вниз — верх по рангу или окно треда.
+ * Постранично: листание вниз догружает следующую страницу верха.
  * Список живёт внутри шита — его скролл и есть движение шита.
  */
 export function CommentList({
+  testID,
   listRef,
   rows,
   isLoading,
@@ -49,12 +51,12 @@ export function CommentList({
   hasMore,
   error,
   closed,
+  silentWhenEmpty = false,
   loadMore,
   headerSpace,
   footerSpace,
   renderRow,
   extraData,
-  onCommitLayout,
 }: CommentListProps) {
   // Шапка и хвост мемоизированы: `FlashList` сравнивает их по ссылке.
   const header = useMemo(
@@ -101,7 +103,7 @@ export function CommentList({
   return (
     <CommentsSheetList
       listRef={listRef}
-      testID="comments-list"
+      testID={testID}
       data={rows}
       keyExtractor={keyOf}
       getItemType={typeOf}
@@ -109,10 +111,9 @@ export function CommentList({
       extraData={extraData}
       ListHeaderComponent={header}
       ListFooterComponent={footer}
-      ListEmptyComponent={empty}
+      ListEmptyComponent={silentWhenEmpty ? null : empty}
       onEndReached={onEndReached}
       onEndReachedThreshold={0.5}
-      onCommitLayoutEffect={onCommitLayout}
     />
   );
 }

@@ -52,6 +52,11 @@ type Options = {
   thread: Pick<CommentsState, 'remove'>;
   /** «Переслать»: комментарии в порядке экрана — дальше выбор чата. */
   onForward: (comments: CommentItem[]) => void;
+  /**
+   * «Ответить» решается снаружи — например, открывается окно треда вместо
+   * цитаты. `true` — ответ взят, цитата в поле не встаёт.
+   */
+  replyElsewhere?: (comments: CommentItem[]) => boolean;
 };
 
 const nameOf = (comment: CommentItem) => comment.authorName ?? DELETED_ACCOUNT;
@@ -68,6 +73,7 @@ export function useCommentReplySelection({
   inputRef,
   thread,
   onForward,
+  replyElsewhere,
 }: Options) {
   // Выбор переписки работает со строками перевёрнутого списка и отдаёт их
   // в обратном порядке — даём ему строки снизу вверх, получаем порядок экрана.
@@ -84,6 +90,7 @@ export function useCommentReplySelection({
   const startReply = useCallback(
     (picked: CommentItem[]) => {
       if (picked.length === 0) return;
+      if (replyElsewhere?.(picked)) return;
 
       if (!inOneThread(picked)) {
         showNotice('Ответить можно только в один тред', 'error');
@@ -94,7 +101,7 @@ export function useCommentReplySelection({
       claimKeyboardForComments();
       focusWithKeyboard(inputRef, undefined, true);
     },
-    [inputRef, setMode],
+    [inputRef, replyElsewhere, setMode],
   );
 
   const selected = useMemo(() => selection.selected.map(commentOf), [selection.selected]);

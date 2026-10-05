@@ -15,7 +15,7 @@ export type CommentsPanelTarget = {
   amMember?: boolean;
   /**
    * Комментарий, к которому пришли (тап по пересланному): он встаёт наверх,
-   * его тред раскрыт, а сам он вспыхивает.
+   * а ответ открывает окно своего треда; сам он вспыхивает.
    */
   focusCommentId?: string;
   /**
@@ -30,10 +30,13 @@ export type CommentsPanelTarget = {
 /** Откуда поднимать сообщение над шитом — см. `CommentsPanelTarget`. */
 export type CommentsLiftFrom = { rowKey: string; settle?: boolean };
 
+/** Окно треда: корень и как оно появилось — въехало справа или сразу на месте. */
+export type OpenThreadState = { rootId: string; instant: boolean };
+
 type PanelState = {
   target: CommentsPanelTarget | null;
-  /** Раскрытый тред — id корня. Раскрыт всегда не больше одного. */
-  openThread: string | null;
+  /** Открытое окно треда. Открыто всегда не больше одного. */
+  openThread: OpenThreadState | null;
 };
 
 const usePanelStore = create<PanelState>(() => ({ target: null, openThread: null }));
@@ -68,17 +71,20 @@ export function getCommentsPanelTarget(): CommentsPanelTarget | null {
   return usePanelStore.getState().target;
 }
 
-export function useOpenThread(): string | null {
+export function useOpenThread(): OpenThreadState | null {
   return usePanelStore((state) => state.openThread);
 }
 
 export function getOpenThread(): string | null {
-  return usePanelStore.getState().openThread;
+  return usePanelStore.getState().openThread?.rootId ?? null;
 }
 
-/** Раскрывает тред этого корня; раскрытый до него закрывается. `null` — закрыть. */
-export function setOpenThread(rootId: string | null) {
-  usePanelStore.setState({ openThread: rootId });
+/**
+ * Открывает окно треда этого корня; `null` — закрыть. `instant` — без въезда:
+ * шит открылся сразу в треде (пришли к пересланному ответу).
+ */
+export function setOpenThread(rootId: string | null, instant = false) {
+  usePanelStore.setState({ openThread: rootId ? { rootId, instant } : null });
 }
 
 /**
