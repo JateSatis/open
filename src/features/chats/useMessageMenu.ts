@@ -1,4 +1,3 @@
-import { impactAsync, ImpactFeedbackStyle } from 'expo-haptics';
 import { useCallback, useState } from 'react';
 import { Keyboard } from 'react-native';
 
@@ -17,7 +16,6 @@ export function useMessageMenu<T>(keyOf: (item: T) => string) {
 
   const open = useCallback(
     (item: T, anchor: AnchorRect) => {
-      impactAsync(ImpactFeedbackStyle.Medium).catch(() => undefined);
       Keyboard.dismiss();
       setLiftedMessage(keyOf(item));
       setTarget({ item, anchor });

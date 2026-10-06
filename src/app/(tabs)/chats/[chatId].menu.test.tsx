@@ -1,6 +1,7 @@
 import type { Session as SupabaseSession } from '@supabase/supabase-js';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react-native';
 import * as Clipboard from 'expo-clipboard';
+import { impactAsync } from 'expo-haptics';
 import { BackHandler, StyleSheet } from 'react-native';
 import { State } from 'react-native-gesture-handler';
 import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils';
@@ -566,6 +567,22 @@ describe('gestures on a message', () => {
     await tapMessage('m2');
 
     expect(await screen.findByTestId('message-menu')).toBeTruthy();
+  });
+
+  it('opens the menu without vibrating; a long press still vibrates', async () => {
+    await renderWithQuery(<ChatScreen />);
+    await screen.findByText('привет');
+
+    await tapMessage('m2');
+    await screen.findByTestId('message-menu');
+
+    expect(impactAsync).not.toHaveBeenCalled();
+
+    fireEvent.press(screen.getByTestId('message-menu-backdrop'));
+    await waitFor(() => expect(screen.queryByTestId('message-menu')).toBeNull());
+    await longPress('m3');
+
+    expect(impactAsync).toHaveBeenCalled();
   });
 
   it('hides the bubble in the chat while its copy stands over the menu backdrop', async () => {
