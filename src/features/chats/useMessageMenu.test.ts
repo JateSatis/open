@@ -17,7 +17,7 @@ function deferredMeasure() {
 describe('useMessageMenu', () => {
   it('opens once the list window is measured, with that window', async () => {
     const { measure, answer } = deferredMeasure();
-    const { result } = await renderHook(() => useMessageMenu((id: string) => id, measure));
+    const { result } = await renderHook(() => useMessageMenu<string>(measure));
 
     await act(() => result.current.open('m1', anchor));
     expect(result.current.target).toBeNull();
@@ -29,7 +29,7 @@ describe('useMessageMenu', () => {
 
   it('does not open when it was closed before the measurement came back', async () => {
     const { measure, answer } = deferredMeasure();
-    const { result } = await renderHook(() => useMessageMenu((id: string) => id, measure));
+    const { result } = await renderHook(() => useMessageMenu<string>(measure));
 
     await act(() => result.current.open('m1', anchor));
     await act(() => result.current.close());
@@ -40,7 +40,7 @@ describe('useMessageMenu', () => {
 
   it('opens over the latest tap when two answers race', async () => {
     const { measure, answer } = deferredMeasure();
-    const { result } = await renderHook(() => useMessageMenu((id: string) => id, measure));
+    const { result } = await renderHook(() => useMessageMenu<string>(measure));
 
     await act(() => result.current.open('m1', anchor));
     await act(() => result.current.open('m2', anchor));

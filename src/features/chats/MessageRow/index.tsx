@@ -11,7 +11,6 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
-import { useIsLifted } from './liftedStore';
 import { styles } from './styles';
 import { useSwipeReply } from './useSwipeReply';
 
@@ -89,7 +88,6 @@ export function MessageRow({
 }: MessageRowProps) {
   const theme = useTheme();
   const highlight = useSharedValue(0);
-  const lifted = useIsLifted(messageId);
   const swipe = useSwipeReply(messageId, !selectionMode, onSwipeReply);
   const contentRef = useRef<View>(null);
   const registry = useContext(RowRegistryContext);
@@ -97,13 +95,12 @@ export function MessageRow({
   // Шит комментариев меряет строку снаружи списка — по ключу.
   useEffect(() => registry?.register(messageId, contentRef), [messageId, registry]);
 
-  // Копия строки над затемнением меню или над шитом комментариев: сама
-  // строка пуста, пока копия на экране. Не удаляется — иначе переписка
-  // сдвинулась бы. Прозрачность одна на оба случая: анимированный стиль
-  // перекрыл бы статический, где бы тот ни стоял.
+  // Копия строки над шитом комментариев: сама строка пуста, пока копия на
+  // экране. Не удаляется — иначе переписка сдвинулась бы. Под меню строка
+  // не прячется: копия меню полупрозрачна и лежит прямо поверх неё.
   const hiddenStyle = useAnimatedStyle(
-    () => ({ opacity: lifted || liftedRowKey.value === messageId ? 0 : 1 }),
-    [lifted, messageId],
+    () => ({ opacity: liftedRowKey.value === messageId ? 0 : 1 }),
+    [messageId],
   );
 
   useEffect(() => {

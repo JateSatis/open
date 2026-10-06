@@ -14,7 +14,7 @@ import { styles } from './styles';
 import { Text } from '@/components/Text';
 import { pickerGeometry, ReactionPicker } from '@/features/interactions/ReactionPicker';
 import { useTheme } from '@/hooks/use-theme';
-import { Sizes, Spacing } from '@/theme';
+import { Opacity, Sizes, Spacing } from '@/theme';
 
 const OPEN_MS = 200;
 const CLOSE_MS = 140;
@@ -66,8 +66,10 @@ export type MessageContextMenuProps<Id extends string = string> = {
 /**
  * Меню сообщения по тапу. Своё окно (`Modal`) — единственный способ
  * затемнить и нативный заголовок, и нативный таб-бар (см. заметку про шит
- * медиа). Облачко не двигается: его копия стоит над затемнением ровно там,
- * где оно в переписке. Меню — у пальца и по горизонтали всегда в одной точке
+ * медиа). Облачко не двигается и не прячется: строка остаётся в переписке
+ * под затемнением, а полупрозрачная копия лежит ровно поверх неё и
+ * высветляет облачко — без пустого кадра, пока окно и картинки копии
+ * догружаются. Меню — у пальца и по горизонтали всегда в одной точке
  * экрана, над ним — блок реакций. Раскрытый блок растёт вниз, поверх меню,
  * до края экрана; действия на это время прячутся.
  */
@@ -156,6 +158,9 @@ export function MessageContextMenu<Id extends string>({
   );
 
   const backdropStyle = useAnimatedStyle(() => ({ opacity: progress.value }));
+  // Копия проявляется вместе с затемнением: облачко под ней темнеет вместе с
+  // экраном, а копия возвращает ему часть яркости.
+  const previewStyle = useAnimatedStyle(() => ({ opacity: progress.value * Opacity.menuCopy }));
   const menuStyle = useAnimatedStyle(() => ({
     opacity: progress.value * (1 - menuHidden.value),
     transform: [{ scale: 0.9 + progress.value * 0.1 }],
@@ -199,7 +204,7 @@ export function MessageContextMenu<Id extends string>({
             pointerEvents="none"
             style={[styles.clip, { top: clipTop, height: Math.max(0, clipBottom - clipTop) }]}
           >
-            <View
+            <Animated.View
               testID="message-menu-preview"
               style={[
                 styles.preview,
@@ -209,10 +214,11 @@ export function MessageContextMenu<Id extends string>({
                   width: anchor.width,
                   height: anchor.height,
                 },
+                previewStyle,
               ]}
             >
               {preview}
-            </View>
+            </Animated.View>
           </View>
 
           {/* Меню в строке с распоркой: распорка держит левый край в одной

@@ -21,7 +21,6 @@ import { confirm } from '@/components/ConfirmDialog';
 import { useSession } from '@/features/auth/useSession';
 import { resetComposerDrafts } from '@/features/chats/composerDraftStore';
 import { resetOutbox } from '@/features/chats/messages/outbox';
-import { setLiftedMessage } from '@/features/chats/MessageRow/liftedStore';
 import { useInAppAlert } from '@/features/notifications/alertsStore';
 import { reportRealtimeJoined, resetConnectionState } from '@/features/connection/connectionStore';
 import { renderWithQuery } from '@/test/renderWithQuery';
@@ -585,9 +584,7 @@ describe('gestures on a message', () => {
     expect(impactAsync).toHaveBeenCalled();
   });
 
-  it('hides the bubble in the chat while its copy stands over the menu backdrop', async () => {
-    // Меню прошлых тестов не закрывалось — их строка осталась поднятой.
-    setLiftedMessage(null);
+  it('keeps the bubble in the chat under its copy — nothing vanishes while the menu opens', async () => {
     await renderWithQuery(<ChatScreen />);
     await screen.findByText('привет');
 
@@ -609,7 +606,7 @@ describe('gestures on a message', () => {
     await tapMessage('m2');
     await screen.findByTestId('message-menu');
 
-    expect(isHidden()).toBe(true);
+    expect(isHidden()).toBe(false);
   });
 
   it('a long press starts selection with that message already marked, without the menu', async () => {

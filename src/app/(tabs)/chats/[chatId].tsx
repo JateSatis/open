@@ -120,7 +120,7 @@ export default function ChatScreen() {
   const jump = useJumpToMessage(listRef, rows, chatMessages.loadUntil);
   const listFrameRef = useRef<View>(null);
   const measureListFrame = useCallback(() => measureInWindow(listFrameRef.current), []);
-  const menu = useMessageMenu(rowKey, measureListFrame);
+  const menu = useMessageMenu<ChatListRow>(measureListFrame);
   const draft = useComposerDraft(chatId);
   const isMember = chat ? isChatMember(chat, currentUserId) : false;
   const isFocused = useIsFocused();

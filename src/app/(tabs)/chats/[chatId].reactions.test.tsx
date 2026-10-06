@@ -17,7 +17,6 @@ import { useInAppAlert } from '@/features/notifications/alertsStore';
 import { reportRealtimeJoined, resetConnectionState } from '@/features/connection/connectionStore';
 import { PRIMARY_REACTIONS } from '@/features/interactions/reactionSet';
 import { renderWithQuery } from '@/test/renderWithQuery';
-import { setLiftedMessage } from '@/features/chats/MessageRow/liftedStore';
 
 // Шапку экран ставит через Stack.Screen — мок рисует и заголовок, и правую
 // кнопку прямо в дереве: так видно «Выбрано: N» и «Отмена».
@@ -163,8 +162,6 @@ async function tapMessage(messageId: string) {
 
 beforeEach(() => {
   jest.clearAllMocks();
-  // Меню, оставленное открытым прошлым тестом, не прячет облачко в следующем.
-  setLiftedMessage(null);
   handlers = null;
   resetOutbox();
   resetPendingReactions();

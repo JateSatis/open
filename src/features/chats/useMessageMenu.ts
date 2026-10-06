@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Keyboard } from 'react-native';
 
 import type { AnchorRect, MenuAnchor } from '@/features/chats/MessageContextMenu';
-import { setLiftedMessage } from '@/features/chats/MessageRow/liftedStore';
 
 /** Над чем открыто меню и где: строка переписки или комментарий. */
 export type MenuTarget<T> = {
@@ -13,15 +12,11 @@ export type MenuTarget<T> = {
 };
 
 /**
- * Контекстное меню: над чем оно открыто и где. `keyOf` — ключ строки
- * списка: её копия поднимается над затемнением, а сама строка прячется.
- * `measureViewport` — окно списка; меряется до открытия, чтобы копия с
- * первого кадра стояла обрезанной так же, как облачко в списке.
+ * Контекстное меню: над чем оно открыто и где. `measureViewport` — окно
+ * списка; меряется до открытия, чтобы копия с первого кадра стояла
+ * обрезанной так же, как облачко в списке.
  */
-export function useMessageMenu<T>(
-  keyOf: (item: T) => string,
-  measureViewport?: () => Promise<AnchorRect | null>,
-) {
+export function useMessageMenu<T>(measureViewport?: () => Promise<AnchorRect | null>) {
   const [target, setTarget] = useState<MenuTarget<T> | null>(null);
   // Номер последнего открытия: замер окна асинхронный, и ответ, пришедший
   // после нового открытия, закрытия или ухода с экрана, уже ничего не открывает.
@@ -42,19 +37,17 @@ export function useMessageMenu<T>(
       const show = (viewport: AnchorRect | null) => {
         if (request !== requestRef.current) return;
 
-        setLiftedMessage(keyOf(item));
         setTarget({ item, anchor, viewport });
       };
 
       if (measureViewport) void measureViewport().then(show);
       else show(null);
     },
-    [keyOf, measureViewport],
+    [measureViewport],
   );
 
   const close = useCallback(() => {
     requestRef.current += 1;
-    setLiftedMessage(null);
     setTarget(null);
   }, []);
 

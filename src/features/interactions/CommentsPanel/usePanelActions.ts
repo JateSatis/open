@@ -39,7 +39,6 @@ import { showNotice } from '@/features/notifications/alertsStore';
 import type { LocalMedia } from '@/features/media';
 import { focusWithKeyboard } from '@/lib/windowFocus';
 
-const commentKey = (comment: CommentItem) => comment.id;
 const nextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 
 type Options = {
@@ -125,7 +124,7 @@ export function usePanelActions({
   const chatId = live?.message.chatId ?? target.chatId ?? '';
   const { chat } = useChat(chatId);
   const draft = useComposerDraft(commentThreadKey(messageId));
-  const menu = useMessageMenu<CommentItem>(commentKey, measureViewport);
+  const menu = useMessageMenu<CommentItem>(measureViewport);
   const { close } = sheet;
   // Выбор — среди комментариев того окна, что на экране.
   const visible = useMemo(
