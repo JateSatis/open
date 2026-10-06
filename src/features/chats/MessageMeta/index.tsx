@@ -121,7 +121,7 @@ export function MessageMeta({
           </View>
 
           {message.editedAt || message.editStatus === 'saving' ? (
-            <Text variant="meta" color={tone}>
+            <Text variant="meta" color={whitePlate ? 'textSecondary' : tone}>
               изменено
             </Text>
           ) : null}
