@@ -83,6 +83,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
+    "check": "node scripts/check.mjs",
     "test": "jest",
     "build:android": "eas build --profile development --platform android",
     "build:ios": "eas build --profile development --platform ios",
