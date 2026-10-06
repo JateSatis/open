@@ -221,11 +221,11 @@ async function react(emoji: string) {
 describe('reactions in the message menu', () => {
   // Блок один для всех: и у участника, и у посетителя — ровно этот набор кнопок.
   const BLOCK = [
-    'reaction-picker-expand',
     ...PRIMARY_REACTIONS.map((emoji) => `reaction-option-${emoji}`),
+    'reaction-picker-expand',
   ];
 
-  it('shows a member the reaction block: expand button on the left, then the primary set', async () => {
+  it('shows a member the reaction block: the primary set, then the expand button on the right', async () => {
     await renderWithQuery(<ChatScreen />);
     await screen.findByText('привет');
     await tapMessage('m2');
@@ -243,7 +243,7 @@ describe('reactions in the message menu', () => {
     expect(await pickerOptions()).toEqual(BLOCK);
   });
 
-  it('opens the whole set with the button on the left and hides the actions meanwhile', async () => {
+  it('opens the whole set with the button on the right and hides the actions meanwhile', async () => {
     await renderWithQuery(<ChatScreen />);
     await screen.findByText('привет');
     await tapMessage('m2');
