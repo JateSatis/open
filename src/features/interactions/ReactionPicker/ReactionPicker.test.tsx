@@ -21,18 +21,18 @@ function Harness({ onSelect, selected = null }: { onSelect: jest.Mock; selected?
 }
 
 describe('ReactionPicker', () => {
-  it('starts as a strip: expand button on the left, then the primary reactions', async () => {
+  it('starts as a strip: the primary reactions, then the expand button on the right', async () => {
     await render(<Harness onSelect={jest.fn()} />);
 
     const buttons = screen.getAllByRole('button').map((button) => button.props.testID);
 
     expect(buttons).toEqual([
-      'reaction-picker-expand',
       ...PRIMARY_REACTIONS.map((emoji) => `reaction-option-${emoji}`),
+      'reaction-picker-expand',
     ]);
   });
 
-  it('opens the whole set by the button on the left', async () => {
+  it('opens the whole set by the button on the right, below the strip', async () => {
     await render(<Harness onSelect={jest.fn()} />);
 
     await fireEvent.press(screen.getByTestId('reaction-picker-expand'));
@@ -44,6 +44,11 @@ describe('ReactionPicker', () => {
     expect(screen.getByTestId('reaction-picker-expand').props.accessibilityState).toMatchObject({
       expanded: true,
     });
+
+    // Кнопка закрывает первую полосу, остальной набор — под ней.
+    const buttons = screen.getAllByRole('button').map((button) => button.props.testID);
+
+    expect(buttons.indexOf('reaction-picker-expand')).toBe(PRIMARY_REACTIONS.length);
   });
 
   it('hands the tapped reaction over', async () => {

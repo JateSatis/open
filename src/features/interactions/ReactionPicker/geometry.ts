@@ -15,7 +15,7 @@ export type PickerGeometry = {
   collapsedHeight: number;
   /** Раскрытый целиком; на экран может не влезть — тогда прокручивается. */
   expandedHeight: number;
-  /** Первая полоса: кнопка раскрытия и основные. */
+  /** Первая полоса: основные, за ними справа — кнопка раскрытия. */
   firstRow: readonly string[];
   /** Остальное — ниже, сеткой. */
   rest: readonly string[];

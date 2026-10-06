@@ -33,7 +33,7 @@ export type ReactionPickerProps = {
 };
 
 /**
- * Реакции над поднятым облачком. Свёрнутый — полоса основных, слева кнопка
+ * Реакции над меню сообщения. Свёрнутый — полоса основных, справа кнопка
  * раскрытия; раскрытый — та же полоса и под ней сетка всего набора. Полоса —
  * первая строка сетки, поэтому раскрытие — это только рост высоты: ничего не
  * перестраивается и не мигает.
@@ -100,6 +100,7 @@ export function ReactionPicker({
     >
       <ScrollView scrollEnabled={expanded} showsVerticalScrollIndicator={expanded} bounces={false}>
         <View style={styles.grid}>
+          {geometry.firstRow.map(cell)}
           <Pressable
             testID="reaction-picker-expand"
             accessibilityRole="button"
@@ -117,7 +118,6 @@ export function ReactionPicker({
             </Animated.View>
           </Pressable>
 
-          {geometry.firstRow.map(cell)}
           {revealed ? geometry.rest.map(cell) : null}
         </View>
       </ScrollView>
