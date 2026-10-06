@@ -429,6 +429,8 @@ npx eslint .            # линтер
 npx jest                # тесты
 ```
 
+`npm run check` гоняет все три параллельно (~30 с вместо ~50) и печатает только упавшее.
+
 Задача не сдана, пока хоть одна падает. Если падение не связано с изменениями агента — сказать
 об этом явно, не чинить молча и не подавлять ошибку.
 
@@ -440,7 +442,7 @@ npm run usb:open        # Metro уже запущен — только подц�
 npm start               # Metro без USB
 npm run build:android   # пересобрать dev build в облаке EAS
 npm run build:ios       # то же для iPhone
-npm run device -- help  # агенту: экран, тапы по testID, скриншоты, запись (навык device)
+npm run device -- up    # агенту: эмулятор, Metro, прогрев бандла, Open открыт (навык device)
 npm run e2e             # сценарии Maestro из .maestro/ — регресс на эмуляторе
 ```
 
