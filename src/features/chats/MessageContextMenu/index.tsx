@@ -190,7 +190,8 @@ export function MessageContextMenu<Id extends string>({
               testID="message-menu-backdrop"
               accessibilityLabel="Закрыть меню"
               style={StyleSheet.absoluteFill}
-              onPress={() => close(null)}
+              // Раскрытые реакции тап мимо сворачивает, а не закрывает меню.
+              onPress={() => (expanded ? setExpandedFor(null) : close(null))}
             />
           </Animated.View>
 

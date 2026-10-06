@@ -1,5 +1,5 @@
 appId: com.openger.app
-name: Тап по сообщению открывает меню с реакциями, «назад» закрывает
+name: Тап по сообщению открывает меню с реакциями, тап мимо сворачивает их, «назад» закрывает
 env:
   CHAT: Plany
 ---
@@ -20,6 +20,20 @@ env:
 - tapOn:
     id: "reaction-picker-expand"
 - assertVisible: "Все реакции"
+# Тап мимо при раскрытых реакциях сворачивает их, меню остаётся. Левый край
+# экрана — левее и меню, и реакций.
+- tapOn:
+    id: "reaction-picker-expand"
+- assertVisible: "Свернуть реакции"
+- tapOn:
+    point: "3%,50%"
+- assertVisible: "Все реакции"
+- assertVisible:
+    id: "message-menu"
+# «Назад» закрывает меню и при раскрытых реакциях.
+- tapOn:
+    id: "reaction-picker-expand"
+- assertVisible: "Свернуть реакции"
 - pressKey: back
 - assertNotVisible:
     id: "message-menu"

@@ -256,6 +256,54 @@ describe('reactions in the message menu', () => {
     expect(screen.getByTestId('message-menu').props.pointerEvents).toBe('none');
   });
 
+  it('a tap outside folds the opened set first and closes the menu only on the next tap', async () => {
+    mockedSetReaction.mockReturnValue(new Promise(() => undefined));
+
+    await renderWithQuery(<ChatScreen />);
+    await screen.findByText('привет');
+    await tapMessage('m2');
+    fireEvent.press(await screen.findByTestId('reaction-picker-expand'));
+    await screen.findByLabelText('Свернуть реакции');
+
+    fireEvent.press(screen.getByTestId('message-menu-backdrop'));
+
+    expect(await screen.findByLabelText('Все реакции')).toBeTruthy();
+    expect(screen.getByTestId('message-menu').props.pointerEvents).toBe('auto');
+
+    // Свернули — раскрывается снова, и реакция ставится.
+    fireEvent.press(screen.getByTestId('reaction-picker-expand'));
+    await screen.findByLabelText('Свернуть реакции');
+    await react('🤯');
+
+    expect(mockedSetReaction).toHaveBeenCalledWith('m2', '🤯');
+  });
+
+  it('a second tap outside closes the menu', async () => {
+    await renderWithQuery(<ChatScreen />);
+    await screen.findByText('привет');
+    await tapMessage('m2');
+    fireEvent.press(await screen.findByTestId('reaction-picker-expand'));
+    await screen.findByLabelText('Свернуть реакции');
+    fireEvent.press(screen.getByTestId('message-menu-backdrop'));
+    await screen.findByLabelText('Все реакции');
+
+    fireEvent.press(screen.getByTestId('message-menu-backdrop'));
+
+    await waitFor(() => expect(screen.queryByTestId('message-menu')).toBeNull());
+  });
+
+  it('the system back button closes the menu even with the whole set open', async () => {
+    await renderWithQuery(<ChatScreen />);
+    await screen.findByText('привет');
+    await tapMessage('m2');
+    fireEvent.press(await screen.findByTestId('reaction-picker-expand'));
+    await screen.findByLabelText('Свернуть реакции');
+
+    await act(async () => fireEvent(screen.getByTestId('message-menu'), 'requestClose'));
+
+    await waitFor(() => expect(screen.queryByTestId('message-menu')).toBeNull());
+  });
+
   it('a tap sets the reaction, closes the menu and shows the chip at once', async () => {
     mockedSetReaction.mockReturnValue(new Promise(() => undefined));
 
