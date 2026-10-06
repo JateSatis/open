@@ -1,7 +1,18 @@
 appId: com.openger.app
 ---
-- stopApp
-- openLink: "openger://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8081"
+# Приложение уже загружено — ссылка сбрасывает стек на список чатов без перезагрузки
+# бандла. Не загружено (или висит ошибка dev-клиента) — холодный старт.
+- openLink: "openger://chats"
+- waitForAnimationToEnd:
+    timeout: 3000
+- runFlow:
+    when:
+      notVisible:
+        id: "chat-list-item"
+    file: restart-app.yaml
+# Ждём строки списка, а не заголовок «Чаты»: заголовок рисуется раньше данных, и тап по
+# чату сразу после него промахивался.
 - extendedWaitUntil:
-    visible: "Чаты"
+    visible:
+      id: "chat-list-item"
     timeout: 90000

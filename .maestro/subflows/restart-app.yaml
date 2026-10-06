@@ -1,0 +1,8 @@
+appId: com.openger.app
+---
+- stopApp
+- openLink: "openger://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8081"
+- extendedWaitUntil:
+    visible:
+      id: "chat-list-item"
+    timeout: 90000

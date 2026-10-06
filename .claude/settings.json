@@ -9,6 +9,7 @@
       "Bash(npx jest*)",
       "Bash(npm run device*)",
       "Bash(npm run e2e*)",
+      "Bash(npm run check*)",
       "Bash(node scripts/device.mjs *)",
       "Bash(node scripts/maestro.mjs *)",
       "Bash(git status*)",

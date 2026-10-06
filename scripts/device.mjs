@@ -7,9 +7,12 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const PORT = 8081;
 const ADB_TIMEOUT_MS = 20_000;
+// Сколько tap/swipe ждут появления цели: экран после перехода дорисовывается не сразу.
+const TARGET_WAIT_MS = 10_000;
 const { expo } = JSON.parse(readFileSync(new URL("../app.json", import.meta.url), "utf8"));
 const APP_ID = expo.android.package;
 const DEV_CLIENT_URL = `${expo.scheme}://expo-development-client/?url=${encodeURIComponent(
@@ -24,12 +27,19 @@ const HELP = `node scripts/device.mjs <команда> [-s <serial>] ...
 
 Устройство: -s <serial>, иначе ANDROID_SERIAL, иначе единственное подключённое.
 
+  up [--second]                 всё окружение одной командой и только недостающее: эмулятор
+                                open_test (--second — и open_test_2), Metro, прогрев бандла,
+                                adb reverse, Open открыт на «Чатах». С -s — только это устройство
   devices                       подключённые устройства: модель, Android, что на экране
   doctor [--fix]                adb, Metro (статус и манифест), adb reverse, приложение наверху;
                                 --fix пробрасывает порт и открывает dev build
   open                          открыть dev build на Metro (или запустить release-сборку)
   ui [--all]                    дерево экрана: подписи, testID, центр; --all — и пустые узлы
-  tap <цель> [--long] [--n N]   тап по цели; несколько совпадений — список и выход, уточни --n
+  tap <цель> [--long] [--n N]   тап по цели; ждёт её появления до 10 с; несколько совпадений —
+                                список и выход, уточни --n
+  wait <цель> [--gone] [--timeout сек]
+                                ждать, пока цель появится (--gone — исчезнет), по умолчанию 15 с.
+                                Вместо sleep: возвращается сразу, как только экран готов
   swipe <цель> <left|right|up|down> [px] [ms]
                                 жест от центра цели; px — длина (по умолчанию 300), ms — 250
   swipe x1,y1 x2,y2 [ms]        жест по координатам
@@ -132,7 +142,7 @@ function guard() {
 
 function dumpUi() {
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    const out = adb(["exec-out", "uiautomator", "dump", "/dev/tty"], { timeout: 30_000 }).stdout;
+    const out = adb(["exec-out", "uiautomator", "dump", "/dev/tty"], { timeout: 15_000 }).stdout;
     const xml = out.slice(out.indexOf("<?xml"), out.lastIndexOf("</hierarchy>") + "</hierarchy>".length);
 
     if (xml.includes("<node")) return xml;
@@ -202,10 +212,7 @@ function cmdUi(all) {
   nodes.forEach((n, i) => console.log(`${String(i).padStart(3)} ${describe(n)}`));
 }
 
-function findTarget(target, nth) {
-  const coords = target.match(/^(\d+),(\d+)$/);
-  if (coords) return { cx: Number(coords[1]), cy: Number(coords[2]), label: target };
-
+function matchTarget(target) {
   const [, kind, value] = target.match(/^(id|text|desc):(.*)$/s) ?? [null, "any", target];
   const nodes = parseNodes(dumpUi()).filter((n) => n.w > 0 && n.h > 0);
   const match = {
@@ -214,11 +221,39 @@ function findTarget(target, nth) {
     desc: (n) => n.desc === value,
     any: (n) => [n.id, n.text, n.desc].some((s) => s.includes(value)),
   }[kind];
-  let found = nodes.filter(match);
+  const found = nodes.filter(match);
 
   // Подпись часто стоит на некликабельном потомке: предпочитаем кликабельные совпадения.
-  if (found.length > 1 && found.some((n) => n.clickable)) found = found.filter((n) => n.clickable);
-  if (found.length === 0) fail(`Не нашёл «${target}» на экране. Посмотри: node scripts/device.mjs ui`, 2);
+  return found.length > 1 && found.some((n) => n.clickable) ? found.filter((n) => n.clickable) : found;
+}
+
+const pause = (ms) => spawnSync(process.execPath, ["-e", `setTimeout(() => {}, ${ms})`]);
+
+/**
+ * Ждёт, пока цель появится (или исчезнет). Опрос — дампом экрана подряд, без пауз: сам
+ * дамп идёт ~2–3 с, а угаданный `sleep` в команде агента стоил дороже, чем любой опрос.
+ */
+function pollTarget(target, { gone = false, timeoutMs }) {
+  const deadline = Date.now() + timeoutMs;
+  let found = matchTarget(target);
+
+  while ((gone ? found.length > 0 : found.length === 0) && Date.now() < deadline) {
+    pause(300);
+    found = matchTarget(target);
+  }
+
+  return found;
+}
+
+function findTarget(target, nth, timeoutMs = TARGET_WAIT_MS) {
+  const coords = target.match(/^(\d+),(\d+)$/);
+  if (coords) return { cx: Number(coords[1]), cy: Number(coords[2]), label: target };
+
+  const found = pollTarget(target, { timeoutMs });
+
+  if (found.length === 0) {
+    fail(`Не нашёл «${target}» за ${timeoutMs / 1000} с. Посмотри: node scripts/device.mjs ui`, 2);
+  }
   if (found.length > 1 && nth === undefined) {
     console.error(`«${target}» — ${found.length} совпадений, уточни --n:`);
     found.forEach((n, i) => console.error(`  --n ${i}  ${describe(n)}`));
@@ -229,6 +264,18 @@ function findTarget(target, nth) {
   if (!node) fail(`--n ${nth}: совпадений всего ${found.length}.`, 2);
 
   return { ...node, label: describe(node) };
+}
+
+function cmdWait(target, { gone, timeoutMs }) {
+  if (!target) fail("wait <цель> [--gone] [--timeout сек]");
+  const started = Date.now();
+  const found = pollTarget(target, { gone, timeoutMs });
+  const seconds = ((Date.now() - started) / 1000).toFixed(1);
+
+  if (gone ? found.length > 0 : found.length === 0) {
+    fail(`«${target}» ${gone ? "не исчезло" : "не появилось"} за ${timeoutMs / 1000} с.`, 2);
+  }
+  console.log(gone ? `«${target}» исчезло за ${seconds} с` : `${describe(found[0])}  (за ${seconds} с)`);
 }
 
 // ---------- жесты ----------
@@ -382,7 +429,8 @@ function cmdOpen() {
   const installed = shell(`pm list packages ${APP_ID}`).includes(APP_ID);
   if (!installed) fail(`${APP_ID} не установлен на ${serial}.`);
 
-  const isDevBuild = shell(`dumpsys package ${APP_ID}`).includes("expo-development-client");
+  // В манифесте dev build есть активности dev-лаунчера; у release их нет.
+  const isDevBuild = shell(`dumpsys package ${APP_ID}`).includes("devlauncher");
   if (isDevBuild) {
     adb(["reverse", `tcp:${PORT}`, `tcp:${PORT}`]);
     shell(`am start -a android.intent.action.VIEW -d "${DEV_CLIENT_URL}"`);
@@ -390,6 +438,175 @@ function cmdOpen() {
     shell(`monkey -p ${APP_ID} -c android.intent.category.LAUNCHER 1`);
   }
   console.log(`открыт ${APP_ID} на ${serial}${isDevBuild ? " (dev build → Metro)" : ""}`);
+}
+
+// ---------- часы ----------
+
+const clockDrift = () => Math.abs(Date.now() / 1000 - Number(shell("date +%s").trim()));
+
+/**
+ * Часы эмулятора после сна ПК отстают на часы — и Supabase отвергает токены. root на
+ * образе нет, но принудительная сверка с сетевым временем выравнивает их без перезагрузки.
+ */
+function fixClock() {
+  shell("cmd network_time_update_service force_refresh");
+  return clockDrift() <= 120;
+}
+
+// ---------- up: окружение одной командой ----------
+
+const ROOT = fileURLToPath(new URL("..", import.meta.url));
+const BUNDLE_URL = `http://127.0.0.1:${PORT}/node_modules/expo-router/entry.bundle?platform=android&dev=true&minify=false`;
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function findEmulator() {
+  const roots = [
+    process.env.ANDROID_SDK_ROOT,
+    process.env.ANDROID_HOME,
+    process.env.LOCALAPPDATA && join(process.env.LOCALAPPDATA, "Android", "Sdk"),
+    "D:/Programs/Android/Sdk",
+  ].filter(Boolean);
+
+  return roots.map((r) => join(r, "emulator", "emulator.exe")).find((p) => existsSync(p)) ?? null;
+}
+
+/**
+ * Отдельный процесс через Start-Process: запущенное из сессии агента напрямую умирает по
+ * лимиту времени команды. Окно — свёрнутое, не скрытое: со скрытым окном у Metro падает
+ * дочерний expo-updates cli (0xC0000142), и манифест отдаёт ошибку.
+ */
+function startDetached(file, args, cwd) {
+  const list = args.map((a) => `'${a.replace(/'/g, "''")}'`).join(",");
+  run(
+    "powershell",
+    [
+      "-NoProfile",
+      "-Command",
+      `Start-Process -FilePath '${file}' -ArgumentList ${list} -WorkingDirectory '${cwd}' -WindowStyle Minimized`,
+    ],
+    { timeout: 30_000 },
+  );
+}
+
+function healAdb() {
+  const res = spawnSync("adb", ["devices"], { encoding: "utf8", timeout: 10_000 });
+  if (res.error?.code !== "ETIMEDOUT") return false;
+
+  spawnSync("taskkill", ["/F", "/IM", "adb.exe"], { stdio: "ignore" });
+  spawnSync("adb", ["start-server"], { stdio: "ignore", timeout: 20_000 });
+  return true;
+}
+
+const readyDevices = () => attached().filter((d) => d.state === "device").map((d) => d.serial);
+
+function runningAvd(s) {
+  return (run("adb", ["-s", s, "emu", "avd", "name"]).stdout ?? "").split(/\r?\n/)[0].trim();
+}
+
+async function waitUntil(check, timeoutMs, stepMs = 2000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await check()) return true;
+    await sleep(stepMs);
+  }
+  return false;
+}
+
+async function cmdUp({ second, only }) {
+  const started = Date.now();
+  const log = (m) => console.log(`[${String(Math.round((Date.now() - started) / 1000)).padStart(3)} с] ${m}`);
+
+  if (healAdb()) log("adb не отвечал — перезапустил сервер");
+
+  // 1. Эмуляторы — запускаем, но не ждём: пока грузятся, поднимается Metro.
+  const wantedAvds = only ? [] : [process.env.OPEN_AVD ?? "open_test", ...(second ? ["open_test_2"] : [])];
+  const running = new Set(readyDevices().filter((s) => s.startsWith("emulator-")).map(runningAvd));
+  const toStart = wantedAvds.filter((avd) => !running.has(avd));
+
+  if (toStart.length > 0) {
+    const emulator = findEmulator();
+    if (!emulator) fail("emulator.exe не найден: задай ANDROID_HOME.");
+    for (const avd of toStart) startDetached(emulator, ["-avd", avd, "-no-boot-anim"], ROOT);
+    log(`запускаю эмулятор: ${toStart.join(", ")}`);
+  }
+
+  // 2. Metro. Порт занят мёртвым node — снимаем; живой — переиспользуем.
+  let metroUp = (await fetchText(`http://127.0.0.1:${PORT}/status`)).text.includes("packager-status:running");
+  if (!metroUp) {
+    const netstat = spawnSync("netstat", ["-ano", "-p", "TCP"], { encoding: "utf8" }).stdout ?? "";
+    const pid = netstat
+      .split(/\r?\n/)
+      .find((l) => /LISTENING/.test(l) && new RegExp(`:${PORT}\\s`).test(l))
+      ?.trim()
+      .split(/\s+/)
+      .pop();
+    if (pid) {
+      spawnSync("taskkill", ["/F", "/T", "/PID", pid], { stdio: "ignore" });
+      log(`порт ${PORT} держал зависший процесс ${pid} — снял`);
+    }
+    startDetached("cmd.exe", ["/k", `cd /d ${ROOT} && npx expo start --dev-client`], ROOT);
+    log("запускаю Metro");
+    metroUp = await waitUntil(
+      async () => (await fetchText(`http://127.0.0.1:${PORT}/status`)).text.includes("packager-status:running"),
+      120_000,
+    );
+    if (!metroUp) fail("Metro не поднялся за 2 минуты — посмотри его свёрнутое окно.");
+    log("Metro отвечает");
+  }
+
+  const manifest = await fetchText(
+    `http://127.0.0.1:${PORT}/`,
+    { "expo-platform": "android", accept: "application/expo+json" },
+    60_000,
+  );
+  if (!manifest.ok || manifest.text.includes('"error"')) {
+    fail(`Манифест Metro с ошибкой — перезапусти Metro (не скрытым окном): ${manifest.text.slice(0, 200)}`);
+  }
+
+  // 3. Прогрев бандла параллельно с загрузкой эмулятора: холодная сборка идёт минуты, и
+  // лучше, чтобы она шла сейчас, а не когда агент впервые откроет приложение.
+  const bundleStarted = Date.now();
+  const warm = fetchText(BUNDLE_URL, {}, 400_000).then((r) => {
+    log(r.ok ? `бандл собран (${Math.round((Date.now() - bundleStarted) / 1000)} с)` : `бандл: ${r.text.slice(0, 200)}`);
+    return r.ok;
+  });
+
+  // 4. Ждём эмуляторы.
+  if (wantedAvds.length > 0) {
+    const booted = await waitUntil(() => {
+      const ready = readyDevices().filter((s) => s.startsWith("emulator-"));
+      const avds = new Set(
+        ready.filter((s) => run("adb", ["-s", s, "shell", "getprop", "sys.boot_completed"]).stdout.trim() === "1").map(runningAvd),
+      );
+      return wantedAvds.every((avd) => avds.has(avd));
+    }, 300_000, 3000);
+    if (!booted) fail("Эмулятор не загрузился за 5 минут.");
+    if (toStart.length > 0) log("эмуляторы загружены");
+  }
+
+  if (!(await warm)) fail("Metro не отдал бандл — белый экран обеспечен; перезапусти Metro с --clear.");
+
+  // 5. Каждое устройство: порт, часы, приложение наверху и живое.
+  const targets = only
+    ? [only]
+    : readyDevices().filter((s) => s.startsWith("emulator-") && wantedAvds.includes(runningAvd(s)));
+
+  for (const s of targets) {
+    serial = s;
+    adb(["reverse", `tcp:${PORT}`, `tcp:${PORT}`]);
+
+    const drift = clockDrift();
+    if (drift > 120) {
+      log(`${s}: часы расходятся на ${Math.round(drift / 60)} мин — ${fixClock() ? "синхронизировал" : "не вышло, лечит adb reboot"}`);
+    }
+
+    if (!appOnTop() || matchTarget("Чаты").length === 0) cmdOpen();
+    const found = pollTarget("Чаты", { timeoutMs: 120_000 });
+    if (found.length === 0) fail(`${s}: приложение не дошло до вкладки «Чаты» за 2 минуты — node scripts/device.mjs shot`);
+    log(`${s} (${runningAvd(s) || "телефон"}): Open открыт, готов`);
+  }
+
+  log(`готово. Устройства: ${targets.join(", ")}`);
 }
 
 async function cmdDoctor(fix) {
@@ -418,10 +635,12 @@ async function cmdDoctor(fix) {
   console.log(`${APP_ID}: ${installed ? "установлен" : "не установлен"}`);
   if (!installed) problems.push("приложение не установлено");
 
-  const deviceTime = Number(shell("date +%s").trim());
-  const drift = Math.round(Math.abs(Date.now() / 1000 - deviceTime));
-  console.log(`часы устройства: ${drift < 120 ? "в порядке" : `расходятся на ${Math.round(drift / 60)} мин`}`);
-  if (drift >= 120) problems.push("часы отстают — запросы к Supabase падают; лечится adb reboot");
+  const drift = clockDrift();
+  const clockOk = drift <= 120 || (fix && fixClock());
+  console.log(
+    `часы устройства: ${drift <= 120 ? "в порядке" : `расходятся на ${Math.round(drift / 60)} мин${clockOk ? ", синхронизировал" : ""}`}`,
+  );
+  if (!clockOk) problems.push("часы отстают — запросы к Supabase падают; doctor --fix или adb reboot");
 
   const onTop = appOnTop();
   console.log(`наверху: ${topActivity() || "?"}`);
@@ -462,6 +681,10 @@ const nth = nthFlag === undefined ? undefined : Number(nthFlag);
 const long = bool("--long");
 const all = bool("--all");
 const fix = bool("--fix");
+const gone = bool("--gone");
+const second = bool("--second");
+const timeoutFlag = flag("--timeout");
+const timeoutMs = timeoutFlag === undefined ? 15_000 : Number(timeoutFlag) * 1000;
 const [command, ...rest] = argv;
 
 if (!command || command === "help" || command === "--help") {
@@ -471,6 +694,10 @@ if (!command || command === "help" || command === "--help") {
 
 if (command === "devices") {
   cmdDevices();
+  process.exit(0);
+}
+if (command === "up") {
+  await cmdUp({ second, only: serialFlag });
   process.exit(0);
 }
 if (command === "frames") {
@@ -485,6 +712,7 @@ const commands = {
   open: () => cmdOpen(),
   ui: () => cmdUi(all),
   tap: () => cmdTap(rest.join(" "), { long, nth }),
+  wait: () => cmdWait(rest.join(" "), { gone, timeoutMs }),
   swipe: () => cmdSwipe(rest, nth),
   text: () => cmdText(rest.join(" ")),
   key: () => cmdKey(rest[0]),
