@@ -1,0 +1,27 @@
+appId: com.openger.app
+name: Тап по сообщению открывает меню с реакциями, «назад» закрывает
+env:
+  CHAT: Plany
+---
+- runFlow: subflows/open-app.yaml
+- tapOn: ${CHAT}
+# Время в облачке — часть строки и не перехватывает тап, в отличие от фото и цитат.
+- tapOn:
+    id: "message-time"
+    index: 0
+- assertVisible:
+    id: "message-menu"
+- assertVisible: "Выбрать"
+- tapOn:
+    id: "reaction-picker-expand"
+- assertVisible:
+    id: "reaction-option-🤯"
+- assertVisible: "Свернуть реакции"
+- tapOn:
+    id: "reaction-picker-expand"
+- assertVisible: "Все реакции"
+- pressKey: back
+- assertNotVisible:
+    id: "message-menu"
+- assertVisible:
+    id: "messages-list"
