@@ -35,6 +35,7 @@ export function ChatListItem({ chat, currentUserId, isOnline, onPress }: ChatLis
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={title}
+      testID="chat-list-item"
       onPress={() => onPress(chat.id)}
       style={styles.row}
     >
