@@ -411,30 +411,30 @@ describe('reactions in the bubble', () => {
     withReactions();
 
     await renderWithQuery(<ChatScreen />);
-    fireEvent.press(await screen.findByTestId('visitor-reaction-😁'));
+    await fireEvent.press(await screen.findByTestId('visitor-reaction-😁'));
 
     expect(mockedSetReaction).not.toHaveBeenCalled();
+    // Чужой ряд забирает касание себе — меню облачка не открывается.
+    expect(screen.queryByTestId('message-menu')).toBeNull();
   });
 
-  it('a visitor taps the viewers row, and member chips do not react', async () => {
+  it('a visitor taps the viewers row, and member chips do nothing — not even the menu', async () => {
     withReactions();
     asVisitor();
     mockedSetReaction.mockResolvedValue({ emoji: '😁', audience: 'visitor' });
 
     await renderWithQuery(<ChatScreen />);
-    // Чип участников для посетителя не кнопка: тап уходит облачку — его меню.
-    fireEvent.press(await screen.findByTestId('reaction-chip-👍'));
+    // Чип участников для посетителя ничего не делает: ни реакции, ни меню.
+    await fireEvent.press(await screen.findByTestId('reaction-chip-👍'));
 
     expect(mockedSetReaction).not.toHaveBeenCalled();
-    expect(await screen.findByTestId('message-menu')).toBeTruthy();
+    expect(screen.queryByTestId('message-menu')).toBeNull();
 
-    fireEvent.press(screen.getByTestId('message-menu-backdrop'));
-    await waitFor(() => expect(screen.queryByTestId('message-menu')).toBeNull());
-
-    fireEvent.press(screen.getByTestId('visitor-reaction-😁'));
+    await fireEvent.press(screen.getByTestId('visitor-reaction-😁'));
 
     expect(mockedSetReaction).toHaveBeenCalledWith('m2', '😁');
     expect(await screen.findByLabelText('Зрители: 😁 5')).toBeTruthy();
+    // Отправка доезжает до конца в этом тесте, а не в следующем.
   });
 
   it('updates the counters when someone else reacts, without reloading the chat', async () => {
