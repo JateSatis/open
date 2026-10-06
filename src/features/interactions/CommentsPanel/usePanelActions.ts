@@ -13,7 +13,7 @@ import type { ForwardedComment } from '@/api/chats';
 import { startForwardPick } from '@/features/chats/composerDraftStore';
 import { claimKeyboardForComments } from '@/features/chats/composerKeyboard';
 import { canReactTo } from '@/features/chats/messageActions';
-import type { AnchorRect } from '@/features/chats/MessageContextMenu';
+import type { AnchorRect, MenuAnchor } from '@/features/chats/MessageContextMenu';
 import { previewOf } from '@/features/chats/messageQuote';
 import type { ChatMessage, EditResult, LiveQuote } from '@/features/chats/messages/types';
 import { useChat } from '@/features/chats/useChat';
@@ -39,7 +39,6 @@ import { showNotice } from '@/features/notifications/alertsStore';
 import type { LocalMedia } from '@/features/media';
 import { focusWithKeyboard } from '@/lib/windowFocus';
 
-const commentKey = (comment: CommentItem) => comment.id;
 const nextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 
 type Options = {
@@ -57,6 +56,8 @@ type Options = {
   sheet: PanelSheet;
   /** Прыжок к комментарию в окне треда — по тапу на цитату. */
   jump: (commentId: string, options?: { flash?: boolean }) => Promise<boolean>;
+  /** Видимая часть списка комментариев в окне — по ней обрезается копия облачка под меню. */
+  measureViewport: () => Promise<AnchorRect | null>;
 };
 
 /** Пересланный комментарий до ответа сервера — как его нарисует чат. */
@@ -114,6 +115,7 @@ export function usePanelActions({
   threadListRef,
   sheet,
   jump,
+  measureViewport,
 }: Options) {
   const queryClient = useQueryClient();
   const router = useRouter();
@@ -122,7 +124,7 @@ export function usePanelActions({
   const chatId = live?.message.chatId ?? target.chatId ?? '';
   const { chat } = useChat(chatId);
   const draft = useComposerDraft(commentThreadKey(messageId));
-  const menu = useMessageMenu<CommentItem>(commentKey);
+  const menu = useMessageMenu<CommentItem>(measureViewport);
   const { close } = sheet;
   // Выбор — среди комментариев того окна, что на экране.
   const visible = useMemo(
@@ -358,7 +360,7 @@ export function usePanelActions({
   );
 
   const openMenu = useCallback(
-    (comment: CommentItem, anchor: AnchorRect) => menu.open(comment, anchor),
+    (comment: CommentItem, anchor: MenuAnchor) => menu.open(comment, anchor),
     [menu],
   );
 
@@ -383,6 +385,7 @@ export function usePanelActions({
     openMenu,
     closeMenu: menu.close,
     menuAnchor: menu.target?.anchor ?? null,
+    menuViewport: menu.target?.viewport ?? null,
     menuComment,
     menuActions,
     menuReactions,

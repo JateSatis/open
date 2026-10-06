@@ -17,7 +17,6 @@ import { useInAppAlert } from '@/features/notifications/alertsStore';
 import { reportRealtimeJoined, resetConnectionState } from '@/features/connection/connectionStore';
 import { PRIMARY_REACTIONS } from '@/features/interactions/reactionSet';
 import { renderWithQuery } from '@/test/renderWithQuery';
-import { setLiftedMessage } from '@/features/chats/MessageRow/liftedStore';
 
 // Шапку экран ставит через Stack.Screen — мок рисует и заголовок, и правую
 // кнопку прямо в дереве: так видно «Выбрано: N» и «Отмена».
@@ -163,8 +162,6 @@ async function tapMessage(messageId: string) {
 
 beforeEach(() => {
   jest.clearAllMocks();
-  // Меню, оставленное открытым прошлым тестом, не прячет облачко в следующем.
-  setLiftedMessage(null);
   handlers = null;
   resetOutbox();
   resetPendingReactions();
@@ -221,11 +218,11 @@ async function react(emoji: string) {
 describe('reactions in the message menu', () => {
   // Блок один для всех: и у участника, и у посетителя — ровно этот набор кнопок.
   const BLOCK = [
-    'reaction-picker-expand',
     ...PRIMARY_REACTIONS.map((emoji) => `reaction-option-${emoji}`),
+    'reaction-picker-expand',
   ];
 
-  it('shows a member the reaction block: expand button on the left, then the primary set', async () => {
+  it('shows a member the reaction block: the primary set, then the expand button on the right', async () => {
     await renderWithQuery(<ChatScreen />);
     await screen.findByText('привет');
     await tapMessage('m2');
@@ -243,7 +240,7 @@ describe('reactions in the message menu', () => {
     expect(await pickerOptions()).toEqual(BLOCK);
   });
 
-  it('opens the whole set with the button on the left and hides the actions meanwhile', async () => {
+  it('opens the whole set with the button on the right and hides the actions meanwhile', async () => {
     await renderWithQuery(<ChatScreen />);
     await screen.findByText('привет');
     await tapMessage('m2');
@@ -254,6 +251,54 @@ describe('reactions in the message menu', () => {
 
     expect(await screen.findByTestId('reaction-option-🤯')).toBeTruthy();
     expect(screen.getByTestId('message-menu').props.pointerEvents).toBe('none');
+  });
+
+  it('a tap outside folds the opened set first and closes the menu only on the next tap', async () => {
+    mockedSetReaction.mockReturnValue(new Promise(() => undefined));
+
+    await renderWithQuery(<ChatScreen />);
+    await screen.findByText('привет');
+    await tapMessage('m2');
+    fireEvent.press(await screen.findByTestId('reaction-picker-expand'));
+    await screen.findByLabelText('Свернуть реакции');
+
+    fireEvent.press(screen.getByTestId('message-menu-backdrop'));
+
+    expect(await screen.findByLabelText('Все реакции')).toBeTruthy();
+    expect(screen.getByTestId('message-menu').props.pointerEvents).toBe('auto');
+
+    // Свернули — раскрывается снова, и реакция ставится.
+    fireEvent.press(screen.getByTestId('reaction-picker-expand'));
+    await screen.findByLabelText('Свернуть реакции');
+    await react('🤯');
+
+    expect(mockedSetReaction).toHaveBeenCalledWith('m2', '🤯');
+  });
+
+  it('a second tap outside closes the menu', async () => {
+    await renderWithQuery(<ChatScreen />);
+    await screen.findByText('привет');
+    await tapMessage('m2');
+    fireEvent.press(await screen.findByTestId('reaction-picker-expand'));
+    await screen.findByLabelText('Свернуть реакции');
+    fireEvent.press(screen.getByTestId('message-menu-backdrop'));
+    await screen.findByLabelText('Все реакции');
+
+    fireEvent.press(screen.getByTestId('message-menu-backdrop'));
+
+    await waitFor(() => expect(screen.queryByTestId('message-menu')).toBeNull());
+  });
+
+  it('the system back button closes the menu even with the whole set open', async () => {
+    await renderWithQuery(<ChatScreen />);
+    await screen.findByText('привет');
+    await tapMessage('m2');
+    fireEvent.press(await screen.findByTestId('reaction-picker-expand'));
+    await screen.findByLabelText('Свернуть реакции');
+
+    await act(async () => fireEvent(screen.getByTestId('message-menu'), 'requestClose'));
+
+    await waitFor(() => expect(screen.queryByTestId('message-menu')).toBeNull());
   });
 
   it('a tap sets the reaction, closes the menu and shows the chip at once', async () => {
@@ -363,30 +408,30 @@ describe('reactions in the bubble', () => {
     withReactions();
 
     await renderWithQuery(<ChatScreen />);
-    fireEvent.press(await screen.findByTestId('visitor-reaction-😁'));
+    await fireEvent.press(await screen.findByTestId('visitor-reaction-😁'));
 
     expect(mockedSetReaction).not.toHaveBeenCalled();
+    // Чужой ряд забирает касание себе — меню облачка не открывается.
+    expect(screen.queryByTestId('message-menu')).toBeNull();
   });
 
-  it('a visitor taps the viewers row, and member chips do not react', async () => {
+  it('a visitor taps the viewers row, and member chips do nothing — not even the menu', async () => {
     withReactions();
     asVisitor();
     mockedSetReaction.mockResolvedValue({ emoji: '😁', audience: 'visitor' });
 
     await renderWithQuery(<ChatScreen />);
-    // Чип участников для посетителя не кнопка: тап уходит облачку — его меню.
-    fireEvent.press(await screen.findByTestId('reaction-chip-👍'));
+    // Чип участников для посетителя ничего не делает: ни реакции, ни меню.
+    await fireEvent.press(await screen.findByTestId('reaction-chip-👍'));
 
     expect(mockedSetReaction).not.toHaveBeenCalled();
-    expect(await screen.findByTestId('message-menu')).toBeTruthy();
+    expect(screen.queryByTestId('message-menu')).toBeNull();
 
-    fireEvent.press(screen.getByTestId('message-menu-backdrop'));
-    await waitFor(() => expect(screen.queryByTestId('message-menu')).toBeNull());
-
-    fireEvent.press(screen.getByTestId('visitor-reaction-😁'));
+    await fireEvent.press(screen.getByTestId('visitor-reaction-😁'));
 
     expect(mockedSetReaction).toHaveBeenCalledWith('m2', '😁');
     expect(await screen.findByLabelText('Зрители: 😁 5')).toBeTruthy();
+    // Отправка доезжает до конца в этом тесте, а не в следующем.
   });
 
   it('updates the counters when someone else reacts, without reloading the chat', async () => {

@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, within } from '@testing-library/react-native';
+import { Pressable } from 'react-native';
 
 import { MessageReactions } from '.';
 
@@ -98,6 +99,38 @@ describe('MessageReactions', () => {
 
     expect(onToggle).toHaveBeenCalledTimes(1);
     expect(onToggle).toHaveBeenCalledWith('😁');
+  });
+
+  it('a chip of the other row keeps the tap from the bubble, but stays disabled for a reader', async () => {
+    const onBubble = jest.fn();
+
+    await render(
+      <Pressable testID="bubble" onPress={onBubble}>
+        <MessageReactions reactions={both} tone="other" audience="visitor" onToggle={jest.fn()} />
+      </Pressable>,
+    );
+
+    await fireEvent.press(screen.getByTestId('reaction-chip-👍'));
+
+    expect(onBubble).not.toHaveBeenCalled();
+    expect(screen.getByTestId('reaction-chip-👍').props.accessibilityState).toMatchObject({
+      disabled: true,
+    });
+  });
+
+  it('in the copy of the bubble chips let the tap through to it', async () => {
+    const onBubble = jest.fn();
+
+    await render(
+      <Pressable testID="bubble" onPress={onBubble}>
+        <MessageReactions reactions={both} tone="other" audience="member" />
+      </Pressable>,
+    );
+
+    await fireEvent.press(screen.getByTestId('reaction-chip-👍'));
+    await fireEvent.press(screen.getByTestId('visitor-reaction-😁'));
+
+    expect(onBubble).toHaveBeenCalledTimes(2);
   });
 
   it('nothing is tappable in the lifted copy of the bubble', async () => {

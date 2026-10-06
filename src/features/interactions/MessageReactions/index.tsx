@@ -72,6 +72,7 @@ export function MessageReactions({
               mine={mine?.audience === 'member' && mine.emoji === emoji}
               tone={tone}
               onPress={canTapMembers ? () => onToggle(emoji) : undefined}
+              swallowsTouch={Boolean(onToggle)}
             />
           ))}
         </View>
@@ -83,6 +84,7 @@ export function MessageReactions({
           mine={mine?.audience === 'visitor' ? mine.emoji : null}
           tone={tone}
           onPress={canTapVisitors ? onToggle : undefined}
+          swallowsTouch={Boolean(onToggle)}
         />
       ) : null}
     </Animated.View>

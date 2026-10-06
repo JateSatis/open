@@ -1,6 +1,6 @@
 import { impactAsync, ImpactFeedbackStyle } from 'expo-haptics';
 import { useCallback, useContext, useEffect, useMemo, useRef, type ReactNode } from 'react';
-import { Pressable, View } from 'react-native';
+import { Pressable, View, type GestureResponderEvent } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   runOnJS,
@@ -11,12 +11,11 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
-import { useIsLifted } from './liftedStore';
 import { styles } from './styles';
 import { useSwipeReply } from './useSwipeReply';
 
 import { Text } from '@/components/Text';
-import type { AnchorRect } from '@/features/chats/MessageContextMenu';
+import type { MenuAnchor } from '@/features/chats/MessageContextMenu';
 import { RowRegistryContext } from '@/features/chats/rowRegistry';
 import { liftedRowKey } from '@/features/interactions/comments/commentsLift';
 import { useTheme } from '@/hooks/use-theme';
@@ -47,7 +46,7 @@ export type MessageRowProps = {
    */
   messageId: string;
   /** Тап по облачку — меню у строки. Нет обработчика — тап ничего не делает. */
-  onOpenMenu?: (anchor: AnchorRect) => void;
+  onOpenMenu?: (anchor: MenuAnchor) => void;
   /** Долгое нажатие — выбор с этим облачком уже отмеченным. Нет — долгого нажатия нет. */
   onSelect?: () => void;
   /** Тап в режиме выбора — снять или поставить отметку. */
@@ -89,7 +88,6 @@ export function MessageRow({
 }: MessageRowProps) {
   const theme = useTheme();
   const highlight = useSharedValue(0);
-  const lifted = useIsLifted(messageId);
   const swipe = useSwipeReply(messageId, !selectionMode, onSwipeReply);
   const contentRef = useRef<View>(null);
   const registry = useContext(RowRegistryContext);
@@ -97,13 +95,12 @@ export function MessageRow({
   // Шит комментариев меряет строку снаружи списка — по ключу.
   useEffect(() => registry?.register(messageId, contentRef), [messageId, registry]);
 
-  // Копия строки над затемнением меню или над шитом комментариев: сама
-  // строка пуста, пока копия на экране. Не удаляется — иначе переписка
-  // сдвинулась бы. Прозрачность одна на оба случая: анимированный стиль
-  // перекрыл бы статический, где бы тот ни стоял.
+  // Копия строки над шитом комментариев: сама строка пуста, пока копия на
+  // экране. Не удаляется — иначе переписка сдвинулась бы. Под меню строка
+  // не прячется: копия меню полупрозрачна и лежит прямо поверх неё.
   const hiddenStyle = useAnimatedStyle(
-    () => ({ opacity: lifted || liftedRowKey.value === messageId ? 0 : 1 }),
-    [lifted, messageId],
+    () => ({ opacity: liftedRowKey.value === messageId ? 0 : 1 }),
+    [messageId],
   );
 
   useEffect(() => {
@@ -122,15 +119,21 @@ export function MessageRow({
 
   const highlightStyle = useAnimatedStyle(() => ({ opacity: highlight.value }));
 
-  const openMenu = useCallback(() => {
-    if (!onOpenMenu) return;
+  const openMenu = useCallback(
+    (event?: GestureResponderEvent) => {
+      if (!onOpenMenu) return;
 
-    // Меню встаёт копией облачка ровно на его место — нужен угол и размер
-    // строки в окне.
-    contentRef.current?.measureInWindow((x, y, width, height) =>
-      onOpenMenu({ x, y, width, height }),
-    );
-  }, [onOpenMenu]);
+      // Меню встаёт у пальца, копия облачка — ровно на его место: нужны
+      // касание и угол с размером строки в окне. Без события (доступность,
+      // тесты) касания нет — меню встанет у облачка.
+      const touchY = event?.nativeEvent?.pageY ?? null;
+
+      contentRef.current?.measureInWindow((x, y, width, height) =>
+        onOpenMenu({ x, y, width, height, touchY }),
+      );
+    },
+    [onOpenMenu],
+  );
 
   const select = useCallback(() => {
     impactAsync(ImpactFeedbackStyle.Light).catch(() => undefined);

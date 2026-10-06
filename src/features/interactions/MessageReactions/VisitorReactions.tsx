@@ -17,6 +17,8 @@ export type VisitorReactionsProps = {
   tone: ReactionsTone;
   /** Без обработчика ряд не нажимается: я участник или это копия облачка в меню. */
   onPress?: (emoji: string) => void;
+  /** Чужой ряд в живом облачке: касание забирается и ничего не делает (см. `ReactionChip`). */
+  swallowsTouch?: boolean;
 };
 
 /**
@@ -24,7 +26,13 @@ export type VisitorReactionsProps = {
  * участников крупнее, и разница видна без подписи. Кто это, говорит
  * подпись для экранного чтеца.
  */
-export function VisitorReactions({ entries, mine, tone, onPress }: VisitorReactionsProps) {
+export function VisitorReactions({
+  entries,
+  mine,
+  tone,
+  onPress,
+  swallowsTouch = false,
+}: VisitorReactionsProps) {
   const theme = useTheme();
   const colors = visitorColors(tone);
 
@@ -48,7 +56,7 @@ export function VisitorReactions({ entries, mine, tone, onPress }: VisitorReacti
             accessibilityRole="button"
             accessibilityLabel={`Зрители: ${emoji} ${count}`}
             accessibilityState={{ selected: mine === emoji, disabled: !onPress }}
-            disabled={!onPress}
+            disabled={onPress || swallowsTouch ? undefined : true}
             hitSlop={6}
             onPress={() => onPress?.(emoji)}
             style={[styles.visitor, mine === emoji && { backgroundColor: theme[colors.mine] }]}

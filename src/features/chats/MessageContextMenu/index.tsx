@@ -14,7 +14,7 @@ import { styles } from './styles';
 import { Text } from '@/components/Text';
 import { pickerGeometry, ReactionPicker } from '@/features/interactions/ReactionPicker';
 import { useTheme } from '@/hooks/use-theme';
-import { Sizes, Spacing } from '@/theme';
+import { Opacity, Sizes, Spacing } from '@/theme';
 
 const OPEN_MS = 200;
 const CLOSE_MS = 140;
@@ -22,7 +22,13 @@ const CLOSE_MS = 140;
 /** Прямоугольник облачка в координатах окна — где оно стоит в переписке. */
 export type AnchorRect = { x: number; y: number; width: number; height: number };
 
-/** Блок реакций над облачком. Один и тот же у участника и у посетителя. */
+/** Над чем открыто меню: облачко и куда пришёлся палец. */
+export type MenuAnchor = AnchorRect & {
+  /** Касание по вертикали, в координатах окна; `null` — открыли не пальцем. */
+  touchY: number | null;
+};
+
+/** Блок реакций над меню. Один и тот же у участника и у посетителя. */
 export type MenuReactions = {
   /** Моя реакция на это сообщение — подсвечена; тап по ней снимает. */
   selected: string | null;
@@ -40,35 +46,39 @@ export type ContextMenuAction<Id extends string = string> = {
 
 export type MessageContextMenuProps<Id extends string = string> = {
   /** Меню открыто, пока есть, над чем. */
-  anchor: AnchorRect | null;
-  /** Копия облачка, которая поднимается над затемнением. */
+  anchor: MenuAnchor | null;
+  /**
+   * Окно списка в координатах окна: копия облачка рисуется только в нём —
+   * длинное облачко, ушедшее под заголовок или поле ввода, не вылезает
+   * поверх них. Нет — копия видна целиком.
+   */
+  viewport: AnchorRect | null;
+  /** Копия облачка над затемнением — на том же месте, что и в переписке. */
   preview: ReactNode;
   actions: readonly ContextMenuAction<Id>[];
   /** Нет — нет и блока реакций: у неотправленного и у системного сообщения. */
   reactions: MenuReactions | null;
-  /** Своё сообщение — меню у правого края облачка, чужое — у левого. */
-  alignEnd: boolean;
-  /** Отступ облачка от левого края строки (аватар у чужих) — меню встаёт под облачко, а не под аватар. */
-  leadingInset: number;
   /** Действие выполняется после того, как меню закрылось: диалог подтверждения не ложится поверх меню. */
   onAction: (id: Id) => void;
   onClose: () => void;
 };
 
 /**
- * Меню долгого нажатия на сообщение. Своё окно (`Modal`) — единственный
- * способ затемнить и нативный заголовок, и нативный таб-бар (см. заметку про
- * шит медиа). Облачко поднимается над затемнением, под ним — список действий,
- * над ним — блок реакций. Раскрытый блок растёт вниз, поверх облачка, до края
- * экрана; действия на это время прячутся.
+ * Меню сообщения по тапу. Своё окно (`Modal`) — единственный способ
+ * затемнить и нативный заголовок, и нативный таб-бар (см. заметку про шит
+ * медиа). Облачко не двигается и не прячется: строка остаётся в переписке
+ * под затемнением, а полупрозрачная копия лежит ровно поверх неё и
+ * высветляет облачко — без пустого кадра, пока окно и картинки копии
+ * догружаются. Меню — у пальца и по горизонтали всегда в одной точке
+ * экрана, над ним — блок реакций. Раскрытый блок растёт вниз, поверх меню,
+ * до края экрана; действия на это время прячутся.
  */
 export function MessageContextMenu<Id extends string>({
   anchor,
+  viewport,
   preview,
   actions,
   reactions,
-  alignEnd,
-  leadingInset,
   onAction,
   onClose,
 }: MessageContextMenuProps<Id>) {
@@ -79,16 +89,22 @@ export function MessageContextMenu<Id extends string>({
   const closingRef = useRef(false);
   const pendingRef = useRef<(() => void) | null>(null);
   // Раскрытие привязано к открытию меню: следующее открытие — снова полосой.
-  const [expandedFor, setExpandedFor] = useState<AnchorRect | null>(null);
+  const [expandedFor, setExpandedFor] = useState<MenuAnchor | null>(null);
   const expanded = anchor !== null && expandedFor === anchor;
   const menuHidden = useSharedValue(0);
 
-  const picker = pickerGeometry(windowWidth - Spacing.two * 2);
+  // Левый край реакций — посередине между краем экрана и левым краем меню.
+  const menuLeft = Math.round(windowWidth * Sizes.menuLeftShare);
+  const pickerLeft = Math.round(menuLeft / 2);
+  const picker = pickerGeometry(windowWidth - Spacing.two - pickerLeft);
   const menuHeight = actions.length * Sizes.menuRowHeight + Spacing.one * 2;
+  // Палец — посередине первого пункта.
+  const touchOffset = Spacing.one + Sizes.menuRowHeight / 2;
   const layout = anchor
     ? computeMenuLayout({
-        anchorTop: anchor.y,
-        anchorHeight: anchor.height,
+        // Не пальцем — меню у верха облачка.
+        touchY: anchor.touchY ?? anchor.y + touchOffset,
+        touchOffset,
         menuHeight,
         accessoryHeight: reactions ? picker.collapsedHeight : 0,
         windowHeight,
@@ -98,7 +114,6 @@ export function MessageContextMenu<Id extends string>({
         gap: Spacing.two,
       })
     : null;
-  const shift = anchor && layout ? anchor.y - layout.bubbleTop : 0;
 
   useEffect(() => {
     if (!anchor) return;
@@ -143,33 +158,21 @@ export function MessageContextMenu<Id extends string>({
   );
 
   const backdropStyle = useAnimatedStyle(() => ({ opacity: progress.value }));
-  // Облачко выезжает из того места, где стояло в переписке.
-  const previewStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: (1 - progress.value) * shift }],
-  }));
+  // Копия проявляется вместе с затемнением: облачко под ней темнеет вместе с
+  // экраном, а копия возвращает ему часть яркости.
+  const previewStyle = useAnimatedStyle(() => ({ opacity: progress.value * Opacity.menuCopy }));
   const menuStyle = useAnimatedStyle(() => ({
     opacity: progress.value * (1 - menuHidden.value),
     transform: [{ scale: 0.9 + progress.value * 0.1 }],
   }));
-  // Блок реакций проявляется вместе с меню и вырастает от края облачка.
+  // Блок реакций проявляется вместе с меню и вырастает от своего левого края.
   const pickerStyle = useAnimatedStyle(() => ({
     opacity: progress.value,
     transform: [{ scale: 0.8 + progress.value * 0.2 }],
   }));
 
-  const horizontal = anchor
-    ? alignEnd
-      ? { right: Math.max(Spacing.two, windowWidth - anchor.x - anchor.width) }
-      : { left: anchor.x + leadingInset }
-    : null;
-  // Блок реакций шире меню: у своего — от правого края облачка, у чужого — от
-  // левого, но всегда целиком на экране.
-  const pickerRoom = windowWidth - Spacing.two - picker.width;
-  const pickerHorizontal = anchor
-    ? alignEnd
-      ? { right: Math.max(Spacing.two, Math.min(windowWidth - anchor.x - anchor.width, pickerRoom)) }
-      : { left: Math.max(Spacing.two, Math.min(anchor.x + leadingInset, pickerRoom)) }
-    : null;
+  const clipTop = viewport?.y ?? 0;
+  const clipBottom = viewport ? viewport.y + viewport.height : windowHeight;
   const pickerMaxHeight = layout
     ? windowHeight - insets.bottom - Spacing.two - layout.accessoryTop
     : 0;
@@ -192,53 +195,65 @@ export function MessageContextMenu<Id extends string>({
               testID="message-menu-backdrop"
               accessibilityLabel="Закрыть меню"
               style={StyleSheet.absoluteFill}
-              onPress={() => close(null)}
+              // Раскрытые реакции тап мимо сворачивает, а не закрывает меню.
+              onPress={() => (expanded ? setExpandedFor(null) : close(null))}
             />
           </Animated.View>
 
-          <Animated.View
+          <View
             pointerEvents="none"
-            style={[
-              styles.preview,
-              {
-                top: layout.bubbleTop,
-                left: anchor.x,
-                width: anchor.width,
-                height: layout.bubbleHeight,
-              },
-              previewStyle,
-            ]}
+            style={[styles.clip, { top: clipTop, height: Math.max(0, clipBottom - clipTop) }]}
           >
-            {preview}
-          </Animated.View>
+            <Animated.View
+              testID="message-menu-preview"
+              style={[
+                styles.preview,
+                {
+                  top: anchor.y - clipTop,
+                  left: anchor.x,
+                  width: anchor.width,
+                  height: anchor.height,
+                },
+                previewStyle,
+              ]}
+            >
+              {preview}
+            </Animated.View>
+          </View>
 
-          <Animated.View
-            testID="message-menu"
-            // Раскрытые реакции закрывают меню собой — касаться его нечем.
-            pointerEvents={expanded ? 'none' : 'auto'}
-            style={[
-              styles.menu,
-              { top: layout.menuTop, backgroundColor: theme.backgroundElement },
-              alignEnd ? styles.originEnd : styles.originStart,
-              horizontal,
-              menuStyle,
-            ]}
+          {/* Меню в строке с распоркой: распорка держит левый край в одной
+              точке экрана, а широкому меню уступает — оно сдвигается влево
+              ровно настолько, чтобы влезть, и не переносит пункты. */}
+          <View
+            testID="message-menu-row"
+            pointerEvents="box-none"
+            style={[styles.menuRow, { top: layout.menuTop }]}
           >
-            {actions.map((action) => (
-              <Pressable
-                key={action.id}
-                accessibilityRole="menuitem"
-                accessibilityLabel={action.label}
-                onPress={() => close(() => onAction(action.id))}
-                style={({ pressed }) => [
-                  styles.item,
-                  pressed && { backgroundColor: theme.backgroundSelected },
-                ]}
-              >
-                <Text color={action.destructive ? 'danger' : 'text'}>{action.label}</Text>
-              </Pressable>
-            ))}
-          </Animated.View>
+            <View pointerEvents="none" style={[styles.spacer, { width: menuLeft - Spacing.two }]} />
+            <Animated.View
+              testID="message-menu"
+              // Раскрытые реакции закрывают меню собой — касаться его нечем.
+              pointerEvents={expanded ? 'none' : 'auto'}
+              style={[styles.menu, { backgroundColor: theme.backgroundElement }, menuStyle]}
+            >
+              {actions.map((action) => (
+                <Pressable
+                  key={action.id}
+                  accessibilityRole="menuitem"
+                  accessibilityLabel={action.label}
+                  onPress={() => close(() => onAction(action.id))}
+                  style={({ pressed }) => [
+                    styles.item,
+                    pressed && { backgroundColor: theme.backgroundSelected },
+                  ]}
+                >
+                  <Text color={action.destructive ? 'danger' : 'text'} numberOfLines={1}>
+                    {action.label}
+                  </Text>
+                </Pressable>
+              ))}
+            </Animated.View>
+          </View>
 
           {reactions ? (
             <ReactionPicker
@@ -249,9 +264,8 @@ export function MessageContextMenu<Id extends string>({
               onToggleExpanded={() => setExpandedFor(expanded ? null : anchor)}
               onSelect={(emoji) => close(() => reactions.onSelect(emoji))}
               style={[
-                { top: layout.accessoryTop },
-                alignEnd ? styles.originEnd : styles.originStart,
-                pickerHorizontal,
+                styles.pickerOrigin,
+                { top: layout.accessoryTop, left: pickerLeft },
                 pickerStyle,
               ]}
             />

@@ -16,10 +16,25 @@ export type ReactionChipProps = {
   tone: ReactionsTone;
   /** Без обработчика чип не нажимается: это чужой ряд или копия облачка в меню. */
   onPress?: () => void;
+  /**
+   * Чужой ряд в живом облачке: касание чип забирает себе и ничего не делает —
+   * иначе оно ушло бы строке и открыло меню. В копии облачка чип касание
+   * пропускает, как и раньше.
+   */
+  swallowsTouch?: boolean;
 };
 
+const noop = () => undefined;
+
 /** Реакция участников в облачке: эмодзи и сколько людей её поставили. */
-export function ReactionChip({ emoji, count, mine, tone, onPress }: ReactionChipProps) {
+export function ReactionChip({
+  emoji,
+  count,
+  mine,
+  tone,
+  onPress,
+  swallowsTouch = false,
+}: ReactionChipProps) {
   const theme = useTheme();
   const colors = chipColors(tone, mine);
 
@@ -34,9 +49,11 @@ export function ReactionChip({ emoji, count, mine, tone, onPress }: ReactionChip
         accessibilityRole="button"
         accessibilityLabel={`${emoji} ${count}`}
         accessibilityState={{ selected: mine, disabled: !onPress }}
-        disabled={!onPress}
+        // Глотающий чип не выключен, но для чтеца «недоступен»: `disabled`
+        // у Pressable перезаписал бы это состояние.
+        disabled={onPress || swallowsTouch ? undefined : true}
         hitSlop={4}
-        onPress={onPress}
+        onPress={onPress ?? (swallowsTouch ? noop : undefined)}
         style={[styles.chip, { backgroundColor: theme[colors.background] }]}
       >
         <Text variant="small">{emoji}</Text>

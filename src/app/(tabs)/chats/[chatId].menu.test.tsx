@@ -1,6 +1,7 @@
 import type { Session as SupabaseSession } from '@supabase/supabase-js';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react-native';
 import * as Clipboard from 'expo-clipboard';
+import { impactAsync } from 'expo-haptics';
 import { BackHandler, StyleSheet } from 'react-native';
 import { State } from 'react-native-gesture-handler';
 import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils';
@@ -20,7 +21,6 @@ import { confirm } from '@/components/ConfirmDialog';
 import { useSession } from '@/features/auth/useSession';
 import { resetComposerDrafts } from '@/features/chats/composerDraftStore';
 import { resetOutbox } from '@/features/chats/messages/outbox';
-import { setLiftedMessage } from '@/features/chats/MessageRow/liftedStore';
 import { useInAppAlert } from '@/features/notifications/alertsStore';
 import { reportRealtimeJoined, resetConnectionState } from '@/features/connection/connectionStore';
 import { renderWithQuery } from '@/test/renderWithQuery';
@@ -568,9 +568,23 @@ describe('gestures on a message', () => {
     expect(await screen.findByTestId('message-menu')).toBeTruthy();
   });
 
-  it('hides the bubble in the chat while its copy stands over the menu backdrop', async () => {
-    // Меню прошлых тестов не закрывалось — их строка осталась поднятой.
-    setLiftedMessage(null);
+  it('opens the menu without vibrating; a long press still vibrates', async () => {
+    await renderWithQuery(<ChatScreen />);
+    await screen.findByText('привет');
+
+    await tapMessage('m2');
+    await screen.findByTestId('message-menu');
+
+    expect(impactAsync).not.toHaveBeenCalled();
+
+    fireEvent.press(screen.getByTestId('message-menu-backdrop'));
+    await waitFor(() => expect(screen.queryByTestId('message-menu')).toBeNull());
+    await longPress('m3');
+
+    expect(impactAsync).toHaveBeenCalled();
+  });
+
+  it('keeps the bubble in the chat under its copy — nothing vanishes while the menu opens', async () => {
     await renderWithQuery(<ChatScreen />);
     await screen.findByText('привет');
 
@@ -592,7 +606,7 @@ describe('gestures on a message', () => {
     await tapMessage('m2');
     await screen.findByTestId('message-menu');
 
-    expect(isHidden()).toBe(true);
+    expect(isHidden()).toBe(false);
   });
 
   it('a long press starts selection with that message already marked, without the menu', async () => {
