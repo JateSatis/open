@@ -99,6 +99,7 @@ jest.mock('@/api/comments', () => ({
   listCommentReactions: jest.fn(() => Promise.resolve([])),
   subscribeToComments: jest.fn(),
 }));
+jest.mock('@/api/messageViews');
 jest.mock('@/api/reactions', () => ({
   ...jest.requireActual('@/api/reactionCounts'),
   listMessageReactions: jest.fn(() => Promise.resolve([])),
@@ -181,6 +182,8 @@ function message(id: string, minute: number, overrides: Partial<Message> = {}): 
     forward: null,
     reactions: NO_REACTIONS,
     commentsCount: 0,
+    viewsCount: 0,
+    readAt: null,
     ...overrides,
   };
 }
@@ -215,6 +218,8 @@ const MESSAGES = [
       id: 'o4',
       chatId: 'chat-1',
       commentsCount: 1,
+      viewsCount: 0,
+      readAt: null,
       chat: { id: 'chat-1', name: 'Разговор', readUpTo: null, amMember: true },
     }),
   ]),
@@ -433,7 +438,7 @@ describe('comments panel', () => {
     await fireEvent.press(screen.getByLabelText('Отправить'));
 
     expect(await screen.findByText('мой комментарий')).toBeTruthy();
-    expect(screen.getByText('Отправляется…')).toBeTruthy();
+    expect(screen.getByLabelText('Отправляется')).toBeTruthy();
     expect(commentField().props.value).toBe('');
     expect(mockedSend).toHaveBeenCalledWith('m1', {
       text: 'мой комментарий',
@@ -608,6 +613,8 @@ describe('a visitor in the comments', () => {
             id: 'o4',
             chatId: 'chat-2',
             commentsCount: 1,
+            viewsCount: 0,
+            readAt: null,
             chat: { id: 'chat-2', name: 'Другой', readUpTo: null, amMember: false },
           }),
         ]),

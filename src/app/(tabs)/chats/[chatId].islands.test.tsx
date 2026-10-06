@@ -24,6 +24,7 @@ import { renderWithQuery } from '@/test/renderWithQuery';
 
 const mockPush = jest.fn();
 
+jest.mock('@/api/messageViews');
 jest.mock('@/api/reactions', () => ({
   ...jest.requireActual('@/api/reactionCounts'),
   listMessageReactions: jest.fn(() => Promise.resolve([])),
@@ -118,6 +119,8 @@ const o1 = original({
   createdAt: '2026-09-01T10:00:00Z',
   reactions: { members: { '🔥': 17 }, visitors: {}, mine: null },
   commentsCount: 146,
+  viewsCount: 0,
+  readAt: null,
   chat: JS,
 });
 const o2 = original({
@@ -170,6 +173,8 @@ function text(id: string, body: string, createdAt: string): Message {
     forward: null,
     reactions: { members: {}, visitors: {}, mine: null },
     commentsCount: 0,
+    viewsCount: 0,
+    readAt: null,
   };
 }
 

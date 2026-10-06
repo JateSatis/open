@@ -21,6 +21,7 @@ import { setLiftedMessage } from '@/features/chats/MessageRow/liftedStore';
 
 // Шапку экран ставит через Stack.Screen — мок рисует и заголовок, и правую
 // кнопку прямо в дереве: так видно «Выбрано: N» и «Отмена».
+jest.mock('@/api/messageViews');
 jest.mock('@/api/reactions', () => ({
   ...jest.requireActual('@/api/reactionCounts'),
   listMessageReactions: jest.fn(() => Promise.resolve([])),
@@ -146,6 +147,8 @@ function message(id: string, text: string, authorId: string, minute = 0): Messag
     forward: null,
     reactions: { members: {}, visitors: {}, mine: null },
     commentsCount: 0,
+    viewsCount: 0,
+    readAt: null,
   };
 }
 

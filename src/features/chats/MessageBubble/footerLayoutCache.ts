@@ -4,6 +4,7 @@ export type FooterLayout = {
   chips?: number;
   visitors?: number;
   meta?: number;
+  views?: number;
   button?: number;
 };
 

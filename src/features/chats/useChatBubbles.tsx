@@ -26,8 +26,6 @@ type Options = {
   chatId: string;
   currentUserId: string | null;
   isMember: boolean;
-  /** До какого момента этот чат прочитали остальные. */
-  readUpTo: string | null;
   participantsById: ReadonlyMap<string, ChatParticipant>;
   mediaBounds: MosaicBounds;
   retry: (localId: string) => void;
@@ -64,7 +62,6 @@ export function useChatBubbles({
   chatId,
   currentUserId,
   isMember,
-  readUpTo,
   participantsById,
   mediaBounds,
   retry,
@@ -136,7 +133,7 @@ export function useChatBubbles({
         <MessageBubble
           message={shown}
           isOwn={item.authorId === currentUserId}
-          isRead={readUpTo !== null && item.createdAt <= readUpTo}
+          isRead={item.readAt !== null}
           authorName={author?.displayName ?? DELETED_ACCOUNT}
           authorAvatarUrl={author?.avatarUrl ?? null}
           mediaBounds={mediaBounds}
@@ -169,7 +166,6 @@ export function useChatBubbles({
       openPerson,
       participantsById,
       reactToComment,
-      readUpTo,
       retry,
       showAvatars,
     ],
@@ -186,7 +182,7 @@ export function useChatBubbles({
         <MessageBubble
           message={item}
           isOwn={item.authorId === currentUserId}
-          isRead={readUpTo !== null && item.createdAt <= readUpTo}
+          isRead={item.readAt !== null}
           authorName={author?.displayName ?? DELETED_ACCOUNT}
           authorAvatarUrl={author?.avatarUrl ?? null}
           mediaBounds={mediaBounds}
@@ -212,7 +208,6 @@ export function useChatBubbles({
       openPerson,
       openQuote,
       participantsById,
-      readUpTo,
       retry,
       showAvatars,
       toggle,
@@ -228,8 +223,6 @@ export function useChatBubbles({
       const message = originalAsMessage(original);
       const { authorId } = original;
       const inThisChat = original.chatId === chatId;
-      // «Прочитано» у своего — по прочтению чата оригинала.
-      const originRead = inThisChat ? readUpTo : (original.chat?.readUpTo ?? null);
       const audience = audienceFor(row);
       const fromHeaderChat = original.chatId === row.island.forward?.sourceChat?.id;
 
@@ -237,7 +230,8 @@ export function useChatBubbles({
         <MessageBubble
           message={message}
           isOwn={authorId === currentUserId}
-          isRead={originRead !== null && message.createdAt <= originRead}
+          // «Прочитано» — у самого оригинала: его увидел участник его чата.
+          isRead={original.readAt !== null}
           authorName={original.authorName ?? DELETED_ACCOUNT}
           authorAvatarUrl={original.authorAvatarUrl}
           mediaBounds={mediaBounds}
@@ -280,7 +274,6 @@ export function useChatBubbles({
       openOriginal,
       openPerson,
       openQuote,
-      readUpTo,
       showAvatars,
       toggle,
     ],

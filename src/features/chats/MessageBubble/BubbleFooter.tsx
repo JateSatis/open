@@ -7,16 +7,18 @@ import { styles } from './styles';
 import { Spacing } from '@/theme';
 
 export type BubbleFooterProps = {
-  isOwn: boolean;
   /** Чипы реакций участников. Нет реакций — нет и строки. */
   members: ReactNode;
-  /** Маленькие реакции зрителей — в строке со временем. */
+  /** Маленькие реакции зрителей — в строке со временем, после него. */
   visitors: ReactNode;
-  /** Кнопка комментариев — у внешнего края облачка: у чужого слева, у своего справа. */
+  /** Кнопка комментариев — правее всего остального в своей строке. */
   comments: ReactNode;
   /** Тихая кнопка всегда стоит в строке со временем, размером с его шрифт. */
   quiet: boolean;
+  /** Время — в левом нижнем углу. */
   meta: ReactNode;
+  /** Просмотры — у правого края нижней строки, перед кнопкой комментариев. */
+  views: ReactNode;
   /**
    * Ширина содержимого облачка без низа — текста, цитат, голосового. У
    * подписи альбома её задаёт мозаика. `null` — ещё не измерена.
@@ -29,37 +31,38 @@ export type BubbleFooterProps = {
   layoutKey?: string;
 };
 
-type Widths = { chips: number; visitors: number; meta: number; button: number };
+type Widths = { chips: number; visitors: number; meta: number; views: number; button: number };
 
 const GAP = Spacing.two;
 
 /**
  * Низ облачка. Ширину облачка задаёт содержимое, а не реакции и кнопки,
  * поэтому раскладка подстраивается под неё:
+ * - нижняя строка: слева время и реакции зрителей, справа просмотры;
  * - кнопка комментариев и чипы участников помещаются в одну строку — так и
- *   стоят, кнопка у внешнего края;
- * - не помещаются — кнопка уходит под чипы, в строку с реакциями зрителей и
- *   временем.
+ *   стоят, кнопка справа от чипов;
+ * - не помещаются — кнопка уходит под чипы, в нижнюю строку, правее
+ *   просмотров.
  *
  * Решение — по ширинам без самой кнопки: так строка, куда её поставили, не
  * раздвигает облачко, и раскладка не перескакивает туда-обратно.
  */
 export function BubbleFooter({
-  isOwn,
   members,
   visitors,
   comments,
   quiet,
   meta,
+  views,
   contentWidth,
   layoutKey,
 }: BubbleFooterProps) {
   const [widths, setWidths] = useState<Partial<Widths>>(() => {
     if (!layoutKey) return {};
 
-    const { chips, visitors, meta, button } = readFooterLayout(layoutKey);
+    const { chips, visitors, meta, views, button } = readFooterLayout(layoutKey);
 
-    return { chips, visitors, meta, button };
+    return { chips, visitors, meta, views, button };
   });
 
   const measure = useCallback(
@@ -74,7 +77,10 @@ export function BubbleFooter({
   );
 
   const { chips, button } = widths;
-  const info = (visitors ? (widths.visitors ?? 0) + GAP : 0) + (widths.meta ?? 0);
+  const info =
+    (widths.meta ?? 0) +
+    (visitors ? GAP + (widths.visitors ?? 0) : 0) +
+    (views ? GAP + (widths.views ?? 0) : 0);
   const room =
     contentWidth !== null && chips !== undefined ? Math.max(contentWidth, chips, info) : null;
   const besideChips =
@@ -96,7 +102,6 @@ export function BubbleFooter({
     <>
       {members ? (
         <View testID="bubble-footer-chips" style={styles.footer}>
-          {besideChips && !isOwn ? commentsButton : null}
           <View
             testID="bubble-footer-chips-content"
             onLayout={measure('chips')}
@@ -104,7 +109,7 @@ export function BubbleFooter({
           >
             {members}
           </View>
-          {besideChips && isOwn ? (
+          {besideChips ? (
             <>
               <View style={styles.footerSpacer} />
               {commentsButton}
@@ -114,17 +119,21 @@ export function BubbleFooter({
       ) : null}
 
       <View testID="bubble-footer-info" style={styles.footer}>
-        {!besideChips && !isOwn ? commentsButton : null}
+        <View testID="bubble-footer-meta" onLayout={measure('meta')}>
+          {meta}
+        </View>
         {visitors ? (
           <View onLayout={measure('visitors')} style={styles.footerShrink}>
             {visitors}
           </View>
         ) : null}
         <View style={styles.footerSpacer} />
-        <View testID="bubble-footer-meta" onLayout={measure('meta')}>
-          {meta}
-        </View>
-        {!besideChips && isOwn ? commentsButton : null}
+        {views ? (
+          <View testID="bubble-footer-views" onLayout={measure('views')}>
+            {views}
+          </View>
+        ) : null}
+        {besideChips ? null : commentsButton}
       </View>
     </>
   );

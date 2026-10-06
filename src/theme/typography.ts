@@ -33,6 +33,8 @@ export const Typography = {
   small: { fontSize: 14, lineHeight: 20, fontWeight: '400' },
   smallBold: { fontSize: 14, lineHeight: 20, fontWeight: '600' },
   caption: { fontSize: 12, lineHeight: 16, fontWeight: '400' },
+  /** Время, «изменено» и просмотры в низу облачка — мельче подписи, чтобы не спорить с текстом. */
+  meta: { fontSize: 10, lineHeight: 13, fontWeight: '400' },
   code: { fontSize: 13, lineHeight: 18, fontWeight: '400' },
   /** Эмодзи в блоке реакций над облачком. */
   emoji: { fontSize: 26, lineHeight: 32, fontWeight: '400' },

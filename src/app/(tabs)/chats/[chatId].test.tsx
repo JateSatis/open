@@ -6,6 +6,7 @@ import ChatScreen from './[chatId]';
 import type { ChatChannelHandlers, ChatSummary, Message } from '@/api/chats';
 import { getChat, listMessages, markChatRead, sendMessage, subscribeToChat } from '@/api/chats';
 import { acceptInvite, declineInvite, getMyInvite } from '@/api/invites';
+import { listMessageViews } from '@/api/messageViews';
 import { getProfile } from '@/api/profile';
 import { useSession } from '@/features/auth/useSession';
 import { formatMessageTime } from '@/features/chats/chatDisplay';
@@ -19,6 +20,7 @@ const mockNavigate = jest.fn();
 
 // Шапку экран ставит через Stack.Screen — мок рисует её прямо в дереве, чтобы
 // статус собеседника и тап по шапке можно было проверить.
+jest.mock('@/api/messageViews');
 jest.mock('@/api/reactions', () => ({
   ...jest.requireActual('@/api/reactionCounts'),
   listMessageReactions: jest.fn(() => Promise.resolve([])),
@@ -146,6 +148,8 @@ function message(id: string, text: string, authorId: string): Message {
     forward: null,
     reactions: { members: {}, visitors: {}, mine: null },
     commentsCount: 0,
+    viewsCount: 0,
+    readAt: null,
   };
 }
 
@@ -165,6 +169,7 @@ beforeEach(() => {
     isLoading: false,
   });
   listMessagesSince.mockResolvedValue([]);
+  (listMessageViews as jest.Mock).mockResolvedValue([]);
   mockedMarkRead.mockResolvedValue(undefined);
   resetConnectionState();
   reportRealtimeJoined();
@@ -270,7 +275,7 @@ describe('ChatScreen', () => {
     expect(mockedMarkRead).not.toHaveBeenCalled();
   });
 
-  it('shows an own message as delivered until the other side reads it', async () => {
+  it('shows an own message with a plain time until another member sees it', async () => {
     mockedListMessages.mockResolvedValue({
       items: [message('m1', 'как дела', 'user-1')],
       nextCursor: null,
@@ -278,35 +283,51 @@ describe('ChatScreen', () => {
 
     await renderWithQuery(<ChatScreen />);
 
-    expect(await screen.findByLabelText('Доставлено')).toBeTruthy();
-    expect(screen.queryByLabelText('Прочитано')).toBeNull();
+    expect(await screen.findByLabelText(formatMessageTime(SENT_AT))).toBeTruthy();
+    expect(screen.queryByLabelText(/прочитано/)).toBeNull();
+    // Кружка-квитанции больше нет.
+    expect(screen.queryByLabelText('Доставлено')).toBeNull();
   });
 
-  it('shows an own message as read once the other side has caught up', async () => {
-    mockedGetChat.mockResolvedValue(
-      chatWith([member, { ...other, lastReadAt: '2026-09-16T11:00:00Z' }]),
-    );
+  it('shows an own message as read once another member has seen it', async () => {
     mockedListMessages.mockResolvedValue({
-      items: [message('m1', 'как дела', 'user-1')],
+      items: [{ ...message('m1', 'как дела', 'user-1'), readAt: '2026-09-16T11:00:00Z' }],
       nextCursor: null,
     });
 
     await renderWithQuery(<ChatScreen />);
 
-    expect(await screen.findByLabelText('Прочитано')).toBeTruthy();
+    expect(
+      await screen.findByLabelText(`${formatMessageTime(SENT_AT)}, прочитано`),
+    ).toBeTruthy();
   });
 
-  it('never marks an incoming message as read or delivered', async () => {
+  it('never marks an incoming message as read', async () => {
     mockedListMessages.mockResolvedValue({
-      items: [message('m1', 'привет', 'user-2')],
+      items: [{ ...message('m1', 'привет', 'user-2'), readAt: '2026-09-16T11:00:00Z' }],
       nextCursor: null,
     });
 
     await renderWithQuery(<ChatScreen />);
     await screen.findByText('привет');
 
-    expect(screen.queryByLabelText('Доставлено')).toBeNull();
-    expect(screen.queryByLabelText('Прочитано')).toBeNull();
+    expect(screen.queryByLabelText(/прочитано/)).toBeNull();
+  });
+
+  it('shows the views count in the bubble and hides it while there are none', async () => {
+    mockedListMessages.mockResolvedValue({
+      items: [
+        { ...message('m2', 'новое', 'user-1'), viewsCount: 0 },
+        { ...message('m1', 'популярное', 'user-2'), viewsCount: 1250 },
+      ],
+      nextCursor: null,
+    });
+
+    await renderWithQuery(<ChatScreen />);
+
+    expect(await screen.findByLabelText('Просмотры: 1250')).toBeTruthy();
+    expect(screen.getByText('1,2K')).toBeTruthy();
+    expect(screen.getAllByTestId('message-views')).toHaveLength(1);
   });
 
   it('hides the composer from an outsider and says why', async () => {
@@ -400,7 +421,8 @@ describe('ChatScreen', () => {
     await user.press(screen.getByLabelText('Отправить'));
 
     expect(screen.getByText('как дела')).toBeTruthy();
-    expect(screen.getByText('Отправляется…')).toBeTruthy();
+    expect(screen.getByLabelText('Отправляется')).toBeTruthy();
+    expect(screen.queryByText('Отправляется…')).toBeNull();
 
     resolveSend(message('m9', 'как дела', 'user-1'));
 
@@ -478,21 +500,24 @@ describe('ChatScreen', () => {
     expect(listMessagesSince).toHaveBeenCalledWith('chat-1', SENT_AT);
   });
 
-  it('turns an own message read as soon as the other side reports reading', async () => {
+  it('turns an own message read as soon as another member sees it', async () => {
     mockedListMessages.mockResolvedValue({
       items: [message('m1', 'как дела', 'user-1')],
       nextCursor: null,
     });
 
     await renderWithQuery(<ChatScreen />);
-    expect(await screen.findByLabelText('Доставлено')).toBeTruthy();
+    expect(await screen.findByLabelText(formatMessageTime(SENT_AT))).toBeTruthy();
 
-    mockedGetChat.mockResolvedValue(
-      chatWith([member, { ...other, lastReadAt: '2026-09-16T11:00:00Z' }]),
-    );
-    handlers?.onRead();
+    (listMessageViews as jest.Mock).mockResolvedValue([
+      { id: 'm1', viewsCount: 1, readAt: '2026-09-16T11:00:00Z' },
+    ]);
+    await act(async () => handlers?.onViewsChanged?.(['m1']));
 
-    expect(await screen.findByLabelText('Прочитано')).toBeTruthy();
+    expect(
+      await screen.findByLabelText(`${formatMessageTime(SENT_AT)}, прочитано`),
+    ).toBeTruthy();
+    expect(screen.getByLabelText('Просмотры: 1')).toBeTruthy();
   });
 
   it('marks the chat read when a message arrives while it is already open', async () => {

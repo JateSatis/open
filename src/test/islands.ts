@@ -22,6 +22,8 @@ export function original({ id, ...overrides }: OriginalInput): IslandOriginal {
     forward: null,
     reactions: NO_REACTIONS,
     commentsCount: 0,
+    viewsCount: 0,
+    readAt: null,
     authorName: 'Джиган',
     authorAvatarUrl: null,
     chat: { id: 'chat-src', name: 'Джиган и Самойлова', readUpTo: null, amMember: false },
@@ -63,5 +65,7 @@ export function island(
     },
     reactions: NO_REACTIONS,
     commentsCount: 0,
+    viewsCount: 0,
+    readAt: null,
   };
 }

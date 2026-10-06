@@ -32,6 +32,7 @@ import { useInAppAlert } from '@/features/notifications/alertsStore';
 import { island, original } from '@/test/islands';
 import { renderWithQuery } from '@/test/renderWithQuery';
 
+jest.mock('@/api/messageViews');
 jest.mock('@/api/reactions', () => ({
   ...jest.requireActual('@/api/reactionCounts'),
   listMessageReactions: jest.fn(() => Promise.resolve([])),
@@ -194,6 +195,8 @@ function message(id: string, text: string | null, authorId: string, minute = 0):
     forward: null,
     reactions: { members: {}, visitors: {}, mine: null },
     commentsCount: 0,
+    viewsCount: 0,
+    readAt: null,
   };
 }
 
@@ -356,7 +359,8 @@ describe('editing text', () => {
     await user.press(screen.getByLabelText('Сохранить'));
 
     expect(await screen.findByText('эй, как ты?')).toBeTruthy();
-    expect(screen.getByText('изменено · Сохраняется…')).toBeTruthy();
+    expect(screen.getByText('изменено')).toBeTruthy();
+    expect(screen.getByLabelText('Отправляется')).toBeTruthy();
     expect(mockedEdit).toHaveBeenCalledWith('m1', { text: 'эй, как ты?', media: [], voice: null });
     expect(mockedSend).not.toHaveBeenCalled();
     // Правка закончилась — поле пустое, плашки нет.

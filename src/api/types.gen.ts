@@ -853,6 +853,48 @@ export type Database = {
           },
         ]
       }
+      message_views: {
+        Row: {
+          counted_at: string
+          created_at: string
+          id: string
+          message_id: string
+          session_id: string
+          viewer_id: string
+        }
+        Insert: {
+          counted_at?: string
+          created_at?: string
+          id?: string
+          message_id: string
+          session_id: string
+          viewer_id: string
+        }
+        Update: {
+          counted_at?: string
+          created_at?: string
+          id?: string
+          message_id?: string
+          session_id?: string
+          viewer_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "message_views_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_views_viewer_id_fkey"
+            columns: ["viewer_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       messages: {
         Row: {
           author_id: string | null
@@ -866,10 +908,13 @@ export type Database = {
           kind: string
           member_reactions: Json
           reactions_count: number
+          read_at: string | null
           source_chat_id: string | null
           stream_id: string | null
           system_event: string | null
           text: string | null
+          unique_views_count: number
+          views_count: number
           visitor_reactions: Json
           my_reaction: {
             audience: string
@@ -908,10 +953,13 @@ export type Database = {
           kind: string
           member_reactions?: Json
           reactions_count?: number
+          read_at?: string | null
           source_chat_id?: string | null
           stream_id?: string | null
           system_event?: string | null
           text?: string | null
+          unique_views_count?: number
+          views_count?: number
           visitor_reactions?: Json
         }
         Update: {
@@ -926,10 +974,13 @@ export type Database = {
           kind?: string
           member_reactions?: Json
           reactions_count?: number
+          read_at?: string | null
           source_chat_id?: string | null
           stream_id?: string | null
           system_event?: string | null
           text?: string | null
+          unique_views_count?: number
+          views_count?: number
           visitor_reactions?: Json
         }
         Relationships: [
@@ -1346,10 +1397,13 @@ export type Database = {
           kind: string
           member_reactions: Json
           reactions_count: number
+          read_at: string | null
           source_chat_id: string | null
           stream_id: string | null
           system_event: string | null
           text: string | null
+          unique_views_count: number
+          views_count: number
           visitor_reactions: Json
         }[]
         SetofOptions: {
@@ -1502,6 +1556,10 @@ export type Database = {
       reconcile_stream: {
         Args: { connected: Json; room: string }
         Returns: string
+      }
+      record_message_views: {
+        Args: { message_ids: string[]; session_id: string; target_chat: string }
+        Returns: undefined
       }
       register_device: {
         Args: {

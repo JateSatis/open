@@ -51,6 +51,8 @@ export function toCommentItem(comment: Comment): CommentItem {
     forward: null,
     reactions: comment.reactions,
     commentsCount: 0,
+    viewsCount: 0,
+    readAt: null,
     status: 'sent',
     threadRootId: comment.threadRootId,
     repliesCount: comment.repliesCount,

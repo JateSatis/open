@@ -55,6 +55,13 @@ export const Colors = {
     /** Приглушённый текст на тёмном экране звонка. */
     textOnCallSecondary: 'rgba(255, 255, 255, 0.7)',
     reactionVisitorMineOnPrimary: 'rgba(255, 255, 255, 0.24)',
+    /**
+     * Время и просмотры на своём облачке (`primary`): приглушённый белый —
+     * настоящий серый на синем почти не читается.
+     */
+    metaOnPrimary: 'rgba(255, 255, 255, 0.72)',
+    /** Контур синего времени «прочитано» на своём синем облачке. */
+    metaReadOutline: '#ffffff',
     /** Пунктир вокруг островка пересылки — акцентный, но тише облачков внутри. */
     islandBorder: 'rgba(60, 135, 247, 0.6)',
     /** Плашка с чатом, откуда переслали. */
@@ -95,6 +102,8 @@ export const Colors = {
     callControl: 'rgba(255, 255, 255, 0.14)',
     callControlActive: '#ffffff',
     textOnCallSecondary: 'rgba(255, 255, 255, 0.7)',
+    metaOnPrimary: 'rgba(255, 255, 255, 0.72)',
+    metaReadOutline: '#ffffff',
     islandBorder: 'rgba(60, 135, 247, 0.7)',
     islandPlate: 'rgba(60, 135, 247, 0.22)',
     islandBackground: 'rgba(60, 135, 247, 0.1)',

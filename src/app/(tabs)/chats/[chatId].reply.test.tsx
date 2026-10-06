@@ -24,6 +24,7 @@ import { renderWithQuery } from '@/test/renderWithQuery';
 
 const mockPush = jest.fn();
 
+jest.mock('@/api/messageViews');
 jest.mock('@/api/reactions', () => ({
   ...jest.requireActual('@/api/reactionCounts'),
   listMessageReactions: jest.fn(() => Promise.resolve([])),
@@ -136,6 +137,8 @@ function message(id: string, text: string, authorId: string, minute = 0): Messag
     forward: null,
     reactions: { members: {}, visitors: {}, mine: null },
     commentsCount: 0,
+    viewsCount: 0,
+    readAt: null,
   };
 }
 

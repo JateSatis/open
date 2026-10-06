@@ -20,6 +20,7 @@ import { MediaAttachmentGrid } from '@/features/chats/MediaAttachmentGrid';
 import { MessageMeta } from '@/features/chats/MessageMeta';
 import { ReplyQuote } from '@/features/chats/ReplyQuote';
 import type { ChatMessage } from '@/features/chats/useChatMessages';
+import { ViewsCount, type ViewsCountTone } from '@/features/chats/ViewsCount';
 import { VoiceMessage } from '@/features/chats/VoiceMessage';
 import { CommentsButton, type CommentsButtonTone } from '@/features/interactions/CommentsButton';
 import { MessageReactions, type ReactionsTone } from '@/features/interactions/MessageReactions';
@@ -31,7 +32,7 @@ import { Spacing } from '@/theme';
 export type MessageBubbleProps = {
   message: ChatMessage;
   isOwn: boolean;
-  /** Собеседник дочитал переписку до этого сообщения. Смысл имеет только для своих. */
+  /** Своё сообщение увидел другой участник чата — время синее. Смысл имеет только для своих. */
   isRead: boolean;
   authorName: string;
   authorAvatarUrl: string | null;
@@ -56,16 +57,16 @@ export type MessageBubbleProps = {
   /** Тап по реакции своего ряда. Нет обработчика (копия в меню) — ряды не нажимаются. */
   onReactionToggle?: (emoji: string) => void;
   /**
-   * Кнопка комментариев внутри облачка, у внешнего края: у чужого слева, у
-   * своего справа. `quiet` — тихая кнопка участника на сообщении без
+   * Кнопка комментариев внутри облачка, правее всего остального в низу.
+   * `quiet` — тихая кнопка участника на сообщении без
    * комментариев. Нет — нет и кнопки (неотправленное, системное, сам
    * комментарий).
    */
   comments?: { count: number; quiet?: boolean; onPress?: () => void };
   /** Тихая пометка после имени автора: «участник чата» у комментария. */
   authorBadge?: string | null;
-  /** «доставлено / прочитано» у своего. У комментариев не показывается. */
-  showReceipt?: boolean;
+  /** Счётчик просмотров в правом нижнем углу. У комментариев его нет: их просмотры не считаются. */
+  showViews?: boolean;
   /**
    * Аватар слева от чужого облачка. В личном диалоге его нет — и места под
    * него тоже: собеседник один, автора видно по имени над облачком.
@@ -98,7 +99,7 @@ export function MessageBubble({
   onReactionToggle,
   comments,
   authorBadge,
-  showReceipt,
+  showViews = true,
   showAvatar = true,
   aside,
   lead,
@@ -176,9 +177,14 @@ export function MessageBubble({
       variant={variant}
       floating={floating}
       onRetry={onRetry}
-      showReceipt={showReceipt}
     />
   );
+
+  // Пока сообщение едет или его никто не видел, счётчика нет.
+  const views = (tone: ViewsCountTone) =>
+    showViews && message.status === 'sent' && message.viewsCount > 0 ? (
+      <ViewsCount count={message.viewsCount} tone={tone} />
+    ) : null;
 
   const commentsButton = (tone: CommentsButtonTone) =>
     comments ? (
@@ -192,12 +198,12 @@ export function MessageBubble({
 
   const footer = (tone: 'own' | 'other', width: number | null) => (
     <BubbleFooter
-      isOwn={isOwn}
       members={hasMemberReactions ? reactions(tone, 'members') : null}
       visitors={hasVisitorReactions ? reactions(tone, 'visitors') : null}
       comments={commentsButton(tone)}
       quiet={comments?.quiet ?? false}
       meta={meta('inline')}
+      views={views(tone)}
       contentWidth={width}
       layoutKey={message.id}
     />
@@ -275,13 +281,13 @@ export function MessageBubble({
               onPress={setViewerIndex}
             >
               {message.text ? null : (
-                // Без подписи время — плашкой на медиа, и кнопка комментариев
-                // рядом, у внешнего края. Без облачка кнопка — под мозаикой.
+                // Без подписи время — плашкой в левом нижнем углу медиа, справа —
+                // просмотры и кнопка комментариев. Без облачка кнопка — под мозаикой.
                 <View pointerEvents="box-none" style={styles.mediaOverlay}>
-                  {isOwn || bareMedia ? null : commentsButton('overlay')}
-                  <View style={styles.footerSpacer} />
                   {meta('overlay', false)}
-                  {isOwn && !bareMedia ? commentsButton('overlay') : null}
+                  <View style={styles.footerSpacer} />
+                  {views('overlay')}
+                  {bareMedia ? null : commentsButton('overlay')}
                 </View>
               )}
             </MediaAttachmentGrid>
@@ -298,6 +304,7 @@ export function MessageBubble({
           {bareMedia && !message.text ? (
             <View style={styles.bareFooter}>
               <View style={styles.footerShrink}>{reactions('bare')}</View>
+              <View style={styles.footerSpacer} />
               {commentsButton('bare')}
             </View>
           ) : null}

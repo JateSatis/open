@@ -1,6 +1,6 @@
 import { StyleSheet } from 'react-native';
 
-import { Radii, Spacing } from '@/theme';
+import { Radii, Sizes, Spacing } from '@/theme';
 
 export const styles = StyleSheet.create({
   /** Над облачками, внутри рамки: сверху — отступ от пунктира, снизу — от первого облачка. */
@@ -17,5 +17,15 @@ export const styles = StyleSheet.create({
     paddingHorizontal: Spacing.two,
     paddingVertical: Spacing.half,
     borderRadius: Radii.full,
+  },
+  /** Лоадер отправки — того же размера, что на месте времени в облачке. */
+  spinnerBox: {
+    width: Sizes.metaSpinner,
+    height: Sizes.metaSpinner,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  spinner: {
+    transform: [{ scale: Sizes.metaSpinner / Sizes.activityIndicatorSmall }],
   },
 });

@@ -13,6 +13,7 @@ import {
   MESSAGE_PAGE_SIZE,
   type Message,
 } from '@/api/chats';
+import { listMessageViews } from '@/api/messageViews';
 import { listMessageReactions } from '@/api/reactions';
 import { originalIds } from '@/features/chats/islands/islandCache';
 import {
@@ -20,6 +21,7 @@ import {
   mergeMessages,
   patchCommentCounts,
   patchReactions,
+  patchViews,
   quotedIds,
   readAllHistories,
   readHistory,
@@ -125,7 +127,7 @@ export async function loadHistory(queryClient: QueryClient, chatId: string): Pro
     .filter((message) => message.kind === 'forward')
     .map((message) => message.id)
     .slice(0, MAX_TOMBSTONE_IDS);
-  const [newer, deleted, edited, islands, reactions, commentCounts] = await Promise.all([
+  const [newer, deleted, edited, islands, reactions, commentCounts, views] = await Promise.all([
     fetchNewer(chatId, since),
     listDeletedMessageIds(loadedIds),
     fetchStaleEdits(cached, loadedIds),
@@ -135,21 +137,26 @@ export async function loadHistory(queryClient: QueryClient, chatId: string): Pro
     listMessageReactions(loadedMessageIds).catch(() => []),
     // Числа комментариев — так же: пропущенное принесёт следующее событие.
     listCommentCounts(loadedMessageIds).catch(() => []),
+    // Просмотры и «прочитано» — так же.
+    listMessageViews(loadedMessageIds).catch(() => []),
   ]);
 
   if (newer === null) return firstPage(chatId);
 
   const latest = readHistory(queryClient, chatId) ?? cached;
 
-  return patchCommentCounts(
-    patchReactions(
-      replaceMessages(
-        removeMessages(mergeMessages(latest, newer, 'newer'), new Set(deleted)),
-        [...edited, ...islands],
+  return patchViews(
+    patchCommentCounts(
+      patchReactions(
+        replaceMessages(
+          removeMessages(mergeMessages(latest, newer, 'newer'), new Set(deleted)),
+          [...edited, ...islands],
+        ),
+        reactions,
       ),
-      reactions,
+      commentCounts,
     ),
-    commentCounts,
+    views,
   );
 }
 
@@ -258,6 +265,18 @@ export async function refreshCommentCounts(
   const fresh = await listCommentCounts(ids);
 
   updateAllHistories(queryClient, (current) => patchCommentCounts(current, fresh));
+}
+
+/** Просмотры и «прочитано» у этих сообщений изменились — перечитать пачкой, только у загруженных. */
+export async function refreshViews(queryClient: QueryClient, candidates: string[]): Promise<void> {
+  const loaded = loadedEverywhere(queryClient);
+  const ids = candidates.filter((id) => loaded.has(id)).slice(0, MAX_TOMBSTONE_IDS);
+
+  if (ids.length === 0) return;
+
+  const fresh = await listMessageViews(ids);
+
+  updateAllHistories(queryClient, (current) => patchViews(current, fresh));
 }
 
 /**

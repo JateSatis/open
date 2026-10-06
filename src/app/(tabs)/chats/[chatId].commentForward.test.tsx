@@ -73,6 +73,7 @@ jest.mock('@/api/comments', () => ({
   listCommentReactions: jest.fn(() => Promise.resolve([])),
   subscribeToComments: jest.fn(() => () => undefined),
 }));
+jest.mock('@/api/messageViews');
 jest.mock('@/api/reactions', () => ({
   ...jest.requireActual('@/api/reactionCounts'),
   listMessageReactions: jest.fn(() => Promise.resolve([])),
@@ -144,6 +145,8 @@ function message(id: string, minute: number, overrides: Partial<Message> = {}): 
     forward: null,
     reactions: NO_REACTIONS,
     commentsCount: 0,
+    viewsCount: 0,
+    readAt: null,
     ...overrides,
   };
 }

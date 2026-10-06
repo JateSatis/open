@@ -21,6 +21,8 @@ function comment(overrides: Partial<CommentItem> = {}): CommentItem {
     forward: null,
     reactions: NO_REACTIONS,
     commentsCount: 0,
+    viewsCount: 0,
+    readAt: null,
     status: 'sent',
     threadRootId: null,
     repliesCount: 0,

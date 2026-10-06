@@ -10,6 +10,7 @@ import {
   refreshEditedMessages,
   refreshIsland,
   refreshReactions,
+  refreshViews,
 } from '@/features/chats/messages/sync';
 import type { UserActivity } from '@/features/chats/messages/types';
 import { chatQueryKey } from '@/features/chats/useChat';
@@ -53,6 +54,8 @@ export function useChatChannel(chatId: string, currentUserId: string | null): Ch
   // Числа комментариев — той же пачкой, что и реакции: горячее сообщение
   // комментируют так же часто, как на него реагируют.
   const commentBatchRef = useRef<Batch>({ ids: new Set(), timer: null });
+  // Просмотры — тоже: каждый зритель шлёт пачку раз в пару секунд.
+  const viewBatchRef = useRef<Batch>({ ids: new Set(), timer: null });
 
   const onNewMessage = useCallback(async () => {
     try {
@@ -92,6 +95,7 @@ export function useChatChannel(chatId: string, currentUserId: string | null): Ch
     const timers = typingTimersRef.current;
     const reactionBatch = reactionBatchRef.current;
     const commentBatch = commentBatchRef.current;
+    const viewBatch = viewBatchRef.current;
 
     // Не вышло перечитать — дочитаем при следующем событии или переподключении.
     const collect = (
@@ -149,6 +153,8 @@ export function useChatChannel(chatId: string, currentUserId: string | null): Ch
       },
       onReactionsChanged: (messageId) => collect(reactionBatch, refreshReactions, messageId),
       onCommentsChanged: (messageId) => collect(commentBatch, refreshCommentCounts, messageId),
+      onViewsChanged: (messageIds) =>
+        messageIds.forEach((messageId) => collect(viewBatch, refreshViews, messageId)),
       onTyping: (userId, activity) => {
         if (userId === currentUserId) return;
 
@@ -182,7 +188,7 @@ export function useChatChannel(chatId: string, currentUserId: string | null): Ch
       timers.forEach(clearTimeout);
       timers.clear();
 
-      for (const batch of [reactionBatch, commentBatch]) {
+      for (const batch of [reactionBatch, commentBatch, viewBatch]) {
         if (batch.timer) clearTimeout(batch.timer);
 
         batch.timer = null;

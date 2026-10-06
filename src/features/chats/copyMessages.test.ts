@@ -16,6 +16,8 @@ function message(id: string, text: string | null, authorId: string, createdAt: s
     forward: null,
     reactions: { members: {}, visitors: {}, mine: null },
     commentsCount: 0,
+    viewsCount: 0,
+    readAt: null,
     status: 'sent',
   };
 }

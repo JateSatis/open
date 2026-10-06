@@ -46,7 +46,7 @@ import {
   readUpTo as readUpToOf,
 } from '@/features/chats/chatDisplay';
 import { mosaicBounds } from '@/features/chats/lib/mosaicLayout';
-import { RowRegistryContext } from '@/features/chats/rowRegistry';
+import { measureInWindow, RowRegistryContext } from '@/features/chats/rowRegistry';
 import { useChatBubbles } from '@/features/chats/useChatBubbles';
 import { useChatKeyboardInset } from '@/features/chats/useChatKeyboardInset';
 import { useChatRowRenderer } from '@/features/chats/useChatRowRenderer';
@@ -57,6 +57,7 @@ import { useChatMessages } from '@/features/chats/useChatMessages';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
 import { useJumpToMessage } from '@/features/chats/useJumpToMessage';
 import { useMarkChatRead } from '@/features/chats/useMarkChatRead';
+import { useMessageViews } from '@/features/chats/useMessageViews';
 import { readChatDraft } from '@/features/chats/composerDraftStore';
 import { useMessageActionHandlers } from '@/features/chats/useMessageActionHandlers';
 import { useMessageEdit } from '@/features/chats/useMessageEdit';
@@ -87,6 +88,8 @@ const rowKey = (row: ChatListRow) => row.key;
 
 /** Ближе этого к самому новому сообщению список держится за низ переписки, а не за прочитанное. */
 const KEEP_READING_POSITION = { minIndexForVisible: 0, autoscrollToTopThreshold: Spacing.six };
+/** Положение прокрутки нужно учёту просмотров лишь примерно: у низа или нет. */
+const VIEWS_SCROLL_THROTTLE_MS = 100;
 
 /**
  * Облачко чужого сообщения начинается после аватара и зазора (`MessageBubble`).
@@ -382,7 +385,6 @@ export default function ChatScreen() {
     chatId,
     currentUserId,
     isMember,
-    readUpTo,
     participantsById,
     mediaBounds,
     retry,
@@ -411,6 +413,17 @@ export default function ChatScreen() {
   });
 
   const commentsLift = useCommentsLiftHost(listRef, rows, bubbleContent);
+  const listFrameRef = useRef<View>(null);
+  const measureListFrame = useCallback(() => measureInWindow(listFrameRef.current), []);
+  const views = useMessageViews({
+    chatId,
+    currentUserId,
+    isFocused,
+    rows,
+    autoscrollThreshold: KEEP_READING_POSITION.autoscrollToTopThreshold,
+    measureRow: commentsLift.registry.measure,
+    measureViewport: measureListFrame,
+  });
 
   // Пока открыт шит комментариев, переписка под ним растворена.
   const fadeStyle = useAnimatedStyle(() => ({ opacity: chatFade.value }));
@@ -567,7 +580,7 @@ export default function ChatScreen() {
             <ActivityIndicator accessibilityLabel="Загрузка переписки" />
           </View>
         ) : (
-          <Animated.View style={[styles.flex, fadeStyle]}>
+          <Animated.View ref={listFrameRef} style={[styles.flex, fadeStyle]}>
             <RowRegistryContext.Provider value={commentsLift.registry}>
               <FlatList
                 ref={listRef}
@@ -577,6 +590,10 @@ export default function ChatScreen() {
                 onScrollToIndexFailed={jump.onScrollToIndexFailed}
                 keyExtractor={rowKey}
                 renderItem={renderItem}
+                viewabilityConfig={views.viewabilityConfig}
+                onViewableItemsChanged={views.onViewableItemsChanged}
+                onScroll={views.onScroll}
+                scrollEventThrottle={VIEWS_SCROLL_THROTTLE_MS}
                 contentContainerStyle={styles.list}
                 // The list is inverted, so its "end" is the top of the screen:
                 // scrolling up pages further back through the history.
