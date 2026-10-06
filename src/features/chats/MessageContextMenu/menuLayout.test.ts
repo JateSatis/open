@@ -6,46 +6,56 @@ const screen = {
   safeBottom: 20,
   margin: 8,
   gap: 8,
-  accessoryHeight: 0,
+  touchOffset: 24,
+  menuHeight: 200,
+  accessoryHeight: 56,
 };
 
-function layout(input: Partial<MenuLayoutInput> & Pick<MenuLayoutInput, 'anchorTop' | 'anchorHeight'>) {
-  return computeMenuLayout({ menuHeight: 200, ...screen, ...input });
+function layout(input: Partial<MenuLayoutInput> & Pick<MenuLayoutInput, 'touchY'>) {
+  return computeMenuLayout({ ...screen, ...input });
 }
 
 describe('computeMenuLayout', () => {
-  it('leaves the bubble where it is when the menu fits under it', () => {
-    expect(layout({ anchorTop: 200, anchorHeight: 60 })).toMatchObject({
-      bubbleTop: 200,
-      bubbleHeight: 60,
-      menuTop: 268,
-    });
+  it('puts the menu under the finger and the reactions right above it', () => {
+    const result = layout({ touchY: 400 });
+
+    expect(result.menuTop).toBe(400 - 24);
+    expect(result.accessoryTop).toBe(result.menuTop - 8 - 56);
   });
 
-  it('lifts a bubble at the bottom edge so the menu stays on screen', () => {
-    const result = layout({ anchorTop: 700, anchorHeight: 60 });
+  it('follows the finger, not the bubble: a lower tap — a lower menu', () => {
+    expect(layout({ touchY: 450 }).menuTop - layout({ touchY: 350 }).menuTop).toBe(100);
+  });
 
-    // Низ меню — ровно у края безопасной зоны.
+  it('moves the pair down just enough when the reactions would go under the status bar', () => {
+    const result = layout({ touchY: 60 });
+
+    expect(result.accessoryTop).toBe(40 + 8);
+    expect(result.menuTop).toBe(40 + 8 + 56 + 8);
+  });
+
+  it('moves the pair up just enough when the menu would go under the navigation bar', () => {
+    const result = layout({ touchY: 760 });
+
     expect(result.menuTop + 200).toBe(800 - 20 - 8);
-    expect(result.bubbleTop).toBe(result.menuTop - 8 - 60);
+    // Реакции по-прежнему над меню.
+    expect(result.accessoryTop).toBe(result.menuTop - 8 - 56);
   });
 
-  it('pushes a bubble half hidden under the top edge down into view', () => {
-    expect(layout({ anchorTop: -30, anchorHeight: 60 }).bubbleTop).toBe(40 + 8);
+  it('without reactions it places the menu alone', () => {
+    const result = layout({ touchY: 400, accessoryHeight: 0 });
+
+    expect(result.menuTop).toBe(376);
+    expect(result.accessoryTop).toBe(376);
   });
 
-  it('cuts a bubble taller than the room left by the menu', () => {
-    const result = layout({ anchorTop: 0, anchorHeight: 2000 });
-
-    expect(result.bubbleTop).toBe(48);
-    expect(result.bubbleHeight).toBe(800 - 20 - 8 - 48 - 8 - 200);
-    expect(result.menuTop + 200).toBe(772);
+  it('without reactions the menu may start right below the top margin', () => {
+    expect(layout({ touchY: 30, accessoryHeight: 0 }).menuTop).toBe(48);
   });
 
-  it('keeps room above the bubble for a block that will sit there (reactions)', () => {
-    const result = layout({ anchorTop: 0, anchorHeight: 60, accessoryHeight: 44 });
+  it('keeps the top of a pair taller than the screen in view', () => {
+    const result = layout({ touchY: 400, menuHeight: 2000 });
 
     expect(result.accessoryTop).toBe(48);
-    expect(result.bubbleTop).toBe(48 + 44 + 8);
   });
 });

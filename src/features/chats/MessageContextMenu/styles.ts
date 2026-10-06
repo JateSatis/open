@@ -3,23 +3,37 @@ import { StyleSheet } from 'react-native';
 import { Radii, Sizes, Spacing } from '@/theme';
 
 export const styles = StyleSheet.create({
-  /** Слишком длинное облачко обрезается снизу — видно его начало. */
-  preview: {
+  /** Окно списка: копия облачка не рисуется поверх заголовка и поля ввода. */
+  clip: {
     position: 'absolute',
+    left: 0,
+    right: 0,
     overflow: 'hidden',
   },
-  menu: {
+  preview: {
     position: 'absolute',
-    width: Sizes.menuWidth,
+  },
+  menuRow: {
+    position: 'absolute',
+    left: Spacing.two,
+    right: Spacing.two,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  spacer: {
+    flexShrink: 1,
+  },
+  /** Без ширины: меню по самому длинному пункту, пункты тянутся до него. */
+  menu: {
+    flexShrink: 0,
+    minWidth: Sizes.menuMinWidth,
     paddingVertical: Spacing.one,
     borderRadius: Radii.md,
     overflow: 'hidden',
-  },
-  originStart: {
     transformOrigin: 'top left',
   },
-  originEnd: {
-    transformOrigin: 'top right',
+  pickerOrigin: {
+    transformOrigin: 'top left',
   },
   item: {
     height: Sizes.menuRowHeight,

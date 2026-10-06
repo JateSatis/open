@@ -11,7 +11,7 @@ import {
   type IslandHeaderRow,
 } from '@/features/chats/islands/rows';
 import { isLocalMessage } from '@/features/chats/messageActions';
-import type { AnchorRect } from '@/features/chats/MessageContextMenu';
+import type { MenuAnchor } from '@/features/chats/MessageContextMenu';
 import { MessageRow } from '@/features/chats/MessageRow';
 import { SystemMessage } from '@/features/chats/SystemMessage';
 import type { JumpHighlight } from '@/features/chats/useJumpToMessage';
@@ -34,7 +34,7 @@ type Options = {
   editingId: string | null;
   highlight: JumpHighlight | null;
   bubbleFor: (row: BubbleRow, interactive: boolean) => React.ReactElement | null;
-  openMenu: (row: ChatListRow, anchor: AnchorRect) => void;
+  openMenu: (row: ChatListRow, anchor: MenuAnchor) => void;
   startReply: (rows: BubbleRow[]) => void;
   retry: (localId: string) => void;
   hostName: (authorId: string | null) => string;

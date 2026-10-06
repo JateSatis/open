@@ -6,7 +6,7 @@ import { styles } from './styles';
 
 import { Text } from '@/components/Text';
 import { isLocalMessage } from '@/features/chats/messageActions';
-import type { AnchorRect } from '@/features/chats/MessageContextMenu';
+import type { MenuAnchor } from '@/features/chats/MessageContextMenu';
 import { MessageRow } from '@/features/chats/MessageRow';
 import type { CommentItem } from '@/features/interactions/comments/commentItem';
 import { useTheme } from '@/hooks/use-theme';
@@ -22,7 +22,7 @@ export type CommentRowViewProps = {
   selected: boolean;
   editing: boolean;
   highlightKey: number | null;
-  onOpenMenu: (comment: CommentItem, anchor: AnchorRect) => void;
+  onOpenMenu: (comment: CommentItem, anchor: MenuAnchor) => void;
   onSelect: (comment: CommentItem) => void;
   onToggle: (comment: CommentItem) => void;
   /** Свайп влево — ответить. Нет — у удалённого сообщения ответов не принимают. */

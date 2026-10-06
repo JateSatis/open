@@ -91,11 +91,6 @@ const KEEP_READING_POSITION = { minIndexForVisible: 0, autoscrollToTopThreshold:
 /** Положение прокрутки нужно учёту просмотров лишь примерно: у низа или нет. */
 const VIEWS_SCROLL_THROTTLE_MS = 100;
 
-/**
- * Облачко чужого сообщения начинается после аватара и зазора (`MessageBubble`).
- * В личном диалоге аватаров нет — облачко у самого края.
- */
-const BUBBLE_LEADING_INSET = Spacing.five + Spacing.two;
 
 export default function ChatScreen() {
   const { chatId } = useLocalSearchParams<{ chatId: string }>();
@@ -123,7 +118,9 @@ export default function ChatScreen() {
   const pinCursor = usePinnedCursor(pins.pins);
   const selection = useMessageSelection(rows, currentUserId);
   const jump = useJumpToMessage(listRef, rows, chatMessages.loadUntil);
-  const menu = useMessageMenu(rowKey);
+  const listFrameRef = useRef<View>(null);
+  const measureListFrame = useCallback(() => measureInWindow(listFrameRef.current), []);
+  const menu = useMessageMenu(rowKey, measureListFrame);
   const draft = useComposerDraft(chatId);
   const isMember = chat ? isChatMember(chat, currentUserId) : false;
   const isFocused = useIsFocused();
@@ -413,8 +410,6 @@ export default function ChatScreen() {
   });
 
   const commentsLift = useCommentsLiftHost(listRef, rows, bubbleContent);
-  const listFrameRef = useRef<View>(null);
-  const measureListFrame = useCallback(() => measureInWindow(listFrameRef.current), []);
   const views = useMessageViews({
     chatId,
     currentUserId,
@@ -691,13 +686,10 @@ export default function ChatScreen() {
 
       <MessageContextMenu
         anchor={menu.target?.anchor ?? null}
+        viewport={menu.target?.viewport ?? null}
         preview={menuPreview}
         actions={menuActions}
         reactions={menuReactions}
-        alignEnd={menuContent?.authorId === currentUserId}
-        leadingInset={
-          menuRow?.type === 'island-header' || chat?.kind === 'direct' ? 0 : BUBBLE_LEADING_INSET
-        }
         onAction={runMenuAction}
         onClose={menu.close}
       />

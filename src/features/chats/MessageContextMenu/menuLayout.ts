@@ -1,45 +1,38 @@
 export type MenuLayoutInput = {
-  /** Где облачко стоит в переписке — в координатах окна. */
-  anchorTop: number;
-  anchorHeight: number;
+  /** Куда пришёлся палец — по вертикали, в координатах окна. */
+  touchY: number;
+  /** Насколько ниже верхнего края меню должен оказаться палец. */
+  touchOffset: number;
   menuHeight: number;
-  /** Блок над облачком — свёрнутые реакции. Нет блока — 0. */
+  /** Блок над меню — свёрнутые реакции. Нет блока — 0. */
   accessoryHeight: number;
   windowHeight: number;
   safeTop: number;
   safeBottom: number;
   /** Отступ от краёв экрана. */
   margin: number;
-  /** Зазор между облачком, меню и блоком над ним. */
+  /** Зазор между меню и блоком над ним. */
   gap: number;
 };
 
 export type MenuLayout = {
-  /** Куда встаёт поднятое облачко. */
-  bubbleTop: number;
-  /** Сколько облачка видно: слишком длинное обрезается снизу. */
-  bubbleHeight: number;
   menuTop: number;
   accessoryTop: number;
 };
 
 /**
- * Облачко остаётся там, где было, если меню помещается; иначе сдвигается
- * ровно настолько, чтобы и оно, и меню, и блок над ним уместились в экран.
+ * Меню встаёт у пальца: касание приходится чуть ниже его верхнего края,
+ * реакции — над меню. Если у пальца связка не помещается, она целиком
+ * сдвигается ровно настолько, чтобы влезть в экран. Сообщение не двигается
+ * никогда — меню и реакции просто ложатся поверх него.
  */
 export function computeMenuLayout(input: MenuLayoutInput): MenuLayout {
   const accessory = input.accessoryHeight > 0 ? input.accessoryHeight + input.gap : 0;
-  const minTop = input.safeTop + input.margin + accessory;
+  const minTop = input.safeTop + input.margin;
   const maxBottom = input.windowHeight - input.safeBottom - input.margin;
-  const room = maxBottom - minTop - input.gap - input.menuHeight;
-  const bubbleHeight = Math.max(0, Math.min(input.anchorHeight, room));
-  const lowestTop = maxBottom - input.menuHeight - input.gap - bubbleHeight;
-  const bubbleTop = Math.max(minTop, Math.min(input.anchorTop, lowestTop));
+  const wanted = input.touchY - input.touchOffset - accessory;
+  // Связка выше экрана — видно её верх: реакции и первые пункты.
+  const top = Math.max(minTop, Math.min(wanted, maxBottom - accessory - input.menuHeight));
 
-  return {
-    bubbleTop,
-    bubbleHeight,
-    menuTop: bubbleTop + bubbleHeight + input.gap,
-    accessoryTop: bubbleTop - accessory,
-  };
+  return { accessoryTop: top, menuTop: top + accessory };
 }

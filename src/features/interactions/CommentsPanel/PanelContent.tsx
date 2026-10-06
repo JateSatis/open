@@ -23,6 +23,7 @@ import { mosaicBounds } from '@/features/chats/lib/mosaicLayout';
 import { MessageBubble } from '@/features/chats/MessageBubble';
 import { canReactTo } from '@/features/chats/messageActions';
 import { MessageContextMenu } from '@/features/chats/MessageContextMenu';
+import { measureInWindow } from '@/features/chats/rowRegistry';
 import { DELETED_ACCOUNT } from '@/features/chats/messageQuote';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
 import { visibleQuotes, type CommentItem } from '@/features/interactions/comments/commentItem';
@@ -39,8 +40,6 @@ import { showNotice } from '@/features/notifications/alertsStore';
 import { useTheme } from '@/hooks/use-theme';
 import { Spacing } from '@/theme';
 
-/** Облачко чужого начинается после аватара и зазора (`MessageBubble`). */
-const BUBBLE_LEADING_INSET = Spacing.five + Spacing.two;
 const MEMBER_BADGE = 'участник чата';
 
 const exitThread = () => setOpenThread(null);
@@ -88,6 +87,19 @@ export function PanelContent({
   const [keyboardInset, setKeyboardInset] = useState(0);
   const closed = about?.state === 'deleted' || about?.state === 'missing';
   const { geometry, headerHeight, close, closeNow } = sheet;
+  const sheetLayout = useRef({ headerHeight: 0, visibleHeight: 0 });
+  const listWindowRef = useRef<View>(null);
+  // Видимая часть списка: под заголовком шита и над полем ввода. Копия
+  // облачка под меню рисуется только в ней — как и само облачко.
+  const measureViewport = useCallback(async () => {
+    const frame = await measureInWindow(listWindowRef.current);
+
+    if (!frame) return null;
+
+    const { headerHeight: header, visibleHeight } = sheetLayout.current;
+
+    return { ...frame, y: frame.y + header, height: Math.max(0, visibleHeight - header) };
+  }, []);
 
   const mainJump = useJumpToComment(
     listRef,
@@ -132,6 +144,7 @@ export function PanelContent({
     threadListRef,
     sheet,
     jump: threadJump.jump,
+    measureViewport,
   });
 
   useEffect(() => {
@@ -142,7 +155,6 @@ export function PanelContent({
   // окне своего треда, верхнеуровневый — в основном. Виден и так — список не
   // двигается: над шитом в переписке стоит сообщение этого комментария.
   const { focusReady } = data;
-  const sheetLayout = useRef({ headerHeight: 0, visibleHeight: 0 });
 
   useEffect(() => {
     sheetLayout.current = {
@@ -296,6 +308,7 @@ export function PanelContent({
     <>
       <Animated.View style={[styles.fill, sheet.shiftStyle]} pointerEvents="box-none">
         <View
+          ref={listWindowRef}
           style={[
             styles.listWindow,
             { top: geometry.top, backgroundColor: theme.background, borderColor: theme.border },
@@ -363,11 +376,10 @@ export function PanelContent({
 
       <MessageContextMenu
         anchor={actions.menuAnchor}
+        viewport={actions.menuViewport}
         preview={actions.menuComment ? renderBubble(actions.menuComment, false) : null}
         actions={actions.menuActions}
         reactions={actions.menuReactions}
-        alignEnd={actions.menuComment?.authorId === currentUserId}
-        leadingInset={BUBBLE_LEADING_INSET}
         onAction={actions.runMenuAction}
         onClose={actions.closeMenu}
       />
