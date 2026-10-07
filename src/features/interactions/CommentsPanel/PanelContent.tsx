@@ -240,6 +240,8 @@ export function PanelContent({
           onReactionToggle={
             interactive && canReactTo(item) ? (emoji) => react(item, emoji) : undefined
           }
+          // У комментария один общий ряд: участники и зрители вместе, тапает любой.
+          reactionsLayout="merged"
         />
       );
     },

@@ -5,6 +5,7 @@ import { styles } from './styles';
 
 import { Text } from '@/components/Text';
 import { useTheme } from '@/hooks/use-theme';
+import { Spacing } from '@/theme';
 
 export type AvatarProps = {
   uri?: string | null;
@@ -29,7 +30,7 @@ export function Avatar({ uri, name, size = 40 }: AvatarProps) {
 
   return (
     <View style={[styles.fallback, dimension, { backgroundColor: theme.backgroundSelected }]}>
-      <Text variant="bodyBold" accessibilityLabel={name}>
+      <Text variant={size < Spacing.four ? 'meta' : 'bodyBold'} accessibilityLabel={name}>
         {name.trim().charAt(0).toUpperCase() || '?'}
       </Text>
     </View>

@@ -13,11 +13,11 @@ import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 
 import { styles } from './styles';
 
-import type { ChannelRef } from '@/api/chats';
+import type { ChannelRef , ForwardedComment, IslandOriginal } from '@/api/chats';
 import { Text } from '@/components/Text';
 import { ChatFooter, modePlate } from '@/features/chats/ChatFooter';
 import { ChatScreenHeader } from '@/features/chats/ChatScreenHeader';
-import type { ForwardedComment, IslandOriginal } from '@/api/chats';
+
 import { DeletedOriginal } from '@/features/chats/DeletedOriginal';
 import {
   commentsHomeOf,
@@ -75,6 +75,7 @@ import { useReplyForward } from '@/features/chats/useReplyForward';
 import { useRespondToInvite } from '@/features/chats/useRespondToInvite';
 import { WaitingBanner } from '@/features/chats/WaitingBanner';
 import { CommentsPanel, openComments } from '@/features/interactions/CommentsPanel';
+import { resetScrolledRows } from '@/features/interactions/MessageReactions';
 import { chatFade } from '@/features/interactions/comments/commentsLift';
 import { useReactToMessage } from '@/features/interactions/useReactToMessage';
 import { CallButton } from '@/features/streams/CallButton';
@@ -478,6 +479,16 @@ export function ChatConversation({ chatId, channel = null, active = true }: Chat
     measureViewport: measureListFrame,
   });
 
+  // Прокрутили переписку — прокрученные вбок ряды реакций возвращаются в начало.
+  const { onScroll: viewsOnScroll } = views;
+  const onListScroll = useCallback(
+    (event: Parameters<typeof viewsOnScroll>[0]) => {
+      viewsOnScroll(event);
+      resetScrolledRows();
+    },
+    [viewsOnScroll],
+  );
+
   // Пока открыт шит комментариев, переписка под ним растворена.
   const fadeStyle = useAnimatedStyle(() => ({ opacity: chatFade.value }));
 
@@ -646,7 +657,7 @@ export function ChatConversation({ chatId, channel = null, active = true }: Chat
                 renderItem={renderItem}
                 viewabilityConfig={views.viewabilityConfig}
                 onViewableItemsChanged={views.onViewableItemsChanged}
-                onScroll={views.onScroll}
+                onScroll={onListScroll}
                 scrollEventThrottle={VIEWS_SCROLL_THROTTLE_MS}
                 contentContainerStyle={styles.list}
                 // The list is inverted, so its "end" is the top of the screen:

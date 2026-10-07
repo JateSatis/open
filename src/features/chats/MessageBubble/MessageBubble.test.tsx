@@ -1,4 +1,5 @@
 import { render, screen, userEvent, within } from '@testing-library/react-native';
+import { StyleSheet } from 'react-native';
 
 import { MessageBubble } from '.';
 
@@ -389,28 +390,61 @@ describe('MessageBubble', () => {
   describe('reactions', () => {
     const reactions = { members: { '👍': 2 }, visitors: { '🔥': 1 }, mine: null };
 
-    it('keeps both rows inside the bubble of a text message', async () => {
+    it('puts member reactions in the bottom row and visitors on a line below it', async () => {
       await render(<MessageBubble message={textMessage({ reactions })} {...baseProps} />);
+
+      const row = screen.getByTestId('bubble-footer-info');
+
+      expect(within(row).getByTestId('member-reactions')).toBeTruthy();
+      expect(within(row).queryByTestId('visitor-reactions')).toBeNull();
+      expect(
+        within(screen.getByTestId('message-bubble')).getByTestId('visitor-reactions'),
+      ).toBeTruthy();
+    });
+
+    it('with only visitor reactions keeps the bottom row empty between time and views', async () => {
+      await render(
+        <MessageBubble
+          message={textMessage({ reactions: { ...reactions, members: {} } })}
+          {...baseProps}
+        />,
+      );
+
+      expect(screen.queryByTestId('bubble-footer-reactions')).toBeNull();
+      expect(screen.getByTestId('visitor-reactions')).toBeTruthy();
+    });
+
+    it('my caption-less album grows a bubble of my colour for its reactions', async () => {
+      await render(<MessageBubble message={mediaMessage({ reactions })} {...baseProps} isOwn />);
 
       const bubble = screen.getByTestId('message-bubble');
 
       expect(within(bubble).getByTestId('member-reactions')).toBeTruthy();
       expect(within(bubble).getByTestId('visitor-reactions')).toBeTruthy();
+      expect(StyleSheet.flatten(bubble.props.style).backgroundColor).not.toBe('transparent');
     });
 
-    it('puts the rows under my caption-less album, outside the bubble that has no background', async () => {
-      await render(<MessageBubble message={mediaMessage({ reactions })} {...baseProps} isOwn />);
-
-      expect(
-        within(screen.getByTestId('message-bubble')).queryByTestId('message-reactions'),
-      ).toBeNull();
-      expect(screen.getByTestId('message-reactions')).toBeTruthy();
-    });
-
-    it('adds no room at all while there are no reactions', async () => {
+    it('my album has no bubble and no room while there are no reactions', async () => {
       await render(<MessageBubble message={mediaMessage()} {...baseProps} isOwn />);
 
-      expect(screen.queryByTestId('message-reactions')).toBeNull();
+      const bubble = screen.getByTestId('message-bubble');
+
+      expect(StyleSheet.flatten(bubble.props.style).backgroundColor).toBe('transparent');
+      expect(screen.queryByTestId('member-reactions')).toBeNull();
+      expect(screen.queryByTestId('visitor-reactions')).toBeNull();
+    });
+
+    it('a comment shows one shared row and no visitors line', async () => {
+      await render(
+        <MessageBubble
+          message={textMessage({ reactions })}
+          {...baseProps}
+          reactionsLayout="merged"
+        />,
+      );
+
+      expect(screen.getByTestId('reaction-chip-🔥')).toBeTruthy();
+      expect(screen.queryByTestId('visitor-reactions')).toBeNull();
     });
   });
 });

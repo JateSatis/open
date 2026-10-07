@@ -575,7 +575,7 @@ describe('a visitor in the comments', () => {
     });
   }
 
-  it('puts a reaction on a comment from its menu, and it lands in the viewers row at once', async () => {
+  it('puts a reaction on a comment from its menu, and it lands in the one row of the comment at once', async () => {
     const mockedReact = setCommentReaction as jest.MockedFunction<typeof setCommentReaction>;
     mockedReact.mockResolvedValue({ emoji: '🔥', audience: 'visitor' });
     mockedListComments.mockResolvedValue({ items: [comment('c1')], nextCursor: null });
@@ -588,7 +588,9 @@ describe('a visitor in the comments', () => {
     await fireEvent.press(await screen.findByTestId('reaction-option-🔥'));
 
     await waitFor(() => expect(mockedReact).toHaveBeenCalledWith('c1', '🔥'));
-    expect(await screen.findByLabelText('Зрители: 🔥 1')).toBeTruthy();
+    // У комментария строки зрителей нет: реакция — в общем ряду.
+    expect(await screen.findByLabelText('🔥 1')).toBeTruthy();
+    expect(screen.queryByTestId('visitor-reactions')).toBeNull();
   });
 
   it('replying to a top-level comment opens its thread: no quote, the message goes into it', async () => {

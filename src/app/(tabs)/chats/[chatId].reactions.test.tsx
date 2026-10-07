@@ -411,12 +411,12 @@ describe('reactions in the bubble', () => {
     await renderWithQuery(<ChatScreen />);
     await fireEvent.press(await screen.findByTestId('visitor-reaction-😁'));
 
+    // Строка зрителей не нажимается вовсе: на устройстве касание уходит
+    // облачку и открывает меню.
     expect(mockedSetReaction).not.toHaveBeenCalled();
-    // Чужой ряд забирает касание себе — меню облачка не открывается.
-    expect(screen.queryByTestId('message-menu')).toBeNull();
   });
 
-  it('a visitor taps the viewers row, and member chips do nothing — not even the menu', async () => {
+  it('a visitor taps neither member chips nor the viewers row — reactions only via the menu', async () => {
     withReactions();
     asVisitor();
     mockedSetReaction.mockResolvedValue({ emoji: '😁', audience: 'visitor' });
@@ -430,9 +430,7 @@ describe('reactions in the bubble', () => {
 
     await fireEvent.press(screen.getByTestId('visitor-reaction-😁'));
 
-    expect(mockedSetReaction).toHaveBeenCalledWith('m2', '😁');
-    expect(await screen.findByLabelText('Зрители: 😁 5')).toBeTruthy();
-    // Отправка доезжает до конца в этом тесте, а не в следующем.
+    expect(mockedSetReaction).not.toHaveBeenCalled();
   });
 
   it('updates the counters when someone else reacts, without reloading the chat', async () => {

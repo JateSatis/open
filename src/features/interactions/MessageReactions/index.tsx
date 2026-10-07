@@ -1,92 +1,128 @@
-import { useMemo } from 'react';
-import { View } from 'react-native';
-import Animated, { FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated';
+import { useCallback, useMemo } from 'react';
 
-import { ReactionChip } from './ReactionChip';
-import { styles } from './styles';
+import { MemberReactionRow } from './MemberReactionRow';
+import type { ShownPerson } from './ReactionBadge';
 import type { ReactionsTone } from './tones';
-import { VisitorReactions } from './VisitorReactions';
+import { VisitorReactionLine } from './VisitorReactionLine';
 
 import type { MessageReactions as Reactions, ReactionAudience } from '@/api/reactionCounts';
-import { byPopularity, hasReactions } from '@/features/interactions/reactionState';
+import {
+  byPopularity,
+  mergedCounts,
+  rowOrder,
+  shownReactors,
+} from '@/features/interactions/reactionState';
 
 export type { ReactionsTone } from './tones';
-
-const APPEAR_MS = 160;
-
-export type MessageReactionsProps = {
-  reactions: Reactions;
-  tone: ReactionsTone;
-  /**
-   * Мой ряд: участник или посетитель. Тап ставит и снимает реакцию только в
-   * своём ряду — реакция человека всегда попадает туда. Без него (копия
-   * облачка в меню) ряды не нажимаются.
-   */
-  audience?: ReactionAudience;
-  onToggle?: (emoji: string) => void;
-  /**
-   * Какой ряд рисовать. В облачке ряды стоят в разных строках: чипы
-   * участников — своей строкой, зрители — в строке со временем.
-   */
-  part?: 'all' | 'members' | 'visitors';
-};
+export { resetScrolledRows, scrolledRowsCount } from './rowMemory';
 
 /**
- * Реакции в облачке двумя рядами: участники — чипами, посетители — тихой
- * строкой под ними. Нет реакций — нет и блока, облачко не растёт.
+ * Как реакции разложены по облачку: у сообщения — ряд участников и строка
+ * зрителей отдельно, у комментария — один общий ряд.
  */
-export function MessageReactions({
+export type ReactionsLayout = 'split' | 'merged';
+
+/** Свежие имя и фото человека — из участников чата, если он там есть. */
+export type ResolvePerson = (
+  userId: string,
+) => { name: string; avatarUrl: string | null } | undefined;
+
+export type BubbleReactionsProps = {
+  /** Ключ памяти рядов (сдвиг, масштаб): у облачка и его копии один. */
+  memoryKey: string;
+  reactions: Reactions;
+  tone: ReactionsTone;
+  layout: ReactionsLayout;
+  /** Мой ряд у сообщения: тап ставит и снимает реакцию только в ряду участников, если я участник. */
+  audience?: ReactionAudience;
+  /** Нет обработчика — копия облачка: ничего не нажимается и не прокручивается. */
+  onToggle?: (emoji: string) => void;
+  resolvePerson?: ResolvePerson;
+};
+
+/** Реакции крупного ряда в порядке показа: моя первой, дальше по популярности. */
+export function largeRowEntries(reactions: Reactions, layout: ReactionsLayout): [string, number][] {
+  const { mine } = reactions;
+
+  if (layout === 'merged') return rowOrder(mergedCounts(reactions), mine?.emoji ?? null);
+
+  return rowOrder(reactions.members, mine?.audience === 'member' ? mine.emoji : null);
+}
+
+/**
+ * Крупный ряд: у сообщения — реакции участников, у комментария — все. Нет
+ * реакций — ничего, и места под ряд в строке нет.
+ */
+export function LargeReactionRow({
+  memoryKey,
   reactions,
   tone,
+  layout,
   audience,
   onToggle,
-  part = 'all',
-}: MessageReactionsProps) {
-  const members = useMemo(() => byPopularity(reactions.members), [reactions.members]);
-  const visitors = useMemo(() => byPopularity(reactions.visitors), [reactions.visitors]);
-
-  const showMembers = part !== 'visitors' && members.length > 0;
-  const showVisitors = part !== 'members' && visitors.length > 0;
-
-  if (!hasReactions(reactions) || (!showMembers && !showVisitors)) return null;
-
+  resolvePerson,
+}: BubbleReactionsProps) {
+  const entries = useMemo(() => largeRowEntries(reactions, layout), [layout, reactions]);
   const { mine } = reactions;
-  const canTapMembers = onToggle && audience === 'member';
-  const canTapVisitors = onToggle && audience === 'visitor';
+  const mineHere =
+    layout === 'merged' || mine?.audience === 'member' ? (mine?.emoji ?? null) : null;
+  // У сообщения ряд участников нажимает только участник; общий ряд комментария — любой.
+  const canTap = Boolean(onToggle) && (layout === 'merged' || audience === 'member');
+
+  const peopleOf = useCallback(
+    (emoji: string, count: number): ShownPerson[] | null => {
+      const reactors = shownReactors(
+        reactions,
+        emoji,
+        count,
+        layout === 'split' ? 'member' : undefined,
+      );
+
+      return (
+        reactors?.map((reactor, index) => {
+          const fresh = reactor.userId ? resolvePerson?.(reactor.userId) : undefined;
+
+          return {
+            key: reactor.userId ?? `deleted-${index}`,
+            // Аккаунт удалён — заглушка без фото.
+            name: fresh?.name ?? reactor.name ?? '',
+            avatarUrl: fresh ? fresh.avatarUrl : reactor.avatarUrl,
+          };
+        }) ?? null
+      );
+    },
+    [layout, reactions, resolvePerson],
+  );
+
+  if (entries.length === 0) return null;
 
   return (
-    <Animated.View
-      testID="message-reactions"
-      entering={FadeIn.duration(APPEAR_MS)}
-      exiting={FadeOut.duration(APPEAR_MS)}
-      layout={LinearTransition.duration(APPEAR_MS)}
-      style={[styles.block, tone === 'bare' && styles.bare]}
-    >
-      {showMembers ? (
-        <View testID="member-reactions" style={styles.chips}>
-          {members.map(([emoji, count]) => (
-            <ReactionChip
-              key={emoji}
-              emoji={emoji}
-              count={count}
-              mine={mine?.audience === 'member' && mine.emoji === emoji}
-              tone={tone}
-              onPress={canTapMembers ? () => onToggle(emoji) : undefined}
-              swallowsTouch={Boolean(onToggle)}
-            />
-          ))}
-        </View>
-      ) : null}
+    <MemberReactionRow
+      memoryKey={memoryKey}
+      entries={entries}
+      mine={mineHere}
+      peopleOf={peopleOf}
+      tone={tone}
+      onToggle={canTap ? onToggle : undefined}
+      swallowsTouch={Boolean(onToggle)}
+      frozen={!onToggle}
+    />
+  );
+}
 
-      {showVisitors ? (
-        <VisitorReactions
-          entries={visitors}
-          mine={mine?.audience === 'visitor' ? mine.emoji : null}
-          tone={tone}
-          onPress={canTapVisitors ? onToggle : undefined}
-          swallowsTouch={Boolean(onToggle)}
-        />
-      ) : null}
-    </Animated.View>
+/** Строка зрителей — только у сообщения. Нет реакций зрителей — нет и строки. */
+export function VisitorReactions({ memoryKey, reactions, tone, layout }: BubbleReactionsProps) {
+  const entries = useMemo(() => byPopularity(reactions.visitors), [reactions.visitors]);
+  const { mine } = reactions;
+
+  if (layout === 'merged' || entries.length === 0) return null;
+
+  return (
+    <VisitorReactionLine
+      memoryKey={memoryKey}
+      entries={entries}
+      mine={mine?.audience === 'visitor' ? mine.emoji : null}
+      tone={tone}
+    />
   );
 }

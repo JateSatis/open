@@ -6,7 +6,7 @@
 import type { QueryData } from '@supabase/supabase-js';
 
 import { toPreview, type MessagePreview } from '@/api/messagePreview';
-import { toReactions, type MessageReactions } from '@/api/reactionCounts';
+import { REACTION_COLUMNS, toReactions, type MessageReactions } from '@/api/reactionCounts';
 import { supabase } from '@/api/supabase';
 
 export type MessageKind =
@@ -187,11 +187,10 @@ const ATTACHMENT_COLUMNS = 'id, url, poster_url, mime_type, width, height, durat
 // `chats` и сама с собой через несколько таблиц сразу.
 const REPLY_COLUMNS =
   'replies:message_replies!message_replies_message_fkey(position, quoted_id, via:messages!message_replies_quoted_forward_fkey(id, created_at), quoted:messages!message_replies_quoted_fkey(id, author_id, kind, text, created_at, edited_at, author:profiles!messages_author_id_fkey(display_name), attachments(url, poster_url, mime_type, duration_ms, position)))';
-const REACTION_AND_COMMENT_COLUMNS =
-  'member_reactions, visitor_reactions, my_reaction(emoji, audience), comments_count, views_count, read_at';
+const REACTION_AND_COMMENT_COLUMNS = `${REACTION_COLUMNS}, comments_count, views_count, read_at`;
 const ORIGINAL_COLUMNS = `id, chat_id, author_id, kind, text, created_at, edited_at, attachments(${ATTACHMENT_COLUMNS}), ${REPLY_COLUMNS}, ${REACTION_AND_COMMENT_COLUMNS}, author:profiles!messages_author_id_fkey(display_name, avatar_url), chat:chats!messages_chat_id_fkey(id, chat_display_name, chat_read_up_to, chat_am_member)`;
 
-const FORWARDED_COMMENT_COLUMNS = `forwarded_comment_id, forwarded:comments!messages_forwarded_comment_fkey(id, message_id, chat_id, thread_root_id, author_id, kind, text, created_at, edited_at, member_reactions, visitor_reactions, my_reaction(emoji, audience), author:profiles(display_name, avatar_url), comment_attachments(${ATTACHMENT_COLUMNS}), chat:chats!comments_chat_id_fkey(id, chat_display_name, chat_am_member), target:messages!comments_message_fkey(id, author_id, kind, text, created_at, author:profiles!messages_author_id_fkey(display_name), attachments(url, poster_url, mime_type, duration_ms, position)))`;
+const FORWARDED_COMMENT_COLUMNS = `forwarded_comment_id, forwarded:comments!messages_forwarded_comment_fkey(id, message_id, chat_id, thread_root_id, author_id, kind, text, created_at, edited_at, ${REACTION_COLUMNS}, author:profiles(display_name, avatar_url), comment_attachments(${ATTACHMENT_COLUMNS}), chat:chats!comments_chat_id_fkey(id, chat_display_name, chat_am_member), target:messages!comments_message_fkey(id, author_id, kind, text, created_at, author:profiles!messages_author_id_fkey(display_name), attachments(url, poster_url, mime_type, duration_ms, position)))`;
 
 // Островок приходит сразу с оригиналами: их текст, файлы, автор, чат,
 // реакции и комментарии — той же выборкой. Своя реакция — вычисляемой связью
@@ -302,6 +301,7 @@ type ContentRow = Pick<
   | 'member_reactions'
   | 'visitor_reactions'
   | 'my_reaction'
+  | 'reactors'
   | 'comments_count'
   | 'views_count'
   | 'read_at'

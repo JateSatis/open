@@ -4,36 +4,37 @@ import { View } from 'react-native';
 import { styles } from './styles';
 
 export type BubbleFooterProps = {
-  /** Чипы реакций участников. Нет реакций — нет и строки. */
-  members: ReactNode;
-  /** Маленькие реакции зрителей — в строке со временем, после него. */
-  visitors: ReactNode;
   /** Время, статус и «ред.» — в левом нижнем углу. */
   meta: ReactNode;
+  /** Крупный ряд реакций — между статусом и просмотрами. Нет реакций — нет и ряда. */
+  reactions: ReactNode;
   /** Просмотры — у правого края нижней строки. */
   views: ReactNode;
+  /** Маленькие реакции зрителей — отдельной строкой под нижней, по центру. */
+  visitors: ReactNode;
 };
 
 /**
- * Низ облачка: чипы участников своей строкой, под ними — нижняя строка со
- * временем и статусом слева и просмотрами справа. Между ними — реакции
- * зрителей; облачко шире не становится, они ужимаются.
+ * Низ облачка: слева время и статус, справа просмотры, всё между ними —
+ * крупный ряд реакций. Ряд расширяет облачко, пока оно не упрётся в свой
+ * предел, дальше прокручивается вбок. Под строкой — реакции зрителей.
  */
-export function BubbleFooter({ members, visitors, meta, views }: BubbleFooterProps) {
+export function BubbleFooter({ meta, reactions, views, visitors }: BubbleFooterProps) {
   return (
     <>
-      {members ? (
-        <View testID="bubble-footer-chips" style={styles.footer}>
-          <View style={styles.footerShrink}>{members}</View>
-        </View>
-      ) : null}
-
       <View testID="bubble-footer-info" style={styles.footer}>
         <View testID="bubble-footer-meta">{meta}</View>
-        {visitors ? <View style={styles.footerShrink}>{visitors}</View> : null}
-        <View style={styles.footerSpacer} />
+        {reactions ? (
+          <View testID="bubble-footer-reactions" style={styles.footerReactions}>
+            {reactions}
+          </View>
+        ) : (
+          <View style={styles.footerSpacer} />
+        )}
         {views ? <View testID="bubble-footer-views">{views}</View> : null}
       </View>
+
+      {visitors}
     </>
   );
 }
