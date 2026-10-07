@@ -1,11 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import {
-  PixelRatio,
-  Pressable,
-  View,
-  type StyleProp,
-  type TextStyle,
-} from 'react-native';
+import { PixelRatio, Pressable, View, type StyleProp, type TextStyle } from 'react-native';
 
 import { BubbleFooter } from './BubbleFooter';
 import { readFooterLayout, writeFooterLayout } from './footerLayoutCache';
@@ -72,6 +66,8 @@ export type MessageBubbleProps = {
    * него тоже: собеседник один, автора видно по имени над облачком.
    */
   showAvatar?: boolean;
+  /** Пост канала: облачко шире обычного (`Sizes.postBubbleShare`). */
+  wide?: boolean;
   /**
    * Сбоку от облачка, со стороны середины экрана: у чужого — справа, у
    * своего — слева. Кнопка треда у корня комментариев.
@@ -101,6 +97,7 @@ export function MessageBubble({
   authorBadge,
   showViews = true,
   showAvatar = true,
+  wide = false,
   aside,
   lead,
 }: MessageBubbleProps) {
@@ -310,7 +307,10 @@ export function MessageBubble({
           ) : null}
         </View>
       ) : (
-        <View testID="message-bubble" style={[styles.bubble, { backgroundColor: bubbleColor }]}>
+        <View
+          testID="message-bubble"
+          style={[styles.bubble, wide && styles.wide, { backgroundColor: bubbleColor }]}
+        >
           {/* Своей ширины — по самому широкому: её и меряет низ облачка. */}
           <View
             style={styles.content}
@@ -324,7 +324,11 @@ export function MessageBubble({
             {annotations}
 
             {voice ? (
-              <VoiceMessage attachment={voice} localUri={message.localPreviews?.[0]} isOwn={isOwn} />
+              <VoiceMessage
+                attachment={voice}
+                localUri={message.localPreviews?.[0]}
+                isOwn={isOwn}
+              />
             ) : null}
 
             {hasUnhandledAttachment ? (

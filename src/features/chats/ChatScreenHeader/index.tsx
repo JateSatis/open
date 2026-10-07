@@ -1,13 +1,16 @@
 import { Stack } from 'expo-router';
 import type { ReactNode } from 'react';
-import { Pressable } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
+import { Avatar } from '@/components/Avatar';
 import { Text } from '@/components/Text';
 import { ChatHeaderTitle } from '@/features/chats/ChatHeaderTitle';
-import { Spacing } from '@/theme';
+import { Sizes, Spacing } from '@/theme';
 
 export type ChatScreenHeaderProps = {
   title: string;
+  /** Аватарка слева от названия — у канала. */
+  avatar?: { uri: string | null; name: string };
   subtitle?: string | null;
   onTitlePress?: () => void;
   /** Сколько отмечено; `0` — выбора нет. */
@@ -23,6 +26,7 @@ export type ChatScreenHeaderProps = {
  */
 export function ChatScreenHeader({
   title,
+  avatar,
   subtitle,
   onTitlePress,
   selectedCount,
@@ -49,11 +53,25 @@ export function ChatScreenHeader({
           : {
               headerBackVisible: true,
               headerRight: right ? () => right : undefined,
-              headerTitle: () => (
-                <ChatHeaderTitle title={title} subtitle={subtitle} onPress={onTitlePress} />
-              ),
+              headerTitle: () =>
+                avatar ? (
+                  <View style={styles.withAvatar}>
+                    <Avatar uri={avatar.uri} name={avatar.name} size={Sizes.headerAvatar} />
+                    <ChatHeaderTitle title={title} subtitle={subtitle} onPress={onTitlePress} />
+                  </View>
+                ) : (
+                  <ChatHeaderTitle title={title} subtitle={subtitle} onPress={onTitlePress} />
+                ),
             }
       }
     />
   );
 }
+
+const styles = StyleSheet.create({
+  withAvatar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+  },
+});

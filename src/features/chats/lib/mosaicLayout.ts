@@ -21,7 +21,7 @@
  * что в `gridLayout.ts` шита).
  */
 
-import { Spacing } from '@/theme';
+import { Sizes, Spacing } from '@/theme';
 
 export type MosaicItem = {
   /** Размеры файла; `null` у старых сообщений — тогда плитка считается квадратом. */
@@ -100,8 +100,11 @@ const SHRINK_FACTORS = [0.85, 0.7];
  * известна в первом же рендере, до `onLayout` облачка: иначе в перевёрнутом
  * списке строка прыгала бы по высоте.
  */
-export function mosaicBounds(listWidth: number): MosaicBounds {
-  const maxWidth = Math.min(Math.round(listWidth * MAX_WIDTH_RATIO), MAX_WIDTH_DP);
+export function mosaicBounds(listWidth: number, wide = false): MosaicBounds {
+  // Пост канала шире сообщения: альбом тянется на ту же долю, что и облачко.
+  const maxWidth = wide
+    ? Math.round(listWidth * Sizes.postBubbleShare)
+    : Math.min(Math.round(listWidth * MAX_WIDTH_RATIO), MAX_WIDTH_DP);
 
   return {
     maxWidth,

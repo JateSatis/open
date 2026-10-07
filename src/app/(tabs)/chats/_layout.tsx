@@ -21,6 +21,8 @@ export default function ChatsLayout() {
       <Stack.Screen name="people/[userId]" options={{ title: 'Профиль' }} />
       {/* Заголовок диалога ставит сам экран: он знает имя собеседника. */}
       <Stack.Screen name="[chatId]" options={{ title: 'Чат' }} />
+      {/* Шапку канала ставит его раздел «Посты»: он знает название и аватарку. */}
+      <Stack.Screen name="channel/[channelId]" options={{ title: 'Канал' }} />
     </Stack>
   );
 }

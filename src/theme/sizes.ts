@@ -100,4 +100,10 @@ export const Sizes = {
   channelAvatarPicker: 96,
   /** Значок камеры в пустом круге аватарки. */
   channelAvatarPickerIcon: 32,
+  /** Пост канала шире сообщения: доля ширины ленты постов, как в Telegram-канале. */
+  postBubbleShare: 0.9,
+  /** Аватарка канала в шапке. */
+  headerAvatar: 32,
+  /** Высота сегментированного контрола «Посты | Попсы». */
+  segmentedControl: 36,
 } as const;

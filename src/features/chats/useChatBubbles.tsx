@@ -40,6 +40,11 @@ type Options = {
   showAvatars: boolean;
   /** Тап по сниппету пересланного комментария — к нему в его ветке. */
   openForwardedComment: (comment: ForwardedComment) => void;
+  /**
+   * Посты канала: подписаны этим именем, а не человеком, и все у левого
+   * края — и у владельца тоже. Null — обычная переписка.
+   */
+  postAuthor?: string | null;
 };
 
 /** Облачко и то, в какой ряд в нём лягут мои реакции. */
@@ -70,6 +75,7 @@ export function useChatBubbles({
   reactions,
   showAvatars,
   openForwardedComment,
+  postAuthor = null,
 }: Options): ChatBubbles {
   const queryClient = useQueryClient();
   const { openQuote, openOriginal } = navigation;
@@ -138,7 +144,9 @@ export function useChatBubbles({
           authorAvatarUrl={author?.avatarUrl ?? null}
           mediaBounds={mediaBounds}
           onRetry={retry}
-          onAuthorPress={interactive && item.authorId ? () => openPerson(item.authorId!) : undefined}
+          onAuthorPress={
+            interactive && item.authorId ? () => openPerson(item.authorId!) : undefined
+          }
           reactionAudience={audienceOf(comment?.chat?.amMember ?? false)}
           onReactionToggle={
             interactive && comment && item.status === 'sent'
@@ -150,7 +158,9 @@ export function useChatBubbles({
             <CommentForwardLead
               forward={forward}
               isOwn={item.authorId === currentUserId}
-              onOpenSource={interactive && comment ? () => openForwardedComment(comment) : undefined}
+              onOpenSource={
+                interactive && comment ? () => openForwardedComment(comment) : undefined
+              }
               onOpenAuthor={
                 interactive && commentAuthorId ? () => openPerson(commentAuthorId) : undefined
               }
@@ -177,17 +187,22 @@ export function useChatBubbles({
 
       const { authorId } = item;
       const author = authorId ? participantsById.get(authorId) : undefined;
+      // Пост — голос канала: ни имени человека, ни «прочитано» участником.
+      const isPost = postAuthor !== null;
 
       return (
         <MessageBubble
           message={item}
-          isOwn={item.authorId === currentUserId}
-          isRead={item.readAt !== null}
-          authorName={author?.displayName ?? DELETED_ACCOUNT}
+          isOwn={!isPost && item.authorId === currentUserId}
+          isRead={!isPost && item.readAt !== null}
+          authorName={postAuthor ?? author?.displayName ?? DELETED_ACCOUNT}
           authorAvatarUrl={author?.avatarUrl ?? null}
+          wide={isPost}
           mediaBounds={mediaBounds}
           onRetry={retry}
-          onAuthorPress={interactive && authorId ? () => openPerson(authorId) : undefined}
+          onAuthorPress={
+            interactive && authorId && !isPost ? () => openPerson(authorId) : undefined
+          }
           onQuotePress={interactive ? openQuote : undefined}
           reactionAudience={myAudience}
           onReactionToggle={
@@ -208,6 +223,7 @@ export function useChatBubbles({
       openPerson,
       openQuote,
       participantsById,
+      postAuthor,
       retry,
       showAvatars,
       toggle,
