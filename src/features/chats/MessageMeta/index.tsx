@@ -1,47 +1,51 @@
-import { ActivityIndicator, Pressable, View } from 'react-native';
+import { View } from 'react-native';
 
-import { READ_OUTLINE, styles } from './styles';
+import { DeliveryStatus, type DeliveryState } from './DeliveryStatus';
+import { styles } from './styles';
 
 import { Text } from '@/components/Text';
 import { formatMessageTime } from '@/features/chats/chatDisplay';
 import type { ChatMessage } from '@/features/chats/useChatMessages';
 import { useTheme } from '@/hooks/use-theme';
-import { Sizes, type ThemeColor } from '@/theme';
-
-const W = Sizes.metaReadOutline;
-/** Белые копии времени под синим, сдвинутые во все стороны, — контур вокруг букв. */
-const STROKE_OFFSETS = [
-  [-W, -W],
-  [0, -W],
-  [W, -W],
-  [-W, 0],
-  [W, 0],
-  [-W, W],
-  [0, W],
-  [W, W],
-] as const;
+import type { ThemeColor } from '@/theme';
 
 export type MessageMetaProps = {
   message: ChatMessage;
   isOwn: boolean;
-  /** Своё сообщение увидел другой участник чата: время синее. У чужого не значит ничего. */
+  /** Своё сообщение увидел другой участник чата: две галочки. У чужого не значит ничего. */
   isRead: boolean;
   /**
    * `overlay` — полупрозрачная плашка поверх медиа без подписи, как в
    * Telegram; `inline` — строка в низу облачка.
    */
   variant: 'inline' | 'overlay';
-  onRetry: (localId: string) => void;
+  /** Тап по значку ошибки. Нет — значок не нажимается (копия облачка). */
+  onRetry?: (localId: string) => void;
   /**
-   * Плашка на медиа сама прижимается к углу. `false` — её ставит родитель,
-   * в строку рядом с просмотрами и кнопкой комментариев.
+   * Галочки «отправлено» и «прочитано». У поста канала их нет: прочтение
+   * участником у него ничего не значит — остаются лоадер и ошибка.
    */
-  floating?: boolean;
+  receipts?: boolean;
 };
 
+/** Состояние иконки у моего сообщения; у чужого иконки нет. */
+function deliveryState(
+  message: ChatMessage,
+  isOwn: boolean,
+  isRead: boolean,
+  receipts: boolean,
+): DeliveryState | null {
+  if (!isOwn) return null;
+  if (message.status === 'failed') return 'failed';
+  if (message.status === 'sending' || message.editStatus === 'saving') return 'sending';
+  if (!receipts) return null;
+
+  return isRead ? 'read' : 'sent';
+}
+
 /**
- * Время сообщения — оно же состояние доставки: пока сообщение едет, на его
- * месте лоадер; доехало — серое; его увидел другой участник — синее.
+ * Время сообщения — всегда видно и всегда одного цвета. Справа от него у
+ * моего сообщения иконка статуса, за ней — «ред.», если сообщение правили.
  */
 export function MessageMeta({
   message,
@@ -49,84 +53,39 @@ export function MessageMeta({
   isRead,
   variant,
   onRetry,
-  floating = true,
+  receipts = true,
 }: MessageMetaProps) {
   const theme = useTheme();
   const overlay = variant === 'overlay';
   const tone: ThemeColor = overlay ? 'textOnMedia' : isOwn ? 'metaOnPrimary' : 'textSecondary';
-  const pending = message.status === 'sending' || message.editStatus === 'saving';
-  const read = isOwn && isRead && !pending;
-  // На своём синем облачке синее время читается только в белом контуре; на
-  // плашке медиа пилюля — сама плашка, она белеет.
-  const outlined = read && !overlay;
-  const whitePlate = read && overlay && READ_OUTLINE === 'pill';
-  const time = formatMessageTime(message.createdAt);
+  const state = deliveryState(message, isOwn, isRead, receipts);
+  const { localId } = message;
 
   return (
     <View
       testID="message-meta"
       style={[
         styles.meta,
-        overlay && [
-          styles.overlay,
-          { backgroundColor: whitePlate ? theme.metaReadOutline : theme.mediaScrim },
-        ],
-        overlay && floating && styles.floating,
+        overlay && [styles.overlay, { backgroundColor: theme.mediaScrim }],
       ]}
     >
-      {message.status === 'failed' ? (
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => message.localId && onRetry(message.localId)}
-        >
-          <Text variant="caption" color="danger">
-            Не отправлено. Повторить
-          </Text>
-        </Pressable>
-      ) : (
-        <>
-          {/* Лоадер встаёт на место времени, а место держит само время —
-              невидимым: облачко не прыгает, когда сообщение доехало. */}
-          <View
-            testID="message-time"
-            accessible
-            accessibilityLabel={pending ? 'Отправляется' : read ? `${time}, прочитано` : time}
-            style={outlined && READ_OUTLINE === 'pill' && styles.readPill}
-          >
-            {outlined && READ_OUTLINE === 'stroke'
-              ? STROKE_OFFSETS.map(([x, y]) => (
-                  <Text
-                    key={`${x}:${y}`}
-                    variant="meta"
-                    color="metaReadOutline"
-                    style={[styles.strokeCopy, { left: x, top: y }]}
-                  >
-                    {time}
-                  </Text>
-                ))
-              : null}
-            <Text variant="meta" color={read ? 'primary' : tone} style={pending && styles.hidden}>
-              {time}
-            </Text>
-            {pending ? (
-              <View style={styles.spinnerBox}>
-                <ActivityIndicator
-                  testID="message-sending"
-                  size="small"
-                  color={theme[tone]}
-                  style={styles.spinner}
-                />
-              </View>
-            ) : null}
-          </View>
+      <Text testID="message-time" variant="meta" color={tone}>
+        {formatMessageTime(message.createdAt)}
+      </Text>
 
-          {message.editedAt || message.editStatus === 'saving' ? (
-            <Text variant="meta" color={whitePlate ? 'textSecondary' : tone}>
-              изменено
-            </Text>
-          ) : null}
-        </>
-      )}
+      {state ? (
+        <DeliveryStatus
+          state={state}
+          tone={tone}
+          onRetry={onRetry && localId ? () => onRetry(localId) : undefined}
+        />
+      ) : null}
+
+      {message.editedAt || message.editStatus === 'saving' ? (
+        <Text variant="meta" color={tone}>
+          ред.
+        </Text>
+      ) : null}
     </View>
   );
 }

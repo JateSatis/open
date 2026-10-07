@@ -1,9 +1,6 @@
 import { StyleSheet } from 'react-native';
 
-import { Colors, Radii, Sizes, Spacing } from '@/theme';
-
-/** Как обвести синее время на синем облачке: контуром букв или белой пилюлей. */
-export const READ_OUTLINE = 'pill' as 'stroke' | 'pill';
+import { Radii, Sizes, Spacing } from '@/theme';
 
 export const styles = StyleSheet.create({
   meta: {
@@ -11,43 +8,28 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.one,
   },
-  hidden: {
-    opacity: 0,
-  },
-  /** Лоадер — в начале места времени, по высоте строки. */
-  spinnerBox: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: Sizes.metaSpinner,
+  /** Место иконки статуса — постоянной ширины, по высоте строки времени. */
+  status: {
+    width: Sizes.deliveryStatus,
+    height: Sizes.deliveryStatusIcon,
     alignItems: 'center',
     justifyContent: 'center',
   },
   spinner: {
     transform: [{ scale: Sizes.metaSpinner / Sizes.activityIndicatorSmall }],
   },
-  /** Копия времени для контура — под ним, той же строкой. */
-  strokeCopy: {
-    position: 'absolute',
+  doubleCheck: {
+    width: Sizes.deliveryStatusIcon + Sizes.deliveryCheckShift,
+    height: Sizes.deliveryStatusIcon,
   },
-  // Левый отступ пилюли съеден отрицательным полем: время не сдвигается от
-  // края облачка, когда синеет. Правый остаётся зазором до «изменено».
-  // Белый в обеих темах: облачко под ним всегда синее.
-  readPill: {
-    backgroundColor: Colors.light.metaReadOutline,
-    borderRadius: Radii.full,
-    paddingHorizontal: Spacing.one,
-    marginLeft: -Spacing.one,
+  secondCheck: {
+    position: 'absolute',
+    left: Sizes.deliveryCheckShift,
+    top: 0,
   },
   overlay: {
     paddingHorizontal: Spacing.one + Spacing.half,
     paddingVertical: Spacing.half,
     borderRadius: Radii.md,
-  },
-  floating: {
-    position: 'absolute',
-    left: Spacing.one + Spacing.half,
-    bottom: Spacing.one + Spacing.half,
   },
 });

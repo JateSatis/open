@@ -74,28 +74,55 @@ describe('MessageBubble', () => {
     expect(screen.getByText('Марина')).toBeTruthy();
   });
 
-  it('время — серое у отправленного, «прочитано» у своего, которое увидели', async () => {
+  it('у своего отправленного — одна галочка, у прочитанного — две; время на месте', async () => {
     const { rerender } = await render(
       <MessageBubble {...baseProps} isOwn message={textMessage({ authorId: 'me' })} />,
     );
 
-    expect(screen.queryByLabelText(/прочитано/)).toBeNull();
-    expect(screen.queryByLabelText('Доставлено')).toBeNull();
+    expect(screen.getByTestId('message-status-sent')).toBeTruthy();
+    expect(screen.queryByTestId('message-status-read')).toBeNull();
+    expect(screen.getByText('13:00')).toBeTruthy();
 
     await rerender(
       <MessageBubble {...baseProps} isOwn isRead message={textMessage({ authorId: 'me' })} />,
     );
 
-    expect(screen.getByLabelText(/прочитано/)).toBeTruthy();
+    expect(screen.getByTestId('message-status-read')).toBeTruthy();
+    expect(screen.queryByTestId('message-status-sent')).toBeNull();
   });
 
-  it('у чужого «прочитано» не показывается', async () => {
+  it('у чужого иконки статуса нет', async () => {
     await render(<MessageBubble {...baseProps} isRead message={textMessage()} />);
 
-    expect(screen.queryByLabelText(/прочитано/)).toBeNull();
+    expect(screen.queryByTestId(/^message-status-/)).toBeNull();
+    expect(screen.queryByTestId('message-retry')).toBeNull();
   });
 
-  it('пока сообщение едет — лоадер вместо времени и без просмотров', async () => {
+  it('у поста канала после отправки галочек нет, лоадер остаётся', async () => {
+    const { rerender } = await render(
+      <MessageBubble
+        {...baseProps}
+        isOwn
+        receipts={false}
+        message={textMessage({ authorId: 'me' })}
+      />,
+    );
+
+    expect(screen.queryByTestId(/^message-status-/)).toBeNull();
+
+    await rerender(
+      <MessageBubble
+        {...baseProps}
+        isOwn
+        receipts={false}
+        message={textMessage({ authorId: 'me', status: 'sending' })}
+      />,
+    );
+
+    expect(screen.getByTestId('message-status-sending')).toBeTruthy();
+  });
+
+  it('пока сообщение едет — время видно, рядом лоадер, просмотров нет', async () => {
     await render(
       <MessageBubble
         {...baseProps}
@@ -105,12 +132,11 @@ describe('MessageBubble', () => {
     );
 
     expect(screen.getByLabelText('Отправляется')).toBeTruthy();
-    expect(screen.getByTestId('message-sending')).toBeTruthy();
-    expect(screen.queryByText('Отправляется…')).toBeNull();
+    expect(screen.getByText('13:00')).toBeTruthy();
     expect(screen.queryByTestId('message-views')).toBeNull();
   });
 
-  it('правка в пути — «изменено» и лоадер', async () => {
+  it('правка в пути — лоадер и «ред.» после него', async () => {
     await render(
       <MessageBubble
         {...baseProps}
@@ -119,8 +145,92 @@ describe('MessageBubble', () => {
       />,
     );
 
-    expect(screen.getByText('изменено')).toBeTruthy();
+    expect(screen.getByText('ред.')).toBeTruthy();
     expect(screen.getByLabelText('Отправляется')).toBeTruthy();
+  });
+
+  it('у чужого исправленного — «ред.» сразу после времени', async () => {
+    await render(
+      <MessageBubble {...baseProps} message={textMessage({ editedAt: '2026-09-22T10:05:00Z' })} />,
+    );
+
+    const meta = within(screen.getByTestId('message-meta'))
+      .getAllByText(/.+/)
+      .map((node) => String(node.props.children));
+
+    expect(meta).toEqual(['13:00', 'ред.']);
+  });
+
+  it('не отправленное — значок ошибки; в копии облачка он не нажимается', async () => {
+    const onRetry = jest.fn();
+    const message = textMessage({ authorId: 'me', status: 'failed', localId: 'local-1' });
+    const { rerender } = await render(
+      <MessageBubble {...baseProps} isOwn message={message} onRetry={onRetry} />,
+    );
+    const user = userEvent.setup();
+
+    await user.press(screen.getByLabelText('Не отправлено. Повторить'));
+
+    expect(onRetry).toHaveBeenCalledWith('local-1');
+
+    await rerender(<MessageBubble {...baseProps} isOwn message={message} onRetry={undefined} />);
+
+    expect(screen.getByTestId('message-retry')).toBeDisabled();
+  });
+
+  describe('круг комментариев', () => {
+    it('стоит сбоку от облачка, а не внутри', async () => {
+      await render(
+        <MessageBubble {...baseProps} message={textMessage()} comments={{ count: 4 }} />,
+      );
+
+      expect(screen.getByTestId('comments-circle')).toBeTruthy();
+      expect(
+        within(screen.getByTestId('message-bubble')).queryByTestId('comments-circle'),
+      ).toBeNull();
+    });
+
+    it('у чужого — справа от облачка, у своего — слева', async () => {
+      const order = () =>
+        screen
+          .getAllByTestId(/^(message-bubble|comments-slot)$/)
+          .map((node) => node.props.testID as string);
+      const { rerender } = await render(
+        <MessageBubble {...baseProps} message={textMessage()} comments={{ count: 1 }} />,
+      );
+
+      expect(order()).toEqual(['message-bubble', 'comments-slot']);
+
+      await rerender(
+        <MessageBubble {...baseProps} isOwn message={textMessage()} comments={{ count: 1 }} />,
+      );
+
+      expect(order()).toEqual(['comments-slot', 'message-bubble']);
+    });
+
+    it('место под круг держится и без круга — облачко не перестраивается', async () => {
+      await render(<MessageBubble {...baseProps} message={textMessage()} commentsSlot />);
+
+      expect(screen.getByTestId('comments-slot')).toBeTruthy();
+      expect(screen.queryByTestId('comments-circle')).toBeNull();
+    });
+
+    it('у медиа без подписи — снаружи сбоку, поверх мозаики только время и просмотры', async () => {
+      await render(
+        <MessageBubble
+          {...baseProps}
+          message={mediaMessage({ viewsCount: 3 })}
+          comments={{ count: 2 }}
+        />,
+      );
+
+      const mosaic = screen.getByTestId('media-mosaic');
+
+      expect(within(mosaic).getByTestId('message-meta')).toBeTruthy();
+      expect(within(mosaic).getByTestId('message-views')).toBeTruthy();
+      expect(within(mosaic).queryByTestId('comments-circle')).toBeNull();
+      expect(screen.getByTestId('comments-circle')).toBeTruthy();
+    });
   });
 
   it('просмотры — у отправленного с просмотрами; у комментария их нет', async () => {
@@ -215,7 +325,7 @@ describe('MessageBubble', () => {
     );
 
     const user = userEvent.setup();
-    await user.press(screen.getByText('Не отправлено. Повторить'));
+    await user.press(screen.getByLabelText('Не отправлено. Повторить'));
 
     expect(onRetry).toHaveBeenCalledWith('local-1');
   });
