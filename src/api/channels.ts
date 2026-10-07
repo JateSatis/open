@@ -56,13 +56,20 @@ function toChannel(row: ChannelRow): Channel {
   };
 }
 
-export async function createChannel(input: CreateChannelInput): Promise<CreatedChannel> {
-  const { data, error } = await supabase.rpc('create_channel', {
+export async function createChannel(
+  input: CreateChannelInput,
+  signal?: AbortSignal,
+): Promise<CreatedChannel> {
+  let request = supabase.rpc('create_channel', {
     channel_title: input.title,
     channel_username: input.username,
     channel_description: input.description ?? undefined,
     channel_avatar_url: input.avatarUrl ?? undefined,
   });
+
+  if (signal) request = request.abortSignal(signal);
+
+  const { data, error } = await request;
 
   if (error) {
     if (error.code === USERNAME_TAKEN_CODE) throw new ChannelUsernameTakenError(input.username);

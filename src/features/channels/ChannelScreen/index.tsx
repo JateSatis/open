@@ -90,13 +90,7 @@ function ChannelSections({ channel }: { channel: Channel }) {
         />
       </View>
 
-      <SectionPager
-        position={position}
-        index={index}
-        width={width}
-        pages={pages}
-        onIndexChange={setIndex}
-      />
+      <SectionPager position={position} width={width} pages={pages} onIndexChange={setIndex} />
     </View>
   );
 }
