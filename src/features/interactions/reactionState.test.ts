@@ -1,6 +1,7 @@
 import {
   byPopularity,
   isRowFull,
+  menuReactionSet,
   mergedCounts,
   nextReaction,
   replaceMine,
@@ -167,7 +168,10 @@ describe('my reaction among reactors', () => {
 
   it('a sync with other people is not the same reactions', () => {
     const before: MessageReactions = { ...base, reactors: { '🔥': [ann] } };
-    const after: MessageReactions = { ...base, reactors: { '🔥': [{ ...ann, avatarUrl: 'new.jpg' }] } };
+    const after: MessageReactions = {
+      ...base,
+      reactors: { '🔥': [{ ...ann, avatarUrl: 'new.jpg' }] },
+    };
 
     expect(sameReactions(before, after)).toBe(false);
     expect(sameReactions(before, { ...before })).toBe(true);
@@ -178,5 +182,64 @@ describe('isRowFull', () => {
   it('is full at the limit of different reactions', () => {
     expect(isRowFull({ a: 1, b: 2 }, 2)).toBe(true);
     expect(isRowFull({ a: 1 }, 2)).toBe(false);
+  });
+});
+
+describe('menuReactionSet', () => {
+  const kinds = (n: number) =>
+    Object.fromEntries(Array.from({ length: n }, (_, index) => [`e${index}`, n - index]));
+
+  it('offers the whole set while the row has room', () => {
+    expect(menuReactionSet({ ...base, members: kinds(19) }, 'member')).toEqual({
+      options: undefined,
+      expandable: true,
+    });
+  });
+
+  it('a full members row offers only its 20 reactions, by popularity', () => {
+    const set = menuReactionSet({ ...base, members: kinds(20) }, 'member');
+
+    expect(set.options).toHaveLength(20);
+    expect(set.options?.[0]).toBe('e0');
+    expect(set.counts).toBeUndefined();
+    expect(set.expandable).toBe(true);
+  });
+
+  it('a visitor sees counts, and a full visitors row of 7 opens without expanding', () => {
+    expect(menuReactionSet(base, 'visitor')).toEqual({
+      options: undefined,
+      counts: { '😁': 3 },
+      expandable: true,
+    });
+
+    const full = menuReactionSet({ ...base, visitors: kinds(7) }, 'visitor');
+
+    expect(full.options).toHaveLength(7);
+    expect(full.expandable).toBe(false);
+  });
+
+  it('a member is not limited by the visitors row', () => {
+    expect(menuReactionSet({ ...base, visitors: kinds(7) }, 'member').options).toBeUndefined();
+  });
+
+  it('a comment counts both rows together, without numbers', () => {
+    const set = menuReactionSet(
+      { ...base, members: kinds(10), visitors: { a: 1, ...kinds(10) } },
+      'comment',
+    );
+
+    expect(set.options).toBeUndefined();
+
+    const full = menuReactionSet(
+      {
+        ...base,
+        members: kinds(10),
+        visitors: Object.fromEntries(Array.from({ length: 10 }, (_, i) => [`v${i}`, 1])),
+      },
+      'comment',
+    );
+
+    expect(full.options).toHaveLength(20);
+    expect(full.counts).toBeUndefined();
   });
 });

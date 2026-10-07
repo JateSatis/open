@@ -8,14 +8,14 @@ import Animated, {
   type AnimatedStyle,
 } from 'react-native-reanimated';
 
-import type { PickerGeometry } from './geometry';
+import type { PickerCell, PickerGeometry } from './geometry';
 import { styles } from './styles';
 
 import { Text } from '@/components/Text';
 import { useTheme } from '@/hooks/use-theme';
 import { Spacing } from '@/theme';
 
-export { pickerGeometry, type PickerGeometry } from './geometry';
+export { pickerGeometry, type PickerGeometry, type PickerOptions } from './geometry';
 
 const EXPAND_MS = 220;
 
@@ -70,21 +70,30 @@ export function ReactionPicker({
     transform: [{ rotate: `${turn.value * 180}deg` }],
   }));
 
-  const cell = (emoji: string) => (
+  const cell = ({ emoji, count, width }: PickerCell) => (
     <Pressable
       key={emoji}
       testID={`reaction-option-${emoji}`}
       accessibilityRole="button"
-      accessibilityLabel={selected === emoji ? `Снять реакцию ${emoji}` : `Реакция ${emoji}`}
+      accessibilityLabel={
+        (selected === emoji ? `Снять реакцию ${emoji}` : `Реакция ${emoji}`) +
+        (count ? `, у зрителей ${count}` : '')
+      }
       accessibilityState={{ selected: selected === emoji }}
       onPress={() => onSelect(emoji)}
       style={({ pressed }) => [
         styles.cell,
+        { width },
         selected === emoji && { backgroundColor: theme.messageHighlight },
         pressed && { backgroundColor: theme.backgroundSelected },
       ]}
     >
       <Text variant="emoji">{emoji}</Text>
+      {count ? (
+        <Text variant="caption" color="textSecondary">
+          {count}
+        </Text>
+      ) : null}
     </Pressable>
   );
 
@@ -101,22 +110,24 @@ export function ReactionPicker({
       <ScrollView scrollEnabled={expanded} showsVerticalScrollIndicator={expanded} bounces={false}>
         <View style={styles.grid}>
           {geometry.firstRow.map(cell)}
-          <Pressable
-            testID="reaction-picker-expand"
-            accessibilityRole="button"
-            accessibilityLabel={expanded ? 'Свернуть реакции' : 'Все реакции'}
-            accessibilityState={{ expanded }}
-            onPress={onToggleExpanded}
-            style={styles.cell}
-          >
-            <Animated.View style={chevronStyle}>
-              <SymbolView
-                name={{ ios: 'chevron.down', android: 'expand_more', web: 'expand_more' }}
-                size={Spacing.four}
-                tintColor={theme.textSecondary}
-              />
-            </Animated.View>
-          </Pressable>
+          {geometry.expandable ? (
+            <Pressable
+              testID="reaction-picker-expand"
+              accessibilityRole="button"
+              accessibilityLabel={expanded ? 'Свернуть реакции' : 'Все реакции'}
+              accessibilityState={{ expanded }}
+              onPress={onToggleExpanded}
+              style={styles.cell}
+            >
+              <Animated.View style={chevronStyle}>
+                <SymbolView
+                  name={{ ios: 'chevron.down', android: 'expand_more', web: 'expand_more' }}
+                  size={Spacing.four}
+                  tintColor={theme.textSecondary}
+                />
+              </Animated.View>
+            </Pressable>
+          ) : null}
 
           {revealed ? geometry.rest.map(cell) : null}
         </View>

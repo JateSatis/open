@@ -188,6 +188,44 @@ export function isRowFull(counts: ReactionCounts, limit: number): boolean {
   return Object.keys(counts).length >= limit;
 }
 
+/** Что меню реакций предлагает в моём ряду. */
+export type MenuReactionSet = {
+  /** Ряд полон — только уже стоящие, по популярности. Нет — весь набор. */
+  options?: readonly string[];
+  /** Сколько каждой уже стоит — у зрителя, чтобы видеть, к чему присоединиться. */
+  counts?: ReactionCounts;
+  /** Полный набор зрителей (7) влезает целиком — раскрывать нечего. */
+  expandable: boolean;
+};
+
+/**
+ * Набор меню по ряду, куда ляжет моя реакция: участника и зрителя у
+ * сообщения, общий ряд у комментария. Ряд полон — новую разную база
+ * отвергнет, и меню её не предлагает.
+ */
+export function menuReactionSet(
+  reactions: MessageReactions,
+  row: ReactionAudience | 'comment',
+): MenuReactionSet {
+  const counts =
+    row === 'comment'
+      ? mergedCounts(reactions)
+      : row === 'member'
+        ? reactions.members
+        : reactions.visitors;
+  const limit = REACTION_KINDS_LIMIT[row];
+  const full = isRowFull(counts, limit);
+  const options = full ? byPopularity(counts).map(([emoji]) => emoji) : undefined;
+
+  if (row !== 'visitor') return { options, expandable: true };
+
+  return {
+    options,
+    counts: Object.keys(counts).length > 0 ? counts : undefined,
+    expandable: !full,
+  };
+}
+
 export function hasReactions(reactions: MessageReactions): boolean {
   return Object.keys(reactions.members).length > 0 || Object.keys(reactions.visitors).length > 0;
 }

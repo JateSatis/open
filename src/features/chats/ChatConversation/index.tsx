@@ -76,6 +76,7 @@ import { useRespondToInvite } from '@/features/chats/useRespondToInvite';
 import { WaitingBanner } from '@/features/chats/WaitingBanner';
 import { CommentsPanel, openComments } from '@/features/interactions/CommentsPanel';
 import { resetScrolledRows } from '@/features/interactions/MessageReactions';
+import { menuReactionSet } from '@/features/interactions/reactionState';
 import { chatFade } from '@/features/interactions/comments/commentsLift';
 import { useReactToMessage } from '@/features/interactions/useReactToMessage';
 import { CallButton } from '@/features/streams/CallButton';
@@ -527,6 +528,7 @@ export function ChatConversation({ chatId, channel = null, active = true }: Chat
     if (menuContent.kind === 'comment_forward') {
       return forwarded && menuContent.status === 'sent'
         ? {
+            ...menuReactionSet(forwarded.reactions, 'comment'),
             selected: forwarded.reactions.mine?.emoji ?? null,
             onSelect: (emoji: string) => reactToComment(forwarded, emoji),
           }
@@ -535,7 +537,10 @@ export function ChatConversation({ chatId, channel = null, active = true }: Chat
 
     if (!canReactTo(menuContent)) return null;
 
+    // Набор — по ряду, куда ляжет моя реакция: у облачка островка — по
+    // участию в чате оригинала. Берётся на момент открытия меню.
     return {
+      ...menuReactionSet(menuContent.reactions, audienceFor(menuRow)),
       selected: menuContent.reactions.mine?.emoji ?? null,
       onSelect: (emoji: string) => {
         const fresh = rows.find((row) => row.key === menuRow.key);

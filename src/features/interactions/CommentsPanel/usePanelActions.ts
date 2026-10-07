@@ -35,6 +35,7 @@ import {
 } from '@/features/interactions/comments/commentsPanelStore';
 import { useCommentActionHandlers } from '@/features/interactions/comments/useCommentActionHandlers';
 import { useCommentReplySelection } from '@/features/interactions/comments/useCommentReplySelection';
+import { menuReactionSet } from '@/features/interactions/reactionState';
 import { showNotice } from '@/features/notifications/alertsStore';
 import type { LocalMedia } from '@/features/media';
 import { focusWithKeyboard } from '@/lib/windowFocus';
@@ -346,6 +347,8 @@ export function usePanelActions({
   const menuReactions =
     menuComment && canReactTo(menuComment)
       ? {
+          // У комментария один общий ряд: полон — только уже стоящие.
+          ...menuReactionSet(menuComment.reactions, 'comment'),
           selected: menuComment.reactions.mine?.emoji ?? null,
           onSelect: (emoji: string) =>
             react(visible.find((item) => item.id === menuComment.id) ?? menuComment, emoji),
