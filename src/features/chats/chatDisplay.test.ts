@@ -26,6 +26,7 @@ const direct: ChatSummary = {
   lastMessageAt: null,
   lastMessageAuthorId: null,
   hasUnread: false,
+  channel: null,
 };
 
 const group: ChatSummary = {

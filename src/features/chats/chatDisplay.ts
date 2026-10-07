@@ -55,6 +55,7 @@ export function listNames(people: Person[], limit = 3): string {
 }
 
 export function chatTitle(chat: ChatSummary, currentUserId: string | null): string {
+  if (chat.channel) return chat.channel.title;
   if (chat.title) return chat.title;
 
   const other = counterpart(chat, currentUserId);
@@ -65,6 +66,8 @@ export function chatTitle(chat: ChatSummary, currentUserId: string | null): stri
 }
 
 export function chatAvatarUrl(chat: ChatSummary, currentUserId: string | null): string | null {
+  if (chat.channel) return chat.channel.avatarUrl;
+
   return counterpart(chat, currentUserId)?.avatarUrl ?? null;
 }
 

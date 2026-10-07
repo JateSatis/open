@@ -120,6 +120,7 @@ function chatWith(participants: ChatSummary['participants']): ChatSummary {
     lastMessageAt: null,
     lastMessageAuthorId: null,
     hasUnread: false,
+    channel: null,
   };
 }
 

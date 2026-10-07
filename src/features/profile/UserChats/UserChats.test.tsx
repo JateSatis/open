@@ -33,6 +33,7 @@ function chat(id: string, overrides: Partial<ChatSummary>): ChatSummary {
     lastMessageAt: '2026-10-01T10:00:00Z',
     lastMessageAuthorId: 'user-3',
     hasUnread: false,
+    channel: null,
     ...overrides,
   };
 }
@@ -52,6 +53,7 @@ describe('UserChats', () => {
             { ...oleg, lastReadAt: '2026-10-01T10:00:00Z' },
           ],
           hasUnread: true,
+          channel: null,
         }),
         chat('c2', {
           kind: 'group',

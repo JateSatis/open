@@ -166,6 +166,7 @@ const chat: ChatSummary = {
   lastMessageAt: null,
   lastMessageAuthorId: null,
   hasUnread: false,
+  channel: null,
 };
 
 function message(id: string, minute: number, overrides: Partial<Message> = {}): Message {

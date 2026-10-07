@@ -34,6 +34,7 @@ export {
   removeUploadedMedia,
   storedPaths,
   uploadAvatar,
+  uploadChannelAvatar,
   uploadMedia,
 } from './storage';
 export { pickAvatar, type AvatarSource, type PickAvatarResult } from './pickAvatar';

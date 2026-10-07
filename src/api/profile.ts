@@ -119,8 +119,9 @@ export async function updateMyProfile(input: ProfileUpdateInput): Promise<Profil
     .single();
 
   if (error) {
-    // 23505 is Postgres unique_violation; profiles_username_key is the only
-    // unique index on this table, so the collision can only be the username.
+    // 23505 is Postgres unique_violation. The only unique keys a profile
+    // update can hit are its username and the shared handle registry (names of
+    // profiles and channels together), so the collision is the username.
     if (error.code === '23505' && typeof patch.username === 'string') {
       throw new UsernameTakenError(patch.username);
     }

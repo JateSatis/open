@@ -156,6 +156,7 @@ function chat(): ChatSummary {
     lastMessageAt: null,
     lastMessageAuthorId: null,
     hasUnread: false,
+    channel: null,
   };
 }
 

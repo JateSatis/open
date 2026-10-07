@@ -27,6 +27,7 @@ const chat: ChatSummary = {
   lastMessageAt: '2026-09-16T10:00:00Z',
   lastMessageAuthorId: 'user-2',
   hasUnread: false,
+  channel: null,
 };
 
 function wrapper({ children }: { children: ReactNode }) {
