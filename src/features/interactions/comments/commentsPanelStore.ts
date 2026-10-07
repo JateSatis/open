@@ -88,14 +88,15 @@ export function setOpenThread(rootId: string | null, instant = false) {
 }
 
 /**
- * Кнопка комментариев в облачке переписки: число и открытие панели.
- * `rowKey` — строка облачка: её сообщение поднимется над шитом. Нет —
- * нет и кнопки (неотправленное, системное). У копии облачка в меню кнопка
- * только показывает число.
+ * Круг комментариев сбоку от облачка переписки: число и открытие панели.
+ * `rowKey` — строка облачка: её сообщение поднимется над шитом. Нет — нет и
+ * круга (неотправленное, системное). У копии облачка круг только показывает
+ * число.
  *
  * `amMember` — я участник чата, где живёт сообщение (у облачка островка — чата
- * оригинала). Участнику на сообщении без комментариев кнопка тихая: главное —
- * сама переписка. Посетитель пришёл смотреть и обсуждать — ему всегда обычная.
+ * оригинала). Участнику круга нет, пока нет комментариев: главное — сама
+ * переписка, а первый он пишет из меню сообщения. Посетитель пришёл смотреть
+ * и обсуждать — ему круг всегда.
  */
 export function commentsEntry(
   message: ChatMessage,
@@ -103,12 +104,12 @@ export function commentsEntry(
   interactive: boolean,
   amMember: boolean,
   rowKey?: string,
-): { count: number; quiet: boolean; onPress?: () => void } | undefined {
+): { count: number; onPress?: () => void } | undefined {
   if (!canCommentOn(message)) return undefined;
+  if (amMember && message.commentsCount === 0) return undefined;
 
   return {
     count: message.commentsCount,
-    quiet: amMember && message.commentsCount === 0,
     onPress: interactive
       ? () => openComments(message.id, chatId, amMember, undefined, rowKey ? { rowKey } : undefined)
       : undefined,

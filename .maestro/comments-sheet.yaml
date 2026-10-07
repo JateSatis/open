@@ -1,13 +1,15 @@
 appId: com.openger.app
-name: Шит комментариев — сообщение над шитом, закрытие свайпом и тапом по сообщению
+name: Шит комментариев из меню «Комментировать» — сообщение над шитом, закрытие свайпом и тапом по сообщению
 env:
   CHAT: Plany
 ---
 - runFlow: subflows/open-app.yaml
 - tapOn: ${CHAT}
+# Участник: у сообщения без комментариев круга нет — первый пишут из меню.
 - tapOn:
-    id: "comments-button"
+    id: "message-time"
     index: 0
+- tapOn: "Комментировать"
 - assertVisible:
     id: "comments-panel"
 # Сообщение не внутри шита, а поднято над ним из переписки.
@@ -19,9 +21,11 @@ env:
     direction: DOWN
 - assertNotVisible:
     id: "comments-panel"
+# Участник: у сообщения без комментариев круга нет — первый пишут из меню.
 - tapOn:
-    id: "comments-button"
+    id: "message-time"
     index: 0
+- tapOn: "Комментировать"
 - assertVisible:
     id: "comments-lifted-message"
 # Тап по поднятому сообщению (оно над шитом, верх шита — на четверти

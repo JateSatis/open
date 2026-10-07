@@ -7,7 +7,7 @@ env:
 - runFlow: subflows/open-app.yaml
 - openLink: ${THREAD_CHAT_LINK}
 - tapOn:
-    id: "comments-button"
+    id: "comments-circle"
     index: 0
 - assertVisible:
     id: "comments-panel"

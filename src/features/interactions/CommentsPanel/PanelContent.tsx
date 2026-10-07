@@ -231,7 +231,7 @@ export function PanelContent({
           authorAvatarUrl={item.authorAvatarUrl}
           authorBadge={item.audience === 'member' ? MEMBER_BADGE : null}
           mediaBounds={mediaBounds}
-          onRetry={retry}
+          onRetry={interactive ? retry : undefined}
           onAuthorPress={interactive && authorId ? () => openPerson(authorId) : undefined}
           onQuotePress={interactive ? (quote) => void actions.jumpToQuote(quote.messageId) : undefined}
           reactionAudience={myAudience}

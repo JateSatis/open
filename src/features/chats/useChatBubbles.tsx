@@ -20,8 +20,6 @@ import { audienceOf, nextReaction } from '@/features/interactions/reactionState'
 import type { ReactToMessage } from '@/features/interactions/useReactToMessage';
 import type { ReactionAudience } from '@/api/reactionCounts';
 
-const noop = () => undefined;
-
 type Options = {
   chatId: string;
   currentUserId: string | null;
@@ -143,7 +141,7 @@ export function useChatBubbles({
           authorName={author?.displayName ?? DELETED_ACCOUNT}
           authorAvatarUrl={author?.avatarUrl ?? null}
           mediaBounds={mediaBounds}
-          onRetry={retry}
+          onRetry={interactive ? retry : undefined}
           onAuthorPress={
             interactive && item.authorId ? () => openPerson(item.authorId!) : undefined
           }
@@ -154,6 +152,7 @@ export function useChatBubbles({
               : undefined
           }
           showAvatar={showAvatars}
+          commentsSlot
           lead={
             <CommentForwardLead
               forward={forward}
@@ -195,11 +194,12 @@ export function useChatBubbles({
           message={item}
           isOwn={!isPost && item.authorId === currentUserId}
           isRead={!isPost && item.readAt !== null}
+          receipts={!isPost}
           authorName={postAuthor ?? author?.displayName ?? DELETED_ACCOUNT}
           authorAvatarUrl={author?.avatarUrl ?? null}
           wide={isPost}
           mediaBounds={mediaBounds}
-          onRetry={retry}
+          onRetry={interactive ? retry : undefined}
           onAuthorPress={
             interactive && authorId && !isPost ? () => openPerson(authorId) : undefined
           }
@@ -209,6 +209,7 @@ export function useChatBubbles({
             interactive && canReactTo(item) ? (emoji) => toggle(item, emoji) : undefined
           }
           comments={commentsEntry(item, chatId, interactive, isMember, rowKey)}
+          commentsSlot
           showAvatar={showAvatars}
         />
       );
@@ -251,7 +252,6 @@ export function useChatBubbles({
           authorName={original.authorName ?? DELETED_ACCOUNT}
           authorAvatarUrl={original.authorAvatarUrl}
           mediaBounds={mediaBounds}
-          onRetry={noop}
           onAuthorPress={interactive && authorId ? () => openPerson(authorId) : undefined}
           // Цитаты оригинала — из его чата: туда и прыжок.
           onQuotePress={interactive ? (quote) => openQuote(quote, original.chatId) : undefined}
@@ -277,6 +277,7 @@ export function useChatBubbles({
             inThisChat ? isMember : (original.chat?.amMember ?? false),
             row.key,
           )}
+          commentsSlot
           showAvatar={showAvatars}
         />
       );

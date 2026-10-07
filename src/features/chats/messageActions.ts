@@ -29,13 +29,13 @@ export type MessageActionContext = {
 export type MessageActionId =
   | 'retry'
   | 'reply'
+  | 'comment'
   | 'copy'
   | 'edit'
   | 'pin'
   | 'unpin'
   | 'forward'
   | 'open_original'
-  | 'select'
   | 'delete'
   | 'remove_from_island';
 
@@ -102,6 +102,14 @@ export const MESSAGE_ACTIONS: readonly MessageAction[] = [
     isVisible: ({ message, isMember }) => isMember && !isLocalMessage(message),
   },
   {
+    id: 'comment',
+    label: 'Комментировать',
+    // И участнику, и посетителю: у участника без комментариев круга нет, и
+    // первый он пишет отсюда; у посетителя это второй путь к тому же кругу.
+    // У пересланного комментария круга нет — нет и пункта.
+    isVisible: ({ message }) => canCommentOn(message) && message.kind !== 'comment_forward',
+  },
+  {
     id: 'copy',
     label: 'Копировать',
     isVisible: ({ message }) => !isLocalMessage(message) && hasCopyableText(message),
@@ -138,11 +146,6 @@ export const MESSAGE_ACTIONS: readonly MessageAction[] = [
     isVisible: ({ island }) => Boolean(island),
   },
   {
-    id: 'select',
-    label: 'Выбрать',
-    isVisible: ({ message }) => !isLocalMessage(message),
-  },
-  {
     id: 'delete',
     label: 'Удалить',
     destructive: true,
@@ -168,9 +171,7 @@ export function visibleMessageActions(context: MessageActionContext): MessageAct
 export function deletedOriginalActions(isMine: boolean): MessageAction[] {
   if (!isMine) return [];
 
-  return MESSAGE_ACTIONS.filter(
-    (action) => action.id === 'select' || action.id === 'remove_from_island',
-  );
+  return MESSAGE_ACTIONS.filter((action) => action.id === 'remove_from_island');
 }
 
 export type IslandActionId = 'open_source' | 'retry' | 'select_all' | 'delete_island';

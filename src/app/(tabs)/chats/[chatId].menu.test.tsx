@@ -172,6 +172,17 @@ async function tapMessage(messageId: string) {
   });
 }
 
+/** Долгое нажатие — так, как его видит жест-обработчик. */
+async function longPress(messageId: string) {
+  await act(async () => {
+    fireGestureHandler(getByGestureTestId(`message-long-press-${messageId}`), [
+      { state: State.BEGAN },
+      { state: State.ACTIVE },
+      { state: State.END },
+    ]);
+  });
+}
+
 async function menuItems(): Promise<string[]> {
   await screen.findByTestId('message-menu');
 
@@ -231,11 +242,11 @@ describe('message menu', () => {
 
     expect(await menuItems()).toEqual([
       'Ответить',
+      'Комментировать',
       'Копировать',
       'Изменить',
       'Закрепить',
       'Переслать',
-      'Выбрать',
       'Удалить',
     ]);
   });
@@ -248,14 +259,14 @@ describe('message menu', () => {
 
     expect(await menuItems()).toEqual([
       'Ответить',
+      'Комментировать',
       'Копировать',
       'Закрепить',
       'Переслать',
-      'Выбрать',
     ]);
   });
 
-  it('lets a visitor copy, forward and select — but not reply', async () => {
+  it('lets a visitor comment, copy and forward — but not reply', async () => {
     mockedGetChat.mockResolvedValue(
       chatWith([other, { ...member, id: 'user-3', displayName: 'Пётр' }]),
     );
@@ -265,7 +276,7 @@ describe('message menu', () => {
 
     await tapMessage('m2');
 
-    expect(await menuItems()).toEqual(['Копировать', 'Переслать', 'Выбрать']);
+    expect(await menuItems()).toEqual(['Комментировать', 'Копировать', 'Переслать']);
   });
 
   it('closes on a tap outside and on the system back button', async () => {
@@ -378,8 +389,7 @@ describe('deleting', () => {
 
 describe('selection', () => {
   async function startSelecting(messageId: string) {
-    tapMessage(messageId);
-    await choose('Выбрать');
+    await longPress(messageId);
     await screen.findByText('Выбрано: 1');
   }
 
@@ -549,17 +559,6 @@ describe('pinned bar', () => {
 });
 
 describe('gestures on a message', () => {
-  /** Долгое нажатие — так, как его видит жест-обработчик. */
-  async function longPress(messageId: string) {
-    await act(async () => {
-      fireGestureHandler(getByGestureTestId(`message-long-press-${messageId}`), [
-        { state: State.BEGAN },
-        { state: State.ACTIVE },
-        { state: State.END },
-      ]);
-    });
-  }
-
   it('a tap opens the menu at once', async () => {
     await renderWithQuery(<ChatScreen />);
     await screen.findByText('привет');

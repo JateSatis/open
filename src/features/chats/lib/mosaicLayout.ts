@@ -99,12 +99,16 @@ const SHRINK_FACTORS = [0.85, 0.7];
  * Границы размеров по ширине списка сообщений (в dp). Ширина мозаики
  * известна в первом же рендере, до `onLayout` облачка: иначе в перевёрнутом
  * списке строка прыгала бы по высоте.
+ *
+ * `aside` — что ещё стоит в строке рядом с облачком (аватар, место круга
+ * комментариев, зазоры между ними): мозаика с ними не вылезает за край.
  */
-export function mosaicBounds(listWidth: number, wide = false): MosaicBounds {
+export function mosaicBounds(listWidth: number, wide = false, aside = 0): MosaicBounds {
   // Пост канала шире сообщения: альбом тянется на ту же долю, что и облачко.
-  const maxWidth = wide
+  const share = wide
     ? Math.round(listWidth * Sizes.postBubbleShare)
     : Math.min(Math.round(listWidth * MAX_WIDTH_RATIO), MAX_WIDTH_DP);
+  const maxWidth = Math.min(share, listWidth - aside);
 
   return {
     maxWidth,

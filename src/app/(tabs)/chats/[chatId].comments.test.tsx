@@ -303,7 +303,7 @@ async function renderChat() {
 
 /** Кружки комментариев в порядке списка — самое новое первым. */
 function buttons() {
-  return screen.getAllByTestId('comments-button');
+  return screen.getAllByTestId('comments-circle');
 }
 
 async function openCommentsOf(index: number) {
@@ -323,7 +323,7 @@ function rowKeys(list = 'comments-list'): string[] {
   return (mockListRows[list] ?? []).map((row) => row.key);
 }
 
-describe('comments button next to the bubble', () => {
+describe('comments circle next to the bubble', () => {
   it('sits next to text, a bare album, a voice note and a forwarded original — not a system one', async () => {
     await renderChat();
 
@@ -356,6 +356,39 @@ describe('comments button next to the bubble', () => {
     await waitFor(() => expect(within(buttons()[3]).getByText('7')).toBeTruthy(), {
       timeout: 2000,
     });
+  });
+});
+
+describe('a member and the comments circle', () => {
+  beforeEach(() => {
+    mockedSession.mockReturnValue({
+      session: { user: { id: 'user-2' } } as unknown as SupabaseSession,
+      isAuthenticated: true,
+      isLoading: false,
+    });
+  });
+
+  it('shows no circle while a message has no comments yet', async () => {
+    await renderChat();
+
+    // o4, m3 и m2 с комментариями; у m1 их нет — и круга нет.
+    expect(buttons()).toHaveLength(3);
+    expect(within(screen.getByTestId('message-row-m1')).queryByTestId('comments-circle')).toBeNull();
+  });
+
+  it('writes the first comment from the message menu', async () => {
+    await renderChat();
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('message-row-m1'));
+    });
+    fireEvent.press(await screen.findByRole('menuitem', { name: 'Комментировать' }));
+
+    expect(await screen.findByTestId('comments-panel')).toBeTruthy();
+    expect(
+      await screen.findByText('Комментариев пока нет. Их увидит каждый, кто откроет этот чат.'),
+    ).toBeTruthy();
+    expect(commentField()).toBeTruthy();
   });
 });
 
@@ -450,7 +483,7 @@ describe('comments panel', () => {
 
     await act(async () => refuse({ code: '42501', message: 'denied' }));
 
-    expect(await screen.findByText('Не отправлено. Повторить')).toBeTruthy();
+    expect(await screen.findByLabelText('Не отправлено. Повторить')).toBeTruthy();
     expect(screen.getByText('мой комментарий')).toBeTruthy();
   });
 
@@ -510,8 +543,8 @@ describe('comments panel', () => {
       const copy = await screen.findByTestId('comments-lifted-message');
 
       expect(within(copy).getByText('текст m1')).toBeTruthy();
-      // Копия неинтерактивна: кнопка комментариев в ней только показывает число.
-      expect(within(copy).getByTestId('comments-button').props.accessibilityState).toEqual(
+      // Копия неинтерактивна: круг комментариев в ней только показывает число.
+      expect(within(copy).getByTestId('comments-circle').props.accessibilityState).toEqual(
         expect.objectContaining({ disabled: true }),
       );
       // Строка в переписке на месте — только прозрачная.

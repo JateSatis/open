@@ -37,6 +37,8 @@ type Options = {
   authorName: (authorId: string | null) => string;
   /** Ответить: облачка встают в плашку над полем ввода. */
   reply: (rows: BubbleRow[]) => void;
+  /** Комментировать: панель комментариев, сообщение строки — над шитом. */
+  comment: (row: BubbleRow) => void;
   /** Переслать: дальше — выбор чата. */
   forward: (rows: BubbleRow[]) => void;
   /** Изменить: поле ввода переходит в режим правки этого сообщения. */
@@ -77,6 +79,7 @@ export function useMessageActionHandlers({
   removeFromIsland,
   authorName,
   reply,
+  comment,
   forward,
   edit,
   openOriginal,
@@ -149,6 +152,9 @@ export function useMessageActionHandlers({
         case 'reply':
           reply([row]);
           return;
+        case 'comment':
+          comment(row);
+          return;
         case 'forward':
           forward([row]);
           return;
@@ -175,9 +181,6 @@ export function useMessageActionHandlers({
             showNotice(failure('Не удалось открепить сообщение', cause), 'error'),
           );
           return;
-        case 'select':
-          selection.start(row.key);
-          return;
         case 'remove_from_island':
           void removeForEveryone([row]);
           return;
@@ -192,7 +195,7 @@ export function useMessageActionHandlers({
           return;
       }
     },
-    [discard, edit, forward, openOriginal, pins, removeForEveryone, reply, retry, selection],
+    [comment, discard, edit, forward, openOriginal, pins, removeForEveryone, reply, retry],
   );
 
   const runSelectionAction = useCallback(

@@ -2,7 +2,6 @@ import { useMemo, useState, type ReactNode } from 'react';
 import { PixelRatio, Pressable, View, type StyleProp, type TextStyle } from 'react-native';
 
 import { BubbleFooter } from './BubbleFooter';
-import { readFooterLayout, writeFooterLayout } from './footerLayoutCache';
 import { styles } from './styles';
 
 import type { QuotedMessage } from '@/api/chats';
@@ -16,7 +15,7 @@ import { ReplyQuote } from '@/features/chats/ReplyQuote';
 import type { ChatMessage } from '@/features/chats/useChatMessages';
 import { ViewsCount, type ViewsCountTone } from '@/features/chats/ViewsCount';
 import { VoiceMessage } from '@/features/chats/VoiceMessage';
-import { CommentsButton, type CommentsButtonTone } from '@/features/interactions/CommentsButton';
+import { CommentsCircle } from '@/features/interactions/CommentsCircle';
 import { MessageReactions, type ReactionsTone } from '@/features/interactions/MessageReactions';
 import { hasReactions } from '@/features/interactions/reactionState';
 import { MediaViewer, type MediaViewerItem } from '@/features/media';
@@ -26,8 +25,10 @@ import { Spacing } from '@/theme';
 export type MessageBubbleProps = {
   message: ChatMessage;
   isOwn: boolean;
-  /** Своё сообщение увидел другой участник чата — время синее. Смысл имеет только для своих. */
+  /** Своё сообщение увидел другой участник чата — две галочки. Смысл имеет только для своих. */
   isRead: boolean;
+  /** Галочки «отправлено» и «прочитано» у своего. У поста канала их нет. */
+  receipts?: boolean;
   authorName: string;
   authorAvatarUrl: string | null;
   /**
@@ -36,7 +37,8 @@ export type MessageBubbleProps = {
    * перевёрнутого списка прыгает по высоте.
    */
   mediaBounds: MosaicBounds;
-  onRetry: (localId: string) => void;
+  /** Тап по значку ошибки. Нет — значок не нажимается (копия облачка). */
+  onRetry?: (localId: string) => void;
   /** Тап по аватару или имени автора — его профиль. Нет автора (удалён) — нет и перехода. */
   onAuthorPress?: () => void;
   /** Тап по цитате ответа — к её оригиналу. */
@@ -51,12 +53,17 @@ export type MessageBubbleProps = {
   /** Тап по реакции своего ряда. Нет обработчика (копия в меню) — ряды не нажимаются. */
   onReactionToggle?: (emoji: string) => void;
   /**
-   * Кнопка комментариев внутри облачка, правее всего остального в низу.
-   * `quiet` — тихая кнопка участника на сообщении без
-   * комментариев. Нет — нет и кнопки (неотправленное, системное, сам
-   * комментарий).
+   * Круг комментариев сбоку от облачка, со стороны середины экрана: у
+   * чужого — справа, у своего — слева. Нет — нет и круга (неотправленное,
+   * системное, у участника — пока нет комментариев).
    */
-  comments?: { count: number; quiet?: boolean; onPress?: () => void };
+  comments?: { count: number; onPress?: () => void };
+  /**
+   * Место под круг комментариев держится, даже пока круга нет: облачко не
+   * перестраивается, когда появляется первый комментарий. У облачка в
+   * панели комментариев круга не бывает — и места тоже.
+   */
+  commentsSlot?: boolean;
   /** Тихая пометка после имени автора: «участник чата» у комментария. */
   authorBadge?: string | null;
   /** Счётчик просмотров в правом нижнем углу. У комментариев его нет: их просмотры не считаются. */
@@ -69,11 +76,6 @@ export type MessageBubbleProps = {
   /** Пост канала: облачко шире обычного (`Sizes.postBubbleShare`). */
   wide?: boolean;
   /**
-   * Сбоку от облачка, со стороны середины экрана: у чужого — справа, у
-   * своего — слева. Кнопка треда у корня комментариев.
-   */
-  aside?: ReactNode;
-  /**
    * Блок над содержимым облачка, выше цитат: у пересланного комментария —
    * откуда он и под каким сообщением оставлен.
    */
@@ -84,6 +86,7 @@ export function MessageBubble({
   message,
   isOwn,
   isRead,
+  receipts = true,
   authorName,
   authorAvatarUrl,
   mediaBounds,
@@ -94,11 +97,11 @@ export function MessageBubble({
   reactionAudience,
   onReactionToggle,
   comments,
+  commentsSlot = false,
   authorBadge,
   showViews = true,
   showAvatar = true,
   wide = false,
-  aside,
   lead,
 }: MessageBubbleProps) {
   const theme = useTheme();
@@ -108,11 +111,6 @@ export function MessageBubble({
   // заглушка, чтобы сообщение не было пустым.
   const hasUnhandledAttachment = !isMediaMessage && !voice && message.kind !== 'text';
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
-  // Ширина содержимого облачка — по ней низ решает, встанет ли кнопка
-  // комментариев рядом с чипами.
-  const [contentWidth, setContentWidth] = useState<number | null>(
-    () => readFooterLayout(message.id).contentWidth ?? null,
-  );
   const hasMemberReactions = Object.keys(message.reactions.members).length > 0;
   const hasVisitorReactions = Object.keys(message.reactions.visitors).length > 0;
   const textColor = isOwn ? 'primaryText' : 'text';
@@ -166,13 +164,13 @@ export function MessageBubble({
     />
   );
 
-  const meta = (variant: 'inline' | 'overlay', floating = true) => (
+  const meta = (variant: 'inline' | 'overlay') => (
     <MessageMeta
       message={message}
       isOwn={isOwn}
       isRead={isRead}
+      receipts={receipts}
       variant={variant}
-      floating={floating}
       onRetry={onRetry}
     />
   );
@@ -183,28 +181,23 @@ export function MessageBubble({
       <ViewsCount count={message.viewsCount} tone={tone} />
     ) : null;
 
-  const commentsButton = (tone: CommentsButtonTone) =>
-    comments ? (
-      <CommentsButton
-        count={comments.count}
-        tone={tone}
-        quiet={comments.quiet}
-        onPress={comments.onPress}
-      />
-    ) : null;
-
-  const footer = (tone: 'own' | 'other', width: number | null) => (
+  const footer = (tone: 'own' | 'other') => (
     <BubbleFooter
       members={hasMemberReactions ? reactions(tone, 'members') : null}
       visitors={hasVisitorReactions ? reactions(tone, 'visitors') : null}
-      comments={commentsButton(tone)}
-      quiet={comments?.quiet ?? false}
       meta={meta('inline')}
       views={views(tone)}
-      contentWidth={width}
-      layoutKey={message.id}
     />
   );
+
+  // Строка тянется по самому высокому, а место круга прижато к её низу —
+  // низ круга вровень с низом облачка.
+  const aside =
+    commentsSlot || comments ? (
+      <View testID="comments-slot" style={styles.aside}>
+        {comments ? <CommentsCircle count={comments.count} onPress={comments.onPress} /> : null}
+      </View>
+    ) : null;
 
   const authorLine = (style?: StyleProp<TextStyle>) => (
     <Text variant="smallBold" color={textColor} style={style}>
@@ -278,13 +271,12 @@ export function MessageBubble({
               onPress={setViewerIndex}
             >
               {message.text ? null : (
-                // Без подписи время — плашкой в левом нижнем углу медиа, справа —
-                // просмотры и кнопка комментариев. Без облачка кнопка — под мозаикой.
+                // Без подписи время со статусом — плашкой в левом нижнем углу
+                // медиа, просмотры — в правом.
                 <View pointerEvents="box-none" style={styles.mediaOverlay}>
-                  {meta('overlay', false)}
+                  {meta('overlay')}
                   <View style={styles.footerSpacer} />
                   {views('overlay')}
-                  {bareMedia ? null : commentsButton('overlay')}
                 </View>
               )}
             </MediaAttachmentGrid>
@@ -292,33 +284,20 @@ export function MessageBubble({
             {message.text ? (
               <View style={styles.caption}>
                 <Text color={textColor}>{message.text}</Text>
-                {footer(isOwn ? 'own' : 'other', layout.width - Spacing.three * 2)}
+                {footer(isOwn ? 'own' : 'other')}
               </View>
             ) : hasReactions(message.reactions) && !bareMedia ? (
               <View style={styles.mediaReactions}>{reactions(isOwn ? 'own' : 'other')}</View>
             ) : null}
           </View>
-          {bareMedia && !message.text ? (
-            <View style={styles.bareFooter}>
-              <View style={styles.footerShrink}>{reactions('bare')}</View>
-              <View style={styles.footerSpacer} />
-              {commentsButton('bare')}
-            </View>
-          ) : null}
+          {bareMedia && hasReactions(message.reactions) ? reactions('bare') : null}
         </View>
       ) : (
         <View
           testID="message-bubble"
           style={[styles.bubble, wide && styles.wide, { backgroundColor: bubbleColor }]}
         >
-          {/* Своей ширины — по самому широкому: её и меряет низ облачка. */}
-          <View
-            style={styles.content}
-            onLayout={({ nativeEvent }) => {
-              writeFooterLayout(message.id, { contentWidth: nativeEvent.layout.width });
-              setContentWidth(nativeEvent.layout.width);
-            }}
-          >
+          <View style={styles.content}>
             {showAuthorLine ? authorLine() : null}
 
             {annotations}
@@ -344,7 +323,7 @@ export function MessageBubble({
             {message.text ? <Text color={textColor}>{message.text}</Text> : null}
           </View>
 
-          {footer(isOwn ? 'own' : 'other', contentWidth)}
+          {footer(isOwn ? 'own' : 'other')}
         </View>
       )}
 

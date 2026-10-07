@@ -4,68 +4,44 @@ import { Pressable } from 'react-native';
 import { styles } from './styles';
 
 import { Text } from '@/components/Text';
+import { formatViewsCount } from '@/features/chats/ViewsCount/formatViewsCount';
 import { commentsCountLabel } from '@/features/interactions/comments/commentsCount';
 import { useTheme } from '@/hooks/use-theme';
-import { Opacity, Sizes, Spacing, type ThemeColor } from '@/theme';
+import { Opacity, Sizes } from '@/theme';
 
-/**
- * На чём стоит кнопка: в своём облачке (на `primary`), в чужом, под альбомом
- * без облачка (на фоне чата) или поверх медиа.
- */
-export type CommentsButtonTone = 'own' | 'other' | 'bare' | 'overlay';
-
-const COLORS: Record<CommentsButtonTone, { background: ThemeColor; tint: ThemeColor }> = {
-  own: { background: 'reactionChipOnPrimary', tint: 'primaryText' },
-  other: { background: 'backgroundSelected', tint: 'textSecondary' },
-  bare: { background: 'backgroundElement', tint: 'textSecondary' },
-  overlay: { background: 'mediaScrim', tint: 'textOnMedia' },
-};
-
-export type CommentsButtonProps = {
+export type CommentsCircleProps = {
   count: number;
-  tone: CommentsButtonTone;
-  /**
-   * Тихая кнопка — у участника на сообщении без комментариев: написать
-   * первым можно, но облачко остаётся главным. Меньше, без подложки и
-   * полупрозрачная.
-   */
-  quiet?: boolean;
-  /** Нет обработчика — кнопка только показывает число (копия облачка в меню). */
+  /** Нет обработчика — круг только показывает число (копия облачка). */
   onPress?: () => void;
 };
 
 /**
- * Кнопка комментариев в облачке: значок и число, при нуле — только значок.
- * Комментарии есть у каждого отправленного сообщения, поэтому и кнопка у
- * каждого: так видно, что комментировать можно всегда.
+ * Круг комментариев сбоку от облачка: сверху значок, под ним крупно число,
+ * при нуле — только значок.
  */
-export function CommentsButton({ count, tone, quiet = false, onPress }: CommentsButtonProps) {
+export function CommentsCircle({ count, onPress }: CommentsCircleProps) {
   const theme = useTheme();
-  const colors = COLORS[tone];
 
   return (
     <Pressable
-      testID="comments-button"
+      testID="comments-circle"
       accessibilityRole="button"
       accessibilityLabel={count > 0 ? `Комментарии: ${commentsCountLabel(count)}` : 'Комментарии'}
       disabled={!onPress}
-      hitSlop={quiet ? Spacing.two : Spacing.one}
       onPress={onPress}
       style={({ pressed }) => [
-        styles.button,
-        quiet
-          ? styles.quiet
-          : { backgroundColor: theme[colors.background], opacity: pressed ? Opacity.pressed : 1 },
+        styles.circle,
+        { backgroundColor: theme.backgroundElement, opacity: pressed ? Opacity.pressed : 1 },
       ]}
     >
       <SymbolView
         name={{ ios: 'bubble.left', android: 'chat_bubble', web: 'chat_bubble' }}
-        size={quiet ? Sizes.commentsIconQuiet : Sizes.commentsIcon}
-        tintColor={theme[colors.tint]}
+        size={Sizes.commentsCircleIcon}
+        tintColor={theme.textSecondary}
       />
       {count > 0 ? (
-        <Text variant="caption" color={colors.tint}>
-          {count}
+        <Text variant="smallBold" color="text" style={styles.count} numberOfLines={1}>
+          {formatViewsCount(count)}
         </Text>
       ) : null}
     </Pressable>

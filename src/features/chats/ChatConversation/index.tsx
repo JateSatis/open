@@ -83,7 +83,7 @@ import { showNotice } from '@/features/notifications/alertsStore';
 import { useProfile } from '@/features/profile/queries';
 import { useTheme } from '@/hooks/use-theme';
 import { setActiveChatId } from '@/store/activeChat';
-import { Spacing } from '@/theme';
+import { Sizes, Spacing } from '@/theme';
 
 const noop = () => undefined;
 const rowKey = (row: ChatListRow) => row.key;
@@ -122,10 +122,16 @@ export function ChatConversation({ chatId, channel = null, active = true }: Chat
     style: keyboardInsetStyle,
   } = useChatKeyboardInset();
   const { width: windowWidth } = useWindowDimensions();
-  // Ширина списка — окно минус его боковые поля (`styles.list`).
+  // Ширина списка — окно минус его боковые поля (`styles.list`). Рядом с
+  // мозаикой в строке — место круга комментариев и, кроме постов, аватар.
   const isPosts = channel !== null;
   const mediaBounds = useMemo(
-    () => mosaicBounds(windowWidth - Spacing.three * 2, isPosts),
+    () =>
+      mosaicBounds(
+        windowWidth - Spacing.three * 2,
+        isPosts,
+        Sizes.commentsCircle + Spacing.two + (isPosts ? 0 : Spacing.five + Spacing.two),
+      ),
     [isPosts, windowWidth],
   );
   const currentUserId = useCurrentUserId();
@@ -322,6 +328,27 @@ export function ChatConversation({ chatId, channel = null, active = true }: Chat
     [afterEdit, beginEdit],
   );
 
+  // Комментарии облачка островка — у оригинала: панель на него, из его чата.
+  const commentOn = useCallback(
+    (row: BubbleRow) => {
+      const message = contentOf(row);
+
+      if (!message) return;
+
+      const original = row.type === 'island-item' ? row.item.original : null;
+      const inThisChat = !original || original.chatId === chatId;
+
+      openComments(
+        message.id,
+        original?.chatId ?? chatId,
+        inThisChat ? isMember : (original?.chat?.amMember ?? false),
+        undefined,
+        { rowKey: row.key },
+      );
+    },
+    [chatId, isMember],
+  );
+
   const { runMessageAction, runSelectionAction, runIslandAction } = useMessageActionHandlers({
     currentUserId,
     selection,
@@ -332,6 +359,7 @@ export function ChatConversation({ chatId, channel = null, active = true }: Chat
     removeFromIsland: chatMessages.removeFromIsland,
     authorName,
     reply: startReply,
+    comment: commentOn,
     forward: replyForward.startForward,
     edit: startEdit,
     openOriginal: navigation.openOriginal,
