@@ -94,6 +94,33 @@ describe('ChatsScreen', () => {
     expect(screen.getByText('до встречи')).toBeTruthy();
   });
 
+  it('shows a channel under its own name, marked «Канал», and opens the channel screen', async () => {
+    mockedListChats.mockResolvedValue([
+      {
+        ...chat,
+        id: 'posts-1',
+        kind: 'channel',
+        channel: { id: 'channel-1', title: 'Новости', username: 'news', avatarUrl: null },
+      },
+    ]);
+    const user = userEvent.setup();
+
+    await renderWithQuery(<ChatsScreen />);
+    await user.press(await screen.findByRole('button', { name: 'Новости' }));
+
+    expect(screen.getByText('Канал')).toBeTruthy();
+    expect(mockPush).toHaveBeenCalledWith('/chats/channel/channel-1');
+  });
+
+  it('keeps the «+» button even when there are no chats', async () => {
+    mockedListChats.mockResolvedValue([]);
+
+    await renderWithQuery(<ChatsScreen />);
+
+    expect(await screen.findByRole('button', { name: 'Новый чат' })).toBeTruthy();
+    expect(screen.getByTestId('create-button')).toBeTruthy();
+  });
+
   it('marks a chat with an unread message', async () => {
     mockedListChats.mockResolvedValue([{ ...chat, hasUnread: true }]);
 
