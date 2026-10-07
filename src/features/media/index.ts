@@ -38,10 +38,16 @@ export {
   uploadMedia,
 } from './storage';
 export { pickAvatar, type AvatarSource, type PickAvatarResult } from './pickAvatar';
+export { prepareAvatar, type PreparedAvatar } from './lib/prepareAvatar';
 export { useVoiceRecorder, type VoiceRecorder as VoiceRecorderApi } from './useVoiceRecorder';
 export { useHoldToRecord, type HoldRecorder, type HoldToRecord } from './useHoldToRecord';
 
-export { MediaGrid, type MediaGridProps, type MediaListComponent } from './MediaGrid';
+export {
+  MediaGrid,
+  type GridPick,
+  type MediaGridProps,
+  type MediaListComponent,
+} from './MediaGrid';
 export { GridSkeleton, type GridSkeletonProps } from './GridSkeleton';
 export { useGridGeometry } from './MediaGrid/useGridGeometry';
 export { MediaViewer, type MediaViewerItem, type MediaViewerProps } from './MediaViewer';

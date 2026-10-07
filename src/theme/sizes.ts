@@ -96,4 +96,8 @@ export const Sizes = {
   floatingButtonIcon: 24,
   /** Отступ плавающей кнопки от правого и нижнего края экрана — одинаковый. */
   floatingButtonMargin: 16,
+  /** Круг выбора аватарки на экране создания канала. */
+  channelAvatarPicker: 96,
+  /** Значок камеры в пустом круге аватарки. */
+  channelAvatarPickerIcon: 32,
 } as const;

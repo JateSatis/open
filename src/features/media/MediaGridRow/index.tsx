@@ -4,7 +4,7 @@ import { View } from 'react-native';
 import { styles } from './styles';
 
 import type { GridGeometry } from '@/features/media/MediaGrid/gridLayout';
-import { MediaGridItem } from '@/features/media/MediaGridItem';
+import { MediaGridItem, type GridPick } from '@/features/media/MediaGridItem';
 import type { MediaLibraryItem } from '@/features/media/mediaLibrary';
 import { useTheme } from '@/hooks/use-theme';
 
@@ -18,6 +18,7 @@ export type MediaGridRowProps = {
   cells: GridCell[];
   geometry: GridGeometry;
   onToggle: (asset: MediaLibraryItem) => void;
+  pick?: GridPick;
 };
 
 /**
@@ -29,6 +30,7 @@ export const MediaGridRow = memo(function MediaGridRow({
   cells,
   geometry,
   onToggle,
+  pick,
 }: MediaGridRowProps) {
   const theme = useTheme();
   const { cellSize, pitch, columnLeft } = geometry;
@@ -46,7 +48,7 @@ export const MediaGridRow = memo(function MediaGridRow({
               style={[styles.skeleton, { backgroundColor: theme.backgroundElement }]}
             />
           ) : (
-            <MediaGridItem asset={cell} size={cellSize} onToggle={onToggle} />
+            <MediaGridItem asset={cell} size={cellSize} onToggle={onToggle} pick={pick} />
           )}
         </View>
       ))}

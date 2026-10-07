@@ -8,12 +8,14 @@ import { useGridGeometry } from './useGridGeometry';
 
 import { Button } from '@/components/Button';
 import { Text } from '@/components/Text';
+import type { GridPick } from '@/features/media/MediaGridItem';
 import { MediaGridRow, type GridCell } from '@/features/media/MediaGridRow';
 import { countRender, perfLog } from '@/features/media/perf';
 import { useMediaSelection } from '@/features/media/selectionStore';
 import { useGalleryAssets } from '@/features/media/useGalleryAssets';
 
 export type { GridCell } from '@/features/media/MediaGridRow';
+export type { GridPick } from '@/features/media/MediaGridItem';
 
 /** Строка списка — три клетки сетки. */
 export type GridRow = {
@@ -59,6 +61,11 @@ export type MediaGridProps = {
    * разрешения и чтение галереи не отнимали кадры у анимации открытия шита.
    */
   enabled?: boolean;
+  /**
+   * Выбор одного файла: тап по клетке отдаёт его сразу, общий выбор не
+   * трогается. Объект должен быть стабильным — он уходит в мемо-клетки.
+   */
+  pick?: GridPick;
 };
 
 /**
@@ -82,6 +89,7 @@ export function MediaGrid({
   footer = null,
   minContentHeight = 0,
   enabled = true,
+  pick,
 }: MediaGridProps) {
   countRender('MediaGrid');
 
@@ -117,8 +125,10 @@ export function MediaGrid({
   }, [geometry.pitch, height, items, status, total]);
 
   const renderItem = useCallback<ListRenderItem<GridRow>>(
-    ({ item }) => <MediaGridRow cells={item.cells} geometry={geometry} onToggle={toggle} />,
-    [geometry, toggle],
+    ({ item }) => (
+      <MediaGridRow cells={item.cells} geometry={geometry} onToggle={toggle} pick={pick} />
+    ),
+    [geometry, pick, toggle],
   );
 
   /** Все строки одинаковы по устройству — один пул вью на всех. */

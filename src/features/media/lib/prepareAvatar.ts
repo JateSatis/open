@@ -12,10 +12,15 @@ export type PreparedAvatar = { uri: string; size: number };
  */
 export async function prepareAvatar(
   uri: string,
-  width: number,
-  height: number,
+  knownWidth: number | null,
+  knownHeight: number | null,
 ): Promise<PreparedAvatar> {
   const { sizePx, quality } = MediaLimits.avatar;
+  // Медиатека не всегда знает размеры файла — тогда их отдаёт сама картинка.
+  const probe =
+    knownWidth && knownHeight ? null : await ImageManipulator.manipulate(uri).renderAsync();
+  const width = knownWidth || probe?.width || 0;
+  const height = knownHeight || probe?.height || 0;
   const side = Math.min(width, height);
   const context = ImageManipulator.manipulate(uri);
 

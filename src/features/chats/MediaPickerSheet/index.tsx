@@ -61,7 +61,7 @@ import {
 } from '@/features/chats/composerKeyboard';
 import { MessageComposer } from '@/features/chats/MessageComposer';
 import type { ComposerDraft } from '@/features/chats/useComposerDraft';
-import { MediaGrid } from '@/features/media';
+import { MediaGrid, type GridPick } from '@/features/media';
 import { prefetchGallery } from '@/features/media/galleryPrefetch';
 import { countRender, perfMark } from '@/features/media/perf';
 import { useHasSelection, useMediaSelection } from '@/features/media/selectionStore';
@@ -81,9 +81,8 @@ export {
 /** За сколько dp до рабочего положения монтируется список — см. ниже. */
 const LIST_MOUNT_DISTANCE = 2;
 
-export type MediaPickerSheetProps = {
-  /** Чьё поле открывает этот экземпляр: показывается он только для своего хозяина. */
-  owner?: MediaSheetOwner;
+/** Строка ввода шита: подпись к выбранным файлам и отправка. */
+type SheetComposerProps = {
   draft: ComposerDraft;
   /** Плашка над полем шита: ответ или правка — альбом бывает и тем и другим. */
   plate?: ReactNode;
@@ -95,6 +94,13 @@ export type MediaPickerSheetProps = {
   onSend: () => void;
 };
 
+export type MediaPickerSheetProps = SheetComposerProps & {
+  /** Чьё поле открывает этот экземпляр: показывается он только для своего хозяина. */
+  owner?: Exclude<MediaSheetOwner, 'pick'>;
+};
+
+export type MediaPickSheetProps = GridPick;
+
 /**
  * Шит выбора медиа. Открывается и закрывается через `sheetStore`: касание
  * кнопки медиа его готовит, отпускание — показывает.
@@ -103,8 +109,41 @@ export type MediaPickerSheetProps = {
  * открытие, — анимация, жест, смонтирован ли список, — лежит в `SheetWindow`
  * и рождается вместе с окном, так что сбрасывать между открытиями нечего.
  */
-export function MediaPickerSheet(props: MediaPickerSheetProps) {
-  const owner = props.owner ?? 'chat';
+export function MediaPickerSheet({ owner = 'chat', ...composer }: MediaPickerSheetProps) {
+  const phase = useSheetPhase(owner);
+
+  if (phase === 'closed') return null;
+
+  return <SheetWindow phase={phase} composer={composer} />;
+}
+
+/**
+ * Тот же шит для выбора одного файла: без строки ввода, тап по подходящей
+ * клетке отдаёт файл в `onPick` и закрывает шит. Открывается
+ * `openMediaSheet('pick')`. Общий выбор файлов чата он не трогает.
+ *
+ * `accepts` решает, какие клетки можно взять: остальные видны притушенными.
+ */
+export function MediaPickSheet({ accepts, onPick }: MediaPickSheetProps) {
+  const phase = useSheetPhase('pick');
+  const pick = useMemo<GridPick>(
+    () => ({
+      accepts,
+      onPick: (asset) => {
+        onPick(asset);
+        closeMediaSheet();
+      },
+    }),
+    [accepts, onPick],
+  );
+
+  if (phase === 'closed') return null;
+
+  return <SheetWindow phase={phase} pick={pick} />;
+}
+
+/** Жизнь окна шита вокруг экземпляра хозяина `owner`. */
+function useSheetPhase(owner: MediaSheetOwner): MediaSheetPhase {
   const phase = useMediaSheetPhase(owner);
 
   // Уход с экрана посреди открытого шита: окно уходит вместе с экраном, и
@@ -131,12 +170,16 @@ export function MediaPickerSheet(props: MediaPickerSheetProps) {
     return () => task.cancel();
   }, []);
 
-  if (phase === 'closed') return null;
-
-  return <SheetWindow phase={phase} {...props} />;
+  return phase;
 }
 
-type SheetWindowProps = MediaPickerSheetProps & { phase: Exclude<MediaSheetPhase, 'closed'> };
+type SheetWindowProps = {
+  phase: Exclude<MediaSheetPhase, 'closed'>;
+  /** Шит отбора файлов в сообщение: со строкой ввода. */
+  composer?: SheetComposerProps;
+  /** Шит выбора одного файла: без строки ввода. */
+  pick?: GridPick;
+};
 
 /**
  * Свой шит на `react-native-gesture-handler` + `react-native-reanimated`:
@@ -163,15 +206,7 @@ const SHEET_EDIT = {
   recordDisabled: true,
 } as const;
 
-function SheetWindow({
-  phase,
-  draft,
-  plate,
-  editing,
-  placeholder,
-  onTyping,
-  onSend,
-}: SheetWindowProps) {
+function SheetWindow({ phase, composer, pick }: SheetWindowProps) {
   countRender('MediaPickerSheet');
 
   const theme = useTheme();
@@ -245,7 +280,8 @@ function SheetWindow({
     // Вопрос про сброс не должен оказаться под клавиатурой.
     void KeyboardController.dismiss();
 
-    if (useMediaSelection.getState().order.length === 0) {
+    // В выборе одного файла сбрасывать нечего: общий выбор чата не его.
+    if (!composer || useMediaSelection.getState().order.length === 0) {
       closeMediaSheet();
       return;
     }
@@ -266,7 +302,7 @@ function SheetWindow({
       // Передумал — шит возвращается в рабочее положение, откуда бы его ни утащили.
       dismissY.value = withSpring(0, OPEN_SPRING);
     });
-  }, [dismissY]);
+  }, [composer, dismissY]);
 
   /** «Назад» отвечает на вопрос, если он задан, и только иначе закрывает шит. */
   const handleBack = useCallback(() => {
@@ -280,8 +316,9 @@ function SheetWindow({
     requestClose();
   }, [requestClose]);
 
+  const onSend = composer?.onSend;
   const submit = useCallback(() => {
-    onSend();
+    onSend?.();
     closeMediaSheet();
   }, [onSend]);
 
@@ -390,6 +427,7 @@ function SheetWindow({
                     enabled={listMounted}
                     header={header}
                     footer={footer}
+                    pick={pick}
                     // Подложка тянется до конца содержимого, значит содержимое
                     // не должно быть короче окна — иначе под ним осталась бы
                     // полоса, сквозь которую видно чат.
@@ -401,7 +439,7 @@ function SheetWindow({
           </GestureDetector>
         </Animated.View>
 
-        {hasMedia ? (
+        {composer && hasMedia ? (
           <Animated.View
             testID="media-picker-footer"
             style={[
@@ -412,14 +450,14 @@ function SheetWindow({
             onLayout={measureFooter}
           >
             <MessageComposer
-              text={draft.text}
-              onChangeText={draft.setText}
+              text={composer.draft.text}
+              onChangeText={composer.draft.setText}
               onSend={submit}
-              onTyping={onTyping}
+              onTyping={composer.onTyping}
               onFieldActivate={claimKeyboardForSheet}
-              plate={plate}
-              edit={editing ? SHEET_EDIT : undefined}
-              placeholder={placeholder}
+              plate={composer.plate}
+              edit={composer.editing ? SHEET_EDIT : undefined}
+              placeholder={composer.placeholder}
               canSend
             />
           </Animated.View>
