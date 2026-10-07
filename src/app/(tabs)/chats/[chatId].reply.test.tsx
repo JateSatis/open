@@ -144,6 +144,17 @@ function message(id: string, text: string, authorId: string, minute = 0): Messag
 }
 
 /** Тап по облачку — так открывается его меню. */
+/** Долгое нажатие — так, как его видит жест-обработчик: включает выбор. */
+async function longPress(rowKey: string) {
+  await act(async () => {
+    fireGestureHandler(getByGestureTestId(`message-long-press-${rowKey}`), [
+      { state: State.BEGAN },
+      { state: State.ACTIVE },
+      { state: State.END },
+    ]);
+  });
+}
+
 async function tapMessage(messageId: string) {
   await act(async () => {
     fireEvent.press(screen.getByTestId(`message-row-${messageId}`));
@@ -249,8 +260,7 @@ describe('replying', () => {
     await renderWithQuery(<ChatScreen />);
     await screen.findByText('привет');
 
-    await tapMessage('m2');
-    await choose('Выбрать');
+    await longPress('m2');
     fireEvent.press(screen.getAllByRole('checkbox')[1]);
     fireEvent.press(await screen.findByRole('button', { name: 'Ответить' }));
 
@@ -302,9 +312,11 @@ describe('replying', () => {
     await screen.findByTestId('message-menu');
     expect(screen.queryByRole('menuitem', { name: 'Ответить' })).toBeNull();
 
-    await choose('Выбрать');
+    fireEvent.press(screen.getByTestId('message-menu-backdrop'));
+    await waitFor(() => expect(screen.queryByTestId('message-menu')).toBeNull());
+    await longPress('m2');
 
-    expect(screen.getByRole('button', { name: 'Ответить' })).toBeDisabled();
+    expect(await screen.findByRole('button', { name: 'Ответить' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Переслать' })).toBeEnabled();
   });
 });

@@ -5,6 +5,7 @@ import type { ChatParticipant, ForwardedComment } from '@/api/chats';
 import { CommentForwardLead } from '@/features/chats/CommentForwardLead';
 import { MessageBubble } from '@/features/chats/MessageBubble';
 import {
+  commentsHomeOf,
   originalAsMessage,
   type BubbleRow,
   type IslandItemRow,
@@ -19,8 +20,6 @@ import { sendReaction } from '@/features/interactions/reactionSender';
 import { audienceOf, nextReaction } from '@/features/interactions/reactionState';
 import type { ReactToMessage } from '@/features/interactions/useReactToMessage';
 import type { ReactionAudience } from '@/api/reactionCounts';
-
-const noop = () => undefined;
 
 type Options = {
   chatId: string;
@@ -143,7 +142,7 @@ export function useChatBubbles({
           authorName={author?.displayName ?? DELETED_ACCOUNT}
           authorAvatarUrl={author?.avatarUrl ?? null}
           mediaBounds={mediaBounds}
-          onRetry={retry}
+          onRetry={interactive ? retry : undefined}
           onAuthorPress={
             interactive && item.authorId ? () => openPerson(item.authorId!) : undefined
           }
@@ -195,11 +194,12 @@ export function useChatBubbles({
           message={item}
           isOwn={!isPost && item.authorId === currentUserId}
           isRead={!isPost && item.readAt !== null}
+          receipts={!isPost}
           authorName={postAuthor ?? author?.displayName ?? DELETED_ACCOUNT}
           authorAvatarUrl={author?.avatarUrl ?? null}
           wide={isPost}
           mediaBounds={mediaBounds}
-          onRetry={retry}
+          onRetry={interactive ? retry : undefined}
           onAuthorPress={
             interactive && authorId && !isPost ? () => openPerson(authorId) : undefined
           }
@@ -209,6 +209,7 @@ export function useChatBubbles({
             interactive && canReactTo(item) ? (emoji) => toggle(item, emoji) : undefined
           }
           comments={commentsEntry(item, chatId, interactive, isMember, rowKey)}
+          commentsSlot
           showAvatar={showAvatars}
         />
       );
@@ -238,7 +239,7 @@ export function useChatBubbles({
 
       const message = originalAsMessage(original);
       const { authorId } = original;
-      const inThisChat = original.chatId === chatId;
+      const home = commentsHomeOf(row, chatId, isMember);
       const audience = audienceFor(row);
       const fromHeaderChat = original.chatId === row.island.forward?.sourceChat?.id;
 
@@ -251,7 +252,6 @@ export function useChatBubbles({
           authorName={original.authorName ?? DELETED_ACCOUNT}
           authorAvatarUrl={original.authorAvatarUrl}
           mediaBounds={mediaBounds}
-          onRetry={noop}
           onAuthorPress={interactive && authorId ? () => openPerson(authorId) : undefined}
           // Цитаты оригинала — из его чата: туда и прыжок.
           onQuotePress={interactive ? (quote) => openQuote(quote, original.chatId) : undefined}
@@ -270,13 +270,8 @@ export function useChatBubbles({
               : undefined
           }
           // Комментарии — к оригиналу: панель открывается на него, из его чата.
-          comments={commentsEntry(
-            message,
-            original.chatId,
-            interactive,
-            inThisChat ? isMember : (original.chat?.amMember ?? false),
-            row.key,
-          )}
+          comments={commentsEntry(message, home.chatId, interactive, home.amMember, row.key)}
+          commentsSlot
           showAvatar={showAvatars}
         />
       );

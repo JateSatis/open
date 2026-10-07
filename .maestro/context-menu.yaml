@@ -11,7 +11,9 @@ env:
     index: 0
 - assertVisible:
     id: "message-menu"
-- assertVisible: "Выбрать"
+- assertVisible: "Комментировать"
+# Выбор — долгим нажатием, в меню его нет.
+- assertNotVisible: "Выбрать"
 - tapOn:
     id: "reaction-picker-expand"
 - assertVisible:

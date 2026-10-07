@@ -188,7 +188,7 @@ describe('ChannelScreen', () => {
     });
   });
 
-  it('signs posts with the channel, not with the person, and hides «прочитано»', async () => {
+  it('signs posts with the channel, not with the person, and shows no delivery checks', async () => {
     await renderChannel();
 
     const bubble = screen.getByTestId('message-bubble');
@@ -196,9 +196,7 @@ describe('ChannelScreen', () => {
     expect(within(bubble).getByText('Мой канал')).toBeTruthy();
     expect(within(bubble).queryByText('Максим')).toBeNull();
     expect(screen.queryByLabelText('Профиль: Максим')).toBeNull();
-    expect(within(bubble).getByTestId('message-time').props.accessibilityLabel).not.toContain(
-      'прочитано',
-    );
+    expect(within(bubble).queryByTestId(/^message-status-/)).toBeNull();
     expect(within(bubble).getByLabelText('Просмотры: 3')).toBeTruthy();
   });
 
@@ -229,7 +227,17 @@ describe('ChannelScreen', () => {
 
     expect(screen.queryByPlaceholderText('Сообщение')).toBeNull();
     expect(screen.queryByText(/писать — только участники/)).toBeNull();
-    expect(screen.getByTestId('comments-button')).toBeEnabled();
+    expect(screen.getByTestId('comments-circle')).toBeEnabled();
+  });
+
+  it('keeps the comments circle to the right of a post, for the owner too', async () => {
+    await renderChannel();
+
+    expect(
+      screen
+        .getAllByTestId(/^(message-bubble|comments-slot)$/)
+        .map((node) => node.props.testID as string),
+    ).toEqual(['message-bubble', 'comments-slot']);
   });
 
   it('switches to the empty «Попсы» section on a segment tap', async () => {

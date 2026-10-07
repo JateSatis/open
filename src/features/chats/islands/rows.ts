@@ -92,6 +92,22 @@ export function contentOf(row: BubbleRow): ChatMessage | null {
   return row.item.original ? originalAsMessage(row.item.original) : null;
 }
 
+/**
+ * Где живут комментарии облачка и участник ли я там. У облачка островка —
+ * у оригинала: в его чате и по участию в нём, а не в этом.
+ */
+export function commentsHomeOf(
+  row: BubbleRow,
+  chatId: string,
+  isMember: boolean,
+): { chatId: string; amMember: boolean } {
+  const original = row.type === 'island-item' ? row.item.original : null;
+
+  if (!original || original.chatId === chatId) return { chatId, amMember: isMember };
+
+  return { chatId: original.chatId, amMember: original.chat?.amMember ?? false };
+}
+
 const asMessageCache = new WeakMap<object, ChatMessage>();
 
 /**

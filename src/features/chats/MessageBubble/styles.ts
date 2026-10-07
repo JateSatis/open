@@ -1,11 +1,13 @@
 import { StyleSheet } from 'react-native';
 
+import { BUBBLE_ROW_GAP } from './layout';
+
 import { Radii, Sizes, Spacing } from '@/theme';
 
 export const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
-    gap: Spacing.two,
+    gap: BUBBLE_ROW_GAP,
     marginBottom: Spacing.two,
   },
   own: {
@@ -59,7 +61,7 @@ export const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     gap: Spacing.one,
   },
-  /** Строка низа облачка: время слева, просмотры и кнопка комментариев справа. */
+  /** Строка низа облачка: время и статус слева, просмотры справа. */
   footer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -71,7 +73,7 @@ export const styles = StyleSheet.create({
   footerSpacer: {
     flexGrow: 1,
   },
-  /** Время, просмотры и кнопка комментариев поверх медиа без подписи — у нижнего края мозаики. */
+  /** Время и просмотры поверх медиа без подписи — у нижнего края мозаики. */
   mediaOverlay: {
     position: 'absolute',
     left: 0,
@@ -82,11 +84,10 @@ export const styles = StyleSheet.create({
     padding: Spacing.one + Spacing.half,
     gap: Spacing.one,
   },
-  /** Под альбомом без облачка: реакции и кнопка комментариев у правого края. */
-  bareFooter: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: Spacing.two,
+  /** Место круга комментариев сбоку: прижато к низу строки — к низу облачка. */
+  aside: {
+    width: Sizes.commentsCircle,
+    alignSelf: 'flex-end',
   },
   attachmentSlot: {
     paddingVertical: Spacing.two,

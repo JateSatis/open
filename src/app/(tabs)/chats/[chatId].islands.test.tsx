@@ -1,5 +1,7 @@
 import type { Session as SupabaseSession } from '@supabase/supabase-js';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react-native';
+import { State } from 'react-native-gesture-handler';
+import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils';
 
 import ChatScreen from './[chatId]';
 
@@ -185,6 +187,17 @@ const ISLAND = island('isl', AT, [o1, o2, o3, null], {
 });
 
 /** Тап по облачку — так открывается его меню. */
+/** Долгое нажатие — так, как его видит жест-обработчик: включает выбор. */
+async function longPress(rowKey: string) {
+  await act(async () => {
+    fireGestureHandler(getByGestureTestId(`message-long-press-${rowKey}`), [
+      { state: State.BEGAN },
+      { state: State.ACTIVE },
+      { state: State.END },
+    ]);
+  });
+}
+
 async function tapMessage(rowKey: string) {
   await act(async () => {
     fireEvent.press(screen.getByTestId(`message-row-${rowKey}`));
@@ -377,8 +390,7 @@ describe('forward island', () => {
 
   it('forwards a mixed selection in the order it stands on screen, from this chat', async () => {
     await renderChat();
-    await tapMessage('isl/o2');
-    await choose('Выбрать');
+    await longPress('isl/o2');
 
     // Отмечаю вразнобой: сначала обычное снизу, потом верхнее облачко островка.
     fireEvent.press(markOf('обычное Светы'));

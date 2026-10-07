@@ -276,7 +276,7 @@ describe('ChatScreen', () => {
     expect(mockedMarkRead).not.toHaveBeenCalled();
   });
 
-  it('shows an own message with a plain time until another member sees it', async () => {
+  it('shows an own message with one check until another member sees it', async () => {
     mockedListMessages.mockResolvedValue({
       items: [message('m1', 'как дела', 'user-1')],
       nextCursor: null,
@@ -284,10 +284,9 @@ describe('ChatScreen', () => {
 
     await renderWithQuery(<ChatScreen />);
 
-    expect(await screen.findByLabelText(formatMessageTime(SENT_AT))).toBeTruthy();
-    expect(screen.queryByLabelText(/прочитано/)).toBeNull();
-    // Кружка-квитанции больше нет.
-    expect(screen.queryByLabelText('Доставлено')).toBeNull();
+    expect(await screen.findByText(formatMessageTime(SENT_AT))).toBeTruthy();
+    expect(screen.getByLabelText('Отправлено')).toBeTruthy();
+    expect(screen.queryByLabelText('Прочитано')).toBeNull();
   });
 
   it('shows an own message as read once another member has seen it', async () => {
@@ -299,7 +298,7 @@ describe('ChatScreen', () => {
     await renderWithQuery(<ChatScreen />);
 
     expect(
-      await screen.findByLabelText(`${formatMessageTime(SENT_AT)}, прочитано`),
+      await screen.findByLabelText('Прочитано'),
     ).toBeTruthy();
   });
 
@@ -312,7 +311,7 @@ describe('ChatScreen', () => {
     await renderWithQuery(<ChatScreen />);
     await screen.findByText('привет');
 
-    expect(screen.queryByLabelText(/прочитано/)).toBeNull();
+    expect(screen.queryByLabelText('Прочитано')).toBeNull();
   });
 
   it('shows the views count in the bubble and hides it while there are none', async () => {
@@ -446,7 +445,7 @@ describe('ChatScreen', () => {
     await user.type(await screen.findByLabelText('Сообщение'), 'как дела');
     await user.press(screen.getByLabelText('Отправить'));
 
-    expect(await screen.findByText('Не отправлено. Повторить')).toBeTruthy();
+    expect(await screen.findByLabelText('Не отправлено. Повторить')).toBeTruthy();
     expect(screen.getByText('как дела')).toBeTruthy();
   });
 
@@ -460,7 +459,7 @@ describe('ChatScreen', () => {
 
     await user.type(await screen.findByLabelText('Сообщение'), 'как дела');
     await user.press(screen.getByLabelText('Отправить'));
-    await user.press(await screen.findByText('Не отправлено. Повторить'));
+    await user.press(await screen.findByLabelText('Не отправлено. Повторить'));
 
     expect(await screen.findByText(formatMessageTime(SENT_AT))).toBeTruthy();
     expect(mockedSendMessage).toHaveBeenCalledTimes(2);
@@ -508,7 +507,7 @@ describe('ChatScreen', () => {
     });
 
     await renderWithQuery(<ChatScreen />);
-    expect(await screen.findByLabelText(formatMessageTime(SENT_AT))).toBeTruthy();
+    expect(await screen.findByText(formatMessageTime(SENT_AT))).toBeTruthy();
 
     (listMessageViews as jest.Mock).mockResolvedValue([
       { id: 'm1', viewsCount: 1, readAt: '2026-09-16T11:00:00Z' },
@@ -516,7 +515,7 @@ describe('ChatScreen', () => {
     await act(async () => handlers?.onViewsChanged?.(['m1']));
 
     expect(
-      await screen.findByLabelText(`${formatMessageTime(SENT_AT)}, прочитано`),
+      await screen.findByLabelText('Прочитано'),
     ).toBeTruthy();
     expect(screen.getByLabelText('Просмотры: 1')).toBeTruthy();
   });
@@ -580,7 +579,7 @@ describe('ChatScreen', () => {
 
     await user.type(await screen.findByLabelText('Сообщение'), 'как дела');
     await user.press(screen.getByLabelText('Отправить'));
-    await screen.findByText('Не отправлено. Повторить');
+    await screen.findByLabelText('Не отправлено. Повторить');
 
     mockedSendMessage.mockResolvedValueOnce(message('m9', 'как дела', 'user-1'));
 
@@ -589,7 +588,7 @@ describe('ChatScreen', () => {
     await act(() => reportRealtimeJoined());
 
     // Повторять вручную не приходится: человек уже нажал «отправить».
-    await waitFor(() => expect(screen.queryByText('Не отправлено. Повторить')).toBeNull());
+    await waitFor(() => expect(screen.queryByLabelText('Не отправлено. Повторить')).toBeNull());
     expect(mockedSendMessage).toHaveBeenCalledTimes(2);
   });
 

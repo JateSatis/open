@@ -347,7 +347,7 @@ describe('editing text', () => {
     expect(screen.getByLabelText('Сохранить')).toBeEnabled();
   });
 
-  it('saves instead of sending: the bubble shows the new text with «изменено» at once', async () => {
+  it('saves instead of sending: the bubble shows the new text with «ред.» at once', async () => {
     mockedEdit.mockReturnValue(new Promise(() => undefined));
 
     await renderWithQuery(<ChatScreen />);
@@ -360,7 +360,7 @@ describe('editing text', () => {
     await user.press(screen.getByLabelText('Сохранить'));
 
     expect(await screen.findByText('эй, как ты?')).toBeTruthy();
-    expect(screen.getByText('изменено')).toBeTruthy();
+    expect(screen.getByText('ред.')).toBeTruthy();
     expect(screen.getByLabelText('Отправляется')).toBeTruthy();
     expect(mockedEdit).toHaveBeenCalledWith('m1', { text: 'эй, как ты?', media: [], voice: null });
     expect(mockedSend).not.toHaveBeenCalled();
@@ -369,7 +369,7 @@ describe('editing text', () => {
     expect(field().props.value).toBe('');
   });
 
-  it('shows the confirmed version with «изменено» next to the time', async () => {
+  it('shows the confirmed version with «ред.» next to the time', async () => {
     mockedEdit.mockResolvedValue({ ...message('m1', 'эй, всё', 'user-1', 1), editedAt: AT });
 
     await renderWithQuery(<ChatScreen />);
@@ -382,7 +382,7 @@ describe('editing text', () => {
     await user.type(field(), 'эй, всё');
     await user.press(screen.getByLabelText('Сохранить'));
 
-    expect(await screen.findByText('изменено')).toBeTruthy();
+    expect(await screen.findByText('ред.')).toBeTruthy();
     expect(screen.getByText('эй, всё')).toBeTruthy();
   });
 
@@ -427,7 +427,7 @@ describe('editing text', () => {
     );
     expect(screen.getByText('эй')).toBeTruthy();
     expect(screen.queryByText('эй!!!')).toBeNull();
-    expect(screen.queryByText('изменено')).toBeNull();
+    expect(screen.queryByText('ред.')).toBeNull();
   });
 });
 
@@ -661,7 +661,7 @@ describe('edits by others', () => {
 
     await waitFor(() => expect(screen.getAllByText('привет, исправила')).toHaveLength(2));
     expect(mockedByIds).toHaveBeenCalledWith(['m2']);
-    expect(screen.getByText('изменено')).toBeTruthy();
+    expect(screen.getByText('ред.')).toBeTruthy();
   });
 
   it('catches up on edits it missed while the channel was gone', async () => {

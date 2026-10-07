@@ -79,11 +79,11 @@ describe('message menu', () => {
       labels({ message: message({ authorId: 'user-1' }), isOwn: true, isMember: true, isPinned: false }),
     ).toEqual([
       'Ответить',
+      'Комментировать',
       'Копировать',
       'Изменить',
       'Закрепить',
       'Переслать',
-      'Выбрать',
       'Удалить',
     ]);
   });
@@ -91,33 +91,50 @@ describe('message menu', () => {
   it('never offers a member to delete somebody else’s message', () => {
     expect(labels({ message: message(), isOwn: false, isMember: true, isPinned: false })).toEqual([
       'Ответить',
+      'Комментировать',
       'Копировать',
       'Закрепить',
       'Переслать',
-      'Выбрать',
     ]);
   });
 
-  it('lets a visitor copy, forward and select — no replying, pinning or deleting', () => {
+  it('lets a visitor comment, copy and forward — no replying, pinning or deleting', () => {
     expect(labels({ message: message(), isOwn: false, isMember: false, isPinned: false })).toEqual([
+      'Комментировать',
       'Копировать',
       'Переслать',
-      'Выбрать',
     ]);
     expect(labels({ message: message(), isOwn: false, isMember: false, isPinned: true })).toEqual([
+      'Комментировать',
       'Копировать',
       'Переслать',
-      'Выбрать',
     ]);
+  });
+
+  it('never offers «Выбрать» — selection starts with a long press', () => {
+    expect(
+      labels({ message: message({ authorId: 'user-1' }), isOwn: true, isMember: true, isPinned: false }),
+    ).not.toContain('Выбрать');
+    expect(deletedOriginalActions(true).map((action) => action.label)).not.toContain('Выбрать');
+  });
+
+  it('offers no commenting on a system message, a forwarded comment or one not sent yet', () => {
+    const offers = (overrides: Partial<ChatMessage>) =>
+      labels({ message: message(overrides), isOwn: true, isMember: true, isPinned: false });
+
+    expect(offers({ kind: 'system' })).not.toContain('Комментировать');
+    expect(offers({ kind: 'comment_forward' })).not.toContain('Комментировать');
+    expect(offers({ status: 'sending', localId: 'l1' })).not.toContain('Комментировать');
+    expect(offers({ status: 'failed', localId: 'l1' })).not.toContain('Комментировать');
   });
 
   it('offers to unpin instead of pin once the message is pinned', () => {
     expect(labels({ message: message(), isOwn: false, isMember: true, isPinned: true })).toEqual([
       'Ответить',
+      'Комментировать',
       'Копировать',
       'Открепить',
       'Переслать',
-      'Выбрать',
     ]);
   });
 
@@ -154,11 +171,11 @@ describe('message menu of a bubble in a forward island', () => {
   it('acts on the original: reply, copy, pin, forward, go to it — never edit or delete it', () => {
     expect(inIsland(false, true)).toEqual([
       'Ответить',
+      'Комментировать',
       'Копировать',
       'Закрепить',
       'Переслать',
       'Перейти к оригиналу',
-      'Выбрать',
     ]);
   });
 
@@ -169,7 +186,6 @@ describe('message menu of a bubble in a forward island', () => {
 
   it('offers only removal on a deleted original, and only to the forwarder', () => {
     expect(deletedOriginalActions(true).map((action) => action.label)).toEqual([
-      'Выбрать',
       'Убрать из пересылки',
     ]);
     expect(deletedOriginalActions(false)).toEqual([]);
