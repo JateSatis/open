@@ -63,7 +63,11 @@ export function NewChannelForm({ onCreated }: NewChannelFormProps) {
     paddingBottom: Math.max(Math.abs(keyboard.height.value) - bottomOffset, 0),
   }));
 
-  const canCreate = title.trim() !== '' && availability.status === 'available';
+  // Не удалось спросить сервер о занятости — создать всё равно можно: имя
+  // проверит сама функция создания.
+  const canCreate =
+    title.trim() !== '' &&
+    (availability.status === 'available' || availability.status === 'failed');
 
   const submit = () => {
     if (!canCreate) return;

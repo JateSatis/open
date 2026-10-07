@@ -25,14 +25,16 @@ export type ChannelScreenProps = { channelId: string };
  */
 export function ChannelScreen({ channelId }: ChannelScreenProps) {
   const theme = useTheme();
-  const { data: channel, error } = useChannel(channelId);
+  const { data: channel, error, fetchStatus } = useChannel(channelId);
+  // Без связи запрос стоит на паузе: крутилка обещала бы данные, которых не будет.
+  const offline = fetchStatus === 'paused';
 
   if (!channel) {
     return (
       <View style={[styles.centered, { backgroundColor: theme.background }]}>
         <Stack.Screen options={{ title: 'Канал' }} />
-        {error ? (
-          <Text color="danger">
+        {error || offline ? (
+          <Text color={offline ? 'textSecondary' : 'danger'}>
             {describeLoadError(error, 'Не удалось открыть канал') ?? 'Нет связи'}
           </Text>
         ) : (
@@ -71,12 +73,17 @@ function ChannelSections({ channel }: { channel: Channel }) {
 
   const pages = useMemo(
     () => [
-      <ChatConversation key="posts" chatId={channel.postsChatId} channel={ref} />,
+      <ChatConversation
+        key="posts"
+        chatId={channel.postsChatId}
+        channel={ref}
+        active={index === 0}
+      />,
       <View key="pops" testID="pops-section" style={styles.centered}>
         <Text color="textSecondary">Попсов пока нет</Text>
       </View>,
     ],
-    [channel.postsChatId, ref],
+    [channel.postsChatId, index, ref],
   );
 
   return (

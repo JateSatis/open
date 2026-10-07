@@ -101,13 +101,18 @@ export type ChatConversationProps = {
    * нет, а постороннему не показывается поле ввода.
    */
   channel?: ChannelRef | null;
+  /**
+   * Переписку видно. На экране канала раздел «Посты» остаётся смонтированным,
+   * когда открыты «Попсы», — просмотры и прочтение тогда не засчитываются.
+   */
+  active?: boolean;
 };
 
 /**
  * Переписка целиком: шапка (через опции экрана), список, поле ввода, шиты,
  * меню и комментарии. Её показывают и экран чата, и раздел «Посты» канала.
  */
-export function ChatConversation({ chatId, channel = null }: ChatConversationProps) {
+export function ChatConversation({ chatId, channel = null, active = true }: ChatConversationProps) {
   const router = useRouter();
   const nav = useNavigation();
   const theme = useTheme();
@@ -141,7 +146,7 @@ export function ChatConversation({ chatId, channel = null }: ChatConversationPro
   const menu = useMessageMenu<ChatListRow>(measureListFrame);
   const draft = useComposerDraft(chatId);
   const isMember = chat ? isChatMember(chat, currentUserId) : false;
-  const isFocused = useIsFocused();
+  const isFocused = useIsFocused() && active;
   // Заявку спрашиваем только у не-участника: участнику отвечать уже не на что.
   const myInvite = useMyInvite(chatId, chat !== null && !isMember);
   const invite = useRespondToInvite();

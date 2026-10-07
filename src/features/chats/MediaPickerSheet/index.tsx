@@ -207,6 +207,8 @@ const SHEET_EDIT = {
 } as const;
 
 function SheetWindow({ phase, composer, pick }: SheetWindowProps) {
+  // `composer` — новый объект на каждый рендер экрана; зависимостям нужен только факт.
+  const hasComposer = composer !== undefined;
   countRender('MediaPickerSheet');
 
   const theme = useTheme();
@@ -281,7 +283,7 @@ function SheetWindow({ phase, composer, pick }: SheetWindowProps) {
     void KeyboardController.dismiss();
 
     // В выборе одного файла сбрасывать нечего: общий выбор чата не его.
-    if (!composer || useMediaSelection.getState().order.length === 0) {
+    if (!hasComposer || useMediaSelection.getState().order.length === 0) {
       closeMediaSheet();
       return;
     }
@@ -302,7 +304,7 @@ function SheetWindow({ phase, composer, pick }: SheetWindowProps) {
       // Передумал — шит возвращается в рабочее положение, откуда бы его ни утащили.
       dismissY.value = withSpring(0, OPEN_SPRING);
     });
-  }, [composer, dismissY]);
+  }, [dismissY, hasComposer]);
 
   /** «Назад» отвечает на вопрос, если он задан, и только иначе закрывает шит. */
   const handleBack = useCallback(() => {

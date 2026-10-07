@@ -16,13 +16,14 @@ export async function prepareAvatar(
   knownHeight: number | null,
 ): Promise<PreparedAvatar> {
   const { sizePx, quality } = MediaLimits.avatar;
-  // Медиатека не всегда знает размеры файла — тогда их отдаёт сама картинка.
+  // Медиатека не всегда знает размеры файла — тогда их отдаёт сама картинка,
+  // и обрезка идёт уже от неё, без второго декодирования.
   const probe =
     knownWidth && knownHeight ? null : await ImageManipulator.manipulate(uri).renderAsync();
   const width = knownWidth || probe?.width || 0;
   const height = knownHeight || probe?.height || 0;
   const side = Math.min(width, height);
-  const context = ImageManipulator.manipulate(uri);
+  const context = ImageManipulator.manipulate(probe ?? uri);
 
   if (width !== height) {
     context.crop({

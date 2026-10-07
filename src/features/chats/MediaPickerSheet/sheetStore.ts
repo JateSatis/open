@@ -48,7 +48,8 @@ export function armMediaSheet(owner: MediaSheetOwner = 'chat') {
 export function openMediaSheet(owner: MediaSheetOwner = 'chat') {
   const phase = getMediaSheetPhase();
 
-  if (phase === 'closed' || phase === 'armed') useMediaSheetStore.setState({ phase: 'open', owner });
+  if (phase === 'closed' || phase === 'armed')
+    useMediaSheetStore.setState({ phase: 'open', owner });
 }
 
 /**

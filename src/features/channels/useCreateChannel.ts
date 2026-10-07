@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { ChannelUsernameTakenError, createChannel, type CreatedChannel } from '@/api/channels';
+import { usernameAvailabilityKey } from '@/features/channels/useUsernameAvailability';
 import { chatsQueryKey } from '@/features/chats/useChats';
 import { removeUploadedMedia, uploadChannelAvatar } from '@/features/media';
 import { DeadlineError, withDeadline } from '@/lib/deadline';
@@ -47,8 +48,11 @@ async function createWithAvatar(input: NewChannel, userId: string): Promise<Crea
       abort.signal,
     );
   } catch (error) {
+    // Оборванный по сроку запрос мог дойти до базы: канал тогда есть и
+    // ссылается на файл. Удалять его нельзя — лишний файл дешевле битой аватарки.
+    if (abort.signal.aborted) throw new DeadlineError();
     if (avatar) await removeUploadedMedia(avatar.path);
-    throw abort.signal.aborted ? new DeadlineError() : error;
+    throw error;
   } finally {
     clearTimeout(timer);
   }
@@ -80,6 +84,14 @@ export function useCreateChannel(
     onSuccess: (created) => {
       void queryClient.invalidateQueries({ queryKey: chatsQueryKey });
       onCreated(created);
+    },
+    // Имя заняли между проверкой и отправкой: старый ответ «свободно» больше не правда.
+    onError: (error, input) => {
+      if (error instanceof ChannelUsernameTakenError) {
+        void queryClient.invalidateQueries({
+          queryKey: usernameAvailabilityKey(input.username.trim()),
+        });
+      }
     },
   });
 }
