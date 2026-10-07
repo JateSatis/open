@@ -3,6 +3,7 @@ import { ActivityIndicator, Platform, Pressable, View } from 'react-native';
 
 import { styles } from './styles';
 
+import { Text } from '@/components/Text';
 import { useTheme } from '@/hooks/use-theme';
 import { Sizes, Spacing, type ThemeColor } from '@/theme';
 
@@ -36,15 +37,13 @@ export function DeliveryStatus({ state, tone, onRetry }: DeliveryStatusProps) {
         onPress={onRetry}
         style={styles.status}
       >
-        <SymbolView
-          name={{
-            ios: 'exclamationmark.circle.fill',
-            android: 'error',
-            web: 'error',
-          }}
-          size={Sizes.deliveryStatusIcon}
-          tintColor={theme.danger}
-        />
+        {/* Сплошной круг, а не значок-контур: красная линия тонет на синем
+            своём облачке, а залитый круг читается на любом фоне. */}
+        <View style={[styles.failed, { backgroundColor: theme.danger }]}>
+          <Text variant="meta" color="primaryText" style={styles.failedMark}>
+            !
+          </Text>
+        </View>
       </Pressable>
     );
   }

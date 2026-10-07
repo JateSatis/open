@@ -40,7 +40,7 @@ export function CommentsCircle({ count, onPress }: CommentsCircleProps) {
         tintColor={theme.textSecondary}
       />
       {count > 0 ? (
-        <Text variant="smallBold" color="text" style={styles.count} numberOfLines={1}>
+        <Text variant="smallBold" color="text" style={styles.count}>
           {formatViewsCount(count)}
         </Text>
       ) : null}

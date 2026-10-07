@@ -1,6 +1,6 @@
 import { StyleSheet } from 'react-native';
 
-import { Radii, Sizes, Spacing } from '@/theme';
+import { Radii, Sizes, Spacing, Typography } from '@/theme';
 
 export const styles = StyleSheet.create({
   meta: {
@@ -17,6 +17,17 @@ export const styles = StyleSheet.create({
   },
   spinner: {
     transform: [{ scale: Sizes.metaSpinner / Sizes.activityIndicatorSmall }],
+  },
+  failed: {
+    width: Sizes.deliveryStatusIcon,
+    height: Sizes.deliveryStatusIcon,
+    borderRadius: Radii.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  failedMark: {
+    fontWeight: Typography.smallBold.fontWeight,
+    lineHeight: Sizes.deliveryStatusIcon,
   },
   doubleCheck: {
     width: Sizes.deliveryStatusIcon + Sizes.deliveryCheckShift,
