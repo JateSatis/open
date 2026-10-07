@@ -1,23 +1,15 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { Modal, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
-import Animated, {
-  runOnJS,
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-} from 'react-native-reanimated';
+import { useEffect, useState, type ReactNode } from 'react';
+import { useWindowDimensions, View } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { computeMenuLayout } from './menuLayout';
 import { styles } from './styles';
 
-import { Text } from '@/components/Text';
+import { MenuList, menuListHeight, type MenuAction } from '@/components/MenuList';
+import { MENU_OPEN_MS, MenuModal, useMenuTransition } from '@/components/MenuModal';
 import { pickerGeometry, ReactionPicker } from '@/features/interactions/ReactionPicker';
-import { useTheme } from '@/hooks/use-theme';
 import { Opacity, Sizes, Spacing } from '@/theme';
-
-const OPEN_MS = 200;
-const CLOSE_MS = 140;
 
 /** Прямоугольник облачка в координатах окна — где оно стоит в переписке. */
 export type AnchorRect = { x: number; y: number; width: number; height: number };
@@ -37,12 +29,7 @@ export type MenuReactions = {
 };
 
 /** Пункт меню. Меню одно на сообщения и комментарии — пункты у них свои. */
-export type ContextMenuAction<Id extends string = string> = {
-  id: Id;
-  label: string;
-  /** Красным — разрушительное действие. */
-  destructive?: boolean;
-};
+export type ContextMenuAction<Id extends string = string> = MenuAction<Id>;
 
 export type MessageContextMenuProps<Id extends string = string> = {
   /** Меню открыто, пока есть, над чем. */
@@ -64,9 +51,7 @@ export type MessageContextMenuProps<Id extends string = string> = {
 };
 
 /**
- * Меню сообщения по тапу. Своё окно (`Modal`) — единственный способ
- * затемнить и нативный заголовок, и нативный таб-бар (см. заметку про шит
- * медиа). Облачко не двигается и не прячется: строка остаётся в переписке
+ * Меню сообщения по тапу. Окно и затемнение — общие (`MenuModal`). Облачко не двигается и не прячется: строка остаётся в переписке
  * под затемнением, а полупрозрачная копия лежит ровно поверх неё и
  * высветляет облачко — без пустого кадра, пока окно и картинки копии
  * догружаются. Меню — у пальца и по горизонтали всегда в одной точке
@@ -82,12 +67,9 @@ export function MessageContextMenu<Id extends string>({
   onAction,
   onClose,
 }: MessageContextMenuProps<Id>) {
-  const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
-  const progress = useSharedValue(0);
-  const closingRef = useRef(false);
-  const pendingRef = useRef<(() => void) | null>(null);
+  const { progress, close } = useMenuTransition(anchor, onClose);
   // Раскрытие привязано к открытию меню: следующее открытие — снова полосой.
   const [expandedFor, setExpandedFor] = useState<MenuAnchor | null>(null);
   const expanded = anchor !== null && expandedFor === anchor;
@@ -97,7 +79,7 @@ export function MessageContextMenu<Id extends string>({
   const menuLeft = Math.round(windowWidth * Sizes.menuLeftShare);
   const pickerLeft = Math.round(menuLeft / 2);
   const picker = pickerGeometry(windowWidth - Spacing.two - pickerLeft);
-  const menuHeight = actions.length * Sizes.menuRowHeight + Spacing.one * 2;
+  const menuHeight = menuListHeight(actions.length);
   // Палец — посередине первого пункта.
   const touchOffset = Spacing.one + Sizes.menuRowHeight / 2;
   const layout = anchor
@@ -116,48 +98,13 @@ export function MessageContextMenu<Id extends string>({
     : null;
 
   useEffect(() => {
-    if (!anchor) return;
-
-    closingRef.current = false;
-    pendingRef.current = null;
-    menuHidden.set(0);
-    progress.set(0);
-    progress.set(withTiming(1, { duration: OPEN_MS }));
-  }, [anchor, menuHidden, progress]);
+    if (anchor) menuHidden.set(0);
+  }, [anchor, menuHidden]);
 
   useEffect(() => {
-    menuHidden.set(withTiming(expanded ? 1 : 0, { duration: OPEN_MS }));
+    menuHidden.set(withTiming(expanded ? 1 : 0, { duration: MENU_OPEN_MS }));
   }, [expanded, menuHidden]);
 
-  const finish = useCallback(() => {
-    const after = pendingRef.current;
-
-    pendingRef.current = null;
-    onClose();
-
-    // Действие — следующим кадром, отдельным от закрытия проходом. Иначе
-    // окно меню исчезло бы только вместе с тем, что делает действие (вход в
-    // выбор перерисовывает весь список), и касания, сделанные сразу после
-    // выбора пункта, уходили бы в ещё не закрытое окно.
-    if (after) requestAnimationFrame(after);
-  }, [onClose]);
-
-  const close = useCallback(
-    (after: (() => void) | null) => {
-      if (closingRef.current) return;
-
-      closingRef.current = true;
-      pendingRef.current = after;
-      progress.set(
-        withTiming(0, { duration: CLOSE_MS }, (finished) => {
-          if (finished) runOnJS(finish)();
-        }),
-      );
-    },
-    [finish, progress],
-  );
-
-  const backdropStyle = useAnimatedStyle(() => ({ opacity: progress.value }));
   // Копия проявляется вместе с затемнением: облачко под ней темнеет вместе с
   // экраном, а копия возвращает ему часть яркости.
   const previewStyle = useAnimatedStyle(() => ({ opacity: progress.value * Opacity.menuCopy }));
@@ -178,28 +125,16 @@ export function MessageContextMenu<Id extends string>({
     : 0;
 
   return (
-    <Modal
+    <MenuModal
       visible={anchor !== null}
-      transparent
-      statusBarTranslucent
-      navigationBarTranslucent
-      animationType="none"
+      progress={progress}
       onRequestClose={() => close(null)}
+      backdropTestID="message-menu-backdrop"
+      // Раскрытые реакции тап мимо сворачивает, а не закрывает меню.
+      onBackdropPress={() => (expanded ? setExpandedFor(null) : close(null))}
     >
       {anchor && layout ? (
-        <View style={StyleSheet.absoluteFill}>
-          <Animated.View
-            style={[StyleSheet.absoluteFill, { backgroundColor: theme.overlay }, backdropStyle]}
-          >
-            <Pressable
-              testID="message-menu-backdrop"
-              accessibilityLabel="Закрыть меню"
-              style={StyleSheet.absoluteFill}
-              // Раскрытые реакции тап мимо сворачивает, а не закрывает меню.
-              onPress={() => (expanded ? setExpandedFor(null) : close(null))}
-            />
-          </Animated.View>
-
+        <>
           <View
             pointerEvents="none"
             style={[styles.clip, { top: clipTop, height: Math.max(0, clipBottom - clipTop) }]}
@@ -230,29 +165,14 @@ export function MessageContextMenu<Id extends string>({
             style={[styles.menuRow, { top: layout.menuTop }]}
           >
             <View pointerEvents="none" style={[styles.spacer, { width: menuLeft - Spacing.two }]} />
-            <Animated.View
+            <MenuList
               testID="message-menu"
+              actions={actions}
+              onSelect={(id) => close(() => onAction(id))}
               // Раскрытые реакции закрывают меню собой — касаться его нечем.
               pointerEvents={expanded ? 'none' : 'auto'}
-              style={[styles.menu, { backgroundColor: theme.backgroundElement }, menuStyle]}
-            >
-              {actions.map((action) => (
-                <Pressable
-                  key={action.id}
-                  accessibilityRole="menuitem"
-                  accessibilityLabel={action.label}
-                  onPress={() => close(() => onAction(action.id))}
-                  style={({ pressed }) => [
-                    styles.item,
-                    pressed && { backgroundColor: theme.backgroundSelected },
-                  ]}
-                >
-                  <Text color={action.destructive ? 'danger' : 'text'} numberOfLines={1}>
-                    {action.label}
-                  </Text>
-                </Pressable>
-              ))}
-            </Animated.View>
+              style={[styles.menu, menuStyle]}
+            />
           </View>
 
           {reactions ? (
@@ -270,8 +190,8 @@ export function MessageContextMenu<Id extends string>({
               ]}
             />
           ) : null}
-        </View>
+        </>
       ) : null}
-    </Modal>
+    </MenuModal>
   );
 }

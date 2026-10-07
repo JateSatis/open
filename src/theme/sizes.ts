@@ -90,4 +90,10 @@ export const Sizes = {
   threadToggleIcon: 14,
   /** Аватар автора в облачке пересланного комментария. */
   forwardedAuthorAvatar: 20,
+  /** Круглая плавающая кнопка «+» в списке чатов. */
+  floatingButton: 56,
+  /** Знак внутри плавающей кнопки. */
+  floatingButtonIcon: 24,
+  /** Отступ плавающей кнопки от правого и нижнего края экрана — одинаковый. */
+  floatingButtonMargin: 16,
 } as const;
