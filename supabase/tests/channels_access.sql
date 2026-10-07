@@ -74,6 +74,13 @@ begin
     perform pg_temp.check('имя канала занято для канала', sqlstate = 'OPN02', sqlerrm);
   end;
 
+  begin
+    perform public.create_channel('X', 'bad name@');
+    perform pg_temp.check('имя с пробелом и @ — отказ', false);
+  exception when others then
+    perform pg_temp.check('имя с пробелом и @ — отказ', sqlstate = '22023', sqlerrm);
+  end;
+
   perform pg_temp.check('проверка занятости: занято', not public.is_handle_available('CHAN_a_zz'));
   perform pg_temp.check('проверка занятости: свободно', public.is_handle_available('free_name_zz'));
 
