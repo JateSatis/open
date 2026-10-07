@@ -70,6 +70,60 @@ export type Database = {
           },
         ]
       }
+      channels: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          deleted_at: string | null
+          description: string | null
+          id: string
+          owner_id: string | null
+          posts_chat_id: string
+          posts_chat_kind: string
+          title: string
+          username: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          description?: string | null
+          id?: string
+          owner_id?: string | null
+          posts_chat_id: string
+          posts_chat_kind?: string
+          title: string
+          username: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          description?: string | null
+          id?: string
+          owner_id?: string | null
+          posts_chat_id?: string
+          posts_chat_kind?: string
+          title?: string
+          username?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "channels_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "channels_posts_chat_id_posts_chat_kind_fkey"
+            columns: ["posts_chat_id", "posts_chat_kind"]
+            isOneToOne: true
+            referencedRelation: "chats"
+            referencedColumns: ["id", "kind"]
+          },
+        ]
+      }
       chat_invites: {
         Row: {
           accepted_at: string | null
@@ -592,6 +646,45 @@ export type Database = {
             columns: ["message_id"]
             isOneToOne: false
             referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      handles: {
+        Row: {
+          channel_id: string | null
+          created_at: string
+          handle: string
+          id: string
+          profile_id: string | null
+        }
+        Insert: {
+          channel_id?: string | null
+          created_at?: string
+          handle: string
+          id?: string
+          profile_id?: string | null
+        }
+        Update: {
+          channel_id?: string | null
+          created_at?: string
+          handle?: string
+          id?: string
+          profile_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "handles_channel_id_fkey"
+            columns: ["channel_id"]
+            isOneToOne: true
+            referencedRelation: "channels"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "handles_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -1330,6 +1423,15 @@ export type Database = {
         Args: { reply_to: string[]; target_message: string }
         Returns: string
       }
+      create_channel: {
+        Args: {
+          channel_avatar_url?: string
+          channel_description?: string
+          channel_title: string
+          channel_username: string
+        }
+        Returns: Json
+      }
       create_chat: {
         Args: { chat_title?: string; invitee_ids: string[] }
         Returns: Json
@@ -1383,6 +1485,7 @@ export type Database = {
         Args: { root: string; target_message: string }
         Returns: boolean
       }
+      is_handle_available: { Args: { candidate: string }; Returns: boolean }
       latest_chat_messages: {
         Args: { chat_ids: string[]; per_chat?: number }
         Returns: {
