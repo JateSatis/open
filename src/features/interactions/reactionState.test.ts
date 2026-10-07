@@ -1,4 +1,14 @@
-import { byPopularity, nextReaction, replaceMine, withMyReaction } from './reactionState';
+import {
+  byPopularity,
+  isRowFull,
+  mergedCounts,
+  nextReaction,
+  replaceMine,
+  rowOrder,
+  sameReactions,
+  shownReactors,
+  withMyReaction,
+} from './reactionState';
 
 import type { MessageReactions } from '@/api/reactionCounts';
 
@@ -88,5 +98,85 @@ describe('byPopularity', () => {
       ['👍', 1],
       ['🔥', 1],
     ]);
+  });
+});
+
+describe('rowOrder', () => {
+  it('puts my reaction first, the rest by popularity', () => {
+    expect(rowOrder({ '👍': 5, '🔥': 3, '😁': 1 }, '😁').map(([emoji]) => emoji)).toEqual([
+      '😁',
+      '👍',
+      '🔥',
+    ]);
+  });
+
+  it('keeps plain popularity when my reaction is not in the row', () => {
+    expect(rowOrder({ '👍': 1, '🔥': 3 }, '😁').map(([emoji]) => emoji)).toEqual(['🔥', '👍']);
+  });
+});
+
+describe('mergedCounts', () => {
+  it('adds visitors to members for the one row of a comment', () => {
+    expect(mergedCounts(base)).toEqual({ '👍': 2, '🔥': 1, '😁': 3 });
+    expect(mergedCounts({ ...base, visitors: { '👍': 1 } })).toEqual({ '👍': 3, '🔥': 1 });
+  });
+});
+
+const me = { userId: 'me', name: 'Я', avatarUrl: 'me.jpg' };
+const ann = { userId: 'ann', audience: 'member' as const, name: 'Аня', avatarUrl: null };
+
+describe('shownReactors', () => {
+  it('shows people only when the list matches the count', () => {
+    const reactions: MessageReactions = { ...base, reactors: { '👍': [ann], '🔥': [ann] } };
+
+    expect(shownReactors(reactions, '🔥', 1, 'member')).toEqual([ann]);
+    // Двое поставили, а знаем одного — число.
+    expect(shownReactors(reactions, '👍', 2, 'member')).toBeNull();
+    expect(shownReactors(reactions, '👍', 3, 'member')).toBeNull();
+  });
+
+  it('a message row shows only its members, a comment row everyone', () => {
+    const guest = { ...ann, userId: 'guest', audience: 'visitor' as const };
+    const reactions: MessageReactions = { ...base, reactors: { '👍': [ann, guest] } };
+
+    expect(shownReactors(reactions, '👍', 1, 'member')).toEqual([ann]);
+    expect(shownReactors(reactions, '👍', 2)).toEqual([ann, guest]);
+  });
+});
+
+describe('my reaction among reactors', () => {
+  it('an optimistic reaction shows me right away, in order of placing', () => {
+    const reactions: MessageReactions = { ...base, reactors: { '🔥': [ann] } };
+    const next = withMyReaction(reactions, { emoji: '🔥', audience: 'member', me });
+
+    expect(next.members['🔥']).toBe(2);
+    expect(shownReactors(next, '🔥', 2, 'member')).toEqual([ann, { ...me, audience: 'member' }]);
+  });
+
+  it('moving my reaction takes me off the old one', () => {
+    const reactions: MessageReactions = {
+      ...base,
+      members: { '🔥': 2 },
+      mine: { emoji: '🔥', audience: 'member' },
+      reactors: { '🔥': [ann, { ...me, audience: 'member' }] },
+    };
+    const next = replaceMine(reactions, { emoji: '👍', audience: 'member' }, me);
+
+    expect(next.reactors).toEqual({ '🔥': [ann], '👍': [{ ...me, audience: 'member' }] });
+  });
+
+  it('a sync with other people is not the same reactions', () => {
+    const before: MessageReactions = { ...base, reactors: { '🔥': [ann] } };
+    const after: MessageReactions = { ...base, reactors: { '🔥': [{ ...ann, avatarUrl: 'new.jpg' }] } };
+
+    expect(sameReactions(before, after)).toBe(false);
+    expect(sameReactions(before, { ...before })).toBe(true);
+  });
+});
+
+describe('isRowFull', () => {
+  it('is full at the limit of different reactions', () => {
+    expect(isRowFull({ a: 1, b: 2 }, 2)).toBe(true);
+    expect(isRowFull({ a: 1 }, 2)).toBe(false);
   });
 });

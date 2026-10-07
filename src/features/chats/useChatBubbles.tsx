@@ -106,10 +106,17 @@ export function useChatBubbles({
         {
           emoji: nextReaction(comment.reactions.mine, emoji),
           audience: audienceOf(comment.chat?.amMember ?? false),
+          me: currentUserId
+            ? {
+                userId: currentUserId,
+                name: participantsById.get(currentUserId)?.displayName ?? null,
+                avatarUrl: participantsById.get(currentUserId)?.avatarUrl ?? null,
+              }
+            : undefined,
         },
         'comment',
       ),
-    [queryClient],
+    [currentUserId, participantsById, queryClient],
   );
 
   /**

@@ -377,10 +377,20 @@ export function useComments(
         sendReaction(
           queryClient,
           comment.id,
-          { emoji: nextReaction(comment.reactions.mine, emoji), audience: audienceOf(amMember) },
+          {
+            emoji: nextReaction(comment.reactions.mine, emoji),
+            audience: audienceOf(amMember),
+            me: currentUserId
+              ? {
+                  userId: currentUserId,
+                  name: me?.displayName ?? null,
+                  avatarUrl: me?.avatarUrl ?? null,
+                }
+              : undefined,
+          },
           'comment',
         ),
-      [amMember, queryClient],
+      [amMember, currentUserId, me, queryClient],
     ),
     retry: useCallback((localId: string) => retryComment(context, localId), [context]),
     discard: useCallback((localId: string) => discardComment(messageId, localId), [messageId]),

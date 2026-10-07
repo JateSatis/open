@@ -204,7 +204,6 @@ export function ChatConversation({ chatId, channel = null, active = true }: Chat
     isFocused,
     focusComment,
   });
-  const reactions = useReactToMessage(isMember);
   const call = useChatCall(chatId, chat, currentUserId, isMember);
 
   // Правки, удаления, реакции и комментарии оригиналов в островках приходят
@@ -249,6 +248,20 @@ export function ChatConversation({ chatId, channel = null, active = true }: Chat
     () => new Map((chat?.participants ?? []).map((participant) => [participant.id, participant])),
     [chat],
   );
+
+  // Я как поставивший реакцию — из участников: там свежий аватар.
+  const me = useMemo(() => {
+    if (!currentUserId) return undefined;
+
+    const self = participantsById.get(currentUserId);
+
+    return {
+      userId: currentUserId,
+      name: self?.displayName ?? null,
+      avatarUrl: self?.avatarUrl ?? null,
+    };
+  }, [currentUserId, participantsById]);
+  const reactions = useReactToMessage(isMember, me);
 
   const authorName = useCallback(
     (authorId: string | null) =>
