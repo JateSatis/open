@@ -1,7 +1,12 @@
 import { File } from 'expo-file-system';
 
 import { MEDIA_BUCKET } from './constants';
-import { buildAvatarPath, buildObjectPath, ownAvatarPathFromUrl } from './lib/objectPath';
+import {
+  buildAvatarPath,
+  buildChannelAvatarPath,
+  buildObjectPath,
+  ownAvatarPathFromUrl,
+} from './lib/objectPath';
 import type { LocalMedia, UploadedMedia } from './types';
 
 import { supabase } from '@/api/supabase';
@@ -111,13 +116,27 @@ export async function removeUploadedMedia(path: string | string[]): Promise<bool
 
 /** Загружает подготовленный аватар (`pickAvatar`) и отдаёт его публичный URL. */
 export async function uploadAvatar(uri: string, userId: string): Promise<string> {
+  return (await uploadJpeg(uri, buildAvatarPath(userId))).url;
+}
+
+/**
+ * Аватарка нового канала. Путь нужен вызывающему: канал создаётся после
+ * загрузки, и если создание сорвалось, файл надо убрать (`removeUploadedMedia`).
+ */
+export async function uploadChannelAvatar(
+  uri: string,
+  userId: string,
+): Promise<{ url: string; path: string }> {
+  return uploadJpeg(uri, buildChannelAvatarPath(userId));
+}
+
+async function uploadJpeg(uri: string, path: string): Promise<{ url: string; path: string }> {
   const file = new File(uri);
 
   if (!file.exists) {
     throw new MediaUploadError(`Avatar file no longer exists: ${uri}`);
   }
 
-  const path = buildAvatarPath(userId);
   const { error } = await supabase.storage
     .from(MEDIA_BUCKET)
     .upload(path, await file.arrayBuffer(), { contentType: 'image/jpeg', upsert: false });
@@ -126,7 +145,7 @@ export async function uploadAvatar(uri: string, userId: string): Promise<string>
     throw new MediaUploadError(`Failed to upload avatar: ${error.message}`, error);
   }
 
-  return supabase.storage.from(MEDIA_BUCKET).getPublicUrl(path).data.publicUrl;
+  return { url: supabase.storage.from(MEDIA_BUCKET).getPublicUrl(path).data.publicUrl, path };
 }
 
 /**

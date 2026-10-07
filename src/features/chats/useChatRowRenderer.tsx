@@ -36,6 +36,8 @@ type Options = {
   bubbleFor: (row: BubbleRow, interactive: boolean) => React.ReactElement | null;
   openMenu: (row: ChatListRow, anchor: MenuAnchor) => void;
   startReply: (rows: BubbleRow[]) => void;
+  /** Свайп влево отвечает. В постах канала его нет: там свайп листает разделы. */
+  swipeReply?: boolean;
   retry: (localId: string) => void;
   hostName: (authorId: string | null) => string;
 };
@@ -58,6 +60,7 @@ export function useChatRowRenderer({
   bubbleFor,
   openMenu,
   startReply,
+  swipeReply = true,
   retry,
   hostName,
 }: Options) {
@@ -130,7 +133,8 @@ export function useChatRowRenderer({
       }
 
       const content = contentOf(row);
-      const local = row.type === 'message' ? isLocalMessage(row.message) : isLocalMessage(row.island);
+      const local =
+        row.type === 'message' ? isLocalMessage(row.message) : isLocalMessage(row.island);
       const island = row.type === 'island-item' ? row : null;
       // Заглушке удалённого меню нужно только переславшему — убрать её.
       const hasMenu = content !== null || island?.island.authorId === currentUserId;
@@ -149,7 +153,9 @@ export function useChatRowRenderer({
           onToggle={() => toggleSelected(row.key)}
           // Ответ — это отправка: свайп есть только у участника и только у
           // сообщений, которые уже на сервере.
-          onSwipeReply={isMember && content && !local ? () => startReply([row]) : undefined}
+          onSwipeReply={
+            swipeReply && isMember && content && !local ? () => startReply([row]) : undefined
+          }
           frame={island ? <IslandBorder top={false} bottom={island.isLast} /> : undefined}
         >
           {bubbleContent(row, true)}
@@ -170,6 +176,7 @@ export function useChatRowRenderer({
       selectIsland,
       startReply,
       startSelection,
+      swipeReply,
       toggleSelected,
     ],
   );

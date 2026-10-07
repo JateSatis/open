@@ -79,7 +79,7 @@ export type ChatFooterProps = {
     onSendVoice: (voice: LocalMedia) => void;
     onRecordingVoice: () => void;
     inputRef: RefObject<TextInput | null>;
-  };
+  } | null;
 };
 
 /**
@@ -104,7 +104,7 @@ export function ChatFooter({ selection, invite, composer }: ChatFooterProps) {
             onDecline={invite.onDecline}
           />
         )
-      ) : (
+      ) : composer ? (
         // На время выбора поле ввода прячется, а не размонтируется: черновик
         // и заранее подготовленный рекордер голосовых остаются как были.
         <View style={selection.isActive ? styles.hidden : undefined}>
@@ -128,7 +128,7 @@ export function ChatFooter({ selection, invite, composer }: ChatFooterProps) {
             onRecordingVoice={composer.onRecordingVoice}
           />
         </View>
-      )}
+      ) : null}
     </>
   );
 }

@@ -11,12 +11,24 @@ import type { MediaLibraryItem } from '@/features/media/mediaLibrary';
 import { countMount, countRender, perfLog } from '@/features/media/perf';
 import { SLOT_BLOCKED, SLOT_FREE, useSelectionSlot } from '@/features/media/selectionStore';
 import { useTheme } from '@/hooks/use-theme';
-import { Spacing } from '@/theme';
+import { Opacity, Spacing } from '@/theme';
+
+/**
+ * Выбор одного файла вместо отбора в альбом: тап по клетке сразу отдаёт файл,
+ * кружка нет. Неподходящие файлы видны, но притушены и не нажимаются.
+ * Общий выбор (`selectionStore`) в этом режиме не трогается.
+ */
+export type GridPick = {
+  accepts: (asset: MediaLibraryItem) => boolean;
+  onPick: (asset: MediaLibraryItem) => void;
+};
 
 export type MediaGridItemProps = {
   asset: MediaLibraryItem;
   size: number;
   onToggle: (asset: MediaLibraryItem) => void;
+  /** Есть — клетка выбирает один файл, а не отмечает его кружком. */
+  pick?: GridPick;
 };
 
 /**
@@ -35,6 +47,7 @@ export const MediaGridItem = memo(function MediaGridItem({
   asset,
   size,
   onToggle,
+  pick,
 }: MediaGridItemProps) {
   countRender('MediaGridItem');
 
@@ -93,28 +106,53 @@ export const MediaGridItem = memo(function MediaGridItem({
         </View>
       ) : null}
 
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={isSelected ? 'Убрать из выбранного' : 'Выбрать файл'}
-        accessibilityState={{ selected: isSelected, disabled }}
-        disabled={disabled}
-        hitSlop={Spacing.two}
-        onPress={() => onToggle(asset)}
-        style={[
-          styles.circle,
-          {
-            borderColor: theme.textInverse,
-            backgroundColor: isSelected ? theme.primary : theme.mediaScrim,
-            opacity: disabled ? 0.4 : 1,
-          },
-        ]}
-      >
-        {isSelected ? (
-          <Text variant="caption" color="primaryText">
-            {slot}
-          </Text>
-        ) : null}
-      </Pressable>
+      {pick ? (
+        <PickCover asset={asset} pick={pick} />
+      ) : (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={isSelected ? 'Убрать из выбранного' : 'Выбрать файл'}
+          accessibilityState={{ selected: isSelected, disabled }}
+          disabled={disabled}
+          hitSlop={Spacing.two}
+          onPress={() => onToggle(asset)}
+          style={[
+            styles.circle,
+            {
+              borderColor: theme.textInverse,
+              backgroundColor: isSelected ? theme.primary : theme.mediaScrim,
+              opacity: disabled ? 0.4 : 1,
+            },
+          ]}
+        >
+          {isSelected ? (
+            <Text variant="caption" color="primaryText">
+              {slot}
+            </Text>
+          ) : null}
+        </Pressable>
+      )}
     </View>
   );
 });
+
+/** Вся клетка — кнопка выбора; неподходящий файл притушен и не нажимается. */
+function PickCover({ asset, pick }: { asset: MediaLibraryItem; pick: GridPick }) {
+  const theme = useTheme();
+  const accepted = pick.accepts(asset);
+
+  return (
+    <Pressable
+      testID="media-grid-pick"
+      accessibilityRole="button"
+      accessibilityLabel={asset.kind === 'video' ? 'Видео' : 'Фото'}
+      accessibilityState={{ disabled: !accepted }}
+      disabled={!accepted}
+      onPress={() => pick.onPick(asset)}
+      style={[
+        styles.thumbnail,
+        !accepted && { backgroundColor: theme.background, opacity: Opacity.unavailable },
+      ]}
+    />
+  );
+}

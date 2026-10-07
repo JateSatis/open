@@ -51,6 +51,7 @@ const group: ChatSummary = {
   lastMessageAt: '2026-09-16T10:00:00Z',
   lastMessageAuthorId: 'user-2',
   hasUnread: false,
+  channel: null,
 };
 
 function invite(overrides: Partial<ChatInvite> = {}): ChatInvite {

@@ -29,6 +29,17 @@ export function buildAvatarPath(userId: string): string {
 }
 
 /**
+ * Аватарки каналов — отдельно от аватара человека: удаление прежнего аватара
+ * профиля не должно задевать каналы. Лежат в префиксе владельца, потому что
+ * запись в бакет разрешена только туда.
+ */
+export const CHANNEL_AVATAR_FOLDER = 'channel-avatar';
+
+export function buildChannelAvatarPath(userId: string): string {
+  return `${userId}/${CHANNEL_AVATAR_FOLDER}/${randomId()}.jpg`;
+}
+
+/**
  * Путь файла в бакете по его публичному URL — только если это аватар самого
  * `userId`. Аватар от провайдера (Google) или чужой файл даёт null: удалять
  * такое приложение не должно.

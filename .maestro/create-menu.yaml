@@ -1,0 +1,52 @@
+appId: com.openger.app
+name: Кнопка «+» открывает меню; «Групповой чат» только закрывает его, «Канал» ведёт к созданию канала
+---
+- runFlow: subflows/open-app.yaml
+- tapOn:
+    id: "create-button"
+- assertVisible:
+    id: "create-menu"
+- assertVisible: "Групповой чат"
+- assertVisible: "Канал"
+# Тап мимо закрывает меню, ничего не открывая.
+- tapOn:
+    point: "50%,20%"
+- assertNotVisible:
+    id: "create-menu"
+- assertVisible:
+    id: "chat-list-item"
+# «Назад» — тоже.
+- tapOn:
+    id: "create-button"
+- assertVisible:
+    id: "create-menu"
+- pressKey: back
+- assertNotVisible:
+    id: "create-menu"
+# «Групповой чат» пока только закрывает меню.
+- tapOn:
+    id: "create-button"
+- tapOn: "Групповой чат"
+- assertNotVisible:
+    id: "create-menu"
+- assertVisible:
+    id: "chat-list-item"
+# «Канал» — экран создания: три поля, «Создать» неактивна.
+- tapOn:
+    id: "create-button"
+- tapOn: "Канал"
+- assertVisible:
+    id: "channel-title"
+- assertVisible:
+    id: "channel-description"
+- assertVisible:
+    id: "channel-username"
+- assertVisible:
+    id: "create-channel-button"
+    enabled: false
+- tapOn:
+    id: "channel-username"
+- inputText: "Ab"
+- assertVisible: "Минимум 3 символа"
+- pressKey: back
+- pressKey: back

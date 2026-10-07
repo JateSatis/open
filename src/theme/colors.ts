@@ -68,6 +68,10 @@ export const Colors = {
     islandPlate: 'rgba(60, 135, 247, 0.12)',
     /** Заливка внутри рамки островка — слабая, чтобы пересланное отличалось от сообщений чата. */
     islandBackground: 'rgba(60, 135, 247, 0.06)',
+    /** Тень плавающей кнопки над списком. */
+    shadow: '#000000',
+    /** Бегунок сегментированного контрола поверх `backgroundElement`. */
+    segmentIndicator: '#ffffff',
   },
   dark: {
     text: '#ffffff',
@@ -107,6 +111,8 @@ export const Colors = {
     islandBorder: 'rgba(60, 135, 247, 0.7)',
     islandPlate: 'rgba(60, 135, 247, 0.22)',
     islandBackground: 'rgba(60, 135, 247, 0.1)',
+    shadow: '#000000',
+    segmentIndicator: '#3A3D42',
   },
 } as const;
 

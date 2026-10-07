@@ -1,6 +1,6 @@
 import { StyleSheet } from 'react-native';
 
-import { Radii, Spacing } from '@/theme';
+import { Radii, Sizes, Spacing } from '@/theme';
 
 export const styles = StyleSheet.create({
   row: {
@@ -18,6 +18,9 @@ export const styles = StyleSheet.create({
     paddingHorizontal: Spacing.three,
     borderRadius: Radii.lg,
     gap: Spacing.one,
+  },
+  wide: {
+    maxWidth: `${Sizes.postBubbleShare * 100}%`,
   },
   /** Альбом и, если облачка нет, реакции под ним. */
   mediaColumn: {

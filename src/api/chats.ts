@@ -34,7 +34,16 @@ export type { ChatActivity } from '@/api/chatTopics';
 
 export const MESSAGE_PAGE_SIZE = 30;
 
-export type ChatKind = 'direct' | 'group';
+/** `channel` — чат постов канала: пишут в него только те, кого назначил канал. */
+export type ChatKind = 'direct' | 'group' | 'channel';
+
+/** Канал, которому принадлежит чат постов, — то, чем он подписан в списках. */
+export type ChannelRef = {
+  id: string;
+  title: string;
+  username: string;
+  avatarUrl: string | null;
+};
 
 /** Человек, как его показывают в списках: без ролей и состояний. */
 export type Person = {
@@ -52,6 +61,8 @@ export type ChatSummary = {
   id: string;
   kind: ChatKind;
   title: string | null;
+  /** Только у чата постов: его имя и аватарка — канала. */
+  channel: ChannelRef | null;
   participants: ChatParticipant[];
   /**
    * Позванные, но ещё не принявшие заявку. Отказ здесь неотличим от молчания:
@@ -115,7 +126,8 @@ export type Page<T> = {
   nextCursor: string | null;
 };
 
-const CHAT_COLUMNS = 'id, kind, title, last_message_at, last_message_text, last_message_author_id';
+const CHAT_COLUMNS =
+  'id, kind, title, last_message_at, last_message_text, last_message_author_id, channel:channels(id, title, username, avatar_url)';
 const MEMBER_COLUMNS =
   'chat_id, user_id, last_read_at, profile:profiles(id, display_name, avatar_url)';
 const WAITING_COLUMNS = 'chat_id, user_id, display_name, avatar_url';
@@ -128,7 +140,15 @@ type MemberRow = QueryData<ReturnType<typeof membersSelect>>[number];
 type WaitingRow = QueryData<ReturnType<typeof waitingSelect>>[number];
 
 function toChatKind(kind: string): ChatKind {
+  if (kind === 'channel_posts') return 'channel';
+
   return kind === 'group' ? 'group' : 'direct';
+}
+
+function toChannelRef(row: ChatRow['channel']): ChannelRef | null {
+  if (!row) return null;
+
+  return { id: row.id, title: row.title, username: row.username, avatarUrl: row.avatar_url };
 }
 
 function toParticipant(row: MemberRow): ChatParticipant {
@@ -170,6 +190,7 @@ export function toSummary(
     id: chat.id,
     kind: toChatKind(chat.kind),
     title: chat.title,
+    channel: toChannelRef(chat.channel),
     participants,
     waiting: people.waiting,
     lastMessagePreview: chat.last_message_text,

@@ -14,12 +14,15 @@ export default function ChatsLayout() {
         }}
       />
       <Stack.Screen name="new" options={{ title: 'Новый чат' }} />
+      <Stack.Screen name="new-channel" options={{ title: 'Новый канал' }} />
       <Stack.Screen name="invites" options={{ title: 'Заявки' }} />
       <Stack.Screen name="forward" options={{ title: 'Переслать' }} />
       {/* Имя человека ставит сам экран, когда профиль загрузится. */}
       <Stack.Screen name="people/[userId]" options={{ title: 'Профиль' }} />
       {/* Заголовок диалога ставит сам экран: он знает имя собеседника. */}
       <Stack.Screen name="[chatId]" options={{ title: 'Чат' }} />
+      {/* Шапку канала ставит его раздел «Посты»: он знает название и аватарку. */}
+      <Stack.Screen name="channel/[channelId]" options={{ title: 'Канал' }} />
     </Stack>
   );
 }

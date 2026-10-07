@@ -4,6 +4,8 @@ import { getChat, type ChatSummary } from '@/api/chats';
 import { useConnectionStatus } from '@/features/connection/useConnectionStatus';
 import { describeLoadError } from '@/lib/network';
 
+const CHAT_STALE_MS = 10_000;
+
 export function chatQueryKey(chatId: string) {
   return ['chat', chatId] as const;
 }
@@ -19,6 +21,10 @@ export function useChat(chatId: string): ChatState {
   const { data, isPending, fetchStatus, error } = useQuery({
     queryKey: chatQueryKey(chatId),
     queryFn: () => getChat(chatId),
+    // Маршрут чата узнаёт вид чата раньше переписки (не канал ли это), и
+    // переписка, смонтированная следом, не должна тут же спрашивать ещё раз.
+    // Изменения состава приходят через Realtime и сбрасывают кеш сами.
+    staleTime: CHAT_STALE_MS,
   });
 
   return {

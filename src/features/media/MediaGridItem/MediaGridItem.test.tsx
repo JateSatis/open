@@ -37,7 +37,9 @@ describe('MediaGridItem', () => {
     );
 
     await act(async () => {
-      fireEvent(screen.getByTestId('media-grid-preview'), 'error', { nativeEvent: { error: 'broken' } });
+      fireEvent(screen.getByTestId('media-grid-preview'), 'error', {
+        nativeEvent: { error: 'broken' },
+      });
     });
 
     expect(screen.getByText('?')).toBeTruthy();
@@ -89,5 +91,46 @@ describe('MediaGridItem', () => {
     await render(<MediaGridItem asset={video} size={100} onToggle={jest.fn()} />);
 
     expect(screen.getByText('0:12')).toBeTruthy();
+  });
+});
+
+describe('MediaGridItem in pick mode', () => {
+  const photosOnly = (asset: MediaLibraryItem) => asset.kind === 'photo';
+
+  it('hands the file over on a tap without touching the shared selection', async () => {
+    const onPick = jest.fn();
+    const user = userEvent.setup();
+
+    await render(
+      <MediaGridItem
+        asset={photo}
+        size={100}
+        onToggle={jest.fn()}
+        pick={{ accepts: photosOnly, onPick }}
+      />,
+    );
+    await user.press(screen.getByTestId('media-grid-pick'));
+
+    expect(onPick).toHaveBeenCalledWith(photo);
+    expect(useMediaSelection.getState().order).toEqual([]);
+    expect(screen.queryByLabelText('Выбрать файл')).toBeNull();
+  });
+
+  it('keeps a file it does not accept visible but untappable', async () => {
+    const onPick = jest.fn();
+    const user = userEvent.setup();
+
+    await render(
+      <MediaGridItem
+        asset={video}
+        size={100}
+        onToggle={jest.fn()}
+        pick={{ accepts: photosOnly, onPick }}
+      />,
+    );
+    await user.press(screen.getByTestId('media-grid-pick'));
+
+    expect(screen.getByTestId('media-grid-pick')).toBeDisabled();
+    expect(onPick).not.toHaveBeenCalled();
   });
 });

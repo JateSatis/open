@@ -1,5 +1,6 @@
 import {
   activityLabel,
+  chatAvatarUrl,
   chatTitle,
   counterpart,
   formatChatTimestamp,
@@ -26,6 +27,7 @@ const direct: ChatSummary = {
   lastMessageAt: null,
   lastMessageAuthorId: null,
   hasUnread: false,
+  channel: null,
 };
 
 const group: ChatSummary = {
@@ -35,7 +37,20 @@ const group: ChatSummary = {
   title: 'Планёрка',
 };
 
+const channelPosts: ChatSummary = {
+  ...direct,
+  id: 'chat-3',
+  kind: 'channel',
+  participants: [direct.participants[1]],
+  channel: { id: 'ch-1', title: 'Новости', username: 'news', avatarUrl: 'https://cdn/ch.jpg' },
+};
+
 describe('chatDisplay', () => {
+  it('names a posts chat and draws its avatar after the channel, not the people in it', () => {
+    expect(chatTitle(channelPosts, 'user-1')).toBe('Новости');
+    expect(chatAvatarUrl(channelPosts, 'user-1')).toBe('https://cdn/ch.jpg');
+  });
+
   it('names a direct chat after the other side', () => {
     expect(chatTitle(direct, 'user-1')).toBe('Марина');
     expect(counterpart(direct, 'user-1')?.id).toBe('user-2');

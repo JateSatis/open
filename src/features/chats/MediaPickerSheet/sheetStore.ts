@@ -12,12 +12,12 @@ import { create } from 'zustand';
 export type MediaSheetPhase = 'closed' | 'armed' | 'open' | 'closing';
 
 /**
- * Чьё поле открыло шит: строка под чатом или строка панели комментариев.
- * Шит на экране один, но выбранные в нём файлы уходят туда, откуда его
- * открыли, — поэтому каждое поле держит свой экземпляр шита, а показывается
- * только экземпляр хозяина.
+ * Кто открыл шит: строка под чатом, строка панели комментариев или экран,
+ * которому нужен один файл (`pick` — аватарка канала). Шит на экране один, но
+ * выбранное уходит туда, откуда его открыли, — поэтому каждый хозяин держит
+ * свой экземпляр шита, а показывается только экземпляр хозяина.
  */
-export type MediaSheetOwner = 'chat' | 'comments';
+export type MediaSheetOwner = 'chat' | 'comments' | 'pick';
 
 type MediaSheetState = {
   phase: MediaSheetPhase;
@@ -48,7 +48,8 @@ export function armMediaSheet(owner: MediaSheetOwner = 'chat') {
 export function openMediaSheet(owner: MediaSheetOwner = 'chat') {
   const phase = getMediaSheetPhase();
 
-  if (phase === 'closed' || phase === 'armed') useMediaSheetStore.setState({ phase: 'open', owner });
+  if (phase === 'closed' || phase === 'armed')
+    useMediaSheetStore.setState({ phase: 'open', owner });
 }
 
 /**
