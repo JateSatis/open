@@ -38,14 +38,14 @@ export function FloatingButton({
       onPress={onPress}
       style={({ pressed }) => [
         styles.button,
-        { backgroundColor: theme.primary },
+        { backgroundColor: theme.backgroundElement, shadowColor: theme.shadow },
         pressed && { opacity: Opacity.pressed },
       ]}
     >
       <SymbolView
         name={{ ios: icon.ios, android: icon.android, web: icon.android }}
         size={Sizes.floatingButtonIcon}
-        tintColor={theme.primaryText}
+        tintColor={theme.text}
       />
     </Pressable>
   );

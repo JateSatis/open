@@ -1,6 +1,6 @@
 import { StyleSheet } from 'react-native';
 
-import { Radii, Sizes } from '@/theme';
+import { Radii, Shadows, Sizes } from '@/theme';
 
 export const styles = StyleSheet.create({
   button: {
@@ -12,5 +12,6 @@ export const styles = StyleSheet.create({
     borderRadius: Radii.full,
     alignItems: 'center',
     justifyContent: 'center',
+    ...Shadows.floating,
   },
 });
