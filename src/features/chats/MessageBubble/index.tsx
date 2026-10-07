@@ -2,6 +2,7 @@ import { useMemo, useState, type ReactNode } from 'react';
 import { PixelRatio, Pressable, View, type StyleProp, type TextStyle } from 'react-native';
 
 import { BubbleFooter } from './BubbleFooter';
+import { BUBBLE_AVATAR } from './layout';
 import { styles } from './styles';
 
 import type { QuotedMessage } from '@/api/chats';
@@ -238,7 +239,7 @@ export function MessageBubble({
           disabled={!onAuthorPress}
           onPress={onAuthorPress}
         >
-          <Avatar uri={authorAvatarUrl} name={authorName} size={Spacing.five} />
+          <Avatar uri={authorAvatarUrl} name={authorName} size={BUBBLE_AVATAR} />
         </Pressable>
       )}
 

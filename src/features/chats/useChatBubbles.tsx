@@ -5,6 +5,7 @@ import type { ChatParticipant, ForwardedComment } from '@/api/chats';
 import { CommentForwardLead } from '@/features/chats/CommentForwardLead';
 import { MessageBubble } from '@/features/chats/MessageBubble';
 import {
+  commentsHomeOf,
   originalAsMessage,
   type BubbleRow,
   type IslandItemRow,
@@ -152,7 +153,6 @@ export function useChatBubbles({
               : undefined
           }
           showAvatar={showAvatars}
-          commentsSlot
           lead={
             <CommentForwardLead
               forward={forward}
@@ -239,7 +239,7 @@ export function useChatBubbles({
 
       const message = originalAsMessage(original);
       const { authorId } = original;
-      const inThisChat = original.chatId === chatId;
+      const home = commentsHomeOf(row, chatId, isMember);
       const audience = audienceFor(row);
       const fromHeaderChat = original.chatId === row.island.forward?.sourceChat?.id;
 
@@ -270,13 +270,7 @@ export function useChatBubbles({
               : undefined
           }
           // Комментарии — к оригиналу: панель открывается на него, из его чата.
-          comments={commentsEntry(
-            message,
-            original.chatId,
-            interactive,
-            inThisChat ? isMember : (original.chat?.amMember ?? false),
-            row.key,
-          )}
+          comments={commentsEntry(message, home.chatId, interactive, home.amMember, row.key)}
           commentsSlot
           showAvatar={showAvatars}
         />

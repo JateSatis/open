@@ -98,28 +98,26 @@ describe('MessageBubble', () => {
     expect(screen.queryByTestId('message-retry')).toBeNull();
   });
 
-  it('у поста канала после отправки галочек нет, лоадер остаётся', async () => {
-    const { rerender } = await render(
+  it('у поста канала галочек нет, а лоадер и ошибка есть — хоть облачко и не «своё»', async () => {
+    // Пост стоит у левого края и у владельца: облачко рисуется как чужое.
+    const post = (overrides: Partial<ChatMessage>) => (
       <MessageBubble
         {...baseProps}
-        isOwn
         receipts={false}
-        message={textMessage({ authorId: 'me' })}
-      />,
+        message={textMessage({ authorId: 'me', ...overrides })}
+      />
     );
+    const { rerender } = await render(post({}));
 
     expect(screen.queryByTestId(/^message-status-/)).toBeNull();
 
-    await rerender(
-      <MessageBubble
-        {...baseProps}
-        isOwn
-        receipts={false}
-        message={textMessage({ authorId: 'me', status: 'sending' })}
-      />,
-    );
+    await rerender(post({ status: 'sending' }));
 
     expect(screen.getByTestId('message-status-sending')).toBeTruthy();
+
+    await rerender(post({ status: 'failed', localId: 'local-1' }));
+
+    expect(screen.getByLabelText('Не отправлено. Повторить')).toBeTruthy();
   });
 
   it('пока сообщение едет — время видно, рядом лоадер, просмотров нет', async () => {

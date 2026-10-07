@@ -20,6 +20,7 @@ import { ChatScreenHeader } from '@/features/chats/ChatScreenHeader';
 import type { ForwardedComment, IslandOriginal } from '@/api/chats';
 import { DeletedOriginal } from '@/features/chats/DeletedOriginal';
 import {
+  commentsHomeOf,
   contentOf,
   islandItemKey,
   toChatRows,
@@ -48,6 +49,7 @@ import {
   readUpTo as readUpToOf,
 } from '@/features/chats/chatDisplay';
 import { mosaicBounds } from '@/features/chats/lib/mosaicLayout';
+import { bubbleAsideWidth } from '@/features/chats/MessageBubble/layout';
 import { measureInWindow, RowRegistryContext } from '@/features/chats/rowRegistry';
 import { useChatBubbles } from '@/features/chats/useChatBubbles';
 import { useChatKeyboardInset } from '@/features/chats/useChatKeyboardInset';
@@ -83,7 +85,7 @@ import { showNotice } from '@/features/notifications/alertsStore';
 import { useProfile } from '@/features/profile/queries';
 import { useTheme } from '@/hooks/use-theme';
 import { setActiveChatId } from '@/store/activeChat';
-import { Sizes, Spacing } from '@/theme';
+import { Spacing } from '@/theme';
 
 const noop = () => undefined;
 const rowKey = (row: ChatListRow) => row.key;
@@ -127,11 +129,7 @@ export function ChatConversation({ chatId, channel = null, active = true }: Chat
   const isPosts = channel !== null;
   const mediaBounds = useMemo(
     () =>
-      mosaicBounds(
-        windowWidth - Spacing.three * 2,
-        isPosts,
-        Sizes.commentsCircle + Spacing.two + (isPosts ? 0 : Spacing.five + Spacing.two),
-      ),
+      mosaicBounds(windowWidth - Spacing.three * 2, isPosts, bubbleAsideWidth(!isPosts)),
     [isPosts, windowWidth],
   );
   const currentUserId = useCurrentUserId();
@@ -335,16 +333,9 @@ export function ChatConversation({ chatId, channel = null, active = true }: Chat
 
       if (!message) return;
 
-      const original = row.type === 'island-item' ? row.item.original : null;
-      const inThisChat = !original || original.chatId === chatId;
+      const home = commentsHomeOf(row, chatId, isMember);
 
-      openComments(
-        message.id,
-        original?.chatId ?? chatId,
-        inThisChat ? isMember : (original?.chat?.amMember ?? false),
-        undefined,
-        { rowKey: row.key },
-      );
+      openComments(message.id, home.chatId, home.amMember, undefined, { rowKey: row.key });
     },
     [chatId, isMember],
   );

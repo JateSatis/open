@@ -1,11 +1,13 @@
 import { StyleSheet } from 'react-native';
 
+import { BUBBLE_ROW_GAP } from './layout';
+
 import { Radii, Sizes, Spacing } from '@/theme';
 
 export const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
-    gap: Spacing.two,
+    gap: BUBBLE_ROW_GAP,
     marginBottom: Spacing.two,
   },
   own: {

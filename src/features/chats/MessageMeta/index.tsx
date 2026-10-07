@@ -28,17 +28,20 @@ export type MessageMetaProps = {
   receipts?: boolean;
 };
 
-/** Состояние иконки у моего сообщения; у чужого иконки нет. */
+/**
+ * Состояние иконки. Едет, не ушло или сохраняется правка — только моё
+ * сообщение, даже если облачко не «своё» (пост канала стоит у левого края).
+ * Галочки — только у своего.
+ */
 function deliveryState(
   message: ChatMessage,
   isOwn: boolean,
   isRead: boolean,
   receipts: boolean,
 ): DeliveryState | null {
-  if (!isOwn) return null;
   if (message.status === 'failed') return 'failed';
   if (message.status === 'sending' || message.editStatus === 'saving') return 'sending';
-  if (!receipts) return null;
+  if (!isOwn || !receipts) return null;
 
   return isRead ? 'read' : 'sent';
 }

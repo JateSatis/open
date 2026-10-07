@@ -226,6 +226,8 @@ export function PanelContent({
           message={quotes === item.replies ? item : { ...item, replies: quotes }}
           isOwn={authorId !== null && authorId === currentUserId}
           isRead={false}
+          // Галочки у комментария ничего не значат: прочтений у него нет.
+          receipts={false}
           showViews={false}
           authorName={item.authorName ?? DELETED_ACCOUNT}
           authorAvatarUrl={item.authorAvatarUrl}
