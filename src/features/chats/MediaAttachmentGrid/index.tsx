@@ -62,6 +62,7 @@ export function MediaAttachmentGrid({
             >
               <PopCover
                 posterUri={attachment.posterUrl ?? localPreviews?.[index] ?? null}
+                placeholderUri={localPreviews?.[index]}
                 durationMs={attachment.durationMs}
                 recyclingKey={attachment.id}
               />

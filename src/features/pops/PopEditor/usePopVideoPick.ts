@@ -18,12 +18,14 @@ export type PickedPopVideo = {
 
 export const NOT_VERTICAL = 'Попсы — только вертикальные видео';
 const TOO_LONG = 'Поп — не длиннее 90 секунд';
+const NO_DURATION = 'Не удалось узнать длительность видео. Выберите другое.';
 const UNREADABLE = 'Не удалось открыть видео. Выберите другое.';
 
 /**
  * Что можно взять в шите: только видео до 90 секунд. Видео без длительности
- * не притушено — её проверит выбор. Ориентацию по плитке не узнать: размеры
- * в медиатеке бывают пустыми и не учитывают поворот.
+ * в медиатеке не притушено: выбор его не примет и скажет почему. Ориентацию
+ * по плитке не узнать: размеры в медиатеке бывают пустыми и не учитывают
+ * поворот.
  */
 export function acceptsPopVideo(asset: MediaLibraryItem): boolean {
   return (
@@ -57,7 +59,13 @@ export function usePopVideoPick(onAccepted: (video: PickedPopVideo) => void) {
             return;
           }
 
-          if (media.durationMs !== null && media.durationMs > MediaLimits.pop.maxDurationMs) {
+          // Без длительности не проверить 90 секунд, а база поп без неё не примет.
+          if (!media.durationMs) {
+            setError(NO_DURATION);
+            return;
+          }
+
+          if (media.durationMs > MediaLimits.pop.maxDurationMs) {
             setError(TOO_LONG);
             return;
           }

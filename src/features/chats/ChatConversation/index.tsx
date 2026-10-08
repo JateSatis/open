@@ -120,9 +120,9 @@ export type ChatConversationProps = {
   active?: boolean;
   /**
    * Свои разделы шита медиа после галереи — у канала это «Pop». Переписка о
-   * них не знает: она даёт лишь участие и способ прикрепить поп к посту.
+   * них не знает: она даёт лишь способ прикрепить поп к посту.
    */
-  sheetSections?: (context: { isMember: boolean; attachPop: (pop: Pop) => void }) => SheetSection[];
+  sheetSections?: (context: { attachPop: (pop: Pop) => void }) => SheetSection[];
 };
 
 /**
@@ -654,9 +654,9 @@ export function ChatConversation({
   const sheetSections = useMemo(
     () =>
       extraSections
-        ? [gallerySection({ locked: draftPop !== null }), ...extraSections({ isMember, attachPop })]
+        ? [gallerySection({ locked: draftPop !== null }), ...extraSections({ attachPop })]
         : GALLERY_ONLY,
-    [attachPop, draftPop, extraSections, isMember],
+    [attachPop, draftPop, extraSections],
   );
   const popChip = draftPop
     ? {

@@ -15,13 +15,21 @@ export type PopCoverProps = {
   showLabel?: boolean;
   /** Подпись для `recyclingKey`: списки переиспользуют вью. */
   recyclingKey?: string;
+  /** Локальный кадр того же попа: держится, пока грузится удалённый постер. */
+  placeholderUri?: string | null;
 };
 
 /**
  * Обложка попа во весь родитель: постер, метка «Pop» и длительность. Размер и
  * пропорции задаёт родитель — сетка, облачко или вложение над полем ввода.
  */
-export function PopCover({ posterUri, durationMs, showLabel = true, recyclingKey }: PopCoverProps) {
+export function PopCover({
+  posterUri,
+  durationMs,
+  showLabel = true,
+  recyclingKey,
+  placeholderUri,
+}: PopCoverProps) {
   const theme = useTheme();
 
   return (
@@ -33,6 +41,10 @@ export function PopCover({ posterUri, durationMs, showLabel = true, recyclingKey
       {posterUri ? (
         <Image
           source={{ uri: posterUri }}
+          placeholder={
+            placeholderUri && placeholderUri !== posterUri ? { uri: placeholderUri } : undefined
+          }
+          placeholderContentFit="cover"
           style={styles.fill}
           contentFit="cover"
           recyclingKey={recyclingKey}

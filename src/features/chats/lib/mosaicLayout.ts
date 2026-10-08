@@ -511,12 +511,6 @@ function singleLayout(item: MosaicItem, bounds: MosaicBounds, scale: number): Mo
 }
 
 /**
- * Раскладка альбома. Чистая функция: результат зависит только от размеров
- * файлов, границ и плотности экрана, поэтому мемоизируется по ним.
- *
- * @param scale физических пикселей в dp (`PixelRatio.get()`)
- */
-/**
  * Пост с попом: полоса во всю ширину альбома и высотой `Sizes.popPostCover`,
  * в середине — вертикальная обложка 9:16. Пропорции попа известны заранее,
  * подбирать раскладку незачем.
@@ -534,6 +528,12 @@ export function popPostLayout(bounds: MosaicBounds, scale: number): MosaicLayout
   };
 }
 
+/**
+ * Раскладка альбома. Чистая функция: результат зависит только от размеров
+ * файлов, границ и плотности экрана, поэтому мемоизируется по ним.
+ *
+ * @param scale физических пикселей в dp (`PixelRatio.get()`)
+ */
 export function computeMosaicLayout(
   items: MosaicItem[],
   bounds: MosaicBounds,

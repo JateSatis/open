@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { render, screen } from '@testing-library/react-native';
 
 import { EditAttachments } from '.';
 
@@ -34,23 +34,5 @@ describe('EditAttachments', () => {
     expect(screen.getByLabelText('Pop')).toBeTruthy();
     expect(screen.queryByLabelText('Открепить поп')).toBeNull();
     expect(screen.queryByLabelText('Убрать видео')).toBeNull();
-  });
-
-  it('lets the pop of a new post be unpinned with ✕', async () => {
-    const onRemove = jest.fn();
-
-    await render(
-      <EditAttachments
-        kept={[]}
-        voice={null}
-        onRemoveAttachment={noop}
-        onRemoveVoice={noop}
-        pop={{ posterUri: 'file:///frame.jpg', onRemove }}
-      />,
-    );
-
-    fireEvent.press(screen.getByLabelText('Открепить поп'));
-
-    expect(onRemove).toHaveBeenCalled();
   });
 });

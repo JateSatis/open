@@ -154,6 +154,13 @@ export function splitIntoAlbums(
   return parts;
 }
 
+/**
+ * Файлы нового попа, уже лежащие в Storage, по id попа. `publish_pop` с тем же
+ * id идемпотентен: если ответ потерялся, а транзакция прошла, поп ссылается
+ * именно на эти файлы — повтор не льёт новые и не удаляет эти.
+ */
+const uploadedPops = new Map<string, UploadedMedia>();
+
 /** Файлы отправки — в Storage, в свой префикс. Ими же пользуются комментарии. */
 export async function uploadOutgoing(
   outgoing: Outgoing,
@@ -161,9 +168,15 @@ export async function uploadOutgoing(
 ): Promise<UploadedMedia[]> {
   if (outgoing.type === 'forward' || outgoing.type === 'forward_comment') return [];
   if (outgoing.type === 'pop_post') {
-    return outgoing.pop.type === 'new'
-      ? [await uploadPop(newPopMedia(outgoing.pop), currentUserId)]
-      : [];
+    if (outgoing.pop.type === 'existing') return [];
+
+    // Повтор — теми же файлами: поп с этим id мог уже создаться и ссылаться на них.
+    const known = uploadedPops.get(outgoing.pop.popId);
+    const uploaded = known ?? (await uploadPop(newPopMedia(outgoing.pop), currentUserId));
+
+    uploadedPops.set(outgoing.pop.popId, uploaded);
+
+    return [uploaded];
   }
   if (outgoing.type === 'voice') return uploadAllMedia([outgoing.voice], currentUserId);
   if (outgoing.media.length === 0) return [];
@@ -365,6 +378,10 @@ export async function deliver(
       settle(queryClient, chatId, localId, saved);
     }
 
+    if (outgoing.type === 'pop_post' && outgoing.pop.type === 'new') {
+      uploadedPops.delete(outgoing.pop.popId);
+    }
+
     // Список чатов держит последнее сообщение и порядок — после отправки он
     // устарел, хотя сама переписка на экране уже верна.
     void queryClient.invalidateQueries({ queryKey: chatsQueryKey });
@@ -376,8 +393,17 @@ export async function deliver(
   } catch (cause) {
     // Сообщение в базу не попало (или упало на середине) — загруженные файлы
     // теперь ничьи, оставлять их в Storage незачем.
-    if (!saved && uploaded.length > 0) {
+    // Исключение — новый поп, не дождавшийся ответа: он мог создаться, и его
+    // файлы ждут повтора с тем же id.
+    const popUnanswered =
+      outgoing.type === 'pop_post' && outgoing.pop.type === 'new' && isNetworkError(cause);
+
+    if (!saved && uploaded.length > 0 && !popUnanswered) {
       void Promise.all(uploaded.map((item) => removeUploadedMedia(storedPaths(item))));
+
+      if (outgoing.type === 'pop_post' && outgoing.pop.type === 'new') {
+        uploadedPops.delete(outgoing.pop.popId);
+      }
     }
 
     if (discarded.has(localId)) return;

@@ -2,7 +2,9 @@ import { memo } from 'react';
 import { View } from 'react-native';
 
 import type { PopCell, PopGridGeometry } from './geometry';
-import { AddPopTile, PendingPopTile, PublishedPopTile } from './PopTile';
+import { AddPopTile } from './AddPopTile';
+import { PendingPopTile } from './PendingPopTile';
+import { PublishedPopTile } from './PublishedPopTile';
 import { styles } from './styles';
 
 import type { Pop } from '@/api/pops';
@@ -39,7 +41,12 @@ export const PopGridRow = memo(function PopGridRow({ cells, geometry, actions }:
           style={[styles.cell, { left: columnLeft[column], width: cellWidth, height: cellHeight }]}
         >
           {cell.type === 'add' ? (
-            <AddPopTile label={actions.addLabel} onPress={actions.onAdd} />
+            // Новый поп тоже не встретится в посте с выбранными фото.
+            <AddPopTile
+              label={actions.addLabel}
+              onPress={actions.onAdd}
+              disabled={actions.popsDisabled}
+            />
           ) : cell.type === 'pending' ? (
             <PendingPopTile
               pending={cell.pending}

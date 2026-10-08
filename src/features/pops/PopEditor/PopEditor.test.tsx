@@ -96,6 +96,22 @@ describe('PopEditor', () => {
     expect(screen.getByRole('button', { name: 'Опубликовать' })).toBeDisabled();
   });
 
+  it('rejects a video whose length is unknown', async () => {
+    await render(<PopEditor channelId="channel-1" from="pops" />);
+    (readVideoFrame as jest.Mock).mockResolvedValue({
+      uri: 'file:///frame.jpg',
+      width: 720,
+      height: 1280,
+    });
+
+    await act(async () => {
+      mockOnPick!({ ...video, durationMs: null });
+    });
+
+    expect(screen.getByText('Не удалось узнать длительность видео. Выберите другое.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Опубликовать' })).toBeDisabled();
+  });
+
   it('publishes a vertical video with a caption, «в посты» on by default', async () => {
     await render(<PopEditor channelId="channel-1" from="pops" />);
     await pick({ width: 720, height: 1280 });

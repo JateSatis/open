@@ -11,8 +11,12 @@ import {
   openMediaSheet,
   releaseMediaSheetArm,
 } from '@/features/chats/MediaPickerSheet';
-import { EditAttachments, type PopChip } from '@/features/chats/EditAttachments';
+import { EditAttachments } from '@/features/chats/EditAttachments';
 import { MessageComposer, type MessageComposerProps } from '@/features/chats/MessageComposer';
+import {
+  PopAttachmentChip,
+  type PopAttachmentChipProps,
+} from '@/features/chats/PopAttachmentChip';
 import { describeMode } from '@/features/chats/messageQuote';
 import type { SelectionActionContext, SelectionActionId } from '@/features/chats/messageActions';
 import { SelectionActionBar } from '@/features/chats/SelectionActionBar';
@@ -80,7 +84,7 @@ export type ChatFooterProps = {
     onRecordingVoice: () => void;
     inputRef: RefObject<TextInput | null>;
     /** Поп, прикреплённый к посту канала. С ним пост уходит и без текста. */
-    pop?: PopChip | null;
+    pop?: Pick<PopAttachmentChipProps, 'posterUri' | 'onRemove'> | null;
   } | null;
 };
 
@@ -122,15 +126,7 @@ export function ChatFooter({ selection, invite, composer }: ChatFooterProps) {
             plate={
               <>
                 {modePlate(composer.mode, composer.onCloseMode, composer.edit)}
-                {composer.pop ? (
-                  <EditAttachments
-                    kept={[]}
-                    voice={null}
-                    onRemoveAttachment={noop}
-                    onRemoveVoice={noop}
-                    pop={composer.pop}
-                  />
-                ) : null}
+                {composer.pop ? <PopAttachmentChip {...composer.pop} standalone /> : null}
               </>
             }
             edit={composer.edit?.state}
@@ -149,8 +145,6 @@ export function ChatFooter({ selection, invite, composer }: ChatFooterProps) {
     </>
   );
 }
-
-const noop = () => undefined;
 
 const styles = StyleSheet.create({
   hidden: {
