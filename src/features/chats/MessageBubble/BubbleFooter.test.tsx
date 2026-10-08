@@ -11,31 +11,32 @@ function order(testID: string): string[] {
 }
 
 describe('BubbleFooter', () => {
-  it('puts time on the left and views on the right of one bottom row', async () => {
+  it('puts time on the left and views on the right, with nothing between them', async () => {
     await render(
       <BubbleFooter
-        members={null}
-        visitors={null}
         meta={<Text>14:45</Text>}
+        reactions={null}
         views={<Text>👁 12</Text>}
+        visitors={null}
       />,
     );
 
     expect(order('bubble-footer-info')).toEqual(['14:45', '👁 12']);
-    expect(screen.queryByTestId('bubble-footer-chips')).toBeNull();
+    expect(screen.queryByTestId('bubble-footer-reactions')).toBeNull();
   });
 
-  it('keeps member chips on their own row and visitors after the time', async () => {
+  it('puts member reactions between the status and the views, visitors below the row', async () => {
     await render(
       <BubbleFooter
-        members={<Text>👍 2</Text>}
-        visitors={<Text>🔥 1</Text>}
         meta={<Text>14:45</Text>}
+        reactions={<Text>👍</Text>}
         views={<Text>👁 12</Text>}
+        visitors={<Text testID="visitors">🔥 1</Text>}
       />,
     );
 
-    expect(order('bubble-footer-chips')).toEqual(['👍 2']);
-    expect(order('bubble-footer-info')).toEqual(['14:45', '🔥 1', '👁 12']);
+    expect(order('bubble-footer-info')).toEqual(['14:45', '👍', '👁 12']);
+    expect(within(screen.getByTestId('bubble-footer-info')).queryByText('🔥 1')).toBeNull();
+    expect(screen.getByTestId('visitors')).toBeTruthy();
   });
 });

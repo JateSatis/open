@@ -1,6 +1,11 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { useWindowDimensions, View } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, {
+  LayoutAnimationConfig,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { computeMenuLayout } from './menuLayout';
@@ -20,10 +25,19 @@ export type MenuAnchor = AnchorRect & {
   touchY: number | null;
 };
 
-/** Блок реакций над меню. Один и тот же у участника и у посетителя. */
+/** Блок реакций над меню. */
 export type MenuReactions = {
   /** Моя реакция на это сообщение — подсвечена; тап по ней снимает. */
   selected: string | null;
+  /**
+   * Только эти реакции, по популярности: мой ряд полон, новую разную база
+   * не примет. Нет — весь набор.
+   */
+  options?: readonly string[];
+  /** Сколько каждой уже стоит в моём ряду — число рядом с эмодзи (у зрителя). */
+  counts?: Readonly<Record<string, number>>;
+  /** Кнопка раскрытия. Полный набор зрителей виден сразу целиком. */
+  expandable?: boolean;
   /** Реакция ставится после того, как меню закрылось, — как и действие. */
   onSelect: (emoji: string) => void;
 };
@@ -78,7 +92,11 @@ export function MessageContextMenu<Id extends string>({
   // Левый край реакций — посередине между краем экрана и левым краем меню.
   const menuLeft = Math.round(windowWidth * Sizes.menuLeftShare);
   const pickerLeft = Math.round(menuLeft / 2);
-  const picker = pickerGeometry(windowWidth - Spacing.two - pickerLeft);
+  const picker = pickerGeometry(windowWidth - Spacing.two - pickerLeft, {
+    options: reactions?.options,
+    counts: reactions?.counts,
+    expandable: reactions?.expandable,
+  });
   const menuHeight = menuListHeight(actions.length);
   // Палец — посередине первого пункта.
   const touchOffset = Spacing.one + Sizes.menuRowHeight / 2;
@@ -152,7 +170,8 @@ export function MessageContextMenu<Id extends string>({
                 previewStyle,
               ]}
             >
-              {preview}
+              {/* Копия с первого кадра как оригинал: её реакции не проявляются заново. */}
+              <LayoutAnimationConfig skipEntering>{preview}</LayoutAnimationConfig>
             </Animated.View>
           </View>
 

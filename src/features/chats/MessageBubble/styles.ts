@@ -24,7 +24,6 @@ export const styles = StyleSheet.create({
   wide: {
     maxWidth: `${Sizes.postBubbleShare * 100}%`,
   },
-  /** Альбом и, если облачка нет, реакции под ним. */
   mediaColumn: {
     gap: Spacing.half,
   },
@@ -55,6 +54,7 @@ export const styles = StyleSheet.create({
   /** Реакции под мозаикой без подписи — внутри облачка, с отступами, как у подписи. */
   mediaReactions: {
     padding: Spacing.two,
+    gap: Spacing.one,
   },
   /** Содержимое облачка над низом — шириной по самому широкому, а не по облачку. */
   content: {
@@ -67,8 +67,14 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.two,
   },
-  footerShrink: {
+  /**
+   * Место крупного ряда реакций: растягивает облачко под ряд, пока оно не
+   * упрётся в свой предел, дальше сжимается — и ряд прокручивается вбок.
+   */
+  footerReactions: {
+    flexGrow: 1,
     flexShrink: 1,
+    minWidth: 0,
   },
   footerSpacer: {
     flexGrow: 1,

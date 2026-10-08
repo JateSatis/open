@@ -15,10 +15,12 @@ export const styles = StyleSheet.create({
     flexWrap: 'wrap',
     padding: PICKER_PADDING,
   },
+  /** Ширина — из раскладки: у реакции с числом клетка шире. */
   cell: {
     width: Sizes.reactionCell,
     height: Sizes.reactionCell,
     borderRadius: Radii.full,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
   },

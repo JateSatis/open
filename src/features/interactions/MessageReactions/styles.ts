@@ -3,38 +3,88 @@ import { StyleSheet } from 'react-native';
 import { Radii, Sizes, Spacing } from '@/theme';
 
 export const styles = StyleSheet.create({
-  block: {
-    gap: Spacing.one,
-  },
-  /** Под альбомом без подписи облачка нет — ряды стоят на фоне чата, с отступом от мозаики. */
-  bare: {
-    paddingTop: Spacing.one,
-  },
-  chips: {
+  /** Значки ряда участников вплотную к краю: поля даёт строка облачка. */
+  rowContent: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    alignItems: 'flex-start',
     gap: Spacing.one,
   },
-  chip: {
-    height: Sizes.reactionChip,
-    minWidth: Sizes.reactionChip,
-    paddingHorizontal: Spacing.two,
+  /** Копия облачка: ряд без прокрутки, сдвинутый так же, как оригинал. */
+  rowClip: {
+    overflow: 'hidden',
+  },
+  /** Значок не сжимается: в копии ряд лежит в обычной строке, а не в прокрутке. */
+  badge: {
+    alignItems: 'center',
+    flexShrink: 0,
+  },
+  badgeCircle: {
+    width: Sizes.reactionBadge,
+    height: Sizes.reactionBadge,
     borderRadius: Radii.full,
-    flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.one,
+    justifyContent: 'center',
   },
-  visitors: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+  /** Число или аватары — по центру под кругом, наезжая на его нижний край. */
+  badgeLabel: {
+    height: Sizes.reactionAvatar,
+    marginTop: -Sizes.reactionLabelOverlap,
     alignItems: 'center',
-    columnGap: Spacing.one,
+    justifyContent: 'center',
+  },
+  people: {
+    flexDirection: 'row',
+  },
+  personRing: {
+    borderRadius: Radii.full,
+    borderWidth: Sizes.reactionRing,
+    // Обводка рисуется снаружи аватара и не меняет его места под кругом.
+    margin: -Sizes.reactionRing,
+  },
+  personOverlap: {
+    marginLeft: -Sizes.reactionAvatarOverlap - Sizes.reactionRing,
+  },
+  count: {
+    minWidth: Sizes.reactionAvatar,
+    height: Sizes.reactionAvatar,
+    paddingHorizontal: Spacing.one,
+    borderRadius: Radii.full,
+    borderWidth: Sizes.reactionRing,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  /** Строка зрителей: постоянной высоты, растянута по облачку — от её ширины масштаб. */
+  visitorFrame: {
+    alignSelf: 'stretch',
+  },
+  /**
+   * Сама строка — поверх рамки, по центру: её ширина не распирает облачко,
+   * распирает только `minWidth` рамки.
+   */
+  visitorCenter: {
+    ...StyleSheet.absoluteFill,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  /** Линейка: та же строка без уменьшения, невидимая, — по ней ширина «как есть». */
+  visitorRuler: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    flexDirection: 'row',
+  },
+  visitorLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexShrink: 0,
   },
   visitor: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.half,
-    paddingHorizontal: Spacing.one,
-    borderRadius: Radii.sm,
+    flexShrink: 0,
+  },
+  hidden: {
+    opacity: 0,
   },
 });

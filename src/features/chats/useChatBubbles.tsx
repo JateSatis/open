@@ -98,6 +98,7 @@ export function useChatBubbles({
   );
 
   /** Реакция на пересланный комментарий ложится оригиналу — как у облачка островка. */
+  const { me } = reactions;
   const reactToComment = useCallback(
     (comment: ForwardedComment, emoji: string) =>
       sendReaction(
@@ -106,10 +107,21 @@ export function useChatBubbles({
         {
           emoji: nextReaction(comment.reactions.mine, emoji),
           audience: audienceOf(comment.chat?.amMember ?? false),
+          me,
         },
         'comment',
       ),
-    [queryClient],
+    [me, queryClient],
+  );
+
+  // Под реакциями — свежие аватары участников чата, а не снимок из выборки.
+  const resolvePerson = useCallback(
+    (userId: string) => {
+      const person = participantsById.get(userId);
+
+      return person ? { name: person.displayName, avatarUrl: person.avatarUrl } : undefined;
+    },
+    [participantsById],
   );
 
   /**
@@ -152,6 +164,9 @@ export function useChatBubbles({
               ? (emoji) => reactToComment(comment, emoji)
               : undefined
           }
+          // Реакции комментария — один общий ряд, как в панели комментариев.
+          reactionsLayout="merged"
+          resolvePerson={resolvePerson}
           showAvatar={showAvatars}
           lead={
             <CommentForwardLead
@@ -175,6 +190,7 @@ export function useChatBubbles({
       openPerson,
       participantsById,
       reactToComment,
+      resolvePerson,
       retry,
       showAvatars,
     ],
@@ -208,6 +224,7 @@ export function useChatBubbles({
           onReactionToggle={
             interactive && canReactTo(item) ? (emoji) => toggle(item, emoji) : undefined
           }
+          resolvePerson={resolvePerson}
           comments={commentsEntry(item, chatId, interactive, isMember, rowKey)}
           commentsSlot
           showAvatar={showAvatars}
@@ -225,6 +242,7 @@ export function useChatBubbles({
       openQuote,
       participantsById,
       postAuthor,
+      resolvePerson,
       retry,
       showAvatars,
       toggle,
@@ -269,6 +287,7 @@ export function useChatBubbles({
               ? (emoji) => toggle(message, emoji, audience)
               : undefined
           }
+          resolvePerson={resolvePerson}
           // Комментарии — к оригиналу: панель открывается на него, из его чата.
           comments={commentsEntry(message, home.chatId, interactive, home.amMember, row.key)}
           commentsSlot
@@ -285,6 +304,7 @@ export function useChatBubbles({
       openOriginal,
       openPerson,
       openQuote,
+      resolvePerson,
       showAvatars,
       toggle,
     ],

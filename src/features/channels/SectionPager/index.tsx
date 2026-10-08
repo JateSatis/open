@@ -12,6 +12,7 @@ import Animated, {
 
 import { dragPosition, resolveSection } from './pagerMath';
 
+import { HorizontalGestureScope } from '@/components/HorizontalGestureScope';
 import { Spacing } from '@/theme';
 
 /** Сдвиг пальца по горизонтали, с которого жест узнаёт себя. */
@@ -82,11 +83,14 @@ export function SectionPager({ position, width, pages, onIndexChange }: SectionP
     <GestureDetector gesture={pan}>
       <View testID="section-pager" style={styles.window}>
         <Animated.View style={[styles.row, { width: width * count }, rowStyle]}>
-          {pages.map((page, pageIndex) => (
-            <View key={pageIndex} style={[styles.page, { width }]}>
-              {page}
-            </View>
-          ))}
+          {/* Полоса, прокручиваемая вбок (реакции в облачке), разделы не листает. */}
+          <HorizontalGestureScope gesture={pan}>
+            {pages.map((page, pageIndex) => (
+              <View key={pageIndex} style={[styles.page, { width }]}>
+                {page}
+              </View>
+            ))}
+          </HorizontalGestureScope>
         </Animated.View>
       </View>
     </GestureDetector>

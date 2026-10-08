@@ -10,9 +10,18 @@ import {
   type RefObject,
 } from 'react';
 import type { ScrollView, ScrollViewProps } from 'react-native';
-import type { AnimatedRef, SharedValue } from 'react-native-reanimated';
+import {
+  runOnJS,
+  useAnimatedReaction,
+  type AnimatedRef,
+  type SharedValue,
+} from 'react-native-reanimated';
 
 import { GestureScrollView, useSheetScroll } from '@/components/ScrollSheet';
+import {
+  resetScrolledRows,
+  scrolledRowsCount,
+} from '@/features/interactions/MessageReactions';
 
 export type CommentsSheetContextValue = {
   animatedRef: AnimatedRef<ScrollView>;
@@ -84,6 +93,16 @@ export function CommentsSheetList<T>({ listRef, ...props }: CommentsSheetListPro
   const { animatedRef, scrollOffset, dismissing, onScrollAttached } = useCommentsSheet();
 
   useSheetScroll(animatedRef, scrollOffset, dismissing);
+
+  // Прокрутили список — прокрученные вбок ряды реакций возвращаются в начало.
+  useAnimatedReaction(
+    () => scrollOffset.value,
+    (offset, previous) => {
+      if (previous !== null && offset !== previous && scrolledRowsCount.value > 0) {
+        runOnJS(resetScrolledRows)();
+      }
+    },
+  );
 
   // Эффекты идут после того, как ссылки на скролл заполнены.
   useEffect(onScrollAttached, [onScrollAttached]);

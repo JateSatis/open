@@ -36,6 +36,10 @@ export const Typography = {
   /** Время, «изменено» и просмотры в низу облачка — мельче подписи, чтобы не спорить с текстом. */
   meta: { fontSize: 10, lineHeight: 13, fontWeight: '400' },
   code: { fontSize: 13, lineHeight: 18, fontWeight: '400' },
+  /** Эмодзи реакции участников в облачке. */
+  reaction: { fontSize: 18, lineHeight: 22, fontWeight: '400' },
+  /** Число под реакцией участников — мелкое, как время, но жирнее. */
+  reactionCount: { fontSize: 10, lineHeight: 13, fontWeight: '600' },
   /** Эмодзи в блоке реакций над облачком. */
   emoji: { fontSize: 26, lineHeight: 32, fontWeight: '400' },
 } as const;

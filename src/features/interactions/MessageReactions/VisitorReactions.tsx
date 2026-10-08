@@ -1,73 +1,23 @@
-import { Fragment } from 'react';
-import { Pressable } from 'react-native';
-import Animated, { FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated';
+import { useMemo } from 'react';
 
-import { styles } from './styles';
-import { visitorColors, type ReactionsTone } from './tones';
+import type { BubbleReactionsProps } from './types';
+import { VisitorReactionLine } from './VisitorReactionLine';
 
-import { Text } from '@/components/Text';
-import { useTheme } from '@/hooks/use-theme';
+import { byPopularity } from '@/features/interactions/reactionState';
 
-const APPEAR_MS = 160;
+/** Строка зрителей — только у сообщения. Нет реакций зрителей — нет и строки. */
+export function VisitorReactions({ memoryKey, reactions, tone, layout }: BubbleReactionsProps) {
+  const entries = useMemo(() => byPopularity(reactions.visitors), [reactions.visitors]);
+  const { mine } = reactions;
 
-export type VisitorReactionsProps = {
-  entries: [string, number][];
-  /** Моя реакция в этом ряду. */
-  mine: string | null;
-  tone: ReactionsTone;
-  /** Без обработчика ряд не нажимается: я участник или это копия облачка в меню. */
-  onPress?: (emoji: string) => void;
-  /** Чужой ряд в живом облачке: касание забирается и ничего не делает (см. `ReactionChip`). */
-  swallowsTouch?: boolean;
-};
-
-/**
- * Реакции посетителей — маленькие и тихие, в строке со временем: чипы
- * участников крупнее, и разница видна без подписи. Кто это, говорит
- * подпись для экранного чтеца.
- */
-export function VisitorReactions({
-  entries,
-  mine,
-  tone,
-  onPress,
-  swallowsTouch = false,
-}: VisitorReactionsProps) {
-  const theme = useTheme();
-  const colors = visitorColors(tone);
+  if (layout === 'merged' || entries.length === 0) return null;
 
   return (
-    <Animated.View
-      testID="visitor-reactions"
-      entering={FadeIn.duration(APPEAR_MS)}
-      exiting={FadeOut.duration(APPEAR_MS)}
-      layout={LinearTransition.duration(APPEAR_MS)}
-      style={styles.visitors}
-    >
-      {entries.map(([emoji, count], index) => (
-        <Fragment key={emoji}>
-          {index > 0 ? (
-            <Text variant="caption" color={colors.text}>
-              ·
-            </Text>
-          ) : null}
-          <Pressable
-            testID={`visitor-reaction-${emoji}`}
-            accessibilityRole="button"
-            accessibilityLabel={`Зрители: ${emoji} ${count}`}
-            accessibilityState={{ selected: mine === emoji, disabled: !onPress }}
-            disabled={onPress || swallowsTouch ? undefined : true}
-            hitSlop={6}
-            onPress={() => onPress?.(emoji)}
-            style={[styles.visitor, mine === emoji && { backgroundColor: theme[colors.mine] }]}
-          >
-            <Text variant="caption">{emoji}</Text>
-            <Text variant="caption" color={colors.text}>
-              {count}
-            </Text>
-          </Pressable>
-        </Fragment>
-      ))}
-    </Animated.View>
+    <VisitorReactionLine
+      memoryKey={memoryKey}
+      entries={entries}
+      mine={mine?.audience === 'visitor' ? mine.emoji : null}
+      tone={tone}
+    />
   );
 }

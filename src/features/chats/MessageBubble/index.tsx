@@ -17,11 +17,16 @@ import type { ChatMessage } from '@/features/chats/useChatMessages';
 import { ViewsCount, type ViewsCountTone } from '@/features/chats/ViewsCount';
 import { VoiceMessage } from '@/features/chats/VoiceMessage';
 import { CommentsCircle } from '@/features/interactions/CommentsCircle';
-import { MessageReactions, type ReactionsTone } from '@/features/interactions/MessageReactions';
+import {
+  LargeReactionRow,
+  VisitorReactions,
+  type ReactionsLayout,
+  type ReactionsTone,
+  type ResolvePerson,
+} from '@/features/interactions/MessageReactions';
 import { hasReactions } from '@/features/interactions/reactionState';
 import { MediaViewer, type MediaViewerItem } from '@/features/media';
 import { useTheme } from '@/hooks/use-theme';
-import { Spacing } from '@/theme';
 
 export type MessageBubbleProps = {
   message: ChatMessage;
@@ -53,6 +58,13 @@ export type MessageBubbleProps = {
   reactionAudience?: ReactionAudience;
   /** Тап по реакции своего ряда. Нет обработчика (копия в меню) — ряды не нажимаются. */
   onReactionToggle?: (emoji: string) => void;
+  /**
+   * Как разложены реакции: у сообщения — крупный ряд участников и строка
+   * зрителей, у комментария — один общий ряд.
+   */
+  reactionsLayout?: ReactionsLayout;
+  /** Свежие имя и фото поставившего реакцию — из участников чата. */
+  resolvePerson?: ResolvePerson;
   /**
    * Круг комментариев сбоку от облачка, со стороны середины экрана: у
    * чужого — справа, у своего — слева. Нет — нет и круга (неотправленное,
@@ -97,6 +109,8 @@ export function MessageBubble({
   sourceChat,
   reactionAudience,
   onReactionToggle,
+  reactionsLayout = 'split',
+  resolvePerson,
   comments,
   commentsSlot = false,
   authorBadge,
@@ -112,8 +126,11 @@ export function MessageBubble({
   // заглушка, чтобы сообщение не было пустым.
   const hasUnhandledAttachment = !isMediaMessage && !voice && message.kind !== 'text';
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
-  const hasMemberReactions = Object.keys(message.reactions.members).length > 0;
-  const hasVisitorReactions = Object.keys(message.reactions.visitors).length > 0;
+  const anyReactions = hasReactions(message.reactions);
+  const hasLargeRow =
+    reactionsLayout === 'merged' ? anyReactions : Object.keys(message.reactions.members).length > 0;
+  const hasVisitorLine =
+    reactionsLayout === 'split' && Object.keys(message.reactions.visitors).length > 0;
   const textColor = isOwn ? 'primaryText' : 'text';
   const bubbleColor = isOwn ? theme.primary : theme.backgroundElement;
 
@@ -151,19 +168,23 @@ export function MessageBubble({
   // Своё облачко имени не показывает, но «из <чат>» у него остаётся.
   const showAuthorLine = !isOwn || Boolean(sourceChat);
 
-  // Без подписи, имени и цитаты у своего альбома облачка нет — только
-  // мозаика, и в её зазорах виден фон чата, как в Telegram.
-  const bareMedia = !message.text && isOwn && !hasAnnotations && !sourceChat;
+  // Без подписи, имени, цитаты и реакций у своего альбома облачка нет —
+  // только мозаика, и в её зазорах виден фон чата, как в Telegram. С первой
+  // реакцией облачко появляется: реакции стоят в нём, под мозаикой.
+  const bareMedia = !message.text && isOwn && !hasAnnotations && !sourceChat && !anyReactions;
+  const tone: ReactionsTone = isOwn ? 'own' : 'other';
 
-  const reactions = (tone: ReactionsTone, part?: 'members' | 'visitors') => (
-    <MessageReactions
-      reactions={message.reactions}
-      tone={tone}
-      audience={reactionAudience}
-      onToggle={onReactionToggle}
-      part={part}
-    />
-  );
+  const reactionProps = {
+    memoryKey: message.id,
+    reactions: message.reactions,
+    tone,
+    layout: reactionsLayout,
+    audience: reactionAudience,
+    onToggle: onReactionToggle,
+    resolvePerson,
+  };
+  const largeRow = hasLargeRow ? <LargeReactionRow {...reactionProps} /> : null;
+  const visitorLine = hasVisitorLine ? <VisitorReactions {...reactionProps} /> : null;
 
   const meta = (variant: 'inline' | 'overlay') => (
     <MessageMeta
@@ -182,12 +203,12 @@ export function MessageBubble({
       <ViewsCount count={message.viewsCount} tone={tone} />
     ) : null;
 
-  const footer = (tone: 'own' | 'other') => (
+  const footer = (
     <BubbleFooter
-      members={hasMemberReactions ? reactions(tone, 'members') : null}
-      visitors={hasVisitorReactions ? reactions(tone, 'visitors') : null}
       meta={meta('inline')}
+      reactions={largeRow}
       views={views(tone)}
+      visitors={visitorLine}
     />
   );
 
@@ -248,7 +269,7 @@ export function MessageBubble({
       {layout ? (
         // Медиа — само облачко: мозаика заподлицо с краями, скругление
         // облачка на ней. Подпись и имя автора — в полосах того же облачка.
-        // Без облачка реакции — под ним: внутри их срезало бы скругление.
+        // Без подписи реакции — тоже полосой облачка, под мозаикой.
         <View style={[styles.mediaColumn, { width: layout.width }]}>
           <View
             testID="message-bubble"
@@ -285,13 +306,16 @@ export function MessageBubble({
             {message.text ? (
               <View style={styles.caption}>
                 <Text color={textColor}>{message.text}</Text>
-                {footer(isOwn ? 'own' : 'other')}
+                {footer}
               </View>
-            ) : hasReactions(message.reactions) && !bareMedia ? (
-              <View style={styles.mediaReactions}>{reactions(isOwn ? 'own' : 'other')}</View>
+            ) : anyReactions ? (
+              // Под мозаикой нет времени и просмотров — ряд занимает всю ширину.
+              <View style={styles.mediaReactions}>
+                {largeRow}
+                {visitorLine}
+              </View>
             ) : null}
           </View>
-          {bareMedia && hasReactions(message.reactions) ? reactions('bare') : null}
         </View>
       ) : (
         <View
@@ -324,7 +348,7 @@ export function MessageBubble({
             {message.text ? <Text color={textColor}>{message.text}</Text> : null}
           </View>
 
-          {footer(isOwn ? 'own' : 'other')}
+          {footer}
         </View>
       )}
 

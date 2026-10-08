@@ -3,9 +3,11 @@ import { useCallback } from 'react';
 
 import type { MessageReactions, ReactionAudience } from '@/api/reactionCounts';
 import { sendReaction } from '@/features/interactions/reactionSender';
-import { audienceOf, nextReaction } from '@/features/interactions/reactionState';
+import { audienceOf, nextReaction, type Me } from '@/features/interactions/reactionState';
 
 export type ReactToMessage = {
+  /** Я как поставивший — тот же для реакций на пересланные комментарии. */
+  me?: Me;
   /** В какой ряд попадёт моя реакция, если поставить её сейчас. */
   audience: ReactionAudience;
   /**
@@ -23,8 +25,9 @@ export type ReactToMessage = {
 /**
  * Реакции на сообщения чата от моего имени. Ряд здесь — только догадка для
  * мгновенного отклика: куда реакция попадёт на самом деле, решит база.
+ * `me` — я как поставивший: оптимистичная реакция сразу с моим аватаром.
  */
-export function useReactToMessage(isMember: boolean): ReactToMessage {
+export function useReactToMessage(isMember: boolean, me?: Me): ReactToMessage {
   const queryClient = useQueryClient();
   const audience = audienceOf(isMember);
 
@@ -37,10 +40,11 @@ export function useReactToMessage(isMember: boolean): ReactToMessage {
       sendReaction(queryClient, message.id, {
         emoji: nextReaction(message.reactions.mine, emoji),
         audience: rowAudience,
+        me,
       });
     },
-    [audience, queryClient],
+    [audience, me, queryClient],
   );
 
-  return { audience, toggle };
+  return { audience, me, toggle };
 }

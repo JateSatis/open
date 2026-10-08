@@ -74,6 +74,60 @@ describe('ReactionPicker', () => {
 
     expect(narrow.width).toBeLessThanOrEqual(300);
     expect(narrow.firstRow.length + narrow.rest.length).toBe(ALL_REACTIONS.length);
-    expect(pickerGeometry(1000).columns).toBe(8);
+    // Шире восьми клеток полоса не растёт: семь основных и кнопка.
+    expect(pickerGeometry(1000).firstRow).toHaveLength(7);
+  });
+
+  it('with a full row offers only the reactions already there, strip and expand', async () => {
+    const options = ALL_REACTIONS.slice(10, 30);
+
+    await render(
+      <ReactionPicker
+        geometry={pickerGeometry(400, { options })}
+        selected={null}
+        expanded
+        maxHeight={1000}
+        onToggleExpanded={jest.fn()}
+        onSelect={jest.fn()}
+      />,
+    );
+
+    const shown = screen
+      .getAllByRole('button')
+      .map((button) => button.props.testID)
+      .filter((id: string) => id.startsWith('reaction-option-'));
+
+    expect(shown).toEqual(options.map((emoji) => `reaction-option-${emoji}`));
+    expect(screen.getByTestId('reaction-picker-expand')).toBeTruthy();
+  });
+
+  it('a full visitors row is shown at once, without expanding, with counts', async () => {
+    const options = ['👍', '🔥', '😁', '❤️', '🤔', '👀', '🎉'];
+    const counts = { '👍': 2345, '🔥': 12, '😁': 1, '❤️': 3, '🤔': 4, '👀': 5, '🎉': 6 };
+
+    await render(
+      <ReactionPicker
+        geometry={pickerGeometry(330, { options, counts, expandable: false })}
+        selected={null}
+        expanded={false}
+        maxHeight={1000}
+        onToggleExpanded={jest.fn()}
+        onSelect={jest.fn()}
+      />,
+    );
+
+    expect(screen.queryByTestId('reaction-picker-expand')).toBeNull();
+    expect(screen.getByLabelText('Реакция 👍, у зрителей 2,3K')).toBeTruthy();
+    for (const emoji of options)
+      expect(screen.getByTestId(`reaction-option-${emoji}`)).toBeTruthy();
+  });
+
+  it('counts widen their cells, and the strip still fits the screen', () => {
+    const geometry = pickerGeometry(330, { counts: { '👍': 2345, '👎': 10 } });
+    const strip = geometry.firstRow.reduce((sum, cell) => sum + cell.width, 0);
+
+    expect(geometry.firstRow[0].count).toBe('2,3K');
+    expect(strip + 40).toBeLessThanOrEqual(geometry.width);
+    expect(geometry.width).toBeLessThanOrEqual(330);
   });
 });

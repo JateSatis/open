@@ -12,17 +12,43 @@ export type ReactionCounts = Readonly<Record<string, number>>;
 
 export type MyReaction = { emoji: string; audience: ReactionAudience };
 
+/** Кто поставил реакцию. `userId` null — аккаунт удалён. */
+export type Reactor = {
+  userId: string | null;
+  audience: ReactionAudience;
+  name: string | null;
+  avatarUrl: string | null;
+};
+
+/** Реакция → поставившие в порядке постановки. */
+export type ReactorsByEmoji = Readonly<Record<string, readonly Reactor[]>>;
+
 export type MessageReactions = {
   members: ReactionCounts;
   visitors: ReactionCounts;
   /** Моя реакция и её ряд. `null` — я реакцию не ставил. */
   mine: MyReaction | null;
+  /**
+   * Поставившие у реакций, которые поставили один-два человека (вычисляемая
+   * связь `reactors`): у сообщения — только участники, у комментария — оба
+   * ряда. У остальных реакций списка нет — под ними число.
+   */
+  reactors?: ReactorsByEmoji;
 };
 
-export const NO_REACTIONS: MessageReactions = { members: {}, visitors: {}, mine: null };
+export const NO_REACTIONS: MessageReactions = {
+  members: {},
+  visitors: {},
+  mine: null,
+  reactors: {},
+};
 
-/** Колонки реакций в выборке сообщения. */
-export const REACTION_COLUMNS = 'member_reactions, visitor_reactions, my_reaction(emoji, audience)';
+/** Колонки реакций в выборке сообщения или комментария. */
+export const REACTION_COLUMNS =
+  'member_reactions, visitor_reactions, my_reaction(emoji, audience), reactors(emoji, user_id, audience, updated_at, profile:profiles(display_name, avatar_url))';
+
+/** Больше двух поставивших под реакцией не рисуется — там число. */
+export const MAX_REACTORS = 2;
 
 export function toAudience(value: string): ReactionAudience {
   return value === 'member' ? 'member' : 'visitor';
@@ -41,10 +67,42 @@ function toCounts(value: Json): ReactionCounts {
   return counts;
 }
 
+type ReactorRow = {
+  emoji: string;
+  user_id: string | null;
+  audience: string;
+  updated_at: string;
+  profile: { display_name: string | null; avatar_url: string | null } | null;
+};
+
+/** Порядок постановки — по времени, а не по порядку строк в ответе: его PostgREST не обещает. */
+function toReactors(rows: readonly ReactorRow[] | null | undefined): ReactorsByEmoji {
+  if (!rows || rows.length === 0) return {};
+
+  const sorted = [...rows].sort((a, b) => a.updated_at.localeCompare(b.updated_at));
+  const byEmoji: Record<string, Reactor[]> = {};
+
+  for (const row of sorted) {
+    const list = (byEmoji[row.emoji] ??= []);
+
+    if (list.length < MAX_REACTORS) {
+      list.push({
+        userId: row.user_id,
+        audience: toAudience(row.audience),
+        name: row.profile?.display_name ?? null,
+        avatarUrl: row.profile?.avatar_url ?? null,
+      });
+    }
+  }
+
+  return byEmoji;
+}
+
 type ReactionRow = {
   member_reactions: Json;
   visitor_reactions: Json;
   my_reaction: { emoji: string; audience: string } | null;
+  reactors?: readonly ReactorRow[] | null;
 };
 
 export function toReactions(row: ReactionRow): MessageReactions {
@@ -61,5 +119,6 @@ export function toReactions(row: ReactionRow): MessageReactions {
     mine: row.my_reaction
       ? { emoji: row.my_reaction.emoji, audience: toAudience(row.my_reaction.audience) }
       : null,
+    reactors: toReactors(row.reactors),
   };
 }

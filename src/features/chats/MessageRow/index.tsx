@@ -14,6 +14,7 @@ import Animated, {
 import { styles } from './styles';
 import { useSwipeReply } from './useSwipeReply';
 
+import { HorizontalGestureScope } from '@/components/HorizontalGestureScope';
 import { Text } from '@/components/Text';
 import type { MenuAnchor } from '@/features/chats/MessageContextMenu';
 import { RowRegistryContext } from '@/features/chats/rowRegistry';
@@ -226,7 +227,8 @@ export function MessageRow({
                 pointerEvents={selectionMode ? 'none' : 'auto'}
                 style={[hiddenStyle, swipe.contentStyle]}
               >
-                {children}
+                {/* Полоса реакций, прокручиваемая вбок, забирает касание у свайпа. */}
+                <HorizontalGestureScope gesture={swipe.gesture}>{children}</HorizontalGestureScope>
               </Animated.View>
             </View>
           </Pressable>

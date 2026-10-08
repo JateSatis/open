@@ -13,11 +13,10 @@ import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 
 import { styles } from './styles';
 
-import type { ChannelRef } from '@/api/chats';
+import type { ChannelRef, ForwardedComment, IslandOriginal } from '@/api/chats';
 import { Text } from '@/components/Text';
 import { ChatFooter, modePlate } from '@/features/chats/ChatFooter';
 import { ChatScreenHeader } from '@/features/chats/ChatScreenHeader';
-import type { ForwardedComment, IslandOriginal } from '@/api/chats';
 import { DeletedOriginal } from '@/features/chats/DeletedOriginal';
 import {
   commentsHomeOf,
@@ -75,6 +74,8 @@ import { useReplyForward } from '@/features/chats/useReplyForward';
 import { useRespondToInvite } from '@/features/chats/useRespondToInvite';
 import { WaitingBanner } from '@/features/chats/WaitingBanner';
 import { CommentsPanel, openComments } from '@/features/interactions/CommentsPanel';
+import { resetScrolledRows } from '@/features/interactions/MessageReactions';
+import { menuReactionSet } from '@/features/interactions/reactionState';
 import { chatFade } from '@/features/interactions/comments/commentsLift';
 import { useReactToMessage } from '@/features/interactions/useReactToMessage';
 import { CallButton } from '@/features/streams/CallButton';
@@ -82,7 +83,7 @@ import { ChatCallBar } from '@/features/streams/ChatCallBar';
 import { useChatCall } from '@/features/streams/useChatCall';
 import { stopVoice } from '@/features/media';
 import { showNotice } from '@/features/notifications/alertsStore';
-import { useProfile } from '@/features/profile/queries';
+import { useMyProfile, useProfile } from '@/features/profile/queries';
 import { useTheme } from '@/hooks/use-theme';
 import { setActiveChatId } from '@/store/activeChat';
 import { Spacing } from '@/theme';
@@ -128,8 +129,7 @@ export function ChatConversation({ chatId, channel = null, active = true }: Chat
   // мозаикой в строке — место круга комментариев и, кроме постов, аватар.
   const isPosts = channel !== null;
   const mediaBounds = useMemo(
-    () =>
-      mosaicBounds(windowWidth - Spacing.three * 2, isPosts, bubbleAsideWidth(!isPosts)),
+    () => mosaicBounds(windowWidth - Spacing.three * 2, isPosts, bubbleAsideWidth(!isPosts)),
     [isPosts, windowWidth],
   );
   const currentUserId = useCurrentUserId();
@@ -204,7 +204,6 @@ export function ChatConversation({ chatId, channel = null, active = true }: Chat
     isFocused,
     focusComment,
   });
-  const reactions = useReactToMessage(isMember);
   const call = useChatCall(chatId, chat, currentUserId, isMember);
 
   // Правки, удаления, реакции и комментарии оригиналов в островках приходят
@@ -249,6 +248,22 @@ export function ChatConversation({ chatId, channel = null, active = true }: Chat
     () => new Map((chat?.participants ?? []).map((participant) => [participant.id, participant])),
     [chat],
   );
+
+  // Я как поставивший реакцию — из участников: там свежий аватар.
+  // Посетителя среди участников нет — тогда из моего профиля.
+  const { data: myProfile } = useMyProfile();
+  const me = useMemo(() => {
+    if (!currentUserId) return undefined;
+
+    const self = participantsById.get(currentUserId);
+
+    return {
+      userId: currentUserId,
+      name: self?.displayName ?? myProfile?.displayName ?? null,
+      avatarUrl: self ? self.avatarUrl : (myProfile?.avatarUrl ?? null),
+    };
+  }, [currentUserId, myProfile, participantsById]);
+  const reactions = useReactToMessage(isMember, me);
 
   const authorName = useCallback(
     (authorId: string | null) =>
@@ -465,6 +480,16 @@ export function ChatConversation({ chatId, channel = null, active = true }: Chat
     measureViewport: measureListFrame,
   });
 
+  // Прокрутили переписку — прокрученные вбок ряды реакций возвращаются в начало.
+  const { onScroll: viewsOnScroll } = views;
+  const onListScroll = useCallback(
+    (event: Parameters<typeof viewsOnScroll>[0]) => {
+      viewsOnScroll(event);
+      resetScrolledRows();
+    },
+    [viewsOnScroll],
+  );
+
   // Пока открыт шит комментариев, переписка под ним растворена.
   const fadeStyle = useAnimatedStyle(() => ({ opacity: chatFade.value }));
 
@@ -503,6 +528,7 @@ export function ChatConversation({ chatId, channel = null, active = true }: Chat
     if (menuContent.kind === 'comment_forward') {
       return forwarded && menuContent.status === 'sent'
         ? {
+            ...menuReactionSet(forwarded.reactions, 'comment'),
             selected: forwarded.reactions.mine?.emoji ?? null,
             onSelect: (emoji: string) => reactToComment(forwarded, emoji),
           }
@@ -511,7 +537,10 @@ export function ChatConversation({ chatId, channel = null, active = true }: Chat
 
     if (!canReactTo(menuContent)) return null;
 
+    // Набор — по ряду, куда ляжет моя реакция: у облачка островка — по
+    // участию в чате оригинала. Берётся на момент открытия меню.
     return {
+      ...menuReactionSet(menuContent.reactions, audienceFor(menuRow)),
       selected: menuContent.reactions.mine?.emoji ?? null,
       onSelect: (emoji: string) => {
         const fresh = rows.find((row) => row.key === menuRow.key);
@@ -633,7 +662,7 @@ export function ChatConversation({ chatId, channel = null, active = true }: Chat
                 renderItem={renderItem}
                 viewabilityConfig={views.viewabilityConfig}
                 onViewableItemsChanged={views.onViewableItemsChanged}
-                onScroll={views.onScroll}
+                onScroll={onListScroll}
                 scrollEventThrottle={VIEWS_SCROLL_THROTTLE_MS}
                 contentContainerStyle={styles.list}
                 // The list is inverted, so its "end" is the top of the screen:

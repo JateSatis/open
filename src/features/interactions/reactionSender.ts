@@ -19,7 +19,7 @@ import {
   setPendingReaction,
 } from '@/features/interactions/pendingReactions';
 import { updateCommentEverywhere } from '@/features/interactions/comments/commentsCache';
-import { replaceMine, type ReactionIntent } from '@/features/interactions/reactionState';
+import { replaceMine, type Me, type ReactionIntent } from '@/features/interactions/reactionState';
 import { showNotice } from '@/features/notifications/alertsStore';
 import { isNetworkError } from '@/lib/network';
 
@@ -29,18 +29,23 @@ import { isNetworkError } from '@/lib/network';
  * догадкой клиента, например, заявку приняли, пока экран этого не знал. Чужие
  * реакции, пришедшие тем временем, догонит событие канала.
  */
-function confirmMessage(queryClient: QueryClient, messageId: string, mine: MyReaction | null) {
+function confirmMessage(
+  queryClient: QueryClient,
+  messageId: string,
+  mine: MyReaction | null,
+  me?: Me,
+) {
   updateAllHistories(queryClient, (history) => {
     let changed = false;
 
     const items = history.items.map((message) => {
       const own =
         message.id === messageId
-          ? { ...message, reactions: replaceMine(message.reactions, mine) }
+          ? { ...message, reactions: replaceMine(message.reactions, mine, me) }
           : message;
       const next = mapOriginals(own, (original) =>
         original.id === messageId
-          ? { ...original, reactions: replaceMine(original.reactions, mine) }
+          ? { ...original, reactions: replaceMine(original.reactions, mine, me) }
           : original,
       );
 
@@ -58,9 +63,16 @@ function confirmMessage(queryClient: QueryClient, messageId: string, mine: MyRea
  * есть, и в пересланные копии в чатах: там облачко показывает реакции
  * оригинала.
  */
-function confirmComment(queryClient: QueryClient, commentId: string, mine: MyReaction | null) {
+function confirmComment(
+  queryClient: QueryClient,
+  commentId: string,
+  mine: MyReaction | null,
+  me?: Me,
+) {
   updateCommentEverywhere(queryClient, (item) =>
-    item.id === commentId ? { ...item, reactions: replaceMine(item.reactions, mine) } : item,
+    item.id === commentId
+      ? { ...item, reactions: replaceMine(item.reactions, mine, me, true) }
+      : item,
   );
   updateAllHistories(queryClient, (history) => {
     let changed = false;
@@ -75,7 +87,7 @@ function confirmComment(queryClient: QueryClient, commentId: string, mine: MyRea
         ...message,
         commentForward: {
           ...message.commentForward!,
-          comment: { ...forwarded, reactions: replaceMine(forwarded.reactions, mine) },
+          comment: { ...forwarded, reactions: replaceMine(forwarded.reactions, mine, me, true) },
         },
       };
     });
@@ -91,12 +103,20 @@ const TARGETS: Record<
   ReactionTarget,
   {
     send: (id: string, emoji: string | null) => Promise<MyReaction | null>;
-    confirm: (queryClient: QueryClient, id: string, mine: MyReaction | null) => void;
+    confirm: (queryClient: QueryClient, id: string, mine: MyReaction | null, me?: Me) => void;
   }
 > = {
   message: { send: setMessageReaction, confirm: confirmMessage },
   comment: { send: setCommentReaction, confirm: confirmComment },
 };
+
+/**
+ * База отвергла новую разную реакцию: ряд уже полон (`reaction_kinds_limit`).
+ * Меню такую не предлагает, но набор мог заполниться, пока оно было открыто.
+ */
+function isReactionLimit(cause: unknown): boolean {
+  return typeof cause === 'object' && cause !== null && 'code' in cause && cause.code === 'OR001';
+}
 
 async function drain(queryClient: QueryClient, messageId: string, target: ReactionTarget) {
   const { send, confirm } = TARGETS[target];
@@ -111,7 +131,7 @@ async function drain(queryClient: QueryClient, messageId: string, target: Reacti
 
       const mine = await send(messageId, wanted.emoji);
 
-      confirm(queryClient, messageId, mine);
+      confirm(queryClient, messageId, mine, wanted.me);
 
       // Пока ехал запрос, человек передумал — отправляем новое желаемое.
       if (readPendingReaction(messageId) !== wanted) continue;
@@ -125,7 +145,9 @@ async function drain(queryClient: QueryClient, messageId: string, target: Reacti
     showNotice(
       isNetworkError(cause)
         ? 'Не удалось поставить реакцию: нет связи'
-        : 'Не удалось поставить реакцию',
+        : isReactionLimit(cause)
+          ? 'Разных реакций уже слишком много — выберите из поставленных'
+          : 'Не удалось поставить реакцию',
       'error',
     );
   } finally {
@@ -145,8 +167,8 @@ export function sendReaction(
   intent: ReactionIntent,
   target: ReactionTarget = 'message',
 ) {
-  setPendingReaction(id, intent);
+  // У комментария поставившие — из обоих рядов, у сообщения — только участники.
+  setPendingReaction(id, { ...intent, listsVisitors: target === 'comment' });
 
   if (!reactionsInFlight.has(id)) void drain(queryClient, id, target);
 }
-

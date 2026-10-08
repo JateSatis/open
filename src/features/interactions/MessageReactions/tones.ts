@@ -1,25 +1,25 @@
 import type { ThemeColor } from '@/theme';
 
+/** В каком облачке стоят реакции: в своём (на `primary`) или в чужом. */
+export type ReactionsTone = 'own' | 'other';
+
+/** Круг реакции участников; моя выделена подложкой. */
+export function chipBackground(tone: ReactionsTone, mine: boolean): ThemeColor {
+  if (tone === 'own') return mine ? 'reactionChipMineOnPrimary' : 'reactionChipOnPrimary';
+
+  return mine ? 'primary' : 'reactionChip';
+}
+
+type LabelColors = { background: ThemeColor; text: ThemeColor };
+
 /**
- * Где стоит блок: в своём облачке (на `primary`), в чужом или без облачка —
- * под альбомом без подписи, на фоне чата.
+ * Число под кругом — плашкой цвета облачка: наезжая на край круга, оно
+ * читается и на моей (залитой) реакции. Тот же цвет — обводка аватаров.
  */
-export type ReactionsTone = 'own' | 'other' | 'bare';
-
-type ChipColors = { background: ThemeColor; text: ThemeColor };
-
-export function chipColors(tone: ReactionsTone, mine: boolean): ChipColors {
-  if (tone === 'own') {
-    return mine
-      ? { background: 'reactionChipMineOnPrimary', text: 'primary' }
-      : { background: 'reactionChipOnPrimary', text: 'primaryText' };
-  }
-
-  if (mine) return { background: 'primary', text: 'primaryText' };
-
-  return tone === 'bare'
-    ? { background: 'backgroundElement', text: 'text' }
-    : { background: 'reactionChip', text: 'primary' };
+export function labelColors(tone: ReactionsTone): LabelColors {
+  return tone === 'own'
+    ? { background: 'primary', text: 'primaryText' }
+    : { background: 'backgroundElement', text: 'textSecondary' };
 }
 
 type VisitorColors = { text: ThemeColor; mine: ThemeColor };

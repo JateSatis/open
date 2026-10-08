@@ -1,0 +1,37 @@
+appId: com.openger.app
+name: Реакция из меню встаёт в нижнюю строку облачка с моим аватаром, тап по ней снимает
+env:
+  CHAT: Plany
+---
+- runFlow: subflows/open-app.yaml
+- tapOn: ${CHAT}
+- evalScript: ${output.msg = 'maestro-' + Date.now()}
+- tapOn: "Сообщение"
+- inputText: ${output.msg}
+- tapOn: "Отправить"
+- assertVisible: ${output.msg}
+# Реакция из меню: участник ставит её в крупный ряд нижней строки.
+- tapOn: ${output.msg}
+- tapOn:
+    id: "reaction-option-👍"
+- assertVisible:
+    id: "reaction-chip-👍"
+# Поставил один я — под эмодзи мой аватар, а не число.
+- assertVisible:
+    id: "reaction-people-👍"
+# Строки зрителей нет: зрители реакций не ставили.
+- assertNotVisible:
+    id: "visitor-reactions"
+# Тап по своей реакции снимает её, меню не открывается.
+- tapOn:
+    id: "reaction-chip-👍"
+- assertNotVisible:
+    id: "reaction-chip-👍"
+- assertNotVisible:
+    id: "message-menu"
+# Уборка: тестовое сообщение удаляется.
+- tapOn: ${output.msg}
+- tapOn: "Удалить"
+- assertVisible: "Удалить сообщение?"
+- tapOn: "Удалить"
+- assertNotVisible: ${output.msg}

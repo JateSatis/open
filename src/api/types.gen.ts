@@ -464,6 +464,18 @@ export type Database = {
             updated_at: string
             user_id: string | null
           } | null
+          reactors: {
+            audience: string
+            chat_id: string | null
+            created_at: string
+            deleted_at: string | null
+            emoji: string
+            id: string
+            target_id: string
+            target_type: string
+            updated_at: string
+            user_id: string | null
+          } | null
         }
         Insert: {
           audience?: string
@@ -1031,6 +1043,18 @@ export type Database = {
             livekit_sid: string | null
             role: string
             stream_id: string
+            user_id: string | null
+          } | null
+          reactors: {
+            audience: string
+            chat_id: string | null
+            created_at: string
+            deleted_at: string | null
+            emoji: string
+            id: string
+            target_id: string
+            target_type: string
+            updated_at: string
             user_id: string | null
           } | null
         }
@@ -1647,6 +1671,11 @@ export type Database = {
         Args: { counts: Json; delta: number; emoji: string }
         Returns: Json
       }
+      reaction_counts_merge: { Args: { a: Json; b: Json }; Returns: Json }
+      reaction_kinds_limit: {
+        Args: { audience: string; kind: string }
+        Returns: number
+      }
       reaction_target: {
         Args: { kind: string; target: string }
         Returns: {
@@ -1656,6 +1685,49 @@ export type Database = {
           target_kind: string
         }[]
       }
+      reactors:
+        | {
+            Args: { "": Database["public"]["Tables"]["comments"]["Row"] }
+            Returns: {
+              audience: string
+              chat_id: string | null
+              created_at: string
+              deleted_at: string | null
+              emoji: string
+              id: string
+              target_id: string
+              target_type: string
+              updated_at: string
+              user_id: string | null
+            }[]
+            SetofOptions: {
+              from: "comments"
+              to: "reactions"
+              isOneToOne: false
+              isSetofReturn: true
+            }
+          }
+        | {
+            Args: { "": Database["public"]["Tables"]["messages"]["Row"] }
+            Returns: {
+              audience: string
+              chat_id: string | null
+              created_at: string
+              deleted_at: string | null
+              emoji: string
+              id: string
+              target_id: string
+              target_type: string
+              updated_at: string
+              user_id: string | null
+            }[]
+            SetofOptions: {
+              from: "messages"
+              to: "reactions"
+              isOneToOne: false
+              isSetofReturn: true
+            }
+          }
       reconcile_stream: {
         Args: { connected: Json; room: string }
         Returns: string
