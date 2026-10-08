@@ -1,6 +1,11 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { useWindowDimensions, View } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, {
+  LayoutAnimationConfig,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { computeMenuLayout } from './menuLayout';
@@ -165,7 +170,8 @@ export function MessageContextMenu<Id extends string>({
                 previewStyle,
               ]}
             >
-              {preview}
+              {/* Копия с первого кадра как оригинал: её реакции не проявляются заново. */}
+              <LayoutAnimationConfig skipEntering>{preview}</LayoutAnimationConfig>
             </Animated.View>
           </View>
 

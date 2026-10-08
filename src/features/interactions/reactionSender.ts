@@ -70,7 +70,9 @@ function confirmComment(
   me?: Me,
 ) {
   updateCommentEverywhere(queryClient, (item) =>
-    item.id === commentId ? { ...item, reactions: replaceMine(item.reactions, mine, me) } : item,
+    item.id === commentId
+      ? { ...item, reactions: replaceMine(item.reactions, mine, me, true) }
+      : item,
   );
   updateAllHistories(queryClient, (history) => {
     let changed = false;
@@ -85,7 +87,7 @@ function confirmComment(
         ...message,
         commentForward: {
           ...message.commentForward!,
-          comment: { ...forwarded, reactions: replaceMine(forwarded.reactions, mine, me) },
+          comment: { ...forwarded, reactions: replaceMine(forwarded.reactions, mine, me, true) },
         },
       };
     });
@@ -165,7 +167,8 @@ export function sendReaction(
   intent: ReactionIntent,
   target: ReactionTarget = 'message',
 ) {
-  setPendingReaction(id, intent);
+  // У комментария поставившие — из обоих рядов, у сообщения — только участники.
+  setPendingReaction(id, { ...intent, listsVisitors: target === 'comment' });
 
   if (!reactionsInFlight.has(id)) void drain(queryClient, id, target);
 }

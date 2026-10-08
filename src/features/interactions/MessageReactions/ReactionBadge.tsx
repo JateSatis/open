@@ -2,13 +2,13 @@ import { Pressable, View } from 'react-native';
 import Animated, { FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated';
 
 import { styles } from './styles';
-import { chipColors, labelColors, type ReactionsTone } from './tones';
+import { chipBackground, labelColors, type ReactionsTone } from './tones';
 
 import { Avatar } from '@/components/Avatar';
 import { Text } from '@/components/Text';
 import { formatViewsCount } from '@/features/chats/ViewsCount/formatViewsCount';
 import { useTheme } from '@/hooks/use-theme';
-import { Sizes } from '@/theme';
+import { Sizes, Spacing } from '@/theme';
 
 const APPEAR_MS = 160;
 
@@ -48,7 +48,6 @@ export function ReactionBadge({
   swallowsTouch = false,
 }: ReactionBadgeProps) {
   const theme = useTheme();
-  const colors = chipColors(tone, mine);
   const label = labelColors(tone);
   const ring = { borderColor: theme[label.background] };
 
@@ -66,11 +65,11 @@ export function ReactionBadge({
         // Глотающий значок не выключен, но для чтеца «недоступен»: `disabled`
         // у Pressable перезаписал бы это состояние.
         disabled={onPress || swallowsTouch ? undefined : true}
-        hitSlop={2}
+        hitSlop={Spacing.half}
         onPress={onPress ?? (swallowsTouch ? noop : undefined)}
         style={styles.badge}
       >
-        <View style={[styles.badgeCircle, { backgroundColor: theme[colors.background] }]}>
+        <View style={[styles.badgeCircle, { backgroundColor: theme[chipBackground(tone, mine)] }]}>
           <Text variant="reaction">{emoji}</Text>
         </View>
 

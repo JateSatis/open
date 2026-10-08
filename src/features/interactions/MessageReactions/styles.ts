@@ -1,6 +1,6 @@
 import { StyleSheet } from 'react-native';
 
-import { Radii, Sizes, Spacing, Typography } from '@/theme';
+import { Radii, Sizes, Spacing } from '@/theme';
 
 export const styles = StyleSheet.create({
   /** Значки ряда участников вплотную к краю: поля даёт строка облачка. */
@@ -56,7 +56,6 @@ export const styles = StyleSheet.create({
   /** Строка зрителей: постоянной высоты, растянута по облачку — от её ширины масштаб. */
   visitorFrame: {
     alignSelf: 'stretch',
-    height: Typography.caption.lineHeight,
   },
   /**
    * Сама строка — поверх рамки, по центру: её ширина не распирает облачко,

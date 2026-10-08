@@ -1,6 +1,5 @@
 import {
   byPopularity,
-  isRowFull,
   menuReactionSet,
   mergedCounts,
   nextReaction,
@@ -146,6 +145,21 @@ describe('shownReactors', () => {
 });
 
 describe('my reaction among reactors', () => {
+  it('a visitor reaction to a message does not list me: the server lists only members there', () => {
+    const next = withMyReaction(base, { emoji: '👍', audience: 'visitor', me });
+
+    expect(next.reactors?.['👍']).toBeUndefined();
+
+    const comment = withMyReaction(base, {
+      emoji: '👍',
+      audience: 'visitor',
+      me,
+      listsVisitors: true,
+    });
+
+    expect(comment.reactors?.['👍']).toEqual([{ ...me, audience: 'visitor' }]);
+  });
+
   it('an optimistic reaction shows me right away, in order of placing', () => {
     const reactions: MessageReactions = { ...base, reactors: { '🔥': [ann] } };
     const next = withMyReaction(reactions, { emoji: '🔥', audience: 'member', me });
@@ -175,13 +189,6 @@ describe('my reaction among reactors', () => {
 
     expect(sameReactions(before, after)).toBe(false);
     expect(sameReactions(before, { ...before })).toBe(true);
-  });
-});
-
-describe('isRowFull', () => {
-  it('is full at the limit of different reactions', () => {
-    expect(isRowFull({ a: 1, b: 2 }, 2)).toBe(true);
-    expect(isRowFull({ a: 1 }, 2)).toBe(false);
   });
 });
 
@@ -216,6 +223,19 @@ describe('menuReactionSet', () => {
 
     expect(full.options).toHaveLength(7);
     expect(full.expandable).toBe(false);
+  });
+
+  it('my reaction that only I put frees its place, as in the database', () => {
+    const visitors = { ...kinds(6), mine: 1 };
+
+    expect(
+      menuReactionSet(
+        { ...base, visitors, mine: { emoji: 'mine', audience: 'visitor' } },
+        'visitor',
+      ).options,
+    ).toBeUndefined();
+    // Не моя, а чужая единственная — места нет.
+    expect(menuReactionSet({ ...base, visitors }, 'visitor').options).toHaveLength(7);
   });
 
   it('a member is not limited by the visitors row', () => {

@@ -6,6 +6,8 @@ import { sendReaction } from '@/features/interactions/reactionSender';
 import { audienceOf, nextReaction, type Me } from '@/features/interactions/reactionState';
 
 export type ReactToMessage = {
+  /** Я как поставивший — тот же для реакций на пересланные комментарии. */
+  me?: Me;
   /** В какой ряд попадёт моя реакция, если поставить её сейчас. */
   audience: ReactionAudience;
   /**
@@ -44,5 +46,5 @@ export function useReactToMessage(isMember: boolean, me?: Me): ReactToMessage {
     [audience, me, queryClient],
   );
 
-  return { audience, toggle };
+  return { audience, me, toggle };
 }

@@ -68,6 +68,16 @@ export function MemberReactionRow({
     [enclosing, frozen, scrollable],
   );
 
+  // Ряд стал короче (реакцию сняли) — запомненный сдвиг не больше, чем ряд
+  // теперь может прокрутиться: иначе копия облачка срезала бы первые значки.
+  useEffect(() => {
+    if (frozen || viewWidth === 0) return;
+
+    const max = Math.max(0, contentWidth - viewWidth);
+
+    if (readRowOffset(memoryKey) > max) rememberRowOffset(memoryKey, max);
+  }, [contentWidth, frozen, memoryKey, viewWidth]);
+
   useEffect(() => {
     if (!scrolled || frozen) return;
 

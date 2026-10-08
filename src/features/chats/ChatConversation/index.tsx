@@ -13,11 +13,10 @@ import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 
 import { styles } from './styles';
 
-import type { ChannelRef , ForwardedComment, IslandOriginal } from '@/api/chats';
+import type { ChannelRef, ForwardedComment, IslandOriginal } from '@/api/chats';
 import { Text } from '@/components/Text';
 import { ChatFooter, modePlate } from '@/features/chats/ChatFooter';
 import { ChatScreenHeader } from '@/features/chats/ChatScreenHeader';
-
 import { DeletedOriginal } from '@/features/chats/DeletedOriginal';
 import {
   commentsHomeOf,
@@ -84,7 +83,7 @@ import { ChatCallBar } from '@/features/streams/ChatCallBar';
 import { useChatCall } from '@/features/streams/useChatCall';
 import { stopVoice } from '@/features/media';
 import { showNotice } from '@/features/notifications/alertsStore';
-import { useProfile } from '@/features/profile/queries';
+import { useMyProfile, useProfile } from '@/features/profile/queries';
 import { useTheme } from '@/hooks/use-theme';
 import { setActiveChatId } from '@/store/activeChat';
 import { Spacing } from '@/theme';
@@ -130,8 +129,7 @@ export function ChatConversation({ chatId, channel = null, active = true }: Chat
   // мозаикой в строке — место круга комментариев и, кроме постов, аватар.
   const isPosts = channel !== null;
   const mediaBounds = useMemo(
-    () =>
-      mosaicBounds(windowWidth - Spacing.three * 2, isPosts, bubbleAsideWidth(!isPosts)),
+    () => mosaicBounds(windowWidth - Spacing.three * 2, isPosts, bubbleAsideWidth(!isPosts)),
     [isPosts, windowWidth],
   );
   const currentUserId = useCurrentUserId();
@@ -252,6 +250,8 @@ export function ChatConversation({ chatId, channel = null, active = true }: Chat
   );
 
   // Я как поставивший реакцию — из участников: там свежий аватар.
+  // Посетителя среди участников нет — тогда из моего профиля.
+  const { data: myProfile } = useMyProfile();
   const me = useMemo(() => {
     if (!currentUserId) return undefined;
 
@@ -259,10 +259,10 @@ export function ChatConversation({ chatId, channel = null, active = true }: Chat
 
     return {
       userId: currentUserId,
-      name: self?.displayName ?? null,
-      avatarUrl: self?.avatarUrl ?? null,
+      name: self?.displayName ?? myProfile?.displayName ?? null,
+      avatarUrl: self ? self.avatarUrl : (myProfile?.avatarUrl ?? null),
     };
-  }, [currentUserId, participantsById]);
+  }, [currentUserId, myProfile, participantsById]);
   const reactions = useReactToMessage(isMember, me);
 
   const authorName = useCallback(

@@ -1,5 +1,5 @@
-import { useRef, useState } from 'react';
-import { View, type LayoutChangeEvent } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { View, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 
 import { estimateLineWidth, fitScale, VISITOR_LINE, VISITOR_MIN_SCALE } from './lineScale';
@@ -45,29 +45,29 @@ export function VisitorReactionLine({ memoryKey, entries, mine, tone }: VisitorR
   const scale = available === null ? (remembered?.scale ?? 1) : fitScale(natural, available);
   // До замера ширины без памяти строка не видна: показалась бы не в своём размере.
   const ready = available !== null || remembered !== undefined;
+  // Рамка держит высоту строки и при крупном системном шрифте.
+  const { fontScale } = useWindowDimensions();
+
+  // Память — по замеренному, а не по значениям прошлой отрисовки: её копия
+  // облачка берёт с первого кадра.
+  useEffect(() => {
+    if (available !== null) {
+      rememberLineMetrics(memoryKey, { natural, scale: fitScale(natural, available) });
+    }
+  }, [available, memoryKey, natural]);
 
   const font = {
     fontSize: Typography.caption.fontSize * scale,
     lineHeight: Typography.caption.lineHeight * scale,
   };
 
-  const onFrame = (event: LayoutChangeEvent) => {
-    const width = event.nativeEvent.layout.width;
-
-    setAvailable(width);
-    rememberLineMetrics(memoryKey, { natural, scale: fitScale(natural, width) });
-  };
+  const onFrame = (event: LayoutChangeEvent) => setAvailable(event.nativeEvent.layout.width);
 
   const onRuler = (event: LayoutChangeEvent) => {
     if (measuredFor.current === signature) return;
 
     measuredFor.current = signature;
-    const measured = event.nativeEvent.layout.width;
-
-    setNatural(measured);
-    if (available !== null) {
-      rememberLineMetrics(memoryKey, { natural: measured, scale: fitScale(measured, available) });
-    }
+    setNatural(event.nativeEvent.layout.width);
   };
 
   return (
@@ -78,9 +78,18 @@ export function VisitorReactionLine({ memoryKey, entries, mine, tone }: VisitorR
       pointerEvents="none"
       onLayout={onFrame}
       // Облачко не уже строки в самом мелком виде — иначе ей некуда влезть.
-      style={[styles.visitorFrame, { minWidth: natural * VISITOR_MIN_SCALE }]}
+      style={[
+        styles.visitorFrame,
+        {
+          minWidth: natural * VISITOR_MIN_SCALE,
+          height: Typography.caption.lineHeight * fontScale,
+        },
+      ]}
     >
-      <View style={[styles.visitorRuler, styles.hidden]} importantForAccessibility="no-hide-descendants">
+      <View
+        style={[styles.visitorRuler, styles.hidden]}
+        importantForAccessibility="no-hide-descendants"
+      >
         <View onLayout={onRuler} style={[styles.visitorLine, { gap: VISITOR_LINE.between }]}>
           {labels.map(([emoji, count]) => (
             <View

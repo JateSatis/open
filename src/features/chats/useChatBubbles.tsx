@@ -98,6 +98,7 @@ export function useChatBubbles({
   );
 
   /** Реакция на пересланный комментарий ложится оригиналу — как у облачка островка. */
+  const { me } = reactions;
   const reactToComment = useCallback(
     (comment: ForwardedComment, emoji: string) =>
       sendReaction(
@@ -106,17 +107,11 @@ export function useChatBubbles({
         {
           emoji: nextReaction(comment.reactions.mine, emoji),
           audience: audienceOf(comment.chat?.amMember ?? false),
-          me: currentUserId
-            ? {
-                userId: currentUserId,
-                name: participantsById.get(currentUserId)?.displayName ?? null,
-                avatarUrl: participantsById.get(currentUserId)?.avatarUrl ?? null,
-              }
-            : undefined,
+          me,
         },
         'comment',
       ),
-    [currentUserId, participantsById, queryClient],
+    [me, queryClient],
   );
 
   // Под реакциями — свежие аватары участников чата, а не снимок из выборки.

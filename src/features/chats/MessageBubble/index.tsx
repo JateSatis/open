@@ -27,7 +27,6 @@ import {
 import { hasReactions } from '@/features/interactions/reactionState';
 import { MediaViewer, type MediaViewerItem } from '@/features/media';
 import { useTheme } from '@/hooks/use-theme';
-import { Spacing } from '@/theme';
 
 export type MessageBubbleProps = {
   message: ChatMessage;

@@ -5,7 +5,7 @@ import { styles } from './styles';
 
 import { Text } from '@/components/Text';
 import { useTheme } from '@/hooks/use-theme';
-import { Spacing } from '@/theme';
+import { Sizes } from '@/theme';
 
 export type AvatarProps = {
   uri?: string | null;
@@ -19,19 +19,13 @@ export function Avatar({ uri, name, size = 40 }: AvatarProps) {
   const dimension = { width: size, height: size, borderRadius: size / 2 };
 
   if (uri) {
-    return (
-      <Image
-        source={{ uri }}
-        accessibilityLabel={name}
-        style={[styles.image, dimension]}
-      />
-    );
+    return <Image source={{ uri }} accessibilityLabel={name} style={[styles.image, dimension]} />;
   }
 
   return (
     <View style={[styles.fallback, dimension, { backgroundColor: theme.backgroundSelected }]}>
       {/* Мелкий аватар (под реакцией) — буква мельче, иначе вылезает за круг. */}
-      <Text variant={size < Spacing.four ? 'meta' : 'bodyBold'} accessibilityLabel={name}>
+      <Text variant={size <= Sizes.reactionAvatar ? 'meta' : 'bodyBold'} accessibilityLabel={name}>
         {name.trim().charAt(0).toUpperCase() || '?'}
       </Text>
     </View>

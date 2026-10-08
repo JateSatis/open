@@ -18,9 +18,15 @@ export type Me = Pick<Reactor, 'userId' | 'name' | 'avatarUrl'>;
 /**
  * Какой я хочу видеть свою реакцию: `emoji: null` — снять. `me` — я как
  * поставивший: с ним оптимистичная реакция сразу показывает мой аватар, а не
- * «1» до сверки.
+ * «1» до сверки. `listsVisitors` — цель отдаёт и поставивших-зрителей
+ * (комментарий); у сообщения сервер отдаёт только участников.
  */
-export type ReactionIntent = { emoji: string | null; audience: ReactionAudience; me?: Me };
+export type ReactionIntent = {
+  emoji: string | null;
+  audience: ReactionAudience;
+  me?: Me;
+  listsVisitors?: boolean;
+};
 
 /**
  * Сколько разных реакций держит ряд. Тот же инвариант — в базе
@@ -62,13 +68,16 @@ function adjust(
 /**
  * Поставившие, в которых я — у `to`: из прежней реакции убран, к новой
  * дописан последним. Список значим только у реакций с одним-двумя
- * поставившими (`shownReactors`); у остальных под реакцией число.
+ * поставившими (`shownReactors`); у остальных под реакцией число. Зрителем
+ * дописываюсь, только если цель их отдаёт (`listsVisitors`): иначе кеш
+ * разошёлся бы со сверкой навсегда.
  */
 function moveMe(
   reactors: ReactorsByEmoji,
   from: MyReaction | null,
   to: MyReaction | null,
   me: Me,
+  listsVisitors: boolean,
 ): ReactorsByEmoji {
   const next: Record<string, readonly Reactor[]> = { ...reactors };
 
@@ -79,7 +88,7 @@ function moveMe(
     else delete next[from.emoji];
   }
 
-  if (to) {
+  if (to && (listsVisitors || to.audience === 'member')) {
     const others = (next[to.emoji] ?? []).filter((reactor) => reactor.userId !== me.userId);
 
     next[to.emoji] = [...others, { ...me, audience: to.audience }];
@@ -98,6 +107,7 @@ export function replaceMine(
   reactions: MessageReactions,
   mine: MyReaction | null,
   me?: Me,
+  listsVisitors = false,
 ): MessageReactions {
   const current = reactions.mine;
 
@@ -107,9 +117,11 @@ export function replaceMine(
 
   if (mine) next = adjust(next, mine.audience, mine.emoji, 1);
 
-  return me?.userId
-    ? { ...next, mine, reactors: moveMe(reactions.reactors ?? {}, current, mine, me) }
-    : { ...next, mine };
+  if (!me?.userId) return { ...next, mine };
+
+  const reactors = moveMe(reactions.reactors ?? {}, current, mine, me, listsVisitors);
+
+  return { ...next, mine, reactors };
 }
 
 /**
@@ -127,6 +139,7 @@ export function withMyReaction(
     reactions,
     intent.emoji === null ? null : { emoji: intent.emoji, audience: intent.audience },
     intent.me,
+    intent.listsVisitors,
   );
 }
 
@@ -183,11 +196,6 @@ export function shownReactors(
   return list.length === count ? list : null;
 }
 
-/** Ряд полон: новую разную реакцию база отвергнет — меню предлагает только уже стоящие. */
-export function isRowFull(counts: ReactionCounts, limit: number): boolean {
-  return Object.keys(counts).length >= limit;
-}
-
 /** Что меню реакций предлагает в моём ряду. */
 export type MenuReactionSet = {
   /** Ряд полон — только уже стоящие, по популярности. Нет — весь набор. */
@@ -201,7 +209,8 @@ export type MenuReactionSet = {
 /**
  * Набор меню по ряду, куда ляжет моя реакция: участника и зрителя у
  * сообщения, общий ряд у комментария. Ряд полон — новую разную база
- * отвергнет, и меню её не предлагает.
+ * отвергнет, и меню её не предлагает. Как и в базе, моя реакция, где я
+ * единственный, место освобождает: сменить её на новую можно и в полном ряду.
  */
 export function menuReactionSet(
   reactions: MessageReactions,
@@ -213,8 +222,10 @@ export function menuReactionSet(
       : row === 'member'
         ? reactions.members
         : reactions.visitors;
-  const limit = REACTION_KINDS_LIMIT[row];
-  const full = isRowFull(counts, limit);
+  const { mine } = reactions;
+  const mineHere = row === 'comment' || mine?.audience === row ? mine?.emoji : undefined;
+  const freed = mineHere !== undefined && counts[mineHere] === 1 ? 1 : 0;
+  const full = Object.keys(counts).length - freed >= REACTION_KINDS_LIMIT[row];
   const options = full ? byPopularity(counts).map(([emoji]) => emoji) : undefined;
 
   if (row !== 'visitor') return { options, expandable: true };
