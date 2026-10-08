@@ -1,0 +1,35 @@
+appId: com.openger.app
+name: Канал — шит медиа в «Постах» с вкладками «Галерея» и «Pop», переключение и закрытие свайпом
+env:
+  CHANNEL: Test Kanal
+---
+- runFlow: subflows/open-app.yaml
+- tapOn: ${CHANNEL}
+- assertVisible:
+    id: "messages-list"
+- tapOn: "Фото и видео"
+# Открывается на галерее, внизу — вкладки разделов.
+- assertVisible:
+    id: "media-sheet-tabs"
+- assertVisible:
+    id: "media-grid"
+- tapOn:
+    id: "media-sheet-tab-pop"
+- assertVisible:
+    id: "pop-sheet-grid"
+- assertVisible: "Новый поп"
+- tapOn:
+    id: "media-sheet-tab-gallery"
+- assertVisible:
+    id: "media-grid"
+- tapOn:
+    id: "media-sheet-tab-pop"
+- assertVisible:
+    id: "pop-sheet-grid"
+# Свайп вниз закрывает шит и на вкладке «Pop».
+- swipe:
+    start: "50%,60%"
+    end: "50%,98%"
+    duration: 250
+- assertNotVisible:
+    id: "media-sheet-tabs"
