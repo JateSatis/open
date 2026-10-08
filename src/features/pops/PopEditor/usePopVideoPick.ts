@@ -1,0 +1,80 @@
+import { useCallback, useState } from 'react';
+
+import {
+  libraryAssetToLocalMedia,
+  MediaLimits,
+  readVideoFrame,
+  resolveLibraryAsset,
+  type LocalMedia,
+  type MediaLibraryItem,
+  type VideoFrame,
+} from '@/features/media';
+
+/** Видео, принятое для попа: файл на устройстве и его первый кадр. */
+export type PickedPopVideo = {
+  media: LocalMedia & { width: number; height: number };
+  frame: VideoFrame;
+};
+
+export const NOT_VERTICAL = 'Попсы — только вертикальные видео';
+const TOO_LONG = 'Поп — не длиннее 90 секунд';
+const UNREADABLE = 'Не удалось открыть видео. Выберите другое.';
+
+/**
+ * Что можно взять в шите: только видео до 90 секунд. Видео без длительности
+ * не притушено — её проверит выбор. Ориентацию по плитке не узнать: размеры
+ * в медиатеке бывают пустыми и не учитывают поворот.
+ */
+export function acceptsPopVideo(asset: MediaLibraryItem): boolean {
+  return (
+    asset.kind === 'video' &&
+    (asset.durationMs === null || asset.durationMs <= MediaLimits.pop.maxDurationMs)
+  );
+}
+
+/**
+ * Выбор видео для попа. Ориентацию честно говорит только кадр: горизонтальное
+ * или квадратное видео не принимается, и человек видит почему.
+ */
+export function usePopVideoPick(onAccepted: (video: PickedPopVideo) => void) {
+  const [video, setVideo] = useState<PickedPopVideo | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [checking, setChecking] = useState(false);
+
+  const onPick = useCallback(
+    (asset: MediaLibraryItem) => {
+      setChecking(true);
+      setError(null);
+
+      void (async () => {
+        try {
+          const resolved = await resolveLibraryAsset(asset);
+          const frame = await readVideoFrame(resolved.uri);
+          const media = libraryAssetToLocalMedia(resolved);
+
+          if (frame.height <= frame.width) {
+            setError(NOT_VERTICAL);
+            return;
+          }
+
+          if (media.durationMs !== null && media.durationMs > MediaLimits.pop.maxDurationMs) {
+            setError(TOO_LONG);
+            return;
+          }
+
+          const picked = { media: { ...media, width: frame.width, height: frame.height }, frame };
+
+          setVideo(picked);
+          onAccepted(picked);
+        } catch {
+          setError(UNREADABLE);
+        } finally {
+          setChecking(false);
+        }
+      })();
+    },
+    [onAccepted],
+  );
+
+  return { video, error, checking, onPick };
+}

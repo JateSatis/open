@@ -7,6 +7,7 @@
 import { create } from 'zustand';
 
 import type { ChatRef, ForwardedComment, MessageAttachment } from '@/api/chats';
+import type { Pop } from '@/api/pops';
 import type {
   ChatMessage,
   EditVoice,
@@ -36,9 +37,31 @@ export type ComposerMode =
   | { type: 'forward_comments'; comments: ForwardedComment[] }
   | EditMode;
 
+/**
+ * Поп, прикреплённый к посту канала: уже опубликованный или новый — видео с
+ * устройства, выбранное в редакторе попа. Новый публикуется вместе с постом.
+ */
+export type DraftPop =
+  | { type: 'existing'; pop: Pop }
+  | {
+      type: 'new';
+      /** Выбран заранее: повтор отправки не создаёт второй поп. */
+      popId: string;
+      /** `file://` видео на устройстве. */
+      uri: string;
+      /** Кадр видео — обложка над полем и в посте до ответа сервера. */
+      posterUri: string;
+      mimeType: string;
+      width: number;
+      height: number;
+      durationMs: number | null;
+    };
+
 export type ChatDraft = {
   text: string;
   mode: ComposerMode | null;
+  /** Поп поста — только в чате постов канала. */
+  pop?: DraftPop | null;
 };
 
 /**
@@ -68,7 +91,7 @@ function update(chatId: string, change: (draft: ChatDraft) => ChatDraft) {
 
     const byChat = { ...state.byChat };
 
-    if (!next.text && !next.mode) delete byChat[chatId];
+    if (!next.text && !next.mode && !next.pop) delete byChat[chatId];
     else byChat[chatId] = next;
 
     return { byChat };
@@ -89,6 +112,11 @@ export function setDraftText(chatId: string, text: string) {
 
 export function setDraftMode(chatId: string, mode: ComposerMode | null) {
   update(chatId, (draft) => (draft.mode === mode ? draft : { ...draft, mode }));
+}
+
+/** Прикрепляет поп к посту или открепляет его (`null`). */
+export function setDraftPop(chatId: string, pop: DraftPop | null) {
+  update(chatId, (draft) => (draft.pop === pop ? draft : { ...draft, pop }));
 }
 
 /**

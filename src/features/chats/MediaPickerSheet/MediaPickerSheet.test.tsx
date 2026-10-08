@@ -57,6 +57,8 @@ function draft(): ComposerDraft {
     setText: jest.fn(),
     mode: null,
     setMode: jest.fn(),
+    pop: null,
+    setPop: jest.fn(),
     media: jest.fn(() => []),
     clear: jest.fn(),
     clearMedia: jest.fn(),

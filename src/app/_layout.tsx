@@ -85,6 +85,8 @@ export default function RootLayout() {
                     name="call"
                     options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }}
                   />
+                  {/* Редактор попа — во весь экран, поверх вкладок, как камера в TikTok. */}
+                  <Stack.Screen name="pop-editor/[channelId]" />
                 </Stack>
               </BelowReturnBar>
               <ReturnToCallBar />

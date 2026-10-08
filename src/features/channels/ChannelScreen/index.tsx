@@ -12,6 +12,7 @@ import { Text } from '@/components/Text';
 import { SECTION_SETTLE_MS, SectionPager } from '@/features/channels/SectionPager';
 import { useChannel } from '@/features/channels/useChannel';
 import { ChatConversation } from '@/features/chats/ChatConversation';
+import { PopsSection } from '@/features/pops/PopsSection';
 import { useTheme } from '@/hooks/use-theme';
 import { describeLoadError } from '@/lib/network';
 
@@ -21,7 +22,7 @@ export type ChannelScreenProps = { channelId: string };
 
 /**
  * Экран канала: под шапкой — «Посты» | «Попсы», разделы листаются свайпом и
- * тапом по сегменту. «Посты» — переписка чата постов, «Попсы» пока пусты.
+ * тапом по сегменту. «Посты» — переписка чата постов, «Попсы» — сетка попсов канала.
  */
 export function ChannelScreen({ channelId }: ChannelScreenProps) {
   const theme = useTheme();
@@ -79,11 +80,9 @@ function ChannelSections({ channel }: { channel: Channel }) {
         channel={ref}
         active={index === 0}
       />,
-      <View key="pops" testID="pops-section" style={styles.centered}>
-        <Text color="textSecondary">Попсов пока нет</Text>
-      </View>,
+      <PopsSection key="pops" channelId={channel.id} />,
     ],
-    [channel.postsChatId, index, ref],
+    [channel.id, channel.postsChatId, index, ref],
   );
 
   return (
