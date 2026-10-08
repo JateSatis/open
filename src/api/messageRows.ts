@@ -5,7 +5,11 @@
 
 import type { QueryData } from '@supabase/supabase-js';
 
-import { toPreview, type MessagePreview } from '@/api/messagePreview';
+import {
+  PREVIEW_ATTACHMENT_COLUMNS,
+  toPreview,
+  type MessagePreview,
+} from '@/api/messagePreview';
 import { REACTION_COLUMNS, toReactions, type MessageReactions } from '@/api/reactionCounts';
 import { supabase } from '@/api/supabase';
 
@@ -36,6 +40,11 @@ export type MessageAttachment = {
   posterUrl: string | null;
   /** Форма волны голосового, столбики 0..31. У остального — `null`. */
   waveform: number[] | null;
+  /**
+   * Вложение — ссылка на поп канала: файл, постер и размеры выше — попа.
+   * Нет или `null` — своё вложение сообщения.
+   */
+  popId?: string | null;
 };
 
 /** Где в этом чате стоит сообщение из другого чата: островок, который его держит. */
@@ -183,20 +192,23 @@ export type Message = {
 };
 
 const ATTACHMENT_COLUMNS = 'id, url, poster_url, mime_type, width, height, duration_ms, waveform, position';
+// Вложение сообщения бывает ссылкой на поп: файл тогда — попа.
+const MESSAGE_ATTACHMENT_COLUMNS =
+  `${ATTACHMENT_COLUMNS}, pop_id, pop:pops(url, poster_url, mime_type, width, height, duration_ms)` as const;
 // Подсказки внешних ключей нужны, потому что `messages` связана с `profiles`,
 // `chats` и сама с собой через несколько таблиц сразу.
 const REPLY_COLUMNS =
-  'replies:message_replies!message_replies_message_fkey(position, quoted_id, via:messages!message_replies_quoted_forward_fkey(id, created_at), quoted:messages!message_replies_quoted_fkey(id, author_id, kind, text, created_at, edited_at, author:profiles!messages_author_id_fkey(display_name), attachments(url, poster_url, mime_type, duration_ms, position)))';
-const REACTION_AND_COMMENT_COLUMNS = `${REACTION_COLUMNS}, comments_count, views_count, read_at`;
-const ORIGINAL_COLUMNS = `id, chat_id, author_id, kind, text, created_at, edited_at, attachments(${ATTACHMENT_COLUMNS}), ${REPLY_COLUMNS}, ${REACTION_AND_COMMENT_COLUMNS}, author:profiles!messages_author_id_fkey(display_name, avatar_url), chat:chats!messages_chat_id_fkey(id, chat_display_name, chat_read_up_to, chat_am_member)`;
+  `replies:message_replies!message_replies_message_fkey(position, quoted_id, via:messages!message_replies_quoted_forward_fkey(id, created_at), quoted:messages!message_replies_quoted_fkey(id, author_id, kind, text, created_at, edited_at, author:profiles!messages_author_id_fkey(display_name), attachments(${PREVIEW_ATTACHMENT_COLUMNS})))` as const;
+const REACTION_AND_COMMENT_COLUMNS = `${REACTION_COLUMNS}, comments_count, views_count, read_at` as const;
+const ORIGINAL_COLUMNS = `id, chat_id, author_id, kind, text, created_at, edited_at, attachments(${MESSAGE_ATTACHMENT_COLUMNS}), ${REPLY_COLUMNS}, ${REACTION_AND_COMMENT_COLUMNS}, author:profiles!messages_author_id_fkey(display_name, avatar_url), chat:chats!messages_chat_id_fkey(id, chat_display_name, chat_read_up_to, chat_am_member)` as const;
 
-const FORWARDED_COMMENT_COLUMNS = `forwarded_comment_id, forwarded:comments!messages_forwarded_comment_fkey(id, message_id, chat_id, thread_root_id, author_id, kind, text, created_at, edited_at, ${REACTION_COLUMNS}, author:profiles(display_name, avatar_url), comment_attachments(${ATTACHMENT_COLUMNS}), chat:chats!comments_chat_id_fkey(id, chat_display_name, chat_am_member), target:messages!comments_message_fkey(id, author_id, kind, text, created_at, author:profiles!messages_author_id_fkey(display_name), attachments(url, poster_url, mime_type, duration_ms, position)))`;
+const FORWARDED_COMMENT_COLUMNS = `forwarded_comment_id, forwarded:comments!messages_forwarded_comment_fkey(id, message_id, chat_id, thread_root_id, author_id, kind, text, created_at, edited_at, ${REACTION_COLUMNS}, author:profiles(display_name, avatar_url), comment_attachments(${ATTACHMENT_COLUMNS}), chat:chats!comments_chat_id_fkey(id, chat_display_name, chat_am_member), target:messages!comments_message_fkey(id, author_id, kind, text, created_at, author:profiles!messages_author_id_fkey(display_name), attachments(${PREVIEW_ATTACHMENT_COLUMNS})))` as const;
 
 // Островок приходит сразу с оригиналами: их текст, файлы, автор, чат,
 // реакции и комментарии — той же выборкой. Своя реакция — вычисляемой связью
 // `my_reaction`, и у оригинала тоже.
 export const MESSAGE_COLUMNS =
-  `id, chat_id, author_id, kind, text, created_at, edited_at, attachments(${ATTACHMENT_COLUMNS}), ${REPLY_COLUMNS}, ${REACTION_AND_COMMENT_COLUMNS}, stream_id, system_event, stream:streams!messages_stream_id_fkey(host_id, started_at, ended_at), my_call:my_stream_participation(id), source_chat:chats!messages_source_chat_id_fkey(id, chat_display_name), items:forward_items!forward_items_forward_fkey(id, position, message_id, original:messages!forward_items_message_fkey(${ORIGINAL_COLUMNS})), ${FORWARDED_COMMENT_COLUMNS}` as const;
+  `id, chat_id, author_id, kind, text, created_at, edited_at, attachments(${MESSAGE_ATTACHMENT_COLUMNS}), ${REPLY_COLUMNS}, ${REACTION_AND_COMMENT_COLUMNS}, stream_id, system_event, stream:streams!messages_stream_id_fkey(host_id, started_at, ended_at), my_call:my_stream_participation(id), source_chat:chats!messages_source_chat_id_fkey(id, chat_display_name), items:forward_items!forward_items_forward_fkey(id, position, message_id, original:messages!forward_items_message_fkey(${ORIGINAL_COLUMNS})), ${FORWARDED_COMMENT_COLUMNS}` as const;
 
 // Мозаика в облачке должна собираться в порядке выбора файлов, а PostgREST
 // не гарантирует порядок вложенной выборки сам по себе — нужен явный order
@@ -211,6 +223,7 @@ export const messagesSelect = () =>
 type MessageRow = QueryData<ReturnType<typeof messagesSelect>>[number];
 type ReplyRow = NonNullable<MessageRow['replies']>[number];
 type AttachmentRow = NonNullable<MessageRow['attachments']>[number];
+type CommentAttachmentRow = NonNullable<ForwardedRow['comment_attachments']>[number];
 type ItemRow = NonNullable<MessageRow['items']>[number];
 type OriginalRow = NonNullable<ItemRow['original']>;
 type ForwardedRow = NonNullable<MessageRow['forwarded']>;
@@ -239,19 +252,40 @@ export function toMessageKind(kind: string): MessageKind {
   return MESSAGE_KINDS.has(kind) ? (kind as MessageKind) : 'system';
 }
 
-function toAttachments(rows: AttachmentRow[] | null | undefined): MessageAttachment[] {
+function toAttachments(
+  rows: (AttachmentRow | CommentAttachmentRow)[] | null | undefined,
+): MessageAttachment[] {
   return [...(rows ?? [])]
     .sort((a, b) => a.position - b.position)
-    .map((attachment) => ({
-      id: attachment.id,
-      url: attachment.url,
-      posterUrl: attachment.poster_url,
-      mimeType: attachment.mime_type,
-      width: attachment.width,
-      height: attachment.height,
-      durationMs: attachment.duration_ms,
-      waveform: attachment.waveform,
-    }));
+    .map((attachment) => {
+      if ('pop_id' in attachment && attachment.pop_id) {
+        // Ссылка на поп: файл — попа. Поп удалён — обложки нет, место остаётся.
+        const pop = attachment.pop;
+
+        return {
+          id: attachment.id,
+          url: pop?.url ?? '',
+          posterUrl: pop?.poster_url ?? null,
+          mimeType: pop?.mime_type ?? null,
+          width: pop?.width ?? null,
+          height: pop?.height ?? null,
+          durationMs: pop?.duration_ms ?? null,
+          waveform: null,
+          popId: attachment.pop_id,
+        };
+      }
+
+      return {
+        id: attachment.id,
+        url: attachment.url ?? '',
+        posterUrl: attachment.poster_url,
+        mimeType: attachment.mime_type,
+        width: attachment.width,
+        height: attachment.height,
+        durationMs: attachment.duration_ms,
+        waveform: attachment.waveform,
+      };
+    });
 }
 
 function toQuoted(row: ReplyRow): QuotedMessage {

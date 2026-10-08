@@ -17,15 +17,25 @@ export type MessagePreview = {
   firstMediaIsVideo: boolean;
   /** Длительность голосового. */
   durationMs: number | null;
+  /** Пост показывает поп: «Pop», а не «Видео». */
+  isPop?: boolean;
 };
 
 export type PreviewAttachment = {
-  url: string;
+  /** `null` — вложение-ссылка на поп: файл у попа. */
+  url: string | null;
   poster_url: string | null;
   mime_type: string | null;
   duration_ms: number | null;
   position?: number;
+  pop_id?: string | null;
+  /** Поп вложения-ссылки; `null` — поп удалён. */
+  pop?: { poster_url: string; duration_ms: number } | null;
 };
+
+/** Вложения сообщения для превью — одной строкой выборки, вместе с попом ссылки. */
+export const PREVIEW_ATTACHMENT_COLUMNS =
+  'url, poster_url, mime_type, duration_ms, position, pop_id, pop:pops(poster_url, duration_ms)' as const;
 
 function isVisual(mimeType: string | null): boolean {
   return Boolean(mimeType?.startsWith('image/') || mimeType?.startsWith('video/'));
@@ -38,6 +48,20 @@ export function toPreview(
   attachments: PreviewAttachment[],
 ): MessagePreview {
   const ordered = [...attachments].sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+  const pop = ordered.find((attachment) => attachment.pop_id);
+
+  if (pop) {
+    return {
+      kind,
+      text,
+      thumbnailUrl: pop.pop?.poster_url ?? pop.poster_url,
+      mediaCount: 1,
+      firstMediaIsVideo: true,
+      durationMs: pop.pop?.duration_ms ?? pop.duration_ms,
+      isPop: true,
+    };
+  }
+
   const visual = ordered.filter((attachment) => isVisual(attachment.mime_type));
   const first = visual[0];
   const firstIsVideo = Boolean(first?.mime_type?.startsWith('video/'));
@@ -49,5 +73,6 @@ export function toPreview(
     mediaCount: visual.length,
     firstMediaIsVideo: firstIsVideo,
     durationMs: kind === 'voice' ? (ordered[0]?.duration_ms ?? null) : null,
+    isPop: false,
   };
 }
