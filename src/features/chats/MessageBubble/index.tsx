@@ -9,7 +9,11 @@ import type { QuotedMessage } from '@/api/chats';
 import type { ReactionAudience } from '@/api/reactionCounts';
 import { Avatar } from '@/components/Avatar';
 import { Text } from '@/components/Text';
-import { computeMosaicLayout, type MosaicBounds } from '@/features/chats/lib/mosaicLayout';
+import {
+  computeMosaicLayout,
+  popPostLayout,
+  type MosaicBounds,
+} from '@/features/chats/lib/mosaicLayout';
 import { MediaAttachmentGrid } from '@/features/chats/MediaAttachmentGrid';
 import { MessageMeta } from '@/features/chats/MessageMeta';
 import { ReplyQuote } from '@/features/chats/ReplyQuote';
@@ -95,6 +99,8 @@ export type MessageBubbleProps = {
   lead?: ReactNode;
 };
 
+const noop = () => undefined;
+
 export function MessageBubble({
   message,
   isOwn,
@@ -121,6 +127,8 @@ export function MessageBubble({
 }: MessageBubbleProps) {
   const theme = useTheme();
   const isMediaMessage = message.kind === 'media' && message.attachments.length > 0;
+  // Пост с попом: обложка попа, а не мозаика; просмотр попа — отдельная задача.
+  const isPopPost = isMediaMessage && Boolean(message.attachments[0]?.popId);
   const voice = message.kind === 'voice' ? message.attachments[0] : undefined;
   // Кружки пока не подключены к облачку — это отдельная задача; здесь только
   // заглушка, чтобы сообщение не было пустым.
@@ -138,10 +146,12 @@ export function MessageBubble({
   // смене вложений или ширины, а не на каждую перерисовку строки.
   const layout = useMemo(
     () =>
-      isMediaMessage
-        ? computeMosaicLayout(message.attachments, mediaBounds, PixelRatio.get())
-        : null,
-    [isMediaMessage, message.attachments, mediaBounds],
+      isPopPost
+        ? popPostLayout(mediaBounds, PixelRatio.get())
+        : isMediaMessage
+          ? computeMosaicLayout(message.attachments, mediaBounds, PixelRatio.get())
+          : null,
+    [isMediaMessage, isPopPost, message.attachments, mediaBounds],
   );
 
   const viewerItems: MediaViewerItem[] = message.attachments.map((attachment) => ({
@@ -290,7 +300,7 @@ export function MessageBubble({
               attachments={message.attachments}
               layout={layout}
               localPreviews={message.localPreviews}
-              onPress={setViewerIndex}
+              onPress={isPopPost ? noop : setViewerIndex}
             >
               {message.text ? null : (
                 // Без подписи время со статусом — плашкой в левом нижнем углу
@@ -354,7 +364,7 @@ export function MessageBubble({
 
       {isOwn ? null : aside}
 
-      {isMediaMessage ? (
+      {isMediaMessage && !isPopPost ? (
         <MediaViewer
           visible={viewerIndex !== null}
           items={viewerItems}

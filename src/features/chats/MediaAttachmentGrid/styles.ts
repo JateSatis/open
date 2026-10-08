@@ -4,4 +4,7 @@ export const styles = StyleSheet.create({
   container: {
     position: 'relative',
   },
+  tile: {
+    position: 'absolute',
+  },
 });
