@@ -36,7 +36,9 @@ export {
   uploadAvatar,
   uploadChannelAvatar,
   uploadMedia,
+  uploadPopMedia,
 } from './storage';
+export { readVideoFrame, type VideoFrame } from './lib/videoFrame';
 export { pickAvatar, type AvatarSource, type PickAvatarResult } from './pickAvatar';
 export { prepareAvatar, type PreparedAvatar } from './lib/prepareAvatar';
 export { useVoiceRecorder, type VoiceRecorder as VoiceRecorderApi } from './useVoiceRecorder';
@@ -73,6 +75,7 @@ export {
 } from './selectionStore';
 export { useGalleryAssets, type GalleryAssets, type GalleryStatus } from './useGalleryAssets';
 export { prepareForUpload } from './lib/prepareForUpload';
+export { SLOT_BLOCKED, SLOT_FREE } from './selectionStore';
 export { uploadAllMedia } from './uploadAll';
 
 export { MediaLimits } from './constants';

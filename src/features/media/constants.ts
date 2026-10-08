@@ -43,6 +43,12 @@ export const MediaLimits = {
      */
     maxDimensionPx: 1280,
   },
+  pop: {
+    /** Поп — короткое вертикальное видео, как в TikTok. */
+    maxDurationMs: 90_000,
+    /** Подпись — пара строк под видео, не статья. */
+    maxCaptionLength: 300,
+  },
   gallery: {
     /** До 50 файлов за одно сообщение — предел самого альбома, не запроса к галерее. */
     maxSelection: 50,

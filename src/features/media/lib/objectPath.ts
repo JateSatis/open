@@ -40,6 +40,19 @@ export function buildChannelAvatarPath(userId: string): string {
 }
 
 /**
+ * Попсы канала — своя папка: у попа своя жизнь (сетка канала, просмотр,
+ * удаление попа), и чистить или переносить их удобнее отдельно от вложений
+ * переписки. Видео и постер — одно имя, разные расширения.
+ */
+export const POPS_FOLDER = 'pops';
+
+export function buildPopPaths(userId: string, mimeType: string): { video: string; poster: string } {
+  const base = `${userId}/${POPS_FOLDER}/${randomId()}`;
+
+  return { video: `${base}.${extensionFromMime(mimeType)}`, poster: `${base}.jpg` };
+}
+
+/**
  * Путь файла в бакете по его публичному URL — только если это аватар самого
  * `userId`. Аватар от провайдера (Google) или чужой файл даёт null: удалять
  * такое приложение не должно.
