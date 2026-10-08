@@ -340,6 +340,26 @@ begin
     (select text from public.messages where id = post) = 'новый текст'
     and (select pop_id from public.attachments where message_id = post) = pop);
 
+  -- Удалённый поп (этап 3) не замораживает текст поста, который его показывает.
+  perform set_config('role', 'postgres', true);
+  update public.pops set deleted_at = now() where id = bare_pop;
+  perform pg_temp.act_as(a);
+  perform public.edit_message(post2, 'после удаления попа',
+    jsonb_build_array(jsonb_build_object('attachment_id',
+      (select id from public.attachments where message_id = post2))));
+  perform pg_temp.check('правка поста с удалённым попом',
+    (select text from public.messages where id = post2) = 'после удаления попа');
+
+  begin
+    perform public.send_pop_post(chat, bare_pop, 'с удалённым', null);
+    perform pg_temp.check('новый пост с удалённым попом — отказ', false);
+  exception when others then
+    perform pg_temp.check('новый пост с удалённым попом — отказ', sqlstate = '42501', sqlerrm);
+  end;
+
+  perform set_config('role', 'postgres', true);
+  update public.pops set deleted_at = null where id = bare_pop;
+
   -- Посторонний
   perform pg_temp.act_as(b);
 
