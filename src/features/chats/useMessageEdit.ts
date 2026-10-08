@@ -185,12 +185,14 @@ export function useMessageEdit({
     if (!mode) return undefined;
 
     const result = resultOf(text, mode, false);
+    const hasPop = mode.kept.some((attachment) => attachment.popId);
 
     return {
       canSave: !isEditEmpty(result),
       textLocked: mode.voice !== null,
-      attachDisabled: editMediaRoom(mode) === 0,
-      recordDisabled: !canRecordInEdit(result),
+      // Поп в посте правкой не меняется: ни файлов к нему, ни голосового вместо.
+      attachDisabled: editMediaRoom(mode) === 0 || hasPop,
+      recordDisabled: !canRecordInEdit(result) || hasPop,
     };
   }, [mode, text]);
 

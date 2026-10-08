@@ -19,6 +19,10 @@ export const Colors = {
     mediaScrim: 'rgba(0, 0, 0, 0.5)',
     /** Текст и значки на `mediaScrim` — белые в обеих темах, фон под ними всегда тёмный. */
     textOnMedia: '#ffffff',
+    /** Подсказки и второстепенный текст на тёмном экране (редактор попа). */
+    textOnMediaSecondary: 'rgba(255, 255, 255, 0.6)',
+    /** Поле и кнопки на тёмном экране — светлая дымка поверх чёрного. */
+    mediaControl: 'rgba(255, 255, 255, 0.14)',
     /** Затемнение фона под модальными окнами — одинаковое в обеих темах. */
     overlay: 'rgba(0, 0, 0, 0.5)',
     /** Непроигранные столбики волны голосового в чужом облачке. */
@@ -86,6 +90,8 @@ export const Colors = {
     viewerBackground: '#000000',
     mediaScrim: 'rgba(0, 0, 0, 0.5)',
     textOnMedia: '#ffffff',
+    textOnMediaSecondary: 'rgba(255, 255, 255, 0.6)',
+    mediaControl: 'rgba(255, 255, 255, 0.14)',
     overlay: 'rgba(0, 0, 0, 0.5)',
     waveformRest: 'rgba(176, 180, 186, 0.35)',
     waveformRestOnPrimary: 'rgba(255, 255, 255, 0.45)',

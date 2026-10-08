@@ -1,4 +1,4 @@
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, useWindowDimensions, View } from 'react-native';
 import { useSharedValue, withTiming } from 'react-native-reanimated';
@@ -11,7 +11,12 @@ import { SegmentedControl } from '@/components/SegmentedControl';
 import { Text } from '@/components/Text';
 import { SECTION_SETTLE_MS, SectionPager } from '@/features/channels/SectionPager';
 import { useChannel } from '@/features/channels/useChannel';
+import type { Pop } from '@/api/pops';
 import { ChatConversation } from '@/features/chats/ChatConversation';
+import { closeMediaSheet } from '@/features/chats/MediaPickerSheet';
+import { popSheetSection } from '@/features/pops/popSheetSection';
+import { useCanPublish } from '@/features/pops/queries';
+import { PopsSection } from '@/features/pops/PopsSection';
 import { useTheme } from '@/hooks/use-theme';
 import { describeLoadError } from '@/lib/network';
 
@@ -21,7 +26,7 @@ export type ChannelScreenProps = { channelId: string };
 
 /**
  * Экран канала: под шапкой — «Посты» | «Попсы», разделы листаются свайпом и
- * тапом по сегменту. «Посты» — переписка чата постов, «Попсы» пока пусты.
+ * тапом по сегменту. «Посты» — переписка чата постов, «Попсы» — сетка попсов канала.
  */
 export function ChannelScreen({ channelId }: ChannelScreenProps) {
   const theme = useTheme();
@@ -50,8 +55,31 @@ export function ChannelScreen({ channelId }: ChannelScreenProps) {
 function ChannelSections({ channel }: { channel: Channel }) {
   const theme = useTheme();
   const { width } = useWindowDimensions();
+  const router = useRouter();
   const position = useSharedValue(0);
   const [index, setIndex] = useState(0);
+
+  // Право публиковать — одно на канал (`can_publish_in_channel`), а не участие в чате.
+  const canPublish = useCanPublish(channel.id);
+
+  // Вкладка «Pop» шита медиа в «Постах»: попсы канала и «+ Новый поп».
+  const sheetSections = useCallback(
+    ({ attachPop }: { attachPop: (pop: Pop) => void }) => [
+      popSheetSection({
+        channelId: channel.id,
+        canAdd: canPublish,
+        onPick: attachPop,
+        onAdd: () => {
+          closeMediaSheet();
+          router.push({
+            pathname: '/pop-editor/[channelId]',
+            params: { channelId: channel.id, from: 'posts' },
+          });
+        },
+      }),
+    ],
+    [canPublish, channel.id, router],
+  );
 
   const ref = useMemo<ChannelRef>(
     () => ({
@@ -78,12 +106,11 @@ function ChannelSections({ channel }: { channel: Channel }) {
         chatId={channel.postsChatId}
         channel={ref}
         active={index === 0}
+        sheetSections={sheetSections}
       />,
-      <View key="pops" testID="pops-section" style={styles.centered}>
-        <Text color="textSecondary">Попсов пока нет</Text>
-      </View>,
+      <PopsSection key="pops" channelId={channel.id} />,
     ],
-    [channel.postsChatId, index, ref],
+    [channel.id, channel.postsChatId, index, ref, sheetSections],
   );
 
   return (

@@ -1,11 +1,10 @@
-import { FlashList } from '@shopify/flash-list';
+import { FlashList, type FlashListProps } from '@shopify/flash-list';
 import {
   createContext,
   forwardRef,
   useCallback,
   useContext,
   useEffect,
-  type ComponentProps,
   type ComponentType,
   type RefObject,
 } from 'react';
@@ -15,7 +14,7 @@ import type { AnimatedRef, SharedValue } from 'react-native-reanimated';
 import { styles } from './styles';
 
 import { GestureScrollView, useSheetScroll } from '@/components/ScrollSheet';
-import { GridSkeleton, type MediaListComponent } from '@/features/media';
+import { GridSkeleton } from '@/features/media';
 import { useTheme } from '@/hooks/use-theme';
 
 export type SheetListContextValue = {
@@ -30,6 +29,8 @@ export type SheetListContextValue = {
   dismissing: SharedValue<boolean>;
   /** Скролл смонтирован и ссылка на него заполнена. */
   onScrollAttached: () => void;
+  /** Скелет сетки галереи под клетками — только у раздела галереи. */
+  skeleton: boolean;
 };
 
 /**
@@ -58,7 +59,7 @@ const SheetScrollView = forwardRef<ScrollView, ScrollViewProps>(function SheetSc
   ref,
 ) {
   const theme = useTheme();
-  const { travel, topBarHeight, animatedRef, gestureRef } = useSheetListContext();
+  const { travel, topBarHeight, animatedRef, gestureRef, skeleton } = useSheetListContext();
 
   const attach = useCallback(
     (instance: ComponentType | null) => {
@@ -89,16 +90,24 @@ const SheetScrollView = forwardRef<ScrollView, ScrollViewProps>(function SheetSc
         style={[styles.surface, { top: travel, backgroundColor: theme.background }]}
         pointerEvents="none"
       >
-        <GridSkeleton top={topBarHeight} square={theme.backgroundElement} gap={theme.background} />
+        {skeleton ? (
+          <GridSkeleton
+            top={topBarHeight}
+            square={theme.backgroundElement}
+            gap={theme.background}
+          />
+        ) : null}
       </View>
       {children}
     </GestureScrollView>
   );
 });
 
-export const SheetMediaList: MediaListComponent = function SheetMediaList(
-  props: ComponentProps<MediaListComponent>,
-) {
+/**
+ * Список шита для любого раздела: галереи, попсов и тех, что придут потом.
+ * Им владеет движение шита — раздел только отдаёт ему строки.
+ */
+export function SheetList<T>(props: FlashListProps<T>) {
   const { animatedRef, scrollOffset, dismissing, onScrollAttached } = useSheetListContext();
 
   useSheetScroll(animatedRef, scrollOffset, dismissing);
@@ -113,4 +122,4 @@ export const SheetMediaList: MediaListComponent = function SheetMediaList(
       renderScrollComponent={SheetScrollView}
     />
   );
-};
+}

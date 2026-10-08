@@ -29,6 +29,8 @@ export type MediaGridItemProps = {
   onToggle: (asset: MediaLibraryItem) => void;
   /** Есть — клетка выбирает один файл, а не отмечает его кружком. */
   pick?: GridPick;
+  /** Галерею сейчас взять нельзя (к посту уже прикреплён поп): клетка притушена. */
+  locked?: boolean;
 };
 
 /**
@@ -48,6 +50,7 @@ export const MediaGridItem = memo(function MediaGridItem({
   size,
   onToggle,
   pick,
+  locked = false,
 }: MediaGridItemProps) {
   countRender('MediaGridItem');
 
@@ -62,7 +65,7 @@ export const MediaGridItem = memo(function MediaGridItem({
   useEffect(() => countMount('MediaGridItem'), []);
 
   const isSelected = slot > SLOT_FREE;
-  const disabled = slot === SLOT_BLOCKED;
+  const disabled = locked || slot === SLOT_BLOCKED;
 
   return (
     <View style={{ width: size, height: size }}>
@@ -104,6 +107,17 @@ export const MediaGridItem = memo(function MediaGridItem({
             {asset.durationMs !== null ? formatDuration(asset.durationMs) : '▶'}
           </Text>
         </View>
+      ) : null}
+
+      {locked && !isSelected ? (
+        <View
+          testID="media-grid-locked"
+          pointerEvents="none"
+          style={[
+            styles.thumbnail,
+            { backgroundColor: theme.background, opacity: Opacity.unavailable },
+          ]}
+        />
       ) : null}
 
       {pick ? (

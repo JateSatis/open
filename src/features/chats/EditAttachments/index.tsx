@@ -7,6 +7,7 @@ import type { MessageAttachment } from '@/api/chats';
 import { Text } from '@/components/Text';
 import type { EditVoice } from '@/features/chats/messages/types';
 import { VoiceMessage } from '@/features/chats/VoiceMessage';
+import { PopAttachmentChip } from '@/features/chats/PopAttachmentChip';
 import { useTheme } from '@/hooks/use-theme';
 import { Spacing } from '@/theme';
 
@@ -101,6 +102,11 @@ export function EditAttachments({
       contentContainerStyle={styles.strip}
     >
       {kept.map((attachment) => {
+        // Поп в посте правкой не убрать: креста у него нет.
+        if (attachment.popId) {
+          return <PopAttachmentChip key={attachment.id} posterUri={attachment.posterUrl} />;
+        }
+
         const isVideo = Boolean(attachment.mimeType?.startsWith('video/'));
         const thumbnail = isVideo ? attachment.posterUrl : attachment.url;
 

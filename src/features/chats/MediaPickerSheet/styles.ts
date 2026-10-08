@@ -1,6 +1,6 @@
 import { StyleSheet } from 'react-native';
 
-import { Radii, Spacing } from '@/theme';
+import { Radii, Sizes, Spacing } from '@/theme';
 
 const HANDLE_BAR_WIDTH = Spacing.five + Spacing.one;
 const HANDLE_BAR_HEIGHT = Spacing.one;
@@ -71,5 +71,15 @@ export const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
+  },
+  tabs: {
+    flexDirection: 'row',
+    height: Sizes.sheetTabBar,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  tab: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

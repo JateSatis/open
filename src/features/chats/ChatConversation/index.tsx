@@ -14,6 +14,9 @@ import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 import { styles } from './styles';
 
 import type { ChannelRef, ForwardedComment, IslandOriginal } from '@/api/chats';
+import type { Pop } from '@/api/pops';
+import type { DraftPop } from '@/features/chats/composerDraftStore';
+import type { LiveQuote } from '@/features/chats/messages/types';
 import { Text } from '@/components/Text';
 import { ChatFooter, modePlate } from '@/features/chats/ChatFooter';
 import { ChatScreenHeader } from '@/features/chats/ChatScreenHeader';
@@ -28,7 +31,13 @@ import {
 } from '@/features/chats/islands/rows';
 import { useForwardedCommentSources } from '@/features/chats/islands/useForwardedCommentSources';
 import { useIslandSources } from '@/features/chats/islands/useIslandSources';
-import { MediaPickerSheet } from '@/features/chats/MediaPickerSheet';
+import {
+  closeMediaSheet,
+  GALLERY_ONLY,
+  gallerySection,
+  MediaPickerSheet,
+  type SheetSection,
+} from '@/features/chats/MediaPickerSheet';
 import { MessageContextMenu } from '@/features/chats/MessageContextMenu';
 import { PinnedBar } from '@/features/chats/PinnedBar';
 import {
@@ -109,13 +118,23 @@ export type ChatConversationProps = {
    * когда открыты «Попсы», — просмотры и прочтение тогда не засчитываются.
    */
   active?: boolean;
+  /**
+   * Свои разделы шита медиа после галереи — у канала это «Pop». Переписка о
+   * них не знает: она даёт лишь способ прикрепить поп к посту.
+   */
+  sheetSections?: (context: { attachPop: (pop: Pop) => void }) => SheetSection[];
 };
 
 /**
  * Переписка целиком: шапка (через опции экрана), список, поле ввода, шиты,
  * меню и комментарии. Её показывают и экран чата, и раздел «Посты» канала.
  */
-export function ChatConversation({ chatId, channel = null, active = true }: ChatConversationProps) {
+export function ChatConversation({
+  chatId,
+  channel = null,
+  active = true,
+  sheetSections: extraSections,
+}: ChatConversationProps) {
   const router = useRouter();
   const nav = useNavigation();
   const theme = useTheme();
@@ -295,6 +314,18 @@ export function ChatConversation({ chatId, channel = null, active = true }: Chat
     [isMember, participantsById, readUpTo, thisChat],
   );
 
+  // Пост с попом — только в «Постах» канала.
+  const { sendPop: sendPopTo } = chatMessages;
+  const channelId = channel?.id ?? null;
+  const sendPop = useMemo(
+    () =>
+      channelId
+        ? (text: string, pop: DraftPop, replies?: LiveQuote[]) =>
+            sendPopTo(channelId, text, pop, replies)
+        : undefined,
+    [channelId, sendPopTo],
+  );
+
   const replyForward = useReplyForward({
     chatId,
     sourceChat: thisChat,
@@ -304,6 +335,7 @@ export function ChatConversation({ chatId, channel = null, active = true }: Chat
     composerRef,
     send: chatMessages.send,
     sendVoice: chatMessages.sendVoice,
+    sendPop,
     forward: chatMessages.forward,
     forwardComments: chatMessages.forwardComments,
   });
@@ -608,6 +640,31 @@ export function ChatConversation({ chatId, channel = null, active = true }: Chat
     : undefined;
   const submit = isEditing ? edit.save : replyForward.submit;
 
+  // Разделы шита медиа по виду чата: в «Постах» канала к галерее добавляется
+  // «Pop». Поп и галерея в одном посте несовместимы — пока поп прикреплён,
+  // галерея притушена.
+  const { pop: draftPop, setPop } = draft;
+  const attachPop = useCallback(
+    (pop: Pop) => {
+      setPop({ type: 'existing', pop });
+      closeMediaSheet();
+    },
+    [setPop],
+  );
+  const sheetSections = useMemo(
+    () =>
+      extraSections
+        ? [gallerySection({ locked: draftPop !== null }), ...extraSections({ attachPop })]
+        : GALLERY_ONLY,
+    [attachPop, draftPop, extraSections],
+  );
+  const popChip = draftPop
+    ? {
+        posterUri: draftPop.type === 'existing' ? draftPop.pop.posterUrl : draftPop.posterUri,
+        onRemove: () => setPop(null),
+      }
+    : null;
+
   return (
     <View
       ref={containerRef}
@@ -744,6 +801,7 @@ export function ChatConversation({ chatId, channel = null, active = true }: Chat
                   // Запись в правке не уходит в чат — и «записывает голосовое…» не правда.
                   onRecordingVoice: isEditing ? noop : notifyRecordingVoice,
                   inputRef: composerRef,
+                  pop: isEditing ? null : popChip,
                 }
           }
         />
@@ -763,6 +821,7 @@ export function ChatConversation({ chatId, channel = null, active = true }: Chat
           editing={isEditing}
           onTyping={notifyTyping}
           onSend={submit}
+          sections={sheetSections}
         />
       ) : null}
 

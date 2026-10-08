@@ -5,6 +5,7 @@ import { getGallerySnapshot, setGallerySnapshot } from './galleryPrefetch';
 import {
   countRecentMedia,
   queryRecentMedia,
+  checkMediaLibraryAccess,
   requestMediaLibraryAccess,
   type MediaLibraryItem,
 } from './mediaLibrary';
@@ -132,12 +133,21 @@ export function useGalleryAssets(enabled: boolean): GalleryAssets {
     if (!enabled) return;
 
     cancelledRef.current = false;
-    requestAccess();
+
+    // Уже выданный доступ не запрашивается заново: запрос поднимает системное
+    // окно поверх приложения даже ради ответа «да», а сетка монтируется на
+    // каждое открытие шита и на каждый возврат на вкладку галереи.
+    void checkMediaLibraryAccess().then((access) => {
+      if (cancelledRef.current) return;
+
+      if (access === 'granted') void fill();
+      else requestAccess();
+    });
 
     return () => {
       cancelledRef.current = true;
     };
-  }, [enabled, requestAccess]);
+  }, [enabled, fill, requestAccess]);
 
   return { status, items, total, isFilling, requestAccess };
 }

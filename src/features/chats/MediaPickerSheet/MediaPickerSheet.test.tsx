@@ -5,6 +5,7 @@ import type { PanGesture } from 'react-native-gesture-handler';
 
 import {
   armMediaSheet,
+  gallerySection,
   MediaPickerSheet,
   openMediaSheet,
   releaseMediaSheetArm,
@@ -57,6 +58,8 @@ function draft(): ComposerDraft {
     setText: jest.fn(),
     mode: null,
     setMode: jest.fn(),
+    pop: null,
+    setPop: jest.fn(),
     media: jest.fn(() => []),
     clear: jest.fn(),
     clearMedia: jest.fn(),
@@ -383,5 +386,60 @@ describe('MediaPickerSheet', () => {
 
     expect(getMediaSheetPhase()).toBe('closed');
     expect(getKeyboardOwner()).toBe('chat');
+  });
+
+  describe('sections', () => {
+    // Раздел-заглушка: свой список шита с его шапкой — так же, как вкладка «Pop».
+    const popSection = {
+      key: 'pop',
+      label: 'Pop',
+      render: ({ header }: { header: React.ReactElement }) => {
+        const { Text, View } = require('react-native');
+
+        return (
+          <View>
+            {header}
+            <Text>Сетка попсов</Text>
+          </View>
+        );
+      },
+    };
+
+    it('shows no tabs with the gallery alone', async () => {
+      await renderOpenSheet();
+
+      expect(screen.queryByTestId('media-sheet-tabs')).toBeNull();
+    });
+
+    it('opens on the first section and switches by a tab tap', async () => {
+      await renderOpenSheet({ sections: [gallerySection(), popSection] });
+
+      expect(screen.getByRole('tab', { name: 'Галерея' })).toBeSelected();
+      expect(screen.queryByText('Сетка попсов')).toBeNull();
+
+      await act(async () => {
+        fireEvent.press(screen.getByRole('tab', { name: 'Pop' }));
+      });
+
+      expect(screen.getByRole('tab', { name: 'Pop' })).toBeSelected();
+      expect(screen.getByText('Сетка попсов')).toBeTruthy();
+
+      await act(async () => {
+        fireEvent.press(screen.getByRole('tab', { name: 'Галерея' }));
+      });
+
+      expect(screen.queryByText('Сетка попсов')).toBeNull();
+    });
+
+    it('still closes on a swipe down from another section', async () => {
+      await renderOpenSheet({ sections: [gallerySection(), popSection] });
+
+      await act(async () => {
+        fireEvent.press(screen.getByRole('tab', { name: 'Pop' }));
+      });
+      await swipeDown();
+
+      expect(getMediaSheetPhase()).toBe('closed');
+    });
   });
 });

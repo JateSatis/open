@@ -5,6 +5,7 @@ import {
   buildAvatarPath,
   buildChannelAvatarPath,
   buildObjectPath,
+  buildPopPaths,
   ownAvatarPathFromUrl,
 } from './lib/objectPath';
 import type { LocalMedia, UploadedMedia } from './types';
@@ -60,6 +61,39 @@ export async function uploadMedia(media: LocalMedia, userId: string): Promise<Up
   };
 }
 
+/**
+ * Видео попа с его постером — в папку попсов. Постер обязателен: без него
+ * сетка канала и обложка в посте пустые, и база такой поп не примет.
+ */
+export async function uploadPopMedia(media: LocalMedia, userId: string): Promise<UploadedMedia> {
+  if (!media.posterUri) throw new MediaUploadError('Pop has no poster');
+
+  const paths = buildPopPaths(userId, media.mimeType);
+  const main = await uploadFile(media.uri, userId, media.kind, media.mimeType, paths.video);
+  let poster: StoredFile;
+
+  try {
+    poster = await uploadFile(media.posterUri, userId, 'photo', 'image/jpeg', paths.poster);
+  } catch (error) {
+    await removeUploadedMedia(main.path);
+    throw error;
+  }
+
+  return {
+    kind: media.kind,
+    url: main.url,
+    path: main.path,
+    posterUrl: poster.url,
+    posterPath: poster.path,
+    mimeType: media.mimeType,
+    width: media.width,
+    height: media.height,
+    durationMs: media.durationMs,
+    sizeBytes: main.sizeBytes,
+    waveform: null,
+  };
+}
+
 type StoredFile = { url: string; path: string; sizeBytes: number };
 
 async function uploadFile(
@@ -67,6 +101,7 @@ async function uploadFile(
   userId: string,
   kind: LocalMedia['kind'],
   mimeType: string,
+  at?: string,
 ): Promise<StoredFile> {
   const file = new File(uri);
 
@@ -79,7 +114,7 @@ async function uploadFile(
   // an ArrayBuffer reliably — a Blob from a file:// URI is the classic cause
   // of zero-byte objects landing in the bucket.
   const body = await file.arrayBuffer();
-  const path = buildObjectPath(userId, kind, mimeType);
+  const path = at ?? buildObjectPath(userId, kind, mimeType);
 
   const { error } = await supabase.storage.from(MEDIA_BUCKET).upload(path, body, {
     contentType: mimeType,

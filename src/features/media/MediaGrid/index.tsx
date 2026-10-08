@@ -66,6 +66,8 @@ export type MediaGridProps = {
    * трогается. Объект должен быть стабильным — он уходит в мемо-клетки.
    */
   pick?: GridPick;
+  /** Галерею сейчас взять нельзя: клетки притушены, кружки не нажимаются. */
+  locked?: boolean;
 };
 
 /**
@@ -90,6 +92,7 @@ export function MediaGrid({
   minContentHeight = 0,
   enabled = true,
   pick,
+  locked = false,
 }: MediaGridProps) {
   countRender('MediaGrid');
 
@@ -126,9 +129,15 @@ export function MediaGrid({
 
   const renderItem = useCallback<ListRenderItem<GridRow>>(
     ({ item }) => (
-      <MediaGridRow cells={item.cells} geometry={geometry} onToggle={toggle} pick={pick} />
+      <MediaGridRow
+        cells={item.cells}
+        geometry={geometry}
+        onToggle={toggle}
+        pick={pick}
+        locked={locked}
+      />
     ),
-    [geometry, pick, toggle],
+    [geometry, locked, pick, toggle],
   );
 
   /** Все строки одинаковы по устройству — один пул вью на всех. */

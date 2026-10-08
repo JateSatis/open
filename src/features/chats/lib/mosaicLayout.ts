@@ -511,6 +511,24 @@ function singleLayout(item: MosaicItem, bounds: MosaicBounds, scale: number): Mo
 }
 
 /**
+ * Пост с попом: полоса во всю ширину альбома и высотой `Sizes.popPostCover`,
+ * в середине — вертикальная обложка 9:16. Пропорции попа известны заранее,
+ * подбирать раскладку незачем.
+ */
+export function popPostLayout(bounds: MosaicBounds, scale: number): MosaicLayout {
+  const snap = (value: number) => Math.round(value * scale) / scale;
+  const height = snap(Sizes.popPostCover);
+  const coverWidth = snap(height * Sizes.popAspect);
+  const width = snap(bounds.maxWidth);
+
+  return {
+    width,
+    height,
+    tiles: [{ x: snap((width - coverWidth) / 2), y: 0, width: coverWidth, height }],
+  };
+}
+
+/**
  * Раскладка альбома. Чистая функция: результат зависит только от размеров
  * файлов, границ и плотности экрана, поэтому мемоизируется по ним.
  *

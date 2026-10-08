@@ -14,6 +14,7 @@ import {
   outgoingOf,
   sendCommentForward,
   sendForward,
+  sendPopPost,
   sendPost,
   sendVoice as sendVoiceMessage,
 } from '@/features/chats/messages/delivery';
@@ -36,6 +37,7 @@ import type {
   UserActivity,
 } from '@/features/chats/messages/types';
 import { useChatChannel } from '@/features/chats/messages/useChatChannel';
+import type { DraftPop } from '@/features/chats/composerDraftStore';
 import { useChatHistory } from '@/features/chats/messages/useChatHistory';
 import { chatsQueryKey } from '@/features/chats/useChats';
 import { pinsQueryKey } from '@/features/chats/usePinnedMessages';
@@ -70,6 +72,8 @@ export type ChatMessagesState = {
   /** Текст с альбомом; с цитатами — это ответ. */
   send: (text: string, media?: MediaLibraryItem[], replies?: LiveQuote[]) => void;
   sendVoice: (voice: LocalMedia, replies?: LiveQuote[]) => void;
+  /** Пост канала `channelId` с попом и необязательным текстом. */
+  sendPop: (channelId: string, text: string, pop: DraftPop, replies?: LiveQuote[]) => void;
   /** Пересылка сюда из `sourceChat`; текст из поля уходит перед островком. */
   forward: (text: string, sourceChat: ChatRef, items: ForwardItem[]) => void;
   /** Пересылка комментариев — по облачку на комментарий. */
@@ -200,6 +204,12 @@ export function useChatMessages(chatId: string, currentUserId: string | null): C
     [context],
   );
 
+  const sendPop = useCallback(
+    (channelId: string, text: string, pop: DraftPop, replies: LiveQuote[] = []) =>
+      sendPopPost(context, channelId, text, pop, replies),
+    [context],
+  );
+
   const forward = useCallback(
     (text: string, sourceChat: ChatRef, items: ForwardItem[]) =>
       sendForward(context, text, sourceChat, items),
@@ -285,6 +295,7 @@ export function useChatMessages(chatId: string, currentUserId: string | null): C
     loadUntil: history.loadUntil,
     send,
     sendVoice,
+    sendPop,
     forward,
     forwardComments,
     retry,

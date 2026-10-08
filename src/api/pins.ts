@@ -32,7 +32,7 @@ const pinsSelect = () =>
   supabase
     .from('message_pins')
     .select(
-      'message_id, forward_id, message:messages!message_pins_message_fkey(id, created_at, kind, text, attachments(url, poster_url, mime_type, position)), forward:messages!message_pins_forward_fkey(created_at)',
+      'message_id, forward_id, message:messages!message_pins_message_fkey(id, created_at, kind, text, attachments(url, poster_url, mime_type, position, pop:pops(poster_url))), forward:messages!message_pins_forward_fkey(created_at)',
     );
 
 type PinRow = QueryData<ReturnType<typeof pinsSelect>>[number];
@@ -41,6 +41,8 @@ function thumbnailOf(row: NonNullable<PinRow['message']>): string | null {
   const [first] = [...(row.attachments ?? [])].sort((a, b) => a.position - b.position);
 
   if (!first) return null;
+  // Ссылка на поп: своего файла нет, обложка — постер попа.
+  if (first.pop) return first.pop.poster_url;
   if (first.mime_type?.startsWith('video/')) return first.poster_url;
   if (first.mime_type?.startsWith('audio/')) return null;
 

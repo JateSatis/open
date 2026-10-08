@@ -53,6 +53,7 @@ export function previewOf(message: Message): MessagePreview {
       mime_type: attachment.mimeType,
       duration_ms: attachment.durationMs,
       position,
+      pop_id: attachment.popId ?? null,
     })),
   );
 }
@@ -77,6 +78,7 @@ export function describePreview(preview: MessagePreview): string {
       : '🎤 Голосовое сообщение';
   }
 
+  if (preview.isPop) return 'Pop';
   if (preview.mediaCount > 1) return 'Альбом';
   if (preview.mediaCount === 1) return preview.firstMediaIsVideo ? 'Видео' : 'Фото';
   if (preview.kind === 'video') return 'Видео';

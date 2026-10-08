@@ -5,6 +5,7 @@ import type {
   MessageAttachment,
   QuotedMessage,
 } from '@/api/chats';
+import type { DraftPop } from '@/features/chats/composerDraftStore';
 import type { LocalMedia, MediaLibraryItem } from '@/features/media';
 
 export type DeliveryStatus = 'sending' | 'sent' | 'failed';
@@ -22,6 +23,8 @@ export type ChatMessage = Message & {
    * порядку. Уходит на сервер одним вызовом — и повторяется им же.
    */
   pendingForward?: { sourceChatId: string; messageIds: string[] };
+  /** Пост с попом до ответа сервера: канал и поп — уже опубликованный или новый. */
+  pendingPop?: { channelId: string; pop: DraftPop };
   /**
    * Локальные превью вложений своего только что отправленного сообщения, по
    * позициям. Переживают ответ сервера: плитка держит локальную картинку,
@@ -60,6 +63,8 @@ export type ForwardItem = { original: IslandOriginal };
 export type Outgoing =
   | { type: 'post'; text: string; media: MediaLibraryItem[]; replyTo: string[] }
   | { type: 'voice'; voice: LocalMedia; replyTo: string[] }
+  /** Пост канала с попом; новый поп публикуется той же транзакцией. */
+  | { type: 'pop_post'; text: string; replyTo: string[]; channelId: string; pop: DraftPop }
   | { type: 'forward'; sourceChatId: string; messageIds: string[] }
   /** Пересланный комментарий — по сообщению на комментарий. */
   | { type: 'forward_comment'; commentId: string };

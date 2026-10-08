@@ -3,9 +3,11 @@ import { useCallback, useEffect, useMemo } from 'react';
 import {
   clearDraft,
   setDraftMode,
+  setDraftPop,
   setDraftText,
   useChatDraft,
   type ComposerMode,
+  type DraftPop,
 } from '@/features/chats/composerDraftStore';
 import { selectedAssets, useMediaSelection, type MediaLibraryItem } from '@/features/media';
 
@@ -15,6 +17,9 @@ export type ComposerDraft = {
   /** Ответ или пересылка — плашка над полем. */
   mode: ComposerMode | null;
   setMode: (mode: ComposerMode | null) => void;
+  /** Поп поста канала; несовместим с фото и видео из галереи. */
+  pop: DraftPop | null;
+  setPop: (pop: DraftPop | null) => void;
   /**
    * Выбранные файлы **на момент вызова**. Функция, а не поле, намеренно: на
    * подписку сюда завязался бы весь экран чата, и один тап по кружку выбора
@@ -40,7 +45,7 @@ export type ComposerDraft = {
  * с экраном и уходит.
  */
 export function useComposerDraft(chatId: string): ComposerDraft {
-  const { text, mode } = useChatDraft(chatId);
+  const { text, mode, pop = null } = useChatDraft(chatId);
   const clearSelection = useMediaSelection((state) => state.clear);
 
   // Выбор живёт в сторе, то есть вне жизненного цикла этого экрана, и
@@ -57,6 +62,8 @@ export function useComposerDraft(chatId: string): ComposerDraft {
     [chatId],
   );
 
+  const setPop = useCallback((value: DraftPop | null) => setDraftPop(chatId, value), [chatId]);
+
   const clear = useCallback(() => {
     clearDraft(chatId);
     clearSelection();
@@ -68,10 +75,12 @@ export function useComposerDraft(chatId: string): ComposerDraft {
       setText,
       mode,
       setMode,
+      pop,
+      setPop,
       media: selectedAssets,
       clear,
       clearMedia: clearSelection,
     }),
-    [clear, clearSelection, mode, setMode, setText, text],
+    [clear, clearSelection, mode, pop, setMode, setPop, setText, text],
   );
 }
