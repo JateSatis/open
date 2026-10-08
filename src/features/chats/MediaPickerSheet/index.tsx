@@ -3,6 +3,7 @@
 // этом React Compiler.
 /* eslint-disable react-hooks/immutability */
 import {
+  Fragment,
   useCallback,
   useEffect,
   useMemo,
@@ -38,8 +39,10 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { sheetGeometry } from './geometry';
-import { SheetListContext, SheetMediaList, type SheetListContextValue } from './SheetList';
+import { GALLERY_ONLY, type SheetSection, type SheetSectionSlot } from './sections';
+import { SheetList, SheetListContext, type SheetListContextValue } from './SheetList';
 import { SheetShell } from './SheetShell';
+import { SheetTabs } from './SheetTabs';
 import {
   closeMediaSheet,
   finishMediaSheetClose,
@@ -61,7 +64,7 @@ import {
 } from '@/features/chats/composerKeyboard';
 import { MessageComposer } from '@/features/chats/MessageComposer';
 import type { ComposerDraft } from '@/features/chats/useComposerDraft';
-import { MediaGrid, type GridPick } from '@/features/media';
+import type { GridPick } from '@/features/media';
 import { prefetchGallery } from '@/features/media/galleryPrefetch';
 import { countRender, perfMark } from '@/features/media/perf';
 import { useHasSelection, useMediaSelection } from '@/features/media/selectionStore';
@@ -77,6 +80,7 @@ export {
   resetMediaSheet,
   type MediaSheetOwner,
 } from './sheetStore';
+export { GALLERY_ONLY, gallerySection, type SheetSection, type SheetSectionSlot } from './sections';
 
 /** За сколько dp до рабочего положения монтируется список — см. ниже. */
 const LIST_MOUNT_DISTANCE = 2;
@@ -97,6 +101,11 @@ type SheetComposerProps = {
 export type MediaPickerSheetProps = SheetComposerProps & {
   /** Чьё поле открывает этот экземпляр: показывается он только для своего хозяина. */
   owner?: Exclude<MediaSheetOwner, 'pick'>;
+  /**
+   * Разделы шита — вкладки внизу. Набор задаёт хозяин по виду чата; при одном
+   * разделе вкладок нет. По умолчанию — только галерея.
+   */
+  sections?: SheetSection[];
 };
 
 export type MediaPickSheetProps = GridPick;
@@ -109,12 +118,16 @@ export type MediaPickSheetProps = GridPick;
  * открытие, — анимация, жест, смонтирован ли список, — лежит в `SheetWindow`
  * и рождается вместе с окном, так что сбрасывать между открытиями нечего.
  */
-export function MediaPickerSheet({ owner = 'chat', ...composer }: MediaPickerSheetProps) {
+export function MediaPickerSheet({
+  owner = 'chat',
+  sections = GALLERY_ONLY,
+  ...composer
+}: MediaPickerSheetProps) {
   const phase = useSheetPhase(owner);
 
   if (phase === 'closed') return null;
 
-  return <SheetWindow phase={phase} composer={composer} />;
+  return <SheetWindow phase={phase} composer={composer} sections={sections} />;
 }
 
 /**
@@ -139,7 +152,7 @@ export function MediaPickSheet({ accepts, onPick }: MediaPickSheetProps) {
 
   if (phase === 'closed') return null;
 
-  return <SheetWindow phase={phase} pick={pick} />;
+  return <SheetWindow phase={phase} pick={pick} sections={GALLERY_ONLY} />;
 }
 
 /** Жизнь окна шита вокруг экземпляра хозяина `owner`. */
@@ -179,6 +192,7 @@ type SheetWindowProps = {
   composer?: SheetComposerProps;
   /** Шит выбора одного файла: без строки ввода. */
   pick?: GridPick;
+  sections: SheetSection[];
 };
 
 /**
@@ -206,7 +220,7 @@ const SHEET_EDIT = {
   recordDisabled: true,
 } as const;
 
-function SheetWindow({ phase, composer, pick }: SheetWindowProps) {
+function SheetWindow({ phase, composer, pick, sections }: SheetWindowProps) {
   // `composer` — новый объект на каждый рендер экрана; зависимостям нужен только факт.
   const hasComposer = composer !== undefined;
   countRender('MediaPickerSheet');
@@ -224,6 +238,10 @@ function SheetWindow({ phase, composer, pick }: SheetWindowProps) {
   const [listMounted, setListMounted] = useState(false);
   const [scrollAttached, setScrollAttached] = useState(false);
   const [footerHeight, setFooterHeight] = useState(0);
+  // Окно рождается на каждое открытие — и открывается всегда на первом разделе.
+  const [activeKey, setActiveKey] = useState(sections[0]?.key);
+  const active = sections.find((section) => section.key === activeKey) ?? sections[0];
+  const showTabs = sections.length > 1;
 
   /** Насколько шит утащен вниз относительно рабочего положения: 0 — на месте. */
   const dismissY = useSharedValue(screenHeight);
@@ -337,6 +355,22 @@ function SheetWindow({ phase, composer, pick }: SheetWindowProps) {
 
   const markScrollAttached = useCallback(() => setScrollAttached(true), []);
 
+  /**
+   * Другой раздел — другой список: прежний скролл уходит, новый начинается с
+   * верха шита в свёрнутом положении. Жест закрытия ждёт, пока новый список
+   * отдаст свой скролл, и пересобирается на него.
+   */
+  const selectSection = useCallback(
+    (key: string) => {
+      if (key === activeKey) return;
+
+      setScrollAttached(false);
+      scrollOffset.value = 0;
+      setActiveKey(key);
+    },
+    [activeKey, scrollOffset],
+  );
+
   const listContext = useMemo<SheetListContextValue>(
     () => ({
       travel,
@@ -346,8 +380,9 @@ function SheetWindow({ phase, composer, pick }: SheetWindowProps) {
       scrollOffset,
       dismissing,
       onScrollAttached: markScrollAttached,
+      skeleton: active?.skeleton ?? false,
     }),
-    [animatedRef, dismissing, markScrollAttached, scrollOffset, topBarHeight, travel],
+    [active, animatedRef, dismissing, markScrollAttached, scrollOffset, topBarHeight, travel],
   );
 
   /** Весь шит целиком: и панель, и список, и строка ввода уезжают вместе. */
@@ -397,6 +432,22 @@ function SheetWindow({ phase, composer, pick }: SheetWindowProps) {
 
   const footer = useMemo(() => <View style={{ height: footerHeight }} />, [footerHeight]);
 
+  const slot = useMemo<SheetSectionSlot>(
+    () => ({
+      List: SheetList,
+      header,
+      footer,
+      pick,
+      // Подложка тянется до конца содержимого, значит содержимое не должно
+      // быть короче окна — иначе под ним осталась бы полоса, сквозь которую
+      // видно чат.
+      minContentHeight: travel + listWindowHeight,
+    }),
+    [footer, header, listWindowHeight, pick, travel],
+  );
+
+  const showComposer = composer !== undefined && hasMedia;
+
   return (
     <Modal
       testID="media-picker-window"
@@ -422,26 +473,16 @@ function SheetWindow({ phase, composer, pick }: SheetWindowProps) {
           <GestureDetector gesture={dismissPan}>
             <View style={[styles.listWindow, { top: listTop }]}>
               <SheetShell top={travel} height={collapsedHeight} topBarHeight={topBarHeight} />
-              {listMounted ? (
+              {listMounted && active ? (
                 <SheetListContext.Provider value={listContext}>
-                  <MediaGrid
-                    ListComponent={SheetMediaList}
-                    enabled={listMounted}
-                    header={header}
-                    footer={footer}
-                    pick={pick}
-                    // Подложка тянется до конца содержимого, значит содержимое
-                    // не должно быть короче окна — иначе под ним осталась бы
-                    // полоса, сквозь которую видно чат.
-                    minContentHeight={travel + listWindowHeight}
-                  />
+                  <Fragment key={active.key}>{active.render(slot)}</Fragment>
                 </SheetListContext.Provider>
               ) : null}
             </View>
           </GestureDetector>
         </Animated.View>
 
-        {composer && hasMedia ? (
+        {showComposer || showTabs ? (
           <Animated.View
             testID="media-picker-footer"
             style={[
@@ -451,17 +492,22 @@ function SheetWindow({ phase, composer, pick }: SheetWindowProps) {
             ]}
             onLayout={measureFooter}
           >
-            <MessageComposer
-              text={composer.draft.text}
-              onChangeText={composer.draft.setText}
-              onSend={submit}
-              onTyping={composer.onTyping}
-              onFieldActivate={claimKeyboardForSheet}
-              plate={composer.plate}
-              edit={composer.editing ? SHEET_EDIT : undefined}
-              placeholder={composer.placeholder}
-              canSend
-            />
+            {composer && showComposer ? (
+              <MessageComposer
+                text={composer.draft.text}
+                onChangeText={composer.draft.setText}
+                onSend={submit}
+                onTyping={composer.onTyping}
+                onFieldActivate={claimKeyboardForSheet}
+                plate={composer.plate}
+                edit={composer.editing ? SHEET_EDIT : undefined}
+                placeholder={composer.placeholder}
+                canSend
+              />
+            ) : null}
+            {showTabs && active ? (
+              <SheetTabs sections={sections} activeKey={active.key} onSelect={selectSection} />
+            ) : null}
           </Animated.View>
         ) : null}
 

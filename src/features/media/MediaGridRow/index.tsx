@@ -19,6 +19,7 @@ export type MediaGridRowProps = {
   geometry: GridGeometry;
   onToggle: (asset: MediaLibraryItem) => void;
   pick?: GridPick;
+  locked?: boolean;
 };
 
 /**
@@ -31,6 +32,7 @@ export const MediaGridRow = memo(function MediaGridRow({
   geometry,
   onToggle,
   pick,
+  locked,
 }: MediaGridRowProps) {
   const theme = useTheme();
   const { cellSize, pitch, columnLeft } = geometry;
@@ -48,7 +50,13 @@ export const MediaGridRow = memo(function MediaGridRow({
               style={[styles.skeleton, { backgroundColor: theme.backgroundElement }]}
             />
           ) : (
-            <MediaGridItem asset={cell} size={cellSize} onToggle={onToggle} pick={pick} />
+            <MediaGridItem
+              asset={cell}
+              size={cellSize}
+              onToggle={onToggle}
+              pick={pick}
+              locked={locked}
+            />
           )}
         </View>
       ))}
