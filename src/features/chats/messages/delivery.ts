@@ -8,7 +8,9 @@ import {
   deleteMessages,
   forwardComments,
   forwardMessages,
+  publishPopPost,
   sendMessage,
+  sendPopPost as sendPopPostOnServer,
   sendVoiceMessage,
   type ChatRef,
   type ForwardedComment,
@@ -45,6 +47,9 @@ import {
   type UploadedMedia,
 } from '@/features/media';
 import { showNotice } from '@/features/notifications/alertsStore';
+import { popsQueryKey } from '@/features/pops/keys';
+import { PopPosterError, toPopMedia, uploadPop } from '@/features/pops/uploadPop';
+import type { DraftPop } from '@/features/chats/composerDraftStore';
 import { isNetworkError } from '@/lib/network';
 import { NO_REACTIONS } from '@/api/reactionCounts';
 
@@ -108,6 +113,10 @@ export function outgoingOf(message: ChatMessage): Outgoing | null {
 
   if (message.pendingVoice) return { type: 'voice', voice: message.pendingVoice, replyTo };
 
+  if (message.pendingPop) {
+    return { type: 'pop_post', text: message.text ?? '', replyTo, ...message.pendingPop };
+  }
+
   const text = message.text ?? '';
   const media = message.pendingMedia ?? [];
 
@@ -151,6 +160,11 @@ export async function uploadOutgoing(
   currentUserId: string,
 ): Promise<UploadedMedia[]> {
   if (outgoing.type === 'forward' || outgoing.type === 'forward_comment') return [];
+  if (outgoing.type === 'pop_post') {
+    return outgoing.pop.type === 'new'
+      ? [await uploadPop(newPopMedia(outgoing.pop), currentUserId)]
+      : [];
+  }
   if (outgoing.type === 'voice') return uploadAllMedia([outgoing.voice], currentUserId);
   if (outgoing.media.length === 0) return [];
 
@@ -161,11 +175,40 @@ export async function uploadOutgoing(
   return uploadAllMedia(resolved.map(libraryAssetToLocalMedia), currentUserId);
 }
 
+/** Новый поп черновика — видео на устройстве, как его знает загрузка. */
+function newPopMedia(pop: Extract<DraftPop, { type: 'new' }>): LocalMedia {
+  return {
+    kind: 'video',
+    uri: pop.uri,
+    mimeType: pop.mimeType,
+    width: pop.width,
+    height: pop.height,
+    durationMs: pop.durationMs,
+  };
+}
+
 async function insert(
   chatId: string,
   outgoing: Outgoing,
   uploaded: UploadedMedia[],
 ): Promise<Message> {
+  if (outgoing.type === 'pop_post') {
+    const { pop } = outgoing;
+
+    if (pop.type === 'existing') {
+      return sendPopPostOnServer(chatId, pop.pop.id, outgoing.text || null, outgoing.replyTo);
+    }
+
+    // Новый поп публикуется вместе с постом, без подписи: текст — у поста.
+    return publishPopPost({
+      channelId: outgoing.channelId,
+      popId: pop.popId,
+      media: toPopMedia(uploaded[0], newPopMedia(pop)),
+      postText: outgoing.text || null,
+      replyTo: outgoing.replyTo,
+    });
+  }
+
   if (outgoing.type === 'forward') {
     // Островок ничего не копирует: ссылки на оригиналы, файлы — их.
     return forwardMessages(chatId, outgoing.sourceChatId, outgoing.messageIds);
@@ -264,6 +307,14 @@ function explainRejection(outgoing: Outgoing, cause: unknown) {
     );
   }
 
+  if (cause instanceof PopPosterError) {
+    showNotice('Не удалось снять обложку видео. Повторите или выберите другое.', 'error');
+  }
+
+  if (code === '42501' && outgoing.type === 'pop_post') {
+    showNotice('Публиковать в канале может только его автор', 'error');
+  }
+
   if (code === '42501' && outgoing.type === 'forward_comment') {
     showNotice('Переслать сюда может только участник чата', 'error');
   }
@@ -292,7 +343,9 @@ export async function deliver(
 
   try {
     const hasFiles =
-      outgoing.type === 'voice' || (outgoing.type === 'post' && outgoing.media.length > 0);
+      outgoing.type === 'voice' ||
+      (outgoing.type === 'post' && outgoing.media.length > 0) ||
+      (outgoing.type === 'pop_post' && outgoing.pop.type === 'new');
 
     // Без своего id файлы заливать некуда (путь в Storage строится от него) —
     // явный сбой лучше, чем сообщение, которое молча потеряло вложения.
@@ -315,6 +368,11 @@ export async function deliver(
     // Список чатов держит последнее сообщение и порядок — после отправки он
     // устарел, хотя сама переписка на экране уже верна.
     void queryClient.invalidateQueries({ queryKey: chatsQueryKey });
+
+    // Новый поп из «Постов» появился и в «Попсах» канала.
+    if (outgoing.type === 'pop_post' && outgoing.pop.type === 'new') {
+      void queryClient.invalidateQueries({ queryKey: popsQueryKey(outgoing.channelId) });
+    }
   } catch (cause) {
     // Сообщение в базу не попало (или упало на середине) — загруженные файлы
     // теперь ничьи, оставлять их в Storage незачем.
@@ -554,7 +612,11 @@ export function sendForward(
  * Облачка появляются сразу, с комментарием как его видно в панели, и уходят
  * на сервер по очереди: порядок в переписке держит время.
  */
-export function sendCommentForward(context: SendContext, text: string, comments: ForwardedComment[]) {
+export function sendCommentForward(
+  context: SendContext,
+  text: string,
+  comments: ForwardedComment[],
+) {
   const { queryClient, chatId, currentUserId } = context;
 
   if (comments.length === 0) return;
@@ -606,4 +668,74 @@ export function sendCommentForward(context: SendContext, text: string, comments:
       });
     }
   })();
+}
+
+/**
+ * Пост канала с попом. Облачко с обложкой — сразу, до загрузки; новый поп
+ * публикуется вместе с постом и появляется в «Попсах».
+ */
+export function sendPopPost(
+  context: SendContext,
+  channelId: string,
+  text: string,
+  pop: DraftPop,
+  replies: LiveQuote[] = [],
+) {
+  const { queryClient, chatId, currentUserId } = context;
+  const localId = nextLocalId();
+  const trimmed = text.trim();
+  const attachment: MessageAttachment =
+    pop.type === 'existing'
+      ? {
+          id: `${localId}-pop`,
+          url: pop.pop.url,
+          posterUrl: pop.pop.posterUrl,
+          mimeType: pop.pop.mimeType,
+          width: pop.pop.width,
+          height: pop.pop.height,
+          durationMs: pop.pop.durationMs,
+          waveform: null,
+          popId: pop.pop.id,
+        }
+      : {
+          id: `${localId}-pop`,
+          url: pop.uri,
+          posterUrl: pop.posterUri,
+          mimeType: pop.mimeType,
+          width: pop.width,
+          height: pop.height,
+          durationMs: pop.durationMs,
+          waveform: null,
+          popId: pop.popId,
+        };
+  const draft: ChatMessage = {
+    id: localId,
+    localId,
+    chatId,
+    authorId: currentUserId,
+    kind: 'media',
+    text: trimmed || null,
+    createdAt: new Date().toISOString(),
+    editedAt: null,
+    reactions: NO_REACTIONS,
+    commentsCount: 0,
+    viewsCount: 0,
+    readAt: null,
+    attachments: [attachment],
+    replies,
+    forward: null,
+    pendingPop: { channelId, pop },
+    // Обложка не мигает пустотой, пока грузится удалённый постер.
+    localPreviews: attachment.posterUrl ? [attachment.posterUrl] : undefined,
+    status: 'sending',
+  };
+
+  addToOutbox(chatId, [draft]);
+  void deliver(queryClient, chatId, currentUserId, localId, {
+    type: 'pop_post',
+    text: trimmed,
+    replyTo: replies.map((quote) => quote.messageId),
+    channelId,
+    pop,
+  });
 }

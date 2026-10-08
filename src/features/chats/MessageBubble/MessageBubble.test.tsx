@@ -447,4 +447,33 @@ describe('MessageBubble', () => {
       expect(screen.queryByTestId('visitor-reactions')).toBeNull();
     });
   });
+
+  it('draws a pop post as a vertical cover with «Pop» and its length, not a mosaic tile', async () => {
+    const message = mediaMessage({
+      text: 'привет',
+      attachments: [
+        {
+          id: 'att-pop',
+          url: 'https://cdn.example/pop.mp4',
+          posterUrl: 'https://cdn.example/pop.jpg',
+          mimeType: 'video/mp4',
+          width: 720,
+          height: 1280,
+          durationMs: 6000,
+          waveform: null,
+          popId: 'pop-1',
+        },
+      ],
+    });
+
+    await render(<MessageBubble message={message} {...baseProps} wide />);
+
+    const cover = screen.getByTestId('pop-post-cover');
+
+    expect(within(cover).getByText('Pop')).toBeTruthy();
+    expect(within(cover).getByText('0:06')).toBeTruthy();
+    expect(screen.getByText('привет')).toBeTruthy();
+    // Просмотр попа — следующий этап: обложка не кнопка «открыть видео».
+    expect(screen.queryByLabelText('Открыть видео')).toBeNull();
+  });
 });

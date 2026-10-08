@@ -7,15 +7,46 @@ import type { MessageAttachment } from '@/api/chats';
 import { Text } from '@/components/Text';
 import type { EditVoice } from '@/features/chats/messages/types';
 import { VoiceMessage } from '@/features/chats/VoiceMessage';
+import { PopCover } from '@/features/pops/PopCover';
 import { useTheme } from '@/hooks/use-theme';
 import { Spacing } from '@/theme';
+
+/** Поп поста над полем ввода: обложка и, если его можно открепить, ✕. */
+export type PopChip = {
+  posterUri: string | null;
+  /** Нет — поп не убрать (правка поста: поп в посте не меняется). */
+  onRemove?: () => void;
+};
 
 export type EditAttachmentsProps = {
   kept: MessageAttachment[];
   voice: EditVoice | null;
   onRemoveAttachment: (attachmentId: string) => void;
   onRemoveVoice: () => void;
+  /** Прикреплённый к новому посту поп. */
+  pop?: PopChip | null;
 };
+
+/** Обложка попа размером с миниатюру вложения, с подписью «Pop» внутри. */
+function PopThumbnail({ posterUri, onRemove }: PopChip) {
+  const theme = useTheme();
+
+  return (
+    <View
+      testID="pop-attachment"
+      accessibilityLabel="Pop"
+      style={[styles.thumbnail, { backgroundColor: theme.backgroundSelected }]}
+    >
+      <PopCover posterUri={posterUri} showLabel={false} />
+      <View style={[styles.popLabel, { backgroundColor: theme.mediaScrim }]}>
+        <Text variant="caption" color="textOnMedia">
+          Pop
+        </Text>
+      </View>
+      {onRemove ? <RemoveButton label="Открепить поп" onPress={onRemove} /> : null}
+    </View>
+  );
+}
 
 function voiceAttachment(voice: EditVoice): { attachment: MessageAttachment; uri?: string } {
   if (voice.type === 'kept') return { attachment: voice.attachment, uri: voice.localUri };
@@ -64,8 +95,17 @@ export function EditAttachments({
   voice,
   onRemoveAttachment,
   onRemoveVoice,
+  pop = null,
 }: EditAttachmentsProps) {
   const theme = useTheme();
+
+  if (pop) {
+    return (
+      <View style={styles.strip}>
+        <PopThumbnail {...pop} />
+      </View>
+    );
+  }
 
   if (voice) {
     const { attachment, uri } = voiceAttachment(voice);
@@ -101,6 +141,11 @@ export function EditAttachments({
       contentContainerStyle={styles.strip}
     >
       {kept.map((attachment) => {
+        // Поп в посте правкой не убрать: креста у него нет.
+        if (attachment.popId) {
+          return <PopThumbnail key={attachment.id} posterUri={attachment.posterUrl} />;
+        }
+
         const isVideo = Boolean(attachment.mimeType?.startsWith('video/'));
         const thumbnail = isVideo ? attachment.posterUrl : attachment.url;
 

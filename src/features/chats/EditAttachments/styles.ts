@@ -4,6 +4,7 @@ import { Radii, Sizes, Spacing } from '@/theme';
 
 export const styles = StyleSheet.create({
   strip: {
+    flexDirection: 'row',
     gap: Spacing.two,
     paddingHorizontal: Spacing.three,
     paddingTop: Spacing.two,
@@ -29,6 +30,13 @@ export const styles = StyleSheet.create({
     left: 0,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  popLabel: {
+    position: 'absolute',
+    left: Spacing.half,
+    bottom: Spacing.half,
+    paddingHorizontal: Spacing.one,
+    borderRadius: Radii.sm,
   },
   remove: {
     position: 'absolute',

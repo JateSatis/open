@@ -5,23 +5,17 @@
 
 import type { QueryClient } from '@tanstack/react-query';
 
-import { publishPop, type Pop, type PopMedia } from '@/api/pops';
+import { publishPop, type Pop } from '@/api/pops';
 import { chatsQueryKey } from '@/features/chats/useChats';
 import { reportRequestFailed } from '@/features/connection/connectionStore';
-import {
-  MediaUploadError,
-  prepareForUpload,
-  removeUploadedMedia,
-  storedPaths,
-  uploadPopMedia,
-  type LocalMedia,
-  type UploadedMedia,
-} from '@/features/media';
+import { MediaUploadError, removeUploadedMedia, storedPaths } from '@/features/media';
 import { showNotice } from '@/features/notifications/alertsStore';
 import { popsQueryKey, type PopsPages } from '@/features/pops/queries';
 import { DeadlineError, withDeadline } from '@/lib/deadline';
 import { isNetworkError } from '@/lib/network';
 import { randomUuid } from '@/lib/uuid';
+
+import { PopPosterError, toPopMedia, uploadPop } from './uploadPop';
 
 import { find, patch, setChannel, type NewPop } from './pendingPops';
 
@@ -31,36 +25,6 @@ export { usePendingPops, type NewPop, type PendingPop } from './pendingPops';
 const PUBLISH_DEADLINE_MS = 60_000;
 
 const running = new Set<string>();
-
-/** Без постера база поп не примет: сбой понятен заранее, до загрузки. */
-export class PopPosterError extends Error {
-  constructor() {
-    super('Не удалось снять обложку видео');
-    this.name = 'PopPosterError';
-  }
-}
-
-/** Сжатие, постер и загрузка видео попа. Общая часть публикации из «Попсов» и из «Постов». */
-export async function uploadPop(media: LocalMedia, userId: string): Promise<UploadedMedia> {
-  const prepared = await prepareForUpload(media);
-
-  if (!prepared.posterUri) throw new PopPosterError();
-
-  return uploadPopMedia(prepared, userId);
-}
-
-/** Загруженное видео — в форме, которую принимает `publish_pop`. */
-export function toPopMedia(uploaded: UploadedMedia, fallback: LocalMedia): PopMedia {
-  return {
-    url: uploaded.url,
-    posterUrl: uploaded.posterUrl ?? '',
-    mimeType: uploaded.mimeType,
-    width: uploaded.width ?? fallback.width ?? 0,
-    height: uploaded.height ?? fallback.height ?? 0,
-    durationMs: uploaded.durationMs ?? fallback.durationMs ?? 0,
-    sizeBytes: uploaded.sizeBytes,
-  };
-}
 
 /** Отказ, который повтор сам не исправит, — человеческим текстом. Обрыв связи виден и так. */
 function explain(cause: unknown) {

@@ -8,6 +8,7 @@ import { claimKeyboardForChat } from '@/features/chats/composerKeyboard';
 import { anchorOf, contentOf, type BubbleRow } from '@/features/chats/islands/rows';
 import { quoteOf } from '@/features/chats/messageQuote';
 import type { ChatMessage, ForwardItem, LiveQuote } from '@/features/chats/messages/types';
+import type { DraftPop } from '@/features/chats/composerDraftStore';
 import type { ComposerDraft } from '@/features/chats/useComposerDraft';
 import type { LocalMedia, MediaLibraryItem } from '@/features/media';
 import { showNotice } from '@/features/notifications/alertsStore';
@@ -24,6 +25,8 @@ type Options = {
   composerRef: RefObject<TextInput | null>;
   send: (text: string, media?: MediaLibraryItem[], replies?: LiveQuote[]) => void;
   sendVoice: (voice: LocalMedia, replies?: LiveQuote[]) => void;
+  /** Пост с попом — только в чате постов канала. */
+  sendPop?: (text: string, pop: DraftPop, replies?: LiveQuote[]) => void;
   forward: (text: string, sourceChat: ChatRef, items: ForwardItem[]) => void;
   forwardComments: (text: string, comments: ForwardedComment[]) => void;
 };
@@ -73,6 +76,7 @@ export function useReplyForward({
   composerRef,
   send,
   sendVoice: sendVoiceMessage,
+  sendPop,
   forward,
   forwardComments,
 }: Options): ReplyForward {
@@ -134,6 +138,21 @@ export function useReplyForward({
 
   const submit = useCallback(() => {
     const media = draft.media();
+    const { pop } = draft;
+
+    // Пост с попом: поп и фото из галереи в одном посте не встречаются.
+    if (pop && sendPop) {
+      sendPop(draft.text, pop, mode?.type === 'reply' ? mode.quotes : []);
+      draft.setPop(null);
+
+      if (mode?.type === 'forward' || mode?.type === 'forward_comments') {
+        draft.setText('');
+        return;
+      }
+
+      draft.clear();
+      return;
+    }
 
     // Пересылка с подписью. Альбом из шита медиа при этом уходит обычным
     // сообщением, а пересылка ждёт своей очереди в плашке.
@@ -158,7 +177,7 @@ export function useReplyForward({
     }
 
     draft.clear();
-  }, [draft, forward, forwardComments, mode, send]);
+  }, [draft, forward, forwardComments, mode, send, sendPop]);
 
   const sendVoice = useCallback(
     (voice: LocalMedia) => {

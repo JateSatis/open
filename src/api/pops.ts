@@ -3,7 +3,6 @@
 // пост с ним одной транзакцией) и `send_pop_post` (пост с уже опубликованным
 // попом). Право публиковать проверяет база, а не клиент.
 
-import { messagesSelect, toMessage, type Message } from '@/api/messageRows';
 import { supabase } from '@/api/supabase';
 import type { Tables } from '@/api/types.gen';
 
@@ -158,43 +157,4 @@ export async function publishPop(
     popId: row.pop_id,
     messageId: typeof row.message_id === 'string' ? row.message_id : null,
   };
-}
-
-async function fetchMessage(messageId: string): Promise<Message> {
-  const { data, error } = await messagesSelect().eq('id', messageId).single();
-
-  if (error) throw error;
-
-  return toMessage(data);
-}
-
-/** Пост с новым попом: поп публикуется без подписи, текст — у поста. */
-export async function publishPopPost(
-  input: Omit<PublishPopInput, 'alsoPost' | 'caption'>,
-): Promise<Message> {
-  const { messageId } = await publishPop({ ...input, caption: null, alsoPost: true });
-
-  if (!messageId) throw new Error('Не удалось опубликовать пост');
-
-  return fetchMessage(messageId);
-}
-
-/** Пост с уже опубликованным попом этого канала. */
-export async function sendPopPost(
-  chatId: string,
-  popId: string,
-  text: string | null,
-  replyTo: string[] = [],
-): Promise<Message> {
-  const { data: messageId, error } = await supabase.rpc('send_pop_post', {
-    target_chat: chatId,
-    pop: popId,
-    message_text: text ?? undefined,
-    reply_to: replyTo.length > 0 ? replyTo : undefined,
-  });
-
-  if (error) throw error;
-  if (typeof messageId !== 'string') throw new Error('Не удалось опубликовать пост');
-
-  return fetchMessage(messageId);
 }

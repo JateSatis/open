@@ -11,7 +11,7 @@ import {
   openMediaSheet,
   releaseMediaSheetArm,
 } from '@/features/chats/MediaPickerSheet';
-import { EditAttachments } from '@/features/chats/EditAttachments';
+import { EditAttachments, type PopChip } from '@/features/chats/EditAttachments';
 import { MessageComposer, type MessageComposerProps } from '@/features/chats/MessageComposer';
 import { describeMode } from '@/features/chats/messageQuote';
 import type { SelectionActionContext, SelectionActionId } from '@/features/chats/messageActions';
@@ -79,6 +79,8 @@ export type ChatFooterProps = {
     onSendVoice: (voice: LocalMedia) => void;
     onRecordingVoice: () => void;
     inputRef: RefObject<TextInput | null>;
+    /** Поп, прикреплённый к посту канала. С ним пост уходит и без текста. */
+    pop?: PopChip | null;
   } | null;
 };
 
@@ -113,9 +115,24 @@ export function ChatFooter({ selection, invite, composer }: ChatFooterProps) {
             onChangeText={composer.onChangeText}
             canSend={composer.canSend}
             canSendEmpty={
-              composer.mode?.type === 'forward' || composer.mode?.type === 'forward_comments'
+              composer.mode?.type === 'forward' ||
+              composer.mode?.type === 'forward_comments' ||
+              Boolean(composer.pop)
             }
-            plate={modePlate(composer.mode, composer.onCloseMode, composer.edit)}
+            plate={
+              <>
+                {modePlate(composer.mode, composer.onCloseMode, composer.edit)}
+                {composer.pop ? (
+                  <EditAttachments
+                    kept={[]}
+                    voice={null}
+                    onRemoveAttachment={noop}
+                    onRemoveVoice={noop}
+                    pop={composer.pop}
+                  />
+                ) : null}
+              </>
+            }
             edit={composer.edit?.state}
             inputRef={composer.inputRef}
             onSend={composer.onSend}
@@ -132,6 +149,8 @@ export function ChatFooter({ selection, invite, composer }: ChatFooterProps) {
     </>
   );
 }
+
+const noop = () => undefined;
 
 const styles = StyleSheet.create({
   hidden: {

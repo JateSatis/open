@@ -8,6 +8,7 @@ import type { QueryData, RealtimeChannel } from '@supabase/supabase-js';
 
 import { acquireChatTopic, type ChatActivity, type ChatTopicListener } from '@/api/chatTopics';
 import { MESSAGE_COLUMNS, messagesSelect, toMessage, type Message } from '@/api/messageRows';
+import { publishPop, type PublishPopInput } from '@/api/pops';
 import { supabase } from '@/api/supabase';
 
 export { toPreview, type MessagePreview } from '@/api/messagePreview';
@@ -1014,4 +1015,46 @@ export function subscribeToOnlineUsers(
   return () => {
     void supabase.removeChannel(channel);
   };
+}
+
+// Посты канала с попом — обычные сообщения его чата постов; поп публикует
+// `publish_pop` из `pops.ts`.
+
+async function fetchPost(messageId: string): Promise<Message> {
+  const { data, error } = await messagesSelect().eq('id', messageId).single();
+
+  if (error) throw error;
+
+  return toMessage(data);
+}
+
+/** Пост с новым попом: поп публикуется без подписи, текст — у поста. */
+export async function publishPopPost(
+  input: Omit<PublishPopInput, 'alsoPost' | 'caption'>,
+): Promise<Message> {
+  const { messageId } = await publishPop({ ...input, caption: null, alsoPost: true });
+
+  if (!messageId) throw new Error('Не удалось опубликовать пост');
+
+  return fetchPost(messageId);
+}
+
+/** Пост с уже опубликованным попом этого канала. */
+export async function sendPopPost(
+  chatId: string,
+  popId: string,
+  text: string | null,
+  replyTo: string[] = [],
+): Promise<Message> {
+  const { data: messageId, error } = await supabase.rpc('send_pop_post', {
+    target_chat: chatId,
+    pop: popId,
+    message_text: text ?? undefined,
+    reply_to: replyTo.length > 0 ? replyTo : undefined,
+  });
+
+  if (error) throw error;
+  if (typeof messageId !== 'string') throw new Error('Не удалось опубликовать пост');
+
+  return fetchPost(messageId);
 }

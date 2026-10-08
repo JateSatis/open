@@ -2,7 +2,9 @@ import { useInfiniteQuery, useQuery, type InfiniteData } from '@tanstack/react-q
 
 import { canPublishInChannel, listPops, POPS_PAGE_SIZE, type Pop } from '@/api/pops';
 
-export const popsQueryKey = (channelId: string) => ['pops', channelId] as const;
+import { popsQueryKey } from './keys';
+
+export { popsQueryKey };
 export const canPublishQueryKey = (channelId: string) =>
   ['channel', channelId, 'can-publish'] as const;
 

@@ -1,4 +1,4 @@
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, useWindowDimensions, View } from 'react-native';
 import { useSharedValue, withTiming } from 'react-native-reanimated';
@@ -11,7 +11,10 @@ import { SegmentedControl } from '@/components/SegmentedControl';
 import { Text } from '@/components/Text';
 import { SECTION_SETTLE_MS, SectionPager } from '@/features/channels/SectionPager';
 import { useChannel } from '@/features/channels/useChannel';
+import type { Pop } from '@/api/pops';
 import { ChatConversation } from '@/features/chats/ChatConversation';
+import { closeMediaSheet } from '@/features/chats/MediaPickerSheet';
+import { popSheetSection } from '@/features/pops/popSheetSection';
 import { PopsSection } from '@/features/pops/PopsSection';
 import { useTheme } from '@/hooks/use-theme';
 import { describeLoadError } from '@/lib/network';
@@ -51,8 +54,28 @@ export function ChannelScreen({ channelId }: ChannelScreenProps) {
 function ChannelSections({ channel }: { channel: Channel }) {
   const theme = useTheme();
   const { width } = useWindowDimensions();
+  const router = useRouter();
   const position = useSharedValue(0);
   const [index, setIndex] = useState(0);
+
+  // Вкладка «Pop» шита медиа в «Постах»: попсы канала и «+ Новый поп».
+  const sheetSections = useCallback(
+    ({ isMember, attachPop }: { isMember: boolean; attachPop: (pop: Pop) => void }) => [
+      popSheetSection({
+        channelId: channel.id,
+        canAdd: isMember,
+        onPick: attachPop,
+        onAdd: () => {
+          closeMediaSheet();
+          router.push({
+            pathname: '/pop-editor/[channelId]',
+            params: { channelId: channel.id, from: 'posts' },
+          });
+        },
+      }),
+    ],
+    [channel.id, router],
+  );
 
   const ref = useMemo<ChannelRef>(
     () => ({
@@ -79,10 +102,11 @@ function ChannelSections({ channel }: { channel: Channel }) {
         chatId={channel.postsChatId}
         channel={ref}
         active={index === 0}
+        sheetSections={sheetSections}
       />,
       <PopsSection key="pops" channelId={channel.id} />,
     ],
-    [channel.id, channel.postsChatId, index, ref],
+    [channel.id, channel.postsChatId, index, ref, sheetSections],
   );
 
   return (
