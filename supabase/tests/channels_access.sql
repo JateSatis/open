@@ -212,6 +212,187 @@ begin
 end;
 $$;
 
+-- =============================================================================
+-- Попсы
+-- =============================================================================
+
+do $$
+declare
+  a uuid := '00000000-0000-4000-8000-0000000000a9';
+  b uuid := '00000000-0000-4000-8000-0000000000b9';
+  video jsonb := '{"url":"a9/pops/v.mp4","poster_url":"a9/pops/p.jpg","mime_type":"video/mp4","width":720,"height":1280,"duration_ms":5000}';
+  chat uuid;
+  chan uuid;
+  other_chan uuid;
+  r jsonb;
+  pop uuid := gen_random_uuid();
+  other_pop uuid := gen_random_uuid();
+  bare_pop uuid := gen_random_uuid();
+  post uuid;
+  post2 uuid;
+  att uuid;
+  emo text;
+  aud text;
+  c uuid;
+begin
+  select min(emoji) into emo from public.reaction_emojis;
+  perform pg_temp.act_as(a);
+
+  select id, posts_chat_id into chan, chat from public.channels where username = 'chan_a_zz';
+  other_chan := (public.create_channel('Канал A2', 'chan_a2_zz') ->> 'channel_id')::uuid;
+
+  perform pg_temp.check('владелец может публиковать', public.can_publish_in_channel(chan));
+
+  r := public.publish_pop(chan, pop, video, ' подпись ', true, 'подпись', null);
+  post := (r ->> 'message_id')::uuid;
+  perform pg_temp.check('поп с постом: поп и пост созданы',
+    (r ->> 'pop_id')::uuid = pop
+    and (select caption from public.pops where id = pop) = 'подпись'
+    and (select kind || '|' || text from public.messages where id = post) = 'media|подпись'
+    and (select pop_id from public.attachments where message_id = post) = pop);
+
+  perform pg_temp.check('превью списка — Pop и текст',
+    (select last_message_text from public.chats where id = chat) = '🎬 Pop: подпись');
+
+  r := public.publish_pop(chan, pop, video, 'подпись', true, 'подпись', null);
+  perform pg_temp.check('повтор публикации отдаёт созданное, без дублей',
+    (r ->> 'message_id')::uuid = post
+    and (select count(*) from public.pops where id = pop) = 1
+    and (select count(*) from public.attachments where pop_id = pop) = 1);
+
+  r := public.publish_pop(chan, bare_pop, video, null, false, null, null);
+  perform pg_temp.check('поп без поста', r -> 'message_id' = 'null'::jsonb
+    and not exists (select 1 from public.attachments where pop_id = bare_pop));
+
+  post2 := public.send_pop_post(chat, bare_pop, null, null);
+  perform pg_temp.check('пост с существующим попом без текста',
+    (select text from public.messages where id = post2) is null
+    and (select last_message_text from public.chats where id = chat) = '🎬 Pop');
+
+  perform public.publish_pop(other_chan, other_pop, video, null, false, null, null);
+
+  begin
+    perform public.send_pop_post(chat, other_pop, 'чужой', null);
+    perform pg_temp.check('поп другого канала — отказ', false);
+  exception when others then
+    perform pg_temp.check('поп другого канала — отказ', sqlstate = '42501', sqlerrm);
+  end;
+
+  begin
+    perform public.publish_pop(chan, gen_random_uuid(), video - 'poster_url', null, false, null, null);
+    perform pg_temp.check('поп без постера — отказ', false);
+  exception when others then
+    perform pg_temp.check('поп без постера — отказ', sqlstate = '23502', sqlerrm);
+  end;
+
+  begin
+    perform public.publish_pop(chan, gen_random_uuid(), video || '{"mime_type":"image/jpeg"}', null, false, null, null);
+    perform pg_temp.check('поп не-видео — отказ', false);
+  exception when others then
+    perform pg_temp.check('поп не-видео — отказ', sqlstate = '23514', sqlerrm);
+  end;
+
+  begin
+    insert into public.attachments (message_id, message_kind, url, mime_type, position)
+    values (post, 'media', 'a9/x.jpg', 'image/jpeg', 1);
+    set constraints all immediate;
+    perform pg_temp.check('пост с попом и ещё файлом — отказ', false);
+  exception when others then
+    perform pg_temp.check('пост с попом и ещё файлом — отказ', sqlstate = '23514', sqlerrm);
+  end;
+
+  begin
+    insert into public.attachments (message_id, message_kind, pop_id, position)
+    values (post, 'media', bare_pop, 1);
+    perform pg_temp.check('ссылку на поп не вставить напрямую', false);
+  exception when others then
+    perform pg_temp.check('ссылку на поп не вставить напрямую', sqlstate = '42501', sqlerrm);
+  end;
+
+  select id into att from public.attachments where message_id = post;
+
+  begin
+    perform public.edit_message(post, 'без попа', '[]'::jsonb);
+    perform pg_temp.check('правка, убирающая поп, — отказ', false);
+  exception when others then
+    perform pg_temp.check('правка, убирающая поп, — отказ', sqlstate = '23514', sqlerrm);
+  end;
+
+  begin
+    perform public.edit_message(post, 'замена',
+      '[{"url":"a9/x.jpg","mime_type":"image/jpeg","width":10,"height":10}]'::jsonb);
+    perform pg_temp.check('правка, заменяющая поп файлом, — отказ', false);
+  exception when others then
+    perform pg_temp.check('правка, заменяющая поп файлом, — отказ', sqlstate = '23514', sqlerrm);
+  end;
+
+  begin
+    perform public.edit_message(post, 'добавить',
+      jsonb_build_array(jsonb_build_object('attachment_id', att),
+        '{"url":"a9/x.jpg","mime_type":"image/jpeg","width":10,"height":10}'::jsonb));
+    perform pg_temp.check('правка, добавляющая файл к попу, — отказ', false);
+  exception when others then
+    perform pg_temp.check('правка, добавляющая файл к попу, — отказ', sqlstate = '23514', sqlerrm);
+  end;
+
+  perform public.edit_message(post, 'новый текст', jsonb_build_array(jsonb_build_object('attachment_id', att)));
+  perform pg_temp.check('правка текста поста с попом',
+    (select text from public.messages where id = post) = 'новый текст'
+    and (select pop_id from public.attachments where message_id = post) = pop);
+
+  -- Посторонний
+  perform pg_temp.act_as(b);
+
+  perform pg_temp.check('посторонний не может публиковать', not public.can_publish_in_channel(chan));
+  perform pg_temp.check('посторонний видит попсы канала',
+    (select count(*) from public.pops where channel_id = chan) = 2);
+
+  begin
+    perform public.publish_pop(chan, gen_random_uuid(), video, null, true, 'x', null);
+    perform pg_temp.check('посторонний: publish_pop — отказ', false);
+  exception when others then
+    perform pg_temp.check('посторонний: publish_pop — отказ', sqlstate = '42501', sqlerrm);
+  end;
+
+  begin
+    perform public.send_pop_post(chat, pop, 'x', null);
+    perform pg_temp.check('посторонний: send_pop_post — отказ', false);
+  exception when others then
+    perform pg_temp.check('посторонний: send_pop_post — отказ', sqlstate = '42501', sqlerrm);
+  end;
+
+  begin
+    insert into public.pops (channel_id, author_id, url, poster_url, mime_type, width, height, duration_ms)
+    values (chan, b, 'b9/v.mp4', 'b9/p.jpg', 'video/mp4', 720, 1280, 1000);
+    perform pg_temp.check('посторонний: прямая вставка в pops — отказ', false);
+  exception when others then
+    perform pg_temp.check('посторонний: прямая вставка в pops — отказ', sqlstate = '42501', sqlerrm);
+  end;
+
+  begin
+    insert into public.attachments (message_id, message_kind, pop_id, position)
+    values (post, 'media', pop, 1);
+    perform pg_temp.check('посторонний: прямая вставка в attachments — отказ', false);
+  exception when others then
+    perform pg_temp.check('посторонний: прямая вставка в attachments — отказ', sqlstate = '42501', sqlerrm);
+  end;
+
+  select s.audience into aud from public.set_reaction('message', post, emo) s;
+  perform pg_temp.check('реакция постороннего на пост с попом — visitor', aud = 'visitor', aud);
+
+  c := public.send_comment(post, 'комментарий к посту с попом');
+  perform pg_temp.check('комментарий постороннего к посту с попом — visitor',
+    (select audience from public.comments where id = c) = 'visitor');
+
+  -- Удаление поста попа не трогает.
+  perform pg_temp.act_as(a);
+  perform public.delete_messages(array[post]);
+  perform pg_temp.check('удаление поста не трогает поп',
+    not exists (select 1 from public.messages where id = post)
+    and exists (select 1 from public.pops where id = pop and deleted_at is null));
+end;
+$$;
+
 select n, name, ok, detail from results order by n;
 
 rollback;

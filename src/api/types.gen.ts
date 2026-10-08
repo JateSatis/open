@@ -23,10 +23,11 @@ export type Database = {
           message_id: string
           message_kind: string
           mime_type: string | null
+          pop_id: string | null
           position: number
           poster_url: string | null
           size_bytes: number | null
-          url: string
+          url: string | null
           waveform: number[] | null
           width: number | null
         }
@@ -38,10 +39,11 @@ export type Database = {
           message_id: string
           message_kind: string
           mime_type?: string | null
+          pop_id?: string | null
           position?: number
           poster_url?: string | null
           size_bytes?: number | null
-          url: string
+          url?: string | null
           waveform?: number[] | null
           width?: number | null
         }
@@ -53,10 +55,11 @@ export type Database = {
           message_id?: string
           message_kind?: string
           mime_type?: string | null
+          pop_id?: string | null
           position?: number
           poster_url?: string | null
           size_bytes?: number | null
-          url?: string
+          url?: string | null
           waveform?: number[] | null
           width?: number | null
         }
@@ -67,6 +70,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "messages"
             referencedColumns: ["id", "kind"]
+          },
+          {
+            foreignKeyName: "attachments_pop_id_fkey"
+            columns: ["pop_id"]
+            isOneToOne: false
+            referencedRelation: "pops"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -1138,6 +1148,69 @@ export type Database = {
           },
         ]
       }
+      pops: {
+        Row: {
+          author_id: string | null
+          caption: string | null
+          channel_id: string
+          created_at: string
+          deleted_at: string | null
+          duration_ms: number
+          height: number
+          id: string
+          mime_type: string
+          poster_url: string
+          size_bytes: number | null
+          url: string
+          width: number
+        }
+        Insert: {
+          author_id?: string | null
+          caption?: string | null
+          channel_id: string
+          created_at?: string
+          deleted_at?: string | null
+          duration_ms: number
+          height: number
+          id?: string
+          mime_type: string
+          poster_url: string
+          size_bytes?: number | null
+          url: string
+          width: number
+        }
+        Update: {
+          author_id?: string | null
+          caption?: string | null
+          channel_id?: string
+          created_at?: string
+          deleted_at?: string | null
+          duration_ms?: number
+          height?: number
+          id?: string
+          mime_type?: string
+          poster_url?: string
+          size_bytes?: number | null
+          url?: string
+          width?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pops_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pops_channel_id_fkey"
+            columns: ["channel_id"]
+            isOneToOne: false
+            referencedRelation: "channels"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -1419,6 +1492,10 @@ export type Database = {
         Args: { ended: string; started: string }
         Returns: string
       }
+      can_publish_in_channel: {
+        Args: { target_channel: string }
+        Returns: boolean
+      }
       chat_am_member: {
         Args: { "": Database["public"]["Tables"]["chats"]["Row"] }
         Returns: {
@@ -1502,6 +1579,15 @@ export type Database = {
           message_ids: string[]
           source_chat: string
           target_chat: string
+        }
+        Returns: string
+      }
+      insert_pop_post: {
+        Args: {
+          message_text: string
+          pop: string
+          posts_chat: string
+          reply_to: string[]
         }
         Returns: string
       }
@@ -1667,6 +1753,18 @@ export type Database = {
         Args: { in_forward?: string; target_message: string }
         Returns: undefined
       }
+      publish_pop: {
+        Args: {
+          also_post?: boolean
+          caption?: string
+          media: Json
+          new_pop: string
+          post_text?: string
+          reply_to?: string[]
+          target_channel: string
+        }
+        Returns: Json
+      }
       reaction_counts_add: {
         Args: { counts: Json; delta: number; emoji: string }
         Returns: Json
@@ -1772,6 +1870,15 @@ export type Database = {
         Args: {
           media: Json
           message_text: string
+          reply_to?: string[]
+          target_chat: string
+        }
+        Returns: string
+      }
+      send_pop_post: {
+        Args: {
+          message_text?: string
+          pop: string
           reply_to?: string[]
           target_chat: string
         }
