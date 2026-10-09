@@ -4,6 +4,7 @@ import { MediaGridItem } from '.';
 
 import { MediaLimits } from '@/features/media/constants';
 import type { MediaLibraryItem } from '@/features/media/mediaLibrary';
+import { resetMediaPreview, useMediaPreview } from '@/features/media/MediaPreview/previewStore';
 import { useMediaSelection } from '@/features/media/selectionStore';
 
 const photo: MediaLibraryItem = {
@@ -28,6 +29,7 @@ function select(...assets: MediaLibraryItem[]) {
 
 beforeEach(() => {
   useMediaSelection.getState().clear();
+  resetMediaPreview();
 });
 
 describe('MediaGridItem', () => {
@@ -91,6 +93,48 @@ describe('MediaGridItem', () => {
     await render(<MediaGridItem asset={video} size={100} onToggle={jest.fn()} />);
 
     expect(screen.getByText('0:12')).toBeTruthy();
+  });
+});
+
+describe('MediaGridItem: тап по самой плитке', () => {
+  it('открывает предпросмотр этого файла и не трогает выбор', async () => {
+    const user = userEvent.setup();
+
+    await render(<MediaGridItem asset={photo} size={100} onToggle={jest.fn()} />);
+    await user.press(screen.getByLabelText('Открыть фото'));
+
+    expect(useMediaPreview.getState().target?.assetId).toBe(photo.id);
+    expect(useMediaSelection.getState().order).toEqual([]);
+  });
+
+  it('кружок только выбирает — предпросмотр не открывается', async () => {
+    const onToggle = jest.fn();
+    const user = userEvent.setup();
+
+    await render(<MediaGridItem asset={photo} size={100} onToggle={onToggle} />);
+    await user.press(screen.getByLabelText('Выбрать файл'));
+
+    expect(onToggle).toHaveBeenCalledWith(photo);
+    expect(useMediaPreview.getState().target).toBeNull();
+  });
+
+  it('в выборе одного файла тап по плитке выбирает её, а не открывает предпросмотр', async () => {
+    const onPick = jest.fn();
+    const user = userEvent.setup();
+
+    await render(
+      <MediaGridItem
+        asset={photo}
+        size={100}
+        onToggle={jest.fn()}
+        pick={{ accepts: () => true, onPick }}
+      />,
+    );
+    await user.press(screen.getByTestId('media-grid-pick'));
+
+    expect(onPick).toHaveBeenCalledWith(photo);
+    expect(screen.queryByLabelText('Открыть фото')).toBeNull();
+    expect(useMediaPreview.getState().target).toBeNull();
   });
 });
 
