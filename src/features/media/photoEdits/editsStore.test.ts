@@ -1,4 +1,6 @@
 import { photoEditOf, setPhotoEdit, usePhotoEdits } from './editsStore';
+import { defaultCrop, rotateQuarter } from './crop';
+import { editedThumbOf, setEditedThumb } from './editedThumbs';
 import type { BakedPhoto } from './types';
 
 import type { MediaLibraryItem } from '@/features/media/mediaLibrary';
@@ -61,5 +63,43 @@ describe('правки фото живут вместе с выбором', () =
 
     expect(sent.map((item) => item.id)).toEqual(['a', 'b', 'c']);
     expect(sent.map((item) => item.edited !== undefined)).toEqual([false, true, false]);
+  });
+});
+
+describe('обрезка в правке', () => {
+  const NEUTRAL = { exposure: 0, contrast: 0, saturation: 0 };
+
+  it('нетронутая обрезка — правки нет', () => {
+    setPhotoEdit('a', { adjust: NEUTRAL, crop: defaultCrop(0.75) }, baked);
+
+    expect(photoEditOf('a')).toBeUndefined();
+  });
+
+  it('только обрезка — правка есть, цвет нейтральный', () => {
+    const crop = rotateQuarter(defaultCrop(0.75));
+
+    setPhotoEdit('a', { adjust: NEUTRAL, crop }, baked);
+
+    expect(photoEditOf('a')).toEqual({ adjust: NEUTRAL, crop });
+  });
+
+  it('цвет с нетронутой обрезкой хранится без обрезки', () => {
+    setPhotoEdit('a', { ...GREY, crop: defaultCrop(1) }, baked);
+
+    expect(photoEditOf('a')).toEqual(GREY);
+  });
+
+  it('картинка плитки уходит вместе с прежней правкой и с выбором', () => {
+    setPhotoEdit('a', GREY, baked);
+    setEditedThumb('a', 'file:///a.jpg');
+    setPhotoEdit('a', { adjust: NEUTRAL }, null);
+
+    expect(editedThumbOf('a')).toBeUndefined();
+
+    setPhotoEdit('a', GREY, baked);
+    setEditedThumb('a', 'file:///a.jpg');
+    useMediaSelection.getState().clear();
+
+    expect(editedThumbOf('a')).toBeUndefined();
   });
 });
