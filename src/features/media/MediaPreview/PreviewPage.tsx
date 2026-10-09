@@ -176,7 +176,16 @@ export const PreviewPage = memo(function PreviewPage({
                 contentFit="contain"
                 cachePolicy="memory"
                 recyclingKey={editedThumb}
-                onLoad={() => setThumbShown(true)}
+                onLoad={(event) => {
+                  const { width: loadedWidth, height: loadedHeight } = event.source;
+
+                  // Без обрезки пропорции — по картинке правки: она повёрнута по
+                  // EXIF, а медиатека отдаёт размеры без поворота.
+                  if (crop === undefined && loadedWidth > 0 && loadedHeight > 0) {
+                    setAspect(loadedWidth / loadedHeight);
+                  }
+                  setThumbShown(true);
+                }}
                 onError={() => setThumbShown(true)}
                 accessibilityIgnoresInvertColors
               />

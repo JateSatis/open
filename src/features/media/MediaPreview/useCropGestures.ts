@@ -19,12 +19,13 @@ import {
   recenteringFrame,
   type CropMotion,
 } from './cropMotion';
+import { hitEdges, movedFrame } from './cropHandles';
 import { startCropTransition } from './useCropTool';
 
 import { rubberBand } from '@/features/media/MediaViewer/viewerMath';
 import {
   clampCenter,
-  coverZoom,
+  coverCrop,
   fitZoom,
   isCovered,
   minCropSide,
@@ -45,11 +46,6 @@ export const GRID_FADE_MS = 200;
 const PINCH_RUBBER = 0.3;
 /** Столько шагов поиска упора: рамка не залезает за фото с точностью до долей точки. */
 const FIT_STEPS = 12;
-
-const LEFT = 1;
-const RIGHT = 2;
-const TOP = 4;
-const BOTTOM = 8;
 
 type Mode = 'none' | 'image' | 'frame';
 
@@ -73,49 +69,6 @@ export function settleCrop(m: CropMotion) {
   m.from.value = now;
   m.twist.value = NO_TWIST;
   m.t.value = 1;
-}
-
-/** Где на рамке палец: битовая маска сторон; 0 — не на ручке. */
-function hitEdges(frame: Box, x: number, y: number): number {
-  'worklet';
-  const hit = Sizes.cropHandleHit;
-  const inX = x > frame.x - hit && x < frame.x + frame.width + hit;
-  const inY = y > frame.y - hit && y < frame.y + frame.height + hit;
-
-  if (!inX || !inY) return 0;
-
-  let edges = 0;
-
-  if (Math.abs(x - frame.x) < hit) edges |= LEFT;
-  else if (Math.abs(x - (frame.x + frame.width)) < hit) edges |= RIGHT;
-
-  if (Math.abs(y - frame.y) < hit) edges |= TOP;
-  else if (Math.abs(y - (frame.y + frame.height)) < hit) edges |= BOTTOM;
-
-  return edges;
-}
-
-/** Рамка со сдвинутыми сторонами — не меньше `min` и не за рабочим полем. */
-function movedFrame(
-  start: Box,
-  edges: number,
-  dx: number,
-  dy: number,
-  area: Box,
-  min: number,
-): Box {
-  'worklet';
-  let left = start.x;
-  let right = start.x + start.width;
-  let top = start.y;
-  let bottom = start.y + start.height;
-
-  if (edges & LEFT) left = Math.min(Math.max(area.x, left + dx), right - min);
-  if (edges & RIGHT) right = Math.max(Math.min(area.x + area.width, right + dx), left + min);
-  if (edges & TOP) top = Math.min(Math.max(area.y, top + dy), bottom - min);
-  if (edges & BOTTOM) bottom = Math.max(Math.min(area.y + area.height, bottom + dy), top + min);
-
-  return { x: left, y: top, width: right - left, height: bottom - top };
 }
 
 /** Центр с резиной за краем: тянуть можно, но всё туже. */
@@ -183,12 +136,7 @@ export function useCropGestures(m: CropMotion, rotationBase: SharedValue<PhotoCr
       }
 
       // Фото вытащили за край или ужали меньше рамки — пружинит обратно.
-      const zoom = coverZoom(m.crop.value);
-      const target = clampCenter({
-        ...m.crop.value,
-        width: m.crop.value.width / zoom,
-        height: m.crop.value.height / zoom,
-      });
+      const target = coverCrop(m.crop.value);
 
       startCropTransition(m, target, { cover: false, duration: SPRING_BACK_MS });
     };

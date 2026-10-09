@@ -30,6 +30,7 @@ import { workingCopyOf, workingImageOf } from './workingCopy';
 import type { MediaLibraryItem } from '@/features/media/mediaLibrary';
 import {
   alignCrop,
+  coverCrop,
   defaultCrop,
   mirrorCrop,
   rotateQuarter,
@@ -118,6 +119,8 @@ export function useCropTool(): CropToolState {
   const [session, setSession] = useState<CropSession | null>(null);
   const entry = useRef<{ asset: MediaLibraryItem; crop: PhotoCrop } | null>(null);
   const starting = useRef(false);
+  /** Слой ещё гаснет после прошлого захода — новый заход подождёт его. */
+  const closing = useRef(false);
 
   const plain = defaultCrop(1);
   const crop = useSharedValue<PhotoCrop>(plain);
@@ -140,7 +143,7 @@ export function useCropTool(): CropToolState {
 
   const start = useCallback(
     (asset: MediaLibraryItem) => {
-      if (starting.current || entry.current) return;
+      if (starting.current || entry.current || closing.current) return;
 
       starting.current = true;
       // Рабочая копия обычно уже готова: она готовится, как только фото
@@ -177,6 +180,9 @@ export function useCropTool(): CropToolState {
   );
 
   const ready = useCallback(() => {
+    // Первый кадр пришёл, когда инструмент уже закрыли, — входить некуда.
+    if (!entry.current) return;
+
     cover.value = 1;
     enter.value = withTiming(1, { duration: TOOL_SWITCH_MS });
   }, [cover, enter]);
@@ -204,11 +210,13 @@ export function useCropTool(): CropToolState {
   );
 
   const closed = useCallback(() => {
+    closing.current = false;
     setSession(null);
   }, []);
 
   const leave = useCallback(() => {
     entry.current = null;
+    closing.current = true;
     setOpen(false);
     enter.value = withTiming(0, { duration: TOOL_SWITCH_MS }, (finished) => {
       if (!finished) return;
@@ -236,8 +244,9 @@ export function useCropTool(): CropToolState {
 
     if (!current) return;
 
-    // Переход мог ещё идти — применяется то, куда он ведёт.
-    const result = crop.value;
+    // Переход мог ещё идти — применяется то, куда он ведёт. Палец мог
+    // ещё тянуть фото за край — применяется то, куда оно спружинит.
+    const result = coverCrop(crop.value);
 
     leave();
     commitPhotoEdit(current.asset, {

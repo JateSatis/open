@@ -132,15 +132,20 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-/** Центр, сдвинутый ровно настолько, чтобы рамка не выходила за исходник. */
+/**
+ * Центр, сдвинутый ровно настолько, чтобы рамка не выходила за исходник.
+ * Рамка больше исходника (щипок за предел) — центр посередине.
+ */
 export function clampCenter(crop: PhotoCrop): PhotoCrop {
   'worklet';
   const extents = cropExtents(crop);
+  const within = (value: number, half: number, side: number) =>
+    half * 2 > side ? side / 2 : clamp(value, half, side - half);
 
   return {
     ...crop,
-    centerX: clamp(crop.centerX, extents.x, Math.max(extents.x, 1 - extents.x)),
-    centerY: clamp(crop.centerY, extents.y, Math.max(extents.y, crop.sourceRatio - extents.y)),
+    centerX: within(crop.centerX, extents.x, 1),
+    centerY: within(crop.centerY, extents.y, crop.sourceRatio),
   };
 }
 
