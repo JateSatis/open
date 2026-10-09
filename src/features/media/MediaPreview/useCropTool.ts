@@ -194,7 +194,14 @@ export function useCropTool(): CropToolState {
 
   const rotate = useCallback(() => turn(rotateQuarter), [turn]);
   const mirror = useCallback(() => turn(mirrorCrop), [turn]);
-  const reset = useCallback(() => turn((now) => defaultCrop(now.sourceRatio)), [turn]);
+  const reset = useCallback(
+    () =>
+      turn((now) => {
+        'worklet';
+        return defaultCrop(now.sourceRatio);
+      }),
+    [turn],
+  );
 
   const closed = useCallback(() => {
     setSession(null);
