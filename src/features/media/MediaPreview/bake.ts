@@ -5,6 +5,7 @@ import {
   Skia,
   TileMode,
   type SkImage,
+  type SkSurface,
 } from '@shopify/react-native-skia';
 import { Image as ExpoImage } from 'expo-image';
 import { File } from 'expo-file-system';
@@ -19,16 +20,20 @@ import {
 } from './workingCopy';
 
 import { MediaLimits } from '@/features/media/constants';
+import { paintDrawing } from './paintDrawing';
+
 import { perfLog } from '@/features/media/perf';
 import { adjustColorMatrix } from '@/features/media/photoEdits/colorMatrix';
 import {
   affineToMatrix,
+  invertAffine,
   cropBounds,
   cropOutputSize,
   cropTransform,
   defaultCrop,
   type PhotoCrop,
 } from '@/features/media/photoEdits/crop';
+import { BLUR_SIGMA, hasBlur } from '@/features/media/photoEdits/drawing';
 import {
   hasCrop,
   type BakedPhoto,
@@ -61,10 +66,13 @@ export function cropOf(
  * — сколько её пикселей в ширине исходника.
  *
  * Шаги — в зафиксированном порядке (см. `PhotoEdit`): цвет, обрезка с
- * поворотом, дальше рисунок, когда он появится. Цвет — фильтр над
- * пикселями, ему всё равно, до или после геометрии; края картинки
- * продолжаются своими пикселями (`clamp`), и сглаживание на границе
- * исходника не тянет внутрь чёрную кайму.
+ * поворотом, рисунок. Цвет — фильтр над пикселями, ему всё равно, до или
+ * после геометрии; края картинки продолжаются своими пикселями (`clamp`), и
+ * сглаживание на границе исходника не тянет внутрь чёрную кайму.
+ *
+ * Рисунок — векторный, в итоговом разрешении: толщина и сила размытия в
+ * долях ширины исходника, в пиксели их переводит та же матрица обрезки.
+ * Размытие проявляет уже окрашенное фото.
  */
 function drawEdit(
   image: SkImage,
@@ -97,7 +105,33 @@ function drawEdit(
 
   paint.setShader(shader);
   paint.setColorFilter(filter);
-  surface.getCanvas().drawRect(Skia.XYWHRect(0, 0, width, height), paint);
+
+  const canvas = surface.getCanvas();
+
+  canvas.drawRect(Skia.XYWHRect(0, 0, width, height), paint);
+
+  if (edit.drawing && edit.drawing.length > 0) {
+    // Единицы рисунка → пиксели итога: та же обрезка, что у фото.
+    const units = cropTransform(crop, { x: 0, y: 0, width, height }, 1);
+    const blurred = hasBlur(edit.drawing) ? blurredSnapshot(surface, width / crop.width) : null;
+    const blur =
+      blurred &&
+      blurred.makeShaderOptions(
+        TileMode.Clamp,
+        TileMode.Clamp,
+        FilterMode.Linear,
+        MipmapMode.None,
+        Skia.Matrix(affineToMatrix(invertAffine(units))),
+      );
+
+    canvas.save();
+    canvas.concat(Skia.Matrix(affineToMatrix(units)));
+    paintDrawing(canvas, edit.drawing, blur);
+    canvas.restore();
+    blur?.dispose();
+    blurred?.dispose();
+  }
+
   surface.flush();
 
   const snapshot = surface.makeImageSnapshot();
@@ -115,6 +149,32 @@ function drawEdit(
   shader.dispose();
 
   return bytes;
+}
+
+/**
+ * Размытое фото того, что уже на холсте (окрашенное и обрезанное), — его
+ * проявляют мазки размытия. Сила — в долях ширины исходника, `pxPerUnit`
+ * переводит её в пиксели итога.
+ */
+function blurredSnapshot(surface: SkSurface, pxPerUnit: number): SkImage {
+  const photo = surface.makeImageSnapshot();
+  const blurSurface = Skia.Surface.Make(photo.width(), photo.height());
+
+  if (!blurSurface) throw new Error('Не удалось создать поверхность для размытия');
+
+  const sigma = BLUR_SIGMA * pxPerUnit;
+  const paint = Skia.Paint();
+
+  paint.setImageFilter(Skia.ImageFilter.MakeBlur(sigma, sigma, TileMode.Clamp, null));
+  blurSurface.getCanvas().drawImage(photo, 0, 0, paint);
+  blurSurface.flush();
+
+  const blurred = blurSurface.makeImageSnapshot();
+
+  blurSurface.dispose();
+  photo.dispose();
+
+  return blurred;
 }
 
 function writeJpeg(id: string, bytes: Uint8Array): string {
@@ -145,7 +205,11 @@ function renderFromCopy(id: string, copy: WorkingCopy, edit: PhotoEdit): PhotoFi
   );
   const uri = writeJpeg(id, bytes);
 
-  perfLog('правки: запечено из копии', { id, ms: Math.round(performance.now() - startedAt) });
+  perfLog('правки: запечено из копии', {
+    id,
+    штрихов: edit.drawing?.length ?? 0,
+    ms: Math.round(performance.now() - startedAt),
+  });
 
   return { uri, ...size };
 }
@@ -241,6 +305,7 @@ async function renderFromSource(
     раскодировано: decodedSize,
     вырезка: `${right - left}×${bottom - top}`,
     итог: `${size.width}×${size.height}`,
+    штрихов: edit.drawing?.length ?? 0,
     раскодированиеMs: Math.round(decodedAt - startedAt),
     всегоMs: Math.round(performance.now() - startedAt),
   });
