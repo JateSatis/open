@@ -23,6 +23,10 @@ export type WorkingCopy = {
   uri: string;
   width: number;
   height: number;
+  /** Исходник, повёрнутый по EXIF, — из него запекается обрезка. */
+  source: string;
+  sourceWidth: number;
+  sourceHeight: number;
 };
 
 const copies = new Map<string, Promise<WorkingCopy>>();
@@ -68,6 +72,7 @@ async function makeWorkingCopy(id: string): Promise<WorkingCopy> {
   // content:// и ph:// открывает не каждый загрузчик — путь к файлу надёжнее.
   const source = await resolveAssetUri(id);
   const oriented = await ImageManipulator.manipulate(source).renderAsync();
+  const { width: sourceWidth, height: sourceHeight } = oriented;
   const { maxWidthPx } = MediaLimits.photo;
   const image =
     oriented.width > maxWidthPx
@@ -84,7 +89,14 @@ async function makeWorkingCopy(id: string): Promise<WorkingCopy> {
 
   new File(saved.uri).move(target);
 
-  return { uri: target.uri, width: saved.width, height: saved.height };
+  return {
+    uri: target.uri,
+    width: saved.width,
+    height: saved.height,
+    source,
+    sourceWidth,
+    sourceHeight,
+  };
 }
 
 /** Рабочая копия фото — одна на файл за сеанс. */

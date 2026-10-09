@@ -1,17 +1,15 @@
 // Мутация `.value` у shared value — штатный способ пользоваться Reanimated.
 /* eslint-disable react-hooks/immutability */
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { InteractionManager } from 'react-native';
 import { cancelAnimation, useSharedValue, withTiming } from 'react-native-reanimated';
 
-import { bakePhoto } from './bake';
+import { commitPhotoEdit } from './commitEdit';
 import type { LiveAdjust } from './EditedPhoto';
 import { workingCopyOf } from './workingCopy';
 
 import type { MediaLibraryItem } from '@/features/media/mediaLibrary';
-import { photoEditOf, setPhotoEdit } from '@/features/media/photoEdits/editsStore';
-import { EMPTY_EDIT, isNeutralAdjust, type ColorAdjust } from '@/features/media/photoEdits/types';
-import { useMediaSelection } from '@/features/media/selectionStore';
+import { photoEditOf } from '@/features/media/photoEdits/editsStore';
+import { EMPTY_EDIT, type ColorAdjust } from '@/features/media/photoEdits/types';
 
 /** Панель инструмента сменяет нижнюю панель плавно, фото ужимается за то же время. */
 export const TOOL_SWITCH_MS = 260;
@@ -34,8 +32,7 @@ export type ColorToolState = {
 /**
  * Заход в «Настройку цвета» для одного фото: ползунки стартуют с его
  * текущей правки, крестик возвращает их к значениям на входе, галочка
- * записывает правку, запускает запекание и выбирает фото, если оно ещё не
- * выбрано и лимит позволяет.
+ * применяет (`commitPhotoEdit`).
  */
 export function useColorTool(): ColorToolState {
   const [open, setOpen] = useState(false);
@@ -114,43 +111,15 @@ export function useColorTool(): ColorToolState {
       if (resetting) value.value = 0;
     }
 
-    const edit = {
+    // Обрезка и всё прочее, что у фото уже есть, остаётся как было.
+    commitPhotoEdit(asset, {
+      ...(photoEditOf(asset.id) ?? EMPTY_EDIT),
       adjust: {
         exposure: Math.round(exposure.value),
         contrast: Math.round(contrast.value),
         saturation: Math.round(saturation.value),
       },
-    };
-
-    if (isNeutralAdjust(edit.adjust)) {
-      setPhotoEdit(asset.id, edit, null);
-      return;
-    }
-
-    const baked = bakePhoto(asset.id, edit);
-
-    setPhotoEdit(asset.id, edit, baked);
-    // Запекание — после анимации смены панели: оно занимает JS-поток.
-    // Рабочая копия к этому времени давно готова: она готовится, как только
-    // фото стало текущим в предпросмотре.
-    void workingCopyOf(asset.id)
-      .then(() =>
-        InteractionManager.runAfterInteractions(() => {
-          try {
-            baked.file();
-          } catch {
-            // Отправка допечёт заново и при сбое упадёт с «повторить».
-          }
-        }),
-      )
-      .catch(() => undefined);
-
-    const selection = useMediaSelection.getState();
-
-    // Правка — намерение отправить это фото.
-    if (!selection.order.includes(asset.id) && selection.order.length < selection.limit) {
-      selection.toggle(asset);
-    }
+    });
   }, [contrast, exposure, leave, saturation]);
 
   return { open, progress, live, start, reset, cancel, done };
