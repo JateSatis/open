@@ -8,6 +8,15 @@ require('react-native-gesture-handler/jestSetup');
 jest.mock('react-native-reanimated', () => ({
   ...require('react-native-reanimated/mock'),
   makeMutable: (value) => ({ value }),
+  // На устройстве shared value живёт весь срок компонента; в моке — новый на
+  // каждый рендер, и записанное в него до перерисовки терялось.
+  useSharedValue: (init) => {
+    const holder = require('react').useRef(null);
+
+    if (!holder.current) holder.current = require('react-native-reanimated/mock').useSharedValue(init);
+
+    return holder.current;
+  },
   // Анимаций раскладки в моке нет — и настройке их пропуска нечего делать.
   LayoutAnimationConfig: ({ children }) => children,
   useAnimatedRef: () => {

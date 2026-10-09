@@ -9,7 +9,9 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { DrawColorPanel } from './DrawColorPanel';
 import { DrawPanel } from './DrawPanel';
+import { Eyedropper } from './Eyedropper';
 import { DrawSizeSlider } from './DrawSizeSlider';
 import { fitRect } from './previewGeometry';
 import type { Rect } from './previewStore';
@@ -17,7 +19,7 @@ import { styles } from './styles';
 import { useDrawGestures } from './useDrawGestures';
 import type { DrawToolState } from './useDrawTool';
 
-import { drawColorOf, useDrawSettings } from '@/features/media/drawSettings';
+import { DEFAULT_DRAW_COLOR, drawColorOf, useDrawSettings } from '@/features/media/drawSettings';
 import { cropAspect } from '@/features/media/photoEdits/crop';
 import { useTheme } from '@/hooks/use-theme';
 import { Opacity, Sizes, Spacing } from '@/theme';
@@ -45,11 +47,17 @@ export function DrawTool({ tool, screen, area, onPanelLayout }: DrawToolProps) {
   const [panelHeight, setPanelHeight] = useState(0);
   const crop = tool.session?.crop ?? null;
   const gesture = useDrawGestures(tool, crop, screen, area);
-  const { progress, size } = tool;
+  const { progress, size, picker } = tool;
   const color = drawColorOf(settings, tool.brush);
+  const pickerProgress = picker.progress;
+  const picking = picker.mode !== 'none';
   const aspect = crop ? cropAspect(crop) : 1;
 
   const chromeStyle = useAnimatedStyle(() => ({ opacity: progress.value }));
+  // Ползунок толщины уступает место панели цвета.
+  const sizeStyle = useAnimatedStyle(() => ({
+    opacity: progress.value * (1 - pickerProgress.value),
+  }));
   const panelStyle = useAnimatedStyle(() => ({
     opacity: progress.value,
     transform: [{ translateY: (1 - progress.value) * Spacing.five }],
@@ -114,14 +122,14 @@ export function DrawTool({ tool, screen, area, onPanelLayout }: DrawToolProps) {
       </Animated.View>
 
       <Animated.View
-        pointerEvents={tool.open ? 'box-none' : 'none'}
+        pointerEvents={tool.open && !picking ? 'box-none' : 'none'}
         style={[
           styles.sizeColumn,
           {
             top: insets.top + Sizes.previewHeaderButton + Spacing.three,
             bottom: panelHeight + Spacing.three,
           },
-          chromeStyle,
+          sizeStyle,
         ]}
       >
         <DrawSizeSlider size={size} sizing={sizing} onCommit={tool.commitSize} />
@@ -134,7 +142,10 @@ export function DrawTool({ tool, screen, area, onPanelLayout }: DrawToolProps) {
         hasDrawing={tool.hasDrawing}
         style={panelStyle}
         active={tool.open}
+        picker={pickerProgress}
+        rowsActive={picker.mode !== 'colors'}
         onBrush={tool.selectBrush}
+        onColor={picker.openColors}
         onUndo={tool.undo}
         onReset={tool.reset}
         onDone={tool.done}
@@ -143,6 +154,28 @@ export function DrawTool({ tool, screen, area, onPanelLayout }: DrawToolProps) {
           onPanelLayout(height);
         }}
       />
+
+      <DrawColorPanel
+        color={color ?? DEFAULT_DRAW_COLOR}
+        alpha={picker.alpha}
+        progress={pickerProgress}
+        active={tool.open && picker.mode === 'colors'}
+        onPick={picker.pick}
+        onBack={picker.close}
+        onEyedropper={picker.startEyedropper}
+      />
+
+      {tool.open && crop && picker.mode === 'eyedropper' && picker.sample ? (
+        <Eyedropper
+          sample={picker.sample}
+          crop={crop}
+          screen={screen}
+          area={area}
+          zoom={tool.live.zoom}
+          progress={progress}
+          onPick={picker.pick}
+        />
+      ) : null}
     </View>
   );
 }

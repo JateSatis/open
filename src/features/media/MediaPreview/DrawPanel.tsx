@@ -1,6 +1,12 @@
 import { SymbolView } from 'expo-symbols';
 import { Pressable, View, type ViewStyle } from 'react-native';
-import Animated, { FadeIn, FadeOut, type AnimatedStyle } from 'react-native-reanimated';
+import Animated, {
+  FadeIn,
+  FadeOut,
+  useAnimatedStyle,
+  type AnimatedStyle,
+  type SharedValue,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DrawBrushRow } from './DrawBrushRow';
@@ -20,7 +26,12 @@ export type DrawPanelProps = {
   style: AnimatedStyle<ViewStyle>;
   /** Панель на экране и принимает касания. */
   active: boolean;
+  /** 1 — вместо рядов открыта панель цвета: ряды гаснут; на UI-потоке. */
+  picker: SharedValue<number>;
+  /** Ряды на экране и принимают касания (панель цвета закрыта). */
+  rowsActive: boolean;
   onBrush: (brush: DrawBrush) => void;
+  onColor: () => void;
   onUndo: () => void;
   onReset: () => void;
   onDone: () => void;
@@ -38,7 +49,10 @@ export function DrawPanel({
   hasDrawing,
   style,
   active,
+  picker,
+  rowsActive,
   onBrush,
+  onColor,
   onUndo,
   onReset,
   onDone,
@@ -46,6 +60,7 @@ export function DrawPanel({
 }: DrawPanelProps) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const rowsStyle = useAnimatedStyle(() => ({ opacity: 1 - picker.value }));
 
   return (
     <Animated.View
@@ -61,9 +76,13 @@ export function DrawPanel({
       ]}
       onLayout={(event) => onLayout(event.nativeEvent.layout.height)}
     >
-      <DrawBrushRow brush={brush} color={color} onBrush={onBrush} />
+      <Animated.View
+        pointerEvents={rowsActive ? 'auto' : 'none'}
+        style={[styles.drawRows, rowsStyle]}
+      >
+        <DrawBrushRow brush={brush} color={color} onBrush={onBrush} onColor={onColor} />
 
-      <View style={styles.toolActions}>
+        <View style={styles.toolActions}>
         <Pressable
           testID="draw-undo"
           accessibilityRole="button"
@@ -110,7 +129,8 @@ export function DrawPanel({
             tintColor={theme.primary}
           />
         </Pressable>
-      </View>
+        </View>
+      </Animated.View>
     </Animated.View>
   );
 }
