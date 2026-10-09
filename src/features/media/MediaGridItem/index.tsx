@@ -13,6 +13,7 @@ import {
 } from '@/features/media/MediaPreview/previewStore';
 import { assetPreviewUri } from '@/features/media/lib/previewUri';
 import type { MediaLibraryItem } from '@/features/media/mediaLibrary';
+import { useEditedThumb } from '@/features/media/photoEdits/editedThumbs';
 import { countMount, countRender, perfLog } from '@/features/media/perf';
 import { SLOT_BLOCKED, SLOT_FREE, useSelectionSlot } from '@/features/media/selectionStore';
 import { useTheme } from '@/hooks/use-theme';
@@ -63,6 +64,9 @@ export const MediaGridItem = memo(function MediaGridItem({
 
   const theme = useTheme();
   const slot = useSelectionSlot(asset.id);
+  // Отредактированное фото — картинкой правки. Подписка по id, а не на
+  // стор: тапы по кружкам её не задевают (см. `editedThumbs`).
+  const editedThumb = useEditedThumb(asset.id);
   // Помним, у какого файла превью не открылось, а не просто «не открылось»:
   // список переиспользует клетку под другие файлы, и флаг без id делал бы
   // битыми и их.
@@ -102,15 +106,17 @@ export const MediaGridItem = memo(function MediaGridItem({
           testID="media-grid-preview"
           // Источник — сам id ассета: content:// на Android, ph:// на iOS.
           // Оба expo-image открывает напрямую, у видео берёт кадр.
-          source={{ uri: assetPreviewUri(asset) }}
+          source={{ uri: editedThumb ?? assetPreviewUri(asset) }}
           style={[styles.thumbnail, { backgroundColor: theme.backgroundElement }]}
           contentFit="cover"
           // Только память: у Glide она ограничена, и превью, пролистанные
           // туда и обратно, берутся из неё. Диск для локальных content://
           // бесполезен — исходник и так лежит на устройстве.
           cachePolicy="memory"
-          recyclingKey={asset.id}
-          transition={120}
+          recyclingKey={editedThumb ?? asset.id}
+          // Правка подменяет картинку без перехода: фото только что
+          // прилетело в плитку той же картинкой.
+          transition={editedThumb ? 0 : 120}
           onError={(event) => {
             perfLog('превью не открылось', { id: asset.id, error: String(event.error) });
             setFailedId(asset.id);
