@@ -8,6 +8,7 @@ import {
 
 import type { LiveAdjust } from './EditedPhoto';
 import { PreviewPage, type PreviewMotion } from './PreviewPage';
+import type { LiveDraw } from './useDrawTool';
 
 import type { MediaLibraryItem } from '@/features/media/mediaLibrary';
 
@@ -20,6 +21,8 @@ export type PreviewPagerProps = {
   motion: PreviewMotion;
   /** Ползунки открытого инструмента цвета — у активной страницы. */
   live: LiveAdjust | null;
+  /** Открытое рисование — у активной страницы. */
+  draw: LiveDraw | null;
   /** Открыт инструмент: листать нельзя. */
   locked: boolean;
   leaving: boolean;
@@ -42,6 +45,7 @@ export function PreviewPager({
   cellSize,
   motion,
   live,
+  draw,
   locked,
   leaving,
   onShown,
@@ -67,11 +71,12 @@ export function PreviewPager({
         isActive={at === index}
         motion={motion}
         live={at === index ? live : null}
+        draw={at === index ? draw : null}
         onShown={onShown}
         leaving={leaving}
       />
     ),
-    [cellSize, height, index, leaving, live, motion, onShown, width],
+    [cellSize, draw, height, index, leaving, live, motion, onShown, width],
   );
 
   const getItemLayout = useCallback(

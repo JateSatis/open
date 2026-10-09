@@ -8,11 +8,13 @@ import Animated, {
   type SharedValue,
 } from 'react-native-reanimated';
 
+import { NO_LAYERS, safeDrawingLayersOf, type DrawingLayers } from './drawingLayers';
 import { EditedPhoto, type LiveAdjust } from './EditedPhoto';
 import { fitRect, flightTransform } from './previewGeometry';
 import type { Rect } from './previewStore';
 import { PreviewVideo } from './PreviewVideo';
 import { styles } from './styles';
+import type { LiveDraw } from './useDrawTool';
 import { workingCopyOf, workingImageOf } from './workingCopy';
 
 import { assetPreviewUri } from '@/features/media/lib/previewUri';
@@ -20,6 +22,7 @@ import type { MediaLibraryItem } from '@/features/media/mediaLibrary';
 import { cropAspect, defaultCrop, type PhotoCrop } from '@/features/media/photoEdits/crop';
 import { useEditedThumb } from '@/features/media/photoEdits/editedThumbs';
 import { usePhotoEdit } from '@/features/media/photoEdits/editsStore';
+import type { PhotoDrawing } from '@/features/media/photoEdits/drawing';
 import type { PhotoEdit } from '@/features/media/photoEdits/types';
 
 /** Общая анимация слоя — читают её только страницы, которым она нужна. */
@@ -29,7 +32,7 @@ export type PreviewMotion = {
   /** Плитка, из которой фото вылетело или в которую улетает. */
   origin: SharedValue<Rect | null>;
   /** Открыт инструмент: 0 — фото на весь экран, 1 — в рабочей области. */
-  tool: SharedValue<number>;
+  tool: Readonly<SharedValue<number>>;
   /** Рабочая область фото, пока открыт инструмент. */
   toolArea: SharedValue<Rect>;
   /** Предпросмотр гаснет на месте (плитки не видно или отправка): 1 — виден. */
@@ -48,6 +51,8 @@ export type PreviewPageProps = {
   motion: PreviewMotion;
   /** Ползунки открытого инструмента — только у активной страницы. */
   live: LiveAdjust | null;
+  /** Открытое рисование — только у активной страницы. */
+  draw: LiveDraw | null;
   /** Превью активной страницы на экране — можно начинать перелёт. */
   onShown?: () => void;
   /**
@@ -85,6 +90,7 @@ export const PreviewPage = memo(function PreviewPage({
   isActive,
   motion,
   live,
+  draw,
   onShown,
   leaving = false,
 }: PreviewPageProps) {
@@ -111,7 +117,8 @@ export const PreviewPage = memo(function PreviewPage({
     () => fitRect(aspect, { x: 0, y: 0, width, height }),
     [aspect, height, width],
   );
-  const skia = useEditedImage(asset, edit, isPhoto && isActive, live !== null);
+  const skia = useEditedImage(asset, edit, isPhoto && isActive, live !== null || draw !== null);
+  const layers = useDrawingLayers(asset.id, skia?.image ?? null, edit?.drawing);
 
   const frameStyle = useAnimatedStyle(() => {
     const target = isActive ? toolTarget(aspect, base, motion) : base;
@@ -256,6 +263,8 @@ export const PreviewPage = memo(function PreviewPage({
               height={base.height}
               adjust={live ?? skia.adjust}
               crop={crop ?? skia.plain}
+              layers={layers}
+              draw={draw}
             />
           ) : null}
         </Animated.View>
@@ -279,6 +288,21 @@ function toolTarget(aspect: number, base: Rect, motion: PreviewMotion): Rect {
     width: base.width + (area.width - base.width) * progress,
     height: base.height + (area.height - base.height) * progress,
   };
+}
+
+/**
+ * Сведённый рисунок фото: готовые слои из памяти — инструмент отдаёт их
+ * сам, — иначе собираются один раз.
+ */
+function useDrawingLayers(
+  id: string,
+  image: SkImage | null,
+  drawing: PhotoDrawing | undefined,
+): DrawingLayers {
+  return useMemo(
+    () => (image ? safeDrawingLayersOf(id, image, drawing) : NO_LAYERS),
+    [drawing, id, image],
+  );
 }
 
 type SkiaLayer = { image: SkImage; adjust: LiveAdjust; plain: PhotoCrop };

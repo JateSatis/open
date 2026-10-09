@@ -24,6 +24,7 @@ import {
   type CropMotion,
   type CropTwist,
 } from './cropMotion';
+import { safeDrawingLayersOf, type DrawingLayers } from './drawingLayers';
 import { TOOL_SWITCH_MS } from './useColorTool';
 import { workingCopyOf, workingImageOf } from './workingCopy';
 
@@ -50,6 +51,8 @@ export type CropSession = {
   image: SkImage;
   /** Цвет фото — в обрезке он виден, но не меняется. */
   adjust: ColorAdjust;
+  /** Рисунок фото — вертится и режется вместе с ним. */
+  layers: DrawingLayers;
 };
 
 export type CropToolState = {
@@ -168,7 +171,14 @@ export function useCropTool(): CropToolState {
             grid.value = 0;
             rotationBase.value = null;
           })();
-          setSession({ asset, image: workingImageOf(asset.id, copy), adjust: edit.adjust });
+          const image = workingImageOf(asset.id, copy);
+
+          setSession({
+            asset,
+            image,
+            adjust: edit.adjust,
+            layers: safeDrawingLayersOf(asset.id, image, edit.drawing),
+          });
           setOpen(true);
         })
         .catch(() => undefined)

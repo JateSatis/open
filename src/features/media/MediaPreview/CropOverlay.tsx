@@ -1,4 +1,12 @@
-import { Canvas, ColorMatrix, Group, ImageShader, Path, Rect } from '@shopify/react-native-skia';
+import {
+  Canvas,
+  ColorMatrix,
+  Group,
+  Image,
+  ImageShader,
+  Path,
+  Rect,
+} from '@shopify/react-native-skia';
 import { useEffect, useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { GestureDetector } from 'react-native-gesture-handler';
@@ -38,7 +46,7 @@ export type CropOverlayProps = {
 export function CropOverlay({ session, motion, rotationBase, active, onReady }: CropOverlayProps) {
   const theme = useTheme();
   const gesture = useCropGestures(motion, rotationBase);
-  const { image } = session;
+  const { image, layers } = session;
   const imageWidth = image.width();
   const imageHeight = image.height();
   const colors = useMemo(() => adjustColorMatrix(session.adjust), [session.adjust]);
@@ -76,6 +84,15 @@ export function CropOverlay({ session, motion, rotationBase, active, onReady }: 
         <ImageShader image={image} tx="decal" ty="decal" fit="none" sampling={PHOTO_SAMPLING} />
         <ColorMatrix matrix={colors} />
       </Rect>
+      {/* Рисунок — в пикселях копии, как фото: размытие под цветом, линии без него. */}
+      {layers.blur ? (
+        <Image image={layers.blur} x={0} y={0} width={imageWidth} height={imageHeight}>
+          <ColorMatrix matrix={colors} />
+        </Image>
+      ) : null}
+      {layers.lines ? (
+        <Image image={layers.lines} x={0} y={0} width={imageWidth} height={imageHeight} />
+      ) : null}
     </Group>
   );
 

@@ -136,6 +136,45 @@ export const styles = StyleSheet.create({
     paddingHorizontal: Spacing.three,
     height: Sizes.previewToolActions,
   },
+  brushRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    paddingHorizontal: Spacing.two,
+  },
+  brush: {
+    borderRadius: Radii.full,
+  },
+  drawTop: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    paddingHorizontal: Spacing.three,
+  },
+  sizeColumn: {
+    position: 'absolute',
+    right: 0,
+    width: Sizes.drawSliderHit,
+    justifyContent: 'center',
+  },
+  sizeSlider: {
+    width: Sizes.drawSliderHit,
+    height: Sizes.drawSliderHeight,
+  },
+  sizeTrack: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    width: Sizes.drawSliderHit,
+    height: Sizes.drawSliderHeight,
+  },
+  sizeThumb: {
+    position: 'absolute',
+  },
+  sizePreview: {
+    position: 'absolute',
+    borderWidth: Sizes.drawSizeOutline,
+  },
   rulerRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
