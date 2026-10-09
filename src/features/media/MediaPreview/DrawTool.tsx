@@ -174,6 +174,7 @@ export function DrawTool({ tool, screen, area, onPanelLayout }: DrawToolProps) {
           zoom={tool.live.zoom}
           progress={progress}
           onPick={picker.pick}
+          onCancel={picker.close}
         />
       ) : null}
     </View>

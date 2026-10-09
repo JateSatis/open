@@ -29,8 +29,12 @@ export function checkerImage(): SkImage | null {
   canvas.drawRect(Skia.XYWHRect(1, 0, 1, 1), paint);
   canvas.drawRect(Skia.XYWHRect(0, 1, 1, 1), paint);
   surface.flush();
-  checker = surface.makeImageSnapshot().makeNonTextureImage();
+  const snapshot = surface.makeImageSnapshot();
+  const raster = snapshot.makeNonTextureImage();
+
   surface.dispose();
+  if (raster && raster !== snapshot) snapshot.dispose();
+  checker = raster ?? snapshot;
 
   return checker;
 }

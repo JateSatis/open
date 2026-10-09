@@ -36,7 +36,7 @@ export function paletteLayout(width: number): PaletteLayout {
   return { columns, cell, height: rows * cell + (rows - 1) * gap, cells };
 }
 
-/** Какой квадратик под точкой; зазор между ними — ближайший, за краем — никакой. */
+/** Какой квадратик под точкой; зазор справа и снизу от квадратика — его же, за краем — никакой. */
 export function paletteCellAt(
   layout: PaletteLayout,
   x: number,
