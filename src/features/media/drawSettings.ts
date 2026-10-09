@@ -5,6 +5,7 @@ import { sizeRange } from '@/features/media/sizeSlider';
 import {
   DRAW_BRUSHES,
   isColorBrush,
+  normalizeInk,
   type ColorBrush,
   type DrawBrush,
 } from '@/features/media/photoEdits/drawing';
@@ -21,11 +22,12 @@ import {
 export type DrawSettings = {
   brush: DrawBrush;
   sizes: Record<DrawBrush, number>;
+  /** Цвет с прозрачностью, `#rrggbbaa`. */
   colors: Record<ColorBrush, string>;
 };
 
-/** Цвет по умолчанию — красный. Выбор цвета появится вместе с панелью цвета. */
-export const DEFAULT_DRAW_COLOR = '#ff3b30';
+/** Цвет по умолчанию — красный, непрозрачный. */
+export const DEFAULT_DRAW_COLOR = '#ff3b30ff';
 
 /**
  * Пределы толщины, точки экрана, — одни для всех кистей: бегунок
@@ -40,8 +42,8 @@ export const DEFAULT_DRAW_SETTINGS: DrawSettings = {
   colors: { pen: DEFAULT_DRAW_COLOR, arrow: DEFAULT_DRAW_COLOR, marker: DEFAULT_DRAW_COLOR },
 };
 
+// Ключ прежний: цвета без прозрачности, сохранённые до неё, читаются как непрозрачные.
 const STORAGE_KEY = 'media.drawSettings.v1';
-const COLOR_PATTERN = /^#[0-9a-f]{6}$/i;
 
 export const useDrawSettings = create<DrawSettings>(() => DEFAULT_DRAW_SETTINGS);
 
@@ -76,13 +78,7 @@ export function parseDrawSettings(raw: string | null): DrawSettings {
     typeof stored.colors === 'object' && stored.colors !== null ? stored.colors : {}
   ) as Record<string, unknown>;
   const brush = DRAW_BRUSHES.find((known) => known === stored.brush) ?? DEFAULT_DRAW_SETTINGS.brush;
-  const color = (key: ColorBrush) => {
-    const value = colors[key];
-
-    return typeof value === 'string' && COLOR_PATTERN.test(value)
-      ? value
-      : DEFAULT_DRAW_SETTINGS.colors[key];
-  };
+  const color = (key: ColorBrush) => normalizeInk(colors[key]) ?? DEFAULT_DRAW_SETTINGS.colors[key];
 
   return {
     brush,
@@ -132,6 +128,15 @@ export function setDrawBrushSize(brush: DrawBrush, size: number) {
 
   if (settings.sizes[brush] !== value) {
     save({ ...settings, sizes: { ...settings.sizes, [brush]: value } });
+  }
+}
+
+export function setDrawBrushColor(brush: ColorBrush, color: string) {
+  const settings = useDrawSettings.getState();
+  const value = normalizeInk(color);
+
+  if (value && settings.colors[brush] !== value) {
+    save({ ...settings, colors: { ...settings.colors, [brush]: value } });
   }
 }
 

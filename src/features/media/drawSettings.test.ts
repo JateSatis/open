@@ -6,6 +6,7 @@ import {
   DEFAULT_DRAW_SETTINGS,
   parseDrawSettings,
   selectDrawBrush,
+  setDrawBrushColor,
   setDrawBrushSize,
   useDrawSettings,
 } from './drawSettings';
@@ -57,5 +58,27 @@ describe('кисти рисования', () => {
     expect(parsed.brush).toBe('pen');
     expect(parsed.sizes.pen).toBe(DRAW_SIZE_RANGE.max);
     expect(parsed.colors.pen).toBe(DEFAULT_DRAW_COLOR);
+  });
+
+  it('цвет с прозрачностью — свой у каждой кисти, сохраняется и читается обратно', () => {
+    setDrawBrushColor('pen', '#0A84FF80');
+    setDrawBrushColor('marker', '#ffcc00ff');
+
+    const saved = jest.mocked(AsyncStorage.setItem).mock.calls.at(-1)?.[1] ?? null;
+    const restored = parseDrawSettings(saved);
+
+    expect(restored.colors.pen).toBe('#0a84ff80');
+    expect(restored.colors.marker).toBe('#ffcc00ff');
+    expect(restored.colors.arrow).toBe(DEFAULT_DRAW_COLOR);
+  });
+
+  it('цвет, сохранённый до прозрачности (#rrggbb), читается непрозрачным, а не сбрасывается', () => {
+    const parsed = parseDrawSettings(
+      JSON.stringify({ brush: 'marker', sizes: {}, colors: { marker: '#34C759', pen: '#ff3b30' } }),
+    );
+
+    expect(parsed.brush).toBe('marker');
+    expect(parsed.colors.marker).toBe('#34c759ff');
+    expect(parsed.colors.pen).toBe('#ff3b30ff');
   });
 });

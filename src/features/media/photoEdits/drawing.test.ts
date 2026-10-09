@@ -1,6 +1,11 @@
 import {
   arrowHead,
+  brushPaintColor,
   drawingPlan,
+  inkAlpha,
+  inkOf,
+  MARKER_OPACITY,
+  normalizeInk,
   normalizeDrawing,
   smoothPath,
   type DrawBrush,
@@ -143,5 +148,28 @@ describe('наконечник стрелки', () => {
   it('у точки наконечника нет', () => {
     expect(arrowHead([0.5, 0.5], 0.01)).toBeNull();
     expect(arrowHead([0.5, 0.5, 0.5, 0.5], 0.01)).toBeNull();
+  });
+});
+
+describe('цвет кисти с прозрачностью', () => {
+  it('старый #rrggbb — непрозрачный, мусор — не цвет', () => {
+    expect(normalizeInk('#FF3B30')).toBe('#ff3b30ff');
+    expect(normalizeInk('#ff3b3080')).toBe('#ff3b3080');
+    expect(normalizeInk('red')).toBeNull();
+    expect(normalizeInk(42)).toBeNull();
+  });
+
+  it('цвет и прозрачность собираются в #rrggbbaa и разбираются обратно', () => {
+    expect(inkOf('#0a84ff', 0.5)).toBe('#0a84ff80');
+    expect(inkOf('#0a84ffff', 0)).toBe('#0a84ff00');
+    expect(inkAlpha('#0a84ff80')).toBeCloseTo(0.5, 2);
+  });
+
+  it('у пера краска — цвет с его прозрачностью; у маркера прозрачность умножается', () => {
+    expect(brushPaintColor('#ff000080', 'pen')).toBe(`rgba(255, 0, 0, ${128 / 255})`);
+    expect(brushPaintColor('#ff000080', 'marker')).toBe(
+      `rgba(255, 0, 0, ${(128 / 255) * MARKER_OPACITY})`,
+    );
+    expect(brushPaintColor('#ff0000ff', 'marker')).toBe(`rgba(255, 0, 0, ${MARKER_OPACITY})`);
   });
 });
