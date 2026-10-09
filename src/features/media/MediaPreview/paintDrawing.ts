@@ -1,34 +1,33 @@
 import {
   BlendMode,
-  BlurStyle,
+  FilterMode,
+  MipmapMode,
   PaintStyle,
   Skia,
   StrokeCap,
   StrokeJoin,
   TileMode,
-  type SkCanvas,
   type SkImage,
   type SkPaint,
   type SkPath,
   type SkShader,
+  type SkSurface,
 } from '@shopify/react-native-skia';
 
+import { affineToMatrix, invertAffine, type Affine } from '@/features/media/photoEdits/crop';
 import {
   arrowHead,
-  BLUR_EDGE,
-  drawingPlan,
   MARKER_OPACITY,
   smoothPath,
   type DrawBrush,
   type DrawOp,
-  type PhotoDrawing,
 } from '@/features/media/photoEdits/drawing';
 
 /**
  * Рисунок → команды Skia. Одни и те же функции собирают слои живого показа
  * (`drawingLayers.ts`), плитку и запекание (`bake.ts`), поэтому отправленное
- * совпадает с увиденным. Холст здесь всегда в единицах рисунка — долях
- * ширины исходника; в пиксели их переводит матрица холста.
+ * совпадает с увиденным. Штрихи — в единицах рисунка (долях ширины
+ * исходника), в пиксели слоя их переводит матрица `units`.
  */
 
 /** Сглаженная линия штриха; у стрелки с наконечником, если он уже положен. */
@@ -78,99 +77,176 @@ function strokePaint(width: number, cap: StrokeCap): SkPaint {
   return paint;
 }
 
-/**
- * Применить к слою его штрихи по порядку. Холст — уже со своим слоем:
- * ластик (`Clear`) вычищает пиксели именно этого слоя, а не фото под ним.
- *
- * Мазок размытия — размытое фото `blur`, проявленное сквозь мягкую маску
- * штриха. Мазок за мазком это то же, что общая маска и одно проявление, —
- * поэтому слой можно и дописывать по одному штриху, и собирать заново.
- */
-export function paintOps(canvas: SkCanvas, ops: DrawOp[], blur: SkShader | null) {
-  for (const { erase, stroke } of ops) {
-    const path = strokePath(stroke.points, stroke.brush, stroke.width, true);
-
-    if (erase) {
-      const paint = strokePaint(stroke.width, StrokeCap.Round);
-
-      paint.setBlendMode(BlendMode.Clear);
-      canvas.drawPath(path, paint);
-      continue;
-    }
-
-    if (stroke.brush === 'blur') {
-      if (!blur) continue;
-
-      const edge = stroke.width * BLUR_EDGE;
-      const mask = strokePaint(stroke.width, StrokeCap.Round);
-      const bounds = path.computeTightBounds();
-      const pad = stroke.width + edge * 3;
-
-      mask.setMaskFilter(Skia.MaskFilter.MakeBlur(BlurStyle.Normal, edge, true));
-
-      const reveal = Skia.Paint();
-
-      reveal.setShader(blur);
-      reveal.setBlendMode(BlendMode.SrcIn);
-
-      canvas.saveLayer(
-        undefined,
-        Skia.XYWHRect(
-          bounds.x - pad,
-          bounds.y - pad,
-          bounds.width + pad * 2,
-          bounds.height + pad * 2,
-        ),
-      );
-      canvas.drawPath(path, mask);
-      canvas.drawPaint(reveal);
-      canvas.restore();
-      continue;
-    }
-
-    const paint = strokePaint(stroke.width, brushCap(stroke.brush));
-
-    paint.setColor(Skia.Color(stroke.color));
-    if (stroke.brush === 'marker') paint.setAlphaf(MARKER_OPACITY);
-    canvas.drawPath(path, paint);
-  }
-}
+/** Уменьшение перед размытием: сигма на маленькой копии — не больше стольких пикселей. */
+const BLUR_SMALL_SIGMA = 4;
 
 /**
- * Весь рисунок поверх фото, уже нарисованного на холсте: слой размытия,
- * затем слой линий, каждый в своём слое холста — ластик стирает рисунок, а
- * не фото. `blur` — размытое фото (уже с цветом) в единицах рисунка.
- */
-export function paintDrawing(canvas: SkCanvas, strokes: PhotoDrawing, blur: SkShader | null) {
-  const plan = drawingPlan(strokes);
-
-  for (const ops of [plan.blur, plan.lines]) {
-    if (ops.length === 0) continue;
-
-    canvas.saveLayer();
-    paintOps(canvas, ops, blur);
-    canvas.restore();
-  }
-}
-
-/**
- * Размытая копия картинки того же размера — её проявляют мазки размытия.
- * Края продолжаются своими пикселями: у края фото размытие не темнеет.
+ * Сильно размытая копия картинки того же размера. Большая сигма на полном
+ * размере — дорого, поэтому картинка уменьшается, размывается там и
+ * растягивается обратно: на глаз то же, в десятки раз быстрее. Края
+ * продолжаются своими пикселями — у края фото размытие не темнеет.
  */
 export function blurImage(image: SkImage, sigma: number): SkImage {
-  const surface = Skia.Surface.Make(image.width(), image.height());
+  const width = image.width();
+  const height = image.height();
+  const factor = Math.max(1, Math.floor(sigma / BLUR_SMALL_SIGMA));
+  const smallWidth = Math.max(1, Math.ceil(width / factor));
+  const smallHeight = Math.max(1, Math.ceil(height / factor));
+  const small = Skia.Surface.Make(smallWidth, smallHeight);
+  const blurredSmall = Skia.Surface.Make(smallWidth, smallHeight);
+  const full = Skia.Surface.Make(width, height);
 
-  if (!surface) throw new Error('Не удалось создать поверхность для размытия');
+  if (!small || !blurredSmall || !full) {
+    throw new Error('Не удалось создать поверхность для размытия');
+  }
 
+  small
+    .getCanvas()
+    .drawImageRectOptions(
+      image,
+      Skia.XYWHRect(0, 0, width, height),
+      Skia.XYWHRect(0, 0, smallWidth, smallHeight),
+      FilterMode.Linear,
+      MipmapMode.Linear,
+    );
+  small.flush();
+
+  const reduced = small.makeImageSnapshot();
   const paint = Skia.Paint();
+  const smallSigma = sigma / factor;
 
-  paint.setImageFilter(Skia.ImageFilter.MakeBlur(sigma, sigma, TileMode.Clamp, null));
-  surface.getCanvas().drawImage(image, 0, 0, paint);
+  paint.setImageFilter(Skia.ImageFilter.MakeBlur(smallSigma, smallSigma, TileMode.Clamp, null));
+  blurredSmall.getCanvas().drawImage(reduced, 0, 0, paint);
+  blurredSmall.flush();
+
+  const reducedBlurred = blurredSmall.makeImageSnapshot();
+
+  full
+    .getCanvas()
+    .drawImageRectOptions(
+      reducedBlurred,
+      Skia.XYWHRect(0, 0, smallWidth, smallHeight),
+      Skia.XYWHRect(0, 0, width, height),
+      FilterMode.Linear,
+      MipmapMode.None,
+    );
+  full.flush();
+
+  const blurred = full.makeImageSnapshot();
+
+  reduced.dispose();
+  reducedBlurred.dispose();
+  small.dispose();
+  blurredSmall.dispose();
+  full.dispose();
+
+  return blurred;
+}
+
+/** Картинка в пикселях слоя → шейдер в единицах рисунка. */
+export function layerShader(image: SkImage, units: Affine): SkShader {
+  return image.makeShaderOptions(
+    TileMode.Clamp,
+    TileMode.Clamp,
+    FilterMode.Linear,
+    MipmapMode.None,
+    Skia.Matrix(affineToMatrix(invertAffine(units))),
+  );
+}
+
+export type LayerParams = {
+  width: number;
+  height: number;
+  /** Единицы рисунка → пиксели слоя. */
+  units: Affine;
+  /** Слой до этих шагов; нет — пустой. */
+  base: SkImage | null;
+  ops: DrawOp[];
+  /**
+   * Чем замазывает мазок размытия: размытым фото (слой размытия, шейдер в
+   * единицах рисунка) или — `self` — размытой копией того, что в слое уже
+   * нарисовано (слой линий).
+   */
+  blur: SkShader | 'self' | null;
+  /** Сила размытия в пикселях слоя — для `self`. */
+  sigmaPx: number;
+};
+
+/** Размытая копия того, что сейчас на поверхности, — шейдером в единицах рисунка. */
+function selfBlur(surface: SkSurface, params: LayerParams): { shader: SkShader; image: SkImage } {
   surface.flush();
 
-  const blurred = surface.makeImageSnapshot();
+  const sharp = surface.makeImageSnapshot();
+  const image = blurImage(sharp, params.sigmaPx);
+
+  sharp.dispose();
+
+  return { shader: layerShader(image, params.units), image };
+}
+
+/**
+ * Слой рисунка: прежний слой и шаги по порядку истории. Ластик вычищает
+ * пиксели слоя; мазок размытия заменяет их размытой копией — с чётким краем,
+ * и то, что под ним было, не просвечивает. Перо, стрелка и маркер ложатся
+ * поверх. Слой можно и дописывать по шагу, и собирать заново — выйдет одно и то же.
+ */
+export function renderLayer(params: LayerParams): SkImage | null {
+  const { width, height, units, base, ops } = params;
+
+  if (ops.length === 0) return base;
+
+  const surface = Skia.Surface.Make(width, height);
+
+  if (!surface) throw new Error('Не удалось создать поверхность для рисунка');
+
+  const canvas = surface.getCanvas();
+  const matrix = Skia.Matrix(affineToMatrix(units));
+
+  if (base) canvas.drawImage(base, 0, 0);
+
+  for (const { kind, stroke } of ops) {
+    const path = strokePath(stroke.points, stroke.brush, stroke.width, true);
+    let paint: SkPaint;
+    let scratch: SkImage | null = null;
+
+    if (kind === 'erase') {
+      paint = strokePaint(stroke.width, StrokeCap.Round);
+      paint.setBlendMode(BlendMode.Clear);
+    } else if (kind === 'blur') {
+      let shader: SkShader | null = null;
+
+      if (params.blur === 'self') {
+        const blurred = selfBlur(surface, params);
+
+        shader = blurred.shader;
+        scratch = blurred.image;
+      } else {
+        shader = params.blur;
+      }
+
+      if (!shader) continue;
+
+      paint = strokePaint(stroke.width, StrokeCap.Round);
+      paint.setShader(shader);
+      paint.setBlendMode(BlendMode.Src);
+    } else {
+      paint = strokePaint(stroke.width, brushCap(stroke.brush));
+      paint.setColor(Skia.Color(stroke.color));
+      if (stroke.brush === 'marker') paint.setAlphaf(MARKER_OPACITY);
+    }
+
+    canvas.save();
+    canvas.concat(matrix);
+    canvas.drawPath(path, paint);
+    canvas.restore();
+    scratch?.dispose();
+  }
+
+  surface.flush();
+
+  const layer = surface.makeImageSnapshot();
 
   surface.dispose();
 
-  return blurred;
+  return layer;
 }

@@ -6,6 +6,7 @@ import {
   TileMode,
   type SkImage,
   type SkPaint,
+  type SkShader,
 } from '@shopify/react-native-skia';
 import { Image as ExpoImage } from 'expo-image';
 import { File } from 'expo-file-system';
@@ -20,7 +21,7 @@ import {
 } from './workingCopy';
 
 import { MediaLimits } from '@/features/media/constants';
-import { blurImage, paintDrawing } from './paintDrawing';
+import { blurImage, renderLayer } from './paintDrawing';
 
 import { perfLog } from '@/features/media/perf';
 import { adjustColorMatrix } from '@/features/media/photoEdits/colorMatrix';
@@ -33,7 +34,7 @@ import {
   defaultCrop,
   type PhotoCrop,
 } from '@/features/media/photoEdits/crop';
-import { BLUR_SIGMA, hasBlur } from '@/features/media/photoEdits/drawing';
+import { BLUR_SIGMA, drawingPlan, hasBlur, type DrawOp } from '@/features/media/photoEdits/drawing';
 import {
   hasCrop,
   type BakedPhoto,
@@ -128,10 +129,18 @@ function drawEdit(
         Skia.Matrix(affineToMatrix(invertAffine(units))).translate(-pad, -pad),
       );
 
-    canvas.save();
-    canvas.concat(Skia.Matrix(affineToMatrix(units)));
-    paintDrawing(canvas, edit.drawing, blur);
-    canvas.restore();
+    const plan = drawingPlan(edit.drawing);
+    const layer = (ops: DrawOp[], source: SkShader | 'self' | null) =>
+      renderLayer({ width, height, units, base: null, ops, blur: source, sigmaPx: sigma });
+
+    // Слой размытия — поверх окрашенного фото, слой линий — поверх всего.
+    for (const image of [layer(plan.blur, blur), layer(plan.lines, 'self')]) {
+      if (!image) continue;
+
+      canvas.drawImage(image, 0, 0);
+      image.dispose();
+    }
+
     blur?.dispose();
     blurred?.dispose();
   }

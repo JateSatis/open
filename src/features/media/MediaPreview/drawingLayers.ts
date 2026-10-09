@@ -1,19 +1,12 @@
-import {
-  FilterMode,
-  MipmapMode,
-  Skia,
-  TileMode,
-  type SkImage,
-  type SkShader,
-} from '@shopify/react-native-skia';
+import type { SkImage } from '@shopify/react-native-skia';
 
-import { blurImage, paintOps } from './paintDrawing';
+import { blurImage, layerShader, renderLayer } from './paintDrawing';
 
 import { perfLog } from '@/features/media/perf';
+import type { Affine } from '@/features/media/photoEdits/crop';
 import {
   BLUR_SIGMA,
   drawingPlan,
-  hasBlur,
   type DrawOp,
   type DrawStroke,
   type PhotoDrawing,
@@ -25,9 +18,11 @@ import {
  * две готовые картинки. Пиксель слоя — пиксель рабочей копии, поэтому слои
  * кладутся той же матрицей, что и само фото.
  *
- * Размытие здесь — размытая копия без цвета, а цвет на него накладывает
- * показ: матрица цвета и размытие перестановочны, и ползунки цвета меняют
- * размытое место вживую, без пересборки слоя.
+ * Мазок размытия в слое размытия — размытая копия без цвета, а цвет на неё
+ * накладывает показ: матрица цвета и размытие перестановочны, и ползунки
+ * цвета меняют размытое место вживую, без пересборки слоя. В слое линий
+ * тот же мазок замазывает уже нарисованное — линии под ним размываются, а
+ * цветом они не перекрашиваются, как и положено линиям.
  */
 export type DrawingLayers = { blur: SkImage | null; lines: SkImage | null };
 
@@ -52,17 +47,6 @@ function keep<V>(cache: Map<string, V>, id: string, value: V, limit: number) {
   }
 }
 
-/** Картинка в пикселях `unitPx` на единицу → шейдер в единицах рисунка. */
-export function unitsShader(image: SkImage, unitPx: number): SkShader {
-  return image.makeShaderOptions(
-    TileMode.Clamp,
-    TileMode.Clamp,
-    FilterMode.Linear,
-    MipmapMode.None,
-    Skia.Matrix().scale(1 / unitPx, 1 / unitPx),
-  );
-}
-
 /** Размытая рабочая копия — одна на фото: её проявляют мазки размытия. */
 export function blurredCopyOf(id: string, image: SkImage): SkImage {
   const known = blurredCache.get(id);
@@ -81,38 +65,33 @@ export function blurredCopyOf(id: string, image: SkImage): SkImage {
   return blurred;
 }
 
-/** Слой поверх прежнего: прежний — как есть, новые штрихи — по порядку. */
-function renderLayer(
-  image: SkImage,
-  ops: DrawOp[],
-  blur: SkShader | null,
-  base: SkImage | null,
-): SkImage | null {
-  if (ops.length === 0) return base;
-
+/** Единицы рисунка → пиксели копии. */
+function copyUnits(image: SkImage): Affine {
   const width = image.width();
-  const surface = Skia.Surface.Make(width, image.height());
 
-  if (!surface) throw new Error('Не удалось создать поверхность для рисунка');
-
-  const canvas = surface.getCanvas();
-
-  if (base) canvas.drawImage(base, 0, 0);
-  canvas.save();
-  canvas.scale(width, width);
-  paintOps(canvas, ops, blur);
-  canvas.restore();
-  surface.flush();
-
-  const layer = surface.makeImageSnapshot();
-
-  surface.dispose();
-
-  return layer;
+  return { a: width, b: 0, c: 0, d: width, tx: 0, ty: 0 };
 }
 
-function blurShaderFor(id: string, image: SkImage, strokes: PhotoDrawing): SkShader | null {
-  return hasBlur(strokes) ? unitsShader(blurredCopyOf(id, image), image.width()) : null;
+/** Слой поверх прежнего: прежний — как есть, новые шаги — по порядку. */
+function layerOf(
+  id: string,
+  image: SkImage,
+  ops: DrawOp[],
+  layer: 'blur' | 'lines',
+  base: SkImage | null,
+): SkImage | null {
+  const units = copyUnits(image);
+  const blurs = ops.some((op) => op.kind === 'blur');
+
+  return renderLayer({
+    width: image.width(),
+    height: image.height(),
+    units,
+    base,
+    ops,
+    blur: layer === 'lines' ? 'self' : blurs ? layerShader(blurredCopyOf(id, image), units) : null,
+    sigmaPx: BLUR_SIGMA * image.width(),
+  });
 }
 
 /** Слои рисунка целиком, с нуля, — мимо памяти: для промежуточных шагов отмены. */
@@ -125,10 +104,9 @@ export function renderDrawingLayers(
 
   const startedAt = performance.now();
   const plan = drawingPlan(strokes);
-  const blur = blurShaderFor(id, image, strokes);
   const layers = {
-    blur: renderLayer(image, plan.blur, blur, null),
-    lines: renderLayer(image, plan.lines, null, null),
+    blur: layerOf(id, image, plan.blur, 'blur', null),
+    lines: layerOf(id, image, plan.lines, 'lines', null),
   };
 
   perfLog('рисунок: слои с нуля', {
@@ -230,23 +208,26 @@ function appendStroke(
   layers: DrawingLayers,
   stroke: DrawStroke,
 ): DrawingLayers {
-  if (stroke.brush === 'eraser') {
-    const op = [{ erase: true, stroke }];
+  if (stroke.brush === 'eraser' || stroke.brush === 'blur') {
+    // Ластик и замазывание — в обоих слоях; в линиях — только если там уже что-то есть.
+    const kind = stroke.brush === 'eraser' ? 'erase' : 'blur';
+    const op = [{ kind, stroke } as const];
+    const blur =
+      kind === 'blur' || layers.blur ? layerOf(id, image, op, 'blur', layers.blur) : null;
 
     return {
-      blur: layers.blur && renderLayer(image, op, null, layers.blur),
-      lines: layers.lines && renderLayer(image, op, null, layers.lines),
+      blur,
+      lines: layers.lines && layerOf(id, image, op, 'lines', layers.lines),
     };
   }
 
-  const op = [{ erase: false, stroke }];
+  return {
+    ...layers,
+    lines: layerOf(id, image, [{ kind: 'paint', stroke }], 'lines', layers.lines),
+  };
+}
 
-  if (stroke.brush === 'blur') {
-    return {
-      ...layers,
-      blur: renderLayer(image, op, blurShaderFor(id, image, [stroke]), layers.blur),
-    };
-  }
-
-  return { ...layers, lines: renderLayer(image, op, null, layers.lines) };
+/** Размытая копия слоя линий — её проявляет мазок размытия под пальцем. */
+export function blurredLinesOf(image: SkImage, lines: SkImage | null): SkImage | null {
+  return lines && blurImage(lines, BLUR_SIGMA * image.width());
 }

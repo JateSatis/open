@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 
+import { sizeRange } from '@/features/media/sizeSlider';
 import {
   DRAW_BRUSHES,
   isColorBrush,
@@ -26,18 +27,16 @@ export type DrawSettings = {
 /** Цвет по умолчанию — красный. Выбор цвета появится вместе с панелью цвета. */
 export const DEFAULT_DRAW_COLOR = '#ff3b30';
 
-/** Пределы толщины каждой кисти, точки экрана. */
-export const BRUSH_SIZE_RANGE: Record<DrawBrush, { min: number; max: number }> = {
-  pen: { min: 2, max: 24 },
-  arrow: { min: 2, max: 24 },
-  marker: { min: 8, max: 48 },
-  blur: { min: 12, max: 72 },
-  eraser: { min: 8, max: 72 },
-};
+/**
+ * Пределы толщины, точки экрана, — одни для всех кистей: бегунок
+ * ползунка — кружок той же толщины, и он целиком влезает в шкалу-клин.
+ * Шире клина линии не бывает. Положение бегунка ↔ толщина — `sizeSlider.ts`.
+ */
+export const DRAW_SIZE_RANGE = sizeRange();
 
 export const DEFAULT_DRAW_SETTINGS: DrawSettings = {
   brush: 'pen',
-  sizes: { pen: 6, arrow: 6, marker: 22, blur: 32, eraser: 28 },
+  sizes: { pen: 6, arrow: 6, marker: 14, blur: 17, eraser: 16 },
   colors: { pen: DEFAULT_DRAW_COLOR, arrow: DEFAULT_DRAW_COLOR, marker: DEFAULT_DRAW_COLOR },
 };
 
@@ -47,7 +46,7 @@ const COLOR_PATTERN = /^#[0-9a-f]{6}$/i;
 export const useDrawSettings = create<DrawSettings>(() => DEFAULT_DRAW_SETTINGS);
 
 function clampSize(brush: DrawBrush, value: unknown): number {
-  const { min, max } = BRUSH_SIZE_RANGE[brush];
+  const { min, max } = DRAW_SIZE_RANGE;
 
   if (typeof value !== 'number' || !Number.isFinite(value))
     return DEFAULT_DRAW_SETTINGS.sizes[brush];

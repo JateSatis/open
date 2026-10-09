@@ -33,6 +33,7 @@ jest.mock('./drawingLayers', () => ({
   retireDrawingLayers: jest.fn(),
   appendDrawingStroke: jest.fn(() => ({ blur: null, lines: { stroke: true } })),
   blurredCopyOf: jest.fn(() => null),
+  blurredLinesOf: jest.fn(() => null),
   rememberDrawingLayers: jest.fn(),
 }));
 jest.mock('./workingCopy', () => ({

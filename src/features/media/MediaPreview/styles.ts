@@ -170,7 +170,6 @@ export const styles = StyleSheet.create({
   },
   sizeThumb: {
     position: 'absolute',
-    borderWidth: Sizes.drawSizeOutline,
   },
   sizePreview: {
     position: 'absolute',

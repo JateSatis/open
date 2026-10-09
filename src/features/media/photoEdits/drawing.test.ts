@@ -16,15 +16,29 @@ const stroke = (brush: DrawBrush, points: number[] = [0.1, 0.1, 0.2, 0.2]): Draw
 });
 
 describe('раскладка рисунка по слоям', () => {
-  it('размытие — в маску, перо, стрелка и маркер — в линии', () => {
+  it('перо, стрелка и маркер — только в линии; размытие до рисунка — только по фото', () => {
     const blur = stroke('blur');
     const pen = stroke('pen');
     const arrow = stroke('arrow');
     const marker = stroke('marker');
     const plan = drawingPlan([blur, pen, arrow, marker]);
 
-    expect(plan.blur.map((op) => op.stroke)).toEqual([blur]);
+    expect(plan.blur).toEqual([{ kind: 'blur', stroke: blur }]);
     expect(plan.lines.map((op) => op.stroke)).toEqual([pen, arrow, marker]);
+  });
+
+  it('размытие поверх рисунка замазывает и его, нарисованное после — чёткое поверх', () => {
+    const pen = stroke('pen');
+    const blur = stroke('blur');
+    const after = stroke('pen');
+    const plan = drawingPlan([pen, blur, after]);
+
+    expect(plan.blur).toEqual([{ kind: 'blur', stroke: blur }]);
+    expect(plan.lines).toEqual([
+      { kind: 'paint', stroke: pen },
+      { kind: 'blur', stroke: blur },
+      { kind: 'paint', stroke: after },
+    ]);
   });
 
   it('ластик стирает в обоих слоях, на своём месте в истории', () => {
@@ -35,13 +49,13 @@ describe('раскладка рисунка по слоям', () => {
     const plan = drawingPlan([blur, pen, eraser, after]);
 
     expect(plan.blur).toEqual([
-      { erase: false, stroke: blur },
-      { erase: true, stroke: eraser },
+      { kind: 'blur', stroke: blur },
+      { kind: 'erase', stroke: eraser },
     ]);
     expect(plan.lines).toEqual([
-      { erase: false, stroke: pen },
-      { erase: true, stroke: eraser },
-      { erase: false, stroke: after },
+      { kind: 'paint', stroke: pen },
+      { kind: 'erase', stroke: eraser },
+      { kind: 'paint', stroke: after },
     ]);
   });
 
@@ -50,7 +64,7 @@ describe('раскладка рисунка по слоям', () => {
     const blur = stroke('blur');
     const plan = drawingPlan([eraser, blur]);
 
-    expect(plan.blur).toEqual([{ erase: false, stroke: blur }]);
+    expect(plan.blur).toEqual([{ kind: 'blur', stroke: blur }]);
     expect(plan.lines).toEqual([]);
   });
 });

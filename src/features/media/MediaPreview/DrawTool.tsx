@@ -17,7 +17,7 @@ import { styles } from './styles';
 import { useDrawGestures } from './useDrawGestures';
 import type { DrawToolState } from './useDrawTool';
 
-import { BRUSH_SIZE_RANGE, drawColorOf, useDrawSettings } from '@/features/media/drawSettings';
+import { drawColorOf, useDrawSettings } from '@/features/media/drawSettings';
 import { cropAspect } from '@/features/media/photoEdits/crop';
 import { useTheme } from '@/hooks/use-theme';
 import { Opacity, Sizes, Spacing } from '@/theme';
@@ -46,7 +46,6 @@ export function DrawTool({ tool, screen, area, onPanelLayout }: DrawToolProps) {
   const crop = tool.session?.crop ?? null;
   const gesture = useDrawGestures(tool, crop, screen, area);
   const { progress, size } = tool;
-  const range = BRUSH_SIZE_RANGE[tool.brush];
   const color = drawColorOf(settings, tool.brush);
   const aspect = crop ? cropAspect(crop) : 1;
 
@@ -125,15 +124,7 @@ export function DrawTool({ tool, screen, area, onPanelLayout }: DrawToolProps) {
           chromeStyle,
         ]}
       >
-        <DrawSizeSlider
-          // Пределы у каждой кисти свои — бегунок встаёт по ним заново.
-          key={tool.brush}
-          size={size}
-          min={range.min}
-          max={range.max}
-          sizing={sizing}
-          onCommit={tool.commitSize}
-        />
+        <DrawSizeSlider size={size} sizing={sizing} onCommit={tool.commitSize} />
       </Animated.View>
 
       <DrawPanel

@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import {
-  BRUSH_SIZE_RANGE,
+  DRAW_SIZE_RANGE,
   DEFAULT_DRAW_COLOR,
   DEFAULT_DRAW_SETTINGS,
   parseDrawSettings,
@@ -25,25 +25,25 @@ describe('кисти рисования', () => {
   });
 
   it('у каждой кисти своя толщина: смена одной другие не трогает', () => {
-    setDrawBrushSize('pen', 3);
-    setDrawBrushSize('marker', 40);
+    setDrawBrushSize('pen', 5);
+    setDrawBrushSize('marker', 15);
 
     const { sizes } = useDrawSettings.getState();
 
-    expect(sizes.pen).toBe(3);
-    expect(sizes.marker).toBe(40);
+    expect(sizes.pen).toBe(5);
+    expect(sizes.marker).toBe(15);
     expect(sizes.arrow).toBe(DEFAULT_DRAW_SETTINGS.sizes.arrow);
   });
 
   it('выбор кисти и толщина сохраняются на телефоне и читаются обратно', async () => {
     selectDrawBrush('marker');
-    setDrawBrushSize('marker', 44);
+    setDrawBrushSize('marker', 12);
 
     const saved = jest.mocked(AsyncStorage.setItem).mock.calls.at(-1)?.[1] ?? null;
     const restored = parseDrawSettings(saved);
 
     expect(restored.brush).toBe('marker');
-    expect(restored.sizes.marker).toBe(44);
+    expect(restored.sizes.marker).toBe(12);
   });
 
   it('сохранённое с мусором не ломает рисование: неизвестное — по умолчанию, толщина в пределах', () => {
@@ -55,7 +55,7 @@ describe('кисти рисования', () => {
     );
 
     expect(parsed.brush).toBe('pen');
-    expect(parsed.sizes.pen).toBe(BRUSH_SIZE_RANGE.pen.max);
+    expect(parsed.sizes.pen).toBe(DRAW_SIZE_RANGE.max);
     expect(parsed.colors.pen).toBe(DEFAULT_DRAW_COLOR);
   });
 });

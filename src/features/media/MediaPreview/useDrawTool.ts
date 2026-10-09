@@ -16,6 +16,7 @@ import { commitPhotoEdit } from './commitEdit';
 import {
   appendDrawingStroke,
   blurredCopyOf,
+  blurredLinesOf,
   NO_LAYERS,
   rememberDrawingLayers,
   renderDrawingLayers,
@@ -63,8 +64,10 @@ export type LiveDraw = {
   /** Толщина штриха под пальцем — в долях ширины исходника. */
   width: SharedValue<number>;
   zoom: DrawZoom;
-  /** Размытая копия — её проявляет мазок размытия под пальцем. */
+  /** Размытая копия фото — её кладёт мазок размытия под пальцем. */
   blurred: SkImage | null;
+  /** Размытая копия нарисованного — ею мазок размытия замазывает линии. */
+  blurredLines: SkImage | null;
 };
 
 /** Фото, открытое в рисовании. */
@@ -134,6 +137,9 @@ export function useDrawTool(): DrawToolState {
   const [open, setOpen] = useState(false);
   const [session, setSession] = useState<DrawSession | null>(null);
   const [blurred, setBlurred] = useState<SkImage | null>(null);
+  const [blurredLines, setBlurredLines] = useState<SkImage | null>(null);
+  const blurredLinesNow = useRef<SkImage | null>(null);
+  const brushNow = useRef<DrawBrush>('pen');
   const [flags, setFlags] = useState({ canUndo: false, hasDrawing: false, dirty: false });
 
   const current = useRef<Session | null>(null);
@@ -162,9 +168,32 @@ export function useDrawTool(): DrawToolState {
 
   const zoom = useMemo<DrawZoom>(() => ({ scale, x, y }), [scale, x, y]);
   const live = useMemo<LiveDraw>(
-    () => ({ layers, points, brush, color, width, zoom, blurred }),
-    [blurred, brush, color, layers, points, width, zoom],
+    () => ({ layers, points, brush, color, width, zoom, blurred, blurredLines }),
+    [blurred, blurredLines, brush, color, layers, points, width, zoom],
   );
+
+  /**
+   * Размытая копия линий — только пока выбрано размытие, и свежая после
+   * каждого шага: мазок под пальцем замазывает то, что нарисовано сейчас.
+   */
+  const refreshBlurredLines = useCallback((next: DrawBrush, lines: SkImage | null) => {
+    const open = current.current;
+    const previous = blurredLinesNow.current;
+    let fresh: SkImage | null = null;
+
+    if (next === 'blur' && open && lines) {
+      try {
+        fresh = blurredLinesOf(open.image, lines);
+      } catch (error) {
+        console.warn('[photo-draw] размытая копия линий не вышла', error);
+      }
+    }
+
+    blurredLinesNow.current = fresh;
+    setBlurredLines(fresh);
+    // Прежнюю копию ещё может рисовать кадр UI-потока.
+    if (previous) setTimeout(() => previous.dispose(), 1000);
+  }, []);
 
   /** Размытая копия нужна, только пока выбрано размытие. */
   const prepareBlur = useCallback((next: DrawBrush) => {
@@ -183,12 +212,14 @@ export function useDrawTool(): DrawToolState {
     (next: DrawBrush) => {
       const settings = useDrawSettings.getState();
 
+      brushNow.current = next;
       selectedBrush.value = next;
       selectedColor.value = drawColorOf(settings, next) ?? '#000000';
       size.value = settings.sizes[next];
       prepareBlur(next);
+      refreshBlurredLines(next, layersNow.current.lines);
     },
-    [prepareBlur, selectedBrush, selectedColor, size],
+    [prepareBlur, refreshBlurredLines, selectedBrush, selectedColor, size],
   );
 
   /** Новый рисунок захода: слои — на экран, флаги — в панель. */
@@ -196,12 +227,15 @@ export function useDrawTool(): DrawToolState {
     (next: PhotoDrawing, nextLayers: DrawingLayers, clearId?: number) => {
       const open = current.current;
 
+      const linesChanged = layersNow.current.lines !== nextLayers.lines;
+
       if (layersNow.current !== nextLayers) {
         retireDrawingLayers(layersNow.current, nextLayers, open ? [open.entryLayers] : []);
       }
 
       strokes.current = next;
       layersNow.current = nextLayers;
+      if (linesChanged) refreshBlurredLines(brushNow.current, nextLayers.lines);
       // Одним ворклетом: готовый слой и снятый штрих под пальцем — в один кадр.
       runOnUI(() => {
         'worklet';
@@ -214,7 +248,7 @@ export function useDrawTool(): DrawToolState {
         dirty: open !== null && next !== open.entry,
       });
     },
-    [layers, points, strokeId],
+    [layers, points, refreshBlurredLines, strokeId],
   );
 
   const start = useCallback(
@@ -364,7 +398,8 @@ export function useDrawTool(): DrawToolState {
     closing.current = false;
     setSession(null);
     setBlurred(null);
-  }, []);
+    refreshBlurredLines('pen', null);
+  }, [refreshBlurredLines]);
 
   const leave = useCallback(() => {
     current.current = null;
