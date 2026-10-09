@@ -1,6 +1,12 @@
 import { ImageFormat, Skia } from '@shopify/react-native-skia';
 
-import { editsFile, readyWorkingCopy, workingImageOf, type WorkingCopy } from './workingCopy';
+import {
+  editsFile,
+  readyWorkingCopy,
+  workingCopyOf,
+  workingImageOf,
+  type WorkingCopy,
+} from './workingCopy';
 
 import { MediaLimits } from '@/features/media/constants';
 import { perfLog } from '@/features/media/perf';
@@ -26,13 +32,25 @@ function renderEdit(id: string, copy: WorkingCopy, edit: PhotoEdit): PhotoFile {
 
   const paint = Skia.Paint();
 
-  paint.setColorFilter(Skia.ColorFilter.MakeMatrix(adjustColorMatrix(edit.adjust)));
+  const filter = Skia.ColorFilter.MakeMatrix(adjustColorMatrix(edit.adjust));
+
+  paint.setColorFilter(filter);
   surface.getCanvas().drawImage(image, 0, 0, paint);
   surface.flush();
 
-  const bytes = surface
-    .makeImageSnapshot()
-    .encodeToBytes(ImageFormat.JPEG, Math.round(MediaLimits.photo.quality * 100));
+  const snapshot = surface.makeImageSnapshot();
+  const bytes = snapshot.encodeToBytes(
+    ImageFormat.JPEG,
+    Math.round(MediaLimits.photo.quality * 100),
+  );
+
+  // Растровая поверхность в итоговом размере — это ~14 МБ; ждать, пока её
+  // соберёт сборщик мусора, незачем.
+  snapshot.dispose();
+  surface.dispose();
+  paint.dispose();
+  filter.dispose();
+
   const file = editsFile(id, 'jpg');
 
   file.write(bytes);
@@ -49,19 +67,26 @@ function renderEdit(id: string, copy: WorkingCopy, edit: PhotoEdit): PhotoFile {
 export function bakePhoto(id: string, edit: PhotoEdit): BakedPhoto {
   let result: PhotoFile | null = null;
 
+  const file = () => {
+    if (result) return result;
+
+    try {
+      result = renderEdit(id, readyWorkingCopy(id), edit);
+    } catch (error) {
+      // Отправка упадёт с «повторить» — оригинал вместо правки не уйдёт.
+      console.warn('[photo-edit] запекание не вышло', error);
+      throw error;
+    }
+
+    return result;
+  };
+
   return {
-    file: () => {
-      if (result) return result;
+    file,
+    prepare: async () => {
+      if (!result) await workingCopyOf(id);
 
-      try {
-        result = renderEdit(id, readyWorkingCopy(id), edit);
-      } catch (error) {
-        // Отправка упадёт с «повторить» — оригинал вместо правки не уйдёт.
-        console.warn('[photo-edit] запекание не вышло', error);
-        throw error;
-      }
-
-      return result;
+      return file();
     },
   };
 }

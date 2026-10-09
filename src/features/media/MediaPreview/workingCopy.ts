@@ -78,6 +78,10 @@ async function makeWorkingCopy(id: string): Promise<WorkingCopy> {
   const saved = await image.saveAsync({ format: SaveFormat.PNG });
   const target = editsFile(id, 'png');
 
+  // Раскодированный снимок с камеры — десятки мегабайт нативной памяти.
+  image.release();
+  if (image !== oriented) oriented.release();
+
   new File(saved.uri).move(target);
 
   return { uri: target.uri, width: saved.width, height: saved.height };
@@ -133,6 +137,7 @@ export function workingImageOf(id: string, copy: WorkingCopy): SkImage {
   if (images.size > IMAGES_KEPT) {
     const oldest = images.keys().next().value;
 
+    // Не `dispose`: вытесненную копию ещё может рисовать соседняя страница.
     if (oldest !== undefined) images.delete(oldest);
   }
 

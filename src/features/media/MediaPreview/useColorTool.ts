@@ -2,7 +2,7 @@
 /* eslint-disable react-hooks/immutability */
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { InteractionManager } from 'react-native';
-import { useSharedValue, withTiming } from 'react-native-reanimated';
+import { cancelAnimation, useSharedValue, withTiming } from 'react-native-reanimated';
 
 import { bakePhoto } from './bake';
 import type { LiveAdjust } from './EditedPhoto';
@@ -15,6 +15,8 @@ import { useMediaSelection } from '@/features/media/selectionStore';
 
 /** Панель инструмента сменяет нижнюю панель плавно, фото ужимается за то же время. */
 export const TOOL_SWITCH_MS = 260;
+/** «Сбросить» возвращает ползунки к нулю не рывком. */
+const RESET_MS = 250;
 
 export type ColorToolState = {
   /** Открыт ли инструмент — для React: что рисовать и что принимает касания. */
@@ -23,6 +25,8 @@ export type ColorToolState = {
   progress: ReturnType<typeof useSharedValue<number>>;
   live: LiveAdjust;
   start: (asset: MediaLibraryItem) => void;
+  /** Плавно вернуть все ползунки к нулю. */
+  reset: () => void;
   cancel: () => void;
   done: () => void;
 };
@@ -41,6 +45,7 @@ export function useColorTool(): ColorToolState {
   const saturation = useSharedValue(0);
   const original = useSharedValue(0);
   const entry = useRef<{ asset: MediaLibraryItem; adjust: ColorAdjust } | null>(null);
+  const resetAt = useRef(-Infinity);
 
   const live = useMemo<LiveAdjust>(
     () => ({ exposure, contrast, saturation, original }),
@@ -63,6 +68,14 @@ export function useColorTool(): ColorToolState {
     },
     [contrast, exposure, original, progress, saturation],
   );
+
+  const reset = useCallback(() => {
+    resetAt.current = performance.now();
+
+    for (const value of [exposure, contrast, saturation]) {
+      value.value = withTiming(0, { duration: RESET_MS });
+    }
+  }, [contrast, exposure, saturation]);
 
   const leave = useCallback(() => {
     original.value = 0;
@@ -92,6 +105,15 @@ export function useColorTool(): ColorToolState {
     if (!current) return;
 
     const { asset } = current;
+
+    // «Сбросить» мог ещё вести ползунки к нулю — сохраняется то, куда они едут.
+    const resetting = performance.now() - resetAt.current < RESET_MS;
+
+    for (const value of [exposure, contrast, saturation]) {
+      cancelAnimation(value);
+      if (resetting) value.value = 0;
+    }
+
     const edit = {
       adjust: {
         exposure: Math.round(exposure.value),
@@ -131,5 +153,5 @@ export function useColorTool(): ColorToolState {
     }
   }, [contrast, exposure, leave, saturation]);
 
-  return { open, progress, live, start, cancel, done };
+  return { open, progress, live, start, reset, cancel, done };
 }

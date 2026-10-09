@@ -1,41 +1,22 @@
 // Слой на низкоуровневом API Reanimated: мутация `.value` у shared value —
 // штатный способ им пользоваться.
 /* eslint-disable react-hooks/immutability */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  FlatList,
-  StyleSheet,
-  useWindowDimensions,
-  View,
-  type ListRenderItem,
-  type NativeScrollEvent,
-  type NativeSyntheticEvent,
-} from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { KeyboardController } from 'react-native-keyboard-controller';
-import Animated, {
-  Easing,
-  runOnJS,
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-} from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ColorTool } from './ColorTool';
 import { PreviewFooter } from './PreviewFooter';
 import { PreviewHeader } from './PreviewHeader';
-import { PreviewPage, type PreviewMotion } from './PreviewPage';
-import {
-  closeMediaPreview,
-  measureGridCell,
-  setPreviewBackHandler,
-  useMediaPreview,
-  type Rect,
-} from './previewStore';
+import type { PreviewMotion } from './PreviewPage';
+import { PreviewPager } from './PreviewPager';
+import { setPreviewBackHandler, useMediaPreview, type Rect } from './previewStore';
 import { PreviewToast, usePreviewToast } from './PreviewToast';
 import { styles } from './styles';
 import { useColorTool } from './useColorTool';
+import { usePreviewFlight } from './usePreviewFlight';
 
 import { useOwnKeyboardHeight } from '@/features/chats/composerKeyboard';
 import { useGridGeometry } from '@/features/media/MediaGrid/useGridGeometry';
@@ -44,11 +25,8 @@ import { useMediaSelection } from '@/features/media/selectionStore';
 import { useTheme } from '@/hooks/use-theme';
 import { Spacing } from '@/theme';
 
-/** Перелёт из плитки и обратно. */
-const FLIGHT_MS = 280;
-const FLIGHT_EASING = Easing.out(Easing.cubic);
-/** Столько ждём превью перед перелётом, дальше летим без него. */
-const LAUNCH_FALLBACK_MS = 400;
+/** Удержание пальца на фото в инструменте — показать оригинал. */
+const HOLD_ORIGINAL_MS = 120;
 
 export type PreviewLayerProps = {
   /** Имя чата — в шапке. */
@@ -85,25 +63,24 @@ export function PreviewLayer({
 
   const gallery = useMediaPreview((state) => state.gallery);
   const target = useMediaPreview((state) => state.target);
-  const [index, setIndex] = useState(() =>
-    Math.max(
-      0,
-      gallery.findIndex((item) => item.id === target?.assetId),
-    ),
+  // Текущий файл — по id: галерея может дочитаться и сдвинуться под ним.
+  const [currentId, setCurrentId] = useState(target?.assetId ?? null);
+  const index = Math.max(
+    0,
+    gallery.findIndex((item) => item.id === currentId),
   );
   const current: MediaLibraryItem | undefined = gallery[index];
-  const [leaving, setLeaving] = useState(false);
   const [footerHeight, setFooterHeight] = useState(0);
   const [toolHeight, setToolHeight] = useState(0);
 
   const tool = useColorTool();
   const toast = usePreviewToast();
   const keyboardHeight = useOwnKeyboardHeight('sheet');
-
-  const flight = useSharedValue(0);
-  const origin = useSharedValue<Rect | null>(target?.origin ?? null);
+  const { flight, origin, fade, leaving, launch, leave, dissolve } = usePreviewFlight(
+    target?.origin ?? null,
+    gridViewport,
+  );
   const toolArea = useSharedValue<Rect>({ x: 0, y: 0, width: size.width, height: size.height });
-  const fade = useSharedValue(1);
 
   const motion = useMemo<PreviewMotion>(
     () => ({ flight, origin, tool: tool.progress, toolArea, fade }),
@@ -120,59 +97,20 @@ export function PreviewLayer({
     };
   }, [insets.top, size, toolArea, toolHeight]);
 
-  /**
-   * Перелёт начинается, когда превью активной страницы уже нарисовано: иначе
-   * анимация отыграла бы впустую, а фото появилось бы в конце, рывком. Если
-   * превью почему-то не пришло — не держим человека дольше страховки.
-   */
-  const launched = useRef(false);
-  const launch = useCallback(() => {
-    if (launched.current) return;
-
-    launched.current = true;
-    flight.value = withTiming(1, { duration: FLIGHT_MS, easing: FLIGHT_EASING });
-  }, [flight]);
-
-  useEffect(() => {
-    const fallback = setTimeout(launch, LAUNCH_FALLBACK_MS);
-
-    return () => clearTimeout(fallback);
-  }, [launch]);
-
-  const leave = useCallback(() => {
-    if (leaving || !current) return;
-
-    setLeaving(true);
-    void KeyboardController.dismiss();
-
-    void measureGridCell(current.id).then((rect) => {
-      const center = rect ? rect.y + rect.height / 2 : -1;
-      const visible = rect !== null && center > gridViewport.top && center < gridViewport.bottom;
-
-      if (visible) {
-        origin.value = rect;
-        flight.value = withTiming(0, { duration: FLIGHT_MS, easing: FLIGHT_EASING }, (finished) => {
-          if (finished) runOnJS(closeMediaPreview)();
-        });
-        return;
-      }
-
-      // Плитки не видно — файл гаснет на месте, сетка не двигается.
-      fade.value = withTiming(0, { duration: FLIGHT_MS }, (finished) => {
-        if (finished) runOnJS(closeMediaPreview)();
-      });
-    });
-  }, [current, fade, flight, gridViewport.bottom, gridViewport.top, leaving, origin]);
+  const currentAssetId = current?.id;
+  const goBack = useCallback(() => {
+    if (currentAssetId) leave(currentAssetId);
+  }, [currentAssetId, leave]);
 
   // «Назад» системы: открытый инструмент закрывается как «Отмена», иначе — предпросмотр.
   const toolOpen = tool.open;
   const cancelTool = tool.cancel;
 
   useEffect(() => {
-    setPreviewBackHandler(toolOpen ? cancelTool : leave);
+    setPreviewBackHandler(toolOpen ? cancelTool : goBack);
 
     return () => setPreviewBackHandler(null);
-  }, [cancelTool, leave, toolOpen]);
+  }, [cancelTool, goBack, toolOpen]);
 
   const toggleCurrent = useCallback(() => {
     if (!current) return;
@@ -191,23 +129,31 @@ export function PreviewLayer({
   const send = useCallback(() => {
     const selection = useMediaSelection.getState();
 
-    // Ничего не выбрано — уходит текущий файл, как в Telegram.
-    if (selection.order.length === 0 && current) selection.toggle(current);
+    // Ничего не выбрано — уходит текущий файл, как в Telegram. В правке
+    // альбома — нет: «сохранить» сохраняет правку, а не добавляет файл,
+    // который просто открыли посмотреть.
+    if (!editing && selection.order.length === 0 && current) selection.toggle(current);
 
-    if (useMediaSelection.getState().order.length === 0) return;
+    if (!editing && useMediaSelection.getState().order.length === 0) return;
 
-    setLeaving(true);
-    void KeyboardController.dismiss();
-    // Шит уезжает вниз, предпросмотр над ним тает за то же время.
-    fade.value = withTiming(0, { duration: FLIGHT_MS });
+    dissolve();
     onSend();
-  }, [current, fade, onSend]);
+  }, [current, dissolve, editing, onSend]);
+
+  const onPage = useCallback(
+    (asset: MediaLibraryItem) => {
+      // Пролистали — файл улетит в свою плитку, а не в ту, из которой вылетел.
+      origin.value = null;
+      setCurrentId(asset.id);
+    },
+    [origin],
+  );
 
   const holdOriginal = useMemo(
     () =>
       Gesture.LongPress()
-        .minDuration(120)
-        .maxDistance(10_000)
+        .minDuration(HOLD_ORIGINAL_MS)
+        .maxDistance(Number.MAX_SAFE_INTEGER)
         .enabled(tool.open)
         .onStart(() => {
           tool.live.original.value = 1;
@@ -218,11 +164,11 @@ export function PreviewLayer({
     [tool.live.original, tool.open],
   );
 
+  // Гаснут части слоя, а не слой целиком: прозрачность всего слоя Android
+  // рисует через отдельный буфер, и с видео внутри шит под ним пропадал.
   const backgroundStyle = useAnimatedStyle(() => ({
     opacity: flight.value * fade.value,
   }));
-  // Гаснут части слоя, а не слой целиком: прозрачность всего слоя Android
-  // рисует через отдельный буфер, и с видео внутри шит под ним пропадал.
   const chromeStyle = useAnimatedStyle(() => ({
     opacity: flight.value * fade.value * (1 - tool.progress.value),
   }));
@@ -235,51 +181,12 @@ export function PreviewLayer({
     transform: [{ translateY: (1 - tool.progress.value) * Spacing.five }],
   }));
 
-  const renderItem = useCallback<ListRenderItem<MediaLibraryItem>>(
-    ({ item, index: at }) => (
-      <PreviewPage
-        asset={item}
-        width={size.width}
-        height={size.height}
-        cellSize={cellSize}
-        isActive={at === index}
-        motion={motion}
-        live={at === index && tool.open ? tool.live : null}
-        onShown={launch}
-        leaving={leaving}
-      />
-    ),
-    [cellSize, index, launch, leaving, motion, size.height, size.width, tool.live, tool.open],
-  );
-
-  const getItemLayout = useCallback(
-    (_: ArrayLike<MediaLibraryItem> | null | undefined, at: number) => ({
-      length: size.width,
-      offset: size.width * at,
-      index: at,
-    }),
-    [size.width],
-  );
-
-  const onPageSettled = useCallback(
-    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-      const next = Math.round(event.nativeEvent.contentOffset.x / size.width);
-
-      if (next !== index && gallery[next]) {
-        // Пролистали — файл улетит в свою плитку, а не в ту, из которой вылетел.
-        origin.value = null;
-        setIndex(next);
-      }
-    },
-    [gallery, index, origin, size.width],
-  );
-
   if (!current) return null;
 
   const isPhoto = current.kind === 'photo';
 
   return (
-    <Animated.View
+    <View
       testID="media-preview"
       style={styles.layer}
       pointerEvents={leaving ? 'none' : 'auto'}
@@ -300,23 +207,17 @@ export function PreviewLayer({
 
       <GestureDetector gesture={holdOriginal}>
         <View style={StyleSheet.absoluteFill}>
-          <FlatList
-            testID="media-preview-pager"
-            data={gallery}
-            keyExtractor={(item) => item.id}
-            renderItem={renderItem}
-            extraData={leaving ? -1 - index : index}
-            horizontal
-            pagingEnabled
-            scrollEnabled={!tool.open}
-            showsHorizontalScrollIndicator={false}
-            initialScrollIndex={index}
-            getItemLayout={getItemLayout}
-            initialNumToRender={1}
-            maxToRenderPerBatch={2}
-            windowSize={3}
-            onMomentumScrollEnd={onPageSettled}
-            keyboardShouldPersistTaps="handled"
+          <PreviewPager
+            gallery={gallery}
+            index={index}
+            width={size.width}
+            height={size.height}
+            cellSize={cellSize}
+            motion={motion}
+            live={tool.open ? tool.live : null}
+            leaving={leaving}
+            onShown={launch}
+            onPage={onPage}
           />
         </View>
       </GestureDetector>
@@ -325,7 +226,8 @@ export function PreviewLayer({
         title={title}
         assetId={current.id}
         style={chromeStyle}
-        onBack={leave}
+        hidden={tool.open}
+        onBack={goBack}
         onToggle={toggleCurrent}
       />
 
@@ -337,6 +239,7 @@ export function PreviewLayer({
         placeholder={placeholder}
         editing={editing}
         style={footerStyle}
+        hidden={tool.open}
         onSend={send}
         onOpenColor={() => tool.start(current)}
         onLayout={setFooterHeight}
@@ -347,6 +250,7 @@ export function PreviewLayer({
           live={tool.live}
           style={toolStyle}
           active={tool.open}
+          onReset={tool.reset}
           onCancel={tool.cancel}
           onDone={tool.done}
           onLayout={setToolHeight}
@@ -354,6 +258,6 @@ export function PreviewLayer({
       ) : null}
 
       <PreviewToast toast={toast} bottom={footerHeight + Spacing.three} />
-    </Animated.View>
+    </View>
   );
 }

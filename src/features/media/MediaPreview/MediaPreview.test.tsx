@@ -20,7 +20,7 @@ jest.mock('./workingCopy', () => ({
   workingImageOf: jest.fn(),
 }));
 jest.mock('./bake', () => ({
-  bakePhoto: jest.fn(() => ({ file: () => ({ uri: 'file:///baked.jpg', width: 1, height: 1 }) })),
+  bakePhoto: jest.fn(() => ({ file: jest.fn(), prepare: jest.fn() })),
 }));
 jest.mock('expo-video', () => ({
   useVideoPlayer: () => ({ play: jest.fn(), pause: jest.fn() }),
@@ -41,7 +41,7 @@ const video: MediaLibraryItem = { id: 'v', kind: 'video', width: 9, height: 16, 
 
 const GALLERY = [photo('a'), photo('b'), video];
 
-async function renderPreview(openOn: MediaLibraryItem, onSend = jest.fn()) {
+async function renderPreview(openOn: MediaLibraryItem, onSend = jest.fn(), editing = false) {
   publishPreviewGallery(GALLERY);
   openMediaPreview(openOn, null);
 
@@ -53,7 +53,7 @@ async function renderPreview(openOn: MediaLibraryItem, onSend = jest.fn()) {
       text=""
       onChangeText={jest.fn()}
       placeholder="Подпись"
-      editing={false}
+      editing={editing}
       onSend={onSend}
       gridViewport={{ top: 0, bottom: 800 }}
     />,
@@ -113,6 +113,16 @@ describe('предпросмотр файлов шита', () => {
     await user.press(screen.getByLabelText('Отправить'));
 
     expect(useMediaSelection.getState().order).toEqual(['b']);
+    expect(onSend).toHaveBeenCalledTimes(1);
+  });
+
+  it('в правке альбома «Сохранить» не добавляет файл, который просто открыли', async () => {
+    const { onSend } = await renderPreview(GALLERY[1], jest.fn(), true);
+    const user = userEvent.setup();
+
+    await user.press(screen.getByLabelText('Сохранить'));
+
+    expect(useMediaSelection.getState().order).toEqual([]);
     expect(onSend).toHaveBeenCalledTimes(1);
   });
 

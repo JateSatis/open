@@ -2,7 +2,7 @@
 // штатный способ им пользоваться.
 /* eslint-disable react-hooks/immutability */
 import * as Haptics from 'expo-haptics';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
@@ -50,40 +50,52 @@ export function AdjustSlider({ testID, label, value }: AdjustSliderProps) {
   const start = useSharedValue(0);
   const [shown, setShown] = useState<number | null>(null);
   // Значение для чтения с экрана — то, что видно на отпущенном ползунке.
-  const [settled, setSettled] = useState(() => Math.round(value.value));
+  // Только на отпускании и после «Сбросить»: не на каждом шаге перетаскивания.
+  const [settled, setSettled] = useState(0);
+  const dragging = useSharedValue(false);
 
   useAnimatedReaction(
     () => Math.round(value.value),
     (now, before) => {
-      if (now !== before) runOnJS(setSettled)(now);
+      if (now !== before && !dragging.value) runOnJS(setSettled)(now);
     },
   );
 
-  const pan = Gesture.Pan()
-    .minDistance(0)
-    .onBegin(() => {
-      start.value = value.value;
-      runOnJS(setShown)(Math.round(value.value));
-    })
-    .onUpdate((event) => {
-      if (width.value <= 0) return;
+  // Жест один на всю жизнь ползунка: ряд перерисовывается на каждом шаге
+  // ради числа в подписи, и новый жест на каждый рендер перенастраивался бы
+  // нативно прямо посреди перетаскивания.
+  const pan = useMemo(
+    () =>
+      Gesture.Pan()
+        .minDistance(0)
+        .onBegin(() => {
+          start.value = value.value;
+          dragging.value = true;
+          runOnJS(setShown)(Math.round(value.value));
+        })
+        .onUpdate((event) => {
+          if (width.value <= 0) return;
 
-      const raw = start.value + (event.translationX / width.value) * (ADJUST_MAX - ADJUST_MIN);
-      const clamped = Math.min(ADJUST_MAX, Math.max(ADJUST_MIN, raw));
-      const next = Math.abs(clamped) < ZERO_SNAP ? 0 : Math.round(clamped);
-      const previous = value.value;
+          const raw = start.value + (event.translationX / width.value) * (ADJUST_MAX - ADJUST_MIN);
+          const clamped = Math.min(ADJUST_MAX, Math.max(ADJUST_MIN, raw));
+          const next = Math.abs(clamped) < ZERO_SNAP ? 0 : Math.round(clamped);
+          const previous = value.value;
 
-      if (next === previous) return;
+          if (next === previous) return;
 
-      // Отсечка на нуле: пришли в ноль или перескочили через него.
-      if ((next === 0 && previous !== 0) || next * previous < 0) runOnJS(haptic)();
+          // Отсечка на нуле: пришли в ноль или перескочили через него.
+          if ((next === 0 && previous !== 0) || next * previous < 0) runOnJS(haptic)();
 
-      value.value = next;
-      runOnJS(setShown)(next);
-    })
-    .onFinalize(() => {
-      runOnJS(setShown)(null);
-    });
+          value.value = next;
+          runOnJS(setShown)(next);
+        })
+        .onFinalize(() => {
+          dragging.value = false;
+          runOnJS(setShown)(null);
+          runOnJS(setSettled)(Math.round(value.value));
+        }),
+    [dragging, start, value, width],
+  );
 
   const thumbStyle = useAnimatedStyle(() => ({
     transform: [

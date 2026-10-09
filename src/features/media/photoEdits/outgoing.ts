@@ -1,4 +1,8 @@
-import { libraryAssetToLocalMedia, resolveLibraryAsset, type MediaLibraryItem } from '../mediaLibrary';
+import {
+  libraryAssetToLocalMedia,
+  resolveLibraryAsset,
+  type MediaLibraryItem,
+} from '../mediaLibrary';
 import { assetPreviewUri } from '../lib/previewUri';
 import type { LocalMedia } from '../types';
 import type { BakedPhoto } from './types';
@@ -43,7 +47,7 @@ export function outgoingPreview(item: OutgoingMedia): OutgoingPreview {
  */
 export async function outgoingLocalMedia(item: OutgoingMedia): Promise<LocalMedia> {
   if (item.edited) {
-    const file = item.edited.file();
+    const file = await item.edited.prepare();
 
     return {
       kind: 'photo',

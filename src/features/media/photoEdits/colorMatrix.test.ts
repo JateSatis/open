@@ -25,12 +25,14 @@ describe('adjustColorMatrix', () => {
   it('экспозиция +100 вдвое светлее, −100 вдвое темнее', () => {
     const grey: [number, number, number] = [0.2, 0.2, 0.2];
 
-    close(applyColorMatrix(adjustColorMatrix({ ...NEUTRAL_ADJUST, exposure: 100 }), grey), [
-      0.4, 0.4, 0.4,
-    ]);
-    close(applyColorMatrix(adjustColorMatrix({ ...NEUTRAL_ADJUST, exposure: -100 }), grey), [
-      0.1, 0.1, 0.1,
-    ]);
+    close(
+      applyColorMatrix(adjustColorMatrix({ ...NEUTRAL_ADJUST, exposure: 100 }), grey),
+      [0.4, 0.4, 0.4],
+    );
+    close(
+      applyColorMatrix(adjustColorMatrix({ ...NEUTRAL_ADJUST, exposure: -100 }), grey),
+      [0.1, 0.1, 0.1],
+    );
   });
 
   it('контраст не сдвигает середину и раздвигает края', () => {

@@ -29,7 +29,10 @@ describe('итоговый файл выбранного', () => {
   });
 
   it('отредактированное: и превью, и байты — запечённый файл, без пережатия', async () => {
-    const edited = { ...PHOTO, edited: { file: () => BAKED } };
+    const edited = {
+      ...PHOTO,
+      edited: { file: () => BAKED, prepare: () => Promise.resolve(BAKED) },
+    };
 
     expect(outgoingPreview(edited)).toEqual({ url: BAKED.uri, width: 1600, height: 1200 });
     expect(await outgoingLocalMedia(edited)).toEqual({
@@ -50,6 +53,7 @@ describe('итоговый файл выбранного', () => {
         file: () => {
           throw new Error('нет рабочей копии');
         },
+        prepare: () => Promise.reject(new Error('нет рабочей копии')),
       },
     };
 

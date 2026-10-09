@@ -1,6 +1,6 @@
 import type { SkImage } from '@shopify/react-native-skia';
 import { Image } from 'expo-image';
-import { memo, useEffect, useMemo, useState } from 'react';
+import { memo, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, {
   useAnimatedStyle,
@@ -52,6 +52,9 @@ export type PreviewPageProps = {
    */
   leaving?: boolean;
 };
+
+/** Столько фото должно пробыть текущим, чтобы для него заранее готовилась рабочая копия. */
+const PREPARE_AFTER_MS = 700;
 
 function aspectOf(asset: MediaLibraryItem): number {
   return asset.width && asset.height ? asset.width / asset.height : 1;
@@ -253,7 +256,9 @@ function useEditedImage(
   const saturation = useSharedValue(edit?.adjust.saturation ?? 0);
   const original = useSharedValue(0);
 
-  useEffect(() => {
+  // До отрисовки: на «Готово» страница переходит с ползунков инструмента на
+  // свои значения, и кадр с прежними мигнул бы оригиналом.
+  useLayoutEffect(() => {
     exposure.value = edit?.adjust.exposure ?? 0;
     contrast.value = edit?.adjust.contrast ?? 0;
     saturation.value = edit?.adjust.saturation ?? 0;
@@ -263,15 +268,23 @@ function useEditedImage(
     if (image || !(needed || isActive)) return;
 
     let cancelled = false;
+    const load = () =>
+      void workingCopyOf(asset.id)
+        .then((copy) => {
+          if (!cancelled) setImage(workingImageOf(asset.id, copy));
+        })
+        .catch(() => undefined);
+    // Фото, мимо которого пролистали, рабочая копия не нужна: она дорогая
+    // (раскодировать снимок, записать PNG). Нужна — у правленого, в открытом
+    // инструменте и у фото, на котором задержались: к заходу в инструмент
+    // она уже готова.
+    const timer = needed ? null : setTimeout(load, PREPARE_AFTER_MS);
 
-    void workingCopyOf(asset.id)
-      .then((copy) => {
-        if (!cancelled) setImage(workingImageOf(asset.id, copy));
-      })
-      .catch(() => undefined);
+    if (needed) load();
 
     return () => {
       cancelled = true;
+      if (timer) clearTimeout(timer);
     };
   }, [asset.id, image, isActive, needed]);
 

@@ -1,6 +1,3 @@
-// Инструмент на низкоуровневом API Reanimated: мутация `.value` у shared
-// value — штатный способ им пользоваться.
-/* eslint-disable react-hooks/immutability */
 import { SymbolView } from 'expo-symbols';
 import { useState } from 'react';
 import { Pressable, View, type ViewStyle } from 'react-native';
@@ -9,7 +6,6 @@ import Animated, {
   FadeOut,
   runOnJS,
   useAnimatedReaction,
-  withTiming,
   type AnimatedStyle,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -22,14 +18,12 @@ import { Text } from '@/components/Text';
 import { useTheme } from '@/hooks/use-theme';
 import { Spacing } from '@/theme';
 
-/** «Сбросить» возвращает ползунки к нулю не рывком. */
-const RESET_MS = 250;
-
 export type ColorToolProps = {
   live: LiveAdjust;
   style: AnimatedStyle<ViewStyle>;
   /** Панель сейчас на экране и принимает касания. */
   active: boolean;
+  onReset: () => void;
   onCancel: () => void;
   onDone: () => void;
   onLayout: (height: number) => void;
@@ -40,7 +34,15 @@ export type ColorToolProps = {
  * отменяет всё, что сделано в этом заходе, галочка применяет. «Сбросить»
  * виден, только пока хоть один ползунок не в нуле.
  */
-export function ColorTool({ live, style, active, onCancel, onDone, onLayout }: ColorToolProps) {
+export function ColorTool({
+  live,
+  style,
+  active,
+  onReset,
+  onCancel,
+  onDone,
+  onLayout,
+}: ColorToolProps) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const [changed, setChanged] = useState(false);
@@ -51,12 +53,6 @@ export function ColorTool({ live, style, active, onCancel, onDone, onLayout }: C
       if (now !== before) runOnJS(setChanged)(now);
     },
   );
-
-  const reset = () => {
-    live.exposure.value = withTiming(0, { duration: RESET_MS });
-    live.contrast.value = withTiming(0, { duration: RESET_MS });
-    live.saturation.value = withTiming(0, { duration: RESET_MS });
-  };
 
   return (
     <Animated.View
@@ -98,7 +94,7 @@ export function ColorTool({ live, style, active, onCancel, onDone, onLayout }: C
               testID="media-preview-tool-reset"
               accessibilityRole="button"
               hitSlop={Spacing.two}
-              onPress={reset}
+              onPress={onReset}
             >
               <Text variant="smallBold" color="textOnMedia">
                 Сбросить

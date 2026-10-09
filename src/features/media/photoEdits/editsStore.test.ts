@@ -13,7 +13,8 @@ const photo = (id: string): MediaLibraryItem => ({
 });
 
 const GREY = { adjust: { exposure: 0, contrast: 0, saturation: -100 } };
-const baked: BakedPhoto = { file: () => ({ uri: 'file:///grey.jpg', width: 100, height: 100 }) };
+const GREY_FILE = { uri: 'file:///grey.jpg', width: 100, height: 100 };
+const baked: BakedPhoto = { file: () => GREY_FILE, prepare: () => Promise.resolve(GREY_FILE) };
 
 beforeEach(() => {
   useMediaSelection.getState().clear();

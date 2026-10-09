@@ -15,6 +15,8 @@ export type PreviewHeaderProps = {
   title: string;
   assetId: string;
   style: AnimatedStyle<ViewStyle>;
+  /** Открыт инструмент: шапка спрятана и не принимает касаний. */
+  hidden: boolean;
   onBack: () => void;
   onToggle: () => void;
 };
@@ -24,7 +26,14 @@ export type PreviewHeaderProps = {
  * его номером в отправке. Номер берётся из того же стора, что у клеток
  * сетки, — и пересчитывается вместе с ними.
  */
-export function PreviewHeader({ title, assetId, style, onBack, onToggle }: PreviewHeaderProps) {
+export function PreviewHeader({
+  title,
+  assetId,
+  style,
+  hidden,
+  onBack,
+  onToggle,
+}: PreviewHeaderProps) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const slot = useSelectionSlot(assetId);
@@ -32,6 +41,9 @@ export function PreviewHeader({ title, assetId, style, onBack, onToggle }: Previ
 
   return (
     <Animated.View
+      pointerEvents={hidden ? 'none' : 'auto'}
+      importantForAccessibility={hidden ? 'no-hide-descendants' : 'auto'}
+      accessibilityElementsHidden={hidden}
       style={[
         styles.header,
         { paddingTop: insets.top + Spacing.two, backgroundColor: theme.mediaScrim },

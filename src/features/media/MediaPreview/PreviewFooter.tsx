@@ -20,6 +20,8 @@ export type PreviewFooterProps = {
   /** Правка альбома: кнопка сохраняет, а не отправляет. */
   editing: boolean;
   style: AnimatedStyle<ViewStyle>;
+  /** Открыт инструмент: низ спрятан и не принимает касаний. */
+  hidden: boolean;
   onSend: () => void;
   onOpenColor: () => void;
   onLayout: (height: number) => void;
@@ -60,6 +62,7 @@ export function PreviewFooter({
   placeholder,
   editing,
   style,
+  hidden,
   onSend,
   onOpenColor,
   onLayout,
@@ -78,6 +81,9 @@ export function PreviewFooter({
   return (
     <Animated.View
       testID="media-preview-footer"
+      pointerEvents={hidden ? 'none' : 'auto'}
+      importantForAccessibility={hidden ? 'no-hide-descendants' : 'auto'}
+      accessibilityElementsHidden={hidden}
       style={[
         styles.footer,
         { paddingBottom: insets.bottom + Spacing.two, backgroundColor: theme.mediaScrim },
@@ -128,7 +134,10 @@ export function PreviewFooter({
               testID={`media-preview-tool-${tool.key}`}
               accessibilityRole="button"
               accessibilityLabel={tool.label}
-              accessibilityState={{ selected: edited[tool.key] }}
+              // Обрезка, рисование и наложения — следующие этапы: место в
+              // ряду есть, нажать нельзя.
+              disabled={tool.key !== 'color'}
+              accessibilityState={{ selected: edited[tool.key], disabled: tool.key !== 'color' }}
               onPress={
                 tool.key === 'color'
                   ? () => {
