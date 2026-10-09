@@ -1,0 +1,44 @@
+appId: com.openger.app
+name: Шит медиа — тап по плитке открывает предпросмотр, кружок в шапке выбирает, «назад» возвращает в шит
+env:
+  CHAT: Plany
+---
+- runFlow: subflows/open-app.yaml
+- tapOn: ${CHAT}
+- assertVisible:
+    id: "messages-list"
+- tapOn: "Фото и видео"
+- assertVisible:
+    id: "media-grid"
+# Тап по самой плитке (не по кружку) — предпросмотр, выбор не меняется.
+- tapOn:
+    id: "media-grid-open"
+    index: 3
+- assertVisible:
+    id: "media-preview"
+- assertVisible:
+    id: "media-preview-tool-color"
+# Кружок в шапке выбирает текущий файл первым номером и снимает выбор.
+- tapOn:
+    id: "media-preview-select"
+- assertVisible: "Убрать из выбранного"
+- tapOn:
+    id: "media-preview-select"
+- assertVisible: "Выбрать файл"
+# Инструмент цвета открывается и закрывается крестиком.
+- tapOn:
+    id: "media-preview-tool-color"
+- assertVisible: "Экспозиция"
+- tapOn:
+    id: "media-preview-tool-cancel"
+- assertNotVisible: "Экспозиция"
+# «Назад» возвращает в шит, а не закрывает его.
+- tapOn:
+    id: "media-preview-back"
+- assertNotVisible:
+    id: "media-preview"
+- assertVisible:
+    id: "media-grid"
+- back
+- assertNotVisible:
+    id: "media-grid"

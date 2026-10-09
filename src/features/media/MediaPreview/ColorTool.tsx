@@ -62,6 +62,9 @@ export function ColorTool({ live, style, active, onCancel, onDone, onLayout }: C
     <Animated.View
       testID="media-preview-color-tool"
       pointerEvents={active ? 'auto' : 'none'}
+      // Спрятанная панель не должна читаться с экрана.
+      importantForAccessibility={active ? 'auto' : 'no-hide-descendants'}
+      accessibilityElementsHidden={!active}
       style={[
         styles.toolPanel,
         { paddingBottom: insets.bottom, backgroundColor: theme.viewerBackground },
