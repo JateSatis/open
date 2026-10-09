@@ -7,7 +7,7 @@ import {
   type SkShader,
 } from '@shopify/react-native-skia';
 
-import { paintOps } from './paintDrawing';
+import { blurImage, paintOps } from './paintDrawing';
 
 import { perfLog } from '@/features/media/perf';
 import {
@@ -73,21 +73,8 @@ export function blurredCopyOf(id: string, image: SkImage): SkImage {
   }
 
   const startedAt = performance.now();
-  const width = image.width();
-  const surface = Skia.Surface.Make(width, image.height());
+  const blurred = blurImage(image, BLUR_SIGMA * image.width());
 
-  if (!surface) throw new Error('Не удалось создать поверхность для размытия');
-
-  const sigma = BLUR_SIGMA * width;
-  const paint = Skia.Paint();
-
-  paint.setImageFilter(Skia.ImageFilter.MakeBlur(sigma, sigma, TileMode.Clamp, null));
-  surface.getCanvas().drawImage(image, 0, 0, paint);
-  surface.flush();
-
-  const blurred = surface.makeImageSnapshot();
-
-  surface.dispose();
   keep(blurredCache, id, { image, blurred }, BLURRED_KEPT);
   perfLog('рисунок: размытая копия', { id, ms: Math.round(performance.now() - startedAt) });
 
@@ -128,8 +115,12 @@ function blurShaderFor(id: string, image: SkImage, strokes: PhotoDrawing): SkSha
   return hasBlur(strokes) ? unitsShader(blurredCopyOf(id, image), image.width()) : null;
 }
 
-/** Слои рисунка целиком, с нуля. */
-function renderLayers(id: string, image: SkImage, strokes: PhotoDrawing): DrawingLayers {
+/** Слои рисунка целиком, с нуля, — мимо памяти: для промежуточных шагов отмены. */
+export function renderDrawingLayers(
+  id: string,
+  image: SkImage,
+  strokes: PhotoDrawing,
+): DrawingLayers {
   if (strokes.length === 0) return NO_LAYERS;
 
   const startedAt = performance.now();
@@ -155,11 +146,54 @@ export function drawingLayersOf(id: string, image: SkImage, strokes: PhotoDrawin
 
   if (known && known.strokes === strokes) return known.layers;
 
-  const layers = renderLayers(id, image, strokes);
+  const layers = renderDrawingLayers(id, image, strokes);
 
   keep(layersCache, id, { strokes, layers }, LAYERS_KEPT);
 
   return layers;
+}
+
+/** Слои рисунка или их отсутствие: не собрались — фото без рисунка, а не падение показа. */
+export function safeDrawingLayersOf(
+  id: string,
+  image: SkImage,
+  drawing: PhotoDrawing | undefined,
+): DrawingLayers {
+  if (!drawing || drawing.length === 0) return NO_LAYERS;
+
+  try {
+    return drawingLayersOf(id, image, drawing);
+  } catch (error) {
+    console.warn('[photo-draw] рисунок не собрался', error);
+    return NO_LAYERS;
+  }
+}
+
+/** Столько ждём, прежде чем освободить сменённый слой: UI-поток мог ещё рисовать его кадр. */
+const RETIRE_AFTER_MS = 1000;
+
+/**
+ * Освободить слои, сменённые новыми, — сразу, а не когда до них дойдёт
+ * сборщик мусора: каждый слой — мегабайты нативной памяти, а сборщик о них
+ * не знает, и сотня штрихов съела бы сотни мегабайт. Слои из `keep` (на
+ * входе в инструмент, в памяти страниц) не трогаются.
+ */
+export function retireDrawingLayers(
+  old: DrawingLayers,
+  next: DrawingLayers,
+  kept: DrawingLayers[],
+) {
+  const cached = [...layersCache.values()].map((entry) => entry.layers);
+  const alive = new Set(
+    [next, ...kept, ...cached].flatMap((layers) => [layers.blur, layers.lines]),
+  );
+  const dead = [old.blur, old.lines].filter(
+    (image): image is SkImage => image !== null && !alive.has(image),
+  );
+
+  if (dead.length === 0) return;
+
+  setTimeout(() => dead.forEach((image) => image.dispose()), RETIRE_AFTER_MS);
 }
 
 /** Слои, уже собранные инструментом, — страница возьмёт их, а не соберёт заново. */

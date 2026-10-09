@@ -28,6 +28,9 @@ jest.mock('./DrawSizeSlider', () => ({ DrawSizeSlider: () => null }));
 jest.mock('./drawingLayers', () => ({
   NO_LAYERS: { blur: null, lines: null },
   drawingLayersOf: jest.fn(() => ({ blur: null, lines: null })),
+  safeDrawingLayersOf: jest.fn(() => ({ blur: null, lines: null })),
+  renderDrawingLayers: jest.fn(() => ({ blur: null, lines: null })),
+  retireDrawingLayers: jest.fn(),
   appendDrawingStroke: jest.fn(() => ({ blur: null, lines: { stroke: true } })),
   blurredCopyOf: jest.fn(() => null),
   rememberDrawingLayers: jest.fn(),

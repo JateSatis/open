@@ -5,7 +5,7 @@ import {
   Skia,
   TileMode,
   type SkImage,
-  type SkSurface,
+  type SkPaint,
 } from '@shopify/react-native-skia';
 import { Image as ExpoImage } from 'expo-image';
 import { File } from 'expo-file-system';
@@ -20,7 +20,7 @@ import {
 } from './workingCopy';
 
 import { MediaLimits } from '@/features/media/constants';
-import { paintDrawing } from './paintDrawing';
+import { blurImage, paintDrawing } from './paintDrawing';
 
 import { perfLog } from '@/features/media/perf';
 import { adjustColorMatrix } from '@/features/media/photoEdits/colorMatrix';
@@ -51,6 +51,8 @@ const THUMB_SHORT_SIDE_PX = 400;
 const MAX_DECODE_PIXELS = 24_000_000;
 /** Запас по краям вырезки — под сглаживание на границе. */
 const BOUNDS_PADDING_PX = 2;
+/** Гаусс заметно тянет пиксели на столько сигм — столько снимка нужно за краем под размытие. */
+const BLUR_REACH = 3;
 
 /** Обрезка правки; нет — фото целиком. */
 export function cropOf(
@@ -113,7 +115,9 @@ function drawEdit(
   if (edit.drawing && edit.drawing.length > 0) {
     // Единицы рисунка → пиксели итога: та же обрезка, что у фото.
     const units = cropTransform(crop, { x: 0, y: 0, width, height }, 1);
-    const blurred = hasBlur(edit.drawing) ? blurredSnapshot(surface, width / crop.width) : null;
+    const sigma = (BLUR_SIGMA * width) / crop.width;
+    const pad = Math.ceil(sigma * BLUR_REACH);
+    const blurred = hasBlur(edit.drawing) ? blurredPhoto(paint, width, height, pad, sigma) : null;
     const blur =
       blurred &&
       blurred.makeShaderOptions(
@@ -121,7 +125,7 @@ function drawEdit(
         TileMode.Clamp,
         FilterMode.Linear,
         MipmapMode.None,
-        Skia.Matrix(affineToMatrix(invertAffine(units))),
+        Skia.Matrix(affineToMatrix(invertAffine(units))).translate(-pad, -pad),
       );
 
     canvas.save();
@@ -152,27 +156,32 @@ function drawEdit(
 }
 
 /**
- * Размытое фото того, что уже на холсте (окрашенное и обрезанное), — его
- * проявляют мазки размытия. Сила — в долях ширины исходника, `pxPerUnit`
- * переводит её в пиксели итога.
+ * Размытое фото (окрашенное, обрезанное) — его проявляют мазки размытия.
+ * С запасом `pad` за краями итога: размытие у края обрезки берёт пиксели
+ * снимка за ней, как в живом показе, а не тянет крайние.
  */
-function blurredSnapshot(surface: SkSurface, pxPerUnit: number): SkImage {
-  const photo = surface.makeImageSnapshot();
-  const blurSurface = Skia.Surface.Make(photo.width(), photo.height());
+function blurredPhoto(
+  photo: SkPaint,
+  width: number,
+  height: number,
+  pad: number,
+  sigma: number,
+): SkImage {
+  const surface = Skia.Surface.Make(width + pad * 2, height + pad * 2);
 
-  if (!blurSurface) throw new Error('Не удалось создать поверхность для размытия');
+  if (!surface) throw new Error('Не удалось создать поверхность для размытия');
 
-  const sigma = BLUR_SIGMA * pxPerUnit;
-  const paint = Skia.Paint();
+  const canvas = surface.getCanvas();
 
-  paint.setImageFilter(Skia.ImageFilter.MakeBlur(sigma, sigma, TileMode.Clamp, null));
-  blurSurface.getCanvas().drawImage(photo, 0, 0, paint);
-  blurSurface.flush();
+  canvas.translate(pad, pad);
+  canvas.drawRect(Skia.XYWHRect(-pad, -pad, width + pad * 2, height + pad * 2), photo);
+  surface.flush();
 
-  const blurred = blurSurface.makeImageSnapshot();
+  const sharp = surface.makeImageSnapshot();
+  const blurred = blurImage(sharp, sigma);
 
-  blurSurface.dispose();
-  photo.dispose();
+  sharp.dispose();
+  surface.dispose();
 
   return blurred;
 }
@@ -244,15 +253,16 @@ async function renderFromSource(
   const pxPerUnit = decoded.width;
   const decodedSize = `${decoded.width}×${decoded.height}`;
   const bounds = cropBounds(crop);
-  const left = Math.max(0, Math.floor(bounds.x * pxPerUnit) - BOUNDS_PADDING_PX);
-  const top = Math.max(0, Math.floor(bounds.y * pxPerUnit) - BOUNDS_PADDING_PX);
-  const right = Math.min(
-    decoded.width,
-    Math.ceil((bounds.x + bounds.width) * pxPerUnit) + BOUNDS_PADDING_PX,
-  );
+  // Под размытие у края обрезки нужен снимок и за ней.
+  const padding =
+    BOUNDS_PADDING_PX +
+    (edit.drawing && hasBlur(edit.drawing) ? Math.ceil(BLUR_SIGMA * pxPerUnit * BLUR_REACH) : 0);
+  const left = Math.max(0, Math.floor(bounds.x * pxPerUnit) - padding);
+  const top = Math.max(0, Math.floor(bounds.y * pxPerUnit) - padding);
+  const right = Math.min(decoded.width, Math.ceil((bounds.x + bounds.width) * pxPerUnit) + padding);
   const bottom = Math.min(
     decoded.height,
-    Math.ceil((bounds.y + bounds.height) * pxPerUnit) + BOUNDS_PADDING_PX,
+    Math.ceil((bounds.y + bounds.height) * pxPerUnit) + padding,
   );
   const decodedAt = performance.now();
 

@@ -19,7 +19,8 @@ export type ZoomState = { scale: number; x: number; y: number };
  * Где фото в рисовании и как экран переводится в единицы рисунка.
  *
  * Страница рисует фото на холсте размером `base` — фото, вписанное в весь
- * экран, — и ужимает его трансформом в рабочую область (`frame`).
+ * экран, — и ужимает его трансформом в рабочую область; `frame` — где оно
+ * при этом прогрессе входа (1 — в рабочей области).
  * Увеличение — внутри холста: `canvas = scale · p + (x, y)`.
  */
 export type DrawGeometry = {
@@ -37,11 +38,20 @@ export function drawGeometry(
   screen: Rect,
   area: Rect,
   zoom: ZoomState,
+  progress: number,
 ): DrawGeometry {
   'worklet';
   const aspect = cropAspect(crop);
-  const frame = fitRect(aspect, area);
+  const fitted = fitRect(aspect, area);
   const base = fitRect(aspect, { x: 0, y: 0, width: screen.width, height: screen.height });
+  // Фото ещё ужимается (палец опустился сразу после входа) — где оно сейчас.
+  const mix = (from: number, to: number) => from + (to - from) * progress;
+  const frame = {
+    x: mix(base.x, fitted.x),
+    y: mix(base.y, fitted.y),
+    width: mix(base.width, fitted.width),
+    height: mix(base.height, fitted.height),
+  };
 
   return {
     frame,

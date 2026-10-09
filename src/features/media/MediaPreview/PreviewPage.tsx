@@ -8,7 +8,7 @@ import Animated, {
   type SharedValue,
 } from 'react-native-reanimated';
 
-import { drawingLayersOf, NO_LAYERS, type DrawingLayers } from './drawingLayers';
+import { NO_LAYERS, safeDrawingLayersOf, type DrawingLayers } from './drawingLayers';
 import { EditedPhoto, type LiveAdjust } from './EditedPhoto';
 import { fitRect, flightTransform } from './previewGeometry';
 import type { Rect } from './previewStore';
@@ -292,24 +292,17 @@ function toolTarget(aspect: number, base: Rect, motion: PreviewMotion): Rect {
 
 /**
  * Сведённый рисунок фото: готовые слои из памяти — инструмент отдаёт их
- * сам, — иначе собираются один раз. Не собрались — фото без рисунка, а не
- * падение страницы.
+ * сам, — иначе собираются один раз.
  */
 function useDrawingLayers(
   id: string,
   image: SkImage | null,
   drawing: PhotoDrawing | undefined,
 ): DrawingLayers {
-  return useMemo(() => {
-    if (!image || !drawing || drawing.length === 0) return NO_LAYERS;
-
-    try {
-      return drawingLayersOf(id, image, drawing);
-    } catch (error) {
-      console.warn('[photo-draw] рисунок не собрался', error);
-      return NO_LAYERS;
-    }
-  }, [drawing, id, image]);
+  return useMemo(
+    () => (image ? safeDrawingLayersOf(id, image, drawing) : NO_LAYERS),
+    [drawing, id, image],
+  );
 }
 
 type SkiaLayer = { image: SkImage; adjust: LiveAdjust; plain: PhotoCrop };

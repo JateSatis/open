@@ -5,7 +5,9 @@ import {
   Skia,
   StrokeCap,
   StrokeJoin,
+  TileMode,
   type SkCanvas,
+  type SkImage,
   type SkPaint,
   type SkPath,
   type SkShader,
@@ -149,4 +151,26 @@ export function paintDrawing(canvas: SkCanvas, strokes: PhotoDrawing, blur: SkSh
     paintOps(canvas, ops, blur);
     canvas.restore();
   }
+}
+
+/**
+ * Размытая копия картинки того же размера — её проявляют мазки размытия.
+ * Края продолжаются своими пикселями: у края фото размытие не темнеет.
+ */
+export function blurImage(image: SkImage, sigma: number): SkImage {
+  const surface = Skia.Surface.Make(image.width(), image.height());
+
+  if (!surface) throw new Error('Не удалось создать поверхность для размытия');
+
+  const paint = Skia.Paint();
+
+  paint.setImageFilter(Skia.ImageFilter.MakeBlur(sigma, sigma, TileMode.Clamp, null));
+  surface.getCanvas().drawImage(image, 0, 0, paint);
+  surface.flush();
+
+  const blurred = surface.makeImageSnapshot();
+
+  surface.dispose();
+
+  return blurred;
 }

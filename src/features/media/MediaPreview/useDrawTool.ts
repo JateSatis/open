@@ -16,9 +16,11 @@ import { commitPhotoEdit } from './commitEdit';
 import {
   appendDrawingStroke,
   blurredCopyOf,
-  drawingLayersOf,
   NO_LAYERS,
   rememberDrawingLayers,
+  renderDrawingLayers,
+  retireDrawingLayers,
+  safeDrawingLayersOf,
   type DrawingLayers,
 } from './drawingLayers';
 import { TOOL_SWITCH_MS } from './useColorTool';
@@ -141,6 +143,8 @@ export function useDrawTool(): DrawToolState {
   const starting = useRef(false);
   const closing = useRef(false);
   const asking = useRef(false);
+  /** Номер последнего штриха, уже положенного в рисунок. */
+  const finished = useRef(0);
 
   const progress = useSharedValue(0);
   const layers = useSharedValue<DrawingLayers>(NO_LAYERS);
@@ -192,6 +196,10 @@ export function useDrawTool(): DrawToolState {
     (next: PhotoDrawing, nextLayers: DrawingLayers, clearId?: number) => {
       const open = current.current;
 
+      if (layersNow.current !== nextLayers) {
+        retireDrawingLayers(layersNow.current, nextLayers, open ? [open.entryLayers] : []);
+      }
+
       strokes.current = next;
       layersNow.current = nextLayers;
       // Одним ворклетом: готовый слой и снятый штрих под пальцем — в один кадр.
@@ -220,10 +228,11 @@ export function useDrawTool(): DrawToolState {
           const image = workingImageOf(asset.id, copy);
           const crop = edit.crop ?? defaultCrop(image.height() / image.width());
           const entry = edit.drawing ?? [];
-          const entryLayers = drawingLayersOf(asset.id, image, entry);
+          const entryLayers = safeDrawingLayersOf(asset.id, image, entry);
 
           current.current = { asset, image, crop, entry, entryLayers };
           history.current = [];
+          layersNow.current = entryLayers;
           setSession({ asset, image, crop });
           setBlurred(null);
           applyBrush(useDrawSettings.getState().brush);
@@ -263,14 +272,25 @@ export function useDrawTool(): DrawToolState {
     [],
   );
 
+  /**
+   * Слои с новым штрихом. Не собрались (нет памяти под поверхность) —
+   * штрих не ложится, история не трогается: рисовать можно дальше.
+   */
   const addStroke = useCallback((stroke: DrawStroke): DrawingLayers | null => {
     const open = current.current;
 
     if (!open || stroke.points.length === 0) return null;
 
-    history.current.push(strokes.current);
+    try {
+      const next = appendDrawingStroke(open.asset.id, open.image, layersNow.current, stroke);
 
-    return appendDrawingStroke(open.asset.id, open.image, layersNow.current, stroke);
+      history.current.push(strokes.current);
+
+      return next;
+    } catch (error) {
+      console.warn('[photo-draw] штрих не лёг', error);
+      return null;
+    }
   }, []);
 
   const finishStroke = useCallback(
@@ -289,30 +309,48 @@ export function useDrawTool(): DrawToolState {
       };
       const nextLayers = addStroke(stroke);
 
+      finished.current = id;
       if (nextLayers) show([...strokes.current, stroke], nextLayers, id);
+      else
+        runOnUI(() => {
+          'worklet';
+          if (strokeId.value === id) points.value = [];
+        })();
     },
-    [addStroke, show],
+    [addStroke, points, show, strokeId],
   );
 
   const restore = useCallback(
     (next: PhotoDrawing) => {
       const open = current.current;
 
-      if (!open) return;
+      if (!open) return false;
 
-      show(
-        next,
-        next === open.entry ? open.entryLayers : drawingLayersOf(open.asset.id, open.image, next),
-      );
+      try {
+        show(
+          next,
+          next === open.entry
+            ? open.entryLayers
+            : renderDrawingLayers(open.asset.id, open.image, next),
+        );
+      } catch (error) {
+        console.warn('[photo-draw] отмена не собралась', error);
+        return false;
+      }
+
+      return true;
     },
     [show],
   );
 
   const undo = useCallback(() => {
-    const previous = history.current.pop();
+    const previous = history.current.at(-1);
 
-    if (previous) restore(previous);
-    else if (strokes.current.length > 0) restore(strokes.current.slice(0, -1));
+    if (previous) {
+      if (restore(previous)) history.current.pop();
+    } else if (strokes.current.length > 0) {
+      restore(strokes.current.slice(0, -1));
+    }
   }, [restore]);
 
   const reset = useCallback(() => {
@@ -382,10 +420,11 @@ export function useDrawTool(): DrawToolState {
 
     if (!open) return;
 
-    // Палец ещё рисует — штрих не теряется, ложится как есть.
+    // Палец ещё рисует — штрих не теряется, ложится как есть. Уже
+    // положенный штрих, точки которого UI-поток ещё не снял, — не второй раз.
     const pending = points.value;
 
-    if (pending.length > 0) {
+    if (pending.length > 0 && strokeId.value !== finished.current) {
       const stroke = {
         brush: brush.value,
         color: color.value,
@@ -395,6 +434,7 @@ export function useDrawTool(): DrawToolState {
       const nextLayers = addStroke(stroke);
 
       if (nextLayers) {
+        retireDrawingLayers(layersNow.current, nextLayers, [open.entryLayers]);
         strokes.current = [...strokes.current, stroke];
         layersNow.current = nextLayers;
       }
@@ -410,7 +450,7 @@ export function useDrawTool(): DrawToolState {
       ...(photoEditOf(open.asset.id) ?? EMPTY_EDIT),
       drawing: result,
     });
-  }, [addStroke, brush, color, leave, points, show, width]);
+  }, [addStroke, brush, color, leave, points, show, strokeId, width]);
 
   return {
     open,

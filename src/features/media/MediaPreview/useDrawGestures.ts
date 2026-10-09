@@ -38,7 +38,7 @@ export function useDrawGestures(
 ) {
   const mode = useSharedValue<Mode>('none');
   const pinch = useSharedValue<PinchStart | null>(null);
-  const { size, strokeId, finishStroke, open, selectedBrush, selectedColor } = tool;
+  const { size, strokeId, finishStroke, open, selectedBrush, selectedColor, progress } = tool;
   // Ворклеты берут shared values по одному, а не объект с картинкой.
   const { points, width, brush, color } = tool.live;
   const { scale, x, y } = tool.live.zoom;
@@ -47,11 +47,17 @@ export function useDrawGestures(
     const geometry = () => {
       'worklet';
       // `crop` есть: жест включён, только пока открыто рисование.
-      return drawGeometry(crop as PhotoCrop, screen.value, area.value, {
-        scale: scale.value,
-        x: x.value,
-        y: y.value,
-      });
+      return drawGeometry(
+        crop as PhotoCrop,
+        screen.value,
+        area.value,
+        {
+          scale: scale.value,
+          x: x.value,
+          y: y.value,
+        },
+        progress.value,
+      );
     };
 
     const startPinch = (touches: TouchData[]) => {
@@ -163,6 +169,7 @@ export function useDrawGestures(
     open,
     pinch,
     points,
+    progress,
     scale,
     screen,
     selectedBrush,

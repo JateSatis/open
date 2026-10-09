@@ -134,7 +134,8 @@ export function EditedPhoto({
               />
               {draw ? <LiveStroke draw={draw} imageWidth={imageWidth} layer="blur" /> : null}
             </Group>
-            <Group layer>
+            {/* Свой слой — только ластику под пальцем: вычищать линии, а не фото. */}
+            <Group layer={draw !== null}>
               <Image
                 image={linesLayer}
                 x={0}

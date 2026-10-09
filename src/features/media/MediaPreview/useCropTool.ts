@@ -24,7 +24,7 @@ import {
   type CropMotion,
   type CropTwist,
 } from './cropMotion';
-import { drawingLayersOf, NO_LAYERS, type DrawingLayers } from './drawingLayers';
+import { safeDrawingLayersOf, type DrawingLayers } from './drawingLayers';
 import { TOOL_SWITCH_MS } from './useColorTool';
 import { workingCopyOf, workingImageOf } from './workingCopy';
 
@@ -38,7 +38,6 @@ import {
   type Box,
   type PhotoCrop,
 } from '@/features/media/photoEdits/crop';
-import type { PhotoDrawing } from '@/features/media/photoEdits/drawing';
 import { photoEditOf } from '@/features/media/photoEdits/editsStore';
 import { EMPTY_EDIT, type ColorAdjust } from '@/features/media/photoEdits/types';
 
@@ -55,17 +54,6 @@ export type CropSession = {
   /** Рисунок фото — вертится и режется вместе с ним. */
   layers: DrawingLayers;
 };
-
-function layersFor(id: string, image: SkImage, drawing: PhotoDrawing | undefined): DrawingLayers {
-  if (!drawing || drawing.length === 0) return NO_LAYERS;
-
-  try {
-    return drawingLayersOf(id, image, drawing);
-  } catch (error) {
-    console.warn('[photo-draw] рисунок не собрался', error);
-    return NO_LAYERS;
-  }
-}
 
 export type CropToolState = {
   /** Открыт ли инструмент — для React: какая панель внизу и что принимает касания. */
@@ -189,7 +177,7 @@ export function useCropTool(): CropToolState {
             asset,
             image,
             adjust: edit.adjust,
-            layers: layersFor(asset.id, image, edit.drawing),
+            layers: safeDrawingLayersOf(asset.id, image, edit.drawing),
           });
           setOpen(true);
         })

@@ -1,9 +1,9 @@
-import { SymbolView, type SymbolViewProps } from 'expo-symbols';
+import { SymbolView } from 'expo-symbols';
 import { Pressable, View, type ViewStyle } from 'react-native';
 import Animated, { FadeIn, FadeOut, type AnimatedStyle } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { DrawColorCircle } from './DrawColorCircle';
+import { DrawBrushRow } from './DrawBrushRow';
 import { styles } from './styles';
 
 import { Text } from '@/components/Text';
@@ -26,30 +26,6 @@ export type DrawPanelProps = {
   onDone: () => void;
   onLayout: (height: number) => void;
 };
-
-const BRUSHES: { key: DrawBrush; label: string; icon: SymbolViewProps['name'] }[] = [
-  { key: 'pen', label: 'Перо', icon: { ios: 'pencil.tip', android: 'edit', web: 'edit' } },
-  {
-    key: 'arrow',
-    label: 'Стрелка',
-    icon: { ios: 'arrow.up.right', android: 'north_east', web: 'north_east' },
-  },
-  {
-    key: 'marker',
-    label: 'Маркер',
-    icon: { ios: 'highlighter', android: 'ink_highlighter', web: 'ink_highlighter' },
-  },
-  {
-    key: 'blur',
-    label: 'Размытие',
-    icon: { ios: 'drop.halffull', android: 'blur_on', web: 'blur_on' },
-  },
-  {
-    key: 'eraser',
-    label: 'Ластик',
-    icon: { ios: 'eraser', android: 'ink_eraser', web: 'ink_eraser' },
-  },
-];
 
 /**
  * Панель «Рисование»: кисти и кружок цвета, ниже — отмена последнего шага,
@@ -85,32 +61,7 @@ export function DrawPanel({
       ]}
       onLayout={(event) => onLayout(event.nativeEvent.layout.height)}
     >
-      <View style={styles.brushRow}>
-        {BRUSHES.map((item) => {
-          const selected = item.key === brush;
-
-          return (
-            <Pressable
-              key={item.key}
-              testID={`draw-brush-${item.key}`}
-              accessibilityRole="button"
-              accessibilityLabel={item.label}
-              accessibilityState={{ selected }}
-              hitSlop={Spacing.one}
-              onPress={() => onBrush(item.key)}
-              style={[
-                styles.tool,
-                styles.brush,
-                selected && { backgroundColor: theme.mediaControl },
-              ]}
-            >
-              <SymbolView name={item.icon} size={Spacing.four} tintColor={theme.textOnMedia} />
-            </Pressable>
-          );
-        })}
-
-        <DrawColorCircle color={color} />
-      </View>
+      <DrawBrushRow brush={brush} color={color} onBrush={onBrush} />
 
       <View style={styles.toolActions}>
         <Pressable
