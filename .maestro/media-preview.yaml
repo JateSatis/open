@@ -49,14 +49,16 @@ env:
     id: "media-preview-tool-crop"
     selected: true
 - assertVisible: "Убрать из выбранного"
-# Рисование: до штриха отменять нечего; штрих → «отменить» → штрих →
-# «Готово» — иконка рисования подсвечена.
+# Рисование: до штриха в этом заходе крестику нечего отменять; штрих →
+# «отменить» → снова нечего → штрих → «Готово» — иконка рисования
+# подсвечена. Крестик, а не стрелка: рисунок прошлого прогона на этом фото
+# стрелка тоже умеет снимать.
 - tapOn:
     id: "media-preview-tool-draw"
 - assertVisible:
     id: "draw-brush-pen"
 - assertVisible:
-    id: "draw-undo"
+    id: "draw-cancel"
     enabled: false
 - tapOn:
     id: "draw-brush-pen"
@@ -65,12 +67,12 @@ env:
     end: 70%, 50%
     duration: 400
 - assertVisible:
-    id: "draw-undo"
+    id: "draw-cancel"
     enabled: true
 - tapOn:
     id: "draw-undo"
 - assertVisible:
-    id: "draw-undo"
+    id: "draw-cancel"
     enabled: false
 - swipe:
     start: 30%, 55%
