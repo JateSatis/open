@@ -1,5 +1,5 @@
 import { FlashList, type FlashListProps, type ListRenderItem } from '@shopify/flash-list';
-import { useCallback, useMemo, type ComponentType, type ReactElement } from 'react';
+import { useCallback, useEffect, useMemo, type ComponentType, type ReactElement } from 'react';
 import { View, useWindowDimensions } from 'react-native';
 
 import { GRID_COLUMNS, rowsToFill } from './gridLayout';
@@ -10,6 +10,7 @@ import { Button } from '@/components/Button';
 import { Text } from '@/components/Text';
 import type { GridPick } from '@/features/media/MediaGridItem';
 import { MediaGridRow, type GridCell } from '@/features/media/MediaGridRow';
+import { publishPreviewGallery } from '@/features/media/MediaPreview/previewStore';
 import { countRender, perfLog } from '@/features/media/perf';
 import { useMediaSelection } from '@/features/media/selectionStore';
 import { useGalleryAssets } from '@/features/media/useGalleryAssets';
@@ -71,9 +72,8 @@ export type MediaGridProps = {
 };
 
 /**
- * Грид последних фото и видео устройства. Максимально простой по задаче:
- * без альбомов, без предпросмотра — только выбор через кружок в углу
- * клетки.
+ * Грид последних фото и видео устройства, без альбомов: выбор — кружок в
+ * углу клетки, тап по клетке — предпросмотр.
  *
  * Выбранное живёт в `selectionStore`, а не приходит пропом: грид не
  * перерисовывается от того, что человек тронул кружок.
@@ -100,6 +100,10 @@ export function MediaGrid({
   const geometry = useGridGeometry();
   const { status, items, total, requestAccess } = useGalleryAssets(enabled);
   const toggle = useMediaSelection((state) => state.toggle);
+
+  // Предпросмотр листает тот же список, что показывает сетка, и тот же
+  // дочитанный хвост.
+  useEffect(() => publishPreviewGallery(items), [items]);
 
   /**
    * Строки списка: сначала настоящие файлы, за ними — скелет до известной

@@ -42,7 +42,7 @@ import {
   removeUploadedMedia,
   storedPaths,
   type LocalMedia,
-  type MediaLibraryItem,
+  type OutgoingMedia,
   type UploadedMedia,
 } from '@/features/media';
 import { showNotice } from '@/features/notifications/alertsStore';
@@ -236,7 +236,7 @@ export async function deliverComment(
 export function sendCommentPost(
   context: CommentSendContext,
   text: string,
-  media: MediaLibraryItem[] = [],
+  media: OutgoingMedia[] = [],
   replies: LiveQuote[] = [],
   threadRootId: string | null = null,
 ) {

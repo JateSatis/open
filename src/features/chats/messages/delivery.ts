@@ -36,14 +36,13 @@ import type {
 import { chatsQueryKey } from '@/features/chats/useChats';
 import { reportRequestFailed } from '@/features/connection/connectionStore';
 import {
-  assetPreviewUri,
-  libraryAssetToLocalMedia,
+  outgoingLocalMedia,
+  outgoingPreview,
   removeUploadedMedia,
-  resolveLibraryAsset,
   storedPaths,
   uploadAllMedia,
   type LocalMedia,
-  type MediaLibraryItem,
+  type OutgoingMedia,
   type UploadedMedia,
 } from '@/features/media';
 import { showNotice } from '@/features/notifications/alertsStore';
@@ -69,17 +68,20 @@ const delivering = new Set<string>();
 // Человек удалил своё неотправленное, пока оно ещё ехало на сервер.
 const discarded = new Set<string>();
 
-/** Локальный предпросмотр вложения до ответа сервера — облачко не пустует, пока файлы грузятся. */
-export function toLocalAttachment(asset: MediaLibraryItem): MessageAttachment {
+/**
+ * Локальный предпросмотр вложения до ответа сервера — облачко не пустует,
+ * пока файлы грузятся. У отредактированного фото — сразу итоговая картинка.
+ */
+export function toLocalAttachment(asset: OutgoingMedia): MessageAttachment {
+  const preview = outgoingPreview(asset);
+
   return {
     id: asset.id,
-    // Превью берётся по id ассета: путь к файлу для показа не нужен, он
-    // понадобится только когда дойдёт до чтения байт.
-    url: assetPreviewUri(asset),
+    url: preview.url,
     posterUrl: null,
     mimeType: asset.kind === 'video' ? 'video/mp4' : 'image/jpeg',
-    width: asset.width,
-    height: asset.height,
+    width: preview.width,
+    height: preview.height,
     durationMs: asset.durationMs,
     waveform: null,
   };
@@ -138,11 +140,11 @@ export function toSendMedia(item: UploadedMedia): SendMessageMedia {
 /** Текст и файлы одного сообщения → сообщения по `MAX_ALBUM_SIZE` файлов, подпись у первого. */
 export function splitIntoAlbums(
   text: string,
-  media: MediaLibraryItem[],
-): { text: string; media: MediaLibraryItem[] }[] {
+  media: OutgoingMedia[],
+): { text: string; media: OutgoingMedia[] }[] {
   if (media.length <= MAX_ALBUM_SIZE) return [{ text, media }];
 
-  const parts: { text: string; media: MediaLibraryItem[] }[] = [];
+  const parts: { text: string; media: OutgoingMedia[] }[] = [];
 
   for (let start = 0; start < media.length; start += MAX_ALBUM_SIZE) {
     parts.push({
@@ -181,11 +183,7 @@ export async function uploadOutgoing(
   if (outgoing.type === 'voice') return uploadAllMedia([outgoing.voice], currentUserId);
   if (outgoing.media.length === 0) return [];
 
-  // Пути к файлам могли не успеть резолвиться к моменту выбора — добираем их
-  // здесь, там, где байты действительно нужны.
-  const resolved = await Promise.all(outgoing.media.map(resolveLibraryAsset));
-
-  return uploadAllMedia(resolved.map(libraryAssetToLocalMedia), currentUserId);
+  return uploadAllMedia(await Promise.all(outgoing.media.map(outgoingLocalMedia)), currentUserId);
 }
 
 /** Новый поп черновика — видео на устройстве, как его знает загрузка. */
@@ -466,7 +464,7 @@ function textDraft(
 export function sendPost(
   context: SendContext,
   text: string,
-  media: MediaLibraryItem[] = [],
+  media: OutgoingMedia[] = [],
   replies: LiveQuote[] = [],
 ) {
   const { queryClient, chatId, currentUserId } = context;

@@ -9,7 +9,7 @@ import type { LocalMedia } from '@/features/media/types';
  * (композеру чата) не нужно знать, что фото и видео сжимаются по-разному.
  */
 export async function prepareForUpload(media: LocalMedia): Promise<LocalMedia> {
-  if (media.kind === 'photo') return compressImage(media);
+  if (media.kind === 'photo') return media.prepared ? media : compressImage(media);
 
   const compressed = await compressVideo(media);
 

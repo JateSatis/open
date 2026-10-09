@@ -1,11 +1,16 @@
 import { Image } from 'expo-image';
-import { memo, useEffect, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import { Pressable, View } from 'react-native';
 
 import { styles } from './styles';
 
 import { Text } from '@/components/Text';
 import { formatDuration } from '@/features/media/lib/formatDuration';
+import {
+  openMediaPreview,
+  registerGridCell,
+  unregisterGridCell,
+} from '@/features/media/MediaPreview/previewStore';
 import { assetPreviewUri } from '@/features/media/lib/previewUri';
 import type { MediaLibraryItem } from '@/features/media/mediaLibrary';
 import { countMount, countRender, perfLog } from '@/features/media/perf';
@@ -34,8 +39,10 @@ export type MediaGridItemProps = {
 };
 
 /**
- * Нажатие на саму клетку пока ничего не делает — выбор и снятие выбора
- * идёт только через кружок в углу; превью и редактирование появятся позже.
+ * Нажатие на саму клетку раскрывает файл в предпросмотр (`MediaPreview`) —
+ * из этой самой плитки; выбор и снятие выбора — только кружок в углу.
+ * Предпросмотр открывается через стор и узнаёт место плитки из таблицы
+ * клеток: ни пропов, ни подписок клетке это не добавляет.
  *
  * Клетка подписана на своё состояние в выборе одним числом, а не получает
  * его пропом: так тап по кружку перерисовывает ровно одну клетку, а не всё
@@ -64,11 +71,22 @@ export const MediaGridItem = memo(function MediaGridItem({
 
   useEffect(() => countMount('MediaGridItem'), []);
 
+  // Клетку переиспользуют под другие файлы — запись в таблице меняется вместе с файлом.
+  const rootRef = useRef<View>(null);
+
+  useEffect(() => {
+    const view = rootRef.current;
+
+    registerGridCell(asset.id, view);
+
+    return () => unregisterGridCell(asset.id, view);
+  }, [asset.id]);
+
   const isSelected = slot > SLOT_FREE;
   const disabled = locked || slot === SLOT_BLOCKED;
 
   return (
-    <View style={{ width: size, height: size }}>
+    <View ref={rootRef} style={{ width: size, height: size }}>
       {failed ? (
         // Файл объективно не открывается (битый, не скачан из облака,
         // незнакомый кодек). Это не «ещё грузится», и выглядеть должно иначе.
@@ -123,28 +141,43 @@ export const MediaGridItem = memo(function MediaGridItem({
       {pick ? (
         <PickCover asset={asset} pick={pick} />
       ) : (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={isSelected ? 'Убрать из выбранного' : 'Выбрать файл'}
-          accessibilityState={{ selected: isSelected, disabled }}
-          disabled={disabled}
-          hitSlop={Spacing.two}
-          onPress={() => onToggle(asset)}
-          style={[
-            styles.circle,
-            {
-              borderColor: theme.textInverse,
-              backgroundColor: isSelected ? theme.primary : theme.mediaScrim,
-              opacity: disabled ? 0.4 : 1,
-            },
-          ]}
-        >
-          {isSelected ? (
-            <Text variant="caption" color="primaryText">
-              {slot}
-            </Text>
-          ) : null}
-        </Pressable>
+        <>
+          {locked ? null : (
+            <Pressable
+              testID="media-grid-open"
+              accessibilityRole="imagebutton"
+              accessibilityLabel={asset.kind === 'video' ? 'Открыть видео' : 'Открыть фото'}
+              onPress={() =>
+                rootRef.current?.measureInWindow((x, y, width, height) =>
+                  openMediaPreview(asset, width > 0 ? { x, y, width, height } : null),
+                )
+              }
+              style={styles.thumbnail}
+            />
+          )}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={isSelected ? 'Убрать из выбранного' : 'Выбрать файл'}
+            accessibilityState={{ selected: isSelected, disabled }}
+            disabled={disabled}
+            hitSlop={Spacing.two}
+            onPress={() => onToggle(asset)}
+            style={[
+              styles.circle,
+              {
+                borderColor: theme.textInverse,
+                backgroundColor: isSelected ? theme.primary : theme.mediaScrim,
+                opacity: disabled ? 0.4 : 1,
+              },
+            ]}
+          >
+            {isSelected ? (
+              <Text variant="caption" color="primaryText">
+                {slot}
+              </Text>
+            ) : null}
+          </Pressable>
+        </>
       )}
     </View>
   );

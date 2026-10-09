@@ -66,6 +66,11 @@ import { MessageComposer } from '@/features/chats/MessageComposer';
 import type { ComposerDraft } from '@/features/chats/useComposerDraft';
 import type { GridPick } from '@/features/media';
 import { prefetchGallery } from '@/features/media/galleryPrefetch';
+import {
+  handlePreviewBack,
+  MediaPreview,
+  resetMediaPreview,
+} from '@/features/media/MediaPreview';
 import { countRender, perfMark } from '@/features/media/perf';
 import { useHasSelection, useMediaSelection } from '@/features/media/selectionStore';
 import { useTheme } from '@/hooks/use-theme';
@@ -94,6 +99,8 @@ type SheetComposerProps = {
   editing?: boolean;
   /** Подсказка в поле шита — как у поля, которое его открыло. */
   placeholder?: string;
+  /** Имя чата — в шапке предпросмотра файлов. */
+  title?: string;
   onTyping: () => void;
   onSend: () => void;
 };
@@ -324,9 +331,14 @@ function SheetWindow({ phase, composer, pick, sections }: SheetWindowProps) {
     });
   }, [dismissY, hasComposer]);
 
-  /** «Назад» отвечает на вопрос, если он задан, и только иначе закрывает шит. */
+  /**
+   * «Назад» отвечает на вопрос, если он задан; открытый предпросмотр
+   * закрывается сам, шит под ним остаётся; и только иначе закрывается шит.
+   */
   const handleBack = useCallback(() => {
     if (dismissTopConfirmDialog()) return;
+
+    if (handlePreviewBack()) return;
 
     if (getMediaSheetPhase() === 'armed') {
       closeMediaSheet();
@@ -354,6 +366,9 @@ function SheetWindow({ phase, composer, pick, sections }: SheetWindowProps) {
   });
 
   const markScrollAttached = useCallback(() => setScrollAttached(true), []);
+
+  // Предпросмотр живёт в окне шита и уходит вместе с ним.
+  useEffect(() => resetMediaPreview, []);
 
   /**
    * Другой раздел — другой список: прежний скролл уходит, новый начинается с
@@ -509,6 +524,20 @@ function SheetWindow({ phase, composer, pick, sections }: SheetWindowProps) {
               <SheetTabs sections={sections} activeKey={active.key} onSelect={selectSection} />
             ) : null}
           </Animated.View>
+        ) : null}
+
+        {/* Предпросмотр файлов — в этом же окне, поверх сетки: второе
+            нативное окно на Android рождается заметное время. */}
+        {composer ? (
+          <MediaPreview
+            title={composer.title ?? ''}
+            text={composer.draft.text}
+            onChangeText={composer.draft.setText}
+            placeholder={composer.placeholder ?? 'Подпись'}
+            editing={composer.editing ?? false}
+            onSend={submit}
+            gridViewport={{ top: listTop + topBarHeight, bottom: screenHeight - footerHeight }}
+          />
         ) : null}
 
         {/* Вопрос про сброс выбора рисуется внутри уже открытого окна шита:

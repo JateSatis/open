@@ -13,8 +13,10 @@ import {
   releaseMediaSheetArm,
 } from '@/features/chats/MediaPickerSheet';
 import { MessageComposer } from '@/features/chats/MessageComposer';
+import { useChatTitle } from '@/features/chats/useChatTitle';
 import type { ComposerDraft } from '@/features/chats/useComposerDraft';
 import type { MessageEdit } from '@/features/chats/useMessageEdit';
+import { useCommentsPanelTarget } from '@/features/interactions/comments/commentsPanelStore';
 import type { LocalMedia } from '@/features/media';
 import { useTheme } from '@/hooks/use-theme';
 
@@ -51,6 +53,8 @@ export function CommentComposer({
   onSendVoice,
 }: CommentComposerProps) {
   const theme = useTheme();
+  // Шапка предпросмотра файлов — имя чата, к сообщению которого комментарий.
+  const title = useChatTitle(useCommentsPanelTarget()?.chatId);
 
   if (closed) {
     return (
@@ -99,6 +103,7 @@ export function CommentComposer({
         plate={isEditing ? plate : null}
         editing={isEditing}
         placeholder={placeholder}
+        title={title}
         onTyping={noop}
         onSend={onSend}
       />

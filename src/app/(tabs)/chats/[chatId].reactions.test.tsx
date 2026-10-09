@@ -91,6 +91,7 @@ jest.mock('expo-haptics', () => ({
   ImpactFeedbackStyle: { Medium: 'medium' },
 }));
 jest.mock('@/features/media', () => ({
+  ...jest.requireActual('@/test/outgoingMediaMock').outgoingMediaMock,
   ...jest.requireActual('@/features/media/selectionStore'),
   assetPreviewUri: (asset: { id: string }) => asset.id,
   MediaGrid: () => null,

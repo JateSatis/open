@@ -665,6 +665,8 @@ export function ChatConversation({
       }
     : null;
 
+  const title = channel ? channel.title : chat ? chatTitle(chat, currentUserId) : 'Чат';
+
   return (
     <View
       ref={containerRef}
@@ -672,7 +674,7 @@ export function ChatConversation({
       style={[styles.flex, { backgroundColor: theme.background }]}
     >
       <ChatScreenHeader
-        title={channel ? channel.title : chat ? chatTitle(chat, currentUserId) : 'Чат'}
+        title={title}
         avatar={channel ? { uri: channel.avatarUrl, name: channel.title } : undefined}
         subtitle={otherProfile?.status}
         onTitlePress={other ? () => openPerson(other.id) : undefined}
@@ -819,6 +821,7 @@ export function ChatConversation({
               : null
           }
           editing={isEditing}
+          title={title}
           onTyping={notifyTyping}
           onSend={submit}
           sections={sheetSections}

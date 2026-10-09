@@ -44,6 +44,7 @@ jest.mock('@/api/pins', () => ({
   listPinnedMessages: jest.fn(() => Promise.resolve([])),
 }));
 jest.mock('@/features/media', () => ({
+  ...jest.requireActual('@/test/outgoingMediaMock').outgoingMediaMock,
   assetPreviewUri: jest.fn((asset) => asset.id),
   libraryAssetToLocalMedia: jest.fn((asset) => ({
     kind: asset.kind,

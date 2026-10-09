@@ -28,9 +28,8 @@ import {
   subscribeToConnectionStatus,
 } from '@/features/connection/connectionStore';
 import {
-  libraryAssetToLocalMedia,
+  outgoingLocalMedia,
   removeUploadedMedia,
-  resolveLibraryAsset,
   storedPaths,
   uploadAllMedia,
   type UploadedMedia,
@@ -86,9 +85,7 @@ export async function uploadEditFiles(
   if (result.voice?.type === 'new') return uploadAllMedia([result.voice.voice], userId);
   if (result.added.length === 0) return [];
 
-  const resolved = await Promise.all(result.added.map(resolveLibraryAsset));
-
-  return uploadAllMedia(resolved.map(libraryAssetToLocalMedia), userId);
+  return uploadAllMedia(await Promise.all(result.added.map(outgoingLocalMedia)), userId);
 }
 
 /** Итог правки в том виде, в каком его принимает база: оставленное по id, новое — загруженным. */

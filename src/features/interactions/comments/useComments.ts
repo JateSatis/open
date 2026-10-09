@@ -45,7 +45,7 @@ import {
   nextReaction,
   withMyReaction,
 } from '@/features/interactions/reactionState';
-import type { LocalMedia, MediaLibraryItem } from '@/features/media';
+import type { LocalMedia, OutgoingMedia } from '@/features/media';
 import { useMyProfile } from '@/features/profile/queries';
 import { describeLoadError } from '@/lib/network';
 
@@ -73,7 +73,7 @@ export type CommentsState = {
   /** С `threadRootId` — ответ в этот тред, с цитатами или без; без него — наверх. */
   send: (
     text: string,
-    media?: MediaLibraryItem[],
+    media?: OutgoingMedia[],
     replies?: LiveQuote[],
     threadRootId?: string | null,
   ) => void;
@@ -361,7 +361,7 @@ export function useComments(
     send: useCallback(
       (
         text: string,
-        media: MediaLibraryItem[] = [],
+        media: OutgoingMedia[] = [],
         replies: LiveQuote[] = [],
         threadRootId: string | null = null,
       ) => sendCommentPost(context, text, media, replies, threadRootId),

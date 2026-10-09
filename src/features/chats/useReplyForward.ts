@@ -10,7 +10,7 @@ import { quoteOf } from '@/features/chats/messageQuote';
 import type { ChatMessage, ForwardItem, LiveQuote } from '@/features/chats/messages/types';
 import type { DraftPop } from '@/features/chats/composerDraftStore';
 import type { ComposerDraft } from '@/features/chats/useComposerDraft';
-import type { LocalMedia, MediaLibraryItem } from '@/features/media';
+import type { LocalMedia, OutgoingMedia } from '@/features/media';
 import { showNotice } from '@/features/notifications/alertsStore';
 import { focusWithKeyboard } from '@/lib/windowFocus';
 
@@ -23,7 +23,7 @@ type Options = {
   /** Облачко как оригинал для островка: с автором и чатом. Заглушка — `null`. */
   originalOf: (row: BubbleRow) => IslandOriginal | null;
   composerRef: RefObject<TextInput | null>;
-  send: (text: string, media?: MediaLibraryItem[], replies?: LiveQuote[]) => void;
+  send: (text: string, media?: OutgoingMedia[], replies?: LiveQuote[]) => void;
   sendVoice: (voice: LocalMedia, replies?: LiveQuote[]) => void;
   /** Пост с попом — только в чате постов канала. */
   sendPop?: (text: string, pop: DraftPop, replies?: LiveQuote[]) => void;
