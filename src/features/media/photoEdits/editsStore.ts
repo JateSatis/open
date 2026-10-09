@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 
-import { isEmptyEdit, type BakedPhoto, type PhotoEdit } from './types';
+import { clearEditedThumbs, setEditedThumb } from './editedThumbs';
+import { isEmptyEdit, normalizeEdit, type BakedPhoto, type PhotoEdit } from './types';
 
 type PhotoEditsState = {
   /** Правки по id файла галереи. Нет записи — фото не правилось. */
@@ -21,10 +22,15 @@ type PhotoEditsState = {
 export const usePhotoEdits = create<PhotoEditsState>(() => ({ edits: {}, baked: {} }));
 
 /**
- * Записать правку фото и её запекание. Пустая правка (все нули) — то же, что
- * её отсутствие: фото уходит оригиналом.
+ * Записать правку фото и её запекание. Пустая правка (все нули, обрезка
+ * исходная) — то же, что её отсутствие: фото уходит оригиналом. Картинка
+ * правки для плитки готовится отдельно (`setEditedThumb`); прежняя правке
+ * больше не соответствует и уходит сразу.
  */
-export function setPhotoEdit(id: string, edit: PhotoEdit, baked: BakedPhoto | null) {
+export function setPhotoEdit(id: string, input: PhotoEdit, baked: BakedPhoto | null) {
+  const edit = normalizeEdit(input);
+
+  setEditedThumb(id, null);
   usePhotoEdits.setState((state) => {
     const edits = { ...state.edits };
     const bakedById = { ...state.baked };
@@ -61,5 +67,6 @@ export function usePhotoEdit(id: string | null): PhotoEdit | undefined {
 export function clearPhotoEdits() {
   const { edits } = usePhotoEdits.getState();
 
+  clearEditedThumbs();
   if (Object.keys(edits).length > 0) usePhotoEdits.setState({ edits: {}, baked: {} });
 }

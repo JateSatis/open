@@ -136,6 +136,20 @@ export const styles = StyleSheet.create({
     paddingHorizontal: Spacing.three,
     height: Sizes.previewToolActions,
   },
+  rulerRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: Spacing.two,
+    paddingHorizontal: Spacing.two,
+  },
+  ruler: {
+    flex: 1,
+    height: Sizes.cropRulerHeight,
+    overflow: 'hidden',
+  },
+  rulerCanvas: {
+    flex: 1,
+  },
   toast: {
     position: 'absolute',
     alignSelf: 'center',

@@ -1,3 +1,5 @@
+import { isEmptyCrop, type PhotoCrop } from './crop';
+
 /**
  * Правка фото — данные, а не картинка: из них картинка собирается заново и
  * для показа, и для отправки.
@@ -7,11 +9,13 @@
  * первым, потому что он относится к снимку, а не к рамке; рисунок последним,
  * потому что кисть не должна перекрашиваться ползунками.
  *
- * Сейчас есть только цвет. Обрезка (этап 2) и слои рисунка (этапы 3–4) лягут
- * сюда же отдельными полями, а сборка — отдельными шагами `renderEdit`.
+ * Слои рисунка (этапы 3–4) лягут сюда же отдельными полями, а сборка —
+ * отдельными шагами `renderEdit`.
  */
 export type PhotoEdit = {
   adjust: ColorAdjust;
+  /** Обрезка и поворот; нет — фото целиком (см. `crop.ts`). */
+  crop?: PhotoCrop;
 };
 
 /**
@@ -57,7 +61,17 @@ export function isNeutralAdjust(adjust: ColorAdjust): boolean {
   return adjust.exposure === 0 && adjust.contrast === 0 && adjust.saturation === 0;
 }
 
+/** Обрезка есть и не исходная. */
+export function hasCrop(edit: PhotoEdit | undefined): boolean {
+  return edit?.crop !== undefined && !isEmptyCrop(edit.crop);
+}
+
 /** Пустая правка — правок нет. */
 export function isEmptyEdit(edit: PhotoEdit): boolean {
-  return isNeutralAdjust(edit.adjust);
+  return isNeutralAdjust(edit.adjust) && !hasCrop(edit);
+}
+
+/** Правка без пустых частей: нетронутая обрезка — её нет. */
+export function normalizeEdit(edit: PhotoEdit): PhotoEdit {
+  return edit.crop === undefined || hasCrop(edit) ? edit : { adjust: edit.adjust };
 }

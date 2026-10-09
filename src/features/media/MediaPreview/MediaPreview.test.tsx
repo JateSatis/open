@@ -9,18 +9,24 @@ import {
   useMediaPreview,
 } from './previewStore';
 
+import { workingCopyOf } from './workingCopy';
+
 import type { MediaLibraryItem } from '@/features/media/mediaLibrary';
+import { editedThumbOf } from '@/features/media/photoEdits/editedThumbs';
 import { photoEditOf, usePhotoEdits } from '@/features/media/photoEdits/editsStore';
 import { setSelectionLimit, useMediaSelection } from '@/features/media/selectionStore';
 
 // Skia, запекание и рабочая копия — нативные; здесь проверяется поведение слоя.
-jest.mock('./EditedPhoto', () => ({ EditedPhoto: () => null }));
+jest.mock('./EditedPhoto', () => ({ EditedPhoto: () => null, PHOTO_SAMPLING: {} }));
+jest.mock('./CropOverlay', () => ({ CropOverlay: () => null }));
+jest.mock('./AngleRuler', () => ({ AngleRuler: () => null }));
 jest.mock('./workingCopy', () => ({
   workingCopyOf: jest.fn(() => new Promise(() => undefined)),
-  workingImageOf: jest.fn(),
+  workingImageOf: jest.fn(() => ({ width: () => 400, height: () => 300 })),
 }));
 jest.mock('./bake', () => ({
-  bakePhoto: jest.fn(() => ({ file: jest.fn(), prepare: jest.fn() })),
+  bakePhoto: jest.fn(() => ({ file: jest.fn(), prepare: jest.fn(() => Promise.resolve()) })),
+  renderEditThumb: jest.fn(() => 'file:///thumb.jpg'),
 }));
 jest.mock('expo-video', () => ({
   useVideoPlayer: () => ({ play: jest.fn(), pause: jest.fn() }),
@@ -174,5 +180,88 @@ describe('предпросмотр файлов шита', () => {
     });
 
     await waitFor(() => expect(useMediaPreview.getState().target).toBeNull());
+  });
+});
+
+describe('обрезка и поворот', () => {
+  const COPY = {
+    uri: 'file:///copy.png',
+    width: 400,
+    height: 300,
+    source: 'file:///a.jpg',
+    sourceWidth: 4000,
+    sourceHeight: 3000,
+  };
+
+  beforeEach(() => {
+    jest.mocked(workingCopyOf).mockImplementation(() => Promise.resolve(COPY));
+  });
+
+  afterEach(() => {
+    jest.mocked(workingCopyOf).mockImplementation(() => new Promise(() => undefined));
+  });
+
+  async function openCrop() {
+    await renderPreview(GALLERY[0]);
+    const user = userEvent.setup();
+
+    await user.press(screen.getByLabelText('Обрезка и поворот'));
+    await screen.findByLabelText('Повернуть на 90°');
+
+    return user;
+  }
+
+  it('открывается панелью с отражением и поворотом, листать нельзя', async () => {
+    await openCrop();
+
+    expect(screen.getByLabelText('Отразить')).toBeTruthy();
+    expect(screen.getByTestId('media-preview-pager')).toHaveProp('scrollEnabled', false);
+  });
+
+  it('поворот на 90° → «Готово»: у фото обрезка, иконка подсвечена, фото выбрано', async () => {
+    const user = await openCrop();
+
+    await user.press(screen.getByLabelText('Повернуть на 90°'));
+    await user.press(screen.getByLabelText('Применить'));
+
+    const crop = photoEditOf('a')?.crop;
+
+    expect(crop?.quarter).toBe(1);
+    expect(screen.getByLabelText('Обрезка и поворот')).toBeSelected();
+    expect(screen.getByLabelText('Настройка цвета')).not.toBeSelected();
+    expect(useMediaSelection.getState().order).toEqual(['a']);
+    await waitFor(() => expect(editedThumbOf('a')).toBe('file:///thumb.jpg'));
+  });
+
+  it('крестик отменяет заход без вопроса, «назад» — то же самое', async () => {
+    const user = await openCrop();
+
+    await user.press(screen.getByLabelText('Повернуть на 90°'));
+    await user.press(screen.getByLabelText('Отменить'));
+
+    expect(photoEditOf('a')).toBeUndefined();
+    expect(useMediaSelection.getState().order).toEqual([]);
+
+    await user.press(screen.getByLabelText('Обрезка и поворот'));
+    await screen.findByLabelText('Повернуть на 90°');
+    await user.press(screen.getByLabelText('Отразить'));
+    await act(async () => {
+      expect(handlePreviewBack()).toBe(true);
+    });
+
+    expect(photoEditOf('a')).toBeUndefined();
+    expect(useMediaPreview.getState().target).not.toBeNull();
+  });
+
+  it('правка цвета у обрезанного фото обрезку не теряет', async () => {
+    const user = await openCrop();
+
+    await user.press(screen.getByLabelText('Повернуть на 90°'));
+    await user.press(screen.getByLabelText('Применить'));
+    await user.press(screen.getByLabelText('Настройка цвета'));
+    await user.press(screen.getByLabelText('Применить'));
+
+    expect(photoEditOf('a')?.crop?.quarter).toBe(1);
+    expect(screen.getByLabelText('Настройка цвета')).not.toBeSelected();
   });
 });

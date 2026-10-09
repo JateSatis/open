@@ -4,6 +4,7 @@ import { MediaGridItem } from '.';
 
 import { MediaLimits } from '@/features/media/constants';
 import type { MediaLibraryItem } from '@/features/media/mediaLibrary';
+import { clearEditedThumbs, setEditedThumb } from '@/features/media/photoEdits/editedThumbs';
 import { resetMediaPreview, useMediaPreview } from '@/features/media/MediaPreview/previewStore';
 import { useMediaSelection } from '@/features/media/selectionStore';
 
@@ -57,6 +58,21 @@ describe('MediaGridItem', () => {
     await render(<MediaGridItem asset={photo} size={100} onToggle={jest.fn()} />);
 
     expect(screen.getByLabelText('Выбрать файл')).toBeTruthy();
+  });
+
+  it('отредактированное фото показывает картинку правки и возвращается к оригиналу без неё', async () => {
+    await render(<MediaGridItem asset={photo} size={100} onToggle={jest.fn()} />);
+    const preview = () => screen.getByTestId('media-grid-preview');
+
+    expect(preview()).toHaveProp('source', [expect.objectContaining({ uri: photo.id })]);
+
+    await act(async () => setEditedThumb(photo.id, 'file:///edited.jpg'));
+    expect(preview()).toHaveProp('source', [
+      expect.objectContaining({ uri: 'file:///edited.jpg' }),
+    ]);
+
+    await act(async () => clearEditedThumbs());
+    expect(preview()).toHaveProp('source', [expect.objectContaining({ uri: photo.id })]);
   });
 
   it('reports the whole asset when the circle is tapped', async () => {

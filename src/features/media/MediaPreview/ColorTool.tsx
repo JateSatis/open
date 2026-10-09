@@ -1,9 +1,6 @@
-import { SymbolView } from 'expo-symbols';
 import { useState } from 'react';
-import { Pressable, View, type ViewStyle } from 'react-native';
+import type { ViewStyle } from 'react-native';
 import Animated, {
-  FadeIn,
-  FadeOut,
   runOnJS,
   useAnimatedReaction,
   type AnimatedStyle,
@@ -13,10 +10,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AdjustSlider } from './AdjustSlider';
 import type { LiveAdjust } from './EditedPhoto';
 import { styles } from './styles';
+import { ToolActions } from './ToolActions';
 
-import { Text } from '@/components/Text';
 import { useTheme } from '@/hooks/use-theme';
-import { Spacing } from '@/theme';
 
 export type ColorToolProps = {
   live: LiveAdjust;
@@ -72,52 +68,7 @@ export function ColorTool({
       <AdjustSlider testID="adjust-contrast" label="Контраст" value={live.contrast} />
       <AdjustSlider testID="adjust-saturation" label="Насыщенность" value={live.saturation} />
 
-      <View style={styles.toolActions}>
-        <Pressable
-          testID="media-preview-tool-cancel"
-          accessibilityRole="button"
-          accessibilityLabel="Отменить"
-          hitSlop={Spacing.two}
-          onPress={onCancel}
-          style={styles.tool}
-        >
-          <SymbolView
-            name={{ ios: 'xmark', android: 'close', web: 'close' }}
-            size={Spacing.four}
-            tintColor={theme.textOnMedia}
-          />
-        </Pressable>
-
-        {changed ? (
-          <Animated.View entering={FadeIn} exiting={FadeOut}>
-            <Pressable
-              testID="media-preview-tool-reset"
-              accessibilityRole="button"
-              hitSlop={Spacing.two}
-              onPress={onReset}
-            >
-              <Text variant="smallBold" color="textOnMedia">
-                Сбросить
-              </Text>
-            </Pressable>
-          </Animated.View>
-        ) : null}
-
-        <Pressable
-          testID="media-preview-tool-done"
-          accessibilityRole="button"
-          accessibilityLabel="Применить"
-          hitSlop={Spacing.two}
-          onPress={onDone}
-          style={styles.tool}
-        >
-          <SymbolView
-            name={{ ios: 'checkmark', android: 'check', web: 'check' }}
-            size={Spacing.four}
-            tintColor={theme.primary}
-          />
-        </Pressable>
-      </View>
+      <ToolActions changed={changed} onCancel={onCancel} onReset={onReset} onDone={onDone} />
     </Animated.View>
   );
 }
