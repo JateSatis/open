@@ -94,6 +94,15 @@ describe('предпросмотр файлов шита', () => {
     expect(useMediaSelection.getState().order).toEqual(['a']);
   });
 
+  it('у невыбранного файла кружок показывает, сколько выбрано всего', async () => {
+    useMediaSelection.getState().toggle(photo('a'));
+    useMediaSelection.getState().toggle(video);
+    await renderPreview(GALLERY[1]);
+
+    expect(screen.getByLabelText('Выбрать файл')).toBeTruthy();
+    expect(screen.getByTestId('media-preview-select-count')).toHaveTextContent('2');
+  });
+
   it('при добранном лимите не выбирает и коротко объясняет почему', async () => {
     setSelectionLimit(1);
     useMediaSelection.getState().toggle(photo('a'));

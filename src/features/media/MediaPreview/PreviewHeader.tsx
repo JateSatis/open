@@ -7,7 +7,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { styles } from './styles';
 
 import { Text } from '@/components/Text';
-import { SLOT_BLOCKED, SLOT_FREE, useSelectionSlot } from '@/features/media/selectionStore';
+import {
+  SLOT_BLOCKED,
+  SLOT_FREE,
+  useSelectionCount,
+  useSelectionSlot,
+} from '@/features/media/selectionStore';
 import { useTheme } from '@/hooks/use-theme';
 import { Opacity, Spacing } from '@/theme';
 
@@ -22,9 +27,10 @@ export type PreviewHeaderProps = {
 };
 
 /**
- * Шапка предпросмотра: «назад», имя чата и кружок выбора текущего файла с
- * его номером в отправке. Номер берётся из того же стора, что у клеток
- * сетки, — и пересчитывается вместе с ними.
+ * Шапка предпросмотра: «назад», имя чата и кружок выбора текущего файла.
+ * Выбранный файл — номер в отправке на акцентной заливке; невыбранный —
+ * пустой кружок со счётчиком всего выбранного, чтобы при листании было
+ * видно, сколько уже уходит. Числа — из того же стора, что у клеток сетки.
  */
 export function PreviewHeader({
   title,
@@ -37,7 +43,9 @@ export function PreviewHeader({
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const slot = useSelectionSlot(assetId);
+  const count = useSelectionCount();
   const isSelected = slot > SLOT_FREE;
+  const label = isSelected ? slot : count > 0 ? count : null;
 
   return (
     <Animated.View
@@ -74,6 +82,7 @@ export function PreviewHeader({
           testID="media-preview-select"
           accessibilityRole="button"
           accessibilityLabel={isSelected ? 'Убрать из выбранного' : 'Выбрать файл'}
+          accessibilityHint={count > 0 ? `Выбрано файлов: ${count}` : undefined}
           accessibilityState={{ selected: isSelected }}
           hitSlop={Spacing.two}
           onPress={onToggle}
@@ -86,9 +95,13 @@ export function PreviewHeader({
             },
           ]}
         >
-          {isSelected ? (
-            <Text variant="smallBold" color="primaryText">
-              {slot}
+          {label !== null ? (
+            <Text
+              testID="media-preview-select-count"
+              variant="smallBold"
+              color={isSelected ? 'primaryText' : 'textOnMedia'}
+            >
+              {label}
             </Text>
           ) : null}
         </Pressable>
