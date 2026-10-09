@@ -18,8 +18,10 @@ export type PreviewPagerProps = {
   height: number;
   cellSize: number;
   motion: PreviewMotion;
-  /** Ползунки открытого инструмента: листать при нём нельзя. */
+  /** Ползунки открытого инструмента цвета — у активной страницы. */
   live: LiveAdjust | null;
+  /** Открыт инструмент: листать нельзя. */
+  locked: boolean;
   leaving: boolean;
   onShown: () => void;
   /** Пролистали к другому файлу. */
@@ -40,6 +42,7 @@ export function PreviewPager({
   cellSize,
   motion,
   live,
+  locked,
   leaving,
   onShown,
   onPage,
@@ -103,7 +106,7 @@ export function PreviewPager({
       extraData={leaving}
       horizontal
       pagingEnabled
-      scrollEnabled={live === null}
+      scrollEnabled={!locked}
       showsHorizontalScrollIndicator={false}
       initialScrollIndex={index}
       getItemLayout={getItemLayout}

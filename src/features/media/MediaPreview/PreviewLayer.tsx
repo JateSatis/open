@@ -8,6 +8,8 @@ import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanima
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ColorTool } from './ColorTool';
+import { CropOverlay } from './CropOverlay';
+import { CropPanel } from './CropPanel';
 import { PreviewFooter } from './PreviewFooter';
 import { PreviewHeader } from './PreviewHeader';
 import type { PreviewMotion } from './PreviewPage';
@@ -16,6 +18,7 @@ import { setPreviewBackHandler, useMediaPreview, type Rect } from './previewStor
 import { PreviewToast, usePreviewToast } from './PreviewToast';
 import { styles } from './styles';
 import { useColorTool } from './useColorTool';
+import { useCropTool } from './useCropTool';
 import { usePreviewFlight } from './usePreviewFlight';
 
 import { useOwnKeyboardHeight } from '@/features/chats/composerKeyboard';
@@ -72,8 +75,10 @@ export function PreviewLayer({
   const current: MediaLibraryItem | undefined = gallery[index];
   const [footerHeight, setFooterHeight] = useState(0);
   const [toolHeight, setToolHeight] = useState(0);
+  const [cropPanelHeight, setCropPanelHeight] = useState(0);
 
   const tool = useColorTool();
+  const crop = useCropTool();
   const toast = usePreviewToast();
   const keyboardHeight = useOwnKeyboardHeight('sheet');
   const { flight, origin, fade, leaving, launch, leave, dissolve } = usePreviewFlight(
@@ -83,8 +88,8 @@ export function PreviewLayer({
   const toolArea = useSharedValue<Rect>({ x: 0, y: 0, width: size.width, height: size.height });
 
   const motion = useMemo<PreviewMotion>(
-    () => ({ flight, origin, tool: tool.progress, toolArea, fade }),
-    [fade, flight, origin, tool.progress, toolArea],
+    () => ({ flight, origin, tool: tool.progress, toolArea, fade, cropCover: crop.cover }),
+    [crop.cover, fade, flight, origin, tool.progress, toolArea],
   );
 
   // Рабочая область фото под панелью инструмента: фото не залезает под неё.
@@ -97,6 +102,22 @@ export function PreviewLayer({
     };
   }, [insets.top, size, toolArea, toolHeight]);
 
+  // Рабочее поле рамки обрезки: с запасом под уголки, над панелью.
+  const cropArea = crop.motion.area;
+  const cropScreen = crop.motion.screen;
+
+  useEffect(() => {
+    const inset = Spacing.four;
+
+    cropArea.value = {
+      x: inset,
+      y: insets.top + inset,
+      width: size.width - inset * 2,
+      height: size.height - cropPanelHeight - insets.top - inset * 2,
+    };
+    cropScreen.value = { x: 0, y: 0, width: size.width, height: size.height };
+  }, [cropArea, cropPanelHeight, cropScreen, insets.top, size]);
+
   const currentAssetId = current?.id;
   const goBack = useCallback(() => {
     if (currentAssetId) leave(currentAssetId);
@@ -105,12 +126,16 @@ export function PreviewLayer({
   // «Назад» системы: открытый инструмент закрывается как «Отмена», иначе — предпросмотр.
   const toolOpen = tool.open;
   const cancelTool = tool.cancel;
+  const cropOpen = crop.open;
+  const cancelCrop = crop.cancel;
 
   useEffect(() => {
-    setPreviewBackHandler(toolOpen ? cancelTool : goBack);
+    const back = cropOpen ? cancelCrop : toolOpen ? cancelTool : goBack;
+
+    setPreviewBackHandler(back);
 
     return () => setPreviewBackHandler(null);
-  }, [cancelTool, goBack, toolOpen]);
+  }, [cancelCrop, cancelTool, cropOpen, goBack, toolOpen]);
 
   const toggleCurrent = useCallback(() => {
     if (!current) return;
@@ -169,17 +194,23 @@ export function PreviewLayer({
   const backgroundStyle = useAnimatedStyle(() => ({
     opacity: flight.value * fade.value,
   }));
+  const cropEnter = crop.motion.enter;
   const chromeStyle = useAnimatedStyle(() => ({
-    opacity: flight.value * fade.value * (1 - tool.progress.value),
+    opacity: flight.value * fade.value * (1 - Math.max(tool.progress.value, cropEnter.value)),
   }));
   const footerStyle = useAnimatedStyle(() => ({
-    opacity: flight.value * fade.value * (1 - tool.progress.value),
+    opacity: flight.value * fade.value * (1 - Math.max(tool.progress.value, cropEnter.value)),
     transform: [{ translateY: -Math.max(keyboardHeight.value - insets.bottom, 0) }],
   }));
   const toolStyle = useAnimatedStyle(() => ({
     opacity: tool.progress.value,
     transform: [{ translateY: (1 - tool.progress.value) * Spacing.five }],
   }));
+  const cropPanelStyle = useAnimatedStyle(() => ({
+    opacity: cropEnter.value,
+    transform: [{ translateY: (1 - cropEnter.value) * Spacing.five }],
+  }));
+  const anyTool = tool.open || crop.open;
 
   if (!current) return null;
 
@@ -215,6 +246,7 @@ export function PreviewLayer({
             cellSize={cellSize}
             motion={motion}
             live={tool.open ? tool.live : null}
+            locked={anyTool}
             leaving={leaving}
             onShown={launch}
             onPage={onPage}
@@ -222,11 +254,21 @@ export function PreviewLayer({
         </View>
       </GestureDetector>
 
+      {crop.session ? (
+        <CropOverlay
+          session={crop.session}
+          motion={crop.motion}
+          rotationBase={crop.rotationBase}
+          active={crop.open}
+          onReady={crop.ready}
+        />
+      ) : null}
+
       <PreviewHeader
         title={title}
         assetId={current.id}
         style={chromeStyle}
-        hidden={tool.open}
+        hidden={anyTool}
         onBack={goBack}
         onToggle={toggleCurrent}
       />
@@ -239,9 +281,10 @@ export function PreviewLayer({
         placeholder={placeholder}
         editing={editing}
         style={footerStyle}
-        hidden={tool.open}
+        hidden={anyTool}
         onSend={send}
         onOpenColor={() => tool.start(current)}
+        onOpenCrop={() => crop.start(current)}
         onLayout={setFooterHeight}
       />
 
@@ -254,6 +297,21 @@ export function PreviewLayer({
           onCancel={tool.cancel}
           onDone={tool.done}
           onLayout={setToolHeight}
+        />
+      ) : null}
+
+      {isPhoto ? (
+        <CropPanel
+          motion={crop.motion}
+          rotationBase={crop.rotationBase}
+          style={cropPanelStyle}
+          active={crop.open}
+          onMirror={crop.mirror}
+          onRotate={crop.rotate}
+          onReset={crop.reset}
+          onCancel={crop.cancel}
+          onDone={crop.done}
+          onLayout={setCropPanelHeight}
         />
       ) : null}
 
