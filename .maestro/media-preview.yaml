@@ -32,6 +32,27 @@ env:
 - tapOn:
     id: "media-preview-tool-cancel"
 - assertNotVisible: "Экспозиция"
+# Обрезка: поворот на 90° → «Готово» — иконка обрезки подсвечена, фото выбрано.
+- tapOn:
+    id: "media-preview-tool-crop"
+- assertVisible:
+    id: "crop-rotate"
+- tapOn:
+    id: "crop-rotate"
+- assertVisible:
+    id: "media-preview-tool-reset"
+- tapOn:
+    id: "media-preview-tool-done"
+- assertNotVisible:
+    id: "crop-rotate"
+- assertVisible:
+    id: "media-preview-tool-crop"
+    selected: true
+- assertVisible: "Убрать из выбранного"
+# Выбор снимается — правки остаются до сброса выбора; на выходе из чата
+# сбросятся вместе с ним.
+- tapOn:
+    id: "media-preview-select"
 # «Назад» возвращает в шит, а не закрывает его.
 - tapOn:
     id: "media-preview-back"
