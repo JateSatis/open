@@ -44,7 +44,7 @@ import { pinsQueryKey } from '@/features/chats/usePinnedMessages';
 import { useConnectionStatus } from '@/features/connection/useConnectionStatus';
 import { usePendingReactionMap } from '@/features/interactions/pendingReactions';
 import { withMyReaction } from '@/features/interactions/reactionState';
-import type { LocalMedia, MediaLibraryItem } from '@/features/media';
+import type { LocalMedia, OutgoingMedia } from '@/features/media';
 
 export type {
   ChatMessage,
@@ -70,7 +70,7 @@ export type ChatMessagesState = {
   /** Догружает историю назад до сообщения с этим временем. Отвечает, дошли ли. */
   loadUntil: (createdAt: string) => Promise<boolean>;
   /** Текст с альбомом; с цитатами — это ответ. */
-  send: (text: string, media?: MediaLibraryItem[], replies?: LiveQuote[]) => void;
+  send: (text: string, media?: OutgoingMedia[], replies?: LiveQuote[]) => void;
   sendVoice: (voice: LocalMedia, replies?: LiveQuote[]) => void;
   /** Пост канала `channelId` с попом и необязательным текстом. */
   sendPop: (channelId: string, text: string, pop: DraftPop, replies?: LiveQuote[]) => void;
@@ -194,7 +194,7 @@ export function useChatMessages(chatId: string, currentUserId: string | null): C
   }, [chatId, connection, currentUserId, queryClient]);
 
   const send = useCallback(
-    (text: string, media: MediaLibraryItem[] = [], replies: LiveQuote[] = []) =>
+    (text: string, media: OutgoingMedia[] = [], replies: LiveQuote[] = []) =>
       sendPost(context, text, media, replies),
     [context],
   );

@@ -9,7 +9,7 @@ import {
   type ComposerMode,
   type DraftPop,
 } from '@/features/chats/composerDraftStore';
-import { selectedAssets, useMediaSelection, type MediaLibraryItem } from '@/features/media';
+import { selectedAssets, useMediaSelection, type OutgoingMedia } from '@/features/media';
 
 export type ComposerDraft = {
   text: string;
@@ -26,7 +26,7 @@ export type ComposerDraft = {
    * перерисовывал бы переписку целиком. Кому нужно число выбранного для
    * отрисовки — подписывается на стор сам (`useSelectionCount`).
    */
-  media: () => MediaLibraryItem[];
+  media: () => OutgoingMedia[];
   /** Всё отправлено: текст, плашка и файлы уходят. */
   clear: () => void;
   /** Сбрасывает только выбор файлов — текст черновика при отмене выбора не теряется. */

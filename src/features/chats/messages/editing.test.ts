@@ -22,6 +22,7 @@ jest.mock('@/api/reactions', () => ({
 jest.mock('@/api/chats', () => ({ editMessage: jest.fn() }));
 jest.mock('@/api/pins', () => ({}));
 jest.mock('@/features/media', () => ({
+  ...jest.requireActual('@/test/outgoingMediaMock').outgoingMediaMock,
   assetPreviewUri: (asset: { id: string }) => `preview:${asset.id}`,
   libraryAssetToLocalMedia: jest.fn((asset) => ({
     kind: 'photo',

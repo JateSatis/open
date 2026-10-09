@@ -77,6 +77,12 @@ export { useGalleryAssets, type GalleryAssets, type GalleryStatus } from './useG
 export { prepareForUpload } from './lib/prepareForUpload';
 export { SLOT_BLOCKED, SLOT_FREE } from './selectionStore';
 export { uploadAllMedia } from './uploadAll';
+export {
+  outgoingLocalMedia,
+  outgoingPreview,
+  type OutgoingMedia,
+  type OutgoingPreview,
+} from './photoEdits/outgoing';
 
 export { MediaLimits } from './constants';
 export { formatDuration } from './lib/formatDuration';

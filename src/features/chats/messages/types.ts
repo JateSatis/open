@@ -6,7 +6,7 @@ import type {
   QuotedMessage,
 } from '@/api/chats';
 import type { DraftPop } from '@/features/chats/composerDraftStore';
-import type { LocalMedia, MediaLibraryItem } from '@/features/media';
+import type { LocalMedia, OutgoingMedia } from '@/features/media';
 
 export type DeliveryStatus = 'sending' | 'sent' | 'failed';
 
@@ -15,7 +15,7 @@ export type ChatMessage = Message & {
   /** Set only while the message exists optimistically, before the server id. */
   localId?: string;
   /** Исходный выбор из галереи — нужен только для повтора неудачной отправки. */
-  pendingMedia?: MediaLibraryItem[];
+  pendingMedia?: OutgoingMedia[];
   /** Записанное голосовое до ответа сервера — для повтора неудачной отправки. */
   pendingVoice?: LocalMedia;
   /**
@@ -46,7 +46,7 @@ export type EditResult = {
   /** Оставленные фото и видео — по порядку. */
   kept: MessageAttachment[];
   /** Добавленные из шита медиа — в конец альбома. */
-  added: MediaLibraryItem[];
+  added: OutgoingMedia[];
   voice: EditVoice | null;
 };
 
@@ -61,7 +61,7 @@ export type ForwardItem = { original: IslandOriginal };
 
 /** Что уходит на сервер одной отправкой: текст с альбомом, голосовое или пересылка. */
 export type Outgoing =
-  | { type: 'post'; text: string; media: MediaLibraryItem[]; replyTo: string[] }
+  | { type: 'post'; text: string; media: OutgoingMedia[]; replyTo: string[] }
   | { type: 'voice'; voice: LocalMedia; replyTo: string[] }
   /** Пост канала с попом; новый поп публикуется той же транзакцией. */
   | { type: 'pop_post'; text: string; replyTo: string[]; channelId: string; pop: DraftPop }

@@ -2,6 +2,8 @@ import { create } from 'zustand';
 
 import { MediaLimits } from './constants';
 import type { MediaLibraryItem } from './mediaLibrary';
+import { bakedPhotoOf, clearPhotoEdits } from './photoEdits/editsStore';
+import type { OutgoingMedia } from './photoEdits/outgoing';
 
 type SelectionState = {
   /** Порядок выбора — он же нумерация кружков. */
@@ -50,7 +52,12 @@ export const useMediaSelection = create<SelectionState>((set) => ({
       };
     }),
 
-  clear: () => set({ order: [], items: {} }),
+  // Правки фото живут, пока жив выбор: отправка, сброс и уход из чата чистят
+  // их вместе с ним.
+  clear: () => {
+    clearPhotoEdits();
+    set({ order: [], items: {} });
+  },
 }));
 
 /** Клетка не выбрана, но выбрать её можно. */
@@ -96,9 +103,19 @@ export function useHasSelection(): boolean {
   return useMediaSelection((state) => state.order.length > 0);
 }
 
-/** Выбранное в порядке выбора. Для отправки, а не для отрисовки. */
-export function selectedAssets(): MediaLibraryItem[] {
+/**
+ * Выбранное в порядке выбора, с запечёнными правками. Для отправки, а не для
+ * отрисовки.
+ */
+export function selectedAssets(): OutgoingMedia[] {
   const { order, items } = useMediaSelection.getState();
 
-  return order.map((id) => items[id]).filter((item) => item !== undefined);
+  return order
+    .map((id) => items[id])
+    .filter((item) => item !== undefined)
+    .map((item) => {
+      const edited = bakedPhotoOf(item.id);
+
+      return edited ? { ...item, edited } : item;
+    });
 }
