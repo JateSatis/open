@@ -1,21 +1,22 @@
 import { isEmptyCrop, type PhotoCrop } from './crop';
+import { normalizeDrawing, type PhotoDrawing } from './drawing';
 
 /**
  * Правка фото — данные, а не картинка: из них картинка собирается заново и
  * для показа, и для отправки.
  *
  * Порядок сборки зафиксирован и не зависит от того, в каком порядке человек
- * трогал инструменты: цвет → обрезка и поворот → рисунок и наложения. Цвет
- * первым, потому что он относится к снимку, а не к рамке; рисунок последним,
- * потому что кисть не должна перекрашиваться ползунками.
- *
- * Слои рисунка (этапы 3–4) лягут сюда же отдельными полями, а сборка —
- * отдельными шагами `renderEdit`.
+ * трогал инструменты: цвет и размытие → обрезка и поворот → линии рисунка.
+ * Цвет первым, потому что он относится к снимку, а не к рамке; размытие —
+ * вместе с ним, потому что замазывает сам снимок; линии последними, потому
+ * что кисть не должна перекрашиваться ползунками.
  */
 export type PhotoEdit = {
   adjust: ColorAdjust;
   /** Обрезка и поворот; нет — фото целиком (см. `crop.ts`). */
   crop?: PhotoCrop;
+  /** Рисунок; нет — не рисовали (см. `drawing.ts`). */
+  drawing?: PhotoDrawing;
 };
 
 /**
@@ -66,12 +67,25 @@ export function hasCrop(edit: PhotoEdit | undefined): boolean {
   return edit?.crop !== undefined && !isEmptyCrop(edit.crop);
 }
 
-/** Пустая правка — правок нет. */
-export function isEmptyEdit(edit: PhotoEdit): boolean {
-  return isNeutralAdjust(edit.adjust) && !hasCrop(edit);
+/** На фото что-то нарисовано. */
+export function hasDrawing(edit: PhotoEdit | undefined): boolean {
+  return edit?.drawing !== undefined && edit.drawing.length > 0;
 }
 
-/** Правка без пустых частей: нетронутая обрезка — её нет. */
+/** Пустая правка — правок нет. */
+export function isEmptyEdit(edit: PhotoEdit): boolean {
+  return isNeutralAdjust(edit.adjust) && !hasCrop(edit) && !hasDrawing(edit);
+}
+
+/** Правка без пустых частей: нетронутая обрезка и пустой рисунок — их нет. */
 export function normalizeEdit(edit: PhotoEdit): PhotoEdit {
-  return edit.crop === undefined || hasCrop(edit) ? edit : { adjust: edit.adjust };
+  const normalized = edit.drawing && normalizeDrawing(edit.drawing);
+  const drawing = normalized && normalized.length > 0 ? normalized : undefined;
+  const crop = hasCrop(edit) ? edit.crop : undefined;
+
+  // Уже без пустых частей — та же правка: по ссылке на неё сверяется, не
+  // поменяли ли её, пока она запекалась.
+  if (crop === edit.crop && drawing === edit.drawing) return edit;
+
+  return { adjust: edit.adjust, ...(crop ? { crop } : null), ...(drawing ? { drawing } : null) };
 }

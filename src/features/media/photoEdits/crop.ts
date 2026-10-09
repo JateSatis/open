@@ -232,6 +232,21 @@ export function applyAffine(m: Affine, x: number, y: number): { x: number; y: nu
   return { x: m.a * x + m.c * y + m.tx, y: m.b * x + m.d * y + m.ty };
 }
 
+/** Обратное преобразование; вырожденное — тождественное. */
+export function invertAffine(m: Affine): Affine {
+  'worklet';
+  const det = m.a * m.d - m.b * m.c;
+
+  if (det === 0) return { a: 1, b: 0, c: 0, d: 1, tx: 0, ty: 0 };
+
+  const a = m.d / det;
+  const b = -m.b / det;
+  const c = -m.c / det;
+  const d = m.a / det;
+
+  return { a, b, c, d, tx: -(a * m.tx + c * m.ty), ty: -(b * m.tx + d * m.ty) };
+}
+
 /** Матрица 3×3 по строкам — так её принимает Skia. */
 export function affineToMatrix(m: Affine): number[] {
   'worklet';
