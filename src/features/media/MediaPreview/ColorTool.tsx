@@ -5,6 +5,8 @@ import { SymbolView } from 'expo-symbols';
 import { useState } from 'react';
 import { Pressable, View, type ViewStyle } from 'react-native';
 import Animated, {
+  FadeIn,
+  FadeOut,
   runOnJS,
   useAnimatedReaction,
   withTiming,
@@ -88,16 +90,18 @@ export function ColorTool({ live, style, active, onCancel, onDone, onLayout }: C
         </Pressable>
 
         {changed ? (
-          <Pressable
-            testID="media-preview-tool-reset"
-            accessibilityRole="button"
-            hitSlop={Spacing.two}
-            onPress={reset}
-          >
-            <Text variant="smallBold" color="textOnMedia">
-              Сбросить
-            </Text>
-          </Pressable>
+          <Animated.View entering={FadeIn} exiting={FadeOut}>
+            <Pressable
+              testID="media-preview-tool-reset"
+              accessibilityRole="button"
+              hitSlop={Spacing.two}
+              onPress={reset}
+            >
+              <Text variant="smallBold" color="textOnMedia">
+                Сбросить
+              </Text>
+            </Pressable>
+          </Animated.View>
         ) : null}
 
         <Pressable

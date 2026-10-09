@@ -7,6 +7,7 @@ import { View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   runOnJS,
+  useAnimatedReaction,
   useAnimatedStyle,
   useSharedValue,
   type SharedValue,
@@ -48,6 +49,15 @@ export function AdjustSlider({ testID, label, value }: AdjustSliderProps) {
   const width = useSharedValue(0);
   const start = useSharedValue(0);
   const [shown, setShown] = useState<number | null>(null);
+  // Значение для чтения с экрана — то, что видно на отпущенном ползунке.
+  const [settled, setSettled] = useState(() => Math.round(value.value));
+
+  useAnimatedReaction(
+    () => Math.round(value.value),
+    (now, before) => {
+      if (now !== before) runOnJS(setSettled)(now);
+    },
+  );
 
   const pan = Gesture.Pan()
     .minDistance(0)
@@ -108,6 +118,7 @@ export function AdjustSlider({ testID, label, value }: AdjustSliderProps) {
           testID={testID}
           accessibilityRole="adjustable"
           accessibilityLabel={label}
+          accessibilityValue={{ min: ADJUST_MIN, max: ADJUST_MAX, now: settled }}
           style={styles.sliderTrack}
           onLayout={(event) => {
             width.value = event.nativeEvent.layout.width;

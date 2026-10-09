@@ -106,8 +106,8 @@ export function PreviewLayer({
   const fade = useSharedValue(1);
 
   const motion = useMemo<PreviewMotion>(
-    () => ({ flight, origin, tool: tool.progress, toolArea }),
-    [flight, origin, tool.progress, toolArea],
+    () => ({ flight, origin, tool: tool.progress, toolArea, fade }),
+    [fade, flight, origin, tool.progress, toolArea],
   );
 
   // Рабочая область фото под панелью инструмента: фото не залезает под неё.
@@ -221,12 +221,13 @@ export function PreviewLayer({
   const backgroundStyle = useAnimatedStyle(() => ({
     opacity: flight.value * fade.value,
   }));
-  const layerStyle = useAnimatedStyle(() => ({ opacity: fade.value }));
+  // Гаснут части слоя, а не слой целиком: прозрачность всего слоя Android
+  // рисует через отдельный буфер, и с видео внутри шит под ним пропадал.
   const chromeStyle = useAnimatedStyle(() => ({
-    opacity: flight.value * (1 - tool.progress.value),
+    opacity: flight.value * fade.value * (1 - tool.progress.value),
   }));
   const footerStyle = useAnimatedStyle(() => ({
-    opacity: flight.value * (1 - tool.progress.value),
+    opacity: flight.value * fade.value * (1 - tool.progress.value),
     transform: [{ translateY: -Math.max(keyboardHeight.value - insets.bottom, 0) }],
   }));
   const toolStyle = useAnimatedStyle(() => ({
@@ -245,9 +246,10 @@ export function PreviewLayer({
         motion={motion}
         live={at === index && tool.open ? tool.live : null}
         onShown={launch}
+        leaving={leaving}
       />
     ),
-    [cellSize, index, launch, motion, size.height, size.width, tool.live, tool.open],
+    [cellSize, index, launch, leaving, motion, size.height, size.width, tool.live, tool.open],
   );
 
   const getItemLayout = useCallback(
@@ -279,7 +281,7 @@ export function PreviewLayer({
   return (
     <Animated.View
       testID="media-preview"
-      style={[styles.layer, layerStyle]}
+      style={styles.layer}
       pointerEvents={leaving ? 'none' : 'auto'}
       onLayout={(event) => {
         const { width, height } = event.nativeEvent.layout;
@@ -303,7 +305,7 @@ export function PreviewLayer({
             data={gallery}
             keyExtractor={(item) => item.id}
             renderItem={renderItem}
-            extraData={index}
+            extraData={leaving ? -1 - index : index}
             horizontal
             pagingEnabled
             scrollEnabled={!tool.open}

@@ -29,6 +29,8 @@ export type PreviewMotion = {
   tool: SharedValue<number>;
   /** Рабочая область фото, пока открыт инструмент. */
   toolArea: SharedValue<Rect>;
+  /** Предпросмотр гаснет на месте (плитки не видно или отправка): 1 — виден. */
+  fade: SharedValue<number>;
 };
 
 export type PreviewPageProps = {
@@ -43,6 +45,12 @@ export type PreviewPageProps = {
   live: LiveAdjust | null;
   /** Превью активной страницы на экране — можно начинать перелёт. */
   onShown?: () => void;
+  /**
+   * Предпросмотр уходит. Видео на это время уступает место своему кадру:
+   * поверхность видео пробивает окно насквозь, и сквозь гаснущий слой был
+   * бы виден чат, а не шит.
+   */
+  leaving?: boolean;
 };
 
 function aspectOf(asset: MediaLibraryItem): number {
@@ -66,6 +74,7 @@ export const PreviewPage = memo(function PreviewPage({
   motion,
   live,
   onShown,
+  leaving = false,
 }: PreviewPageProps) {
   const [aspect, setAspect] = useState(() => aspectOf(asset));
   const [thumbShown, setThumbShown] = useState(false);
@@ -92,6 +101,7 @@ export const PreviewPage = memo(function PreviewPage({
     );
 
     return {
+      opacity: isActive ? motion.fade.value : 1,
       transform: [
         { translateX: frame.translateX },
         { translateY: frame.translateY },
@@ -113,11 +123,21 @@ export const PreviewPage = memo(function PreviewPage({
     return { transform: [{ scaleX: image.scaleX }, { scaleY: image.scaleY }] };
   });
 
-  const thumbScale = Math.max(base.width, base.height) / cellSize;
+  // Превью стороной в клетку сетки — той же, что в памяти, — растянутое до рамки.
+  const thumbBox = {
+    width: cellSize,
+    height: cellSize,
+    left: (base.width - cellSize) / 2,
+    top: (base.height - cellSize) / 2,
+    transform: [{ scale: Math.max(base.width, base.height) / cellSize }],
+  };
 
   return (
     <View testID="media-preview-page" style={{ width, height }}>
+      {/* Гаснущая рамка с обрезкой краёв без отдельного буфера на Android
+          вырезала окно шита насквозь — сквозь неё был виден чат. */}
       <Animated.View
+        needsOffscreenAlphaCompositing
         style={[
           styles.frame,
           { left: base.x, top: base.y, width: base.width, height: base.height },
@@ -125,18 +145,7 @@ export const PreviewPage = memo(function PreviewPage({
         ]}
       >
         <Animated.View style={[StyleSheet.absoluteFill, imageStyle]}>
-          <View
-            style={[
-              styles.thumb,
-              {
-                width: cellSize,
-                height: cellSize,
-                left: (base.width - cellSize) / 2,
-                top: (base.height - cellSize) / 2,
-                transform: [{ scale: thumbScale }],
-              },
-            ]}
-          >
+          <View style={[styles.thumb, thumbBox]}>
             <Image
               source={{ uri: assetPreviewUri(asset) }}
               style={StyleSheet.absoluteFill}
@@ -173,8 +182,23 @@ export const PreviewPage = memo(function PreviewPage({
               accessibilityIgnoresInvertColors
             />
           ) : (
-            <PreviewVideo asset={asset} isActive={isActive} />
+            <PreviewVideo asset={asset} isActive={isActive} hidden={leaving} />
           )}
+
+          {/* Уходящее видео закрыто своим кадром в тот же кадр, в который
+              видео убирается: его поверхность ещё кадр держит дыру в окне. */}
+          {leaving && !isPhoto ? (
+            <View style={[styles.thumb, thumbBox]}>
+              <Image
+                source={{ uri: assetPreviewUri(asset) }}
+                style={StyleSheet.absoluteFill}
+                contentFit="contain"
+                cachePolicy="memory"
+                recyclingKey={asset.id}
+                accessibilityIgnoresInvertColors
+              />
+            </View>
+          ) : null}
 
           {skia ? (
             <EditedPhoto

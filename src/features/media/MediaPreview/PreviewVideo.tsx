@@ -7,6 +7,8 @@ import { resolveAssetUri, type MediaLibraryItem } from '@/features/media/mediaLi
 export type PreviewVideoProps = {
   asset: MediaLibraryItem;
   isActive: boolean;
+  /** Не рисовать видео — виден кадр под ним. */
+  hidden?: boolean;
 };
 
 /**
@@ -14,7 +16,7 @@ export type PreviewVideoProps = {
  * страница. Пока путь к файлу добирается и первый кадр не готов, под видео
  * видно превью из сетки.
  */
-export function PreviewVideo({ asset, isActive }: PreviewVideoProps) {
+export function PreviewVideo({ asset, isActive, hidden = false }: PreviewVideoProps) {
   const [uri, setUri] = useState<string | null>(null);
   const player = useVideoPlayer(uri, (instance) => {
     instance.loop = true;
@@ -44,7 +46,7 @@ export function PreviewVideo({ asset, isActive }: PreviewVideoProps) {
     else player.pause();
   }, [isActive, player, uri]);
 
-  if (!uri) return null;
+  if (!uri || hidden) return null;
 
   return (
     <VideoView
