@@ -20,6 +20,15 @@ import { setSelectionLimit, useMediaSelection } from '@/features/media/selection
 jest.mock('./EditedPhoto', () => ({ EditedPhoto: () => null, PHOTO_SAMPLING: {} }));
 jest.mock('./CropOverlay', () => ({ CropOverlay: () => null }));
 jest.mock('./AngleRuler', () => ({ AngleRuler: () => null }));
+jest.mock('./DrawColorCircle', () => ({ DrawColorCircle: () => null }));
+jest.mock('./DrawSizeSlider', () => ({ DrawSizeSlider: () => null }));
+jest.mock('./drawingLayers', () => ({
+  NO_LAYERS: { blur: null, lines: null },
+  drawingLayersOf: jest.fn(() => ({ blur: null, lines: null })),
+  appendDrawingStroke: jest.fn(() => ({ blur: null, lines: { stroke: true } })),
+  blurredCopyOf: jest.fn(() => null),
+  rememberDrawingLayers: jest.fn(),
+}));
 jest.mock('./workingCopy', () => ({
   workingCopyOf: jest.fn(() => new Promise(() => undefined)),
   workingImageOf: jest.fn(() => ({ width: () => 400, height: () => 300 })),

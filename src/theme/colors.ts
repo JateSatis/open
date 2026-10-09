@@ -120,3 +120,17 @@ export const Colors = {
 } as const;
 
 export type ThemeColor = keyof typeof Colors.light & keyof typeof Colors.dark;
+
+/**
+ * Обводка кружка цвета в рисовании — цветовой круг. Одинаковый в обеих
+ * темах: инструмент на тёмном фоне предпросмотра.
+ */
+export const ColorWheel = [
+  '#ff3b30',
+  '#ffcc00',
+  '#34c759',
+  '#32ade6',
+  '#5856d6',
+  '#ff2d55',
+  '#ff3b30',
+];

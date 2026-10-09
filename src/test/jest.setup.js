@@ -93,3 +93,8 @@ jest.mock('livekit-client', () => {
     DisconnectReason: { CLIENT_INITIATED: 1, DUPLICATE_IDENTITY: 2, ROOM_DELETED: 5 },
   };
 });
+
+// AsyncStorage — нативный модуль; в тестах — хранилище в памяти из пакета.
+jest.mock('@react-native-async-storage/async-storage', () =>
+  require('@react-native-async-storage/async-storage/jest/async-storage-mock'),
+);

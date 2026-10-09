@@ -4,12 +4,17 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
+import Animated, {
+  useAnimatedStyle,
+  useDerivedValue,
+  useSharedValue,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ColorTool } from './ColorTool';
 import { CropOverlay } from './CropOverlay';
 import { CropPanel } from './CropPanel';
+import { DrawTool } from './DrawTool';
 import { PreviewFooter } from './PreviewFooter';
 import { PreviewHeader } from './PreviewHeader';
 import type { PreviewMotion } from './PreviewPage';
@@ -19,6 +24,7 @@ import { PreviewToast, usePreviewToast } from './PreviewToast';
 import { styles } from './styles';
 import { useColorTool } from './useColorTool';
 import { useCropTool } from './useCropTool';
+import { useDrawTool } from './useDrawTool';
 import { usePreviewFlight } from './usePreviewFlight';
 
 import { useOwnKeyboardHeight } from '@/features/chats/composerKeyboard';
@@ -26,7 +32,7 @@ import { useGridGeometry } from '@/features/media/MediaGrid/useGridGeometry';
 import type { MediaLibraryItem } from '@/features/media/mediaLibrary';
 import { useMediaSelection } from '@/features/media/selectionStore';
 import { useTheme } from '@/hooks/use-theme';
-import { Spacing } from '@/theme';
+import { Sizes, Spacing } from '@/theme';
 
 /** Удержание пальца на фото в инструменте — показать оригинал. */
 const HOLD_ORIGINAL_MS = 120;
@@ -76,9 +82,13 @@ export function PreviewLayer({
   const [footerHeight, setFooterHeight] = useState(0);
   const [toolHeight, setToolHeight] = useState(0);
   const [cropPanelHeight, setCropPanelHeight] = useState(0);
+  const [drawPanelHeight, setDrawPanelHeight] = useState(0);
+  /** Чья рабочая область у фото: цвета или рисования. Держится и на выходе. */
+  const [areaOf, setAreaOf] = useState<'color' | 'draw'>('color');
 
   const tool = useColorTool();
   const crop = useCropTool();
+  const draw = useDrawTool();
   const toast = usePreviewToast();
   const keyboardHeight = useOwnKeyboardHeight('sheet');
   const { flight, origin, fade, leaving, launch, leave, dissolve } = usePreviewFlight(
@@ -86,21 +96,30 @@ export function PreviewLayer({
     gridViewport,
   );
   const toolArea = useSharedValue<Rect>({ x: 0, y: 0, width: size.width, height: size.height });
+  const screen = useSharedValue<Rect>({ x: 0, y: 0, width: size.width, height: size.height });
+  const colorProgress = tool.progress;
+  const drawProgress = draw.progress;
+  const toolProgress = useDerivedValue(() => Math.max(colorProgress.value, drawProgress.value));
 
   const motion = useMemo<PreviewMotion>(
-    () => ({ flight, origin, tool: tool.progress, toolArea, fade, cropCover: crop.cover }),
-    [crop.cover, fade, flight, origin, tool.progress, toolArea],
+    () => ({ flight, origin, tool: toolProgress, toolArea, fade, cropCover: crop.cover }),
+    [crop.cover, fade, flight, origin, toolProgress, toolArea],
   );
 
   // Рабочая область фото под панелью инструмента: фото не залезает под неё.
+  // У рисования сверху ещё крестик.
   useEffect(() => {
+    const top = insets.top + Spacing.three + (areaOf === 'draw' ? Sizes.previewHeaderButton : 0);
+    const panel = areaOf === 'draw' ? drawPanelHeight : toolHeight;
+
     toolArea.value = {
       x: Spacing.three,
-      y: insets.top + Spacing.three,
+      y: top,
       width: size.width - Spacing.three * 2,
-      height: size.height - toolHeight - insets.top - Spacing.three * 2,
+      height: size.height - panel - top - Spacing.three,
     };
-  }, [insets.top, size, toolArea, toolHeight]);
+    screen.value = { x: 0, y: 0, width: size.width, height: size.height };
+  }, [areaOf, drawPanelHeight, insets.top, screen, size, toolArea, toolHeight]);
 
   // Рабочее поле рамки обрезки: с запасом под уголки, над панелью.
   const cropArea = crop.motion.area;
@@ -128,14 +147,16 @@ export function PreviewLayer({
   const cancelTool = tool.cancel;
   const cropOpen = crop.open;
   const cancelCrop = crop.cancel;
+  const drawOpen = draw.open;
+  const cancelDraw = draw.cancel;
 
   useEffect(() => {
-    const back = cropOpen ? cancelCrop : toolOpen ? cancelTool : goBack;
+    const back = drawOpen ? cancelDraw : cropOpen ? cancelCrop : toolOpen ? cancelTool : goBack;
 
     setPreviewBackHandler(back);
 
     return () => setPreviewBackHandler(null);
-  }, [cancelCrop, cancelTool, cropOpen, goBack, toolOpen]);
+  }, [cancelCrop, cancelDraw, cancelTool, cropOpen, drawOpen, goBack, toolOpen]);
 
   const toggleCurrent = useCallback(() => {
     if (!current) return;
@@ -196,10 +217,10 @@ export function PreviewLayer({
   }));
   const cropEnter = crop.motion.enter;
   const chromeStyle = useAnimatedStyle(() => ({
-    opacity: flight.value * fade.value * (1 - Math.max(tool.progress.value, cropEnter.value)),
+    opacity: flight.value * fade.value * (1 - Math.max(toolProgress.value, cropEnter.value)),
   }));
   const footerStyle = useAnimatedStyle(() => ({
-    opacity: flight.value * fade.value * (1 - Math.max(tool.progress.value, cropEnter.value)),
+    opacity: flight.value * fade.value * (1 - Math.max(toolProgress.value, cropEnter.value)),
     transform: [{ translateY: -Math.max(keyboardHeight.value - insets.bottom, 0) }],
   }));
   const toolStyle = useAnimatedStyle(() => ({
@@ -210,7 +231,7 @@ export function PreviewLayer({
     opacity: cropEnter.value,
     transform: [{ translateY: (1 - cropEnter.value) * Spacing.five }],
   }));
-  const anyTool = tool.open || crop.open;
+  const anyTool = tool.open || crop.open || draw.open;
 
   if (!current) return null;
 
@@ -246,6 +267,7 @@ export function PreviewLayer({
             cellSize={cellSize}
             motion={motion}
             live={tool.open ? tool.live : null}
+            draw={draw.session ? draw.live : null}
             locked={anyTool}
             leaving={leaving}
             onShown={launch}
@@ -283,8 +305,15 @@ export function PreviewLayer({
         style={footerStyle}
         hidden={anyTool}
         onSend={send}
-        onOpenColor={() => tool.start(current)}
+        onOpenColor={() => {
+          setAreaOf('color');
+          tool.start(current);
+        }}
         onOpenCrop={() => crop.start(current)}
+        onOpenDraw={() => {
+          setAreaOf('draw');
+          draw.start(current);
+        }}
         onLayout={setFooterHeight}
       />
 
@@ -313,6 +342,10 @@ export function PreviewLayer({
           onDone={crop.done}
           onLayout={setCropPanelHeight}
         />
+      ) : null}
+
+      {isPhoto ? (
+        <DrawTool tool={draw} screen={screen} area={toolArea} onPanelLayout={setDrawPanelHeight} />
       ) : null}
 
       <PreviewToast toast={toast} bottom={footerHeight + Spacing.three} />

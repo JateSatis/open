@@ -8,7 +8,7 @@ import { styles } from './styles';
 
 import { claimKeyboardForSheet } from '@/features/chats/composerKeyboard';
 import { usePhotoEdit } from '@/features/media/photoEdits/editsStore';
-import { hasCrop, isNeutralAdjust } from '@/features/media/photoEdits/types';
+import { hasCrop, hasDrawing, isNeutralAdjust } from '@/features/media/photoEdits/types';
 import { useTheme } from '@/hooks/use-theme';
 import { Spacing } from '@/theme';
 
@@ -26,6 +26,7 @@ export type PreviewFooterProps = {
   onSend: () => void;
   onOpenColor: () => void;
   onOpenCrop: () => void;
+  onOpenDraw: () => void;
   onLayout: (height: number) => void;
 };
 
@@ -53,8 +54,8 @@ const TOOLS: { key: ToolKey; label: string; icon: SymbolViewProps['name'] }[] = 
 /**
  * Низ предпросмотра: подпись — тот же черновик, что в поле шита и чата, —
  * отправка и ряд инструментов фото. Иконка инструмента подсвечена, если у
- * этого фото есть его правки. Рисование и наложения — следующие этапы: их
- * места в ряду уже есть, но на тап они пока не отвечают.
+ * этого фото есть его правки. Наложения — следующий этап: место в ряду
+ * уже есть, но на тап оно пока не отвечает.
  */
 export function PreviewFooter({
   assetId,
@@ -68,6 +69,7 @@ export function PreviewFooter({
   onSend,
   onOpenColor,
   onOpenCrop,
+  onOpenDraw,
   onLayout,
 }: PreviewFooterProps) {
   const theme = useTheme();
@@ -77,11 +79,15 @@ export function PreviewFooter({
   // Подсветка — по инструментам: горит тот, чьи правки у фото есть.
   const edited: Record<ToolKey, boolean> = {
     crop: hasCrop(edit),
-    draw: false,
+    draw: hasDrawing(edit),
     overlay: false,
     color: edit !== undefined && !isNeutralAdjust(edit.adjust),
   };
-  const opens: Partial<Record<ToolKey, () => void>> = { crop: onOpenCrop, color: onOpenColor };
+  const opens: Partial<Record<ToolKey, () => void>> = {
+    crop: onOpenCrop,
+    draw: onOpenDraw,
+    color: onOpenColor,
+  };
 
   return (
     <Animated.View
@@ -142,8 +148,7 @@ export function PreviewFooter({
                 testID={`media-preview-tool-${tool.key}`}
                 accessibilityRole="button"
                 accessibilityLabel={tool.label}
-                // Рисование и наложения — следующие этапы: место в ряду есть,
-                // нажать нельзя.
+                // Наложения — следующий этап: место в ряду есть, нажать нельзя.
                 disabled={!onOpen}
                 accessibilityState={{ selected: edited[tool.key], disabled: !onOpen }}
                 onPress={
