@@ -49,6 +49,40 @@ env:
     id: "media-preview-tool-crop"
     selected: true
 - assertVisible: "Убрать из выбранного"
+# Рисование: до штриха отменять нечего; штрих → «отменить» → штрих →
+# «Готово» — иконка рисования подсвечена.
+- tapOn:
+    id: "media-preview-tool-draw"
+- assertVisible:
+    id: "draw-brush-pen"
+- assertVisible:
+    id: "draw-undo"
+    enabled: false
+- tapOn:
+    id: "draw-brush-pen"
+- swipe:
+    start: 30%, 45%
+    end: 70%, 50%
+    duration: 400
+- assertVisible:
+    id: "draw-undo"
+    enabled: true
+- tapOn:
+    id: "draw-undo"
+- assertVisible:
+    id: "draw-undo"
+    enabled: false
+- swipe:
+    start: 30%, 55%
+    end: 70%, 50%
+    duration: 400
+- tapOn:
+    id: "media-preview-tool-done"
+- assertNotVisible:
+    id: "draw-brush-pen"
+- assertVisible:
+    id: "media-preview-tool-draw"
+    selected: true
 # Выбор снимается — правки остаются до сброса выбора; на выходе из чата
 # сбросятся вместе с ним.
 - tapOn:

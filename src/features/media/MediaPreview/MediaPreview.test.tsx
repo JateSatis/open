@@ -11,9 +11,12 @@ import {
 
 import { workingCopyOf } from './workingCopy';
 
+import { confirm } from '@/components/ConfirmDialog';
+import { useDrawSettings } from '@/features/media/drawSettings';
 import type { MediaLibraryItem } from '@/features/media/mediaLibrary';
 import { editedThumbOf } from '@/features/media/photoEdits/editedThumbs';
-import { photoEditOf, usePhotoEdits } from '@/features/media/photoEdits/editsStore';
+import { photoEditOf, setPhotoEdit, usePhotoEdits } from '@/features/media/photoEdits/editsStore';
+import { EMPTY_EDIT } from '@/features/media/photoEdits/types';
 import { setSelectionLimit, useMediaSelection } from '@/features/media/selectionStore';
 
 // Skia, запекание и рабочая копия — нативные; здесь проверяется поведение слоя.
@@ -37,6 +40,7 @@ jest.mock('./bake', () => ({
   bakePhoto: jest.fn(() => ({ file: jest.fn(), prepare: jest.fn(() => Promise.resolve()) })),
   renderEditThumb: jest.fn(() => 'file:///thumb.jpg'),
 }));
+jest.mock('@/components/ConfirmDialog', () => ({ confirm: jest.fn() }));
 jest.mock('expo-video', () => ({
   useVideoPlayer: () => ({ play: jest.fn(), pause: jest.fn() }),
   VideoView: () => null,
@@ -272,5 +276,129 @@ describe('обрезка и поворот', () => {
 
     expect(photoEditOf('a')?.crop?.quarter).toBe(1);
     expect(screen.getByLabelText('Настройка цвета')).not.toBeSelected();
+  });
+});
+
+describe('рисование', () => {
+  const COPY = {
+    uri: 'file:///copy.png',
+    width: 400,
+    height: 300,
+    source: 'file:///a.jpg',
+    sourceWidth: 4000,
+    sourceHeight: 3000,
+  };
+  const stroke = (x: number) => ({
+    brush: 'pen' as const,
+    color: '#ff3b30',
+    width: 0.01,
+    points: [x, 0.1, x, 0.5],
+  });
+  const FIRST = stroke(0.2);
+  const SECOND = stroke(0.6);
+
+  beforeEach(() => {
+    jest.mocked(workingCopyOf).mockImplementation(() => Promise.resolve(COPY));
+    jest.mocked(confirm).mockReset();
+  });
+
+  afterEach(() => {
+    jest.mocked(workingCopyOf).mockImplementation(() => new Promise(() => undefined));
+  });
+
+  async function openDraw() {
+    await renderPreview(GALLERY[0]);
+    const user = userEvent.setup();
+
+    await user.press(screen.getByLabelText('Рисование'));
+    await screen.findByLabelText('Перо');
+
+    return user;
+  }
+
+  it('до первого штриха крестик и «отменить» не нажимаются, «Сбросить» нет, листать нельзя', async () => {
+    await openDraw();
+
+    expect(screen.getByLabelText('Отменить рисование')).toBeDisabled();
+    expect(screen.getByLabelText('Отменить последнее действие')).toBeDisabled();
+    expect(screen.queryByText('Сбросить')).toBeNull();
+    expect(screen.getByTestId('media-preview-pager')).toHaveProp('scrollEnabled', false);
+  });
+
+  it('«назад», когда нечего терять, выходит без вопроса', async () => {
+    await openDraw();
+
+    await act(async () => {
+      handlePreviewBack();
+    });
+
+    expect(confirm).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.queryByLabelText('Перо')).toBeNull());
+  });
+
+  it('выбор кисти переносит подсветку и запоминается', async () => {
+    const user = await openDraw();
+
+    await user.press(screen.getByLabelText('Маркер'));
+
+    expect(screen.getByLabelText('Маркер')).toBeSelected();
+    expect(screen.getByLabelText('Перо')).not.toBeSelected();
+    expect(useDrawSettings.getState().brush).toBe('marker');
+  });
+
+  it('прежний рисунок: стрелка снимает штрихи прошлого захода по одному, «Готово» сохраняет', async () => {
+    setPhotoEdit('a', { ...EMPTY_EDIT, drawing: [FIRST, SECOND] }, null);
+    const user = await openDraw();
+
+    expect(screen.getByText('Сбросить')).toBeTruthy();
+    expect(screen.getByLabelText('Отменить рисование')).toBeDisabled();
+
+    await user.press(screen.getByLabelText('Отменить последнее действие'));
+
+    expect(screen.getByLabelText('Отменить рисование')).toBeEnabled();
+
+    await user.press(screen.getByLabelText('Применить'));
+
+    expect(photoEditOf('a')?.drawing).toEqual([FIRST]);
+    expect(screen.getByLabelText('Рисование')).toBeSelected();
+  });
+
+  it('«Сбросить» убирает весь рисунок и сам отменяется стрелкой', async () => {
+    setPhotoEdit('a', { ...EMPTY_EDIT, drawing: [FIRST, SECOND] }, null);
+    const user = await openDraw();
+
+    await user.press(screen.getByText('Сбросить'));
+    await waitFor(() => expect(screen.queryByText('Сбросить')).toBeNull());
+
+    await user.press(screen.getByLabelText('Отменить последнее действие'));
+
+    expect(screen.getByText('Сбросить')).toBeTruthy();
+
+    await user.press(screen.getByText('Сбросить'));
+    await user.press(screen.getByLabelText('Применить'));
+
+    expect(photoEditOf('a')).toBeUndefined();
+  });
+
+  it('крестик с изменениями спрашивает: «Отмена» оставляет в рисовании, «ОК» возвращает как было', async () => {
+    setPhotoEdit('a', { ...EMPTY_EDIT, drawing: [FIRST, SECOND] }, null);
+    const user = await openDraw();
+
+    await user.press(screen.getByLabelText('Отменить последнее действие'));
+
+    jest.mocked(confirm).mockResolvedValueOnce(false);
+    await user.press(screen.getByLabelText('Отменить рисование'));
+
+    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(screen.getByLabelText('Перо')).toBeTruthy();
+
+    jest.mocked(confirm).mockResolvedValueOnce(true);
+    await act(async () => {
+      handlePreviewBack();
+    });
+
+    await waitFor(() => expect(screen.queryByLabelText('Перо')).toBeNull());
+    expect(confirm).toHaveBeenCalledTimes(2);
+    expect(photoEditOf('a')?.drawing).toEqual([FIRST, SECOND]);
   });
 });
