@@ -78,6 +78,27 @@ env:
     start: 30%, 55%
     end: 70%, 50%
     duration: 400
+# Цвет: кружок → панель цвета; системное «назад» закрывает только панель.
+# Снова кружок → цвет из сетки (середина сетки) → панель закрыта → штрих им.
+- tapOn:
+    id: "draw-color"
+- assertVisible:
+    id: "draw-eyedropper"
+- back
+- assertNotVisible:
+    id: "draw-eyedropper"
+- assertVisible:
+    id: "draw-brush-pen"
+- tapOn:
+    id: "draw-color"
+- tapOn:
+    id: "draw-palette"
+- assertNotVisible:
+    id: "draw-eyedropper"
+- swipe:
+    start: 30%, 40%
+    end: 70%, 35%
+    duration: 400
 - tapOn:
     id: "media-preview-tool-done"
 - assertNotVisible:
