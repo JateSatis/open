@@ -413,6 +413,160 @@ begin
 end;
 $$;
 
+-- =============================================================================
+-- Реакции и просмотры попа
+-- =============================================================================
+
+do $$
+declare
+  a uuid := '00000000-0000-4000-8000-0000000000a9';
+  b uuid := '00000000-0000-4000-8000-0000000000b9';
+  chan uuid;
+  pop uuid;
+  emojis text[];
+  aud text;
+  u uuid;
+  i int;
+  s uuid := gen_random_uuid();
+  p public.pops;
+begin
+  select array_agg(emoji order by position) into emojis from public.reaction_emojis;
+  select id into chan from public.channels where username = 'chan_a_zz';
+  select id into pop from public.pops where channel_id = chan and deleted_at is null
+  order by created_at limit 1;
+
+  -- Посторонний ставит, меняет, снимает.
+  perform pg_temp.act_as(b);
+
+  select x.audience into aud from public.set_reaction('pop', pop, emojis[1]) x;
+  select * into p from public.pops where id = pop;
+  perform pg_temp.check('реакция постороннего на поп — проходит, ряд visitor',
+    aud = 'visitor' and p.reactions = jsonb_build_object(emojis[1], 1) and p.reactions_count = 1,
+    aud || ' ' || p.reactions::text);
+
+  perform pg_temp.check('моя реакция на поп в выборке',
+    (select r.emoji from public.pops x, public.my_reaction(x) r where x.id = pop) = emojis[1]);
+
+  perform public.set_reaction('pop', pop, emojis[2]);
+  select * into p from public.pops where id = pop;
+  perform pg_temp.check('другая реакция на поп заменяет прежнюю',
+    p.reactions = jsonb_build_object(emojis[2], 1) and p.reactions_count = 1
+    and (select count(*) from public.reactions
+         where target_type = 'pop' and target_id = pop and user_id = b and deleted_at is null) = 1,
+    p.reactions::text);
+
+  perform public.set_reaction('pop', pop, null);
+  select * into p from public.pops where id = pop;
+  perform pg_temp.check('null снимает реакцию на поп',
+    p.reactions = '{}'::jsonb and p.reactions_count = 0, p.reactions::text);
+
+  -- Публикующий в канале — ряд member.
+  perform pg_temp.act_as(a);
+  select x.audience into aud from public.set_reaction('pop', pop, emojis[1]) x;
+  perform pg_temp.check('реакция автора канала на поп — member', aud = 'member', aud);
+  perform public.set_reaction('pop', pop, null);
+
+  -- Лимит: 20 разных, 21-я — отказ, как у комментария.
+  perform set_config('role', 'postgres', true);
+  for i in 1..21 loop
+    u := gen_random_uuid();
+    insert into auth.users (id, aud, role, email, raw_user_meta_data)
+    values (u, 'authenticated', 'authenticated', 'pop-limit-' || i || '@test.local',
+            jsonb_build_object('full_name', 'Тест ' || i));
+
+    if i <= 20 then
+      insert into public.reactions (target_type, target_id, user_id, emoji)
+      values ('pop', pop, u, emojis[i]);
+    else
+      begin
+        insert into public.reactions (target_type, target_id, user_id, emoji)
+        values ('pop', pop, u, emojis[21]);
+        perform pg_temp.check('21-я разная реакция на поп — отказ', false);
+      exception when others then
+        perform pg_temp.check('21-я разная реакция на поп — отказ', sqlstate = 'OR001', sqlerrm);
+      end;
+
+      insert into public.reactions (target_type, target_id, user_id, emoji)
+      values ('pop', pop, u, emojis[1]);
+      perform pg_temp.check('реакция из 20 на поп ставится',
+        ((select reactions from public.pops where id = pop) ->> emojis[1])::int = 2
+        and (select reactions_count from public.pops where id = pop) = 21);
+    end if;
+  end loop;
+
+  -- Просмотры: первый показ — оба счётчика, повтор раньше 10 секунд — ничего.
+  perform pg_temp.act_as(b);
+  perform public.record_pop_views(array[pop], s);
+  perform public.record_pop_views(array[pop], gen_random_uuid());
+  select * into p from public.pops where id = pop;
+  perform pg_temp.check('два показа подряд — +1 просмотр, +1 уникальный',
+    p.views_count = 1 and p.unique_views_count = 1, p.views_count || '/' || p.unique_views_count);
+
+  perform set_config('role', 'postgres', true);
+  update public.pop_views set counted_at = counted_at - interval '11 seconds' where pop_id = pop;
+  perform pg_temp.act_as(b);
+  perform public.record_pop_views(array[pop], s);
+  select * into p from public.pops where id = pop;
+  perform pg_temp.check('показ через 10 секунд — +1 просмотр, уникальные те же',
+    p.views_count = 2 and p.unique_views_count = 1, p.views_count || '/' || p.unique_views_count);
+
+  perform pg_temp.act_as(a);
+  perform public.record_pop_views(array[pop], gen_random_uuid());
+  select * into p from public.pops where id = pop;
+  perform pg_temp.check('показ автору канала не считается',
+    p.views_count = 2 and p.unique_views_count = 1, p.views_count || '/' || p.unique_views_count);
+
+  -- Мимо функций — отказ.
+  perform pg_temp.act_as(b);
+
+  begin
+    insert into public.pop_views (pop_id, viewer_id, session_id) values (pop, b, s);
+    perform pg_temp.check('прямая вставка в pop_views — отказ', false);
+  exception when others then
+    perform pg_temp.check('прямая вставка в pop_views — отказ', sqlstate = '42501', sqlerrm);
+  end;
+
+  begin
+    perform 1 from public.pop_views limit 1;
+    perform pg_temp.check('чтение pop_views — отказ', false);
+  exception when others then
+    perform pg_temp.check('чтение pop_views — отказ', sqlstate = '42501', sqlerrm);
+  end;
+
+  begin
+    update public.pops set views_count = 1000, reactions = '{}'::jsonb where id = pop;
+    perform pg_temp.check('прямая правка счётчиков попа — отказ', false);
+  exception when others then
+    perform pg_temp.check('прямая правка счётчиков попа — отказ', sqlstate = '42501', sqlerrm);
+  end;
+
+  begin
+    perform public.set_reaction('poop', pop, emojis[1]);
+    perform pg_temp.check('неизвестная цель реакции — отказ', false);
+  exception when others then
+    perform pg_temp.check('неизвестная цель реакции — отказ', sqlstate = '22023', sqlerrm);
+  end;
+
+  -- Удалённый поп: ни реакции, ни просмотра.
+  perform set_config('role', 'postgres', true);
+  update public.pops set deleted_at = now() where id = pop;
+  update public.pop_views set counted_at = counted_at - interval '11 seconds' where pop_id = pop;
+  perform pg_temp.act_as(b);
+
+  begin
+    perform public.set_reaction('pop', pop, emojis[1]);
+    perform pg_temp.check('реакция на удалённый поп — отказ', false);
+  exception when others then
+    perform pg_temp.check('реакция на удалённый поп — отказ', sqlstate = 'P0002', sqlerrm);
+  end;
+
+  perform public.record_pop_views(array[pop], gen_random_uuid());
+  perform set_config('role', 'postgres', true);
+  perform pg_temp.check('просмотр удалённого попа пропускается',
+    (select views_count from public.pops where id = pop) = 2);
+end;
+$$;
+
 select n, name, ok, detail from results order by n;
 
 rollback;

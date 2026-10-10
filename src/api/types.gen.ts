@@ -1148,6 +1148,48 @@ export type Database = {
           },
         ]
       }
+      pop_views: {
+        Row: {
+          counted_at: string
+          created_at: string
+          id: string
+          pop_id: string
+          session_id: string
+          viewer_id: string
+        }
+        Insert: {
+          counted_at?: string
+          created_at?: string
+          id?: string
+          pop_id: string
+          session_id: string
+          viewer_id: string
+        }
+        Update: {
+          counted_at?: string
+          created_at?: string
+          id?: string
+          pop_id?: string
+          session_id?: string
+          viewer_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pop_views_pop_id_fkey"
+            columns: ["pop_id"]
+            isOneToOne: false
+            referencedRelation: "pops"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pop_views_viewer_id_fkey"
+            columns: ["viewer_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pops: {
         Row: {
           author_id: string | null
@@ -1160,9 +1202,25 @@ export type Database = {
           id: string
           mime_type: string
           poster_url: string
+          reactions: Json
+          reactions_count: number
           size_bytes: number | null
+          unique_views_count: number
           url: string
+          views_count: number
           width: number
+          my_reaction: {
+            audience: string
+            chat_id: string | null
+            created_at: string
+            deleted_at: string | null
+            emoji: string
+            id: string
+            target_id: string
+            target_type: string
+            updated_at: string
+            user_id: string | null
+          } | null
         }
         Insert: {
           author_id?: string | null
@@ -1175,8 +1233,12 @@ export type Database = {
           id?: string
           mime_type: string
           poster_url: string
+          reactions?: Json
+          reactions_count?: number
           size_bytes?: number | null
+          unique_views_count?: number
           url: string
+          views_count?: number
           width: number
         }
         Update: {
@@ -1190,8 +1252,12 @@ export type Database = {
           id?: string
           mime_type?: string
           poster_url?: string
+          reactions?: Json
+          reactions_count?: number
           size_bytes?: number | null
+          unique_views_count?: number
           url?: string
+          views_count?: number
           width?: number
         }
         Relationships: [
@@ -1492,10 +1558,12 @@ export type Database = {
         Args: { ended: string; started: string }
         Returns: string
       }
-      can_publish_in_channel: {
-        Args: { target_channel: string }
-        Returns: boolean
-      }
+      can_publish_in_channel:
+        | { Args: { target_channel: string }; Returns: boolean }
+        | {
+            Args: { publisher: string; target_channel: string }
+            Returns: boolean
+          }
       chat_am_member: {
         Args: { "": Database["public"]["Tables"]["chats"]["Row"] }
         Returns: {
@@ -1728,6 +1796,27 @@ export type Database = {
               isSetofReturn: true
             }
           }
+        | {
+            Args: { "": Database["public"]["Tables"]["pops"]["Row"] }
+            Returns: {
+              audience: string
+              chat_id: string | null
+              created_at: string
+              deleted_at: string | null
+              emoji: string
+              id: string
+              target_id: string
+              target_type: string
+              updated_at: string
+              user_id: string | null
+            }
+            SetofOptions: {
+              from: "pops"
+              to: "reactions"
+              isOneToOne: true
+              isSetofReturn: true
+            }
+          }
       my_stream_participation: {
         Args: { "": Database["public"]["Tables"]["messages"]["Row"] }
         Returns: {
@@ -1777,6 +1866,7 @@ export type Database = {
       reaction_target: {
         Args: { kind: string; target: string }
         Returns: {
+          channel_id: string
           chat_id: string
           deleted_at: string
           message_id: string
@@ -1832,6 +1922,10 @@ export type Database = {
       }
       record_message_views: {
         Args: { message_ids: string[]; session_id: string; target_chat: string }
+        Returns: undefined
+      }
+      record_pop_views: {
+        Args: { pop_ids: string[]; session_id: string }
         Returns: undefined
       }
       register_device: {
