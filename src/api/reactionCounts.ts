@@ -55,7 +55,7 @@ export function toAudience(value: string): ReactionAudience {
 }
 
 /** jsonb «реакция → число» из базы. Всё, что не похоже на положительное число, отбрасывается. */
-function toCounts(value: Json): ReactionCounts {
+export function toReactionCounts(value: Json): ReactionCounts {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return {};
 
   const counts: Record<string, number> = {};
@@ -106,8 +106,8 @@ type ReactionRow = {
 };
 
 export function toReactions(row: ReactionRow): MessageReactions {
-  const members = toCounts(row.member_reactions);
-  const visitors = toCounts(row.visitor_reactions);
+  const members = toReactionCounts(row.member_reactions);
+  const visitors = toReactionCounts(row.visitor_reactions);
 
   if (!row.my_reaction && Object.keys(members).length === 0 && Object.keys(visitors).length === 0) {
     return NO_REACTIONS;

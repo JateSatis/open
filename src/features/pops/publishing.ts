@@ -5,7 +5,7 @@
 
 import type { QueryClient } from '@tanstack/react-query';
 
-import { publishPop, type Pop } from '@/api/pops';
+import { NO_POP_REACTIONS, publishPop, type Pop } from '@/api/pops';
 import { chatsQueryKey } from '@/features/chats/useChats';
 import { reportRequestFailed } from '@/features/connection/connectionStore';
 import { MediaUploadError, removeUploadedMedia, storedPaths } from '@/features/media';
@@ -93,6 +93,8 @@ async function run(queryClient: QueryClient, userId: string, channelId: string, 
       height: media.height,
       durationMs: media.durationMs,
       createdAt: new Date().toISOString(),
+      reactions: NO_POP_REACTIONS,
+      viewsCount: 0,
     };
 
     // Опубликованный встаёт первой плиткой сразу, без ожидания перечитывания:

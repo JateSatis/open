@@ -3,6 +3,12 @@
 // пост с ним одной транзакцией) и `send_pop_post` (пост с уже опубликованным
 // попом). Право публиковать проверяет база, а не клиент.
 
+import {
+  toAudience,
+  toReactionCounts,
+  type MyReaction,
+  type ReactionCounts,
+} from '@/api/reactionCounts';
 import { supabase } from '@/api/supabase';
 import type { Tables } from '@/api/types.gen';
 
@@ -21,7 +27,9 @@ type PopRow = Pick<
   | 'height'
   | 'duration_ms'
   | 'created_at'
->;
+  | 'reactions'
+  | 'views_count'
+> & { my_reaction: { emoji: string } | null };
 
 export type Pop = {
   id: string;
@@ -36,7 +44,20 @@ export type Pop = {
   height: number;
   durationMs: number;
   createdAt: string;
+  reactions: PopReactions;
+  viewsCount: number;
 };
+
+/**
+ * Реакции попа — один общий ряд, без деления на авторов канала и зрителей.
+ * `mine` — моя реакция; `null` — не ставил.
+ */
+export type PopReactions = { counts: ReactionCounts; mine: string | null };
+
+export const NO_POP_REACTIONS: PopReactions = { counts: {}, mine: null };
+
+/** Счётчики попа — то, что меняется, пока поп на экране. */
+export type PopCounters = Pick<Pop, 'id' | 'reactions' | 'viewsCount'>;
 
 /** Загруженный файл попа — то, что `publish_pop` кладёт в строку попа. */
 export type PopMedia = {
@@ -61,12 +82,24 @@ export type PublishPopInput = {
   replyTo?: string[];
 };
 
+const COUNTER_COLUMNS = 'reactions, views_count, my_reaction(emoji)';
+
 const COLUMNS =
-  'id, channel_id, author_id, caption, url, poster_url, mime_type, width, height, duration_ms, created_at';
+  `id, channel_id, author_id, caption, url, poster_url, mime_type, width, height, duration_ms, created_at, ${COUNTER_COLUMNS}` as const;
+
+function toCounters(
+  row: Pick<PopRow, 'id' | 'reactions' | 'views_count' | 'my_reaction'>,
+): PopCounters {
+  return {
+    id: row.id,
+    reactions: { counts: toReactionCounts(row.reactions), mine: row.my_reaction?.emoji ?? null },
+    viewsCount: row.views_count,
+  };
+}
 
 function toPop(row: PopRow): Pop {
   return {
-    id: row.id,
+    ...toCounters(row),
     channelId: row.channel_id,
     authorId: row.author_id,
     caption: row.caption,
@@ -107,6 +140,72 @@ export async function listPops(
   if (error) throw error;
 
   return (data ?? []).map(toPop);
+}
+
+/**
+ * Страница попсов новее `after` — те, что в сетке выше него. Отдаётся в
+ * порядке сетки (новые сначала), ближайший к `after` — последним.
+ */
+export async function listPopsAfter(
+  channelId: string,
+  after: Pick<Pop, 'id' | 'createdAt'>,
+  limit = POPS_PAGE_SIZE,
+): Promise<Pop[]> {
+  const at = `"${after.createdAt}"`;
+  const { data, error } = await supabase
+    .from('pops')
+    .select(COLUMNS)
+    .eq('channel_id', channelId)
+    .or(`created_at.gt.${at},and(created_at.eq.${at},id.gt.${after.id})`)
+    .order('created_at', { ascending: true })
+    .order('id', { ascending: true })
+    .limit(limit);
+
+  if (error) throw error;
+
+  return (data ?? []).map(toPop).reverse();
+}
+
+/** Один поп; `null` — его нет или он удалён. */
+export async function getPop(popId: string): Promise<Pop | null> {
+  const { data, error } = await supabase.from('pops').select(COLUMNS).eq('id', popId).maybeSingle();
+
+  if (error) throw error;
+
+  return data ? toPop(data) : null;
+}
+
+/** Свежие счётчики этих попсов — только живых. */
+export async function listPopCounters(popIds: string[]): Promise<PopCounters[]> {
+  if (popIds.length === 0) return [];
+
+  const { data, error } = await supabase
+    .from('pops')
+    .select(`id, ${COUNTER_COLUMNS}` as const)
+    .in('id', popIds.slice(0, MAX_POP_IDS));
+
+  if (error) throw error;
+
+  return (data ?? []).map(toCounters);
+}
+
+/** Столько попсов за раз — сверка и запись просмотров. */
+const MAX_POP_IDS = 200;
+
+/**
+ * Засчитать показ попсов. Повтор того же попа одним человеком база
+ * засчитывает не чаще раза в 10 секунд; свои (публикующего в канале) и
+ * удалённые пропускает.
+ */
+export async function recordPopViews(popIds: string[], sessionId: string): Promise<void> {
+  if (popIds.length === 0) return;
+
+  const { error } = await supabase.rpc('record_pop_views', {
+    pop_ids: popIds.slice(0, MAX_POP_IDS),
+    session_id: sessionId,
+  });
+
+  if (error) throw error;
 }
 
 /** Могу ли я публиковать в канале — посты и попсы. Решает база. */
