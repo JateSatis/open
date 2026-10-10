@@ -232,6 +232,13 @@ describe('MessageBubble', () => {
     });
   });
 
+  it('отправленное, которое ещё никто не видел, — без счётчика просмотров', async () => {
+    await render(<MessageBubble {...baseProps} message={textMessage({ viewsCount: 0 })} />);
+
+    expect(screen.getByTestId('message-meta')).toBeTruthy();
+    expect(screen.queryByTestId('message-views')).toBeNull();
+  });
+
   it('просмотры — у отправленного с просмотрами; у комментария их нет', async () => {
     const { rerender } = await render(
       <MessageBubble {...baseProps} message={textMessage({ viewsCount: 15_400 })} />,

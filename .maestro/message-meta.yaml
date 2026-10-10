@@ -1,13 +1,15 @@
 appId: com.openger.app
-name: Низ облачка — просмотры, время вместо «Отправляется…»
+name: Низ облачка — время вместо «Отправляется…»
 env:
   CHAT: Plany
 ---
 - runFlow: subflows/open-app.yaml
 - tapOn: ${CHAT}
-# Сообщения чата кто-то уже видел — у облачков есть счётчик просмотров.
+# Счётчик просмотров здесь не проверяется: он есть, только если сообщение
+# кто-то уже посмотрел, а это зависит от того, что лежит внизу чата.
+# Показ и скрытие счётчика — в MessageBubble.test.tsx.
 - assertVisible:
-    id: "message-views"
+    id: "messages-list"
 - evalScript: ${output.msg = 'maestro-' + Date.now()}
 - tapOn: "Сообщение"
 - inputText: ${output.msg}
