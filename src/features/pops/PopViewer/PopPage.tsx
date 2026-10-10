@@ -1,7 +1,6 @@
-import { SymbolView } from 'expo-symbols';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, View } from 'react-native';
-import Animated, { FadeIn, FadeOut, useSharedValue } from 'react-native-reanimated';
+import { useSharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { HeartBurst, randomTilt, type Heart } from './HeartBurst';
@@ -10,18 +9,16 @@ import { PopProgressBar } from './PopProgressBar';
 import { PopReactionPopover, type PopoverAnchor } from './PopReactionPopover';
 import { PopSideColumn } from './PopSideColumn';
 import { PopVideo } from './PopVideo';
+import { PlaybackBadges } from './PlaybackBadges';
 import { styles } from './styles';
 import { useSurfacePress } from './useSurfacePress';
 
 import type { Pop } from '@/api/pops';
-import { Text } from '@/components/Text';
 import { usePendingReactions } from '@/features/interactions/pendingReactions';
 import { PopCover } from '@/features/pops/PopCover';
 import { withPendingPopReaction } from '@/features/pops/popReactions';
 import { useTheme } from '@/hooks/use-theme';
 import { Sizes } from '@/theme';
-
-const FADE_MS = 150;
 
 /** Что делает страница: играет, прогревает плеер следом за активной или показывает обложку. */
 export type PopPageMode = 'active' | 'preload' | 'idle';
@@ -136,33 +133,7 @@ export const PopPage = memo(function PopPage({
         {...surfacePress}
       />
 
-      {paused && active ? (
-        <Animated.View
-          testID="pop-paused"
-          entering={FadeIn.duration(FADE_MS)}
-          exiting={FadeOut.duration(FADE_MS)}
-          style={styles.center}
-          pointerEvents="none"
-        >
-          <SymbolView
-            name={{ ios: 'play.fill', android: 'play_arrow', web: 'play_arrow' }}
-            size={Sizes.popPauseIcon}
-            tintColor={theme.textOnMediaSecondary}
-          />
-        </Animated.View>
-      ) : null}
-
-      {fast && active ? (
-        <View
-          testID="pop-fast"
-          style={[styles.fastBadge, { top: insets.top, backgroundColor: theme.mediaScrim }]}
-          pointerEvents="none"
-        >
-          <Text variant="smallBold" color="textOnMedia">
-            2×
-          </Text>
-        </View>
-      ) : null}
+      <PlaybackBadges paused={paused && active} fast={fast && active} />
 
       {hearts.map((heart) => (
         <HeartBurst key={heart.key} heart={heart} onDone={dropHeart} />
