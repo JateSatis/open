@@ -76,6 +76,8 @@ export function PopProgressBar({
 
           scrubbing.set(true);
           progress.set(share);
+          lastSeek.set(share);
+          runOnJS(onSeek)(share);
           runOnJS(onScrubChange)(true);
           runOnJS(showTime)(share);
         })

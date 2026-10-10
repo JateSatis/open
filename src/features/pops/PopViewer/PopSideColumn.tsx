@@ -1,10 +1,11 @@
-import { SymbolView, type SymbolViewProps } from 'expo-symbols';
+import { SymbolView } from 'expo-symbols';
 import { useContext, useMemo, useRef } from 'react';
-import { Pressable, ScrollView, View, type LayoutChangeEvent } from 'react-native';
+import { ScrollView, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 
 import { PagerGestureContext } from './PopPager';
 import type { PopoverAnchor } from './PopReactionPopover';
+import { SideIcon } from './SideIcon';
 import { styles } from './styles';
 
 import type { PopReactions } from '@/api/pops';
@@ -13,52 +14,18 @@ import { formatViewsCount } from '@/features/chats/ViewsCount/formatViewsCount';
 import { ReactionBadge } from '@/features/interactions/MessageReactions/ReactionBadge';
 import { popReactionColumn } from '@/features/pops/popReactions';
 import { useTheme } from '@/hooks/use-theme';
-import { Sizes, Spacing } from '@/theme';
+import { Sizes } from '@/theme';
 
 export type PopSideColumnProps = {
   reactions: PopReactions;
   viewsCount: number;
   onReaction: (emoji: string) => void;
-  /** «+» нажат; где он на экране — к нему прижмётся выбор реакции. */
   /**
    * «+» нажат. `fromBottom` — от низа «+» до низа колонки: к нему прижмётся
    * выбор реакции.
    */
   onAddReaction: (anchor: PopoverAnchor) => void;
 };
-
-function SideIcon({
-  name,
-  label,
-  testID,
-  onPress,
-  onLayout,
-}: {
-  name: SymbolViewProps['name'];
-  label: string;
-  testID: string;
-  onPress?: () => void;
-  onLayout?: (event: LayoutChangeEvent) => void;
-}) {
-  const theme = useTheme();
-
-  return (
-    <Pressable
-      onLayout={onLayout}
-      testID={testID}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      // Индикатор без действия глотает тап: он не должен уйти видео как пауза.
-      onPress={onPress ?? noop}
-      hitSlop={Spacing.one}
-      style={[styles.sideButton, styles.onMediaShadow, { shadowColor: theme.shadow }]}
-    >
-      <SymbolView name={name} size={Sizes.popSideIcon} tintColor={theme.textOnMedia} />
-    </Pressable>
-  );
-}
-
-const noop = () => undefined;
 
 /**
  * Колонка справа, сверху вниз: столбик реакций, «+», комментарии,

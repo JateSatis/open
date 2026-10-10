@@ -58,4 +58,18 @@ describe('useViewBatcher', () => {
 
     expect(sent(send)).toEqual([['a']]);
   });
+
+  it('не дошедшая часть пачки засчитывается снова, дошедшая — нет', async () => {
+    const send = jest.fn().mockResolvedValueOnce(['b']).mockResolvedValue(undefined);
+    const hook = await renderHook(() =>
+      useViewBatcher<{ id: string }>({ isFocused: true, send, repeat: 'session' }),
+    );
+
+    await act(() => hook.result.current.setVisible([{ id: 'a' }, { id: 'b' }]));
+    await act(() => jest.advanceTimersByTime(2000));
+    await act(() => hook.result.current.setVisible([{ id: 'a' }, { id: 'b' }]));
+    await act(() => jest.advanceTimersByTime(2000));
+
+    expect(sent(send)).toEqual([['a', 'b'], ['b']]);
+  });
 });

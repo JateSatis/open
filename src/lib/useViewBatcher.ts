@@ -50,8 +50,11 @@ export function useViewBatcher<T extends { id: string }>({
   repeat,
 }: {
   isFocused: boolean;
-  /** Отправить пачку. Отказ — засчитаем, когда снова покажется на экране. */
-  send: (items: T[], sessionId: string) => Promise<void>;
+  /**
+   * Отправить пачку. Отдаёт id, которые не дошли (часть пачки), отказ — не
+   * дошло ничего. Не дошедшее засчитаем, когда снова покажется на экране.
+   */
+  send: (items: T[], sessionId: string) => Promise<string[] | void>;
   repeat: ViewRepeat;
 }): ViewBatcher<T> {
   const sessionId = useMemo(() => newSessionId(), []);
@@ -78,11 +81,15 @@ export function useViewBatcher<T extends { id: string }>({
 
     if (pending.length === 0) return;
 
-    sendRef.current(pending, sessionId).catch(() => {
-      pending.forEach(({ id }) => {
+    const forget = (ids: string[]) =>
+      ids.forEach((id) => {
         sentRef.current.delete(id);
       });
-    });
+
+    sendRef
+      .current(pending, sessionId)
+      .then((failed) => forget(failed ?? []))
+      .catch(() => forget(pending.map(({ id }) => id)));
   }, [sessionId]);
 
   /** Засчитать то, что сейчас на экране, если смотреть сейчас есть кому. */

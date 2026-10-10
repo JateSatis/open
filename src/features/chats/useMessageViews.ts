@@ -98,7 +98,7 @@ export function useMessageViews({
       ),
     );
 
-    if (failed.length > 0) throw new Error('views not recorded');
+    return failed;
   }, []);
 
   const { setVisible, addVisible, flush } = useViewBatcher<ViewedMessage>({

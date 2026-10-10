@@ -1,4 +1,4 @@
-import { createContext, useEffect, useMemo, useRef, type ReactNode } from 'react';
+import { createContext, useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Gesture, GestureDetector, type PanGesture } from 'react-native-gesture-handler';
 import Animated, {
@@ -57,35 +57,49 @@ export function PopPager<T>({
   const offset = useSharedValue(-activeIndex * height);
   const count = useSharedValue(items.length);
 
-  // Подгрузились страницы сверху: тот же поп встал на другой индекс — лента
-  // сдвигается на столько же, и экран остаётся на нём. Смену страницы жестом
-  // это не трогает: у неё меняется сам поп. Сдвиг — на UI-потоке, где живут
-  // индекс и положение ленты: чтение их с JS-потока отстаёт.
-  const shown = useRef({
-    key: items[activeIndex] ? keyOf(items[activeIndex]) : null,
-    at: activeIndex,
-  });
+  // Индексы, на которые лента уже приехала жестом, а React ещё не догнал.
+  // Активный индекс сменился не жестом (страницы подгрузились сверху, поп
+  // пропал из ленты, сменилась высота) — лента переставляется на него сразу.
+  // Положение ставится на UI-потоке: чтение shared value с JS-потока отстаёт,
+  // и запоздалый эффект от прошлой страницы откатывал ленту назад.
+  const fromGesture = useRef<number[]>([]);
+  const placed = useRef({ at: activeIndex, height });
 
   useEffect(() => {
-    const key = items[activeIndex] ? keyOf(items[activeIndex]) : null;
-    const before = shown.current;
+    const pending = fromGesture.current.indexOf(activeIndex);
 
-    shown.current = { key, at: activeIndex };
+    if (pending >= 0) {
+      fromGesture.current = fromGesture.current.slice(pending + 1);
+      placed.current = { at: activeIndex, height };
+      return;
+    }
 
-    if (key === null || key !== before.key || activeIndex === before.at) return;
+    if (placed.current.at === activeIndex && placed.current.height === height) return;
 
-    const delta = activeIndex - before.at;
+    placed.current = { at: activeIndex, height };
+    fromGesture.current = [];
 
     runOnUI(() => {
-      index.set(index.get() + delta);
-      offset.set(offset.get() - delta * height);
+      index.set(activeIndex);
+      offset.set(-activeIndex * height);
     })();
-  }, [activeIndex, height, index, items, keyOf, offset]);
+  }, [activeIndex, height, index, offset]);
+
+  const reportIndex = useCallback(
+    (next: number) => {
+      fromGesture.current = [...fromGesture.current, next];
+      onActiveIndex(next);
+    },
+    [onActiveIndex],
+  );
 
   useEffect(() => {
     count.set(items.length);
   }, [count, items.length]);
 
+  // `reportIndex` трогает ref, но зовётся по концу жеста, а не в рендере:
+  // линтер видит передачу в ворклет внутри useMemo как чтение при рендере.
+  /* eslint-disable react-hooks/refs */
   const pan = useMemo(
     () =>
       Gesture.Pan()
@@ -117,10 +131,11 @@ export function PopPager<T>({
           );
 
           // Страница становится активной сразу, пока доезжает: видео стартует без паузы.
-          if (next !== at) runOnJS(onActiveIndex)(next);
+          if (next !== at) runOnJS(reportIndex)(next);
         }),
-    [count, height, index, offset, onActiveIndex],
+    [count, height, index, offset, reportIndex],
   );
+  /* eslint-enable react-hooks/refs */
 
   const strip = useAnimatedStyle(() => ({ transform: [{ translateY: offset.get() }] }));
 

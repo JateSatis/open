@@ -1,16 +1,17 @@
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useRef, useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { useSharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { HeartBurst, randomTilt, type Heart } from './HeartBurst';
+import { HeartBurst } from './HeartBurst';
 import { PopCaption } from './PopCaption';
 import { PopProgressBar } from './PopProgressBar';
-import { PopReactionPopover, type PopoverAnchor } from './PopReactionPopover';
+import { PopReactionPopover } from './PopReactionPopover';
 import { PopSideColumn } from './PopSideColumn';
 import { PopVideo } from './PopVideo';
 import { PlaybackBadges } from './PlaybackBadges';
 import { styles } from './styles';
+import { usePageControls } from './usePageControls';
 import { useSurfacePress } from './useSurfacePress';
 
 import type { Pop } from '@/api/pops';
@@ -50,15 +51,9 @@ export const PopPage = memo(function PopPage({
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const active = mode === 'active';
-  const [paused, setPaused] = useState(false);
-  const [fast, setFast] = useState(false);
   const [scrubbingNow, setScrubbingNow] = useState(false);
-  const [captionOpen, setCaptionOpen] = useState(false);
-  const [picker, setPicker] = useState<PopoverAnchor | null>(null);
-  const [hearts, setHearts] = useState<Heart[]>([]);
-  // Кадр видео уже на экране — обложка поверх убирается.
-  const [framed, setFramed] = useState(false);
-  const heartKey = useRef(0);
+  const controls = usePageControls(active);
+  const { paused, fast, captionOpen, setCaptionOpen, picker, setPicker, framed, hearts } = controls;
   const progress = useSharedValue(0);
   const scrubbing = useSharedValue(false);
   const seekRef = useRef<((share: number) => void) | null>(null);
@@ -66,36 +61,20 @@ export const PopPage = memo(function PopPage({
   const pending = usePendingReactions((state) => state.byMessage[pop.id]);
   const reactions = withPendingPopReaction(pop.reactions, pending);
 
-  // Ушёл со страницы — вернётся к игре, а не к паузе и не к раскрытой подписи.
-  useEffect(() => {
-    if (active) return;
-
-    setPaused(false);
-    setFast(false);
-    setCaptionOpen(false);
-    setPicker(null);
-    setFramed(false);
-  }, [active]);
-
-  const showFrame = useCallback(() => setFramed(true), []);
-  const togglePause = useCallback(() => setPaused((value) => !value), []);
+  const { addHeart } = controls;
   const doubleTap = useCallback(
     (x: number, y: number) => {
-      heartKey.current += 1;
-      setHearts((list) => [...list, { key: heartKey.current, x, y, tilt: randomTilt() }]);
+      addHeart(x, y);
       onDoubleTap(pop);
     },
-    [onDoubleTap, pop],
-  );
-  const dropHeart = useCallback(
-    (key: number) => setHearts((list) => list.filter((heart) => heart.key !== key)),
-    [],
+    [addHeart, onDoubleTap, pop],
   );
 
   const surfacePress = useSurfacePress({
-    onTap: togglePause,
+    onTap: controls.togglePause,
     onDoubleTap: doubleTap,
-    onHold: setFast,
+    onHold: controls.setFast,
+    enabled: active,
   });
 
   const seek = useCallback((share: number) => seekRef.current?.(share), []);
@@ -118,7 +97,7 @@ export const PopPage = memo(function PopPage({
           progress={progress}
           scrubbing={scrubbing}
           seekRef={seekRef}
-          onPlaying={showFrame}
+          onPlaying={controls.showFrame}
         />
       ) : null}
       {framed && active ? null : (
@@ -136,7 +115,7 @@ export const PopPage = memo(function PopPage({
       <PlaybackBadges paused={paused && active} fast={fast && active} />
 
       {hearts.map((heart) => (
-        <HeartBurst key={heart.key} heart={heart} onDone={dropHeart} />
+        <HeartBurst key={heart.key} heart={heart} onDone={controls.dropHeart} />
       ))}
 
       {captionOpen ? (

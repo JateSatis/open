@@ -1,6 +1,6 @@
 import { SymbolView } from 'expo-symbols';
 import { useIsFocused, useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, View, type LayoutChangeEvent } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -42,11 +42,27 @@ export function PopViewer({ channelId, startId }: PopViewerProps) {
   const feed = usePopFeed(channelId, startId);
   const { pops } = feed;
   const [size, setSize] = useState<{ width: number; height: number } | null>(null);
-  const [activeId, setActiveId] = useState(startId);
-  const activeIndex = Math.max(
-    0,
-    pops.findIndex((pop) => pop.id === activeId),
-  );
+  // Активный поп и его последнее место в ленте. Пропал из ленты (удалён,
+  // лента перечитана) — экран остаётся на том же месте, на соседнем попе.
+  const [active, setActive] = useState({ id: startId, at: 0 });
+  const found = pops.findIndex((pop) => pop.id === active.id);
+
+  if (found >= 0 && found !== active.at) setActive({ id: active.id, at: found });
+
+  if (found < 0 && pops.length > 0) {
+    const at = Math.min(active.at, pops.length - 1);
+
+    // Стартовый ещё не загружен — ждём его, а не перескакиваем на соседа.
+    if (active.id !== startId || !feed.isFetching) setActive({ id: pops[at].id, at });
+  }
+
+  const activeIndex = found >= 0 ? found : Math.min(active.at, Math.max(pops.length - 1, 0));
+  const popsRef = useRef(pops);
+
+  useEffect(() => {
+    popsRef.current = pops;
+  }, [pops]);
+
   const live = focused && appActive;
   const { onReaction, onDoubleTap } = usePopReactionActions(canPublish);
   const onOpenChannel = useOpenChannel(channelId);
@@ -89,14 +105,13 @@ export function PopViewer({ channelId, startId }: PopViewerProps) {
     [activeIndex, channelTitle, live, onDoubleTap, onOpenChannel, onReaction, size],
   );
 
-  const onActiveIndex = useCallback(
-    (index: number) => {
-      const pop = pops[index];
+  // Стабильный: от него зависит жест листания, и обновления счётчиков не
+  // должны пересоздавать жест посреди свайпа.
+  const onActiveIndex = useCallback((index: number) => {
+    const pop = popsRef.current[index];
 
-      if (pop) setActiveId(pop.id);
-    },
-    [pops],
-  );
+    if (pop) setActive({ id: pop.id, at: index });
+  }, []);
 
   const loadError = describeLoadError(feed.error, 'Не удалось загрузить попсы');
 

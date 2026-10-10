@@ -1,7 +1,7 @@
-import { useQueryClient } from '@tanstack/react-query';
+import { useQueryClient, type InfiniteData } from '@tanstack/react-query';
 import { useEffect } from 'react';
 
-import { listPopCounters } from '@/api/pops';
+import { listPopCounters, type Pop } from '@/api/pops';
 import { acquirePopTopic } from '@/api/popTopics';
 import { popsQueryKey } from '@/features/pops/keys';
 import { applyPopCounters } from '@/features/pops/popsCache';
@@ -46,8 +46,16 @@ export function usePopCountersSync(channelId: string) {
     const release = acquirePopTopic(channelId, {
       onReactionsChanged: (popId) => enqueue([popId]),
       onViewsChanged: enqueue,
+      // Пропущенное за обрыв — только счётчики загруженных попсов. Ленту
+      // просмотра не перечитываем: её страницы собраны от выбранного попа, и
+      // перечитывание переложило бы их иначе, под пальцем.
       onReconnected: () => {
-        void queryClient.invalidateQueries({ queryKey: popsQueryKey(channelId) });
+        const loaded = queryClient
+          .getQueriesData<InfiniteData<Pop[], unknown>>({ queryKey: popsQueryKey(channelId) })
+          .flatMap(([, data]) => data?.pages.flat() ?? [])
+          .map((pop) => pop.id);
+
+        enqueue([...new Set(loaded)]);
       },
     });
 

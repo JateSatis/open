@@ -13,6 +13,8 @@ export type SurfacePressHandlers = {
   onDoubleTap: (x: number, y: number) => void;
   /** Удержание началось (`true`) и закончилось (`false`). */
   onHold: (holding: boolean) => void;
+  /** Страница активна. Ушла — ожидающий одиночный тап отменяется, а не ставит паузу ей вслед. */
+  enabled: boolean;
 };
 
 /**
@@ -25,6 +27,7 @@ export function useSurfacePress({
   onTap,
   onDoubleTap,
   onHold,
+  enabled,
 }: SurfacePressHandlers): Pick<
   PressableProps,
   'onPress' | 'onLongPress' | 'onPressOut' | 'delayLongPress'
@@ -38,6 +41,15 @@ export function useSurfacePress({
   useEffect(() => {
     handlers.current = { onTap, onDoubleTap, onHold };
   }, [onDoubleTap, onHold, onTap]);
+
+  useEffect(() => {
+    if (enabled) return;
+
+    if (singleTimer.current) clearTimeout(singleTimer.current);
+
+    singleTimer.current = null;
+    inSeries.current = false;
+  }, [enabled]);
 
   useEffect(
     () => () => {
