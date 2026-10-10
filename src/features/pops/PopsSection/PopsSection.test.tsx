@@ -16,8 +16,14 @@ jest.mock('@/features/auth/useSession', () => ({
   useSession: () => ({ session: { user: { id: 'me' } } }),
 }));
 jest.mock('@/features/chats/useChats', () => ({ chatsQueryKey: ['chats'] }));
+const mockOpenPopViewer = jest.fn();
+jest.mock('@/features/pops/openPopViewer', () => ({
+  openPopViewer: (...args: unknown[]) => mockOpenPopViewer(...args),
+}));
+jest.mock('@/api/popTopics', () => ({ acquirePopTopic: () => () => undefined }));
 jest.mock('@/api/pops', () => ({
   POPS_PAGE_SIZE: 30,
+  NO_POP_REACTIONS: { counts: {}, mine: null },
   listPops: jest.fn(),
   canPublishInChannel: jest.fn(),
   publishPop: jest.fn(),
@@ -54,6 +60,8 @@ const pop: Pop = {
   height: 1280,
   durationMs: 5000,
   createdAt: '2026-10-08T10:00:00Z',
+  reactions: { counts: {}, mine: null },
+  viewsCount: 0,
 };
 
 const probe: { client: QueryClient | null } = { client: null };
@@ -110,16 +118,17 @@ describe('PopsSection', () => {
     expect(screen.queryByLabelText('Новый поп')).toBeNull();
   });
 
-  it('shows published pops to a stranger, a tap does nothing', async () => {
+  it('shows a stranger published pops with views; a tap opens the viewer on that pop', async () => {
     (canPublishInChannel as jest.Mock).mockResolvedValue(false);
-    (listPops as jest.Mock).mockResolvedValue([pop]);
+    (listPops as jest.Mock).mockResolvedValue([{ ...pop, viewsCount: 1234 }]);
 
     await renderSection();
 
-    expect(await screen.findByTestId('pop-tile')).toBeTruthy();
-    expect(screen.getByTestId('pop-tile').props.accessibilityState).toMatchObject({
-      disabled: true,
-    });
+    fireEvent.press(await screen.findByTestId('pop-tile'));
+
+    expect(screen.getByLabelText('Просмотры: 1234')).toBeTruthy();
+    expect(screen.getByText('1,2K')).toBeTruthy();
+    expect(mockOpenPopViewer).toHaveBeenCalledWith('channel-1', 'pop-1');
   });
 
   it('puts a publishing pop first, marks a failure and retries with the same id', async () => {

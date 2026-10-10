@@ -45,6 +45,10 @@ export type MessageAttachment = {
    * Нет или `null` — своё вложение сообщения.
    */
   popId?: string | null;
+  /** Канал попа — по нему открывается просмотр попсов. */
+  popChannelId?: string | null;
+  /** Поп удалён: база его не отдаёт, на месте обложки — плашка. */
+  popDeleted?: boolean;
 };
 
 /** Где в этом чате стоит сообщение из другого чата: островок, который его держит. */
@@ -194,7 +198,7 @@ export type Message = {
 const ATTACHMENT_COLUMNS = 'id, url, poster_url, mime_type, width, height, duration_ms, waveform, position';
 // Вложение сообщения бывает ссылкой на поп: файл тогда — попа.
 const MESSAGE_ATTACHMENT_COLUMNS =
-  `${ATTACHMENT_COLUMNS}, pop_id, pop:pops(url, poster_url, mime_type, width, height, duration_ms)` as const;
+  `${ATTACHMENT_COLUMNS}, pop_id, pop:pops(channel_id, url, poster_url, mime_type, width, height, duration_ms)` as const;
 // Подсказки внешних ключей нужны, потому что `messages` связана с `profiles`,
 // `chats` и сама с собой через несколько таблиц сразу.
 const REPLY_COLUMNS =
@@ -272,6 +276,8 @@ function toAttachments(
           durationMs: pop?.duration_ms ?? null,
           waveform: null,
           popId: attachment.pop_id,
+          popChannelId: pop?.channel_id ?? null,
+          popDeleted: !pop,
         };
       }
 

@@ -16,9 +16,11 @@ export type PopGridActions = {
   /** Подпись под «+» — в шите. */
   addLabel?: string;
   onPop?: (pop: Pop) => void;
+  onPopLongPress?: (pop: Pop) => void;
   /** Попсы нельзя взять (в посте уже выбраны фото или видео). */
   popsDisabled?: boolean;
   showDuration?: boolean;
+  showViews?: boolean;
   onRetry: (pending: PendingPop) => void;
   onDiscard: (pending: PendingPop) => void;
 };
@@ -57,8 +59,10 @@ export const PopGridRow = memo(function PopGridRow({ cells, geometry, actions }:
             <PublishedPopTile
               pop={cell.pop}
               onPress={actions.onPop}
+              onLongPress={actions.onPopLongPress}
               disabled={actions.popsDisabled}
               showDuration={actions.showDuration}
+              showViews={actions.showViews}
             />
           )}
         </View>

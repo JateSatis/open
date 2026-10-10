@@ -44,8 +44,12 @@ export type PopGridProps = {
   onAdd: () => void;
   addLabel?: string;
   onPop?: (pop: Pop) => void;
+  /** Удержание на попе. */
+  onPopLongPress?: (pop: Pop) => void;
   popsDisabled?: boolean;
   showDuration?: boolean;
+  /** Просмотры внизу слева на плитках — в сетке канала, как в профиле TikTok. */
+  showViews?: boolean;
   ListComponent?: PopListComponent;
   header?: ReactElement | null;
   footer?: ReactElement | null;
@@ -64,8 +68,10 @@ export function PopGrid({
   onAdd,
   addLabel,
   onPop,
+  onPopLongPress,
   popsDisabled,
   showDuration,
+  showViews,
   ListComponent = FlashList,
   header = null,
   footer = null,
@@ -113,8 +119,28 @@ export function PopGrid({
   );
 
   const actions = useMemo<PopGridActions>(
-    () => ({ onAdd, addLabel, onPop, popsDisabled, showDuration, onRetry, onDiscard }),
-    [addLabel, onAdd, onDiscard, onPop, onRetry, popsDisabled, showDuration],
+    () => ({
+      onAdd,
+      addLabel,
+      onPop,
+      onPopLongPress,
+      popsDisabled,
+      showDuration,
+      showViews,
+      onRetry,
+      onDiscard,
+    }),
+    [
+      addLabel,
+      onAdd,
+      onDiscard,
+      onPop,
+      onPopLongPress,
+      onRetry,
+      popsDisabled,
+      showDuration,
+      showViews,
+    ],
   );
 
   const renderItem = useCallback<ListRenderItem<PopRow>>(

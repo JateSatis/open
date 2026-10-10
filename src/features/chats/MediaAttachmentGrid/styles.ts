@@ -7,4 +7,8 @@ export const styles = StyleSheet.create({
   tile: {
     position: 'absolute',
   },
+  popDeleted: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });

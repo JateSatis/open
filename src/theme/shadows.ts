@@ -7,4 +7,15 @@ export const Shadows = {
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 3 },
   },
+  /** Текст и значки прямо на видео, без подложки: читаются и на светлом кадре. */
+  onMedia: {
+    shadowOpacity: 0.5,
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 1 },
+  },
+  /** То же для текста: `textShadow*` вместо `shadow*`. */
+  textOnMedia: {
+    textShadowRadius: 3,
+    textShadowOffset: { width: 0, height: 1 },
+  },
 } as const;

@@ -56,6 +56,7 @@ jest.mock('@/api/profile', () => ({ getProfile: jest.fn(() => Promise.resolve(nu
 jest.mock('@/features/auth/useSession', () => ({ useSession: jest.fn() }));
 jest.mock('@/api/streams');
 jest.mock('@/api/channels', () => ({ getChannel: jest.fn() }));
+jest.mock('@/api/popTopics', () => ({ acquirePopTopic: () => () => undefined }));
 jest.mock('@/api/pops', () => ({
   POPS_PAGE_SIZE: 30,
   listPops: jest.fn(() => Promise.resolve([])),
