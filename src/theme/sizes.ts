@@ -160,6 +160,19 @@ export const Sizes = {
   /** Кружок текущего цвета в рисовании и толщина его градиентной обводки. */
   drawColorCircle: 30,
   drawColorRing: 3,
+  /** Клетка шахматного фона под полупрозрачным цветом. */
+  drawCheckerCell: 5,
+  /** Сетка цветов: зазор между квадратиками и обводка выбранного. */
+  drawPaletteGap: 2,
+  drawPaletteOutline: 2,
+  /** Ползунок прозрачности: высота полосы и диаметр бегунка. */
+  drawAlphaTrack: 24,
+  drawAlphaThumb: 28,
+  /** Лупа пипетки: диаметр, сколько пикселей фото в поперечнике, окантовки. */
+  drawLoupe: 120,
+  drawLoupePixels: 10,
+  drawLoupeBorder: 3,
+  drawLoupeRing: 10,
   /** Ползунок толщины рисования: высота шкалы, ширина её узкого и широкого конца. */
   drawSliderHeight: 220,
   drawSliderNarrow: 4,

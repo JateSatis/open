@@ -17,7 +17,7 @@ import {
 import { affineToMatrix, invertAffine, type Affine } from '@/features/media/photoEdits/crop';
 import {
   arrowHead,
-  MARKER_OPACITY,
+  brushPaintColor,
   smoothPath,
   type DrawBrush,
   type DrawOp,
@@ -231,8 +231,7 @@ export function renderLayer(params: LayerParams): SkImage | null {
       paint.setBlendMode(BlendMode.Src);
     } else {
       paint = strokePaint(stroke.width, brushCap(stroke.brush));
-      paint.setColor(Skia.Color(stroke.color));
-      if (stroke.brush === 'marker') paint.setAlphaf(MARKER_OPACITY);
+      paint.setColor(Skia.Color(brushPaintColor(stroke.color, stroke.brush)));
     }
 
     canvas.save();

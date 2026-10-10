@@ -13,6 +13,12 @@ import type { PhotoCrop } from '@/features/media/photoEdits/crop';
 
 /** Точки штриха не чаще, чем через столько точек экрана: меньше — только шум. */
 const MIN_STEP = 1.5;
+/**
+ * Касание фото при открытой панели цвета закрывает её. Палец сдвинулся
+ * дальше этого — это уже штрих, он рисуется от места касания; нет — был тап,
+ * штриха нет.
+ */
+const DISMISS_SLOP = 10;
 
 type Mode = 'none' | 'draw' | 'zoom';
 
@@ -38,6 +44,9 @@ export function useDrawGestures(
 ) {
   const mode = useSharedValue<Mode>('none');
   const pinch = useSharedValue<PinchStart | null>(null);
+  /** Касание закрыло панель цвета и ещё не стало штрихом: где опустился палец. */
+  const dismiss = useSharedValue<{ x: number; y: number } | null>(null);
+  const { colorsOpen, close: closePicker } = tool.picker;
   const { size, strokeId, finishStroke, open, selectedBrush, selectedColor, progress } = tool;
   // Ворклеты берут shared values по одному, а не объект с картинкой.
   const { points, width, brush, color } = tool.live;
@@ -86,6 +95,7 @@ export function useDrawGestures(
         if (touches.length >= 2) {
           // Второй палец: штрих, начатый первым, не остаётся.
           if (mode.value === 'draw') points.value = [];
+          dismiss.value = null;
           mode.value = 'zoom';
           startPinch(touches);
           return;
@@ -101,6 +111,17 @@ export function useDrawGestures(
         brush.value = selectedBrush.value;
         color.value = selectedColor.value;
         width.value = size.value / g.pointsPerUnit;
+
+        if (colorsOpen.value) {
+          // Точек пока нет: тап не оставит даже точки.
+          colorsOpen.value = false;
+          dismiss.value = { x: touches[0].x, y: touches[0].y };
+          points.value = [];
+          runOnJS(closePicker)();
+          return;
+        }
+
+        dismiss.value = null;
         points.value = [point.x, point.y];
       })
       .onTouchesMove((event) => {
@@ -125,6 +146,18 @@ export function useDrawGestures(
         const touch = touches[0];
         const point = screenToUnits(g, touch.x, touch.y);
         const step = MIN_STEP / g.pointsPerUnit;
+        const down = dismiss.value;
+
+        if (down) {
+          if (Math.hypot(touch.x - down.x, touch.y - down.y) < DISMISS_SLOP) return;
+
+          // Повели пальцем — штрих, от места касания.
+          const from = screenToUnits(g, down.x, down.y);
+
+          dismiss.value = null;
+          points.value = [from.x, from.y, point.x, point.y];
+          return;
+        }
 
         points.modify((list) => {
           'worklet';
@@ -139,7 +172,9 @@ export function useDrawGestures(
       .onTouchesUp((event, manager) => {
         const left = remaining(event);
 
-        if (mode.value === 'draw' && left.length === 0) {
+        if (mode.value === 'draw' && left.length === 0 && dismiss.value) {
+          dismiss.value = null;
+        } else if (mode.value === 'draw' && left.length === 0) {
           const pointsNow = points.value.slice();
 
           runOnJS(finishStroke)(strokeId.value, pointsNow, brush.value, color.value, width.value);
@@ -155,6 +190,7 @@ export function useDrawGestures(
       })
       .onTouchesCancelled((_event, manager) => {
         if (mode.value === 'draw') points.value = [];
+        dismiss.value = null;
         mode.value = 'none';
         pinch.value = null;
         manager.end();
@@ -162,8 +198,11 @@ export function useDrawGestures(
   }, [
     area,
     brush,
+    closePicker,
     color,
+    colorsOpen,
     crop,
+    dismiss,
     finishStroke,
     mode,
     open,

@@ -4,7 +4,7 @@ import { useDerivedValue } from 'react-native-reanimated';
 import { strokePath } from './paintDrawing';
 import type { LiveDraw } from './useDrawTool';
 
-import { isColorBrush, MARKER_OPACITY } from '@/features/media/photoEdits/drawing';
+import { brushPaintColor, isColorBrush } from '@/features/media/photoEdits/drawing';
 
 export type LiveStrokeProps = {
   draw: LiveDraw;
@@ -26,7 +26,7 @@ export type LiveStrokeProps = {
  * вычисления, и путь из вложенной функции не пересчитывался бы по ходу штриха.
  */
 export function LiveStroke({ draw, imageWidth, layer }: LiveStrokeProps) {
-  const { brush, points, width } = draw;
+  const { brush, color, points, width } = draw;
   const units = [imageWidth, 0, 0, 0, imageWidth, 0, 0, 0, 1];
   const inUnits = [1 / imageWidth, 0, 0, 0, 1 / imageWidth, 0, 0, 0, 1];
   const blurSource: SkImage | null = layer === 'blur' ? draw.blurred : draw.blurredLines;
@@ -47,7 +47,7 @@ export function LiveStroke({ draw, imageWidth, layer }: LiveStrokeProps) {
       : Skia.Path.Make(),
   );
   const cap = useDerivedValue(() => (brush.value === 'marker' ? 'square' : 'round'));
-  const opacity = useDerivedValue(() => (brush.value === 'marker' ? MARKER_OPACITY : 1));
+  const paintColor = useDerivedValue(() => brushPaintColor(color.value, brush.value));
 
   return (
     <Group matrix={units}>
@@ -58,8 +58,7 @@ export function LiveStroke({ draw, imageWidth, layer }: LiveStrokeProps) {
           strokeWidth={width}
           strokeCap={cap}
           strokeJoin="round"
-          color={draw.color}
-          opacity={opacity}
+          color={paintColor}
         />
       ) : null}
       {blurSource ? (

@@ -18,7 +18,7 @@ export type DrawBrush = 'pen' | 'arrow' | 'marker' | 'blur' | 'eraser';
 
 export type DrawStroke = {
   brush: DrawBrush;
-  /** Цвет линии, `#rrggbb`. У размытия и ластика не используется. */
+  /** Цвет линии с прозрачностью, `#rrggbbaa`. У размытия и ластика не используется. */
   color: string;
   /** Толщина в долях ширины исходника. */
   width: number;
@@ -38,8 +38,63 @@ export function isColorBrush(brush: DrawBrush): brush is ColorBrush {
   return brush === 'pen' || brush === 'arrow' || brush === 'marker';
 }
 
-/** Маркер — полупрозрачный, как текстовыделитель. */
+/**
+ * Маркер — полупрозрачный, как текстовыделитель. Прозрачность цвета кисти
+ * умножается на неё: маркер с цветом в 50% — вдвое прозрачнее обычного.
+ */
 export const MARKER_OPACITY = 0.45;
+
+/** Цвет кисти: `#rrggbbaa`, а сохранённый до прозрачности `#rrggbb` — непрозрачный. */
+const INK_PATTERN = /^#[0-9a-f]{6}([0-9a-f]{2})?$/i;
+
+/** Цвет кисти в виде `#rrggbbaa` или `null`, если это не цвет. */
+export function normalizeInk(value: unknown): string | null {
+  if (typeof value !== 'string' || !INK_PATTERN.test(value)) return null;
+
+  const lower = value.toLowerCase();
+
+  return lower.length === 7 ? `${lower}ff` : lower;
+}
+
+function hexByte(value: number): string {
+  'worklet';
+  const byte = Math.round(Math.min(1, Math.max(0, value)) * 255);
+
+  return (byte < 16 ? '0' : '') + byte.toString(16);
+}
+
+/** Цвет `#rrggbb…` и прозрачность 0…1 → цвет кисти `#rrggbbaa`. */
+export function inkOf(rgb: string, alpha: number): string {
+  'worklet';
+  return `${rgb.slice(0, 7).toLowerCase()}${hexByte(alpha)}`;
+}
+
+/** Цвет из каналов 0…255 — `#rrggbb`. */
+export function rgbHex(r: number, g: number, b: number): string {
+  'worklet';
+  return `#${hexByte(r / 255)}${hexByte(g / 255)}${hexByte(b / 255)}`;
+}
+
+/** Прозрачность цвета кисти, 0…1. */
+export function inkAlpha(ink: string): number {
+  'worklet';
+  return ink.length === 9 ? parseInt(ink.slice(7, 9), 16) / 255 : 1;
+}
+
+/**
+ * Цвет кисти → краска линии, `rgba(…)`: одна функция для штриха под пальцем
+ * и для сборки слоя, поэтому запечённое совпадает с увиденным. У маркера
+ * прозрачность цвета умножается на его собственную.
+ */
+export function brushPaintColor(ink: string, brush: DrawBrush): string {
+  'worklet';
+  const r = parseInt(ink.slice(1, 3), 16);
+  const g = parseInt(ink.slice(3, 5), 16);
+  const b = parseInt(ink.slice(5, 7), 16);
+  const alpha = inkAlpha(ink) * (brush === 'marker' ? MARKER_OPACITY : 1);
+
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
 /**
  * Сила размытия — сигма гауссова размытия в долях ширины фото: на рабочей
  * копии в 1600 это ~56 px, под мазком не разобрать ни лица, ни номера, ни

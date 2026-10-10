@@ -5,3 +5,4 @@ export * from './radii';
 export * from './sizes';
 export * from './opacity';
 export * from './shadows';
+export * from './drawPalette';

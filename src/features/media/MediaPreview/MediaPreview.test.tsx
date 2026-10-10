@@ -1,4 +1,11 @@
-import { act, render, screen, userEvent, waitFor } from '@testing-library/react-native';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  userEvent,
+  waitFor,
+} from '@testing-library/react-native';
 
 import { PreviewLayer } from './PreviewLayer';
 import {
@@ -12,18 +19,48 @@ import {
 import { workingCopyOf } from './workingCopy';
 
 import { confirm } from '@/components/ConfirmDialog';
-import { useDrawSettings } from '@/features/media/drawSettings';
+import { DEFAULT_DRAW_SETTINGS, useDrawSettings } from '@/features/media/drawSettings';
 import type { MediaLibraryItem } from '@/features/media/mediaLibrary';
 import { editedThumbOf } from '@/features/media/photoEdits/editedThumbs';
 import { photoEditOf, setPhotoEdit, usePhotoEdits } from '@/features/media/photoEdits/editsStore';
 import { EMPTY_EDIT } from '@/features/media/photoEdits/types';
 import { setSelectionLimit, useMediaSelection } from '@/features/media/selectionStore';
+import { DrawPalette, Sizes } from '@/theme';
 
 // Skia, запекание и рабочая копия — нативные; здесь проверяется поведение слоя.
 jest.mock('./EditedPhoto', () => ({ EditedPhoto: () => null, PHOTO_SAMPLING: {} }));
 jest.mock('./CropOverlay', () => ({ CropOverlay: () => null }));
 jest.mock('./AngleRuler', () => ({ AngleRuler: () => null }));
-jest.mock('./DrawColorCircle', () => ({ DrawColorCircle: () => null }));
+jest.mock('@shopify/react-native-skia', () => {
+  const none = () => null;
+
+  return {
+    Canvas: none,
+    Circle: none,
+    Group: none,
+    ImageShader: none,
+    LinearGradient: none,
+    Rect: none,
+    RoundedRect: none,
+    SweepGradient: none,
+    FilterMode: { Nearest: 0 },
+    MipmapMode: { None: 0 },
+    vec: (x: number, y: number) => ({ x, y }),
+    Skia: { Surface: { Make: () => null } },
+  };
+});
+jest.mock('./DrawAlphaSlider', () => ({ DrawAlphaSlider: () => null }));
+jest.mock('./eyedropperPixels', () => ({ visibleImageOf: jest.fn(() => ({ dispose: jest.fn() })) }));
+jest.mock('./Eyedropper', () => {
+  const { Pressable } = jest.requireActual<typeof import('react-native')>('react-native');
+
+  return {
+    // Лупа — Skia на UI-потоке; здесь — её итог: палец отпущен на синем.
+    Eyedropper: ({ onPick }: { onPick: (rgb: string) => void }) => (
+      <Pressable testID="eyedropper-release" onPress={() => onPick('#1e64c8')} />
+    ),
+  };
+});
 jest.mock('./DrawSizeSlider', () => ({ DrawSizeSlider: () => null }));
 jest.mock('./drawingLayers', () => ({
   NO_LAYERS: { blur: null, lines: null },
@@ -404,5 +441,96 @@ describe('рисование', () => {
     await waitFor(() => expect(screen.queryByLabelText('Перо')).toBeNull());
     expect(confirm).toHaveBeenCalledTimes(2);
     expect(photoEditOf('a')?.drawing).toEqual([FIRST, SECOND]);
+  });
+
+  describe('цвет кисти', () => {
+    beforeEach(() => {
+      useDrawSettings.setState({
+        ...DEFAULT_DRAW_SETTINGS,
+        colors: { ...DEFAULT_DRAW_SETTINGS.colors, marker: '#ffcc0080' },
+      });
+    });
+
+    /** Тап по квадратику сетки: ряд и столбец — по раскладке во всю ширину. */
+    async function pressPaletteCell(row: number, column: number) {
+      const grid = screen.getByTestId('draw-palette');
+      const width = 300;
+      const step = (width - Sizes.drawPaletteGap * 9) / 10 + Sizes.drawPaletteGap;
+
+      await act(async () => {
+        fireEvent(grid, 'layout', { nativeEvent: { layout: { width, height: 0, x: 0, y: 0 } } });
+      });
+      // Свежий элемент: после раскладки у сетки новый обработчик.
+      fireEvent.press(screen.getByTestId('draw-palette'), {
+        nativeEvent: { locationX: column * step + 1, locationY: row * step + 1 },
+      });
+    }
+
+    it('у ластика и размытия кружок неактивен — панель не открывается', async () => {
+      const user = await openDraw();
+
+      await user.press(screen.getByLabelText('Ластик'));
+      expect(screen.getByLabelText('У этой кисти нет цвета')).toBeDisabled();
+
+      await user.press(screen.getByLabelText('Размытие'));
+      expect(screen.getByLabelText('У этой кисти нет цвета')).toBeDisabled();
+      expect(screen.queryByLabelText('Пипетка')).toBeNull();
+    });
+
+    it('тап по цвету сетки применяет его к текущей кисти и закрывает панель', async () => {
+      const user = await openDraw();
+
+      await user.press(screen.getByLabelText('Цвет кисти'));
+      expect(screen.getByLabelText('Пипетка')).toBeTruthy();
+
+      await pressPaletteCell(4, 7);
+
+      expect(useDrawSettings.getState().colors.pen).toBe(`${DrawPalette[4][7]}ff`);
+      expect(useDrawSettings.getState().colors.marker).toBe('#ffcc0080');
+      expect(screen.queryByLabelText('Пипетка')).toBeNull();
+    });
+
+    it('прозрачность кисти сохраняется при выборе цвета: у маркера — его 50%', async () => {
+      const user = await openDraw();
+
+      await user.press(screen.getByLabelText('Маркер'));
+      await user.press(screen.getByLabelText('Цвет кисти'));
+      await pressPaletteCell(0, 9);
+
+      expect(useDrawSettings.getState().colors.marker).toBe('#00000080');
+    });
+
+    it('«назад» при открытой панели закрывает её, цвет прежний, рисование открыто', async () => {
+      const user = await openDraw();
+
+      await user.press(screen.getByLabelText('Цвет кисти'));
+      await act(async () => {
+        handlePreviewBack();
+      });
+
+      expect(screen.queryByLabelText('Пипетка')).toBeNull();
+      expect(screen.getByLabelText('Перо')).toBeTruthy();
+      expect(useDrawSettings.getState().colors.pen).toBe(DEFAULT_DRAW_SETTINGS.colors.pen);
+
+      await user.press(screen.getByLabelText('Цвет кисти'));
+      await user.press(screen.getByLabelText('Закрыть цвета'));
+
+      expect(screen.queryByLabelText('Пипетка')).toBeNull();
+      expect(screen.getByLabelText('Перо')).toBeTruthy();
+    });
+
+    it('пипетка закрывает панель, отпущенный палец ставит цвет с фото', async () => {
+      const user = await openDraw();
+
+      await user.press(screen.getByLabelText('Цвет кисти'));
+      await user.press(screen.getByLabelText('Пипетка'));
+
+      expect(screen.queryByLabelText('Пипетка')).toBeNull();
+
+      await user.press(screen.getByTestId('eyedropper-release'));
+
+      expect(useDrawSettings.getState().colors.pen).toBe('#1e64c8ff');
+      expect(screen.queryByTestId('eyedropper-release')).toBeNull();
+    });
   });
 });

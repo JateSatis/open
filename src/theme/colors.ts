@@ -134,3 +134,18 @@ export const ColorWheel = [
   '#ff2d55',
   '#ff3b30',
 ];
+
+/**
+ * Рисование: шахматная клетка под полупрозрачным цветом, серая обводка
+ * кружка у кистей без цвета и обводка выбранного квадратика сетки — чёрная
+ * на светлом цвете, белая на тёмном. Одинаковые в обеих темах: инструмент на
+ * тёмном фоне предпросмотра.
+ */
+export const DrawColors = {
+  checkerLight: '#ffffff',
+  checkerDark: '#c7c7cc',
+  neutralRing: '#8e8e93',
+  outlineOnLight: '#000000',
+  outlineOnDark: '#ffffff',
+} as const;
+

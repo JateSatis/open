@@ -175,6 +175,36 @@ export const styles = StyleSheet.create({
     position: 'absolute',
     borderWidth: Sizes.drawSizeOutline,
   },
+  drawRows: {
+    gap: Spacing.two,
+  },
+  colorPanel: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingTop: Spacing.three,
+    paddingHorizontal: Spacing.three,
+    gap: Spacing.two,
+  },
+  colorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    height: Sizes.previewToolActions,
+  },
+  alphaSlider: {
+    flex: 1,
+    height: Sizes.drawAlphaThumb,
+    justifyContent: 'center',
+  },
+  alphaThumb: {
+    position: 'absolute',
+    width: Sizes.drawAlphaThumb,
+    height: Sizes.drawAlphaThumb,
+    borderRadius: Radii.full,
+    borderWidth: Sizes.previewLine,
+  },
   rulerRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',

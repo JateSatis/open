@@ -148,7 +148,7 @@ export function PreviewLayer({
   const cropOpen = crop.open;
   const cancelCrop = crop.cancel;
   const drawOpen = draw.open;
-  const cancelDraw = draw.cancel;
+  const cancelDraw = draw.back;
 
   useEffect(() => {
     const back = drawOpen ? cancelDraw : cropOpen ? cancelCrop : toolOpen ? cancelTool : goBack;

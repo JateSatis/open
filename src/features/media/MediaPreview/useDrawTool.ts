@@ -25,6 +25,7 @@ import {
   type DrawingLayers,
 } from './drawingLayers';
 import { TOOL_SWITCH_MS } from './useColorTool';
+import { useDrawPicker, type DrawPicker } from './useDrawPicker';
 import { workingCopyOf, workingImageOf } from './workingCopy';
 
 import { confirm } from '@/components/ConfirmDialog';
@@ -115,7 +116,11 @@ export type DrawToolState = {
   undo: () => void;
   reset: () => void;
   cancel: () => void;
+  /** Системное «назад»: открытая панель цвета или пипетка закрываются, иначе — как крестик. */
+  back: () => void;
   done: () => void;
+  /** Панель цвета и пипетка. */
+  picker: DrawPicker;
 };
 
 type Session = DrawSession & {
@@ -156,15 +161,29 @@ export function useDrawTool(): DrawToolState {
   const layers = useSharedValue<DrawingLayers>(NO_LAYERS);
   const points = useSharedValue<number[]>([]);
   const brush = useSharedValue<DrawBrush>('pen');
-  const color = useSharedValue('#000000');
+  const color = useSharedValue('#000000ff');
   const selectedBrush = useSharedValue<DrawBrush>('pen');
-  const selectedColor = useSharedValue('#000000');
+  const selectedColor = useSharedValue('#000000ff');
   const width = useSharedValue(0);
   const size = useSharedValue(0);
   const strokeId = useSharedValue(0);
   const scale = useSharedValue(1);
   const x = useSharedValue(0);
   const y = useSharedValue(0);
+
+  const pickerSource = useCallback(() => {
+    const open = current.current;
+
+    if (!open) return null;
+
+    return {
+      image: open.image,
+      adjust: (photoEditOf(open.asset.id) ?? EMPTY_EDIT).adjust,
+      layers: layersNow.current,
+    };
+  }, []);
+  const picker = useDrawPicker(selectedColor, pickerSource);
+  const closePicker = picker.close;
 
   const zoom = useMemo<DrawZoom>(() => ({ scale, x, y }), [scale, x, y]);
   const live = useMemo<LiveDraw>(
@@ -214,7 +233,7 @@ export function useDrawTool(): DrawToolState {
 
       brushNow.current = next;
       selectedBrush.value = next;
-      selectedColor.value = drawColorOf(settings, next) ?? '#000000';
+      selectedColor.value = drawColorOf(settings, next) ?? '#000000ff';
       size.value = settings.sizes[next];
       prepareBlur(next);
       refreshBlurredLines(next, layersNow.current.lines);
@@ -297,8 +316,9 @@ export function useDrawTool(): DrawToolState {
       void Haptics.selectionAsync();
       selectDrawBrush(next);
       applyBrush(next);
+      closePicker();
     },
-    [applyBrush],
+    [applyBrush, closePicker],
   );
 
   const commitSize = useCallback(
@@ -405,6 +425,7 @@ export function useDrawTool(): DrawToolState {
     current.current = null;
     closing.current = true;
     setOpen(false);
+    closePicker();
     runOnUI(() => {
       'worklet';
       points.value = [];
@@ -415,7 +436,7 @@ export function useDrawTool(): DrawToolState {
     progress.value = withTiming(0, { duration: TOOL_SWITCH_MS }, (finished) => {
       if (finished) runOnJS(closed)();
     });
-  }, [closed, points, progress, scale, x, y]);
+  }, [closePicker, closed, points, progress, scale, x, y]);
 
   const cancel = useCallback(() => {
     const open = current.current;
@@ -449,6 +470,12 @@ export function useDrawTool(): DrawToolState {
         asking.current = false;
       });
   }, [leave, show]);
+
+  const pickerMode = picker.mode;
+  const back = useCallback(() => {
+    if (pickerMode !== 'none') closePicker();
+    else cancel();
+  }, [cancel, closePicker, pickerMode]);
 
   const done = useCallback(() => {
     const open = current.current;
@@ -505,6 +532,8 @@ export function useDrawTool(): DrawToolState {
     undo,
     reset,
     cancel,
+    back,
     done,
+    picker,
   };
 }

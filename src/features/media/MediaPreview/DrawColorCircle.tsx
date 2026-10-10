@@ -1,39 +1,56 @@
 import { Canvas, Circle, SweepGradient, vec } from '@shopify/react-native-skia';
-import { View } from 'react-native';
+import { Pressable } from 'react-native';
 
+import { CheckerShader } from './checker';
 import { styles } from './styles';
 
-import { useTheme } from '@/hooks/use-theme';
-import { ColorWheel, Sizes } from '@/theme';
+import { ColorWheel, DrawColors, Opacity, Sizes, Spacing } from '@/theme';
 
 export type DrawColorCircleProps = {
-  /** Цвет кисти; нет — у кисти цвета нет (размытие, ластик), кружок нейтральный. */
+  /** Цвет кисти `#rrggbbaa`; нет — у кисти цвета нет (размытие, ластик). */
   color: string | null;
+  onPress: () => void;
 };
 
 /**
- * Кружок текущего цвета: обводка — цветовой круг, внутри цвет кисти. Выбор
- * цвета — следующий этап, пока кружок только показывает.
+ * Кружок текущего цвета: обводка — цветовой круг, внутри цвет кисти поверх
+ * шахматной клетки — так видна его прозрачность. Тап открывает панель цвета.
+ * У кисти без цвета кружок серый, с пустой клеткой внутри, приглушён и не
+ * нажимается.
  */
-export function DrawColorCircle({ color }: DrawColorCircleProps) {
-  const theme = useTheme();
+export function DrawColorCircle({ color, onPress }: DrawColorCircleProps) {
   const side = Sizes.drawColorCircle;
   const center = side / 2;
   const ring = Sizes.drawColorRing;
+  const inner = center - ring * 2;
 
   return (
-    <View
+    <Pressable
       testID="draw-color"
-      accessible
+      accessibilityRole="button"
       accessibilityLabel={color ? 'Цвет кисти' : 'У этой кисти нет цвета'}
-      style={styles.tool}
+      accessibilityState={{ disabled: !color }}
+      disabled={!color}
+      hitSlop={Spacing.one}
+      onPress={onPress}
+      style={[styles.tool, !color && { opacity: Opacity.toolIdle }]}
     >
-      <Canvas style={{ width: side, height: side }}>
-        <Circle cx={center} cy={center} r={center - ring / 2} style="stroke" strokeWidth={ring}>
-          <SweepGradient c={vec(center, center)} colors={ColorWheel} />
+      <Canvas style={{ width: side, height: side }} pointerEvents="none">
+        <Circle
+          cx={center}
+          cy={center}
+          r={center - ring / 2}
+          style="stroke"
+          strokeWidth={ring}
+          color={DrawColors.neutralRing}
+        >
+          {color ? <SweepGradient c={vec(center, center)} colors={ColorWheel} /> : null}
         </Circle>
-        <Circle cx={center} cy={center} r={center - ring * 2} color={color ?? theme.mediaControl} />
+        <Circle cx={center} cy={center} r={inner}>
+          <CheckerShader />
+        </Circle>
+        {color ? <Circle cx={center} cy={center} r={inner} color={color} /> : null}
       </Canvas>
-    </View>
+    </Pressable>
   );
 }

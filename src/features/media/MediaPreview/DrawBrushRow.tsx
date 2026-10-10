@@ -13,6 +13,8 @@ export type DrawBrushRowProps = {
   /** Цвет выбранной кисти; нет — у неё цвета нет. */
   color: string | null;
   onBrush: (brush: DrawBrush) => void;
+  /** Тап по кружку цвета — открыть панель цвета. */
+  onColor: () => void;
 };
 
 const BRUSHES: { key: DrawBrush; label: string; icon: SymbolViewProps['name'] }[] = [
@@ -40,7 +42,7 @@ const BRUSHES: { key: DrawBrush; label: string; icon: SymbolViewProps['name'] }[
 ];
 
 /** Кисти слева направо и кружок цвета; выбранная кисть — на подложке-кружке. */
-export function DrawBrushRow({ brush, color, onBrush }: DrawBrushRowProps) {
+export function DrawBrushRow({ brush, color, onBrush, onColor }: DrawBrushRowProps) {
   const theme = useTheme();
 
   return (
@@ -64,7 +66,7 @@ export function DrawBrushRow({ brush, color, onBrush }: DrawBrushRowProps) {
         );
       })}
 
-      <DrawColorCircle color={color} />
+      <DrawColorCircle color={color} onPress={onColor} />
     </View>
   );
 }
