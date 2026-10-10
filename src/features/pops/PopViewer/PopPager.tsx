@@ -56,6 +56,10 @@ export function PopPager<T>({
   const index = useSharedValue(activeIndex);
   const offset = useSharedValue(-activeIndex * height);
   const count = useSharedValue(items.length);
+  // Страница, которую React уже отрисовал активной. Пока он не догнал жест,
+  // следующая страница не принимается: иначе быстрые свайпы уводят ленту за
+  // смонтированных соседей, на пустой экран.
+  const rendered = useSharedValue(activeIndex);
 
   // Индексы, на которые лента уже приехала жестом, а React ещё не догнал.
   // Активный индекс сменился не жестом (страницы подгрузились сверху, поп
@@ -67,6 +71,8 @@ export function PopPager<T>({
 
   useEffect(() => {
     const pending = fromGesture.current.indexOf(activeIndex);
+
+    rendered.set(activeIndex);
 
     if (pending >= 0) {
       fromGesture.current = fromGesture.current.slice(pending + 1);
@@ -83,7 +89,7 @@ export function PopPager<T>({
       index.set(activeIndex);
       offset.set(-activeIndex * height);
     })();
-  }, [activeIndex, height, index, offset]);
+  }, [activeIndex, height, index, offset, rendered]);
 
   const reportIndex = useCallback(
     (next: number) => {
@@ -125,6 +131,8 @@ export function PopPager<T>({
           }
 
           next = Math.min(Math.max(next, 0), count.get() - 1);
+
+          if (at !== rendered.get()) next = at;
           index.set(next);
           offset.set(
             withTiming(-next * height, { duration: SETTLE_MS, easing: Easing.out(Easing.cubic) }),
@@ -133,7 +141,7 @@ export function PopPager<T>({
           // Страница становится активной сразу, пока доезжает: видео стартует без паузы.
           if (next !== at) runOnJS(reportIndex)(next);
         }),
-    [count, height, index, offset, reportIndex],
+    [count, height, index, offset, rendered, reportIndex],
   );
   /* eslint-enable react-hooks/refs */
 
