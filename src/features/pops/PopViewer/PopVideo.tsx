@@ -13,12 +13,6 @@ const FILL_ASPECT = 1.5;
 
 export type PopVideoProps = {
   pop: Pop;
-  /**
-   * Показывать видео. Прогреваемый плеер буферизуется без вида: TextureView,
-   * созданный за краем экрана, на Android так и остаётся чёрным, когда
-   * страница приезжает.
-   */
-  attached: boolean;
   /** Играть сейчас: страница активна, экран наверху, приложение не в фоне, нет паузы. */
   playing: boolean;
   /** 2× — пока держат палец. */
@@ -29,26 +23,29 @@ export type PopVideoProps = {
   scrubbing: SharedValue<boolean>;
   /** Перемотка на долю длительности — для полосы прогресса. */
   seekRef: RefObject<((share: number) => void) | null>;
-  /** Вид показал первый кадр — обложку поверх можно убрать. */
-  onFirstFrame: () => void;
+  /**
+   * Видео пошло после того, как страница стала активной, — обложку поверх
+   * можно убрать. Не «первый кадр»: прогретый вид рисует его ещё за краем
+   * экрана, и на приехавшей странице до новых кадров была бы чернота.
+   */
+  onPlaying: () => void;
 };
 
 /**
  * Плеер страницы попа. Живёт только у активной страницы и следующей за ней
  * (прогрев): остальные страницы — обложки, а их плееры освобождаются вместе с
- * этим компонентом. До первого кадра поверх видео лежит обложка (её рисует
- * страница): прозрачность самого вида на Android не годится — TextureView с
- * ней терял кадры и оставался чёрным.
+ * этим компонентом. Вид подключён и у прогрева: смена поверхности у уже
+ * готового плеера на Android давала пустую текстуру. Пока видео не пошло,
+ * поверх лежит обложка (её рисует страница).
  */
 export function PopVideo({
   pop,
-  attached,
   playing,
   fast,
   progress,
   scrubbing,
   seekRef,
-  onFirstFrame,
+  onPlaying,
 }: PopVideoProps) {
   const player = useVideoPlayer(pop.url, (instance) => {
     instance.loop = true;
@@ -59,6 +56,22 @@ export function PopVideo({
     if (playing) player.play();
     else player.pause();
   }, [player, playing]);
+
+  // Время сдвинулось после запуска — кадры идут на экран.
+  useEffect(() => {
+    if (!playing) return;
+
+    let startedAt: number | null = null;
+    const subscription = player.addListener('timeUpdate', ({ currentTime }) => {
+      if (startedAt === null) startedAt = currentTime;
+      else if (currentTime !== startedAt) {
+        subscription.remove();
+        onPlaying();
+      }
+    });
+
+    return () => subscription.remove();
+  }, [onPlaying, player, playing]);
 
   useEffect(() => {
     // Плеер expo-video управляется присваиванием свойств — это его API.
@@ -85,8 +98,6 @@ export function PopVideo({
     };
   }, [player, pop.durationMs, seekRef]);
 
-  if (!attached) return null;
-
   // Касаний вид не получает: нативный плеер на Android забирал их у
   // листания, и свайп обрывался на полпути.
   return (
@@ -97,7 +108,10 @@ export function PopVideo({
         style={StyleSheet.absoluteFill}
         contentFit={pop.height / pop.width >= FILL_ASPECT ? 'cover' : 'contain'}
         nativeControls={false}
-        onFirstFrameRender={onFirstFrame}
+        // TextureView рисуется как обычный вью и едет вместе с лентой. У
+        // SurfaceView своя поверхность вне дерева: при сдвиге ленты и двух
+        // плеерах сразу она мигала чёрным между кадрами.
+        surfaceType="textureView"
       />
     </View>
   );

@@ -122,9 +122,6 @@ export const styles = StyleSheet.create({
   progressFill: {
     height: '100%',
   },
-  popover: {
-    position: 'absolute',
-  },
   message: {
     ...StyleSheet.absoluteFill,
     alignItems: 'center',

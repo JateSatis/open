@@ -1,8 +1,7 @@
 import { SymbolView } from 'expo-symbols';
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, View } from 'react-native';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, { FadeIn, FadeOut, runOnJS, useSharedValue } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeOut, useSharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { HeartBurst, randomTilt, type Heart } from './HeartBurst';
@@ -12,6 +11,7 @@ import { PopReactionPopover, type PopoverAnchor } from './PopReactionPopover';
 import { PopSideColumn } from './PopSideColumn';
 import { PopVideo } from './PopVideo';
 import { styles } from './styles';
+import { useSurfacePress } from './useSurfacePress';
 
 import type { Pop } from '@/api/pops';
 import { Text } from '@/components/Text';
@@ -21,13 +21,6 @@ import { withPendingPopReaction } from '@/features/pops/popReactions';
 import { useTheme } from '@/hooks/use-theme';
 import { Sizes } from '@/theme';
 
-/** Короче этого — тап, дольше — удержание для 2×. */
-const TAP_MAX_MS = 250;
-const LONG_PRESS_MS = 300;
-/** Второй тап двойного — не позже этого после первого. */
-const DOUBLE_TAP_GAP_MS = 250;
-/** Сдвиг пальца, после которого удержание уже не удержание, а листание. */
-const HOLD_SLOP = 12;
 const FADE_MS = 150;
 
 /** Что делает страница: играет, прогревает плеер следом за активной или показывает обложку. */
@@ -102,31 +95,11 @@ export const PopPage = memo(function PopPage({
     [],
   );
 
-  const gesture = useMemo(() => {
-    // Без предела сдвига тап забирал бы быстрый свайп у листания.
-    const single = Gesture.Tap()
-      .maxDistance(HOLD_SLOP)
-      .maxDuration(TAP_MAX_MS)
-      .onEnd((_event, success) => {
-        if (success) runOnJS(togglePause)();
-      });
-    const double = Gesture.Tap()
-      .numberOfTaps(2)
-      .maxDistance(HOLD_SLOP)
-      .maxDuration(TAP_MAX_MS)
-      .maxDelay(DOUBLE_TAP_GAP_MS)
-      .onEnd((event, success) => {
-        if (success) runOnJS(doubleTap)(event.x, event.y);
-      });
-    const hold = Gesture.LongPress()
-      .minDuration(LONG_PRESS_MS)
-      .maxDistance(HOLD_SLOP)
-      .onStart(() => runOnJS(setFast)(true))
-      .onFinalize(() => runOnJS(setFast)(false));
-
-    // Одиночный тап ждёт, не окажется ли он двойным или удержанием.
-    return Gesture.Exclusive(hold, double, single);
-  }, [doubleTap, togglePause]);
+  const surfacePress = useSurfacePress({
+    onTap: togglePause,
+    onDoubleTap: doubleTap,
+    onHold: setFast,
+  });
 
   const seek = useCallback((share: number) => seekRef.current?.(share), []);
   const react = useCallback((emoji: string | null) => onReaction(pop, emoji), [onReaction, pop]);
@@ -143,22 +116,25 @@ export const PopPage = memo(function PopPage({
       {mode !== 'idle' ? (
         <PopVideo
           pop={pop}
-          attached
           playing={playing}
           fast={fast && active}
           progress={progress}
           scrubbing={scrubbing}
           seekRef={seekRef}
-          onFirstFrame={showFrame}
+          onPlaying={showFrame}
         />
       ) : null}
       {framed && active ? null : (
         <PopCover posterUri={pop.posterUrl} showLabel={false} recyclingKey={pop.id} />
       )}
 
-      <GestureDetector gesture={gesture}>
-        <View testID="pop-surface" style={styles.surface} />
-      </GestureDetector>
+      <Pressable
+        testID="pop-surface"
+        accessibilityRole="button"
+        accessibilityLabel={paused ? 'Воспроизвести' : 'Пауза'}
+        style={styles.surface}
+        {...surfacePress}
+      />
 
       {paused && active ? (
         <Animated.View
@@ -236,6 +212,7 @@ export const PopPage = memo(function PopPage({
           width={width}
           height={height}
           anchor={picker}
+          columnBottom={Sizes.popProgressTouch + insets.bottom}
           onSelect={(emoji) => {
             setPicker(null);
             react(reactions.mine === emoji ? null : emoji);

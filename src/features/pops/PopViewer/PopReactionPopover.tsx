@@ -2,8 +2,6 @@ import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 
-import { styles } from './styles';
-
 import type { PopReactions } from '@/api/pops';
 import { pickerGeometry, ReactionPicker } from '@/features/interactions/ReactionPicker';
 import { popPickerOptions } from '@/features/pops/popReactions';
@@ -11,8 +9,8 @@ import { Sizes, Spacing } from '@/theme';
 
 const FADE_MS = 150;
 
-/** Где кнопка «+» на странице — к ней прижимается поповер. */
-export type PopoverAnchor = { x: number; y: number; height: number };
+/** Где кнопка «+»: от её низа до низа боковой колонки. */
+export type PopoverAnchor = { fromBottom: number };
 
 export type PopReactionPopoverProps = {
   reactions: PopReactions;
@@ -20,6 +18,8 @@ export type PopReactionPopoverProps = {
   width: number;
   height: number;
   anchor: PopoverAnchor;
+  /** Низ колонки — от низа страницы. */
+  columnBottom: number;
   onSelect: (emoji: string) => void;
   onClose: () => void;
 };
@@ -34,16 +34,18 @@ export function PopReactionPopover({
   width,
   height,
   anchor,
+  columnBottom,
   onSelect,
   onClose,
 }: PopReactionPopoverProps) {
   const [expanded, setExpanded] = useState(false);
-  const right = width - anchor.x + Spacing.one;
+  // Слева от колонки, вплотную.
+  const right = Spacing.one + Sizes.popSideColumn + Spacing.one;
   const geometry = useMemo(
     () => pickerGeometry(width - right - Spacing.two, { options: popPickerOptions(reactions) }),
     [reactions, right, width],
   );
-  const bottom = height - (anchor.y + anchor.height);
+  const bottom = columnBottom + anchor.fromBottom;
 
   return (
     <>
@@ -56,7 +58,8 @@ export function PopReactionPopover({
       <Animated.View
         entering={FadeIn.duration(FADE_MS)}
         exiting={FadeOut.duration(FADE_MS)}
-        style={[styles.popover, { right, bottom }]}
+        style={StyleSheet.absoluteFill}
+        pointerEvents="box-none"
       >
         <ReactionPicker
           geometry={geometry}
@@ -65,6 +68,8 @@ export function PopReactionPopover({
           maxHeight={height - bottom - Sizes.popSideButton * 2}
           onToggleExpanded={() => setExpanded((value) => !value)}
           onSelect={onSelect}
+          // Блок сам стоит абсолютно — место ему задаёт тот, кто показывает.
+          style={{ right, bottom }}
         />
       </Animated.View>
     </>

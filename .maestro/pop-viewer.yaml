@@ -1,0 +1,67 @@
+appId: com.openger.app
+name: Просмотр попа — открытие с плитки, пауза тапом, ❤️ двойным тапом, реакция из «+», возврат стрелкой
+env:
+  CHANNEL: Test Kanal
+---
+- runFlow: subflows/open-app.yaml
+- tapOn: ${CHANNEL}
+- tapOn:
+    id: "segment-1"
+- tapOn:
+    id: "pop-tile"
+    index: 0
+- assertVisible:
+    id: "pop-page-active"
+- assertVisible:
+    id: "pop-side-column"
+# Вкладок нет: просмотр на весь экран.
+- assertNotVisible: "Чаты"
+# Тап — пауза, ещё тап — играет.
+- tapOn:
+    id: "pop-surface"
+    index: 0
+- assertVisible:
+    id: "pop-paused"
+- tapOn:
+    id: "pop-surface"
+    index: 0
+- assertNotVisible:
+    id: "pop-paused"
+# Двойной тап без моей реакции — ❤️ в столбике; ещё один не снимает её.
+- doubleTapOn:
+    id: "pop-surface"
+    index: 0
+- assertVisible:
+    id: "reaction-chip-❤️"
+- doubleTapOn:
+    id: "pop-surface"
+    index: 0
+- assertVisible:
+    id: "reaction-chip-❤️"
+# «+» — выбор из набора; выбранная заменяет мою.
+- tapOn:
+    id: "pop-add-reaction"
+- assertVisible:
+    id: "reaction-picker"
+- tapOn:
+    id: "reaction-option-🔥"
+- assertVisible:
+    id: "reaction-chip-🔥"
+- assertNotVisible:
+    id: "reaction-chip-❤️"
+# Уборка: тап по своей реакции снимает её.
+- tapOn:
+    id: "reaction-chip-🔥"
+- assertNotVisible:
+    id: "reaction-chip-🔥"
+# Индикаторы без действия: видео не встаёт на паузу.
+- tapOn:
+    id: "pop-comments"
+- tapOn:
+    id: "pop-more"
+- assertNotVisible:
+    id: "pop-paused"
+- tapOn:
+    id: "pop-viewer-back"
+- assertVisible:
+    id: "pops-section"

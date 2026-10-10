@@ -1,6 +1,6 @@
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
-import { useContext, useMemo, useRef, type Ref } from 'react';
-import { Pressable, ScrollView, View } from 'react-native';
+import { useContext, useMemo, useRef } from 'react';
+import { Pressable, ScrollView, View, type LayoutChangeEvent } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 
 import { PagerGestureContext } from './PopPager';
@@ -20,6 +20,10 @@ export type PopSideColumnProps = {
   viewsCount: number;
   onReaction: (emoji: string) => void;
   /** «+» нажат; где он на экране — к нему прижмётся выбор реакции. */
+  /**
+   * «+» нажат. `fromBottom` — от низа «+» до низа колонки: к нему прижмётся
+   * выбор реакции.
+   */
   onAddReaction: (anchor: PopoverAnchor) => void;
 };
 
@@ -28,19 +32,19 @@ function SideIcon({
   label,
   testID,
   onPress,
-  buttonRef,
+  onLayout,
 }: {
   name: SymbolViewProps['name'];
   label: string;
   testID: string;
   onPress?: () => void;
-  buttonRef?: Ref<View>;
+  onLayout?: (event: LayoutChangeEvent) => void;
 }) {
   const theme = useTheme();
 
   return (
     <Pressable
-      ref={buttonRef}
+      onLayout={onLayout}
       testID={testID}
       accessibilityRole="button"
       accessibilityLabel={label}
@@ -68,7 +72,10 @@ export function PopSideColumn({
   onAddReaction,
 }: PopSideColumnProps) {
   const theme = useTheme();
-  const plusRef = useRef<View>(null);
+  // Раскладка, а не замер в окне: колонка едет вместе с лентой страниц, и
+  // замер в окне посреди её сдвига врал.
+  const columnHeight = useRef(0);
+  const plusBottom = useRef(0);
   const pager = useContext(PagerGestureContext);
   // Палец в столбике реакций — листание попсов ждёт, пока прокрутка столбика не откажется.
   const columnScroll = useMemo(() => {
@@ -77,12 +84,17 @@ export function PopSideColumn({
     return pager ? native.blocksExternalGesture(pager) : native;
   }, [pager]);
   const column = popReactionColumn(reactions);
-  const openPicker = () =>
-    plusRef.current?.measureInWindow((x, y, _width, height) => onAddReaction({ x, y, height }));
+  const openPicker = () => onAddReaction({ fromBottom: columnHeight.current - plusBottom.current });
   const height = Math.min(column.length, Sizes.popReactionsVisible) * Sizes.popReactionCell;
 
   return (
-    <View testID="pop-side-column" style={styles.sideColumn}>
+    <View
+      testID="pop-side-column"
+      style={styles.sideColumn}
+      onLayout={(event) => {
+        columnHeight.current = event.nativeEvent.layout.height;
+      }}
+    >
       <GestureDetector gesture={columnScroll}>
         <ScrollView
           testID="pop-reactions"
@@ -110,7 +122,11 @@ export function PopSideColumn({
         name={{ ios: 'plus', android: 'add', web: 'add' }}
         label="Поставить реакцию"
         onPress={openPicker}
-        buttonRef={plusRef}
+        onLayout={(event) => {
+          const { y, height } = event.nativeEvent.layout;
+
+          plusBottom.current = y + height;
+        }}
       />
       <SideIcon
         testID="pop-comments"
