@@ -172,8 +172,11 @@ export function PopViewer({ channelId, startId }: PopViewerProps) {
   const onOpenChannel = useCallback(() => {
     const state = navigation.getState() as unknown as { index: number; routes: NavRoute[] };
 
-    if (channelScreenBelow(state, channelId)) router.back();
-    else router.push(`/chats/channel/${channelId}`);
+    // Просмотр — экран корневого стека поверх вкладок: канал открывается во
+    // вкладке чатов под ним, поэтому просмотр сначала закрывается.
+    router.back();
+
+    if (!channelScreenBelow(state, channelId)) router.push(`/chats/channel/${channelId}`);
   }, [channelId, navigation, router]);
 
   const channelTitle = channel.data?.title ?? null;
