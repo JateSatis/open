@@ -1,7 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import {
-  AppState,
-  type AppStateStatus,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
   type ViewabilityConfig,
@@ -11,9 +9,7 @@ import {
 import { recordMessageViews } from '@/api/messageViews';
 import type { ChatListRow } from '@/features/chats/islands/rows';
 import type { AnchorRect } from '@/features/chats/MessageContextMenu';
-
-/** Как часто увиденное уходит на сервер. */
-const FLUSH_MS = 2000;
+import { useViewBatcher } from '@/lib/useViewBatcher';
 
 /**
  * Строка видна, как только на экране хоть один её пиксель. Экран — рамка
@@ -42,20 +38,6 @@ export function viewedMessageOf(
   if (message.authorId !== null && message.authorId === currentUserId) return null;
 
   return { id: message.id, chatId: message.chatId };
-}
-
-/** На старте состояние бывает `unknown` — приложение при этом на экране. */
-function isForeground(state: AppStateStatus | null): boolean {
-  return state !== 'background' && state !== 'inactive';
-}
-
-/** Сессия экрана чата: случайный uuid v4. Не секрет — сервер ей и не верит. */
-function newSessionId(): string {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = Math.floor(Math.random() * 16);
-
-    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
-  });
 }
 
 export type MessageViewTracking = {
@@ -92,79 +74,56 @@ export function useMessageViews({
   /** Рамка списка в окне — то, что человек видит. */
   measureViewport: () => Promise<AnchorRect | null>;
 }): MessageViewTracking {
-  const sessionId = useMemo(() => newSessionId(), []);
   const userRef = useRef(currentUserId);
-  const visibleRef = useRef<ViewedMessage[]>([]);
-  const sentRef = useRef(new Set<string>());
-  const pendingRef = useRef(new Map<string, ViewedMessage>());
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const focusedRef = useRef(isFocused);
-  const appActiveRef = useRef(isForeground(AppState.currentState));
 
   useEffect(() => {
     userRef.current = currentUserId;
   }, [currentUserId]);
 
-  const flush = useCallback(() => {
-    if (timerRef.current) clearTimeout(timerRef.current);
-
-    timerRef.current = null;
-
-    const pending = [...pendingRef.current.values()];
-
-    pendingRef.current.clear();
-
-    if (pending.length === 0) return;
-
+  const send = useCallback(async (viewed: ViewedMessage[], sessionId: string) => {
     const byChat = new Map<string, string[]>();
 
-    for (const { id, chatId: target } of pending) {
+    for (const { id, chatId: target } of viewed) {
       byChat.set(target, [...(byChat.get(target) ?? []), id]);
     }
 
-    byChat.forEach((ids, target) => {
-      recordMessageViews(target, ids, sessionId).catch(() => {
-        // Не дошло — засчитаем, когда сообщение снова покажется на экране.
-        ids.forEach((id) => {
-          sentRef.current.delete(id);
-        });
-      });
-    });
-  }, [sessionId]);
+    // Чаты — по отдельности: не дошедшее в одном не тянет за собой другие.
+    const failed: string[] = [];
 
-  /** Засчитать то, что сейчас на экране, если смотреть сейчас есть кому. */
-  const collect = useCallback(() => {
-    if (!focusedRef.current || !appActiveRef.current) return;
+    await Promise.all(
+      [...byChat].map(([target, ids]) =>
+        recordMessageViews(target, ids, sessionId).catch(() => {
+          failed.push(...ids);
+        }),
+      ),
+    );
 
-    let added = false;
+    if (failed.length > 0) throw new Error('views not recorded');
+  }, []);
 
-    for (const viewed of visibleRef.current) {
-      if (sentRef.current.has(viewed.id)) continue;
-
-      sentRef.current.add(viewed.id);
-      pendingRef.current.set(viewed.id, viewed);
-      added = true;
-    }
-
-    if (added && !timerRef.current) timerRef.current = setTimeout(flush, FLUSH_MS);
-  }, [flush]);
+  const { setVisible, addVisible, flush } = useViewBatcher<ViewedMessage>({
+    isFocused,
+    send,
+    repeat: 'session',
+  });
 
   // FlatList не принимает смену `onViewableItemsChanged` на лету: обработчик
   // один на всю жизнь списка, свежие значения — через ref.
-  const collectRef = useRef(collect);
+  const setVisibleRef = useRef(setVisible);
 
   useEffect(() => {
-    collectRef.current = collect;
-  }, [collect]);
+    setVisibleRef.current = setVisible;
+  }, [setVisible]);
 
   const onViewableItemsChanged = useCallback(
     ({ viewableItems }: { viewableItems: ViewToken<ChatListRow>[] }) => {
-      visibleRef.current = viewableItems.flatMap((token) => {
-        const viewed = token.item ? viewedMessageOf(token.item, userRef.current) : null;
+      setVisibleRef.current(
+        viewableItems.flatMap((token) => {
+          const viewed = token.item ? viewedMessageOf(token.item, userRef.current) : null;
 
-        return viewed ? [viewed] : [];
-      });
-      collectRef.current();
+          return viewed ? [viewed] : [];
+        }),
+      );
     },
     [],
   );
@@ -207,54 +166,34 @@ export function useMessageViews({
 
     // Замерить, когда список разложил новые строки.
     const frame = requestAnimationFrame(() => {
-      void Promise.all([
-        measureViewport(),
-        ...arrived.map(({ key }) => measureRow(key)),
-      ]).then(([viewport, ...rects]) => {
-        if (cancelled || !viewport) return;
+      void Promise.all([measureViewport(), ...arrived.map(({ key }) => measureRow(key))]).then(
+        ([viewport, ...rects]) => {
+          if (cancelled || !viewport) return;
 
-        const onScreen = arrived
-          .filter((_, index) => {
-            const rect = rects[index];
+          const onScreen = arrived
+            .filter((_, index) => {
+              const rect = rects[index];
 
-            return (
-              rect !== null &&
-              rect.y < viewport.y + viewport.height &&
-              rect.y + rect.height > viewport.y
-            );
-          })
-          .map(({ viewed }) => viewed);
+              return (
+                rect !== null &&
+                rect.y < viewport.y + viewport.height &&
+                rect.y + rect.height > viewport.y
+              );
+            })
+            .map(({ viewed }) => viewed);
 
-        if (onScreen.length === 0) return;
+          if (onScreen.length === 0) return;
 
-        visibleRef.current = [...onScreen, ...visibleRef.current];
-        collect();
-      });
+          addVisible(onScreen);
+        },
+      );
     });
 
     return () => {
       cancelled = true;
       cancelAnimationFrame(frame);
     };
-  }, [autoscrollThreshold, collect, measureRow, measureViewport, rows]);
-
-  useEffect(() => {
-    focusedRef.current = isFocused;
-
-    if (isFocused) collect();
-    else flush();
-  }, [collect, flush, isFocused]);
-
-  useEffect(() => {
-    const subscription = AppState.addEventListener('change', (state) => {
-      appActiveRef.current = isForeground(state);
-
-      if (appActiveRef.current) collect();
-      else flush();
-    });
-
-    return () => subscription.remove();
-  }, [collect, flush]);
+  }, [addVisible, autoscrollThreshold, measureRow, measureViewport, rows]);
 
   // Ушли с экрана — увиденное уходит сразу, не дожидаясь таймера.
   useEffect(() => () => flush(), [flush, chatId]);
