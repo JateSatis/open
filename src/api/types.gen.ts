@@ -248,6 +248,7 @@ export type Database = {
           last_message_at: string | null
           last_message_author_id: string | null
           last_message_text: string | null
+          subscribers_count: number
           title: string | null
           chat_am_member: boolean | null
           chat_display_name: string | null
@@ -263,6 +264,7 @@ export type Database = {
           last_message_at?: string | null
           last_message_author_id?: string | null
           last_message_text?: string | null
+          subscribers_count?: number
           title?: string | null
         }
         Update: {
@@ -275,6 +277,7 @@ export type Database = {
           last_message_at?: string | null
           last_message_author_id?: string | null
           last_message_text?: string | null
+          subscribers_count?: number
           title?: string | null
         }
         Relationships: [
@@ -1850,6 +1853,22 @@ export type Database = {
           username: string
         }[]
       }
+      list_chat_subscribers: {
+        Args: {
+          before_created?: string
+          before_id?: string
+          page_size?: number
+          target_chat: string
+        }
+        Returns: {
+          avatar_url: string
+          display_name: string
+          id: string
+          subscribed_at: string
+          subscriber_id: string
+          username: string
+        }[]
+      }
       list_comment_thread_roots: {
         Args: {
           after_id?: string
@@ -1927,6 +1946,10 @@ export type Database = {
         Returns: undefined
       }
       mark_chat_read: { Args: { target_chat: string }; Returns: string }
+      mark_chat_subscription_read: {
+        Args: { target_chat: string }
+        Returns: undefined
+      }
       mark_device_signed_out: {
         Args: { p_installation_id: string }
         Returns: undefined
@@ -2048,6 +2071,17 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: true
         }
+      }
+      my_subscriptions: {
+        Args: { target_chat?: string }
+        Returns: {
+          channel_id: string
+          chat_id: string
+          in_chats: boolean
+          notify: boolean
+          unread_pops: number
+          unread_posts: number
+        }[]
       }
       pin_comment: { Args: { target_comment: string }; Returns: undefined }
       pin_message: {
@@ -2271,6 +2305,10 @@ export type Database = {
         Args: { enabled: boolean; target_channel: string }
         Returns: undefined
       }
+      set_chat_notifications: {
+        Args: { enabled: boolean; target_chat: string }
+        Returns: undefined
+      }
       set_reaction: {
         Args: { reaction: string; target_id: string; target_type: string }
         Returns: {
@@ -2302,6 +2340,7 @@ export type Database = {
         Args: { add_to_chats?: boolean; target_channel: string }
         Returns: undefined
       }
+      subscribe_to_chat: { Args: { target_chat: string }; Returns: undefined }
       subscription_unread_messages: {
         Args: { since: string; target_chat: string; viewer: string }
         Returns: number
@@ -2318,6 +2357,10 @@ export type Database = {
       }
       unsubscribe_from_channel: {
         Args: { target_channel: string }
+        Returns: undefined
+      }
+      unsubscribe_from_chat: {
+        Args: { target_chat: string }
         Returns: undefined
       }
       uuid_or_null: { Args: { value: string }; Returns: string }
