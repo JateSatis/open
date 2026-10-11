@@ -44,6 +44,8 @@ declare
   chan uuid;
   r jsonb;
   st record;
+  pending_dialog uuid;
+  untitled_group uuid;
 begin
   -- Диалог Ани и Петра, группа Ани с Петром и E (E ещё не принял)
   perform pg_temp.act_as(a);
@@ -174,6 +176,17 @@ begin
     ),
     (select string_agg(payload::text, ' | ') from realtime.messages where topic = 'user:' || c::text));
   set constraints public.on_message_created deferred;
+
+  -- Название глазами постороннего — по правилам клиента
+  perform pg_temp.act_as(a);
+  pending_dialog := (public.create_chat(array[d], null) ->> 'chat_id')::uuid;
+  untitled_group := (public.create_chat(array[d, e], null) ->> 'chat_id')::uuid;
+  perform set_config('role', 'postgres', true);
+  perform pg_temp.check('название: диалог с ещё не принявшим — оба',
+    public.outsider_chat_title(pending_dialog) = 'Аня и Посторонний D',
+    public.outsider_chat_title(pending_dialog));
+  perform pg_temp.check('название: группа без названия — «Групповой чат»',
+    public.outsider_chat_title(untitled_group) = 'Групповой чат');
 
   -- Уведомления и отписка
   perform pg_temp.act_as(c);

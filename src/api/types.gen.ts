@@ -2083,6 +2083,7 @@ export type Database = {
           unread_posts: number
         }[]
       }
+      outsider_chat_title: { Args: { target_chat: string }; Returns: string }
       pin_comment: { Args: { target_comment: string }; Returns: undefined }
       pin_message: {
         Args: { in_forward?: string; target_message: string }
