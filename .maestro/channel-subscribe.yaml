@@ -1,0 +1,52 @@
+appId: com.openger.app
+name: Канал — подписка с «Постов», канал в «Чатах», «⋮» читателя, отписка; «Попсы» спрашивают про чаты
+env:
+  # Канал тестового владельца «Тест Подписки»: основной аккаунт в нём не публикует.
+  CHANNEL_ID: b01b50da-c050-4ef2-bb9c-6ef379d2b887
+  CHANNEL: Канал подписок
+---
+- runFlow: subflows/open-app.yaml
+- openLink: openger://chats/channel/${CHANNEL_ID}
+- assertVisible:
+    id: "messages-list"
+# Подписка от прошлого прогона — сначала отписаться.
+- runFlow:
+    when:
+      visible:
+        id: "channel-menu-button"
+    commands:
+      - tapOn:
+          id: "channel-menu-button"
+      - tapOn: "Отписаться"
+- assertVisible: "Подписаться"
+- assertVisible: "0 читателей"
+# «Посты»: подписка сразу кладёт канал в «Чаты», вопроса нет, внизу пусто.
+- tapOn:
+    id: "channel-subscribe-button"
+- assertNotVisible:
+    id: "channel-subscribe-bar"
+- assertVisible: "1 читатель"
+- assertNotVisible: "Хотите добавить в чаты?"
+# «⋮» читателя — три пункта.
+- tapOn:
+    id: "channel-menu-button"
+- assertVisible: "Выключить уведомления"
+- assertVisible: "Не отображать в чатах"
+- assertVisible: "Отписаться"
+- tapOn: "Отписаться"
+- assertVisible: "Подписаться"
+# «Попсы»: подписка спрашивает про чаты; «Нет» — подписчик без чатов.
+- tapOn:
+    id: "segment-1"
+- tapOn:
+    id: "channel-subscribe-button"
+- assertVisible: "Хотите добавить в чаты?"
+- tapOn: "Нет"
+- assertVisible: "Добавить в чаты"
+- assertVisible: "1 подписчик"
+- tapOn:
+    id: "channel-menu-button"
+- assertVisible: "Добавить в чаты"
+- assertNotVisible: "Выключить уведомления"
+- tapOn: "Отписаться"
+- assertVisible: "Подписаться"

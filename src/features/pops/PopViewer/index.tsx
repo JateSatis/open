@@ -17,7 +17,9 @@ import { usePopFeedPaging, usePopViewCounting } from './usePopViewerEffects';
 
 import type { Pop } from '@/api/pops';
 import { Text } from '@/components/Text';
+import { useSubscriptionActions } from '@/features/channels/subscription';
 import { useChannel } from '@/features/channels/useChannel';
+import { useChannelSubscription } from '@/features/channels/useChannelSubscription';
 import { CommentsPanel } from '@/features/interactions/CommentsPanel';
 import { useCanPublishState } from '@/features/pops/queries';
 import { usePopCountersSync } from '@/features/pops/usePopCountersSync';
@@ -42,7 +44,12 @@ export type PopViewerProps = {
  * по вертикали, от выбранного — выше новее, ниже старше. Играет только
  * активная страница; следующая прогревает плеер, остальные — обложки.
  */
-export function PopViewer({ channelId, startId, openComments = false, focusCommentId }: PopViewerProps) {
+export function PopViewer({
+  channelId,
+  startId,
+  openComments = false,
+  focusCommentId,
+}: PopViewerProps) {
   const theme = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -79,8 +86,7 @@ export function PopViewer({ channelId, startId, openComments = false, focusComme
   const onOpenChannel = useOpenChannel(channelId);
   const startReady = Boolean(size) && pops[activeIndex]?.id === startId;
   const start = useMemo(
-    () =>
-      openComments ? { startId, focusCommentId, ready: startReady, rightsKnown } : undefined,
+    () => (openComments ? { startId, focusCommentId, ready: startReady, rightsKnown } : undefined),
     [focusCommentId, openComments, rightsKnown, startId, startReady],
   );
   const { openPopId, onOpenComments, onOpenPerson } = usePopComments(canPublish, start);
@@ -88,7 +94,7 @@ export function PopViewer({ channelId, startId, openComments = false, focusComme
   const chromeStyle = useCommentsChromeFade(commentsOpen);
 
   usePopCountersSync(channelId);
-  usePopViewCounting(pops, activeIndex, canPublish, focused);
+  usePopViewCounting(channelId, pops, activeIndex, canPublish, focused);
   usePopFeedPaging(feed, activeIndex);
 
   const onLayout = useCallback((event: LayoutChangeEvent) => {
@@ -100,6 +106,20 @@ export function PopViewer({ channelId, startId, openComments = false, focusComme
   }, []);
 
   const channelTitle = channel.data?.title ?? null;
+  const channelAvatarUrl = channel.data?.avatarUrl ?? null;
+
+  // Отсюда подписка — без чатов: смотрящий попсы ещё не решил, нужен ли ему
+  // канал в «Чатах». Следующим шагом кнопка предлагает именно это.
+  const { status } = useChannelSubscription(channelId);
+  const { subscribe: subscribeTo, setInChats } = useSubscriptionActions(channelId);
+  const subscribe = useMemo(() => {
+    if (status === 'none') return { label: 'Подписаться', onPress: () => void subscribeTo(false) };
+    if (status === 'subscriber') {
+      return { label: 'Добавить в чаты', onPress: () => void setInChats(true) };
+    }
+
+    return null;
+  }, [setInChats, status, subscribeTo]);
 
   const renderPage = useCallback(
     (pop: Pop, index: number) => {
@@ -112,6 +132,8 @@ export function PopViewer({ channelId, startId, openComments = false, focusComme
         <PopPage
           pop={pop}
           channelTitle={channelTitle}
+          channelAvatarUrl={channelAvatarUrl}
+          subscribe={subscribe}
           width={size.width}
           height={size.height}
           mode={mode}
@@ -128,6 +150,7 @@ export function PopViewer({ channelId, startId, openComments = false, focusComme
     },
     [
       activeIndex,
+      channelAvatarUrl,
       channelTitle,
       live,
       onDoubleTap,
@@ -136,6 +159,7 @@ export function PopViewer({ channelId, startId, openComments = false, focusComme
       onReaction,
       openPopId,
       size,
+      subscribe,
     ],
   );
 

@@ -234,7 +234,20 @@ handles              общее пространство @имён: ровно �
 
 channels             канал: название, описание, username, аватарка, владелец и связанный
                      один к одному чат постов (posts_chat_id). Пишут только функции
-                     (create_channel). Права и роли — свойство канала, не чата
+                     (create_channel). Права и роли — свойство канала, не чата.
+                     Счётчики subscribers_count / readers_count и last_pop_at
+                     (свежий живой поп) — триггерами
+subscriptions        подписки: человек + ровно одно из channel_id | chat_id (чат —
+                     этап 2, пока запрещён проверкой). in_chats — читатель (канал в
+                     «Чатах»), notify — карточки, messages_read_at / pops_read_at —
+                     отметки прочтения временем сервера. Подписчик никогда не
+                     становится chat_members. Свою строку читает только сам, пишут
+                     только функции (subscribe_to_channel, set_channel_in_chats,
+                     set_channel_notifications, unsubscribe_from_channel,
+                     mark_channel_read); непрочитанное — my_channel_subscriptions,
+                     список подписчиков — list_channel_subscribers (только
+                     владелец канала). Отписка удаляет строку физически: это не
+                     публичный контент. Публикующий в канале не подписывается
 
 chats                диалог, групповой чат или чат постов канала:
                      kind = direct | group | channel_posts. Чат постов существует только

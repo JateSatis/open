@@ -9,6 +9,18 @@ import { getChannel } from '@/api/channels';
 import type { ChatSummary, Message } from '@/api/chats';
 import { getChat, listMessages, subscribeToChat } from '@/api/chats';
 import { listMessageViews } from '@/api/messageViews';
+import { canPublishInChannel } from '@/api/pops';
+import {
+  getMySubscription,
+  listChannelSubscribers,
+  markChannelRead,
+  setChannelInChats,
+  subscribeToChannel,
+  unsubscribeFromChannel,
+  type ChannelSubscription,
+} from '@/api/subscriptions';
+import { ConfirmDialogHost } from '@/components/ConfirmDialog';
+import { resetConfirmDialogQueue } from '@/components/ConfirmDialog/store';
 import ChatScreen from '@/app/(tabs)/chats/[chatId]';
 import { useSession } from '@/features/auth/useSession';
 import { readChatDraft, resetComposerDrafts } from '@/features/chats/composerDraftStore';
@@ -128,6 +140,8 @@ const channel = {
   avatarUrl: null,
   ownerId: OWNER,
   postsChatId: 'posts-1',
+  subscribersCount: 0,
+  readersCount: 0,
 };
 
 const postsChat: ChatSummary = {
@@ -140,6 +154,10 @@ const postsChat: ChatSummary = {
   lastMessagePreview: null,
   lastMessageAt: null,
   lastMessageAuthorId: null,
+  lastPopAt: null,
+  lastActivityAt: null,
+  previewIsPop: false,
+  subscription: null,
   hasUnread: false,
 };
 
@@ -263,6 +281,213 @@ describe('ChannelScreen', () => {
         selected: true,
       }),
     );
+  });
+});
+
+describe('ChannelScreen subscription', () => {
+  const subscription: ChannelSubscription = {
+    channelId: 'channel-1',
+    chatId: 'posts-1',
+    inChats: true,
+    notify: true,
+    unreadPosts: 0,
+    unreadPops: 0,
+  };
+
+  // База в миниатюре: подписка и счётчики канала меняются вместе с действиями,
+  // и перечитывание после действия отдаёт то же, что увидел бы человек.
+  let stored: ChannelSubscription | null = null;
+
+  async function renderAs(userId: string, current: ChannelSubscription | null) {
+    signIn(userId);
+    stored = current;
+    await renderWithQuery(
+      <>
+        <ChannelScreen channelId="channel-1" />
+        <ConfirmDialogHost />
+      </>,
+    );
+    await screen.findByText('первый пост');
+  }
+
+  const openPops = async () => {
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('segment-1'));
+    });
+  };
+
+  beforeEach(() => {
+    resetConfirmDialogQueue();
+    stored = null;
+    jest.mocked(canPublishInChannel).mockResolvedValue(false);
+    jest.mocked(getMySubscription).mockImplementation(async () => stored);
+    // Кроме меня — 2 читателя и ещё 1 подписчик без чатов.
+    mockedGetChannel.mockImplementation(async () => ({
+      ...channel,
+      readersCount: 2 + (stored?.inChats ? 1 : 0),
+      subscribersCount: 3 + (stored ? 1 : 0),
+    }));
+    jest.mocked(subscribeToChannel).mockImplementation(async (_id, addToChats) => {
+      stored = { ...subscription, inChats: (stored?.inChats ?? false) || addToChats };
+    });
+    jest.mocked(setChannelInChats).mockImplementation(async (_id, inChats) => {
+      if (stored) stored = { ...stored, inChats };
+    });
+    jest.mocked(unsubscribeFromChannel).mockImplementation(async () => {
+      stored = null;
+    });
+    jest.mocked(markChannelRead).mockImplementation(async (_id, { posts, pops }) => {
+      if (!stored) return;
+
+      stored = {
+        ...stored,
+        unreadPosts: posts ? 0 : stored.unreadPosts,
+        unreadPops: pops ? 0 : stored.unreadPops,
+      };
+    });
+  });
+
+  it('tells readers on «Посты» and subscribers on «Попсы» in the header', async () => {
+    await renderAs('stranger-1', null);
+
+    expect(await screen.findByText('2 читателя')).toBeTruthy();
+    await openPops();
+    expect(await screen.findByText('3 подписчика')).toBeTruthy();
+    expect(screen.queryByText('2 читателя')).toBeNull();
+  });
+
+  it('subscribes a stranger from «Посты» straight into chats, without a question', async () => {
+    await renderAs('stranger-1', null);
+
+    fireEvent.press(await screen.findByRole('button', { name: 'Подписаться' }));
+
+    await waitFor(() => expect(subscribeToChannel).toHaveBeenCalledWith('channel-1', true));
+    expect(screen.queryByText('Хотите добавить в чаты?')).toBeNull();
+    await waitFor(() => expect(screen.queryByTestId('channel-subscribe-bar')).toBeNull());
+    expect(await screen.findByText('3 читателя')).toBeTruthy();
+  });
+
+  it('counts a subscription made from «Попсы» among subscribers, not readers', async () => {
+    await renderAs('stranger-1', null);
+    await openPops();
+
+    fireEvent.press(await screen.findByRole('button', { name: 'Подписаться' }));
+    fireEvent.press(await screen.findByRole('button', { name: 'Нет' }));
+
+    expect(await screen.findByText('4 подписчика')).toBeTruthy();
+  });
+
+  it('asks on «Попсы»; «Нет» leaves a subscriber offered «Добавить в чаты»', async () => {
+    await renderAs('stranger-1', null);
+    await openPops();
+
+    fireEvent.press(await screen.findByRole('button', { name: 'Подписаться' }));
+    expect(await screen.findByText('Хотите добавить в чаты?')).toBeTruthy();
+    fireEvent.press(screen.getByRole('button', { name: 'Нет' }));
+
+    await waitFor(() => expect(subscribeToChannel).toHaveBeenCalledWith('channel-1', false));
+    expect(await screen.findByRole('button', { name: 'Добавить в чаты' })).toBeTruthy();
+    expect(setChannelInChats).not.toHaveBeenCalled();
+  });
+
+  it('a quick double tap on «Подписаться» is one subscription and one question', async () => {
+    await renderAs('stranger-1', null);
+    await openPops();
+
+    const button = await screen.findByRole('button', { name: 'Подписаться' });
+    fireEvent.press(button);
+    fireEvent.press(button);
+
+    expect(await screen.findAllByText('Хотите добавить в чаты?')).toHaveLength(1);
+    fireEvent.press(screen.getByRole('button', { name: 'Нет' }));
+    await waitFor(() => expect(subscribeToChannel).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText('Хотите добавить в чаты?')).toBeNull();
+  });
+
+  it('closing the question without an answer is «Нет»', async () => {
+    await renderAs('stranger-1', null);
+    await openPops();
+
+    fireEvent.press(await screen.findByRole('button', { name: 'Подписаться' }));
+    fireEvent.press(await screen.findByTestId('confirm-dialog-backdrop'));
+
+    expect(await screen.findByRole('button', { name: 'Добавить в чаты' })).toBeTruthy();
+    expect(setChannelInChats).not.toHaveBeenCalled();
+  });
+
+  it('«Добавить» on the question adds the channel to chats', async () => {
+    await renderAs('stranger-1', null);
+    await openPops();
+
+    fireEvent.press(await screen.findByRole('button', { name: 'Подписаться' }));
+    fireEvent.press(await screen.findByRole('button', { name: 'Добавить' }));
+
+    await waitFor(() => expect(setChannelInChats).toHaveBeenCalledWith('channel-1', true));
+    await waitFor(() => expect(screen.queryByTestId('channel-subscribe-bar')).toBeNull());
+  });
+
+  it('shows a reader nothing at the bottom and three items under «⋮»', async () => {
+    await renderAs('reader-1', subscription);
+
+    fireEvent.press(await screen.findByRole('button', { name: 'Меню канала' }));
+
+    for (const label of ['Выключить уведомления', 'Не отображать в чатах', 'Отписаться']) {
+      expect(await screen.findByRole('menuitem', { name: label })).toBeTruthy();
+    }
+    expect(screen.queryByRole('menuitem', { name: 'Подписчики' })).toBeNull();
+    expect(screen.queryByTestId('channel-subscribe-bar')).toBeNull();
+
+    fireEvent.press(screen.getByRole('menuitem', { name: 'Отписаться' }));
+    await waitFor(() => expect(unsubscribeFromChannel).toHaveBeenCalledWith('channel-1'));
+    expect(await screen.findByRole('button', { name: 'Подписаться' })).toBeTruthy();
+  });
+
+  it('offers a subscriber without chats «Добавить в чаты» and «Отписаться» only', async () => {
+    await renderAs('reader-1', { ...subscription, inChats: false });
+
+    fireEvent.press(await screen.findByRole('button', { name: 'Меню канала' }));
+
+    expect(await screen.findByRole('menuitem', { name: 'Добавить в чаты' })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: 'Отписаться' })).toBeTruthy();
+    expect(screen.queryByRole('menuitem', { name: 'Выключить уведомления' })).toBeNull();
+  });
+
+  it('gives a stranger no «⋮» and no unread counters', async () => {
+    await renderAs('stranger-1', null);
+
+    await screen.findByRole('button', { name: 'Подписаться' });
+    expect(screen.queryByRole('button', { name: 'Меню канала' })).toBeNull();
+    expect(screen.queryByTestId('segment-badge-0')).toBeNull();
+    expect(screen.queryByTestId('segment-badge-1')).toBeNull();
+  });
+
+  it('gives the creator «Подписчики» and no subscribe button', async () => {
+    jest.mocked(canPublishInChannel).mockResolvedValue(true);
+    await renderAs(OWNER, null);
+
+    fireEvent.press(await screen.findByRole('button', { name: 'Меню канала' }));
+
+    expect(await screen.findByRole('menuitem', { name: 'Подписчики' })).toBeTruthy();
+    expect(screen.queryByTestId('channel-subscribe-bar')).toBeNull();
+    expect(getMySubscription).not.toHaveBeenCalled();
+    expect(listChannelSubscribers).not.toHaveBeenCalled();
+  });
+
+  it('shows unread counts per section; the open «Посты» are read at once', async () => {
+    await renderAs('reader-1', { ...subscription, unreadPosts: 3, unreadPops: 2 });
+
+    expect(await screen.findByTestId('segment-badge-1')).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Попсы, непрочитанных: 2' })).toBeTruthy();
+    await waitFor(() =>
+      expect(markChannelRead).toHaveBeenCalledWith('channel-1', { posts: true, pops: false }),
+    );
+    expect(screen.queryByTestId('segment-badge-0')).toBeNull();
+
+    await openPops();
+    await waitFor(() =>
+      expect(markChannelRead).toHaveBeenCalledWith('channel-1', { posts: false, pops: true }),
+    );
+    await waitFor(() => expect(screen.queryByTestId('segment-badge-1')).toBeNull());
   });
 });
 

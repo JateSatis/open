@@ -18,6 +18,16 @@ export const styles = StyleSheet.create({
   },
   segment: {
     flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.one,
+  },
+  badge: {
+    minWidth: Sizes.segmentBadge,
+    height: Sizes.segmentBadge,
+    borderRadius: Sizes.segmentBadge / 2,
+    paddingHorizontal: Spacing.one,
     alignItems: 'center',
     justifyContent: 'center',
   },

@@ -87,9 +87,12 @@ export type Database = {
           deleted_at: string | null
           description: string | null
           id: string
+          last_pop_at: string | null
           owner_id: string | null
           posts_chat_id: string
           posts_chat_kind: string
+          readers_count: number
+          subscribers_count: number
           title: string
           username: string
         }
@@ -99,9 +102,12 @@ export type Database = {
           deleted_at?: string | null
           description?: string | null
           id?: string
+          last_pop_at?: string | null
           owner_id?: string | null
           posts_chat_id: string
           posts_chat_kind?: string
+          readers_count?: number
+          subscribers_count?: number
           title: string
           username: string
         }
@@ -111,9 +117,12 @@ export type Database = {
           deleted_at?: string | null
           description?: string | null
           id?: string
+          last_pop_at?: string | null
           owner_id?: string | null
           posts_chat_id?: string
           posts_chat_kind?: string
+          readers_count?: number
+          subscribers_count?: number
           title?: string
           username?: string
         }
@@ -1580,6 +1589,64 @@ export type Database = {
           },
         ]
       }
+      subscriptions: {
+        Row: {
+          channel_id: string | null
+          chat_id: string | null
+          created_at: string
+          id: string
+          in_chats: boolean
+          messages_read_at: string
+          notify: boolean
+          pops_read_at: string
+          subscriber_id: string
+        }
+        Insert: {
+          channel_id?: string | null
+          chat_id?: string | null
+          created_at?: string
+          id?: string
+          in_chats?: boolean
+          messages_read_at?: string
+          notify?: boolean
+          pops_read_at?: string
+          subscriber_id: string
+        }
+        Update: {
+          channel_id?: string | null
+          chat_id?: string | null
+          created_at?: string
+          id?: string
+          in_chats?: boolean
+          messages_read_at?: string
+          notify?: boolean
+          pops_read_at?: string
+          subscriber_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscriptions_channel_id_fkey"
+            columns: ["channel_id"]
+            isOneToOne: false
+            referencedRelation: "channels"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "subscriptions_chat_id_fkey"
+            columns: ["chat_id"]
+            isOneToOne: false
+            referencedRelation: "chats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "subscriptions_subscriber_id_fkey"
+            columns: ["subscriber_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       chat_waiting_invitees: {
@@ -1766,6 +1833,23 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      list_channel_subscribers: {
+        Args: {
+          before_created?: string
+          before_id?: string
+          page_size?: number
+          target_channel: string
+        }
+        Returns: {
+          avatar_url: string
+          display_name: string
+          id: string
+          in_chats: boolean
+          subscribed_at: string
+          subscriber_id: string
+          username: string
+        }[]
+      }
       list_comment_thread_roots: {
         Args: {
           after_id?: string
@@ -1834,6 +1918,14 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      mark_channel_read: {
+        Args: {
+          read_pops?: boolean
+          read_posts?: boolean
+          target_channel: string
+        }
+        Returns: undefined
+      }
       mark_chat_read: { Args: { target_chat: string }; Returns: string }
       mark_device_signed_out: {
         Args: { p_installation_id: string }
@@ -1859,6 +1951,17 @@ export type Database = {
         Returns: {
           deleted_at: string
           id: string
+        }[]
+      }
+      my_channel_subscriptions: {
+        Args: { target_channel?: string }
+        Returns: {
+          channel_id: string
+          chat_id: string
+          in_chats: boolean
+          notify: boolean
+          unread_pops: number
+          unread_posts: number
         }[]
       }
       my_reaction:
@@ -2160,6 +2263,14 @@ export type Database = {
         }
         Returns: string
       }
+      set_channel_in_chats: {
+        Args: { target_channel: string; value: boolean }
+        Returns: undefined
+      }
+      set_channel_notifications: {
+        Args: { enabled: boolean; target_channel: string }
+        Returns: undefined
+      }
       set_reaction: {
         Args: { reaction: string; target_id: string; target_type: string }
         Returns: {
@@ -2187,10 +2298,26 @@ export type Database = {
         Returns: string
       }
       stream_room_finished: { Args: { room: string }; Returns: string }
+      subscribe_to_channel: {
+        Args: { add_to_chats?: boolean; target_channel: string }
+        Returns: undefined
+      }
+      subscription_unread_messages: {
+        Args: { since: string; target_chat: string; viewer: string }
+        Returns: number
+      }
+      subscription_unread_pops: {
+        Args: { since: string; target_channel: string; viewer: string }
+        Returns: number
+      }
       touch_device: { Args: { p_installation_id: string }; Returns: boolean }
       unpin_comment: { Args: { target: string }; Returns: undefined }
       unpin_message: {
         Args: { target_chat?: string; target_message: string }
+        Returns: undefined
+      }
+      unsubscribe_from_channel: {
+        Args: { target_channel: string }
         Returns: undefined
       }
       uuid_or_null: { Args: { value: string }; Returns: string }

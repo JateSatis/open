@@ -2,11 +2,13 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 
 import { subscribeToUserEvents } from '@/api/chats';
+import { channelSubscriptionQueryKey } from '@/features/channels/keys';
 import { chatQueryKey } from '@/features/chats/useChat';
 import { chatsQueryKey } from '@/features/chats/useChats';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
 import { invitesQueryKey } from '@/features/chats/useInvites';
 import { myInviteQueryKey } from '@/features/chats/useMyInvite';
+import { popsQueryKey } from '@/features/pops/keys';
 import {
   dismissAlert,
   showAlert,
@@ -53,12 +55,38 @@ export function useInAppAlerts(): InAppAlertsState {
       onMessage: (incoming) => {
         refreshChat(incoming.chatId);
 
+        // Пост канала, который я читаю: счётчики разделов канала тоже устарели.
+        if (incoming.channel) {
+          void queryClient.invalidateQueries({
+            queryKey: channelSubscriptionQueryKey(incoming.channel.id),
+          });
+        }
+
         // Показывать карточку о чате, который человек прямо сейчас читает, —
         // значит перекрывать уведомлением то самое сообщение. О звонке
         // сообщает сам входящий, а не карточка системного сообщения.
-        if (incoming.chatId === activeChatId || incoming.messageKind === 'system') return;
+        // Выключенные уведомления канала гасят только карточку: канал в
+        // списке всё равно поднимается.
+        if (
+          incoming.chatId === activeChatId ||
+          incoming.messageKind === 'system' ||
+          !incoming.notify
+        ) {
+          return;
+        }
 
         showAlert({ kind: 'message', ...incoming });
+      },
+      onPop: (pop) => {
+        void queryClient.invalidateQueries({ queryKey: chatsQueryKey });
+        void queryClient.invalidateQueries({
+          queryKey: channelSubscriptionQueryKey(pop.channel.id),
+        });
+        void queryClient.invalidateQueries({ queryKey: popsQueryKey(pop.channel.id) });
+
+        if (pop.chatId === activeChatId || !pop.notify) return;
+
+        showAlert({ kind: 'pop', ...pop });
       },
       onInvite: (invite) => {
         void queryClient.invalidateQueries({ queryKey: invitesQueryKey });

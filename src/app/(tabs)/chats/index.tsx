@@ -1,17 +1,23 @@
 import { useRouter } from 'expo-router';
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { ActivityIndicator, FlatList, RefreshControl, View } from 'react-native';
 
 import { Button } from '@/components/Button';
 import { Screen } from '@/components/Screen';
 import { Text } from '@/components/Text';
-import { ChatListItem } from '@/features/chats/ChatListItem';
+import { sectionToOpen } from '@/features/channels/sectionToOpen';
+import {
+  SubscriptionRowMenu,
+  type SubscriptionRowTarget,
+} from '@/features/channels/SubscriptionRowMenu';
+import { ChatListItem, type RowRect } from '@/features/chats/ChatListItem';
 import { CreateMenu, type CreateMenuItem } from '@/features/chats/CreateMenu';
 import { InvitesEntry } from '@/features/chats/InvitesEntry';
 import { counterpart } from '@/features/chats/chatDisplay';
 import { useChats } from '@/features/chats/useChats';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
 import { useInvites } from '@/features/chats/useInvites';
+import type { ChatSummary } from '@/api/chats';
 import { useOnlineUsers } from '@/features/chats/useOnlineUsers';
 import { Sizes, Spacing } from '@/theme';
 
@@ -25,14 +31,32 @@ export default function ChatsScreen() {
   const { chats, isLoading, isRefreshing, error, refresh } = useChats();
   const { incoming, declined, error: invitesError, refresh: refreshInvites } = useInvites();
 
+  const [rowMenu, setRowMenu] = useState<SubscriptionRowTarget | null>(null);
+
   const openChat = useCallback(
     (chatId: string) => {
-      const channelId = chats.find((chat) => chat.id === chatId)?.channel?.id;
+      const chat = chats.find((item) => item.id === chatId);
+      const channelId = chat?.channel?.id;
 
-      router.push(channelId ? `/chats/channel/${channelId}` : `/chats/${chatId}`);
+      if (!chat || !channelId) {
+        router.push(`/chats/${chatId}`);
+        return;
+      }
+
+      router.push({
+        pathname: '/chats/channel/[channelId]',
+        params: { channelId, section: sectionToOpen(chat) },
+      });
     },
     [chats, router],
   );
+  // Меню — только у каналов, на которые я подписан: в своих чатах и своём
+  // канале долгое нажатие пока ничего не делает.
+  const openRowMenu = useCallback(
+    (chat: ChatSummary, rect: RowRect) => setRowMenu({ chat, rect }),
+    [],
+  );
+  const closeRowMenu = useCallback(() => setRowMenu(null), []);
   const onCreate = useCallback(
     (item: CreateMenuItem) => {
       // «Групповой чат» пока только закрывает меню: создание группы — отдельная задача.
@@ -90,6 +114,7 @@ export default function ChatsScreen() {
             currentUserId={currentUserId}
             isOnline={onlineIds.has(counterpart(item, currentUserId)?.id ?? '')}
             onPress={openChat}
+            onLongPress={item.subscription ? openRowMenu : undefined}
           />
         )}
         ListEmptyComponent={
@@ -106,6 +131,8 @@ export default function ChatsScreen() {
       />
 
       <CreateMenu onSelect={onCreate} />
+
+      <SubscriptionRowMenu target={rowMenu} onClosed={closeRowMenu} />
     </Screen>
   );
 }

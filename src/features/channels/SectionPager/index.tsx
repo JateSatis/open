@@ -1,4 +1,4 @@
-import { useMemo, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
@@ -28,6 +28,8 @@ export type SectionPagerProps = {
   position: SharedValue<number>;
   width: number;
   pages: ReactNode[];
+  /** Выбранный раздел — там, где ряд стоит в покое. */
+  index: number;
   onIndexChange: (index: number) => void;
 };
 
@@ -39,10 +41,20 @@ export type SectionPagerProps = {
  * Полноэкранный просмотр, шиты и меню — отдельные окна (`Modal`): касания в
  * них сюда не доходят, и пейджер под ними не листается.
  */
-export function SectionPager({ position, width, pages, onIndexChange }: SectionPagerProps) {
+export function SectionPager({ position, width, pages, index, onIndexChange }: SectionPagerProps) {
   const start = useSharedValue(0);
   const dragging = useSharedValue(false);
   const count = pages.length;
+  // Раздел, где ряд стоит в покое, — отстаёт от выбранного на время доводки:
+  // обычный стиль меняется, только когда анимация уже пришла туда же, и
+  // нативный коммит не обгоняет её на кадр.
+  const [resting, setResting] = useState(index);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setResting(index), SECTION_SETTLE_MS);
+
+    return () => clearTimeout(timer);
+  }, [index]);
 
   const pan = useMemo(
     () =>
@@ -82,7 +94,17 @@ export function SectionPager({ position, width, pages, onIndexChange }: SectionP
   return (
     <GestureDetector gesture={pan}>
       <View testID="section-pager" style={styles.window}>
-        <Animated.View style={[styles.row, { width: width * count }, rowStyle]}>
+        {/* Сдвиг ряда ведёт Reanimated, но сдвиг в покое — ещё и в обычном
+            стиле, последним: когда поверх открывается нативное окно (меню
+            «⋮»), Android заново применяет к ряду свойства из дерева React, и
+            без него ряд возвращался к сдвигу на момент монтирования. */}
+        <Animated.View
+          style={[
+            styles.row,
+            rowStyle,
+            { width: width * count, transform: [{ translateX: -resting * width }] },
+          ]}
+        >
           {/* Полоса, прокручиваемая вбок (реакции в облачке), разделы не листает. */}
           <HorizontalGestureScope gesture={pan}>
             {pages.map((page, pageIndex) => (

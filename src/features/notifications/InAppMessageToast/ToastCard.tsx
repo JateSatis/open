@@ -105,31 +105,57 @@ export function ToastCard({ alert, dismiss }: ToastCardProps) {
     );
   }
 
+  // Пост и поп канала — от канала: его имя, аватарка и нужный раздел.
+  const channel = alert.kind === 'pop' || alert.kind === 'message' ? alert.channel : null;
+
   const open = () => {
     dismiss();
+
+    if (channel) {
+      router.push({
+        pathname: '/chats/channel/[channelId]',
+        params: { channelId: channel.id, section: alert.kind === 'pop' ? 'pops' : 'posts' },
+      });
+      return;
+    }
+
     // Заявка открывает сам чат: его можно прочитать и там же принять.
     router.push(`/chats/${alert.chatId}`);
   };
 
-  const who = alert.kind === 'message' ? alert.authorName : alert.inviterName;
+  const who = channel
+    ? channel.title
+    : alert.kind === 'message'
+      ? alert.authorName
+      : alert.kind === 'invite'
+        ? alert.inviterName
+        : '';
   const what =
-    alert.kind === 'message'
-      ? (alert.text ?? 'Вложение')
-      : alert.chatTitle
-        ? `Зовёт вас в чат «${alert.chatTitle}»`
-        : 'Зовёт вас в чат';
+    alert.kind === 'pop'
+      ? 'Новый попс'
+      : alert.kind === 'message'
+        ? (alert.text ?? 'Вложение')
+        : alert.chatTitle
+          ? `Зовёт вас в чат «${alert.chatTitle}»`
+          : 'Зовёт вас в чат';
+  const label =
+    alert.kind === 'pop'
+      ? `Новый попс в канале ${who}`
+      : alert.kind === 'message'
+        ? channel
+          ? `Новый пост в канале ${who}`
+          : `Новое сообщение от ${who}`
+        : `Заявка в чат от ${who}`;
 
   return (
     <Animated.View style={[styles.wrapper, slideStyle]}>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={
-          alert.kind === 'message' ? `Новое сообщение от ${who}` : `Заявка в чат от ${who}`
-        }
+        accessibilityLabel={label}
         onPress={open}
         style={[styles.card, cardColors]}
       >
-        <Avatar uri={null} name={who} size={Spacing.five} />
+        <Avatar uri={channel?.avatarUrl ?? null} name={who} size={Spacing.five} />
 
         <View style={styles.body}>
           <Text variant="smallBold" numberOfLines={1}>

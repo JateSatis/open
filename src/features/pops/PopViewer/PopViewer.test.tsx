@@ -12,6 +12,12 @@ import {
 } from '@/api/pops';
 import { setPopReaction } from '@/api/reactions';
 import {
+  getMySubscription,
+  setChannelInChats,
+  subscribeToChannel,
+  type ChannelSubscription,
+} from '@/api/subscriptions';
+import {
   closeComments,
   getCommentsPanelTarget,
 } from '@/features/interactions/comments/commentsPanelStore';
@@ -134,6 +140,68 @@ beforeEach(() => {
   (setPopReaction as jest.Mock).mockImplementation((_id: string, emoji: string | null) =>
     Promise.resolve(emoji ? { emoji, audience: 'visitor' } : null),
   );
+});
+
+describe('PopViewer subscription', () => {
+  const subscriber: ChannelSubscription = {
+    channelId: 'channel-1',
+    chatId: 'posts-1',
+    inChats: false,
+    notify: true,
+    unreadPosts: 0,
+    unreadPops: 0,
+  };
+
+  it('offers a stranger «Подписаться» — without chats — then «Добавить в чаты»', async () => {
+    let stored: ChannelSubscription | null = null;
+    jest.mocked(getMySubscription).mockImplementation(async () => stored);
+    jest.mocked(subscribeToChannel).mockImplementation(async () => {
+      stored = subscriber;
+    });
+    jest.mocked(setChannelInChats).mockImplementation(async () => {
+      stored = { ...subscriber, inChats: true };
+    });
+
+    await open(pop('p1'));
+
+    fireEvent.press(await screen.findByRole('button', { name: 'Подписаться' }));
+    await waitFor(() => expect(subscribeToChannel).toHaveBeenCalledWith('channel-1', false));
+    fireEvent.press(await screen.findByRole('button', { name: 'Добавить в чаты' }));
+
+    await waitFor(() => expect(setChannelInChats).toHaveBeenCalledWith('channel-1', true));
+    await waitFor(() => expect(screen.queryByTestId('pop-subscribe')).toBeNull());
+  });
+
+  it('a tap on the button does not pause the video', async () => {
+    jest.mocked(getMySubscription).mockResolvedValue(null);
+
+    await open(pop('p1'));
+    const button = await screen.findByTestId('pop-subscribe');
+
+    // Одиночный тап по видео ставит паузу через 250 мс — ждём дольше.
+    jest.useFakeTimers();
+    await fireEvent.press(button);
+    await act(() => jest.advanceTimersByTime(300));
+    expect(screen.queryByTestId('pop-paused')).toBeNull();
+    jest.useRealTimers();
+  });
+
+  it('shows no button to a reader', async () => {
+    jest.mocked(getMySubscription).mockResolvedValue({ ...subscriber, inChats: true });
+
+    await open(pop('p1'));
+
+    await waitFor(() => expect(getMySubscription).toHaveBeenCalled());
+    expect(screen.queryByTestId('pop-subscribe')).toBeNull();
+  });
+
+  it('shows no button to the publisher and does not ask for a subscription', async () => {
+    await open(pop('p1'), { canPublish: true });
+
+    await screen.findByTestId('pop-channel-name');
+    expect(screen.queryByTestId('pop-subscribe')).toBeNull();
+    expect(getMySubscription).not.toHaveBeenCalled();
+  });
 });
 
 describe('PopViewer', () => {

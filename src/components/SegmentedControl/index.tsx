@@ -17,7 +17,15 @@ export type SegmentedControlProps = {
   position: SharedValue<number>;
   selectedIndex: number;
   onSelect: (index: number) => void;
+  /**
+   * Число справа от названия сегмента — например, непрочитанное в разделе.
+   * Ноль и отсутствие — без пилюли.
+   */
+  badges?: readonly (number | null | undefined)[];
 };
+
+/** Больше — «99+»: дальше число ничего не добавляет. */
+const BADGE_MAX = 99;
 
 /**
  * Сегментированный контрол над пейджером. Свой, а не нативный из `@expo/ui`:
@@ -28,6 +36,7 @@ export function SegmentedControl({
   position,
   selectedIndex,
   onSelect,
+  badges,
 }: SegmentedControlProps) {
   const theme = useTheme();
   const [trackWidth, setTrackWidth] = useState(0);
@@ -50,19 +59,33 @@ export function SegmentedControl({
           indicatorStyle,
         ]}
       />
-      {segments.map((label, index) => (
-        <Pressable
-          key={label}
-          testID={`segment-${index}`}
-          accessibilityRole="tab"
-          accessibilityLabel={label}
-          accessibilityState={{ selected: index === selectedIndex }}
-          onPress={() => onSelect(index)}
-          style={styles.segment}
-        >
-          <Text variant={index === selectedIndex ? 'smallBold' : 'small'}>{label}</Text>
-        </Pressable>
-      ))}
+      {segments.map((label, index) => {
+        const badge = badges?.[index] ?? 0;
+
+        return (
+          <Pressable
+            key={label}
+            testID={`segment-${index}`}
+            accessibilityRole="tab"
+            accessibilityLabel={badge > 0 ? `${label}, непрочитанных: ${badge}` : label}
+            accessibilityState={{ selected: index === selectedIndex }}
+            onPress={() => onSelect(index)}
+            style={styles.segment}
+          >
+            <Text variant={index === selectedIndex ? 'smallBold' : 'small'}>{label}</Text>
+            {badge > 0 ? (
+              <View
+                testID={`segment-badge-${index}`}
+                style={[styles.badge, { backgroundColor: theme.primary }]}
+              >
+                <Text variant="captionBold" color="primaryText">
+                  {badge > BADGE_MAX ? `${BADGE_MAX}+` : badge}
+                </Text>
+              </View>
+            ) : null}
+          </Pressable>
+        );
+      })}
     </View>
   );
 }
