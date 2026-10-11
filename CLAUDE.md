@@ -292,6 +292,14 @@ comment_attachments  медиа комментария: те же инвариа
 comment_replies      цитаты ответа на комментарий: только комментарии той же ветки
                      (составной FK по target_id), по порядку, до 100. Пишут только
                      функции отправки комментария
+comment_pins         закреплённый комментарий цели: target_id + comment_id (составной FK
+                     на comments(id, target_id)). Один живой на цель, только корень.
+                     Закрепляет автор контента: у попа и поста канала —
+                     can_publish_in_channel, у остального сообщения — его автор
+                     (comment_pin_right). Пишут только pin_comment / unpin_comment,
+                     удаление комментария снимает закреп. Читают все; сигнал
+                     comment_pin_changed в comments:<target_id>. Закреплённый отдаёт
+                     pinned_comment, страницы ранга его не содержат
 comment_revisions    прежние версии комментария после правки, с целью (message_id |
                      pop_id). Только для модерации
 reactions            полиморфные: target_type = message | comment | pop + target_id; ряд
@@ -372,6 +380,8 @@ blocks               блокировки между пользователям�
 - `pops` — читают все аутентифицированные, пишут только `publish_pop` (поп и, по флагу,
   пост с ним одной транзакцией) и `send_pop_post`; обе проверяют
   `can_publish_in_channel`. Удаление поста поп не трогает
+- `comment_pins` — читают все, пишут только `pin_comment` / `unpin_comment`: право
+  закреплять (автор контента) проверяет функция, а не скрытие пункта меню
 - `devices` — обоснованное исключение из открытого `SELECT`: модель телефона и время
   активности о человеке не публичны. Читает только владелец, пишут только функции
   (`register_device`, `touch_device`, `end_device_session`, `end_other_sessions`),
