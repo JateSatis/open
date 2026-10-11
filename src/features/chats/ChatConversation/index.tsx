@@ -19,7 +19,9 @@ import type { DraftPop } from '@/features/chats/composerDraftStore';
 import type { LiveQuote } from '@/features/chats/messages/types';
 import { Text } from '@/components/Text';
 import { useMarkChannelSectionRead } from '@/features/channels/useMarkChannelSectionRead';
+import { subscribersLabel } from '@/features/channels/subscriberText';
 import { ChatFooter, modePlate } from '@/features/chats/ChatFooter';
+import { ChatMenu } from '@/features/chats/ChatMenu';
 import { ChatScreenHeader } from '@/features/chats/ChatScreenHeader';
 import { DeletedOriginal } from '@/features/chats/DeletedOriginal';
 import {
@@ -54,6 +56,7 @@ import {
   activityLabel,
   chatTitle,
   counterpart,
+  dialogPair,
   isChatMember,
   readUpTo as readUpToOf,
 } from '@/features/chats/chatDisplay';
@@ -70,6 +73,10 @@ import { useChatMessages } from '@/features/chats/useChatMessages';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
 import { useJumpToMessage } from '@/features/chats/useJumpToMessage';
 import { useMarkChatRead } from '@/features/chats/useMarkChatRead';
+import {
+  useChatSubscription,
+  useMarkChatSubscriptionRead,
+} from '@/features/chats/chatSubscription';
 import { useMessageViews } from '@/features/chats/useMessageViews';
 import { readChatDraft } from '@/features/chats/composerDraftStore';
 import { useMessageActionHandlers } from '@/features/chats/useMessageActionHandlers';
@@ -181,6 +188,9 @@ export function ChatConversation({
   // Заявку спрашиваем только у не-участника: участнику отвечать уже не на что.
   const myInvite = useMyInvite(chatId, chat !== null && !isMember);
   const invite = useRespondToInvite();
+  const hasOpenInvite = Boolean(myInvite && myInvite.status !== 'accepted');
+  // Подписка — на чужой диалог или группу; у канала она своя, через канал.
+  const subscription = useChatSubscription(chatId, !isPosts && chat !== null && !isMember);
   const waitingForOthers = useMemo(
     () => (chat?.waiting ?? []).filter((person) => person.id !== currentUserId),
     [chat, currentUserId],
@@ -254,6 +264,12 @@ export function ChatConversation({
   const newestMessageId = messages.length > 0 ? messages[0].id : null;
 
   useMarkChatRead(chatId, newestMessageId, isMember);
+  // Подписчик чужого диалога — своей отметкой в подписке.
+  useMarkChatSubscriptionRead(
+    chatId,
+    newestMessageId,
+    isFocused && !isPosts && Boolean(subscription),
+  );
   // Подписчик канала — своей отметкой: участником чата постов он не бывает.
   useMarkChannelSectionRead(
     channel?.id ?? null,
@@ -694,6 +710,13 @@ export function ChatConversation({
     : null;
 
   const title = channel ? channel.title : chat ? chatTitle(chat, currentUserId) : 'Чат';
+  // Чужой личный диалог — двое внахлёст, как в «Чатах».
+  const pair = !channel && chat ? dialogPair(chat, currentUserId) : null;
+  // Под названием — число подписчиков для всех; у участника диалога — рядом
+  // со статусом собеседника.
+  const chatSubtitle = chat
+    ? [otherProfile?.status, subscribersLabel(chat.subscribersCount)].filter(Boolean).join(' · ')
+    : otherProfile?.status;
 
   return (
     <View
@@ -703,8 +726,17 @@ export function ChatConversation({
     >
       <ChatScreenHeader
         title={title}
-        avatar={channel ? { uri: channel.avatarUrl, name: channel.title } : undefined}
-        subtitle={channel ? (channelHeader?.subtitle ?? null) : otherProfile?.status}
+        avatar={
+          channel
+            ? { uri: channel.avatarUrl, name: channel.title }
+            : pair && pair.length === 2
+              ? [
+                  { uri: pair[0].avatarUrl, name: pair[0].displayName },
+                  { uri: pair[1].avatarUrl, name: pair[1].displayName },
+                ]
+              : undefined
+        }
+        subtitle={channel ? (channelHeader?.subtitle ?? null) : chatSubtitle}
         onTitlePress={other ? () => openPerson(other.id) : undefined}
         selectedCount={selection.selected.length}
         onCancelSelection={clearSelection}
@@ -712,11 +744,16 @@ export function ChatConversation({
           isPosts ? (
             channelHeader?.right
           ) : isMember ? (
-            <CallButton
-              live={call.stream !== null}
-              disabled={call.busy}
-              onPress={call.startOrJoin}
-            />
+            <View style={styles.headerActions}>
+              <CallButton
+                live={call.stream !== null}
+                disabled={call.busy}
+                onPress={call.startOrJoin}
+              />
+              <ChatMenu chatId={chatId} isMember subscription={null} />
+            </View>
+          ) : chat ? (
+            <ChatMenu chatId={chatId} isMember={false} subscription={subscription} />
           ) : undefined
         }
       />
@@ -806,7 +843,7 @@ export function ChatConversation({
             onAction: runSelectionAction,
           }}
           invite={
-            !isMember && myInvite && myInvite.status !== 'accepted'
+            !isMember && myInvite && hasOpenInvite
               ? {
                   value: myInvite,
                   responding: invite.pending?.chatId === chatId ? invite.pending.answer : null,
@@ -816,9 +853,20 @@ export function ChatConversation({
                 }
               : null
           }
-          // Постороннему в канале писать некуда: поле ввода не показывается вовсе.
+          subscribe={
+            !isPosts &&
+            chat !== null &&
+            !isMember &&
+            myInvite !== undefined &&
+            !hasOpenInvite &&
+            subscription === null
+              ? { chatId }
+              : null
+          }
+          // Постороннему писать некуда: поле ввода не показывается вовсе. Пока
+          // чат грузится, оно ждёт под надписью, кто сюда пишет.
           composer={
-            isPosts && !isMember
+            !isMember && (isPosts || chat !== null)
               ? null
               : {
                   text: draft.text,

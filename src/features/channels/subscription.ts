@@ -118,7 +118,11 @@ export function useSubscriptionActions(channelId: string): SubscriptionActions {
       failure: string,
     ): Promise<boolean> => {
       const snapshot = takeSnapshot(queryClient, channelId);
-      const current = snapshot.subscription ?? null;
+      // Из «Чатов» канал могли ещё не открывать — тогда подписка есть только
+      // в строке списка, и без неё «Прочитать все» убрало бы строку.
+      const listed = snapshot.chats?.find((chat) => chat.channel?.id === channelId)?.subscription;
+      const current =
+        snapshot.subscription ?? (listed?.channelId ? { ...listed, channelId: listed.channelId } : null);
 
       await queryClient.cancelQueries({ queryKey: channelSubscriptionQueryKey(channelId) });
       applySubscription(queryClient, channelId, next(current));

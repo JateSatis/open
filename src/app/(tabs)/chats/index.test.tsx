@@ -8,9 +8,12 @@ import { listChats, subscribeToOnlineUsers } from '@/api/chats';
 import { listInvites, type ChatInvite } from '@/api/invites';
 import {
   markChannelRead,
+  markChatSubscriptionRead,
   setChannelInChats,
   setChannelNotifications,
+  setChatNotifications,
   unsubscribeFromChannel,
+  unsubscribeFromChat,
   type ChannelSubscription,
 } from '@/api/subscriptions';
 import { useSession } from '@/features/auth/useSession';
@@ -69,6 +72,7 @@ const chat: ChatSummary = {
   previewIsPop: false,
   subscription: null,
   hasUnread: false,
+  subscribersCount: 0,
   channel: null,
 };
 
@@ -249,6 +253,21 @@ describe('ChatsScreen', () => {
       await waitFor(() => expect(screen.queryByRole('button', { name: 'Новости' })).toBeNull());
     });
 
+    it('keeps the row and drops only the dot on «Прочитать все»', async () => {
+      mockedListChats.mockResolvedValue([readChannel]);
+      (markChannelRead as jest.Mock).mockImplementation(() => new Promise(() => undefined));
+      const user = userEvent.setup();
+
+      await renderWithQuery(<ChatsScreen />);
+      fireEvent(await screen.findByRole('button', { name: 'Новости' }), 'longPress');
+      await user.press(await screen.findByRole('menuitem', { name: 'Прочитать все' }));
+
+      await waitFor(() =>
+        expect(screen.queryByLabelText('Есть непрочитанные сообщения')).toBeNull(),
+      );
+      expect(screen.getByRole('button', { name: 'Новости' })).toBeTruthy();
+    });
+
     it('does nothing on a long press of my own chat or channel', async () => {
       mockedListChats.mockResolvedValue([chat]);
 
@@ -256,6 +275,97 @@ describe('ChatsScreen', () => {
       fireEvent(await screen.findByRole('button', { name: 'Марина' }), 'longPress');
 
       expect(screen.queryByTestId('subscription-menu')).toBeNull();
+    });
+  });
+
+  describe('dialogue I subscribed to', () => {
+    const theirs: ChatSummary = {
+      ...chat,
+      id: 'their-1',
+      participants: [
+        { id: 'user-2', displayName: 'Аня', avatarUrl: null, lastReadAt: READ_AT },
+        { id: 'user-3', displayName: 'Пётр', avatarUrl: null, lastReadAt: READ_AT },
+      ],
+      lastMessagePreview: 'Аня, привет',
+      lastMessageAuthorId: 'user-3',
+      subscription: {
+        channelId: null,
+        chatId: 'their-1',
+        inChats: true,
+        notify: true,
+        unreadPosts: 1,
+        unreadPops: 0,
+      },
+      hasUnread: true,
+    };
+
+    it('names it after both people, with two avatars and the unread dot', async () => {
+      mockedListChats.mockResolvedValue([theirs]);
+      const user = userEvent.setup();
+
+      await renderWithQuery(<ChatsScreen />);
+
+      expect(await screen.findByText('Аня и Пётр')).toBeTruthy();
+      expect(screen.getByTestId('chat-avatar-pair')).toBeTruthy();
+      expect(screen.getByText('Аня, привет')).toBeTruthy();
+      expect(screen.getByLabelText('Есть непрочитанные сообщения')).toBeTruthy();
+
+      await user.press(screen.getByRole('button', { name: 'Аня и Пётр' }));
+      expect(mockPush).toHaveBeenCalledWith('/chats/their-1');
+    });
+
+    it('offers three actions on a long press — no «Не отображать в чатах»', async () => {
+      mockedListChats.mockResolvedValue([theirs]);
+
+      await renderWithQuery(<ChatsScreen />);
+      fireEvent(await screen.findByRole('button', { name: 'Аня и Пётр' }), 'longPress');
+
+      expect(await screen.findByTestId('subscription-menu')).toBeTruthy();
+      for (const label of ['Прочитать все', 'Выключить уведомления', 'Отписаться']) {
+        expect(screen.getByRole('menuitem', { name: label })).toBeTruthy();
+      }
+      expect(screen.queryByRole('menuitem', { name: 'Не отображать в чатах' })).toBeNull();
+    });
+
+    it.each([
+      ['Прочитать все', () => expect(markChatSubscriptionRead).toHaveBeenCalledWith('their-1')],
+      [
+        'Выключить уведомления',
+        () => expect(setChatNotifications).toHaveBeenCalledWith('their-1', false),
+      ],
+      ['Отписаться', () => expect(unsubscribeFromChat).toHaveBeenCalledWith('their-1')],
+    ])('«%s» goes to the database for the chat', async (label, check) => {
+      mockedListChats.mockResolvedValue([theirs]);
+      const user = userEvent.setup();
+
+      await renderWithQuery(<ChatsScreen />);
+      fireEvent(await screen.findByRole('button', { name: 'Аня и Пётр' }), 'longPress');
+      await user.press(await screen.findByRole('menuitem', { name: label }));
+
+      await waitFor(check);
+    });
+
+    it('drops the row right away on «Отписаться» and the dot on «Прочитать все»', async () => {
+      mockedListChats.mockResolvedValue([theirs]);
+      // Перечитанный список держим прежним: строка уходит сама, оптимистично.
+      (unsubscribeFromChat as jest.Mock).mockImplementation(() => new Promise(() => undefined));
+      (markChatSubscriptionRead as jest.Mock).mockImplementation(
+        () => new Promise(() => undefined),
+      );
+      const user = userEvent.setup();
+
+      await renderWithQuery(<ChatsScreen />);
+      fireEvent(await screen.findByRole('button', { name: 'Аня и Пётр' }), 'longPress');
+      await user.press(await screen.findByRole('menuitem', { name: 'Прочитать все' }));
+      await waitFor(() =>
+        expect(screen.queryByLabelText('Есть непрочитанные сообщения')).toBeNull(),
+      );
+
+      fireEvent(screen.getByRole('button', { name: 'Аня и Пётр' }), 'longPress');
+      await user.press(await screen.findByRole('menuitem', { name: 'Отписаться' }));
+      await waitFor(() =>
+        expect(screen.queryByRole('button', { name: 'Аня и Пётр' })).toBeNull(),
+      );
     });
   });
 

@@ -10,6 +10,7 @@ import { MenuList, menuListHeight, type MenuAction } from '@/components/MenuList
 import { MenuModal, useMenuTransition } from '@/components/MenuModal';
 import type { RowRect } from '@/features/chats/ChatListItem';
 import { useSubscriptionActions } from '@/features/channels/subscription';
+import { useChatSubscriptionActions } from '@/features/chats/chatSubscription';
 import { Spacing } from '@/theme';
 
 type RowMenuItem = 'read' | 'mute' | 'unmute' | 'hide' | 'unsubscribe';
@@ -17,32 +18,38 @@ type RowMenuItem = 'read' | 'mute' | 'unmute' | 'hide' | 'unsubscribe';
 export type SubscriptionRowTarget = { chat: ChatSummary; rect: RowRect };
 
 export type SubscriptionRowMenuProps = {
-  /** Строка канала-подписки, на которой долго нажали; `null` — меню нет. */
+  /** Строка подписки (канал или чужой чат), на которой долго нажали; `null` — меню нет. */
   target: SubscriptionRowTarget | null;
   /** Закрытие доиграло — владелец снимает цель. */
   onClosed: () => void;
 };
 
+/**
+ * У канала — ещё «Не отображать в чатах»; у чужого диалога и группы подписка
+ * одного уровня: убрать из чатов и значит отписаться.
+ */
 function actionsFor(chat: ChatSummary): MenuAction<RowMenuItem>[] {
   return [
     { id: 'read', label: 'Прочитать все' },
     chat.subscription?.notify === false
       ? { id: 'unmute', label: 'Включить уведомления' }
       : { id: 'mute', label: 'Выключить уведомления' },
-    { id: 'hide', label: 'Не отображать в чатах' },
+    ...(chat.channel ? [{ id: 'hide' as const, label: 'Не отображать в чатах' }] : []),
     { id: 'unsubscribe', label: 'Отписаться', destructive: true },
   ];
 }
 
 /**
- * Меню канала-подписки по долгому нажатию в «Чатах»: под строкой, а если
- * снизу не помещается — над ней. Затемнение и анимации — как у остальных меню.
+ * Меню подписки по долгому нажатию в «Чатах»: под строкой, а если снизу не
+ * помещается — над ней. Затемнение и анимации — как у остальных меню.
  */
 export function SubscriptionRowMenu({ target, onClosed }: SubscriptionRowMenuProps) {
   const { height: windowHeight } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const { progress, close } = useMenuTransition(target, onClosed);
-  const actions = useSubscriptionActions(target?.chat.channel?.id ?? '');
+  const channelActions = useSubscriptionActions(target?.chat.channel?.id ?? '');
+  const chatActions = useChatSubscriptionActions(target?.chat.id ?? '');
+  const isChannel = Boolean(target?.chat.channel);
 
   const menuStyle = useAnimatedStyle(() => ({
     opacity: progress.value,
@@ -53,23 +60,23 @@ export function SubscriptionRowMenu({ target, onClosed }: SubscriptionRowMenuPro
     (item: RowMenuItem) => {
       switch (item) {
         case 'read':
-          void actions.readAll();
+          void (isChannel ? channelActions.readAll() : chatActions.readAll());
           return;
         case 'mute':
-          void actions.setNotify(false);
+          void (isChannel ? channelActions.setNotify(false) : chatActions.setNotify(false));
           return;
         case 'unmute':
-          void actions.setNotify(true);
+          void (isChannel ? channelActions.setNotify(true) : chatActions.setNotify(true));
           return;
         case 'hide':
-          void actions.setInChats(false);
+          void channelActions.setInChats(false);
           return;
         case 'unsubscribe':
-          void actions.unsubscribe();
+          void (isChannel ? channelActions.unsubscribe() : chatActions.unsubscribe());
           return;
       }
     },
-    [actions],
+    [channelActions, chatActions, isChannel],
   );
 
   const items = target ? actionsFor(target.chat) : [];
