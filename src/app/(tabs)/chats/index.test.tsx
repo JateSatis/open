@@ -1,11 +1,18 @@
 import type { Session as SupabaseSession } from '@supabase/supabase-js';
-import { screen, userEvent } from '@testing-library/react-native';
+import { fireEvent, screen, userEvent, waitFor } from '@testing-library/react-native';
 
 import ChatsScreen from './index';
 
 import type { ChatSummary } from '@/api/chats';
 import { listChats, subscribeToOnlineUsers } from '@/api/chats';
 import { listInvites, type ChatInvite } from '@/api/invites';
+import {
+  markChannelRead,
+  setChannelInChats,
+  setChannelNotifications,
+  unsubscribeFromChannel,
+  type ChannelSubscription,
+} from '@/api/subscriptions';
 import { useSession } from '@/features/auth/useSession';
 import { reportRealtimeJoined, resetConnectionState } from '@/features/connection/connectionStore';
 import { renderWithQuery } from '@/test/renderWithQuery';
@@ -57,6 +64,10 @@ const chat: ChatSummary = {
   lastMessagePreview: 'до встречи',
   lastMessageAt: '2026-09-16T10:00:00Z',
   lastMessageAuthorId: 'user-2',
+  lastPopAt: null,
+  lastActivityAt: '2026-09-16T10:00:00Z',
+  previewIsPop: false,
+  subscription: null,
   hasUnread: false,
   channel: null,
 };
@@ -109,7 +120,143 @@ describe('ChatsScreen', () => {
     await user.press(await screen.findByRole('button', { name: 'Новости' }));
 
     expect(screen.getByText('Канал')).toBeTruthy();
-    expect(mockPush).toHaveBeenCalledWith('/chats/channel/channel-1');
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/chats/channel/[channelId]',
+      params: { channelId: 'channel-1', section: 'posts' },
+    });
+  });
+
+  describe('channel I read', () => {
+    const subscription: ChannelSubscription = {
+      channelId: 'channel-1',
+      chatId: 'posts-1',
+      inChats: true,
+      notify: true,
+      unreadPosts: 0,
+      unreadPops: 1,
+    };
+    const readChannel: ChatSummary = {
+      ...chat,
+      id: 'posts-1',
+      kind: 'channel',
+      channel: { id: 'channel-1', title: 'Новости', username: 'news', avatarUrl: null },
+      participants: [{ id: 'owner-1', displayName: 'Автор', avatarUrl: null, lastReadAt: READ_AT }],
+      lastMessagePreview: 'старый пост',
+      lastMessageAuthorId: 'owner-1',
+      lastPopAt: '2026-09-16T11:00:00Z',
+      lastActivityAt: '2026-09-16T11:00:00Z',
+      previewIsPop: true,
+      subscription,
+      hasUnread: true,
+    };
+
+    it('shows «Новый попс» when a pop without a post is the freshest, and opens «Попсы»', async () => {
+      mockedListChats.mockResolvedValue([readChannel]);
+      const user = userEvent.setup();
+
+      await renderWithQuery(<ChatsScreen />);
+
+      expect(await screen.findByText('Новый попс')).toBeTruthy();
+      expect(screen.queryByText('старый пост')).toBeNull();
+      expect(screen.getByLabelText('Есть непрочитанные сообщения')).toBeTruthy();
+
+      await user.press(screen.getByRole('button', { name: 'Новости' }));
+
+      expect(mockPush).toHaveBeenCalledWith({
+        pathname: '/chats/channel/[channelId]',
+        params: { channelId: 'channel-1', section: 'pops' },
+      });
+    });
+
+    it('opens «Посты» when the fresher unread is a post', async () => {
+      mockedListChats.mockResolvedValue([
+        {
+          ...readChannel,
+          lastMessageAt: '2026-09-16T12:00:00Z',
+          lastActivityAt: '2026-09-16T12:00:00Z',
+          previewIsPop: false,
+          subscription: { ...subscription, unreadPosts: 2 },
+        },
+      ]);
+      const user = userEvent.setup();
+
+      await renderWithQuery(<ChatsScreen />);
+      await user.press(await screen.findByRole('button', { name: 'Новости' }));
+
+      expect(mockPush).toHaveBeenCalledWith({
+        pathname: '/chats/channel/[channelId]',
+        params: { channelId: 'channel-1', section: 'posts' },
+      });
+    });
+
+    it('offers the four subscription actions on a long press', async () => {
+      mockedListChats.mockResolvedValue([readChannel]);
+
+      await renderWithQuery(<ChatsScreen />);
+      fireEvent(await screen.findByRole('button', { name: 'Новости' }), 'longPress');
+
+      const menu = await screen.findByTestId('subscription-menu');
+
+      expect(menu).toBeTruthy();
+      for (const label of [
+        'Прочитать все',
+        'Выключить уведомления',
+        'Не отображать в чатах',
+        'Отписаться',
+      ]) {
+        expect(screen.getByRole('menuitem', { name: label })).toBeTruthy();
+      }
+    });
+
+    it.each([
+      [
+        'Прочитать все',
+        () =>
+          expect(markChannelRead).toHaveBeenCalledWith('channel-1', { posts: true, pops: true }),
+      ],
+      [
+        'Выключить уведомления',
+        () => expect(setChannelNotifications).toHaveBeenCalledWith('channel-1', false),
+      ],
+      [
+        'Не отображать в чатах',
+        () => expect(setChannelInChats).toHaveBeenCalledWith('channel-1', false),
+      ],
+      ['Отписаться', () => expect(unsubscribeFromChannel).toHaveBeenCalledWith('channel-1')],
+    ])('«%s» goes to the database', async (label, check) => {
+      mockedListChats.mockResolvedValue([readChannel]);
+      const user = userEvent.setup();
+
+      await renderWithQuery(<ChatsScreen />);
+      fireEvent(await screen.findByRole('button', { name: 'Новости' }), 'longPress');
+      await user.press(await screen.findByRole('menuitem', { name: label }));
+
+      await waitFor(check);
+    });
+
+    it('removes the row right away when hidden from chats', async () => {
+      mockedListChats.mockResolvedValue([readChannel]);
+      // Перечитанный список — уже без канала.
+      (setChannelInChats as jest.Mock).mockImplementation(async () => {
+        mockedListChats.mockResolvedValue([]);
+      });
+      const user = userEvent.setup();
+
+      await renderWithQuery(<ChatsScreen />);
+      fireEvent(await screen.findByRole('button', { name: 'Новости' }), 'longPress');
+      await user.press(await screen.findByRole('menuitem', { name: 'Не отображать в чатах' }));
+
+      await waitFor(() => expect(screen.queryByRole('button', { name: 'Новости' })).toBeNull());
+    });
+
+    it('does nothing on a long press of my own chat or channel', async () => {
+      mockedListChats.mockResolvedValue([chat]);
+
+      await renderWithQuery(<ChatsScreen />);
+      fireEvent(await screen.findByRole('button', { name: 'Марина' }), 'longPress');
+
+      expect(screen.queryByTestId('subscription-menu')).toBeNull();
+    });
   });
 
   it('keeps the «+» button even when there are no chats', async () => {

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-import type { IncomingInvite, IncomingMessage } from '@/api/chats';
+import type { IncomingInvite, IncomingMessage, IncomingPop } from '@/api/chats';
 
 /**
  * Короткая фраза: «Скопировано», «Не удалось удалить сообщение». Может нести
@@ -15,6 +15,7 @@ export type Notice = {
 export type InAppAlert =
   | ({ kind: 'message' } & IncomingMessage)
   | ({ kind: 'invite' } & IncomingInvite)
+  | ({ kind: 'pop' } & IncomingPop)
   | ({ kind: 'notice' } & Notice);
 
 type AlertsState = { alert: InAppAlert | null };

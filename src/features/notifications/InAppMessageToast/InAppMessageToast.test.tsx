@@ -7,6 +7,7 @@ import {
   subscribeToUserEvents,
   type IncomingInvite,
   type IncomingMessage,
+  type IncomingPop,
   type UserChannelHandlers,
 } from '@/api/chats';
 import { useSession } from '@/features/auth/useSession';
@@ -37,6 +38,27 @@ const mockedSession = useSession as jest.MockedFunction<typeof useSession>;
 let handlers: UserChannelHandlers | null = null;
 const deliver = (message: IncomingMessage) => handlers?.onMessage(message);
 const deliverInvite = (invite: IncomingInvite) => handlers?.onInvite(invite);
+const deliverPop = (pop: IncomingPop) => handlers?.onPop?.(pop);
+
+const channel = { id: 'channel-1', title: 'Плейлисты', avatarUrl: null };
+const post: IncomingMessage = {
+  messageId: 'p1',
+  chatId: 'posts-1',
+  authorId: 'owner-1',
+  authorName: 'Владелец',
+  messageKind: 'text',
+  text: 'новый трек',
+  createdAt: '2026-10-11T10:00:00Z',
+  channel,
+  notify: true,
+};
+const pop: IncomingPop = {
+  popId: 'pop-1',
+  chatId: 'posts-1',
+  channel,
+  notify: true,
+  createdAt: '2026-10-11T10:00:00Z',
+};
 
 const incoming: IncomingMessage = {
   messageId: 'm1',
@@ -46,6 +68,8 @@ const incoming: IncomingMessage = {
   messageKind: 'text',
   text: 'ты где',
   createdAt: '2026-09-16T10:00:00Z',
+  channel: null,
+  notify: true,
 };
 
 beforeEach(() => {
@@ -126,6 +150,55 @@ describe('InAppMessageToast', () => {
     await user.press(screen.getByText('Зовёт вас в чат «Поход»'));
 
     expect(mockPush).toHaveBeenCalledWith('/chats/chat-7');
+  });
+
+  it('signs a channel post with the channel and opens its «Посты»', async () => {
+    const user = userEvent.setup();
+
+    await renderWithQuery(<InAppMessageToast />);
+
+    await act(async () => deliver(post));
+    expect(await screen.findByText('Плейлисты')).toBeTruthy();
+    expect(screen.queryByText('Владелец')).toBeNull();
+    await user.press(screen.getByText('новый трек'));
+
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/chats/channel/[channelId]',
+      params: { channelId: 'channel-1', section: 'posts' },
+    });
+  });
+
+  it('stays silent for a channel with notifications off', async () => {
+    await renderWithQuery(<InAppMessageToast />);
+
+    await act(async () => deliver({ ...post, notify: false }));
+    await act(async () => deliverPop({ ...pop, notify: false }));
+
+    await waitFor(() => expect(screen.queryByText('Плейлисты')).toBeNull());
+  });
+
+  it('announces a new pop and opens the channel on «Попсы»', async () => {
+    const user = userEvent.setup();
+
+    await renderWithQuery(<InAppMessageToast />);
+
+    await act(async () => deliverPop(pop));
+    await user.press(await screen.findByText('Новый попс'));
+
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/chats/channel/[channelId]',
+      params: { channelId: 'channel-1', section: 'pops' },
+    });
+  });
+
+  it('keeps quiet about a pop of the channel being read', async () => {
+    setActiveChatId('posts-1');
+
+    await renderWithQuery(<InAppMessageToast />);
+
+    await act(async () => deliverPop(pop));
+
+    await waitFor(() => expect(screen.queryByText('Новый попс')).toBeNull());
   });
 
   it('runs the action of a notice that carries one and closes', async () => {
