@@ -155,7 +155,13 @@ function ChannelSections({ channel, initialIndex }: { channel: Channel; initialI
         />
       </View>
 
-      <SectionPager position={position} width={width} pages={pages} onIndexChange={setIndex} />
+      <SectionPager
+        position={position}
+        width={width}
+        pages={pages}
+        index={index}
+        onIndexChange={setIndex}
+      />
 
       <SubscribeBar channelId={channel.id} section={SECTION_KEYS[index]} />
     </View>
