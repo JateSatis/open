@@ -221,6 +221,18 @@ begin
       select 1 from realtime.messages
       where topic = 'user:' || b::text and event = 'new_pop' and payload ->> 'pop_id' = pop1::text
     ));
+  -- Удалённый до фиксации поп не рассылается.
+  set constraints public.on_message_created, public.pops_broadcast_new deferred;
+  perform pg_temp.act_as(a);
+  perform public.publish_pop(chan, '00000000-0000-4000-8000-0000000005f1', video, null, false, null, null);
+  perform set_config('role', 'postgres', true);
+  update public.pops set deleted_at = now() where id = '00000000-0000-4000-8000-0000000005f1';
+  set constraints public.on_message_created, public.pops_broadcast_new immediate;
+  perform pg_temp.check('удалённый до фиксации поп: new_pop нет',
+    not exists (
+      select 1 from realtime.messages
+      where event = 'new_pop' and payload ->> 'pop_id' = '00000000-0000-4000-8000-0000000005f1'
+    ));
   perform pg_temp.check('поп с постом: отдельного new_pop нет',
     not exists (
       select 1 from realtime.messages
