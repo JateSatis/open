@@ -33,13 +33,17 @@ export function useChatSubscription(
   chatId: string,
   enabled: boolean,
 ): Subscription | null | undefined {
-  const { data } = useQuery({
+  const { data, isError } = useQuery({
     queryKey: chatSubscriptionQueryKey(chatId),
     queryFn: () => getMyChatSubscription(chatId),
     enabled,
   });
 
-  return enabled ? data : null;
+  if (!enabled) return null;
+
+  // Не узнали — считаем, что не подписан: иначе низ переписки остался бы
+  // пустым. Повторная подписка базе не ошибка.
+  return data ?? (isError ? null : undefined);
 }
 
 type Snapshot = {
@@ -67,8 +71,12 @@ function restore(queryClient: QueryClient, chatId: string, snapshot: Snapshot) {
  * шапке и строка в «Чатах». Подписанный чат в список добавит перечитывание:
  * строку целиком собирать здесь не из чего.
  */
-function applySubscription(queryClient: QueryClient, chatId: string, next: Subscription | null) {
-  const previous = queryClient.getQueryData<Subscription | null>(chatSubscriptionQueryKey(chatId));
+function applySubscription(
+  queryClient: QueryClient,
+  chatId: string,
+  previous: Subscription | null,
+  next: Subscription | null,
+) {
   const delta = (next ? 1 : 0) - (previous ? 1 : 0);
 
   queryClient.setQueryData(chatSubscriptionQueryKey(chatId), next);
@@ -116,7 +124,7 @@ export function useChatSubscriptionActions(chatId: string): ChatSubscriptionActi
         null;
 
       await queryClient.cancelQueries({ queryKey: chatSubscriptionQueryKey(chatId) });
-      applySubscription(queryClient, chatId, next(current));
+      applySubscription(queryClient, chatId, current, next(current));
 
       try {
         await withDeadline(request(), ACTION_DEADLINE_MS);

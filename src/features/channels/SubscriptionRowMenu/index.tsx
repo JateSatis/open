@@ -49,7 +49,8 @@ export function SubscriptionRowMenu({ target, onClosed }: SubscriptionRowMenuPro
   const { progress, close } = useMenuTransition(target, onClosed);
   const channelActions = useSubscriptionActions(target?.chat.channel?.id ?? '');
   const chatActions = useChatSubscriptionActions(target?.chat.id ?? '');
-  const isChannel = Boolean(target?.chat.channel);
+  // Общее у двух целей — прочитать, уведомления, отписка; «в чатах» — только у канала.
+  const actions = target?.chat.channel ? channelActions : chatActions;
 
   const menuStyle = useAnimatedStyle(() => ({
     opacity: progress.value,
@@ -60,23 +61,23 @@ export function SubscriptionRowMenu({ target, onClosed }: SubscriptionRowMenuPro
     (item: RowMenuItem) => {
       switch (item) {
         case 'read':
-          void (isChannel ? channelActions.readAll() : chatActions.readAll());
+          void actions.readAll();
           return;
         case 'mute':
-          void (isChannel ? channelActions.setNotify(false) : chatActions.setNotify(false));
+          void actions.setNotify(false);
           return;
         case 'unmute':
-          void (isChannel ? channelActions.setNotify(true) : chatActions.setNotify(true));
+          void actions.setNotify(true);
           return;
         case 'hide':
           void channelActions.setInChats(false);
           return;
         case 'unsubscribe':
-          void (isChannel ? channelActions.unsubscribe() : chatActions.unsubscribe());
+          void actions.unsubscribe();
           return;
       }
     },
-    [channelActions, chatActions, isChannel],
+    [actions, channelActions],
   );
 
   const items = target ? actionsFor(target.chat) : [];

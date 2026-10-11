@@ -12,11 +12,12 @@ export function myInviteQueryKey(chatId: string) {
  * известна: «Подписаться» не мигает перед панелью заявки.
  */
 export function useMyInvite(chatId: string, enabled: boolean): MyInvite | null | undefined {
-  const { data } = useQuery({
+  const { data, isError } = useQuery({
     queryKey: myInviteQueryKey(chatId),
     queryFn: () => getMyInvite(chatId),
     enabled,
   });
 
-  return data;
+  // Не узнали — как будто заявки нет: низ переписки не остаётся пустым.
+  return data ?? (isError ? null : undefined);
 }

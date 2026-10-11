@@ -857,16 +857,17 @@ export function ChatConversation({
             !isPosts &&
             chat !== null &&
             !isMember &&
-            myInvite !== undefined &&
-            !hasOpenInvite &&
+            // Заявки нет вовсе: принятая — значит, я вот-вот появлюсь среди
+            // участников, отклонённая — её панель и так внизу.
+            myInvite === null &&
             subscription === null
               ? { chatId }
               : null
           }
-          // Постороннему писать некуда: поле ввода не показывается вовсе. Пока
-          // чат грузится, оно ждёт под надписью, кто сюда пишет.
+          // Постороннему писать некуда: поле ввода не показывается вовсе — и
+          // пока чат грузится, тоже, чтобы не мелькало.
           composer={
-            !isMember && (isPosts || chat !== null)
+            !isMember
               ? null
               : {
                   text: draft.text,
