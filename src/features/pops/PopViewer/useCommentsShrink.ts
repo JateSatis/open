@@ -1,10 +1,7 @@
 import { useAnimatedStyle } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import {
-  commentsSheetOpen,
-  commentsSheetTop,
-} from '@/features/interactions/comments/commentsLift';
+import { commentsSheetOpen, commentsSheetTop } from '@/features/interactions/comments/commentsLift';
 
 /**
  * Видео страницы, пока открыты комментарии к её попу: уменьшается целиком в

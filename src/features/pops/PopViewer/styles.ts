@@ -64,8 +64,26 @@ export const styles = StyleSheet.create({
     gap: Spacing.one,
     paddingBottom: Spacing.two,
   },
+  /** Аватарка с именем и кнопка подписки — одной строкой. */
+  channelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+  },
   channelName: {
-    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    flexShrink: 1,
+  },
+  channelTitle: {
+    flexShrink: 1,
+  },
+  subscribe: {
+    borderWidth: 1,
+    borderRadius: Radii.full,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.one,
   },
   /** Невидимая копия подписи — только чтобы узнать, сколько в ней строк. */
   measure: {

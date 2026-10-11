@@ -4,7 +4,7 @@ import Animated, { useSharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { HeartBurst } from './HeartBurst';
-import { PopCaption } from './PopCaption';
+import { PopCaption, type PopSubscribeAction } from './PopCaption';
 import { PopProgressBar } from './PopProgressBar';
 import { PopReactionPopover } from './PopReactionPopover';
 import { PopSideColumn } from './PopSideColumn';
@@ -28,6 +28,8 @@ export type PopPageMode = 'active' | 'preload' | 'idle';
 export type PopPageProps = {
   pop: Pop;
   channelTitle: string | null;
+  channelAvatarUrl: string | null;
+  subscribe: PopSubscribeAction | null;
   width: number;
   height: number;
   mode: PopPageMode;
@@ -47,6 +49,8 @@ export type PopPageProps = {
 export const PopPage = memo(function PopPage({
   pop,
   channelTitle,
+  channelAvatarUrl,
+  subscribe,
   width,
   height,
   mode,
@@ -153,6 +157,8 @@ export const PopPage = memo(function PopPage({
         >
           <PopCaption
             channelTitle={channelTitle}
+            channelAvatarUrl={channelAvatarUrl}
+            subscribe={subscribe}
             caption={pop.caption}
             expanded={captionOpen}
             onToggle={() => setCaptionOpen((open) => !open)}
