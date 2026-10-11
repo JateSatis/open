@@ -148,6 +148,13 @@ const rootsSelect = (targetId: string, cursor: RootCursor | undefined, limit: nu
     .order('id', { ascending: false })
     .order('position', { referencedTable: 'comment_attachments' });
 
+/** Закреплённый комментарий цели — функцией `pinned_comment`, те же колонки. */
+const pinnedSelect = (targetId: string) =>
+  supabase
+    .rpc('pinned_comment', { target: targetId })
+    .select(COMMENT_COLUMNS)
+    .order('position', { referencedTable: 'comment_attachments' });
+
 type CommentRow = NonNullable<Awaited<ReturnType<typeof commentsSelect>>['data']>[number];
 type CommentReplyRow = NonNullable<CommentRow['replies']>[number];
 
@@ -234,6 +241,37 @@ export async function listThreadRoots(
     items,
     nextCursor: rows.length > limit && last ? { rank: last.rank, id: last.id } : null,
   };
+}
+
+/**
+ * Закреплённый автором контента комментарий цели или `null`. Страницы ранга
+ * его не содержат — он идёт первым отдельно.
+ */
+export async function getPinnedComment(targetId: string): Promise<Comment | null> {
+  const { data, error } = await pinnedSelect(targetId);
+
+  if (error) throw error;
+
+  const [row] = data ?? [];
+
+  return row ? toComment(row) : null;
+}
+
+/**
+ * Закрепляет верхнеуровневый комментарий у его цели; прежний закреп снимается.
+ * Право — у автора контента, его проверяет база (`pin_comment`).
+ */
+export async function pinComment(commentId: string): Promise<void> {
+  const { error } = await supabase.rpc('pin_comment', { target_comment: commentId });
+
+  if (error) throw error;
+}
+
+/** Снимает закреп у цели — сообщения или попа. */
+export async function unpinComment(targetId: string): Promise<void> {
+  const { error } = await supabase.rpc('unpin_comment', { target: targetId });
+
+  if (error) throw error;
 }
 
 /**

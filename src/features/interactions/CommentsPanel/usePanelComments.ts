@@ -11,7 +11,7 @@ import {
 } from '@/features/interactions/comments/commentItem';
 import {
   addToThread,
-  pinRoot,
+  raiseRoot,
   rootsKey,
   updateRoots,
   updateThread,
@@ -66,7 +66,7 @@ function useFocusComment(targetId: string, focusId: string | undefined) {
 
         if (cancelled) return;
 
-        updateRoots(queryClient, targetId, (page) => pinRoot(page, root));
+        updateRoots(queryClient, targetId, (page) => raiseRoot(page, root));
 
         if (comment.threadRootId) {
           updateThread(queryClient, targetId, rootId, (page) => addToThread(page, comment), {
@@ -116,7 +116,7 @@ export function usePanelComments(
   const openThread = useOpenThread();
   const thread = useCommentThread(targetId, threadRootId, comments.overlay);
   const focusReady = useFocusComment(targetId, target.focusCommentId);
-  const { roots, pendingReplies } = comments;
+  const { roots, pendingReplies, pinnedId } = comments;
 
   const pendingCount = useCallback(
     (rootId: string) => pendingReplies.get(rootId)?.length ?? 0,
@@ -124,8 +124,8 @@ export function usePanelComments(
   );
 
   const rows = useMemo<CommentRow[]>(
-    () => buildCommentRows(roots, pendingCount),
-    [pendingCount, roots],
+    () => buildCommentRows(roots, pendingCount, pinnedId),
+    [pendingCount, pinnedId, roots],
   );
 
   const threadRows = useMemo<CommentRow[]>(

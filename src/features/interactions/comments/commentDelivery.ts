@@ -42,7 +42,7 @@ import type { CommentItem } from '@/features/interactions/comments/commentItem';
 import { toCommentItem } from '@/features/interactions/comments/commentItem';
 import {
   addToThread,
-  pinRoot,
+  raiseRoot,
   updateRoots,
   updateThread,
 } from '@/features/interactions/comments/commentsCache';
@@ -156,11 +156,12 @@ function settle(queryClient: QueryClient, targetId: string, localId: string, sav
     // Число ответов у корня — сразу; точное догонит сигнал канала.
     updateRoots(queryClient, targetId, (page) => ({
       ...page,
-      pinned: page.pinned.map((root) => bumpReplies(root, saved.threadRootId!)),
+      authorPin: page.authorPin && bumpReplies(page.authorPin, saved.threadRootId!),
+      raised: page.raised.map((root) => bumpReplies(root, saved.threadRootId!)),
       items: page.items.map((root) => bumpReplies(root, saved.threadRootId!)),
     }));
   } else {
-    updateRoots(queryClient, targetId, (page) => pinRoot(page, item));
+    updateRoots(queryClient, targetId, (page) => raiseRoot(page, item));
   }
 
   notifyManager.schedule(() => removeOutboxComment(targetId, localId));

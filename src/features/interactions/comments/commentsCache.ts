@@ -3,8 +3,11 @@
 // Верх (`roots`) — верхнеуровневые комментарии в порядке ранга на момент
 // загрузки. Порядок не пересчитывается на глазах: свежие счётчики и правки
 // ложатся на место, а новый ранг — только при следующем открытии панели
-// (панель забывает кеш при закрытии). Свои отправленные за это открытие и
-// выделенный комментарий — отдельно, сверху (`pinned`).
+// (панель забывает кеш при закрытии). Над рангом два слоя, и это разные вещи:
+// закреп автора контента (`authorPin`) — состояние в базе, видное всем,
+// первым всегда; поднятые (`raised`) — свои отправленные за это открытие и
+// комментарий, к которому пришли по пересланному, — только у себя, до
+// закрытия панели.
 //
 // Тред (`thread`) — ответы одного корня по порядку. Начало треда (`head`)
 // загружено подряд; за разрывом «Показать ещё» может лежать `tail` — свои
@@ -17,8 +20,10 @@ import type { Comment, RootCursor } from '@/api/comments';
 import { toCommentItem, type CommentItem } from '@/features/interactions/comments/commentItem';
 
 export type RootsPage = {
-  /** Свои отправленные за это открытие и выделенный — сверху, новыми вперёд. */
-  pinned: CommentItem[];
+  /** Закреплённый автором контента — первым; в `raised` и `items` его нет. */
+  authorPin: CommentItem | null;
+  /** Свои отправленные за это открытие и выделенный — под закрепом, новыми вперёд. */
+  raised: CommentItem[];
   /** Остальные — по рангу на момент загрузки. */
   items: CommentItem[];
   nextCursor: RootCursor | null;
@@ -55,8 +60,22 @@ function byTime(a: CommentItem, b: CommentItem): number {
   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 }
 
-export function rootsPageOf(page: { items: Comment[]; nextCursor: RootCursor | null }): RootsPage {
-  return { pinned: [], items: page.items.map(toCommentItem), nextCursor: page.nextCursor };
+export function rootsPageOf(
+  page: { items: Comment[]; nextCursor: RootCursor | null },
+  pinned: Comment | null = null,
+): RootsPage {
+  const authorPin = pinned ? toCommentItem(pinned) : null;
+
+  return {
+    authorPin,
+    raised: [],
+    items: page.items.map(toCommentItem).filter((item) => item.id !== authorPin?.id),
+    nextCursor: page.nextCursor,
+  };
+}
+
+function allRoots(page: RootsPage): CommentItem[] {
+  return page.authorPin ? [page.authorPin, ...page.raised, ...page.items] : [...page.raised, ...page.items];
 }
 
 /**
@@ -69,26 +88,63 @@ export function appendRoots(
   incoming: Comment[],
   nextCursor: RootCursor | null,
 ): RootsPage {
-  const known = new Set([...page.pinned, ...page.items].map((item) => item.id));
+  const known = new Set(allRoots(page).map((item) => item.id));
   const added = incoming.filter((comment) => !known.has(comment.id)).map(toCommentItem);
 
   return { ...page, items: added.length > 0 ? [...page.items, ...added] : page.items, nextCursor };
 }
 
-/** Комментарий — в самый верх, до закрытия панели. Ниже он не повторяется. */
-export function pinRoot(page: RootsPage, item: CommentItem): RootsPage {
+/**
+ * Комментарий — наверх, под закреп, до закрытия панели. Ниже он не
+ * повторяется. Закреплённый и так первый — его не трогаем.
+ */
+export function raiseRoot(page: RootsPage, item: CommentItem): RootsPage {
+  if (page.authorPin?.id === item.id) return page;
+
   return {
     ...page,
-    pinned: [item, ...page.pinned.filter((pinned) => pinned.id !== item.id)],
+    raised: [item, ...page.raised.filter((raised) => raised.id !== item.id)],
     items: page.items.some((other) => other.id === item.id)
       ? page.items.filter((other) => other.id !== item.id)
       : page.items,
   };
 }
 
-/** Порядок верха на экране: закреплённые, затем по рангу. */
+/** Выше по рангу: больший ранг, при равном — больший id, как у страниц базы. */
+function ranksAbove(a: CommentItem, b: CommentItem): boolean {
+  const rankA = a.rank ?? Infinity;
+  const rankB = b.rank ?? Infinity;
+
+  return rankA !== rankB ? rankA > rankB : a.id > b.id;
+}
+
+/**
+ * Новый закреп автора (`null` — снят). Закреплённый уходит из остальных слоёв,
+ * прежний возвращается на своё место по рангу. Если его место — за последней
+ * загруженной страницей, он придёт с ней: страницы ранга закреплённого не
+ * содержат, а снятый — уже да.
+ */
+export function setAuthorPin(page: RootsPage, item: CommentItem | null): RootsPage {
+  const previous = page.authorPin;
+
+  if (previous && item && previous.id === item.id) return { ...page, authorPin: item };
+
+  const raised = item ? page.raised.filter((other) => other.id !== item.id) : page.raised;
+  let items = item ? page.items.filter((other) => other.id !== item.id) : page.items;
+
+  if (previous && !items.some((other) => other.id === previous.id)) {
+    const at = items.findIndex((other) => ranksAbove(previous, other));
+
+    if (at >= 0) items = [...items.slice(0, at), previous, ...items.slice(at)];
+    else if (!page.nextCursor) items = [...items, previous];
+  }
+
+  return { ...page, authorPin: item, raised, items };
+}
+
+/** Порядок верха на экране: закреп автора, поднятые, затем по рангу. */
 export function rootsInOrder(page: RootsPage): CommentItem[] {
-  return page.pinned.length === 0 ? page.items : [...page.pinned, ...page.items];
+  return !page.authorPin && page.raised.length === 0 ? page.items : allRoots(page);
 }
 
 /**
@@ -146,7 +202,7 @@ function mapItems(items: CommentItem[], update: Update): CommentItem[] {
 }
 
 function isRootsPage(page: unknown): page is RootsPage {
-  return typeof page === 'object' && page !== null && 'pinned' in page;
+  return typeof page === 'object' && page !== null && 'raised' in page;
 }
 
 function isThreadPage(page: unknown): page is ThreadPage {
@@ -155,10 +211,13 @@ function isThreadPage(page: unknown): page is ThreadPage {
 
 function mapPage<T extends RootsPage | ThreadPage>(page: T, update: Update): T {
   if (isRootsPage(page)) {
-    const pinned = mapItems(page.pinned, update);
+    const authorPin = page.authorPin ? update(page.authorPin) : null;
+    const raised = mapItems(page.raised, update);
     const items = mapItems(page.items, update);
 
-    return pinned === page.pinned && items === page.items ? page : { ...page, pinned, items };
+    return authorPin === page.authorPin && raised === page.raised && items === page.items
+      ? page
+      : { ...page, authorPin, raised, items };
   }
 
   const thread = page as ThreadPage;
@@ -191,7 +250,7 @@ export function loadedComments(queryClient: QueryClient, targetId: string): Map<
 
   for (const [, page] of queryClient.getQueriesData({ queryKey: commentsKey(targetId) })) {
     if (isRootsPage(page)) {
-      for (const item of [...page.pinned, ...page.items]) found.set(item.id, item);
+      for (const item of allRoots(page)) found.set(item.id, item);
     } else if (isThreadPage(page)) {
       for (const item of [...page.head, ...page.tail]) found.set(item.id, item);
     }

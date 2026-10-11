@@ -15,6 +15,8 @@ export type CommentRow =
       threadRoot: boolean;
       /** В основном списке — число на кнопке «N ответов»; 0 — кнопки нет. */
       replies: number;
+      /** Закреплён автором контента — над облачком метка. */
+      pinned: boolean;
     }
   | { type: 'thread-gap'; key: string; rootId: string; hidden: number }
   | { type: 'thread-loading'; key: string; rootId: string }
@@ -42,10 +44,11 @@ function loadingKey(rootId: string): string {
   return `${rootId}/loading`;
 }
 
-/** Основной список: верх в порядке экрана, с числом ответов у каждого. */
+/** Основной список: верх в порядке экрана, с числом ответов у каждого и меткой закрепа. */
 export function buildCommentRows(
   roots: CommentItem[],
   pendingCount: (rootId: string) => number = () => 0,
+  pinnedId: string | null = null,
 ): CommentRow[] {
   const rows: CommentRow[] = [];
 
@@ -55,7 +58,14 @@ export function buildCommentRows(
     // Удалённый корень без ответов показывать незачем.
     if (root.deleted && replies === 0) continue;
 
-    rows.push({ type: 'comment', key: root.id, comment: root, threadRoot: false, replies });
+    rows.push({
+      type: 'comment',
+      key: root.id,
+      comment: root,
+      threadRoot: false,
+      replies,
+      pinned: root.id === pinnedId,
+    });
   }
 
   return rows;
@@ -74,9 +84,19 @@ export function buildThreadRows(open: OpenThread): CommentRow[] {
     comment,
     threadRoot: false,
     replies: 0,
+    pinned: false,
   });
 
-  if (root) rows.push({ type: 'comment', key: root.id, comment: root, threadRoot: true, replies: 0 });
+  if (root) {
+    rows.push({
+      type: 'comment',
+      key: root.id,
+      comment: root,
+      threadRoot: true,
+      replies: 0,
+      pinned: false,
+    });
+  }
 
   if (open.isLoading) {
     // Начало ещё грузится, а хвост уже есть — например, ответ, к которому пришли.

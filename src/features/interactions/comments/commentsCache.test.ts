@@ -6,9 +6,10 @@ import {
   appendRoots,
   appendThreadHead,
   loadedComments,
-  pinRoot,
+  raiseRoot,
   replaceComments,
   rootsInOrder,
+  setAuthorPin,
   rootsKey,
   rootsPageOf,
   threadKey,
@@ -56,9 +57,68 @@ describe('roots cache', () => {
 
   it('keeps my freshly sent comment at the top, once', () => {
     const page = rootsPageOf({ items: [comment('a', 1), comment('b', 2)], nextCursor: null });
-    const pinned = pinRoot(page, toCommentItem(comment('b', 2)));
+    const raised = raiseRoot(page, toCommentItem(comment('b', 2)));
 
-    expect(ids(rootsInOrder(pinned))).toEqual(['b', 'a']);
+    expect(ids(rootsInOrder(raised))).toEqual(['b', 'a']);
+  });
+});
+
+describe('author pin', () => {
+  // Ранг убывает: c выше всех, a ниже.
+  const ranked = () =>
+    rootsPageOf({
+      items: [
+        comment('c', 3, { rank: 30 }),
+        comment('b', 2, { rank: 20 }),
+        comment('a', 1, { rank: 10 }),
+      ],
+      nextCursor: null,
+    });
+
+  it('puts the pinned comment first and above the raised ones, without a repeat', () => {
+    const page = raiseRoot(ranked(), toCommentItem(comment('c', 3, { rank: 30 })));
+    const pinned = setAuthorPin(page, toCommentItem(comment('a', 1, { rank: 10 })));
+
+    expect(ids(rootsInOrder(pinned))).toEqual(['a', 'c', 'b']);
+  });
+
+  it('returns the previous pin to its rank place when another is pinned', () => {
+    const first = setAuthorPin(ranked(), toCommentItem(comment('b', 2, { rank: 20 })));
+    const second = setAuthorPin(first, toCommentItem(comment('a', 1, { rank: 10 })));
+
+    expect(ids(rootsInOrder(second))).toEqual(['a', 'c', 'b']);
+  });
+
+  it('restores the rank order after unpin', () => {
+    const pinned = setAuthorPin(ranked(), toCommentItem(comment('a', 1, { rank: 10 })));
+
+    expect(ids(rootsInOrder(setAuthorPin(pinned, null)))).toEqual(['c', 'b', 'a']);
+  });
+
+  it('leaves an unpinned comment to a later page when its place is past the loaded ones', () => {
+    const page = rootsPageOf({
+      items: [comment('c', 3, { rank: 30 }), comment('b', 2, { rank: 20 })],
+      nextCursor: { rank: 20, id: 'b' },
+    });
+    const pinned = setAuthorPin(page, toCommentItem(comment('a', 1, { rank: 10 })));
+
+    expect(ids(rootsInOrder(setAuthorPin(pinned, null)))).toEqual(['c', 'b']);
+  });
+
+  it('does not raise the pinned comment under itself', () => {
+    const pinned = setAuthorPin(ranked(), toCommentItem(comment('b', 2, { rank: 20 })));
+    const raised = raiseRoot(pinned, toCommentItem(comment('b', 2, { rank: 20 })));
+
+    expect(ids(rootsInOrder(raised))).toEqual(['b', 'c', 'a']);
+  });
+
+  it('takes the pinned comment out of the first page on load', () => {
+    const page = rootsPageOf(
+      { items: [comment('c', 3, { rank: 30 }), comment('b', 2, { rank: 20 })], nextCursor: null },
+      comment('b', 2, { rank: 20 }),
+    );
+
+    expect(ids(rootsInOrder(page))).toEqual(['b', 'c']);
   });
 });
 

@@ -10,6 +10,7 @@
 import type { QueryClient } from '@tanstack/react-query';
 
 import {
+  getPinnedComment,
   listCommentReactions,
   listCommentsByIds,
   listThreadReplies,
@@ -28,8 +29,10 @@ import {
   isThreadComplete,
   loadedComments,
   loadedThreads,
-  pinRoot,
+  raiseRoot,
   readThread,
+  rootsInOrder,
+  setAuthorPin,
   replaceComments,
   rootsPageOf,
   updateAllComments,
@@ -42,9 +45,20 @@ import {
 /** Столько id сверяется одним запросом. */
 const MAX_IDS = 500;
 
-/** Первая страница верха — свежий ранг. */
+/** Первая страница верха — свежий ранг — и закреп автора над ней. */
 export async function loadRoots(targetId: string): Promise<RootsPage> {
-  return rootsPageOf(await listThreadRoots(targetId));
+  const [page, pinned] = await Promise.all([listThreadRoots(targetId), getPinnedComment(targetId)]);
+
+  return rootsPageOf(page, pinned);
+}
+
+/** Закреп сменился (сигнал канала или своё действие не прошло) — берём его из базы. */
+export async function syncAuthorPin(queryClient: QueryClient, targetId: string): Promise<void> {
+  const pinned = await getPinnedComment(targetId);
+
+  updateRoots(queryClient, targetId, (page) =>
+    setAuthorPin(page, pinned ? toCommentItem(pinned) : null),
+  );
 }
 
 /**
@@ -80,9 +94,7 @@ function placeAdded(queryClient: QueryClient, targetId: string, me: string | nul
   // появляется: порядок не прыгает, он будет при следующем открытии.
   if (me && comment.authorId === me) {
     updateRoots(queryClient, targetId, (page) =>
-      [...page.pinned, ...page.items].some((other) => other.id === item.id)
-        ? page
-        : pinRoot(page, item),
+      rootsInOrder(page).some((other) => other.id === item.id) ? page : raiseRoot(page, item),
     );
   }
 }
@@ -196,7 +208,7 @@ export async function syncCommentReactions(
 
 /**
  * После обрыва канала: сверка всего загруженного (правки, удаления,
- * счётчики) и хвосты дочитанных тредов. Порядок верха не трогается.
+ * счётчики), закреп и хвосты дочитанных тредов. Порядок верха не трогается.
  */
 export async function resyncComments(
   queryClient: QueryClient,
@@ -210,6 +222,7 @@ export async function resyncComments(
 
   await Promise.all([
     syncComments(queryClient, targetId, me, { added: [], changed: loaded }),
+    syncAuthorPin(queryClient, targetId),
     ...threads.map(async ([rootId, page]) => {
       const last = page.head[page.head.length - 1];
       const newer = await listThreadReplies(rootId, { cursor: last?.createdAt });

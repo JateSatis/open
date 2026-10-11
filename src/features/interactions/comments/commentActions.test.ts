@@ -36,8 +36,8 @@ function ids(context: Parameters<typeof visibleCommentActions>[0]) {
 }
 
 describe('comment menu', () => {
-  // Пересылка комментариев включена (треды и пересылка, 04.10.2026): кроме
-  // закрепа, у комментария всё, что у сообщения.
+  // Пересылка комментариев включена (треды и пересылка, 04.10.2026). Закреп
+  // — только автору контента (этап 3в), здесь его нет.
   it('offers everything a message has except pin on my own sent comment', () => {
     expect(ids({ comment: comment(), isOwn: true, targetLive: true })).toEqual([
       'reply',
@@ -77,5 +77,57 @@ describe('comment menu', () => {
     expect(
       ids({ comment: comment({ kind: 'voice', text: null }), isOwn: false, targetLive: true }),
     ).toEqual(['reply', 'forward', 'select']);
+  });
+
+  describe('pin', () => {
+    it('offers pin to the author of the content on any top-level comment', () => {
+      expect(ids({ comment: comment(), isOwn: false, targetLive: true, canPin: true })).toEqual([
+        'reply',
+        'copy',
+        'pin',
+        'forward',
+        'select',
+      ]);
+    });
+
+    it('offers unpin instead on the pinned one', () => {
+      const actions = ids({
+        comment: comment(),
+        isOwn: false,
+        targetLive: true,
+        canPin: true,
+        isPinned: true,
+      });
+
+      expect(actions).toContain('unpin');
+      expect(actions).not.toContain('pin');
+    });
+
+    it('has no pin on a reply in a thread', () => {
+      const actions = ids({
+        comment: comment({ threadRootId: 'root' }),
+        isOwn: false,
+        targetLive: true,
+        canPin: true,
+      });
+
+      expect(actions).not.toContain('pin');
+      expect(actions).not.toContain('unpin');
+    });
+
+    it('has no pin for anyone else, for an unsent comment or once the target is gone', () => {
+      expect(ids({ comment: comment(), isOwn: true, targetLive: true })).not.toContain('pin');
+      expect(
+        ids({
+          comment: comment({ status: 'sending', localId: 'l1' }),
+          isOwn: true,
+          targetLive: true,
+          canPin: true,
+        }),
+      ).not.toContain('pin');
+      expect(ids({ comment: comment(), isOwn: false, targetLive: false, canPin: true })).not.toContain(
+        'pin',
+      );
+    });
   });
 });

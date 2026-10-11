@@ -85,6 +85,14 @@ export const styles = StyleSheet.create({
     ...StyleSheet.absoluteFill,
   },
   /** Заглушка удалённого корня — на месте облачка, с местом под аватар, как у чужого. */
+  /** Метка закрепа — над облачком, от края облачка, а не аватарки. */
+  pinnedLabel: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.one,
+    paddingLeft: Spacing.five + Spacing.two,
+    marginBottom: Spacing.one,
+  },
   deletedRow: {
     flexDirection: 'row',
     gap: Spacing.two,

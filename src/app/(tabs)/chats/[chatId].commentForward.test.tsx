@@ -58,6 +58,9 @@ jest.mock('@/api/chats', () => ({
   MESSAGE_PAGE_SIZE: 30,
 }));
 jest.mock('@/api/comments', () => ({
+  getPinnedComment: jest.fn(() => Promise.resolve(null)),
+  pinComment: jest.fn(() => Promise.resolve()),
+  unpinComment: jest.fn(() => Promise.resolve()),
   COMMENT_PAGE_SIZE: 30,
   THREAD_PAGE_SIZE: 10,
   listThreadRoots: jest.fn(),

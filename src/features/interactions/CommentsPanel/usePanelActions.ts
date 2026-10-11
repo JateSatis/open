@@ -337,13 +337,24 @@ export function usePanelActions({
   }, [edit, selection]);
 
   const closed = data.about?.state === 'deleted' || data.about?.state === 'missing';
+  // Закреп — автору контента. Здесь только показ пункта: право решает база.
+  const canPin = data.pop
+    ? amMember
+    : Boolean(
+        live &&
+          currentUserId &&
+          (chat?.kind === 'channel'
+            ? chat.participants.some((person) => person.id === currentUserId)
+            : live.message.authorId === currentUserId),
+      );
   const menuComment = menu.target?.item ?? null;
   const menuActions = menuComment
     ? visibleCommentActions({
         comment: menuComment,
         isOwn: menuComment.authorId === currentUserId,
         targetLive: !closed,
-        canForward,
+        canPin,
+        isPinned: menuComment.id === comments.pinnedId,
       })
     : [];
   const { react } = comments;

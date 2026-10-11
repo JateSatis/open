@@ -80,6 +80,9 @@ jest.mock('@/api/chats', () => ({
 }));
 
 jest.mock('@/api/comments', () => ({
+  getPinnedComment: jest.fn(() => Promise.resolve(null)),
+  pinComment: jest.fn(() => Promise.resolve()),
+  unpinComment: jest.fn(() => Promise.resolve()),
   listComments: jest.fn(() => Promise.resolve({ items: [], nextCursor: null })),
   getCommentTarget: jest.fn(() => Promise.resolve({ state: 'missing' })),
   subscribeToComments: jest.fn(() => () => undefined),
