@@ -3,14 +3,18 @@ import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Avatar } from '@/components/Avatar';
+import { AvatarPair, type AvatarPairPerson } from '@/components/AvatarPair';
 import { Text } from '@/components/Text';
 import { ChatHeaderTitle } from '@/features/chats/ChatHeaderTitle';
 import { Sizes, Spacing } from '@/theme';
 
 export type ChatScreenHeaderProps = {
   title: string;
-  /** Аватарка слева от названия — у канала. */
-  avatar?: { uri: string | null; name: string };
+  /**
+   * Аватарка слева от названия: у канала — одна, у чужого личного диалога —
+   * две внахлёст.
+   */
+  avatar?: AvatarPairPerson | [AvatarPairPerson, AvatarPairPerson];
   subtitle?: string | null;
   onTitlePress?: () => void;
   /** Сколько отмечено; `0` — выбора нет. */
@@ -56,7 +60,16 @@ export function ChatScreenHeader({
               headerTitle: () =>
                 avatar ? (
                   <View style={styles.withAvatar}>
-                    <Avatar uri={avatar.uri} name={avatar.name} size={Sizes.headerAvatar} />
+                    {Array.isArray(avatar) ? (
+                      <AvatarPair
+                        testID="chat-header-avatar-pair"
+                        first={avatar[0]}
+                        second={avatar[1]}
+                        size={Sizes.headerAvatar}
+                      />
+                    ) : (
+                      <Avatar uri={avatar.uri} name={avatar.name} size={Sizes.headerAvatar} />
+                    )}
                     <ChatHeaderTitle title={title} subtitle={subtitle} onPress={onTitlePress} />
                   </View>
                 ) : (

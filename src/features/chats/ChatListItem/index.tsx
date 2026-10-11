@@ -6,8 +6,14 @@ import { styles } from './styles';
 
 import type { ChatSummary } from '@/api/chats';
 import { Avatar } from '@/components/Avatar';
+import { AvatarPair } from '@/components/AvatarPair';
 import { Text } from '@/components/Text';
-import { chatAvatarUrl, chatTitle, formatChatTimestamp } from '@/features/chats/chatDisplay';
+import {
+  chatAvatarUrl,
+  chatTitle,
+  dialogPair,
+  formatChatTimestamp,
+} from '@/features/chats/chatDisplay';
 import { useTheme } from '@/hooks/use-theme';
 import { Sizes } from '@/theme';
 
@@ -34,19 +40,23 @@ export function ChatListItem({
   const theme = useTheme();
   const rowRef = useRef<View>(null);
   const title = chatTitle(chat, currentUserId);
+  // Чужой диалог — двое внахлёст: сразу видно, что переписка не моя с одним из них.
+  const pair = dialogPair(chat, currentUserId);
   const waiting = chat.waiting.length;
   const status =
     chat.kind === 'channel'
       ? 'Канал'
-      : chat.kind === 'group'
-        ? `${chat.participants.length} участников${waiting > 0 ? ` · ждём ответа: ${waiting}` : ''}`
-        : waiting > 0
-          ? 'ждём ответа на заявку'
-          : isOnline === undefined
-            ? null
-            : isOnline
-              ? 'в сети'
-              : 'не в сети';
+      : pair
+        ? null
+        : chat.kind === 'group'
+          ? `${chat.participants.length} участников${waiting > 0 ? ` · ждём ответа: ${waiting}` : ''}`
+          : waiting > 0
+            ? 'ждём ответа на заявку'
+            : isOnline === undefined
+              ? null
+              : isOnline
+                ? 'в сети'
+                : 'не в сети';
 
   return (
     <Pressable
@@ -65,7 +75,16 @@ export function ChatListItem({
       }
       style={styles.row}
     >
-      <Avatar uri={chatAvatarUrl(chat, currentUserId)} name={title} />
+      {pair && pair.length === 2 ? (
+        <AvatarPair
+          testID="chat-avatar-pair"
+          first={{ uri: pair[0].avatarUrl, name: pair[0].displayName }}
+          second={{ uri: pair[1].avatarUrl, name: pair[1].displayName }}
+          size={Sizes.chatListAvatar}
+        />
+      ) : (
+        <Avatar uri={chatAvatarUrl(chat, currentUserId)} name={title} size={Sizes.chatListAvatar} />
+      )}
 
       <View style={styles.body}>
         <View style={styles.header}>

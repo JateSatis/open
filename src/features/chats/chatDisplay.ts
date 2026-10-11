@@ -32,12 +32,39 @@ export function formatChatTimestamp(iso: string | null, now: Date = new Date()):
 }
 
 /**
+ * Смотрящий — посторонний: не участник и не позван в чат. Пока смотрящий не
+ * известен, он считается своим — иначе участник на миг увидел бы свой диалог
+ * чужим.
+ */
+export function isOutsider(chat: ChatSummary, currentUserId: string | null): boolean {
+  if (!currentUserId) return false;
+
+  return (
+    !chat.participants.some((participant) => participant.id === currentUserId) &&
+    !chat.waiting.some((person) => person.id === currentUserId)
+  );
+}
+
+/**
+ * Оба человека чужого личного диалога — для постороннего: «Аня и Пётр» и две
+ * аватарки. Порядок — по вступлению, как у названия в карточке. Свой диалог,
+ * группа или канал — null.
+ */
+export function dialogPair(chat: ChatSummary, currentUserId: string | null): Person[] | null {
+  if (chat.kind !== 'direct' || !isOutsider(chat, currentUserId)) return null;
+
+  const people = [...chat.participants, ...chat.waiting].slice(0, 2);
+
+  return people.length > 0 ? people : null;
+}
+
+/**
  * The other side of a direct chat, or null in a group. Until they accept the
  * invite the other side is not a participant yet — the dialogue is still
- * theirs by name.
+ * theirs by name. У постороннего собеседника нет: диалог чужой, в нём двое.
  */
 export function counterpart(chat: ChatSummary, currentUserId: string | null): Person | null {
-  if (chat.kind !== 'direct') return null;
+  if (chat.kind !== 'direct' || isOutsider(chat, currentUserId)) return null;
 
   return (
     chat.participants.find((participant) => participant.id !== currentUserId) ??
@@ -57,6 +84,10 @@ export function listNames(people: Person[], limit = 3): string {
 export function chatTitle(chat: ChatSummary, currentUserId: string | null): string {
   if (chat.channel) return chat.channel.title;
   if (chat.title) return chat.title;
+
+  const pair = dialogPair(chat, currentUserId);
+
+  if (pair) return pair.map((person) => person.displayName).join(' и ');
 
   const other = counterpart(chat, currentUserId);
 
