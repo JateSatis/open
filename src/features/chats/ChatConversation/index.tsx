@@ -1,5 +1,5 @@
 import { useIsFocused, useNavigation, useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react';
 import {
   ActivityIndicator,
   BackHandler,
@@ -18,6 +18,7 @@ import type { Pop } from '@/api/pops';
 import type { DraftPop } from '@/features/chats/composerDraftStore';
 import type { LiveQuote } from '@/features/chats/messages/types';
 import { Text } from '@/components/Text';
+import { useMarkChannelSectionRead } from '@/features/channels/useMarkChannelSectionRead';
 import { ChatFooter, modePlate } from '@/features/chats/ChatFooter';
 import { ChatScreenHeader } from '@/features/chats/ChatScreenHeader';
 import { DeletedOriginal } from '@/features/chats/DeletedOriginal';
@@ -124,6 +125,11 @@ export type ChatConversationProps = {
    * них не знает: она даёт лишь способ прикрепить поп к посту.
    */
   sheetSections?: (context: { attachPop: (pop: Pop) => void }) => SheetSection[];
+  /**
+   * Шапка канала: подпись под названием и правая часть. Их знает экран
+   * канала — подпись зависит от открытого раздела, а не от «Постов».
+   */
+  channelHeader?: { subtitle: string | null; right: ReactNode };
 };
 
 /**
@@ -135,6 +141,7 @@ export function ChatConversation({
   channel = null,
   active = true,
   sheetSections: extraSections,
+  channelHeader,
 }: ChatConversationProps) {
   const router = useRouter();
   const nav = useNavigation();
@@ -244,7 +251,16 @@ export function ChatConversation({
   // экран. Но не чат: закрыл переписку — голосовое замолкает.
   useEffect(() => () => stopVoice(), [chatId]);
 
-  useMarkChatRead(chatId, messages.length > 0 ? messages[0].id : null, isMember);
+  const newestMessageId = messages.length > 0 ? messages[0].id : null;
+
+  useMarkChatRead(chatId, newestMessageId, isMember);
+  // Подписчик канала — своей отметкой: участником чата постов он не бывает.
+  useMarkChannelSectionRead(
+    channel?.id ?? null,
+    'posts',
+    newestMessageId,
+    isFocused && chat !== null && !isMember,
+  );
 
   const readUpTo = useMemo(() => readUpToOf(chat, currentUserId), [chat, currentUserId]);
 
@@ -688,12 +704,14 @@ export function ChatConversation({
       <ChatScreenHeader
         title={title}
         avatar={channel ? { uri: channel.avatarUrl, name: channel.title } : undefined}
-        subtitle={otherProfile?.status}
+        subtitle={channel ? (channelHeader?.subtitle ?? null) : otherProfile?.status}
         onTitlePress={other ? () => openPerson(other.id) : undefined}
         selectedCount={selection.selected.length}
         onCancelSelection={clearSelection}
         right={
-          isMember && !isPosts ? (
+          isPosts ? (
+            channelHeader?.right
+          ) : isMember ? (
             <CallButton
               live={call.stream !== null}
               disabled={call.busy}

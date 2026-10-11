@@ -23,6 +23,7 @@ export default function ChatsLayout() {
       <Stack.Screen name="[chatId]" options={{ title: 'Чат' }} />
       {/* Шапку канала ставит его раздел «Посты»: он знает название и аватарку. */}
       <Stack.Screen name="channel/[channelId]" options={{ title: 'Канал' }} />
+      <Stack.Screen name="channel-subscribers/[channelId]" options={{ title: 'Подписчики' }} />
     </Stack>
   );
 }
