@@ -21,6 +21,7 @@ export {
   type ChatRef,
   type CommentForward,
   type ForwardedComment,
+  type ForwardedCommentPop,
   type ForwardIsland,
   type IslandAnchor,
   type IslandItem,

@@ -17,15 +17,21 @@ import {
   type CommentTarget,
 } from '@/api/comments';
 import { useSession } from '@/features/auth/useSession';
-import { resetComposerDrafts } from '@/features/chats/composerDraftStore';
+import {
+  finishForwardPick,
+  readChatDraft,
+  resetComposerDrafts,
+} from '@/features/chats/composerDraftStore';
 import { reportRealtimeJoined, resetConnectionState } from '@/features/connection/connectionStore';
 import { resetCommentOutbox } from '@/features/interactions/comments/commentOutbox';
 import { closeComments, openPopComments } from '@/features/interactions/comments/commentsPanelStore';
 import { renderWithQuery } from '@/test/renderWithQuery';
 
+const mockedPush = jest.fn();
+
 jest.mock('expo-router', () => ({
   useIsFocused: () => true,
-  useRouter: () => ({ push: jest.fn(), navigate: jest.fn(), back: jest.fn() }),
+  useRouter: () => ({ push: mockedPush, navigate: jest.fn(), back: jest.fn() }),
 }));
 jest.mock('@/api/profile', () => ({
   getProfile: jest.fn(() => Promise.resolve(null)),
@@ -101,6 +107,8 @@ const LIVE_POP: CommentTarget = {
     channelTitle: 'Канал A',
     postsChatId: 'posts-1',
     commentsCount: 3,
+    posterUrl: 'https://cdn.test/p.jpg',
+    caption: 'Подпись попа',
   },
 };
 
@@ -217,19 +225,48 @@ describe('comments of a pop', () => {
     expect(sendComment).not.toHaveBeenCalled();
   });
 
-  it('offers no forwarding of a pop comment — neither in the menu nor in the selection bar', async () => {
+  it('forwards a pop comment from the menu: the chat will quote the pop under the channel’s name', async () => {
     await openPanel();
 
     await tapComment('c2');
-    await screen.findByTestId('message-menu');
+    await fireEvent.press(await screen.findByRole('menuitem', { name: 'Переслать' }));
 
-    expect(screen.getByRole('menuitem', { name: 'Ответить' })).toBeTruthy();
-    expect(screen.queryByRole('menuitem', { name: 'Переслать' })).toBeNull();
+    expect(mockedPush).toHaveBeenCalledWith(
+      expect.objectContaining({ pathname: '/chats/forward' }),
+    );
+    expect(finishForwardPick('chat-dest')).toBe(true);
 
-    await fireEvent.press(screen.getByRole('menuitem', { name: 'Выбрать' }));
+    const mode = readChatDraft('chat-dest').mode;
+    const [forwarded] = mode?.type === 'forward_comments' ? mode.comments : [];
 
-    await waitFor(() => expect(screen.getByLabelText('Ответить')).toBeTruthy());
-    expect(screen.queryByLabelText('Переслать')).toBeNull();
+    expect(forwarded).toMatchObject({
+      id: 'c2',
+      subject: { type: 'pop', id: 'pop-1' },
+      target: null,
+      pop: { id: 'pop-1', channelId: 'channel-1', caption: 'Подпись попа' },
+      chat: { id: 'posts-1', name: 'Канал A' },
+    });
+  });
+
+  it('forwards several pop comments from the selection bar', async () => {
+    await openPanel();
+
+    await tapComment('c2');
+    await fireEvent.press(await screen.findByRole('menuitem', { name: 'Выбрать' }));
+    await waitFor(() => expect(screen.getByLabelText('Переслать')).toBeTruthy());
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('message-row-c1'));
+    });
+    await fireEvent.press(screen.getByLabelText('Переслать'));
+
+    expect(finishForwardPick('chat-dest')).toBe(true);
+
+    const mode = readChatDraft('chat-dest').mode;
+
+    expect(mode?.type === 'forward_comments' ? mode.comments.map((c) => c.id).sort() : []).toEqual([
+      'c1',
+      'c2',
+    ]);
   });
 
   it('says the pop is gone and takes no new comments once it is deleted', async () => {

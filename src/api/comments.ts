@@ -98,6 +98,9 @@ export type CommentPop = {
   /** Чат постов канала — чат комментариев попа. */
   postsChatId: string;
   commentsCount: number;
+  /** Обложка и подпись — для цитаты, если комментарий перешлют. */
+  posterUrl: string;
+  caption: string | null;
 };
 
 /** Сообщение или поп, к которому открыты комментарии, — каким оно сейчас. */
@@ -555,7 +558,9 @@ export async function getCommentTarget(messageId: string): Promise<CommentTarget
 export async function getPopCommentTarget(popId: string): Promise<CommentTarget> {
   const { data, error } = await supabase
     .from('pops')
-    .select('id, channel_id, comments_count, channel:channels(title, posts_chat_id)')
+    .select(
+      'id, channel_id, comments_count, poster_url, caption, channel:channels(title, posts_chat_id)',
+    )
     .eq('id', popId)
     .maybeSingle();
 
@@ -571,6 +576,8 @@ export async function getPopCommentTarget(popId: string): Promise<CommentTarget>
       channelTitle: data.channel.title,
       postsChatId: data.channel.posts_chat_id,
       commentsCount: data.comments_count,
+      posterUrl: data.poster_url,
+      caption: data.caption,
     },
   };
 }

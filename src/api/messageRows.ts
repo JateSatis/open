@@ -127,15 +127,24 @@ export type ForwardIsland = {
   items: IslandItem[];
 };
 
+/** Поп, под которым оставлен пересланный комментарий, — для цитаты и перехода. */
+export type ForwardedCommentPop = {
+  id: string;
+  channelId: string;
+  posterUrl: string;
+  caption: string | null;
+};
+
 /**
  * Пересланный комментарий, как его показывает облачко в чате: сам
- * комментарий, сообщение, под которым он оставлен, и чат, откуда он. Ссылка,
- * а не копия: правка и удаление оригинала видны сразу.
+ * комментарий, сообщение или поп, под которым он оставлен, и чат, откуда он.
+ * Ссылка, а не копия: правка и удаление оригинала видны сразу.
  */
 export type ForwardedComment = {
   id: string;
-  /** Сообщение, под которым оставлен комментарий. */
-  messageId: string;
+  /** К чему комментарий: сообщение или поп. Id — ключ его ветки и топика. */
+  subject: { type: 'message' | 'pop'; id: string };
+  /** Чат комментария; у комментария к попу — чат постов канала. */
   chatId: string;
   /** Корень треда; `null` — комментарий верхнеуровневый. */
   threadRootId: string | null;
@@ -150,7 +159,7 @@ export type ForwardedComment = {
   attachments: MessageAttachment[];
   /** Реакции оригинала: на пересланном их ставят ему. */
   reactions: MessageReactions;
-  /** Сообщение под комментарием; `null` — удалено. */
+  /** Сообщение под комментарием; `null` — удалено или комментарий к попу. */
   target: {
     id: string;
     /** Время сообщения — до него догружается история при переходе к нему. */
@@ -160,7 +169,9 @@ export type ForwardedComment = {
     authorName: string | null;
     preview: MessagePreview;
   } | null;
-  /** Чат комментария; `null` — удалён. `amMember` — ряд моей реакции. */
+  /** Поп под комментарием; `null` — удалён или комментарий к сообщению. */
+  pop: ForwardedCommentPop | null;
+  /** Чат комментария; `null` — удалён. `amMember` — ряд моей реакции. У попа — имя канала. */
   chat: (ChatRef & { amMember: boolean }) | null;
 };
 
@@ -206,7 +217,7 @@ const REPLY_COLUMNS =
 const REACTION_AND_COMMENT_COLUMNS = `${REACTION_COLUMNS}, comments_count, views_count, read_at` as const;
 const ORIGINAL_COLUMNS = `id, chat_id, author_id, kind, text, created_at, edited_at, attachments(${MESSAGE_ATTACHMENT_COLUMNS}), ${REPLY_COLUMNS}, ${REACTION_AND_COMMENT_COLUMNS}, author:profiles!messages_author_id_fkey(display_name, avatar_url), chat:chats!messages_chat_id_fkey(id, chat_display_name, chat_read_up_to, chat_am_member)` as const;
 
-const FORWARDED_COMMENT_COLUMNS = `forwarded_comment_id, forwarded:comments!messages_forwarded_comment_fkey(id, message_id, chat_id, thread_root_id, author_id, kind, text, created_at, edited_at, ${REACTION_COLUMNS}, author:profiles(display_name, avatar_url), comment_attachments(${ATTACHMENT_COLUMNS}), chat:chats!comments_chat_id_fkey(id, chat_display_name, chat_am_member), target:messages!comments_message_fkey(id, author_id, kind, text, created_at, author:profiles!messages_author_id_fkey(display_name), attachments(${PREVIEW_ATTACHMENT_COLUMNS})))` as const;
+const FORWARDED_COMMENT_COLUMNS = `forwarded_comment_id, forwarded:comments!messages_forwarded_comment_fkey(id, message_id, pop_id, chat_id, thread_root_id, author_id, kind, text, created_at, edited_at, ${REACTION_COLUMNS}, author:profiles(display_name, avatar_url), comment_attachments(${ATTACHMENT_COLUMNS}), chat:chats!comments_chat_id_fkey(id, chat_display_name, chat_am_member), target:messages!comments_message_fkey(id, author_id, kind, text, created_at, author:profiles!messages_author_id_fkey(display_name), attachments(${PREVIEW_ATTACHMENT_COLUMNS})), pop:pops!comments_pop_id_fkey(id, channel_id, poster_url, caption))` as const;
 
 // Островок приходит сразу с оригиналами: их текст, файлы, автор, чат,
 // реакции и комментарии — той же выборкой. Своя реакция — вычисляемой связью
@@ -407,8 +418,10 @@ function toForwardedComment(row: ForwardedRow): ForwardedComment {
 
   return {
     id: row.id,
-    // Пересылаются только комментарии к сообщениям (`forward_comments`).
-    messageId: row.message_id ?? '',
+    // Ровно одно из двух — держит база (`comments_one_target`).
+    subject: row.pop_id
+      ? { type: 'pop', id: row.pop_id }
+      : { type: 'message', id: row.message_id ?? row.id },
     chatId: row.chat_id,
     threadRootId: row.thread_root_id,
     authorId: row.author_id,
@@ -428,6 +441,15 @@ function toForwardedComment(row: ForwardedRow): ForwardedComment {
           authorId: target.author_id,
           authorName: target.author_id ? (target.author?.display_name ?? 'Без имени') : null,
           preview: toPreview(toMessageKind(target.kind), target.text, target.attachments ?? []),
+        }
+      : null,
+    // Удалённый поп SELECT-политика не отдаёт.
+    pop: row.pop
+      ? {
+          id: row.pop.id,
+          channelId: row.pop.channel_id,
+          posterUrl: row.pop.poster_url,
+          caption: row.pop.caption,
         }
       : null,
     chat: row.chat

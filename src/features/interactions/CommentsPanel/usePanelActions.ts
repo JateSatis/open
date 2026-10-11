@@ -8,7 +8,7 @@ import type { CommentRow } from './rows';
 import type { usePanelComments } from './usePanelComments';
 import type { PanelSheet } from './usePanelSheet';
 
-import type { CommentTarget } from '@/api/comments';
+import type { CommentPop, CommentTarget } from '@/api/comments';
 import type { ForwardedComment } from '@/api/chats';
 import { startForwardPick } from '@/features/chats/composerDraftStore';
 import { claimKeyboardForComments } from '@/features/chats/composerKeyboard';
@@ -65,12 +65,13 @@ type Options = {
 function forwardedOf(
   comment: CommentItem,
   live: Options['live'],
+  pop: CommentPop | null,
   chat: { id: string; name: string } | null,
   amMember: boolean,
 ): ForwardedComment {
   return {
     id: comment.id,
-    messageId: comment.targetId,
+    subject: { type: pop ? 'pop' : 'message', id: comment.targetId },
     chatId: comment.chatId,
     threadRootId: comment.threadRootId,
     authorId: comment.authorId,
@@ -90,6 +91,9 @@ function forwardedOf(
           authorName: live.authorName,
           preview: previewOf(live.message as ChatMessage),
         }
+      : null,
+    pop: pop
+      ? { id: pop.id, channelId: pop.channelId, posterUrl: pop.posterUrl, caption: pop.caption }
       : null,
     chat: chat ? { ...chat, amMember } : null,
   };
@@ -122,9 +126,8 @@ export function usePanelActions({
   const router = useRouter();
   const { subject } = target;
   const targetId = subject.id;
-  const canForward = subject.type === 'message';
   const { comments, rows, threadRows, amMember } = data;
-  // У попа — чат постов его канала: пересылки нет, но пустой id сходил бы в базу зря.
+  // У попа — чат постов его канала.
   const chatId = live?.message.chatId ?? data.pop?.postsChatId ?? target.chatId ?? '';
   const { chat } = useChat(chatId);
   const draft = useComposerDraft(commentThreadKey(targetId));
@@ -157,11 +160,13 @@ export function usePanelActions({
 
       if (sendable.length === 0) return;
 
-      const name = chat ? chatTitle(chat, currentUserId) : 'Чат';
+      const { pop } = data;
+      // У попа подпись «Комментарий из …» — имя канала.
+      const name = pop ? pop.channelTitle : chat ? chatTitle(chat, currentUserId) : 'Чат';
 
       startForwardPick({
         comments: sendable.map((comment) =>
-          forwardedOf(comment, live, chatId ? { id: chatId, name } : null, amMember),
+          forwardedOf(comment, live, pop, chatId ? { id: chatId, name } : null, amMember),
         ),
       });
       // Окно панели — поверх экранов: выбор чата открывается за ним.
@@ -171,7 +176,7 @@ export function usePanelActions({
         params: hostChatId ? { from: hostChatId } : {},
       });
     },
-    [amMember, chat, chatId, close, currentUserId, hostChatId, live, router],
+    [amMember, chat, chatId, close, currentUserId, data, hostChatId, live, router],
   );
 
   /**
@@ -409,7 +414,6 @@ export function usePanelActions({
     menuReactions,
     runMenuAction,
     extraData,
-    canForward,
   };
 }
 

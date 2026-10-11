@@ -90,13 +90,26 @@ function pop(id: string, extra: Partial<Pop> = {}): Pop {
   };
 }
 
-async function open(start: Pop, { canPublish = false } = {}) {
+async function open(
+  start: Pop,
+  {
+    canPublish = false,
+    focusCommentId,
+  }: { canPublish?: boolean; focusCommentId?: string } = {},
+) {
   (getPop as jest.Mock).mockResolvedValue(start);
   (listPopsAfter as jest.Mock).mockResolvedValue([]);
   (listPops as jest.Mock).mockResolvedValue([]);
   (canPublishInChannel as jest.Mock).mockResolvedValue(canPublish);
 
-  await renderWithQuery(<PopViewer channelId="channel-1" startId={start.id} />);
+  await renderWithQuery(
+    <PopViewer
+      channelId="channel-1"
+      startId={start.id}
+      openComments={focusCommentId !== undefined}
+      focusCommentId={focusCommentId}
+    />,
+  );
   await fireEvent(screen.getByTestId('pop-viewer'), 'layout', {
     nativeEvent: { layout: { width: 400, height: 800 } },
   });
@@ -228,6 +241,25 @@ describe('PopViewer', () => {
     await fireEvent.press(screen.getByTestId('pop-comments'));
 
     await waitFor(() => expect(getCommentsPanelTarget()?.amMember).toBe(true));
+  });
+
+  it('opens straight with the pop’s comments when it came from a forwarded comment', async () => {
+    await open(pop('p1'), { canPublish: true, focusCommentId: 'c9' });
+
+    await waitFor(() =>
+      expect(getCommentsPanelTarget()).toEqual({
+        subject: { type: 'pop', id: 'p1' },
+        amMember: true,
+        focusCommentId: 'c9',
+      }),
+    );
+    expect(screen.getByTestId('pop-video-shrunk')).toBeTruthy();
+  });
+
+  it('opens with comments closed by default', async () => {
+    await open(pop('p1'));
+
+    expect(getCommentsPanelTarget()).toBeNull();
   });
 
   it('counts a view for a stranger as soon as the pop is shown', async () => {
