@@ -567,6 +567,245 @@ begin
 end;
 $$;
 
+-- =============================================================================
+-- Комментарии к попу
+-- =============================================================================
+
+do $$
+declare
+  a uuid := '00000000-0000-4000-8000-0000000000a9';
+  b uuid := '00000000-0000-4000-8000-0000000000b9';
+  video jsonb := '{"url":"a9/pops/v2.mp4","poster_url":"a9/pops/p2.jpg","mime_type":"video/mp4","width":720,"height":1280,"duration_ms":5000}';
+  voice jsonb := '{"url":"b9/c/v.m4a","mime_type":"audio/mp4","duration_ms":1500,"waveform":[1,2,3]}';
+  chan uuid;
+  posts_chat uuid;
+  pop uuid := gen_random_uuid();
+  other_pop uuid := gen_random_uuid();
+  msg uuid;
+  msg_comment uuid;
+  other_pop_comment uuid;
+  c1 uuid;
+  v1 uuid;
+  r1 uuid;
+  own uuid;
+  own_chat uuid;
+  x uuid;
+  n int;
+  emojis text[];
+  aud text;
+  u uuid;
+  i int;
+begin
+  select array_agg(emoji order by position) into emojis from public.reaction_emojis;
+  select id, posts_chat_id into chan, posts_chat from public.channels where username = 'chan_a_zz';
+
+  perform pg_temp.act_as(a);
+  perform public.publish_pop(chan, pop, video, null, false, null, null);
+  perform public.publish_pop(chan, other_pop, video, null, false, null, null);
+  insert into public.messages (chat_id, author_id, kind, text)
+  values (posts_chat, a, 'text', 'пост для сверки') returning id into msg;
+
+  -- К1.1: посторонний — комментарий, голосовое, ответ в ветке; ряд visitor.
+  perform pg_temp.act_as(b);
+  c1 := public.send_pop_comment(pop, 'первый к попу');
+  perform pg_temp.check('посторонний: комментарий к попу — visitor, чат постов, без сообщения',
+    (select audience || '|' || (chat_id = posts_chat)::text || '|' || coalesce(message_id::text, '∅')
+     from public.comments where id = c1) = 'visitor|true|∅');
+
+  v1 := public.send_voice_pop_comment(pop, voice);
+  perform pg_temp.check('посторонний: голосовой к попу — visitor',
+    (select audience || '|' || kind from public.comments where id = v1) = 'visitor|voice'
+    and (select waveform from public.comment_attachments where comment_id = v1) = array[1,2,3]::smallint[]);
+
+  r1 := public.send_pop_comment(pop, 'ответ в ветке', '[]'::jsonb, array[c1]);
+  perform pg_temp.check('посторонний: ответ в ветке попа — тред и цитата',
+    (select thread_root_id from public.comments where id = r1) = c1
+    and (select quoted_id from public.comment_replies where comment_id = r1) = c1
+    and (select replies_count from public.comments where id = c1) = 1);
+
+  x := public.send_pop_comment(pop, 'в тред без цитаты', '[]'::jsonb, null, c1);
+  perform pg_temp.check('ответ в ветку попа явным корнем',
+    (select thread_root_id from public.comments where id = x) = c1);
+
+  perform pg_temp.check('pops.comments_count считает все комментарии попа',
+    (select comments_count from public.pops where id = pop) = 4,
+    (select comments_count::text from public.pops where id = pop));
+
+  perform pg_temp.check('комментарии попа не трогают счётчик постов',
+    (select comments_count from public.messages where id = msg) = 0);
+
+  perform pg_temp.act_as(a);
+  own := public.send_pop_comment(pop, 'от автора канала');
+  perform pg_temp.check('владелец канала: комментарий к попу — member',
+    (select audience from public.comments where id = own) = 'member');
+
+  perform pg_temp.act_as(b);
+  select count(*) into n from public.list_comment_thread_roots(pop);
+  perform pg_temp.check('верх попа: корни без ответов', n = 3, n::text);
+  select count(*) into n from public.list_thread_roots(pop);
+  perform pg_temp.check('list_thread_roots сообщения не отдаёт комментарии попа', n = 0, n::text);
+
+  -- К1.2: ветка и цитата не пересекают границу цели.
+  msg_comment := public.send_comment(msg, 'комментарий к посту');
+  other_pop_comment := public.send_pop_comment(other_pop, 'к другому попу');
+
+  begin
+    perform public.send_pop_comment(pop, 'цитата чужого попа', '[]'::jsonb, array[other_pop_comment]);
+    perform pg_temp.check('цитата комментария другого попа — отказ', false);
+  exception when others then
+    perform pg_temp.check('цитата комментария другого попа — отказ', sqlstate = 'P0002', sqlerrm);
+  end;
+
+  begin
+    perform public.send_pop_comment(pop, 'цитата сообщения', '[]'::jsonb, array[msg_comment]);
+    perform pg_temp.check('цитата комментария к сообщению в попе — отказ', false);
+  exception when others then
+    perform pg_temp.check('цитата комментария к сообщению в попе — отказ', sqlstate = 'P0002', sqlerrm);
+  end;
+
+  begin
+    perform public.send_comment(msg, 'цитата попа', '[]'::jsonb, array[c1]);
+    perform pg_temp.check('цитата комментария попа под сообщением — отказ', false);
+  exception when others then
+    perform pg_temp.check('цитата комментария попа под сообщением — отказ', sqlstate = 'P0002', sqlerrm);
+  end;
+
+  begin
+    perform public.send_pop_comment(pop, 'чужой корень', '[]'::jsonb, null, other_pop_comment);
+    perform pg_temp.check('ветка с корнем другого попа — отказ', false);
+  exception when others then
+    perform pg_temp.check('ветка с корнем другого попа — отказ', sqlstate = '22023', sqlerrm);
+  end;
+
+  begin
+    insert into public.comments (pop_id, author_id, kind, text, thread_root_id)
+    values (pop, b, 'text', 'мимо функции', msg_comment);
+    perform pg_temp.check('прямая вставка: корень у комментария сообщения — отказ схемы', false);
+  exception when others then
+    perform pg_temp.check('прямая вставка: корень у комментария сообщения — отказ схемы', sqlstate = '23503', sqlerrm);
+  end;
+
+  begin
+    insert into public.comments (message_id, chat_id, pop_id, author_id, kind, text)
+    values (msg, posts_chat, pop, b, 'text', 'две цели');
+    perform pg_temp.check('две цели сразу — отказ', false);
+  exception when others then
+    perform pg_temp.check('две цели сразу — отказ', sqlstate in ('23514', '23503'), sqlstate || ' ' || sqlerrm);
+  end;
+
+  perform pg_temp.act_as(a);
+  own_chat := (public.create_chat(array[b], null) ->> 'chat_id')::uuid;
+  perform pg_temp.act_as(b);
+
+  insert into public.comments (pop_id, chat_id, author_id, kind, text)
+  values (pop, own_chat, b, 'text', 'чат подделан')
+  returning id into x;
+  perform pg_temp.check('чат комментария к попу ставит база',
+    (select chat_id from public.comments where id = x) = posts_chat);
+
+  perform pg_temp.act_as(a);
+
+  begin
+    perform public.forward_comments(own_chat, array[c1]);
+    perform pg_temp.check('пересылка комментария к попу — отказ (этап 3в)', false);
+  exception when others then
+    perform pg_temp.check('пересылка комментария к попу — отказ (этап 3в)', sqlstate = '22023', sqlerrm);
+  end;
+
+  perform pg_temp.check('пересылка комментария к сообщению — как раньше',
+    cardinality(public.forward_comments(own_chat, array[msg_comment])) = 1);
+
+  perform pg_temp.act_as(b);
+
+  -- К1.3: реакции на комментарий к попу — ряд по праву публиковать, лимит общий.
+  select s.audience into aud from public.set_reaction('comment', c1, emojis[1]) s;
+  perform pg_temp.check('реакция постороннего на комментарий к попу — visitor',
+    aud = 'visitor' and (select reactions_count from public.comments where id = c1) = 1, aud);
+
+  perform pg_temp.act_as(a);
+  select s.audience into aud from public.set_reaction('comment', c1, emojis[2]) s;
+  perform pg_temp.check('реакция владельца на комментарий к попу — member', aud = 'member', aud);
+
+  perform set_config('role', 'postgres', true);
+  for i in 3..21 loop
+    u := gen_random_uuid();
+    insert into auth.users (id, aud, role, email, raw_user_meta_data)
+    values (u, 'authenticated', 'authenticated', 'popc-limit-' || i || '@test.local',
+            jsonb_build_object('full_name', 'Тест ' || i));
+
+    begin
+      insert into public.reactions (target_type, target_id, user_id, emoji)
+      values ('comment', c1, u, emojis[i]);
+
+      if i = 21 then
+        perform pg_temp.check('21-я разная реакция на комментарий к попу — отказ', false);
+      end if;
+    exception when others then
+      perform pg_temp.check('21-я разная реакция на комментарий к попу — отказ',
+        i = 21 and sqlstate = 'OR001', i || ' ' || sqlerrm);
+    end;
+  end loop;
+
+  -- К1.4: правка и удаление — только своё; счётчик падает.
+  perform pg_temp.act_as(a);
+
+  begin
+    perform public.edit_comment(c1, 'чужая правка');
+    perform pg_temp.check('чужой правит мой комментарий к попу — отказ', false);
+  exception when others then
+    perform pg_temp.check('чужой правит мой комментарий к попу — отказ', sqlstate = '42501', sqlerrm);
+  end;
+
+  begin
+    perform public.delete_comment(c1);
+    perform pg_temp.check('чужой удаляет мой комментарий к попу — отказ', false);
+  exception when others then
+    perform pg_temp.check('чужой удаляет мой комментарий к попу — отказ', sqlstate = '42501', sqlerrm);
+  end;
+
+  perform pg_temp.act_as(b);
+  perform public.edit_comment(c1, 'первый к попу, правка');
+  perform set_config('role', 'postgres', true);
+  perform pg_temp.check('правка комментария к попу — ревизия помнит поп',
+    (select pop_id from public.comment_revisions where comment_id = c1) = pop
+    and (select text from public.comments where id = c1) = 'первый к попу, правка');
+
+  select comments_count into n from public.pops where id = pop;
+  perform pg_temp.act_as(b);
+  perform public.delete_comment(v1);
+  perform pg_temp.check('удаление комментария к попу уменьшает счётчик',
+    (select comments_count from public.pops where id = pop) = n - 1);
+
+  -- К1.3: к удалённому попу — ни комментария, ни правки.
+  perform set_config('role', 'postgres', true);
+  update public.pops set deleted_at = now() where id = pop;
+  perform pg_temp.act_as(b);
+
+  begin
+    perform public.send_pop_comment(pop, 'к удалённому');
+    perform pg_temp.check('комментарий к удалённому попу — отказ', false);
+  exception when others then
+    perform pg_temp.check('комментарий к удалённому попу — отказ', sqlstate = 'P0002', sqlerrm);
+  end;
+
+  begin
+    insert into public.comments (pop_id, author_id, kind, text) values (pop, b, 'text', 'мимо функции');
+    perform pg_temp.check('прямая вставка к удалённому попу — отказ', false);
+  exception when others then
+    perform pg_temp.check('прямая вставка к удалённому попу — отказ', sqlstate = 'P0002', sqlerrm);
+  end;
+
+  begin
+    perform public.edit_comment(c1, 'правка после удаления попа');
+    perform pg_temp.check('правка комментария удалённого попа — отказ', false);
+  exception when others then
+    perform pg_temp.check('правка комментария удалённого попа — отказ', sqlstate = 'P0002', sqlerrm);
+  end;
+
+  perform set_config('role', 'postgres', true);
+end;
+$$;
+
 select n, name, ok, detail from results order by n;
 
 rollback;

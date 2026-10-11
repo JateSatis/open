@@ -346,40 +346,40 @@ export type Database = {
           comment_id: string
           created_at: string
           id: string
-          message_id: string
           position: number
           quoted_id: string
+          target_id: string
         }
         Insert: {
           comment_id: string
           created_at?: string
           id?: string
-          message_id: string
           position: number
           quoted_id: string
+          target_id: string
         }
         Update: {
           comment_id?: string
           created_at?: string
           id?: string
-          message_id?: string
           position?: number
           quoted_id?: string
+          target_id?: string
         }
         Relationships: [
           {
             foreignKeyName: "comment_replies_comment_fkey"
-            columns: ["comment_id", "message_id"]
+            columns: ["comment_id", "target_id"]
             isOneToOne: false
             referencedRelation: "comments"
-            referencedColumns: ["id", "message_id"]
+            referencedColumns: ["id", "target_id"]
           },
           {
             foreignKeyName: "comment_replies_quoted_fkey"
-            columns: ["quoted_id", "message_id"]
+            columns: ["quoted_id", "target_id"]
             isOneToOne: false
             referencedRelation: "comments"
-            referencedColumns: ["id", "message_id"]
+            referencedColumns: ["id", "target_id"]
           },
         ]
       }
@@ -392,7 +392,8 @@ export type Database = {
           created_at: string
           id: string
           kind: string
-          message_id: string
+          message_id: string | null
+          pop_id: string | null
           text: string | null
           version_at: string
         }
@@ -404,7 +405,8 @@ export type Database = {
           created_at?: string
           id?: string
           kind: string
-          message_id: string
+          message_id?: string | null
+          pop_id?: string | null
           text?: string | null
           version_at: string
         }
@@ -416,7 +418,8 @@ export type Database = {
           created_at?: string
           id?: string
           kind?: string
-          message_id?: string
+          message_id?: string | null
+          pop_id?: string | null
           text?: string | null
           version_at?: string
         }
@@ -442,6 +445,13 @@ export type Database = {
             referencedRelation: "comments"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "comment_revisions_pop_id_fkey"
+            columns: ["pop_id"]
+            isOneToOne: false
+            referencedRelation: "pops"
+            referencedColumns: ["id"]
+          },
         ]
       }
       comments: {
@@ -455,10 +465,12 @@ export type Database = {
           id: string
           kind: string
           member_reactions: Json
-          message_id: string
+          message_id: string | null
+          pop_id: string | null
           rank: number | null
           reactions_count: number
           replies_count: number
+          target_id: string | null
           text: string | null
           thread_root_id: string | null
           visitor_reactions: Json
@@ -497,10 +509,12 @@ export type Database = {
           id?: string
           kind: string
           member_reactions?: Json
-          message_id: string
+          message_id?: string | null
+          pop_id?: string | null
           rank?: number | null
           reactions_count?: number
           replies_count?: number
+          target_id?: string | null
           text?: string | null
           thread_root_id?: string | null
           visitor_reactions?: Json
@@ -515,10 +529,12 @@ export type Database = {
           id?: string
           kind?: string
           member_reactions?: Json
-          message_id?: string
+          message_id?: string | null
+          pop_id?: string | null
           rank?: number | null
           reactions_count?: number
           replies_count?: number
+          target_id?: string | null
           text?: string | null
           thread_root_id?: string | null
           visitor_reactions?: Json
@@ -546,11 +562,18 @@ export type Database = {
             referencedColumns: ["id", "chat_id"]
           },
           {
+            foreignKeyName: "comments_pop_id_fkey"
+            columns: ["pop_id"]
+            isOneToOne: false
+            referencedRelation: "pops"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "comments_thread_root_fkey"
-            columns: ["thread_root_id", "message_id"]
+            columns: ["thread_root_id", "target_id"]
             isOneToOne: false
             referencedRelation: "comments"
-            referencedColumns: ["id", "message_id"]
+            referencedColumns: ["id", "target_id"]
           },
         ]
       }
@@ -1195,6 +1218,7 @@ export type Database = {
           author_id: string | null
           caption: string | null
           channel_id: string
+          comments_count: number
           created_at: string
           deleted_at: string | null
           duration_ms: number
@@ -1226,6 +1250,7 @@ export type Database = {
           author_id?: string | null
           caption?: string | null
           channel_id: string
+          comments_count?: number
           created_at?: string
           deleted_at?: string | null
           duration_ms: number
@@ -1245,6 +1270,7 @@ export type Database = {
           author_id?: string | null
           caption?: string | null
           channel_id?: string
+          comments_count?: number
           created_at?: string
           deleted_at?: string | null
           duration_ms?: number
@@ -1694,6 +1720,40 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      list_comment_thread_roots: {
+        Args: {
+          after_id?: string
+          after_rank?: number
+          page_size?: number
+          target: string
+        }
+        Returns: {
+          audience: string
+          author_id: string | null
+          chat_id: string
+          created_at: string
+          deleted_at: string | null
+          edited_at: string | null
+          id: string
+          kind: string
+          member_reactions: Json
+          message_id: string | null
+          pop_id: string | null
+          rank: number | null
+          reactions_count: number
+          replies_count: number
+          target_id: string | null
+          text: string | null
+          thread_root_id: string | null
+          visitor_reactions: Json
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "comments"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       list_thread_roots: {
         Args: {
           after_id?: string
@@ -1711,10 +1771,12 @@ export type Database = {
           id: string
           kind: string
           member_reactions: Json
-          message_id: string
+          message_id: string | null
+          pop_id: string | null
           rank: number | null
           reactions_count: number
           replies_count: number
+          target_id: string | null
           text: string | null
           thread_root_id: string | null
           visitor_reactions: Json
@@ -1841,6 +1903,18 @@ export type Database = {
       pin_message: {
         Args: { in_forward?: string; target_message: string }
         Returns: undefined
+      }
+      post_comment: {
+        Args: {
+          comment_text: string
+          media: Json
+          reply_to: string[]
+          target_message: string
+          target_pop: string
+          thread_root: string
+          voice: Json
+        }
+        Returns: string
       }
       publish_pop: {
         Args: {
@@ -1969,6 +2043,16 @@ export type Database = {
         }
         Returns: string
       }
+      send_pop_comment: {
+        Args: {
+          comment_text: string
+          media?: Json
+          reply_to?: string[]
+          target_pop: string
+          thread_root?: string
+        }
+        Returns: string
+      }
       send_pop_post: {
         Args: {
           message_text?: string
@@ -1989,6 +2073,15 @@ export type Database = {
       }
       send_voice_message: {
         Args: { reply_to?: string[]; target_chat: string; voice: Json }
+        Returns: string
+      }
+      send_voice_pop_comment: {
+        Args: {
+          reply_to?: string[]
+          target_pop: string
+          thread_root?: string
+          voice: Json
+        }
         Returns: string
       }
       set_reaction: {

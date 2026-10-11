@@ -256,8 +256,9 @@ pops                 попсы канала: вертикальное виде�
                      длительностью и подписью. Не сообщение и не чат. Пишут только
                      функции публикации; право — can_publish_in_channel (одно место для
                      будущих модераторов). Свои реакции (один ряд: reactions,
-                     reactions_count) и просмотры (views_count, unique_views_count),
-                     отдельные от поста с попом; сигналы — в топик pops:<channel_id>
+                     reactions_count), просмотры (views_count, unique_views_count) и
+                     комментарии (comments_count), отдельные от поста с попом; сигналы —
+                     в топик pops:<channel_id>
 pop_views            кто видел поп: пара поп + зритель, время последнего засчитанного
                      показа. Повторный показ — не чаще раза в 10 с, публикующие в
                      канале не считаются. Пишет только record_pop_views, закрыта
@@ -276,14 +277,23 @@ message_views        кто видел сообщение: пара сообще
                      unique_views_count, «прочитано» участником — messages.read_at.
                      Пишет только record_message_views, пользователям закрыта
 
-comments             комментарии к сообщению — от любого, и посетителя, и участника. Чат
-                     совпадает с чатом сообщения (составной FK); ряд audience = member |
-                     visitor ставит база. Счётчик — messages.comments_count
+comments             комментарии к сообщению или к попу (ровно одно из message_id |
+                     pop_id) — от любого, и посетителя, и участника. Ключ цели —
+                     вычисляемая target_id = coalesce(message_id, pop_id): по нему
+                     составные ключи ветки и цитат, ранг, топик comments:<target_id>.
+                     Чат у сообщения — чат сообщения (составной FK), у попа — чат постов
+                     канала (ставит триггер). Ряд audience = member | visitor ставит
+                     база: у сообщения — по участию в чате, у попа — по
+                     can_publish_in_channel («Автор»). Счётчик — messages.comments_count
+                     или pops.comments_count. Отправка: send_comment / send_voice_comment
+                     (сообщение), send_pop_comment / send_voice_pop_comment (поп), верх
+                     — list_comment_thread_roots(target)
 comment_attachments  медиа комментария: те же инварианты, что у attachments
 comment_replies      цитаты ответа на комментарий: только комментарии той же ветки
-                     (составной FK по message_id), по порядку, до 100. Пишут только
-                     send_comment / send_voice_comment
-comment_revisions    прежние версии комментария после правки. Только для модерации
+                     (составной FK по target_id), по порядку, до 100. Пишут только
+                     функции отправки комментария
+comment_revisions    прежние версии комментария после правки, с целью (message_id |
+                     pop_id). Только для модерации
 reactions            полиморфные: target_type = message | comment | pop + target_id; ряд
                      audience = member | visitor ставит база по chat_members чата цели
                      (у попа — по can_publish_in_channel), не клиент. chat_id у попа —

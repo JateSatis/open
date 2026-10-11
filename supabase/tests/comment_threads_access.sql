@@ -123,7 +123,7 @@ begin
   -- Верхнеуровневый — без цитат: дописать цитату к своему свежему корню нельзя.
   root3 := public.send_comment(m, 'корень посетителя');
   begin
-    insert into public.comment_replies (message_id, comment_id, quoted_id, position)
+    insert into public.comment_replies (target_id, comment_id, quoted_id, position)
     values (m, root3, root1, 0);
     perform pg_temp.check('у верхнеуровневого комментария цитат нет', false, 'прошло');
   exception when others then

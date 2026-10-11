@@ -151,7 +151,7 @@ begin
   perform pg_temp.act_as(d);
 
   begin
-    insert into public.comment_replies (message_id, comment_id, quoted_id, position)
+    insert into public.comment_replies (target_id, comment_id, quoted_id, position)
     values (m, others_reply, first_reply, 5);
     perform pg_temp.check('к чужому комментарию цитату не дописать', false, 'прошло');
   exception when others then
@@ -159,7 +159,7 @@ begin
   end;
 
   begin
-    insert into public.comment_replies (message_id, comment_id, quoted_id, position)
+    insert into public.comment_replies (target_id, comment_id, quoted_id, position)
     values (m, reply, ca, 5);
     perform pg_temp.check('к старому своему комментарию цитату задним числом не дописать', false, 'прошло');
   exception when others then
