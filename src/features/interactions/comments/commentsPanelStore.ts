@@ -72,6 +72,18 @@ export function openPopComments(popId: string, amMember = false, focusCommentId?
   });
 }
 
+/**
+ * Право публиковать в канале пришло позже, чем открыли комментарии к попу, —
+ * поправить догадку ряда и пункты закрепа у открытой панели.
+ */
+export function setCommentsAmMember(amMember: boolean) {
+  const { target } = usePanelStore.getState();
+
+  if (target && target.amMember !== amMember) {
+    usePanelStore.setState({ target: { ...target, amMember } });
+  }
+}
+
 export function closeComments() {
   usePanelStore.setState({ target: null, openThread: null });
 }

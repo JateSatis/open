@@ -126,7 +126,7 @@ export function usePanelActions({
   const router = useRouter();
   const { subject } = target;
   const targetId = subject.id;
-  const { comments, rows, threadRows, amMember } = data;
+  const { comments, rows, threadRows, amMember, pop } = data;
   // У попа — чат постов его канала.
   const chatId = live?.message.chatId ?? data.pop?.postsChatId ?? target.chatId ?? '';
   const { chat } = useChat(chatId);
@@ -160,7 +160,6 @@ export function usePanelActions({
 
       if (sendable.length === 0) return;
 
-      const { pop } = data;
       // У попа подпись «Комментарий из …» — имя канала.
       const name = pop ? pop.channelTitle : chat ? chatTitle(chat, currentUserId) : 'Чат';
 
@@ -176,7 +175,7 @@ export function usePanelActions({
         params: hostChatId ? { from: hostChatId } : {},
       });
     },
-    [amMember, chat, chatId, close, currentUserId, data, hostChatId, live, router],
+    [amMember, chat, chatId, close, currentUserId, hostChatId, live, pop, router],
   );
 
   /**
@@ -343,7 +342,7 @@ export function usePanelActions({
 
   const closed = data.about?.state === 'deleted' || data.about?.state === 'missing';
   // Закреп — автору контента. Здесь только показ пункта: право решает база.
-  const canPin = data.pop
+  const canPin = pop
     ? amMember
     : Boolean(
         live &&

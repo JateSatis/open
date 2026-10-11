@@ -201,8 +201,10 @@ begin
     exists (select 1 from public.comment_pins where target_id = m and comment_id = c1 and deleted_at is not null));
   perform pg_temp.act_as(a);
 
-  perform pg_temp.check('страница ранга без закреплённого',
-    not exists (select 1 from public.list_comment_thread_roots(m) where id = c2)
+  -- Страница ранга — целиком, с закреплённым: дубль убирает клиент
+  -- (20261012110000_comment_roots_keep_pinned.sql).
+  perform pg_temp.check('страница ранга отдаёт и закреплённый',
+    exists (select 1 from public.list_comment_thread_roots(m) where id = c2)
     and exists (select 1 from public.list_comment_thread_roots(m) where id = c1));
 
   s := pg_temp.try_unpin(m);

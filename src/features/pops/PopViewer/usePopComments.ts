@@ -5,6 +5,7 @@ import type { Pop } from '@/api/pops';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
 import {
   openPopComments,
+  setCommentsAmMember,
   useCommentsPanelTarget,
 } from '@/features/interactions/comments/commentsPanelStore';
 
@@ -32,6 +33,11 @@ export function usePopComments(canPublish: boolean, start?: StartWithComments) {
     (pop: Pop) => openPopComments(pop.id, canPublish),
     [canPublish],
   );
+
+  // Шит открыли раньше, чем пришло право публиковать, — догоняем его.
+  useEffect(() => {
+    if (openPopId) setCommentsAmMember(canPublish);
+  }, [canPublish, openPopId]);
 
   // Шит открывается один раз: закрыл — листает попсы дальше без него.
   const startedRef = useRef(false);

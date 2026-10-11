@@ -9,14 +9,18 @@ import type { ChatMessage } from '@/features/chats/messages/types';
 /** Столько копить сигналы, прежде чем перечитать: на горячий комментарий реакции сыплются пачками. */
 const BATCH_MS = 500;
 
-/** Ветки (сообщения и попсы под комментариями), из которых здесь лежат пересланные комментарии. */
+/**
+ * Ветки (сообщения и попсы под комментариями), из которых здесь лежат
+ * пересланные комментарии, — строкой `вид:id` через запятую: стабильный ключ
+ * эффекта.
+ */
 function sourceThreads(messages: ChatMessage[]): string {
   const ids = new Set<string>();
 
   for (const message of messages) {
     const comment = message.commentForward?.comment;
 
-    if (comment) ids.add(comment.subject.id);
+    if (comment) ids.add(`${comment.subject.type}:${comment.subject.id}`);
   }
 
   return [...ids].sort().join(',');
@@ -84,17 +88,24 @@ export function useForwardedCommentSources(chatId: string, messages: ChatMessage
       schedule();
     };
 
-    const releases = threads.split(',').map((targetId) =>
-      acquireCommentTopic(targetId, {
+    const releases = threads.split(',').map((thread) => {
+      const [type, targetId] = thread.split(':');
+
+      return acquireCommentTopic(targetId, {
         onEdited: onChange,
         onDeleted: onChange,
         onReactionsChanged: onChange,
-        onTargetChanged: () => {
-          changedTargets.add(targetId);
-          schedule();
-        },
-      }),
-    );
+        // Цитата сообщения у пересланного — снимок, а цитата попа — «Поп
+        // удалён» по живому попу: перечитываем только у попсов.
+        onTargetChanged:
+          type === 'pop'
+            ? () => {
+                changedTargets.add(targetId);
+                schedule();
+              }
+            : undefined,
+      });
+    });
 
     return () => {
       releases.forEach((release) => release());

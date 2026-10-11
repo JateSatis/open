@@ -95,12 +95,13 @@ async function open(
   {
     canPublish = false,
     focusCommentId,
-  }: { canPublish?: boolean; focusCommentId?: string } = {},
+  }: { canPublish?: boolean | Promise<boolean>; focusCommentId?: string } = {},
 ) {
   (getPop as jest.Mock).mockResolvedValue(start);
   (listPopsAfter as jest.Mock).mockResolvedValue([]);
   (listPops as jest.Mock).mockResolvedValue([]);
-  (canPublishInChannel as jest.Mock).mockResolvedValue(canPublish);
+  // Промис — ответ о праве придёт, когда тест его отпустит.
+  (canPublishInChannel as jest.Mock).mockReturnValue(Promise.resolve(canPublish));
 
   await renderWithQuery(
     <PopViewer
@@ -240,6 +241,21 @@ describe('PopViewer', () => {
 
     await fireEvent.press(screen.getByTestId('pop-comments'));
 
+    await waitFor(() => expect(getCommentsPanelTarget()?.amMember).toBe(true));
+  });
+
+  it('comments opened before the right to publish arrived catch up with it', async () => {
+    let grant: (value: boolean) => void = () => undefined;
+
+    await open(pop('p1'), {
+      canPublish: new Promise<boolean>((resolve) => {
+        grant = resolve;
+      }),
+    });
+    await fireEvent.press(screen.getByTestId('pop-comments'));
+    expect(getCommentsPanelTarget()?.amMember).toBe(false);
+
+    await act(async () => grant(true));
     await waitFor(() => expect(getCommentsPanelTarget()?.amMember).toBe(true));
   });
 

@@ -84,7 +84,6 @@ export const styles = StyleSheet.create({
   threadPane: {
     ...StyleSheet.absoluteFill,
   },
-  /** Заглушка удалённого корня — на месте облачка, с местом под аватар, как у чужого. */
   /** Метка закрепа — над облачком, от края облачка, а не аватарки. */
   pinnedLabel: {
     flexDirection: 'row',
@@ -93,6 +92,7 @@ export const styles = StyleSheet.create({
     paddingLeft: Spacing.five + Spacing.two,
     marginBottom: Spacing.one,
   },
+  /** Заглушка удалённого корня — на месте облачка, с местом под аватар, как у чужого. */
   deletedRow: {
     flexDirection: 'row',
     gap: Spacing.two,

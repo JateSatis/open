@@ -299,7 +299,7 @@ comment_pins         закреплённый комментарий цели: t
                      (comment_pin_right). Пишут только pin_comment / unpin_comment,
                      удаление комментария снимает закреп. Читают все; сигнал
                      comment_pin_changed в comments:<target_id>. Закреплённый отдаёт
-                     pinned_comment, страницы ранга его не содержат
+                     pinned_comment; страницы ранга — целиком, дубль убирает клиент
 comment_revisions    прежние версии комментария после правки, с целью (message_id |
                      pop_id). Только для модерации
 reactions            полиморфные: target_type = message | comment | pop + target_id; ряд
