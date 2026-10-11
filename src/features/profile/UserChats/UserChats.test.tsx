@@ -37,6 +37,7 @@ function chat(id: string, overrides: Partial<ChatSummary>): ChatSummary {
     previewIsPop: false,
     subscription: null,
     hasUnread: false,
+    subscribersCount: 0,
     channel: null,
     ...overrides,
   };

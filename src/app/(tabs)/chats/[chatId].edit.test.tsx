@@ -186,6 +186,7 @@ function chatWith(participants: ChatSummary['participants']): ChatSummary {
     previewIsPop: false,
     subscription: null,
     hasUnread: false,
+    subscribersCount: 0,
     channel: null,
   };
 }

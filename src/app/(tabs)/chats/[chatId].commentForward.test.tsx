@@ -139,6 +139,7 @@ const chat: ChatSummary = {
   previewIsPop: false,
   subscription: null,
   hasUnread: false,
+  subscribersCount: 0,
   channel: null,
 };
 
