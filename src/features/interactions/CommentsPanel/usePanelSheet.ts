@@ -29,7 +29,12 @@ import {
   useDismissGesture,
 } from '@/components/ScrollSheet';
 import { useOwnKeyboardHeight } from '@/features/chats/composerKeyboard';
-import { chatFade, liftedRowKey } from '@/features/interactions/comments/commentsLift';
+import {
+  chatFade,
+  commentsSheetOpen,
+  commentsSheetTop,
+  liftedRowKey,
+} from '@/features/interactions/comments/commentsLift';
 import { closeComments } from '@/features/interactions/comments/commentsPanelStore';
 
 /** Жест закрытия панели на основном списке — снаружи нужен только тестам. */
@@ -164,6 +169,25 @@ export function usePanelSheet({ windowHeight, prepareClose }: Options) {
   const dismissing = useSharedValue(false);
   const closing = useSharedValue(false);
   const started = useRef(false);
+
+  // Ход шита — для экрана под ним (просмотр попа уменьшает видео над шитом).
+  useEffect(() => {
+    commentsSheetTop.value = geometry.top;
+  }, [geometry.top]);
+
+  useAnimatedReaction(
+    () => dismissY.value,
+    (shift) => {
+      commentsSheetOpen.value = Math.min(Math.max(1 - shift / geometry.height, 0), 1);
+    },
+  );
+
+  useEffect(
+    () => () => {
+      commentsSheetOpen.value = 0;
+    },
+    [],
+  );
 
   // Выезжает, когда окно на экране и сообщение над шитом готово — копия
   // стоит ровно на месте строки.

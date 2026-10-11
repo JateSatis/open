@@ -2,12 +2,14 @@ import { SymbolView } from 'expo-symbols';
 import { useIsFocused, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, View, type LayoutChangeEvent } from 'react-native';
+import Animated from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PopPage, type PopPageMode } from './PopPage';
 import { PopPager } from './PopPager';
 import { styles } from './styles';
 import { useAppActive } from './useAppActive';
+import { useCommentsShrink } from './useCommentsShrink';
 import { useOpenChannel } from './useOpenChannel';
 import { usePopReactionActions } from './usePopReactionActions';
 import { usePopFeedPaging, usePopViewCounting } from './usePopViewerEffects';
@@ -15,6 +17,12 @@ import { usePopFeedPaging, usePopViewCounting } from './usePopViewerEffects';
 import type { Pop } from '@/api/pops';
 import { Text } from '@/components/Text';
 import { useChannel } from '@/features/channels/useChannel';
+import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
+import { CommentsPanel } from '@/features/interactions/CommentsPanel';
+import {
+  openPopComments,
+  useCommentsPanelTarget,
+} from '@/features/interactions/comments/commentsPanelStore';
 import { useCanPublish } from '@/features/pops/queries';
 import { usePopCountersSync } from '@/features/pops/usePopCountersSync';
 import { usePopFeed } from '@/features/pops/usePopFeed';
@@ -66,6 +74,25 @@ export function PopViewer({ channelId, startId }: PopViewerProps) {
   const live = focused && appActive;
   const { onReaction, onDoubleTap } = usePopReactionActions(canPublish);
   const onOpenChannel = useOpenChannel(channelId);
+  const currentUserId = useCurrentUserId();
+  const commentsOpen = useCommentsPanelTarget()?.subject.type === 'pop';
+  const chrome = useCommentsShrink(size?.height ?? 0, commentsOpen);
+
+  const onOpenComments = useCallback(
+    (pop: Pop) => openPopComments(pop.id, canPublish),
+    [canPublish],
+  );
+
+  // Просмотр — экран поверх вкладок, профиль — во вкладке чатов под ним.
+  const onOpenPerson = useCallback(
+    (personId: string) => {
+      router.back();
+
+      if (personId === currentUserId) router.navigate('/profile');
+      else router.push(`/chats/people/${personId}`);
+    },
+    [currentUserId, router],
+  );
 
   usePopCountersSync(channelId);
   usePopViewCounting(pops, activeIndex, canPublish, focused);
@@ -99,10 +126,22 @@ export function PopViewer({ channelId, startId }: PopViewerProps) {
           onReaction={onReaction}
           onDoubleTap={onDoubleTap}
           onOpenChannel={onOpenChannel}
+          onOpenComments={onOpenComments}
+          commentsOpen={commentsOpen}
         />
       );
     },
-    [activeIndex, channelTitle, live, onDoubleTap, onOpenChannel, onReaction, size],
+    [
+      activeIndex,
+      channelTitle,
+      commentsOpen,
+      live,
+      onDoubleTap,
+      onOpenChannel,
+      onOpenComments,
+      onReaction,
+      size,
+    ],
   );
 
   // Стабильный: от него зависит жест листания, и обновления счётчиков не
@@ -130,6 +169,7 @@ export function PopViewer({ channelId, startId }: PopViewerProps) {
           onActiveIndex={onActiveIndex}
           keyOf={popKey}
           renderPage={renderPage}
+          locked={commentsOpen}
         />
       ) : (
         <View style={styles.message}>
@@ -141,19 +181,26 @@ export function PopViewer({ channelId, startId }: PopViewerProps) {
         </View>
       )}
 
-      <Pressable
-        testID="pop-viewer-back"
-        accessibilityRole="button"
-        accessibilityLabel="Назад"
-        onPress={() => router.back()}
-        style={[styles.back, styles.onMediaShadow, { top: insets.top, shadowColor: theme.shadow }]}
+      <Animated.View
+        style={[styles.back, { top: insets.top }, chrome.chromeStyle]}
+        pointerEvents={commentsOpen ? 'none' : 'auto'}
       >
-        <SymbolView
-          name={{ ios: 'chevron.left', android: 'arrow_back', web: 'arrow_back' }}
-          size={Sizes.popBackIcon}
-          tintColor={theme.textOnMedia}
-        />
-      </Pressable>
+        <Pressable
+          testID="pop-viewer-back"
+          accessibilityRole="button"
+          accessibilityLabel="Назад"
+          onPress={() => router.back()}
+          style={[styles.backButton, styles.onMediaShadow, { shadowColor: theme.shadow }]}
+        >
+          <SymbolView
+            name={{ ios: 'chevron.left', android: 'arrow_back', web: 'arrow_back' }}
+            size={Sizes.popBackIcon}
+            tintColor={theme.textOnMedia}
+          />
+        </Pressable>
+      </Animated.View>
+
+      <CommentsPanel onOpenPerson={onOpenPerson} />
     </View>
   );
 }

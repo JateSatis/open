@@ -11,6 +11,10 @@ import {
   type Pop,
 } from '@/api/pops';
 import { setPopReaction } from '@/api/reactions';
+import {
+  closeComments,
+  getCommentsPanelTarget,
+} from '@/features/interactions/comments/commentsPanelStore';
 import { resetPendingReactions } from '@/features/interactions/pendingReactions';
 import { renderWithQuery } from '@/test/renderWithQuery';
 
@@ -58,6 +62,9 @@ jest.mock('@/api/pops', () => ({
 }));
 jest.mock('@/api/reactions', () => ({ setPopReaction: jest.fn() }));
 jest.mock('@/api/comments', () => ({ setCommentReaction: jest.fn() }));
+jest.mock('@/features/chats/useCurrentUserId', () => ({ useCurrentUserId: () => 'me' }));
+// Панель — своя история (`CommentsPanel`); здесь — что просмотр её открывает.
+jest.mock('@/features/interactions/CommentsPanel', () => ({ CommentsPanel: () => null }));
 jest.mock('@/api/popTopics', () => ({ acquirePopTopic: () => () => undefined }));
 jest.mock('@/api/channels', () => ({
   getChannel: jest.fn(() => Promise.resolve({ id: 'channel-1', title: 'Канал A' })),
@@ -109,6 +116,7 @@ async function doubleTap() {
 beforeEach(() => {
   jest.clearAllMocks();
   resetPendingReactions();
+  closeComments();
   (setPopReaction as jest.Mock).mockImplementation((_id: string, emoji: string | null) =>
     Promise.resolve(emoji ? { emoji, audience: 'visitor' } : null),
   );
@@ -185,15 +193,41 @@ describe('PopViewer', () => {
     jest.useRealTimers();
   });
 
-  it('comments and «⋯» are indicators: a tap does nothing', async () => {
+  it('«⋯» is an indicator: a tap does nothing', async () => {
     await open(pop('p1'));
 
-    await fireEvent.press(screen.getByTestId('pop-comments'));
     await fireEvent.press(screen.getByTestId('pop-more'));
 
     expect(screen.queryByTestId('pop-paused')).toBeNull();
     expect(mockPush).not.toHaveBeenCalled();
     expect(mockBack).not.toHaveBeenCalled();
+  });
+
+  it('the comments button shows the pop’s count and opens the pop’s comments, shrinking the video', async () => {
+    await open(pop('p1', { commentsCount: 12 }));
+
+    expect(screen.getByLabelText('Комментарии: 12')).toBeTruthy();
+    expect(screen.getByText('12')).toBeTruthy();
+    expect(screen.queryByTestId('pop-video-shrunk')).toBeNull();
+
+    await fireEvent.press(screen.getByTestId('pop-comments'));
+
+    expect(getCommentsPanelTarget()).toEqual({
+      subject: { type: 'pop', id: 'p1' },
+      amMember: false,
+    });
+    expect(screen.getByTestId('pop-video-shrunk')).toBeTruthy();
+    // Тап по видео под шитом ничего не делает с видео: жесты выключены.
+    expect(screen.queryByTestId('pop-paused')).toBeNull();
+  });
+
+  it('the channel’s publisher opens comments as a member', async () => {
+    await open(pop('p1'), { canPublish: true });
+    await waitFor(() => expect(canPublishInChannel).toHaveBeenCalled());
+
+    await fireEvent.press(screen.getByTestId('pop-comments'));
+
+    await waitFor(() => expect(getCommentsPanelTarget()?.amMember).toBe(true));
   });
 
   it('counts a view for a stranger as soon as the pop is shown', async () => {

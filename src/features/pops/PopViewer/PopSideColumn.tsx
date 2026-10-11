@@ -19,7 +19,10 @@ import { Sizes } from '@/theme';
 export type PopSideColumnProps = {
   reactions: PopReactions;
   viewsCount: number;
+  /** Комментарии к самому попу. */
+  commentsCount: number;
   onReaction: (emoji: string) => void;
+  onOpenComments: () => void;
   /**
    * «+» нажат. `fromBottom` — от низа «+» до низа колонки: к нему прижмётся
    * выбор реакции.
@@ -28,15 +31,16 @@ export type PopSideColumnProps = {
 };
 
 /**
- * Колонка справа, сверху вниз: столбик реакций, «+», комментарии,
- * просмотры, «⋯». Комментарии и «⋯» пока только индикаторы — комментарии к
- * попу и меню придут следующими этапами.
+ * Колонка справа, сверху вниз: столбик реакций, «+», комментарии с числом,
+ * просмотры, «⋯». «⋯» пока только индикатор — меню придёт следующим этапом.
  */
 export function PopSideColumn({
   reactions,
   viewsCount,
+  commentsCount,
   onReaction,
   onAddReaction,
+  onOpenComments,
 }: PopSideColumnProps) {
   const theme = useTheme();
   // Раскладка, а не замер в окне: колонка едет вместе с лентой страниц, и
@@ -98,7 +102,9 @@ export function PopSideColumn({
       <SideIcon
         testID="pop-comments"
         name={{ ios: 'bubble.right.fill', android: 'chat_bubble', web: 'chat_bubble' }}
-        label="Комментарии"
+        label={`Комментарии: ${commentsCount}`}
+        count={formatViewsCount(commentsCount)}
+        onPress={onOpenComments}
       />
       <View
         testID="pop-views"

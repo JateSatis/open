@@ -12,6 +12,10 @@ export const styles = StyleSheet.create({
   surface: {
     ...StyleSheet.absoluteFill,
   },
+  /** Видео с обложкой — слой, который уменьшается над шитом комментариев. */
+  videoLayer: {
+    ...StyleSheet.absoluteFill,
+  },
   center: {
     ...StyleSheet.absoluteFill,
     alignItems: 'center',
@@ -23,6 +27,8 @@ export const styles = StyleSheet.create({
   back: {
     position: 'absolute',
     left: Spacing.two,
+  },
+  backButton: {
     width: Sizes.popSideButton,
     height: Sizes.popSideButton,
     alignItems: 'center',

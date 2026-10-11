@@ -1,0 +1,54 @@
+appId: com.openger.app
+name: Комментарии к попу — шит над уменьшенным видео, закрытие тапом по видео, «назад» и свайпом
+env:
+  CHANNEL: Test Kanal
+---
+- runFlow: subflows/open-app.yaml
+- tapOn: ${CHANNEL}
+- tapOn:
+    id: "segment-1"
+- tapOn:
+    id: "pop-tile"
+    index: 0
+- assertVisible:
+    id: "pop-page-active"
+# Кнопка комментариев открывает шит; видео уменьшается над ним.
+- tapOn:
+    id: "pop-comments"
+- assertVisible:
+    id: "comments-panel"
+- assertVisible:
+    id: "comments-list"
+- assertVisible: "Комментарий"
+# Тап по уменьшенному видео над шитом закрывает шит, просмотр остаётся.
+- tapOn:
+    point: "50%,15%"
+- assertNotVisible:
+    id: "comments-panel"
+- assertVisible:
+    id: "pop-side-column"
+# Системное «назад» закрывает шит, а не просмотр.
+- tapOn:
+    id: "pop-comments"
+- assertVisible:
+    id: "comments-panel"
+- back
+- assertNotVisible:
+    id: "comments-panel"
+- assertVisible:
+    id: "pop-page-active"
+# Свайп шита вниз за шапку закрывает.
+- tapOn:
+    id: "pop-comments"
+- assertVisible:
+    id: "comments-panel"
+- swipe:
+    start: 50%, 30%
+    end: 50%, 90%
+    duration: 600
+- assertNotVisible:
+    id: "comments-panel"
+- tapOn:
+    id: "pop-viewer-back"
+- assertVisible:
+    id: "pops-section"

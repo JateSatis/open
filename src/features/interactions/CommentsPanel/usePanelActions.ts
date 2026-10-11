@@ -124,8 +124,8 @@ export function usePanelActions({
   const targetId = subject.id;
   const canForward = subject.type === 'message';
   const { comments, rows, threadRows, amMember } = data;
-  // Название чата нужно только пересылке — у попа её нет, и чат постов не читается.
-  const chatId = canForward ? (live?.message.chatId ?? target.chatId ?? '') : '';
+  // У попа — чат постов его канала: пересылки нет, но пустой id сходил бы в базу зря.
+  const chatId = live?.message.chatId ?? data.pop?.postsChatId ?? target.chatId ?? '';
   const { chat } = useChat(chatId);
   const draft = useComposerDraft(commentThreadKey(targetId));
   const menu = useMessageMenu<CommentItem>(measureViewport);
