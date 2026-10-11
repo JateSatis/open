@@ -12,7 +12,7 @@ import { PopVideo } from './PopVideo';
 import { PlaybackBadges } from './PlaybackBadges';
 import { styles } from './styles';
 import { usePageControls } from './usePageControls';
-import { useCommentsShrink } from './useCommentsShrink';
+import { useCommentsChromeFade, useCommentsShrink } from './useCommentsShrink';
 import { useSurfacePress } from './useSurfacePress';
 
 import type { Pop } from '@/api/pops';
@@ -38,7 +38,7 @@ export type PopPageProps = {
   onOpenChannel: () => void;
   onOpenComments: (pop: Pop) => void;
   /**
-   * Открыты комментарии к попу: видео уменьшено над шитом, интерфейс и
+   * Открыты комментарии к этому попу: видео уменьшено над шитом, интерфейс и
    * жесты по видео выключены. Касается только активной страницы.
    */
   commentsOpen: boolean;
@@ -61,7 +61,8 @@ export const PopPage = memo(function PopPage({
   const insets = useSafeAreaInsets();
   const active = mode === 'active';
   const shrunk = active && commentsOpen;
-  const shrink = useCommentsShrink(height, shrunk);
+  const videoStyle = useCommentsShrink(height, shrunk);
+  const chromeStyle = useCommentsChromeFade(shrunk);
   const [scrubbingNow, setScrubbingNow] = useState(false);
   const controls = usePageControls(active);
   const { paused, fast, captionOpen, setCaptionOpen, picker, setPicker, framed, hearts } = controls;
@@ -103,7 +104,7 @@ export const PopPage = memo(function PopPage({
     <View testID={active ? 'pop-page-active' : 'pop-page'} style={[styles.page, { width, height }]}>
       <Animated.View
         testID={shrunk ? 'pop-video-shrunk' : undefined}
-        style={[styles.videoLayer, shrink.videoStyle]}
+        style={[styles.videoLayer, videoStyle]}
         pointerEvents="none"
       >
         {mode !== 'idle' ? (
@@ -147,7 +148,7 @@ export const PopPage = memo(function PopPage({
 
       {overlaysHidden ? null : (
         <Animated.View
-          style={[styles.bottom, { paddingBottom: insets.bottom }, shrink.chromeStyle]}
+          style={[styles.bottom, { paddingBottom: insets.bottom }, chromeStyle]}
           pointerEvents={shrunk ? 'none' : 'box-none'}
         >
           <PopCaption
@@ -169,7 +170,7 @@ export const PopPage = memo(function PopPage({
       )}
 
       <Animated.View
-        style={[styles.progressDock, { bottom: insets.bottom }, shrink.chromeStyle]}
+        style={[styles.progressDock, { bottom: insets.bottom }, chromeStyle]}
         pointerEvents={shrunk ? 'none' : 'box-none'}
       >
         <PopProgressBar

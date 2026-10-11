@@ -9,20 +9,16 @@ import { PopPage, type PopPageMode } from './PopPage';
 import { PopPager } from './PopPager';
 import { styles } from './styles';
 import { useAppActive } from './useAppActive';
-import { useCommentsShrink } from './useCommentsShrink';
+import { useCommentsChromeFade } from './useCommentsShrink';
 import { useOpenChannel } from './useOpenChannel';
+import { usePopComments } from './usePopComments';
 import { usePopReactionActions } from './usePopReactionActions';
 import { usePopFeedPaging, usePopViewCounting } from './usePopViewerEffects';
 
 import type { Pop } from '@/api/pops';
 import { Text } from '@/components/Text';
 import { useChannel } from '@/features/channels/useChannel';
-import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
 import { CommentsPanel } from '@/features/interactions/CommentsPanel';
-import {
-  openPopComments,
-  useCommentsPanelTarget,
-} from '@/features/interactions/comments/commentsPanelStore';
 import { useCanPublish } from '@/features/pops/queries';
 import { usePopCountersSync } from '@/features/pops/usePopCountersSync';
 import { usePopFeed } from '@/features/pops/usePopFeed';
@@ -74,25 +70,9 @@ export function PopViewer({ channelId, startId }: PopViewerProps) {
   const live = focused && appActive;
   const { onReaction, onDoubleTap } = usePopReactionActions(canPublish);
   const onOpenChannel = useOpenChannel(channelId);
-  const currentUserId = useCurrentUserId();
-  const commentsOpen = useCommentsPanelTarget()?.subject.type === 'pop';
-  const chrome = useCommentsShrink(size?.height ?? 0, commentsOpen);
-
-  const onOpenComments = useCallback(
-    (pop: Pop) => openPopComments(pop.id, canPublish),
-    [canPublish],
-  );
-
-  // Просмотр — экран поверх вкладок, профиль — во вкладке чатов под ним.
-  const onOpenPerson = useCallback(
-    (personId: string) => {
-      router.back();
-
-      if (personId === currentUserId) router.navigate('/profile');
-      else router.push(`/chats/people/${personId}`);
-    },
-    [currentUserId, router],
-  );
+  const { openPopId, onOpenComments, onOpenPerson } = usePopComments(canPublish);
+  const commentsOpen = openPopId !== null;
+  const chromeStyle = useCommentsChromeFade(commentsOpen);
 
   usePopCountersSync(channelId);
   usePopViewCounting(pops, activeIndex, canPublish, focused);
@@ -127,19 +107,21 @@ export function PopViewer({ channelId, startId }: PopViewerProps) {
           onDoubleTap={onDoubleTap}
           onOpenChannel={onOpenChannel}
           onOpenComments={onOpenComments}
-          commentsOpen={commentsOpen}
+          // Только страница этого попа: остальные не перерисовываются, а
+          // соседняя, ставшая активной, пока поп пропадал из ленты, не уменьшается.
+          commentsOpen={pop.id === openPopId}
         />
       );
     },
     [
       activeIndex,
       channelTitle,
-      commentsOpen,
       live,
       onDoubleTap,
       onOpenChannel,
       onOpenComments,
       onReaction,
+      openPopId,
       size,
     ],
   );
@@ -182,7 +164,7 @@ export function PopViewer({ channelId, startId }: PopViewerProps) {
       )}
 
       <Animated.View
-        style={[styles.back, { top: insets.top }, chrome.chromeStyle]}
+        style={[styles.back, { top: insets.top }, chromeStyle]}
         pointerEvents={commentsOpen ? 'none' : 'auto'}
       >
         <Pressable

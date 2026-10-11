@@ -8,36 +8,36 @@ import { create } from 'zustand';
 import type { CommentItem } from '@/features/interactions/comments/commentItem';
 
 type CommentOutboxState = {
-  /** targetId → свои неподтверждённые, самые новые первыми. */
-  byMessage: Record<string, CommentItem[]>;
+  /** id цели (сообщения или попа) → свои неподтверждённые, самые новые первыми. */
+  byTarget: Record<string, CommentItem[]>;
 };
 
 const EMPTY: CommentItem[] = [];
 
-const useCommentOutbox = create<CommentOutboxState>(() => ({ byMessage: {} }));
+const useCommentOutbox = create<CommentOutboxState>(() => ({ byTarget: {} }));
 
 function setThread(targetId: string, update: (items: CommentItem[]) => CommentItem[]) {
   useCommentOutbox.setState((state) => {
-    const current = state.byMessage[targetId] ?? EMPTY;
+    const current = state.byTarget[targetId] ?? EMPTY;
     const next = update(current);
 
     if (next === current) return state;
 
-    const byMessage = { ...state.byMessage };
+    const byTarget = { ...state.byTarget };
 
-    if (next.length === 0) delete byMessage[targetId];
-    else byMessage[targetId] = next;
+    if (next.length === 0) delete byTarget[targetId];
+    else byTarget[targetId] = next;
 
-    return { byMessage };
+    return { byTarget };
   });
 }
 
 export function useOutboxComments(targetId: string): CommentItem[] {
-  return useCommentOutbox((state) => state.byMessage[targetId] ?? EMPTY);
+  return useCommentOutbox((state) => state.byTarget[targetId] ?? EMPTY);
 }
 
 export function outboxComments(targetId: string): CommentItem[] {
-  return useCommentOutbox.getState().byMessage[targetId] ?? EMPTY;
+  return useCommentOutbox.getState().byTarget[targetId] ?? EMPTY;
 }
 
 export function addOutboxComments(targetId: string, drafts: CommentItem[]) {
@@ -66,5 +66,5 @@ export function removeOutboxComment(targetId: string, localId: string) {
 
 /** Выход из аккаунта: чужие исходящие следующему пользователю не нужны. */
 export function resetCommentOutbox() {
-  useCommentOutbox.setState({ byMessage: {} });
+  useCommentOutbox.setState({ byTarget: {} });
 }

@@ -142,7 +142,7 @@ function useOverlay(targetId: string) {
  * открытие читает свежий ранг. На глазах порядок не меняется.
  */
 export function useComments(
-  { type: targetType, id: targetId }: CommentSubject,
+  subject: CommentSubject,
   chatId: string,
   currentUserId: string | null,
   amMember = false,
@@ -150,12 +150,9 @@ export function useComments(
   const queryClient = useQueryClient();
   const connection = useConnectionStatus();
   const { data: me } = useMyProfile();
+  const targetId = subject.id;
   const outbox = useOutboxComments(targetId);
   const overlay = useOverlay(targetId);
-  const subject = useMemo<CommentSubject>(
-    () => ({ type: targetType, id: targetId }),
-    [targetId, targetType],
-  );
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const loadingMoreRef = useRef(false);
   const wasOfflineRef = useRef(false);

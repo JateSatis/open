@@ -222,6 +222,7 @@ export async function deliverComment(
     // Уже в базе, но человек его удалил — удаляем и там, для всех.
     if (discarded.has(localId)) {
       void deleteComment(saved.id).catch(() => undefined);
+      bumpCount(queryClient, subject, -1);
       return;
     }
 

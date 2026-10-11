@@ -7,18 +7,17 @@ import {
 } from '@/features/interactions/comments/commentsLift';
 
 /**
- * Видео страницы и интерфейс поверх него, пока открыты комментарии к попу.
- * Видео уменьшается целиком в область над шитом — от статус-бара до верха
- * шита — и стоит в ней по центру; интерфейс (подпись, колонка, полоса)
- * гаснет. Всё — по ходу шита на UI-потоке: тянут шит вниз — видео растёт за
- * пальцем, закрылся — снова на весь экран.
+ * Видео страницы, пока открыты комментарии к её попу: уменьшается целиком в
+ * область над шитом — от статус-бара до верха шита — и стоит в ней по центру.
+ * По ходу шита на UI-потоке: тянут шит вниз — видео растёт за пальцем,
+ * закрылся — снова на весь экран.
  *
  * Трансформ, а не высота страницы: от высоты считает смещения лента попсов.
  */
 export function useCommentsShrink(height: number, enabled: boolean) {
   const insets = useSafeAreaInsets();
 
-  const videoStyle = useAnimatedStyle(() => {
+  return useAnimatedStyle(() => {
     const open = enabled ? commentsSheetOpen.value : 0;
 
     if (open === 0 || height <= 0) return { transform: [{ translateY: 0 }, { scale: 1 }] };
@@ -32,10 +31,11 @@ export function useCommentsShrink(height: number, enabled: boolean) {
       transform: [{ translateY: shift * open }, { scale: 1 + (scale - 1) * open }],
     };
   });
+}
 
-  const chromeStyle = useAnimatedStyle(() => ({
+/** Интерфейс поверх видео — подпись, колонка, полоса, «назад» — гаснет по ходу шита. */
+export function useCommentsChromeFade(enabled: boolean) {
+  return useAnimatedStyle(() => ({
     opacity: enabled ? 1 - commentsSheetOpen.value : 1,
   }));
-
-  return { videoStyle, chromeStyle };
 }

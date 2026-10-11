@@ -35,6 +35,19 @@ export function updatePopEverywhere(
   });
 }
 
+/** Поп из любого загруженного списка — сетки или ленты просмотра. */
+export function findCachedPop(queryClient: QueryClient, popId: string): Pop | undefined {
+  for (const [, data] of queryClient.getQueriesData<InfiniteData<Pop[], unknown>>({
+    queryKey: ALL_POPS,
+  })) {
+    const found = data?.pages?.flat().find((pop) => pop.id === popId);
+
+    if (found) return found;
+  }
+
+  return undefined;
+}
+
 /** Свежие счётчики из базы — во все загруженные попсы. */
 export function applyPopCounters(queryClient: QueryClient, counters: PopCounters[]) {
   for (const fresh of counters) {
