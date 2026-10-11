@@ -2,10 +2,11 @@ import { useQuery } from '@tanstack/react-query';
 import { useCallback, useState } from 'react';
 
 import { listChats, type ChatSummary } from '@/api/chats';
+import { chatsQueryKey } from '@/features/chats/chatsKey';
 import { useConnectionStatus } from '@/features/connection/useConnectionStatus';
 import { describeLoadError } from '@/lib/network';
 
-export const chatsQueryKey = ['chats'] as const;
+export { chatsQueryKey };
 
 export type ChatsState = {
   chats: ChatSummary[];

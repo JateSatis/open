@@ -142,6 +142,10 @@ function chatWith(participants: ChatSummary['participants']): ChatSummary {
     lastMessagePreview: null,
     lastMessageAt: null,
     lastMessageAuthorId: null,
+    lastPopAt: null,
+    lastActivityAt: null,
+    previewIsPop: false,
+    subscription: null,
     hasUnread: false,
     channel: null,
   };

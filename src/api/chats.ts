@@ -9,6 +9,7 @@ import type { QueryData, RealtimeChannel } from '@supabase/supabase-js';
 import { acquireChatTopic, type ChatActivity, type ChatTopicListener } from '@/api/chatTopics';
 import { MESSAGE_COLUMNS, messagesSelect, toMessage, type Message } from '@/api/messageRows';
 import { publishPop, type PublishPopInput } from '@/api/pops';
+import { listChatSubscriptions, type ChannelSubscription } from '@/api/subscriptions';
 import { supabase } from '@/api/supabase';
 
 export { toPreview, type MessagePreview } from '@/api/messagePreview';
@@ -74,7 +75,22 @@ export type ChatSummary = {
   lastMessagePreview: string | null;
   lastMessageAt: string | null;
   lastMessageAuthorId: string | null;
-  /** True when the last message is somebody else's and arrived after my read mark. */
+  /** Свежий живой поп канала; у обычного чата — null. */
+  lastPopAt: string | null;
+  /** Свежее из последнего сообщения и попа — по нему чат встаёт в списке. */
+  lastActivityAt: string | null;
+  /**
+   * Самое свежее в канале — поп без поста: превью тогда «Новый попс». Поп с
+   * постом публикуется одной транзакцией и получает то же время, что пост, —
+   * превью у него остаётся текстом поста.
+   */
+  previewIsPop: boolean;
+  /** Моя подписка на канал, если я его читаю, а не публикую в нём. */
+  subscription: ChannelSubscription | null;
+  /**
+   * Участнику — последнее сообщение чужое и пришло после моей отметки.
+   * Подписчику — в канале есть непрочитанные посты или попсы.
+   */
   hasUnread: boolean;
 };
 
@@ -129,7 +145,7 @@ export type Page<T> = {
 };
 
 const CHAT_COLUMNS =
-  'id, kind, title, last_message_at, last_message_text, last_message_author_id, channel:channels(id, title, username, avatar_url)';
+  'id, kind, title, last_message_at, last_message_text, last_message_author_id, channel:channels(id, title, username, avatar_url, last_pop_at)';
 const MEMBER_COLUMNS =
   'chat_id, user_id, last_read_at, profile:profiles(id, display_name, avatar_url)';
 const WAITING_COLUMNS = 'chat_id, user_id, display_name, avatar_url';
@@ -184,9 +200,18 @@ export function toSummary(
   chat: ChatRow,
   people: ChatPeople,
   viewerId: string,
+  subscription: ChannelSubscription | null = null,
 ): ChatSummary {
   const participants = people.members.map(toParticipant);
   const mine = participants.find((participant) => participant.id === viewerId);
+  const lastPopAt = chat.channel?.last_pop_at ?? null;
+  const previewIsPop =
+    lastPopAt !== null && (chat.last_message_at === null || lastPopAt > chat.last_message_at);
+  const memberUnread =
+    chat.last_message_at !== null &&
+    chat.last_message_author_id !== viewerId &&
+    mine !== undefined &&
+    chat.last_message_at > mine.lastReadAt;
 
   return {
     id: chat.id,
@@ -198,12 +223,23 @@ export function toSummary(
     lastMessagePreview: chat.last_message_text,
     lastMessageAt: chat.last_message_at,
     lastMessageAuthorId: chat.last_message_author_id,
-    hasUnread:
-      chat.last_message_at !== null &&
-      chat.last_message_author_id !== viewerId &&
-      mine !== undefined &&
-      chat.last_message_at > mine.lastReadAt,
+    lastPopAt,
+    lastActivityAt: previewIsPop ? lastPopAt : chat.last_message_at,
+    previewIsPop,
+    subscription,
+    hasUnread: subscription
+      ? subscription.unreadPosts + subscription.unreadPops > 0
+      : memberUnread,
   };
+}
+
+/** Свежие сверху; чаты без единого сообщения — в конце. */
+function byActivity(a: ChatSummary, b: ChatSummary): number {
+  if (a.lastActivityAt === b.lastActivityAt) return 0;
+  if (a.lastActivityAt === null) return 1;
+  if (b.lastActivityAt === null) return -1;
+
+  return a.lastActivityAt > b.lastActivityAt ? -1 : 1;
 }
 
 export async function getCurrentUserId(): Promise<string> {
@@ -255,35 +291,47 @@ export async function fetchChatPeople(chatIds: string[]): Promise<Map<string, Ch
 const NO_PEOPLE: ChatPeople = { members: [], waiting: [] };
 
 /**
- * Chats the current user takes part in, most recent conversation first. The
- * preview comes from the denormalised columns on `chats`, kept up to date by a
- * trigger — reading the last message per chat would be one query per row.
+ * «Чаты»: те, где я участник, и каналы, которые я читаю (подписка «в чатах»),
+ * свежие сверху. Превью — из денормализованных колонок `chats` и
+ * `channels.last_pop_at`, непрочитанное подписчика — одним запросом на все
+ * подписки: читать последнее сообщение по каждой строке было бы запросом на строку.
  */
 export async function listChats(): Promise<ChatSummary[]> {
   const userId = await getCurrentUserId();
 
-  const { data: membershipData, error: membershipError } = await supabase
-    .from('chat_members')
-    .select('chat_id')
-    .eq('user_id', userId);
+  const [membership, subscriptions] = await Promise.all([
+    supabase.from('chat_members').select('chat_id').eq('user_id', userId),
+    listChatSubscriptions(),
+  ]);
 
-  if (membershipError) throw membershipError;
+  if (membership.error) throw membership.error;
 
-  const chatIds = (membershipData ?? []).map((row) => row.chat_id);
+  const subscriptionByChat = new Map(subscriptions.map((item) => [item.chatId, item]));
+  const chatIds = [
+    ...new Set([...(membership.data ?? []).map((row) => row.chat_id), ...subscriptionByChat.keys()]),
+  ];
 
   if (chatIds.length === 0) return [];
 
   const { data: chatData, error: chatError } = await chatsSelect()
     .in('id', chatIds)
-    .is('deleted_at', null)
-    .order('last_message_at', { ascending: false, nullsFirst: false });
+    .is('deleted_at', null);
 
   if (chatError) throw chatError;
 
   const chats = chatData ?? [];
   const peopleByChat = await fetchChatPeople(chats.map((chat) => chat.id));
 
-  return chats.map((chat) => toSummary(chat, peopleByChat.get(chat.id) ?? NO_PEOPLE, userId));
+  return chats
+    .map((chat) =>
+      toSummary(
+        chat,
+        peopleByChat.get(chat.id) ?? NO_PEOPLE,
+        userId,
+        subscriptionByChat.get(chat.id) ?? null,
+      ),
+    )
+    .sort(byActivity);
 }
 
 export const CHATS_OF_PAGE_SIZE = 30;
@@ -754,7 +802,53 @@ export type IncomingMessage = {
   messageKind: string | null;
   text: string | null;
   createdAt: string;
+  /** Пост канала: подписан каналом, а не опубликовавшим человеком. */
+  channel: IncomingChannel | null;
+  /**
+   * Показывать ли карточку. Читатель мог выключить уведомления канала —
+   * событие всё равно приходит, чтобы поднять канал в списке.
+   */
+  notify: boolean;
 };
+
+/** Канал в событии: чем подписать карточку. */
+export type IncomingChannel = { id: string; title: string; avatarUrl: string | null };
+
+/** Новый поп без поста в канале, который я читаю. */
+export type IncomingPop = {
+  popId: string;
+  chatId: string;
+  channel: IncomingChannel;
+  notify: boolean;
+  createdAt: string;
+};
+
+function toIncomingChannel(row: Record<string, unknown>): IncomingChannel | null {
+  if (typeof row.channel_id !== 'string') return null;
+
+  return {
+    id: row.channel_id,
+    title: typeof row.channel_title === 'string' ? row.channel_title : 'Канал',
+    avatarUrl: typeof row.channel_avatar_url === 'string' ? row.channel_avatar_url : null,
+  };
+}
+
+function toIncomingPop(payload: unknown): IncomingPop | null {
+  if (typeof payload !== 'object' || payload === null) return null;
+
+  const row = payload as Record<string, unknown>;
+  const channel = toIncomingChannel(row);
+
+  if (typeof row.pop_id !== 'string' || typeof row.chat_id !== 'string' || !channel) return null;
+
+  return {
+    popId: row.pop_id,
+    chatId: row.chat_id,
+    channel,
+    notify: row.notify !== false,
+    createdAt: typeof row.created_at === 'string' ? row.created_at : new Date().toISOString(),
+  };
+}
 
 export type ChatChannelHandlers = {
   onMessage: () => void;
@@ -812,6 +906,8 @@ function toIncoming(payload: unknown): IncomingMessage | null {
     messageKind: typeof row.kind === 'string' ? row.kind : null,
     text: typeof row.text === 'string' ? row.text : null,
     createdAt: typeof row.created_at === 'string' ? row.created_at : new Date().toISOString(),
+    channel: toIncomingChannel(row),
+    notify: row.notify !== false,
   };
 }
 
@@ -871,6 +967,8 @@ function chatIdOf(payload: unknown): string | null {
 
 export type UserChannelHandlers = {
   onMessage: (message: IncomingMessage) => void;
+  /** В канале, который я читаю, вышел поп без поста. */
+  onPop?: (pop: IncomingPop) => void;
   /** Меня позвали в чат. */
   onInvite: (invite: IncomingInvite) => void;
   /**
@@ -937,6 +1035,11 @@ export function subscribeToUserEvents(userId: string, handlers: UserChannelHandl
       const incoming = toIncoming(payload);
 
       if (incoming) handlers.onMessage(incoming);
+    })
+    .on('broadcast', { event: 'new_pop' }, ({ payload }) => {
+      const pop = toIncomingPop(payload);
+
+      if (pop) handlers.onPop?.(pop);
     })
     .on('broadcast', { event: 'invite' }, ({ payload }) => {
       const invite = toInvite(payload);

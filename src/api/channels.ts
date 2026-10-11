@@ -7,7 +7,15 @@ import type { Tables } from '@/api/types.gen';
 
 type ChannelRow = Pick<
   Tables<'channels'>,
-  'id' | 'title' | 'description' | 'username' | 'avatar_url' | 'owner_id' | 'posts_chat_id'
+  | 'id'
+  | 'title'
+  | 'description'
+  | 'username'
+  | 'avatar_url'
+  | 'owner_id'
+  | 'posts_chat_id'
+  | 'subscribers_count'
+  | 'readers_count'
 >;
 
 export type Channel = {
@@ -20,6 +28,10 @@ export type Channel = {
   ownerId: string | null;
   /** Чат, сообщения которого — посты канала. */
   postsChatId: string;
+  /** Все подписавшиеся — и добавившие канал в чаты, и нет. */
+  subscribersCount: number;
+  /** Подписчики, у которых канал лежит в «Чатах». */
+  readersCount: number;
 };
 
 export type CreateChannelInput = {
@@ -42,7 +54,8 @@ export class ChannelUsernameTakenError extends Error {
 /** Код, которым `create_channel` отвергает занятое имя. */
 const USERNAME_TAKEN_CODE = 'OPN02';
 
-const COLUMNS = 'id, title, description, username, avatar_url, owner_id, posts_chat_id';
+const COLUMNS =
+  'id, title, description, username, avatar_url, owner_id, posts_chat_id, subscribers_count, readers_count';
 
 function toChannel(row: ChannelRow): Channel {
   return {
@@ -53,6 +66,8 @@ function toChannel(row: ChannelRow): Channel {
     avatarUrl: row.avatar_url,
     ownerId: row.owner_id,
     postsChatId: row.posts_chat_id,
+    subscribersCount: row.subscribers_count,
+    readersCount: row.readers_count,
   };
 }
 

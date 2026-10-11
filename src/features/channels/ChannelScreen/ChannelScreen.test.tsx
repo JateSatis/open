@@ -128,6 +128,8 @@ const channel = {
   avatarUrl: null,
   ownerId: OWNER,
   postsChatId: 'posts-1',
+  subscribersCount: 0,
+  readersCount: 0,
 };
 
 const postsChat: ChatSummary = {
@@ -140,6 +142,10 @@ const postsChat: ChatSummary = {
   lastMessagePreview: null,
   lastMessageAt: null,
   lastMessageAuthorId: null,
+  lastPopAt: null,
+  lastActivityAt: null,
+  previewIsPop: false,
+  subscription: null,
   hasUnread: false,
 };
 

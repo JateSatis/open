@@ -50,6 +50,10 @@ const group: ChatSummary = {
   lastMessagePreview: 'берём палатку?',
   lastMessageAt: '2026-09-16T10:00:00Z',
   lastMessageAuthorId: 'user-2',
+  lastPopAt: null,
+  lastActivityAt: '2026-09-16T10:00:00Z',
+  previewIsPop: false,
+  subscription: null,
   hasUnread: false,
   channel: null,
 };
