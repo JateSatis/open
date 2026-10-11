@@ -41,8 +41,10 @@ export const styles = StyleSheet.create({
     height: Sizes.popQuoteCoverHeight,
     borderRadius: Radii.sm,
   },
+  // Нулевая основа: длинная подпись не растягивает облачко за его край —
+  // ширину задают подпись «Комментарий из …» и сам комментарий.
   popQuoteBody: {
-    flexShrink: 1,
+    flex: 1,
     minHeight: Typography.smallBold.lineHeight + Typography.small.lineHeight,
     justifyContent: 'center',
   },

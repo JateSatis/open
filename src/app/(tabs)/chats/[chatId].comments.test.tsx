@@ -909,3 +909,74 @@ describe('two chat screens in the stack', () => {
     expect(screen.queryByTestId('comments-panel')).toBeNull();
   });
 });
+
+describe('pinning a comment under a message', () => {
+  async function menuOfFirstComment() {
+    await screen.findByText('комментарий c1');
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('message-row-c1'));
+    });
+    await screen.findByTestId('message-menu');
+  }
+
+  function as(userId: string) {
+    mockedSession.mockReturnValue({
+      session: { user: { id: userId } } as unknown as SupabaseSession,
+      isAuthenticated: true,
+      isLoading: false,
+    });
+  }
+
+  beforeEach(() => {
+    // Две реплики с комментариями: новая — Олега, старая — Марины.
+    const items = [
+      message('m2', 2, { authorId: 'user-2', commentsCount: 1 }),
+      message('m1', 1, { authorId: 'user-1', commentsCount: 1 }),
+    ];
+
+    mockedListComments.mockResolvedValue({ items: [comment('c1')], nextCursor: null });
+    mockedListMessages.mockResolvedValue({ items, nextCursor: null });
+    mockedTarget.mockImplementation(async (messageId) => ({
+      state: 'live',
+      message: items.find((item) => item.id === messageId)!,
+      authorName: null,
+      authorAvatarUrl: null,
+    }));
+  });
+
+  it('the author of the message may pin under it in a dialog', async () => {
+    as('user-1');
+    await renderChat();
+    await openCommentsOf(1);
+    await menuOfFirstComment();
+
+    expect(screen.getByRole('menuitem', { name: 'Закрепить' })).toBeTruthy();
+  });
+
+  it('the other side of the dialog may not pin under somebody else’s message', async () => {
+    as('user-1');
+    await renderChat();
+    await openCommentsOf(0);
+    await menuOfFirstComment();
+
+    expect(screen.queryByRole('menuitem', { name: 'Закрепить' })).toBeNull();
+  });
+
+  it('a visitor may not pin', async () => {
+    await renderChat();
+    await openCommentsOf(1);
+    await menuOfFirstComment();
+
+    expect(screen.queryByRole('menuitem', { name: 'Закрепить' })).toBeNull();
+  });
+
+  it('in a channel’s posts the publisher may pin under any post', async () => {
+    as('user-1');
+    mockedGetChat.mockResolvedValue({ ...chat, kind: 'channel', participants: [author] });
+    await renderChat();
+    await openCommentsOf(0);
+    await menuOfFirstComment();
+
+    expect(screen.getByRole('menuitem', { name: 'Закрепить' })).toBeTruthy();
+  });
+});
