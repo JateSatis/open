@@ -62,4 +62,39 @@ describe('MediaAttachmentGrid', () => {
       height: layout.height,
     });
   });
+
+  it('a pop cover opens the pop; a deleted pop is a plaque that does nothing', async () => {
+    const pop: MessageAttachment = {
+      ...video,
+      id: 'att-pop',
+      popId: 'pop-1',
+      popChannelId: 'channel-1',
+      width: 720,
+      height: 1280,
+    };
+    const popLayout = computeMosaicLayout([pop], mosaicBounds(328), 3);
+    const onPress = jest.fn();
+    const user = userEvent.setup();
+
+    const view = await render(
+      <MediaAttachmentGrid attachments={[pop]} layout={popLayout} onPress={onPress} />,
+    );
+
+    await user.press(screen.getByTestId('pop-post-cover'));
+    expect(onPress).toHaveBeenCalledWith(0);
+
+    onPress.mockClear();
+    await view.rerender(
+      <MediaAttachmentGrid
+        attachments={[{ ...pop, popDeleted: true, posterUrl: null, url: '' }]}
+        layout={popLayout}
+        onPress={onPress}
+      />,
+    );
+
+    expect(screen.getByText('Поп удалён')).toBeTruthy();
+    expect(screen.queryByTestId('pop-post-cover')).toBeNull();
+    await user.press(screen.getByTestId('pop-post-deleted'));
+    expect(onPress).not.toHaveBeenCalled();
+  });
 });

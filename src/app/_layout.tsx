@@ -87,6 +87,8 @@ export default function RootLayout() {
                   />
                   {/* Редактор попа — во весь экран, поверх вкладок, как камера в TikTok. */}
                   <Stack.Screen name="pop-editor/[channelId]" />
+                  {/* Просмотр попсов — на весь экран, без вкладок, на чёрном фоне. */}
+                  <Stack.Screen name="pops/[channelId]" options={{ statusBarStyle: 'light' }} />
                 </Stack>
               </BelowReturnBar>
               <ReturnToCallBar />

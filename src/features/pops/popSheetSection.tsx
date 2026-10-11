@@ -1,7 +1,10 @@
+import { useState } from 'react';
+
 import type { Pop } from '@/api/pops';
 import type { SheetSection, SheetSectionSlot } from '@/features/chats/MediaPickerSheet';
 import { useHasSelection } from '@/features/media';
 import { PopGrid } from '@/features/pops/PopGrid';
+import { PopPreviewStub } from '@/features/pops/PopPreviewStub';
 
 export type PopSheetSectionOptions = {
   channelId: string;
@@ -31,21 +34,27 @@ function PopSheetGrid({
   // Поп и фото из галереи в одном посте не встречаются: пока выбраны файлы,
   // попсы притушены.
   const gallerySelected = useHasSelection();
+  // Удержание — предпросмотр попа. Пока это заглушка; тап по-прежнему прикрепляет.
+  const [previewing, setPreviewing] = useState(false);
 
   return (
-    <PopGrid
-      testID="pop-sheet-grid"
-      ListComponent={slot.List}
-      header={slot.header}
-      footer={slot.footer}
-      minContentHeight={slot.minContentHeight}
-      channelId={channelId}
-      canAdd={canAdd}
-      onAdd={onAdd}
-      addLabel="Новый поп"
-      onPop={onPick}
-      popsDisabled={gallerySelected}
-      showDuration
-    />
+    <>
+      <PopGrid
+        testID="pop-sheet-grid"
+        ListComponent={slot.List}
+        header={slot.header}
+        footer={slot.footer}
+        minContentHeight={slot.minContentHeight}
+        channelId={channelId}
+        canAdd={canAdd}
+        onAdd={onAdd}
+        addLabel="Новый поп"
+        onPop={onPick}
+        onPopLongPress={() => setPreviewing(true)}
+        popsDisabled={gallerySelected}
+        showDuration
+      />
+      <PopPreviewStub visible={previewing} onClose={() => setPreviewing(false)} />
+    </>
   );
 }

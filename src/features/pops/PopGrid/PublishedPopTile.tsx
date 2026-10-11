@@ -8,14 +8,18 @@ import { PopCover } from '@/features/pops/PopCover';
 import { useTheme } from '@/hooks/use-theme';
 import { Opacity } from '@/theme';
 
-/** Опубликованный поп в сетке. Счётчиков на плитке пока нет. */
+/** Опубликованный поп в сетке. */
 type PublishedTileProps = {
   pop: Pop;
-  /** Нет — тап ничего не делает (просмотр попа — следующий этап). */
+  /** Нет — тап ничего не делает. */
   onPress?: (pop: Pop) => void;
   /** Взять нельзя: притушена и не нажимается. */
   disabled?: boolean;
   showDuration?: boolean;
+  /** Просмотры внизу слева. */
+  showViews?: boolean;
+  /** Удержание — во вкладке «Pop» шита открывает предпросмотр. */
+  onLongPress?: (pop: Pop) => void;
 };
 
 export const PublishedPopTile = memo(function PublishedPopTile({
@@ -23,6 +27,8 @@ export const PublishedPopTile = memo(function PublishedPopTile({
   onPress,
   disabled = false,
   showDuration = false,
+  showViews = false,
+  onLongPress,
 }: PublishedTileProps) {
   const theme = useTheme();
 
@@ -34,6 +40,7 @@ export const PublishedPopTile = memo(function PublishedPopTile({
       accessibilityState={{ disabled }}
       disabled={disabled || !onPress}
       onPress={() => onPress?.(pop)}
+      onLongPress={onLongPress ? () => onLongPress(pop) : undefined}
       style={styles.fill}
     >
       <PopCover
@@ -41,6 +48,7 @@ export const PublishedPopTile = memo(function PublishedPopTile({
         durationMs={showDuration ? pop.durationMs : null}
         showLabel={false}
         recyclingKey={pop.id}
+        viewsCount={showViews ? pop.viewsCount : null}
       />
       {disabled ? (
         <View

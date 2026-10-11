@@ -9,7 +9,7 @@
 import type { QueryClient } from '@tanstack/react-query';
 
 import { setCommentReaction } from '@/api/comments';
-import { setMessageReaction, type MyReaction } from '@/api/reactions';
+import { setMessageReaction, setPopReaction, type MyReaction } from '@/api/reactions';
 import { mapOriginals } from '@/features/chats/islands/islandCache';
 import { updateAllHistories } from '@/features/chats/messages/historyCache';
 import {
@@ -21,6 +21,8 @@ import {
 import { updateCommentEverywhere } from '@/features/interactions/comments/commentsCache';
 import { replaceMine, type Me, type ReactionIntent } from '@/features/interactions/reactionState';
 import { showNotice } from '@/features/notifications/alertsStore';
+import { replacePopMine } from '@/features/pops/popReactions';
+import { updatePopEverywhere } from '@/features/pops/popsCache';
 import { isNetworkError } from '@/lib/network';
 
 /**
@@ -96,8 +98,17 @@ function confirmComment(
   });
 }
 
-/** Куда ставится реакция: сообщение или комментарий. У обоих одна очередь и одно наложение. */
-export type ReactionTarget = 'message' | 'comment';
+/** Подтверждённая реакция на поп — во все загруженные списки попсов: сетку и просмотр. */
+function confirmPop(queryClient: QueryClient, popId: string, mine: MyReaction | null) {
+  updatePopEverywhere(queryClient, popId, (pop) => {
+    const reactions = replacePopMine(pop.reactions, mine?.emoji ?? null);
+
+    return reactions === pop.reactions ? pop : { ...pop, reactions };
+  });
+}
+
+/** Куда ставится реакция. У всех целей одна очередь и одно наложение. */
+export type ReactionTarget = 'message' | 'comment' | 'pop';
 
 const TARGETS: Record<
   ReactionTarget,
@@ -108,6 +119,7 @@ const TARGETS: Record<
 > = {
   message: { send: setMessageReaction, confirm: confirmMessage },
   comment: { send: setCommentReaction, confirm: confirmComment },
+  pop: { send: setPopReaction, confirm: confirmPop },
 };
 
 /**
@@ -156,10 +168,9 @@ async function drain(queryClient: QueryClient, messageId: string, target: Reacti
 }
 
 /**
- * Ставит, меняет или снимает мою реакцию на сообщение или комментарий. На
- * экране — сразу, наложением, везде, где цель показана; в базу — очередью
- * (см. выше). Ключ наложения — id цели: id сообщений и комментариев не
- * пересекаются.
+ * Ставит, меняет или снимает мою реакцию на сообщение, комментарий или поп.
+ * На экране — сразу, наложением, везде, где цель показана; в базу — очередью
+ * (см. выше). Ключ наложения — id цели: uuid разных целей не пересекаются.
  */
 export function sendReaction(
   queryClient: QueryClient,

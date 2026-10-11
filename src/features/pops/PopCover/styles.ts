@@ -1,6 +1,6 @@
 import { StyleSheet } from 'react-native';
 
-import { Radii, Spacing } from '@/theme';
+import { Radii, Shadows, Spacing } from '@/theme';
 
 export const styles = StyleSheet.create({
   fill: {
@@ -20,5 +20,18 @@ export const styles = StyleSheet.create({
   duration: {
     right: Spacing.one,
     bottom: Spacing.one,
+  },
+  /** Без подложки, как в TikTok: тень держит число и на светлой обложке. */
+  views: {
+    position: 'absolute',
+    left: Spacing.one,
+    bottom: Spacing.one,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.half,
+    ...Shadows.onMedia,
+  },
+  viewsText: {
+    ...Shadows.textOnMedia,
   },
 });

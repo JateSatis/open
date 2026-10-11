@@ -33,6 +33,7 @@ export const Typography = {
   small: { fontSize: 14, lineHeight: 20, fontWeight: '400' },
   smallBold: { fontSize: 14, lineHeight: 20, fontWeight: '600' },
   caption: { fontSize: 12, lineHeight: 16, fontWeight: '400' },
+  captionBold: { fontSize: 12, lineHeight: 16, fontWeight: '600' },
   /** Время, «изменено» и просмотры в низу облачка — мельче подписи, чтобы не спорить с текстом. */
   meta: { fontSize: 10, lineHeight: 13, fontWeight: '400' },
   code: { fontSize: 13, lineHeight: 18, fontWeight: '400' },
@@ -42,6 +43,8 @@ export const Typography = {
   reactionCount: { fontSize: 10, lineHeight: 13, fontWeight: '600' },
   /** Эмодзи в блоке реакций над облачком. */
   emoji: { fontSize: 26, lineHeight: 32, fontWeight: '400' },
+  /** Сердце двойного тапа по видео попа. */
+  popHeart: { fontSize: 88, lineHeight: 104, fontWeight: '400' },
 } as const;
 
 export type TypographyVariant = keyof typeof Typography;

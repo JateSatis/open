@@ -32,7 +32,7 @@ export type ReactionIntent = {
  * Сколько разных реакций держит ряд. Тот же инвариант — в базе
  * (`reaction_kinds_limit`, миграция `20261007120000_reaction_limits_and_reactors.sql`).
  */
-export const REACTION_KINDS_LIMIT = { member: 20, visitor: 7, comment: 20 } as const;
+export const REACTION_KINDS_LIMIT = { member: 20, visitor: 7, comment: 20, pop: 20 } as const;
 
 /** В какой ряд попадёт моя реакция, если поставить её сейчас. Решает база; это — её же правило. */
 export function audienceOf(isMember: boolean): ReactionAudience {

@@ -30,6 +30,7 @@ import {
 } from '@/features/interactions/MessageReactions';
 import { hasReactions } from '@/features/interactions/reactionState';
 import { MediaViewer, type MediaViewerItem } from '@/features/media';
+import { openPopViewer } from '@/features/pops/openPopViewer';
 import { useTheme } from '@/hooks/use-theme';
 
 export type MessageBubbleProps = {
@@ -127,8 +128,14 @@ export function MessageBubble({
 }: MessageBubbleProps) {
   const theme = useTheme();
   const isMediaMessage = message.kind === 'media' && message.attachments.length > 0;
-  // Пост с попом: обложка попа, а не мозаика; просмотр попа — отдельная задача.
+  // Пост с попом: обложка попа, а не мозаика; тап — просмотр попсов его канала.
   const isPopPost = isMediaMessage && Boolean(message.attachments[0]?.popId);
+  const popLink = isPopPost ? message.attachments[0] : undefined;
+  // Оптимистичный пост с новым попом ещё не знает канала, удалённый поп не открыть.
+  const openPop =
+    popLink?.popId && popLink.popChannelId && !popLink.popDeleted
+      ? () => openPopViewer(popLink.popChannelId!, popLink.popId!)
+      : noop;
   const voice = message.kind === 'voice' ? message.attachments[0] : undefined;
   // Кружки пока не подключены к облачку — это отдельная задача; здесь только
   // заглушка, чтобы сообщение не было пустым.
@@ -300,7 +307,7 @@ export function MessageBubble({
               attachments={message.attachments}
               layout={layout}
               localPreviews={message.localPreviews}
-              onPress={isPopPost ? noop : setViewerIndex}
+              onPress={isPopPost ? openPop : setViewerIndex}
             >
               {message.text ? null : (
                 // Без подписи время со статусом — плашкой в левом нижнем углу

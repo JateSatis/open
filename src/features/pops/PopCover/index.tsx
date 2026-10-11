@@ -1,11 +1,14 @@
 import { Image } from 'expo-image';
+import { SymbolView } from 'expo-symbols';
 import { View } from 'react-native';
 
 import { styles } from './styles';
 
 import { Text } from '@/components/Text';
+import { formatViewsCount } from '@/features/chats/ViewsCount/formatViewsCount';
 import { formatDuration } from '@/features/media/lib/formatDuration';
 import { useTheme } from '@/hooks/use-theme';
+import { Sizes } from '@/theme';
 
 export type PopCoverProps = {
   /** Постер попа — удалённый или ещё локальный кадр. Нет — тёмная заглушка. */
@@ -17,6 +20,8 @@ export type PopCoverProps = {
   recyclingKey?: string;
   /** Локальный кадр того же попа: держится, пока грузится удалённый постер. */
   placeholderUri?: string | null;
+  /** Просмотры внизу слева, как в профиле TikTok. `null` — не показывать. */
+  viewsCount?: number | null;
 };
 
 /**
@@ -29,6 +34,7 @@ export function PopCover({
   showLabel = true,
   recyclingKey,
   placeholderUri,
+  viewsCount = null,
 }: PopCoverProps) {
   const theme = useTheme();
 
@@ -56,6 +62,28 @@ export function PopCover({
         <View style={[styles.badge, styles.label, { backgroundColor: theme.mediaScrim }]}>
           <Text variant="caption" color="textOnMedia">
             Pop
+          </Text>
+        </View>
+      ) : null}
+
+      {viewsCount !== null ? (
+        <View
+          testID="pop-tile-views"
+          accessible
+          accessibilityLabel={`Просмотры: ${viewsCount}`}
+          style={[styles.views, { shadowColor: theme.shadow }]}
+        >
+          <SymbolView
+            name={{ ios: 'play', android: 'play_arrow', web: 'play_arrow' }}
+            size={Sizes.popTileViewsIcon}
+            tintColor={theme.textOnMedia}
+          />
+          <Text
+            variant="captionBold"
+            color="textOnMedia"
+            style={[styles.viewsText, { textShadowColor: theme.shadow }]}
+          >
+            {formatViewsCount(viewsCount)}
           </Text>
         </View>
       ) : null}

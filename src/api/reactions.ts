@@ -7,7 +7,13 @@
 // что и переписка (`MESSAGE_COLUMNS`); своя реакция — вычисляемой связью
 // `my_reaction`, тоже в той же выборке.
 
-import { REACTION_COLUMNS, toAudience, toReactions, type MessageReactions, type MyReaction } from '@/api/reactionCounts';
+import {
+  REACTION_COLUMNS,
+  toAudience,
+  toReactions,
+  type MessageReactions,
+  type MyReaction,
+} from '@/api/reactionCounts';
 import { supabase } from '@/api/supabase';
 
 export * from '@/api/reactionCounts';
@@ -26,6 +32,28 @@ export async function setMessageReaction(
     target_id: messageId,
     // Снятие — это NULL, а генератор типов не размечает скалярные аргументы
     // rpc как nullable.
+    reaction: emoji as string,
+  });
+
+  if (error) throw error;
+
+  const row = data?.[0];
+
+  return row ? { emoji: row.emoji, audience: toAudience(row.audience) } : null;
+}
+
+/**
+ * Приводит мою реакцию на поп к `emoji`: ставит, меняет или снимает
+ * (`null`). Повтор безопасен. Ряд ставит база — по праву публиковать в
+ * канале; в показе у попа один общий ряд.
+ */
+export async function setPopReaction(
+  popId: string,
+  emoji: string | null,
+): Promise<MyReaction | null> {
+  const { data, error } = await supabase.rpc('set_reaction', {
+    target_type: 'pop',
+    target_id: popId,
     reaction: emoji as string,
   });
 
