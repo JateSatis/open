@@ -80,7 +80,7 @@ export const styles = StyleSheet.create({
     flexShrink: 1,
   },
   subscribe: {
-    borderWidth: 1,
+    borderWidth: Sizes.popSubscribeBorder,
     borderRadius: Radii.full,
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.one,

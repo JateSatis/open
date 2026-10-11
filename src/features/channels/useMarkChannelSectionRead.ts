@@ -42,7 +42,12 @@ export function useMarkChannelSectionRead(
 
     markChannelRead(channelId, { posts: section === 'posts', pops: section === 'pops' })
       .then(() => {
-        if (alive) void queryClient.invalidateQueries({ queryKey: chatsQueryKey });
+        if (!alive) return;
+
+        // Перечитывание, ушедшее в базу раньше отметки (новый пост пришёл
+        // посреди неё), вернуло бы на вкладку старое число — перечитываем после.
+        void queryClient.invalidateQueries({ queryKey: channelSubscriptionQueryKey(channelId) });
+        void queryClient.invalidateQueries({ queryKey: chatsQueryKey });
       })
       .catch(() => {
         // Как и у отметки участника: следующий вход или новое поправят.

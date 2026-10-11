@@ -32,6 +32,10 @@ export function usePopViewCounting(
         items.map(({ id }) => id),
         sessionId,
       ).then(() => {
+        // Постороннему прочитывать нечего — и перечитывать «Чаты» на каждый
+        // свайп незачем.
+        if (!queryClient.getQueryData(channelSubscriptionQueryKey(channelId))) return;
+
         void queryClient.invalidateQueries({ queryKey: channelSubscriptionQueryKey(channelId) });
         void queryClient.invalidateQueries({ queryKey: chatsQueryKey });
       }),

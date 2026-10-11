@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import { View } from 'react-native';
 
 import { styles } from './styles';
@@ -24,10 +25,12 @@ export function SubscribeBar({ channelId, section }: SubscribeBarProps) {
   const theme = useTheme();
   const { status } = useChannelSubscription(channelId);
   const { subscribe, setInChats } = useSubscriptionActions(channelId);
+  // Второй быстрый тап, пока первый ещё идёт, — не второе действие и не второй вопрос.
+  const busyRef = useRef(false);
 
   if (status !== 'none' && status !== 'subscriber') return null;
 
-  const onPress = async () => {
+  const run = async () => {
     if (status === 'subscriber') {
       void setInChats(true);
       return;
@@ -49,6 +52,18 @@ export function SubscribeBar({ channelId, section }: SubscribeBarProps) {
     });
 
     if (add && (await subscribed)) void setInChats(true);
+  };
+
+  const onPress = async () => {
+    if (busyRef.current) return;
+
+    busyRef.current = true;
+
+    try {
+      await run();
+    } finally {
+      busyRef.current = false;
+    }
   };
 
   return (

@@ -1,14 +1,5 @@
 import type { CallMark, ChatKind } from '@/api/chats';
-
-function plural(n: number, one: string, few: string, many: string): string {
-  const mod10 = n % 10;
-  const mod100 = n % 100;
-
-  if (mod10 === 1 && mod100 !== 11) return one;
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few;
-
-  return many;
-}
+import { plural } from '@/lib/plural';
 
 /** «12 мин» — та же запись, что у `call_duration_text` в базе. */
 export function formatCallDuration(startedAt: string, endedAt: string): string {

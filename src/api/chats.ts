@@ -301,7 +301,9 @@ export async function listChats(): Promise<ChatSummary[]> {
 
   const [membership, subscriptions] = await Promise.all([
     supabase.from('chat_members').select('chat_id').eq('user_id', userId),
-    listChatSubscriptions(),
+    // Сбой подписок не должен прятать свои диалоги и группы: каналы
+    // вернутся со следующим перечитыванием.
+    listChatSubscriptions().catch((): ChannelSubscription[] => []),
   ]);
 
   if (membership.error) throw membership.error;
@@ -363,7 +365,13 @@ export async function listChatsOf(
 
   const chats = data ?? [];
   const peopleByChat = await fetchChatPeople(chats.map((chat) => chat.id));
-  const items = chats.map((chat) => toSummary(chat, peopleByChat.get(chat.id) ?? NO_PEOPLE, userId));
+  // Страницы упорядочены базой по последнему сообщению — строка показывает его
+  // же, без «Нового попса», иначе время строки разошлось бы с её местом.
+  const items = chats.map((chat) => ({
+    ...toSummary(chat, peopleByChat.get(chat.id) ?? NO_PEOPLE, userId),
+    lastActivityAt: chat.last_message_at,
+    previewIsPop: false,
+  }));
   const full = chats.length === CHATS_OF_PAGE_SIZE;
 
   return { items, nextCursor: null, nextPage: full ? page + 1 : null };

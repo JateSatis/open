@@ -390,6 +390,20 @@ describe('ChannelScreen subscription', () => {
     expect(setChannelInChats).not.toHaveBeenCalled();
   });
 
+  it('a quick double tap on «Подписаться» is one subscription and one question', async () => {
+    await renderAs('stranger-1', null);
+    await openPops();
+
+    const button = await screen.findByRole('button', { name: 'Подписаться' });
+    fireEvent.press(button);
+    fireEvent.press(button);
+
+    expect(await screen.findAllByText('Хотите добавить в чаты?')).toHaveLength(1);
+    fireEvent.press(screen.getByRole('button', { name: 'Нет' }));
+    await waitFor(() => expect(subscribeToChannel).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText('Хотите добавить в чаты?')).toBeNull();
+  });
+
   it('closing the question without an answer is «Нет»', async () => {
     await renderAs('stranger-1', null);
     await openPops();
