@@ -407,7 +407,8 @@ function toForwardedComment(row: ForwardedRow): ForwardedComment {
 
   return {
     id: row.id,
-    messageId: row.message_id,
+    // Пересылаются только комментарии к сообщениям (`forward_comments`).
+    messageId: row.message_id ?? '',
     chatId: row.chat_id,
     threadRootId: row.thread_root_id,
     authorId: row.author_id,

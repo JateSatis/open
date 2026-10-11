@@ -12,6 +12,8 @@ import { supabase } from '@/api/supabase';
 export type PopTopicListener = {
   /** У попа сменились реакции. */
   onReactionsChanged?: (popId: string) => void;
+  /** У попа изменилось число комментариев. */
+  onCommentsChanged?: (popId: string) => void;
   /** У этих попсов выросли просмотры. */
   onViewsChanged?: (popIds: string[]) => void;
   /** Канал заново подключился: пропущенное за время обрыва пора дочитать. */
@@ -55,6 +57,11 @@ function open(channelId: string): Entry {
       const id = popIdOf(payload);
 
       if (id) each((l) => l.onReactionsChanged?.(id));
+    })
+    .on('broadcast', { event: 'pop_comments_changed' }, ({ payload }) => {
+      const id = popIdOf(payload);
+
+      if (id) each((l) => l.onCommentsChanged?.(id));
     })
     .on('broadcast', { event: 'pop_views_changed' }, ({ payload }) => {
       const list = popIdsOf(payload);

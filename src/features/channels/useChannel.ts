@@ -1,8 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { getChannel } from '@/api/channels';
+import { channelQueryKey } from '@/features/channels/keys';
 
-export const channelQueryKey = (channelId: string) => ['channel', channelId] as const;
+export { channelQueryKey };
 
 export function useChannel(channelId: string | undefined) {
   return useQuery({

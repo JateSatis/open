@@ -2,19 +2,23 @@ import { SymbolView } from 'expo-symbols';
 import { useIsFocused, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, View, type LayoutChangeEvent } from 'react-native';
+import Animated from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PopPage, type PopPageMode } from './PopPage';
 import { PopPager } from './PopPager';
 import { styles } from './styles';
 import { useAppActive } from './useAppActive';
+import { useCommentsChromeFade } from './useCommentsShrink';
 import { useOpenChannel } from './useOpenChannel';
+import { usePopComments } from './usePopComments';
 import { usePopReactionActions } from './usePopReactionActions';
 import { usePopFeedPaging, usePopViewCounting } from './usePopViewerEffects';
 
 import type { Pop } from '@/api/pops';
 import { Text } from '@/components/Text';
 import { useChannel } from '@/features/channels/useChannel';
+import { CommentsPanel } from '@/features/interactions/CommentsPanel';
 import { useCanPublish } from '@/features/pops/queries';
 import { usePopCountersSync } from '@/features/pops/usePopCountersSync';
 import { usePopFeed } from '@/features/pops/usePopFeed';
@@ -66,6 +70,9 @@ export function PopViewer({ channelId, startId }: PopViewerProps) {
   const live = focused && appActive;
   const { onReaction, onDoubleTap } = usePopReactionActions(canPublish);
   const onOpenChannel = useOpenChannel(channelId);
+  const { openPopId, onOpenComments, onOpenPerson } = usePopComments(canPublish);
+  const commentsOpen = openPopId !== null;
+  const chromeStyle = useCommentsChromeFade(commentsOpen);
 
   usePopCountersSync(channelId);
   usePopViewCounting(pops, activeIndex, canPublish, focused);
@@ -99,10 +106,24 @@ export function PopViewer({ channelId, startId }: PopViewerProps) {
           onReaction={onReaction}
           onDoubleTap={onDoubleTap}
           onOpenChannel={onOpenChannel}
+          onOpenComments={onOpenComments}
+          // Только страница этого попа: остальные не перерисовываются, а
+          // соседняя, ставшая активной, пока поп пропадал из ленты, не уменьшается.
+          commentsOpen={pop.id === openPopId}
         />
       );
     },
-    [activeIndex, channelTitle, live, onDoubleTap, onOpenChannel, onReaction, size],
+    [
+      activeIndex,
+      channelTitle,
+      live,
+      onDoubleTap,
+      onOpenChannel,
+      onOpenComments,
+      onReaction,
+      openPopId,
+      size,
+    ],
   );
 
   // Стабильный: от него зависит жест листания, и обновления счётчиков не
@@ -130,6 +151,7 @@ export function PopViewer({ channelId, startId }: PopViewerProps) {
           onActiveIndex={onActiveIndex}
           keyOf={popKey}
           renderPage={renderPage}
+          locked={commentsOpen}
         />
       ) : (
         <View style={styles.message}>
@@ -141,19 +163,26 @@ export function PopViewer({ channelId, startId }: PopViewerProps) {
         </View>
       )}
 
-      <Pressable
-        testID="pop-viewer-back"
-        accessibilityRole="button"
-        accessibilityLabel="Назад"
-        onPress={() => router.back()}
-        style={[styles.back, styles.onMediaShadow, { top: insets.top, shadowColor: theme.shadow }]}
+      <Animated.View
+        style={[styles.back, { top: insets.top }, chromeStyle]}
+        pointerEvents={commentsOpen ? 'none' : 'auto'}
       >
-        <SymbolView
-          name={{ ios: 'chevron.left', android: 'arrow_back', web: 'arrow_back' }}
-          size={Sizes.popBackIcon}
-          tintColor={theme.textOnMedia}
-        />
-      </Pressable>
+        <Pressable
+          testID="pop-viewer-back"
+          accessibilityRole="button"
+          accessibilityLabel="Назад"
+          onPress={() => router.back()}
+          style={[styles.backButton, styles.onMediaShadow, { shadowColor: theme.shadow }]}
+        >
+          <SymbolView
+            name={{ ios: 'chevron.left', android: 'arrow_back', web: 'arrow_back' }}
+            size={Sizes.popBackIcon}
+            tintColor={theme.textOnMedia}
+          />
+        </Pressable>
+      </Animated.View>
+
+      <CommentsPanel onOpenPerson={onOpenPerson} />
     </View>
   );
 }

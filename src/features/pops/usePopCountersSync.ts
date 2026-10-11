@@ -10,7 +10,7 @@ import { applyPopCounters } from '@/features/pops/popsCache';
 const BATCH_MS = 300;
 
 /**
- * Живые счётчики попсов канала: реакции и просмотры, пришедшие от других,
+ * Живые счётчики попсов канала: реакции, комментарии и просмотры, пришедшие от других,
  * перечитываются из базы и ложатся во все загруженные списки — сетку и
  * просмотр. Топик общий на всё приложение (`popTopics.ts`).
  */
@@ -45,6 +45,7 @@ export function usePopCountersSync(channelId: string) {
 
     const release = acquirePopTopic(channelId, {
       onReactionsChanged: (popId) => enqueue([popId]),
+      onCommentsChanged: (popId) => enqueue([popId]),
       onViewsChanged: enqueue,
       // Пропущенное за обрыв — только счётчики загруженных попсов. Ленту
       // просмотра не перечитываем: её страницы собраны от выбранного попа, и

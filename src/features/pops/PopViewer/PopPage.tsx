@@ -1,6 +1,6 @@
 import { memo, useCallback, useRef, useState } from 'react';
 import { Pressable, View } from 'react-native';
-import { useSharedValue } from 'react-native-reanimated';
+import Animated, { useSharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { HeartBurst } from './HeartBurst';
@@ -12,6 +12,7 @@ import { PopVideo } from './PopVideo';
 import { PlaybackBadges } from './PlaybackBadges';
 import { styles } from './styles';
 import { usePageControls } from './usePageControls';
+import { useCommentsChromeFade, useCommentsShrink } from './useCommentsShrink';
 import { useSurfacePress } from './useSurfacePress';
 
 import type { Pop } from '@/api/pops';
@@ -35,6 +36,12 @@ export type PopPageProps = {
   onReaction: (pop: Pop, emoji: string | null) => void;
   onDoubleTap: (pop: Pop) => void;
   onOpenChannel: () => void;
+  onOpenComments: (pop: Pop) => void;
+  /**
+   * Открыты комментарии к этому попу: видео уменьшено над шитом, интерфейс и
+   * жесты по видео выключены. Касается только активной страницы.
+   */
+  commentsOpen: boolean;
 };
 
 export const PopPage = memo(function PopPage({
@@ -47,10 +54,15 @@ export const PopPage = memo(function PopPage({
   onReaction,
   onDoubleTap,
   onOpenChannel,
+  onOpenComments,
+  commentsOpen,
 }: PopPageProps) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const active = mode === 'active';
+  const shrunk = active && commentsOpen;
+  const videoStyle = useCommentsShrink(height, shrunk);
+  const chromeStyle = useCommentsChromeFade(shrunk);
   const [scrubbingNow, setScrubbingNow] = useState(false);
   const controls = usePageControls(active);
   const { paused, fast, captionOpen, setCaptionOpen, picker, setPicker, framed, hearts } = controls;
@@ -74,9 +86,10 @@ export const PopPage = memo(function PopPage({
     onTap: controls.togglePause,
     onDoubleTap: doubleTap,
     onHold: controls.setFast,
-    enabled: active,
+    enabled: active && !commentsOpen,
   });
 
+  const openComments = useCallback(() => onOpenComments(pop), [onOpenComments, pop]);
   const seek = useCallback((share: number) => seekRef.current?.(share), []);
   const react = useCallback((emoji: string | null) => onReaction(pop, emoji), [onReaction, pop]);
   const tapReaction = useCallback(
@@ -89,20 +102,26 @@ export const PopPage = memo(function PopPage({
 
   return (
     <View testID={active ? 'pop-page-active' : 'pop-page'} style={[styles.page, { width, height }]}>
-      {mode !== 'idle' ? (
-        <PopVideo
-          pop={pop}
-          playing={playing}
-          fast={fast && active}
-          progress={progress}
-          scrubbing={scrubbing}
-          seekRef={seekRef}
-          onPlaying={controls.showFrame}
-        />
-      ) : null}
-      {framed && active ? null : (
-        <PopCover posterUri={pop.posterUrl} showLabel={false} recyclingKey={pop.id} />
-      )}
+      <Animated.View
+        testID={shrunk ? 'pop-video-shrunk' : undefined}
+        style={[styles.videoLayer, videoStyle]}
+        pointerEvents="none"
+      >
+        {mode !== 'idle' ? (
+          <PopVideo
+            pop={pop}
+            playing={playing}
+            fast={fast && active}
+            progress={progress}
+            scrubbing={scrubbing}
+            seekRef={seekRef}
+            onPlaying={controls.showFrame}
+          />
+        ) : null}
+        {framed && active ? null : (
+          <PopCover posterUri={pop.posterUrl} showLabel={false} recyclingKey={pop.id} />
+        )}
+      </Animated.View>
 
       <Pressable
         testID="pop-surface"
@@ -128,7 +147,10 @@ export const PopPage = memo(function PopPage({
       ) : null}
 
       {overlaysHidden ? null : (
-        <View style={[styles.bottom, { paddingBottom: insets.bottom }]} pointerEvents="box-none">
+        <Animated.View
+          style={[styles.bottom, { paddingBottom: insets.bottom }, chromeStyle]}
+          pointerEvents={shrunk ? 'none' : 'box-none'}
+        >
           <PopCaption
             channelTitle={channelTitle}
             caption={pop.caption}
@@ -139,13 +161,18 @@ export const PopPage = memo(function PopPage({
           <PopSideColumn
             reactions={reactions}
             viewsCount={pop.viewsCount}
+            commentsCount={pop.commentsCount}
             onReaction={tapReaction}
             onAddReaction={setPicker}
+            onOpenComments={openComments}
           />
-        </View>
+        </Animated.View>
       )}
 
-      <View style={[styles.progressDock, { bottom: insets.bottom }]} pointerEvents="box-none">
+      <Animated.View
+        style={[styles.progressDock, { bottom: insets.bottom }, chromeStyle]}
+        pointerEvents={shrunk ? 'none' : 'box-none'}
+      >
         <PopProgressBar
           width={width}
           durationMs={pop.durationMs}
@@ -154,7 +181,7 @@ export const PopPage = memo(function PopPage({
           onSeek={seek}
           onScrubChange={setScrubbingNow}
         />
-      </View>
+      </Animated.View>
 
       {picker ? (
         <PopReactionPopover

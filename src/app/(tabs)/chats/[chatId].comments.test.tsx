@@ -233,7 +233,7 @@ const MESSAGES = [
 function comment(id: string, overrides: Partial<Comment> = {}): Comment {
   return {
     id,
-    messageId: 'm1',
+    targetId: 'm1',
     chatId: 'chat-1',
     authorId: 'user-2',
     authorName: 'Олег',
@@ -660,7 +660,7 @@ describe('a visitor in the comments', () => {
       nextCursor: null,
     });
     mockedListComments.mockResolvedValue({
-      items: [comment('c1', { messageId: 'o4', chatId: 'chat-2' })],
+      items: [comment('c1', { targetId: 'o4', chatId: 'chat-2' })],
       nextCursor: null,
     });
 

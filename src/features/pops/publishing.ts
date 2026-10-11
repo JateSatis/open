@@ -95,6 +95,7 @@ async function run(queryClient: QueryClient, userId: string, channelId: string, 
       createdAt: new Date().toISOString(),
       reactions: NO_POP_REACTIONS,
       viewsCount: 0,
+      commentsCount: 0,
     };
 
     // Опубликованный встаёт первой плиткой сразу, без ожидания перечитывания:

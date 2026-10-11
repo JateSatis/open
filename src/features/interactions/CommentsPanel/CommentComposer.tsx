@@ -13,10 +13,8 @@ import {
   releaseMediaSheetArm,
 } from '@/features/chats/MediaPickerSheet';
 import { MessageComposer } from '@/features/chats/MessageComposer';
-import { useChatTitle } from '@/features/chats/useChatTitle';
 import type { ComposerDraft } from '@/features/chats/useComposerDraft';
 import type { MessageEdit } from '@/features/chats/useMessageEdit';
-import { useCommentsPanelTarget } from '@/features/interactions/comments/commentsPanelStore';
 import type { LocalMedia } from '@/features/media';
 import { useTheme } from '@/hooks/use-theme';
 
@@ -24,10 +22,12 @@ export type CommentComposerProps = {
   draft: ComposerDraft;
   edit: MessageEdit;
   inputRef: RefObject<TextInput | null>;
-  /** Сообщение удалено — новые комментарии не принимаются. */
-  closed: boolean;
+  /** Сообщение или поп удалены — новые комментарии не принимаются; текст плашки. */
+  closedNotice: string | null;
   /** Подпись пустого поля. */
   placeholder: string;
+  /** Шапка предпросмотра файлов — чат сообщения или канал попа. */
+  title: string;
   onSend: () => void;
   onSendVoice: (voice: LocalMedia) => void;
 };
@@ -47,20 +47,19 @@ export function CommentComposer({
   draft,
   edit,
   inputRef,
-  closed,
+  closedNotice,
   placeholder,
+  title,
   onSend,
   onSendVoice,
 }: CommentComposerProps) {
   const theme = useTheme();
-  // Шапка предпросмотра файлов — имя чата, к сообщению которого комментарий.
-  const title = useChatTitle(useCommentsPanelTarget()?.chatId);
 
-  if (closed) {
+  if (closedNotice) {
     return (
       <View style={[styles.closedNotice, { borderTopColor: theme.border }]}>
         <Text variant="small" color="textSecondary">
-          Сообщение удалено — новые комментарии не принимаются.
+          {closedNotice}
         </Text>
       </View>
     );

@@ -54,9 +54,7 @@ env:
     id: "reaction-chip-🔥"
 - assertNotVisible:
     id: "reaction-chip-🔥"
-# Индикаторы без действия: видео не встаёт на паузу.
-- tapOn:
-    id: "pop-comments"
+# Индикатор без действия: видео не встаёт на паузу.
 - tapOn:
     id: "pop-more"
 - assertNotVisible:

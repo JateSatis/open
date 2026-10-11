@@ -9,7 +9,15 @@
 
 import { notifyManager, type QueryClient } from '@tanstack/react-query';
 
-import { deleteComment, sendComment, sendVoiceComment, type Comment } from '@/api/comments';
+import {
+  deleteComment,
+  sendComment,
+  sendPopComment,
+  sendVoiceComment,
+  sendVoicePopComment,
+  type Comment,
+  type CommentSubject,
+} from '@/api/comments';
 import { NO_REACTIONS } from '@/api/reactionCounts';
 import {
   errorCode,
@@ -46,11 +54,12 @@ import {
   type UploadedMedia,
 } from '@/features/media';
 import { showNotice } from '@/features/notifications/alertsStore';
+import { bumpPopComments } from '@/features/pops/popsCache';
 import { isNetworkError } from '@/lib/network';
 
 export type CommentSendContext = {
   queryClient: QueryClient;
-  messageId: string;
+  subject: CommentSubject;
   chatId: string;
   currentUserId: string | null;
   /** Имя и аватар — для своего пузыря до ответа сервера. */
@@ -63,7 +72,7 @@ const delivering = new Set<string>();
 const discarded = new Set<string>();
 
 function draftOf(
-  { messageId, chatId, currentUserId, me }: CommentSendContext,
+  { subject, chatId, currentUserId, me }: CommentSendContext,
   at: number,
   content: Pick<CommentItem, 'kind' | 'text' | 'attachments' | 'threadRootId'> &
     Partial<Pick<CommentItem, 'pendingMedia' | 'pendingVoice' | 'localPreviews' | 'replies'>>,
@@ -74,7 +83,7 @@ function draftOf(
     id: localId,
     localId,
     chatId,
-    messageId,
+    targetId: subject.id,
     authorId: currentUserId,
     authorName: me.name,
     authorAvatarUrl: me.avatarUrl,
@@ -97,7 +106,7 @@ function draftOf(
 }
 
 async function insert(
-  messageId: string,
+  subject: CommentSubject,
   outgoing: Outgoing,
   uploaded: UploadedMedia[],
   threadRootId: string | null,
@@ -105,8 +114,8 @@ async function insert(
   if (outgoing.type === 'voice') {
     const [file] = uploaded;
 
-    return sendVoiceComment(
-      messageId,
+    return (subject.type === 'pop' ? sendVoicePopComment : sendVoiceComment)(
+      subject.id,
       {
         url: file.url,
         mimeType: file.mimeType,
@@ -121,7 +130,7 @@ async function insert(
 
   if (outgoing.type !== 'post') throw new Error('Комментарий не пересылается');
 
-  return sendComment(messageId, {
+  return (subject.type === 'pop' ? sendPopComment : sendComment)(subject.id, {
     text: outgoing.text || undefined,
     media: uploaded.map(toSendMedia),
     replyTo: outgoing.replyTo,
@@ -135,36 +144,45 @@ async function insert(
  * встаёт в конец треда: тред создаётся, даже если его ещё не открывали, —
  * своё начало он дочитает, а ответ уже лежит за разрывом.
  */
-function settle(queryClient: QueryClient, messageId: string, localId: string, saved: Comment) {
-  const localPreviews = outboxComments(messageId).find((item) => item.localId === localId)
+function settle(queryClient: QueryClient, targetId: string, localId: string, saved: Comment) {
+  const localPreviews = outboxComments(targetId).find((item) => item.localId === localId)
     ?.localPreviews;
   const item: CommentItem = { ...toCommentItem(saved), localPreviews };
 
   if (saved.threadRootId) {
-    updateThread(queryClient, messageId, saved.threadRootId, (page) => addToThread(page, item), {
+    updateThread(queryClient, targetId, saved.threadRootId, (page) => addToThread(page, item), {
       create: true,
     });
     // Число ответов у корня — сразу; точное догонит сигнал канала.
-    updateRoots(queryClient, messageId, (page) => ({
+    updateRoots(queryClient, targetId, (page) => ({
       ...page,
       pinned: page.pinned.map((root) => bumpReplies(root, saved.threadRootId!)),
       items: page.items.map((root) => bumpReplies(root, saved.threadRootId!)),
     }));
   } else {
-    updateRoots(queryClient, messageId, (page) => pinRoot(page, item));
+    updateRoots(queryClient, targetId, (page) => pinRoot(page, item));
   }
 
-  notifyManager.schedule(() => removeOutboxComment(messageId, localId));
+  notifyManager.schedule(() => removeOutboxComment(targetId, localId));
 }
 
 function bumpReplies(root: CommentItem, rootId: string): CommentItem {
   return root.id === rootId ? { ...root, repliesCount: root.repliesCount + 1 } : root;
 }
 
+/** Число комментариев цели — у попа на кнопке просмотра, у сообщения в кружке у облачка. */
+function bumpCount(queryClient: QueryClient, subject: CommentSubject, delta: number) {
+  if (subject.type === 'pop') bumpPopComments(queryClient, subject.id, delta);
+  else updateAllHistories(queryClient, (history) => bumpCommentsCount(history, subject.id, delta));
+}
+
 /** Отказ, который повтор не исправит, — сказать человеку по-человечески. */
-function explainRejection(cause: unknown) {
+function explainRejection(cause: unknown, subject: CommentSubject) {
   if (errorCode(cause) === 'P0002') {
-    showNotice('Не отправлено: сообщение удалено', 'error');
+    showNotice(
+      subject.type === 'pop' ? 'Не отправлено: поп удалён' : 'Не отправлено: сообщение удалено',
+      'error',
+    );
   }
 }
 
@@ -174,15 +192,16 @@ export async function deliverComment(
   outgoing: Outgoing,
   threadRootId: string | null,
 ): Promise<void> {
-  const { queryClient, messageId, currentUserId } = context;
+  const { queryClient, subject, currentUserId } = context;
+  const targetId = subject.id;
 
   if (delivering.has(localId)) return;
 
   delivering.add(localId);
-  setOutboxCommentStatus(messageId, localId, 'sending');
+  setOutboxCommentStatus(targetId, localId, 'sending');
   // Кружок у облачка — сразу, во всех местах, где сообщение показано: в его
   // чате и в островках других. Не дошло — число возвращается.
-  updateAllHistories(queryClient, (history) => bumpCommentsCount(history, messageId, 1));
+  bumpCount(queryClient, subject, 1);
 
   let uploaded: UploadedMedia[] = [];
   let saved: Comment | null = null;
@@ -198,30 +217,31 @@ export async function deliverComment(
 
     if (discarded.has(localId)) throw new Error('Отправка отменена');
 
-    saved = await insert(messageId, outgoing, uploaded, threadRootId);
+    saved = await insert(subject, outgoing, uploaded, threadRootId);
 
     // Уже в базе, но человек его удалил — удаляем и там, для всех.
     if (discarded.has(localId)) {
       void deleteComment(saved.id).catch(() => undefined);
+      bumpCount(queryClient, subject, -1);
       return;
     }
 
-    settle(queryClient, messageId, localId, saved);
+    settle(queryClient, targetId, localId, saved);
   } catch (cause) {
     // Комментарий в базу не попал — загруженные файлы ничьи.
     if (!saved && uploaded.length > 0) {
       void Promise.all(uploaded.map((item) => removeUploadedMedia(storedPaths(item))));
     }
 
-    if (!saved) updateAllHistories(queryClient, (history) => bumpCommentsCount(history, messageId, -1));
+    if (!saved) bumpCount(queryClient, subject, -1);
 
     if (discarded.has(localId)) return;
 
     if (isNetworkError(cause)) reportRequestFailed();
-    else explainRejection(cause);
+    else explainRejection(cause, subject);
 
     // Право писать решает база; отказ — это «Не отправлено», а не тихая пропажа.
-    setOutboxCommentStatus(messageId, localId, 'failed');
+    setOutboxCommentStatus(targetId, localId, 'failed');
   } finally {
     delivering.delete(localId);
     discarded.delete(localId);
@@ -259,7 +279,7 @@ export function sendCommentPost(
     });
   });
 
-  addOutboxComments(context.messageId, [...drafts].reverse());
+  addOutboxComments(context.subject.id, [...drafts].reverse());
 
   // По очереди: параллельная вставка перемешала бы их время на сервере.
   void (async () => {
@@ -290,7 +310,7 @@ export function sendCommentVoice(
   });
 
   draft.attachments = [toLocalVoiceAttachment(draft.localId!, voice)];
-  addOutboxComments(context.messageId, [draft]);
+  addOutboxComments(context.subject.id, [draft]);
   void deliverComment(
     context,
     draft.localId!,
@@ -301,15 +321,15 @@ export function sendCommentVoice(
 
 /** «Повторить» у упавшего. */
 export function retryComment(context: CommentSendContext, localId: string) {
-  const failed = outboxComments(context.messageId).find((item) => item.localId === localId);
+  const failed = outboxComments(context.subject.id).find((item) => item.localId === localId);
   const outgoing = failed ? outgoingOf(failed) : null;
 
   if (failed && outgoing) void deliverComment(context, localId, outgoing, failed.threadRootId);
 }
 
 /** Своё неотправленное — убрать. Если оно как раз едет, по прибытии его не покажут. */
-export function discardComment(messageId: string, localId: string) {
+export function discardComment(targetId: string, localId: string) {
   if (delivering.has(localId)) discarded.add(localId);
 
-  removeOutboxComment(messageId, localId);
+  removeOutboxComment(targetId, localId);
 }

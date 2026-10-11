@@ -35,16 +35,16 @@ export type ThreadPage = {
   tail: CommentItem[];
 };
 
-export function commentsKey(messageId: string) {
-  return ['comments', messageId] as const;
+export function commentsKey(targetId: string) {
+  return ['comments', targetId] as const;
 }
 
-export function rootsKey(messageId: string) {
-  return ['comments', messageId, 'roots'] as const;
+export function rootsKey(targetId: string) {
+  return ['comments', targetId, 'roots'] as const;
 }
 
-export function threadKey(messageId: string, rootId: string) {
-  return ['comments', messageId, 'thread', rootId] as const;
+export function threadKey(targetId: string, rootId: string) {
+  return ['comments', targetId, 'thread', rootId] as const;
 }
 
 export const EMPTY_THREAD: ThreadPage = { headLoaded: false, head: [], nextCursor: null, tail: [] };
@@ -172,8 +172,8 @@ function mapPage<T extends RootsPage | ThreadPage>(page: T, update: Update): T {
  * Каждый загруженный комментарий сообщения — в верхе и во всех тредах.
  * `update` отдаёт тот же объект (не трогать), новый или `null` (убрать).
  */
-export function updateAllComments(queryClient: QueryClient, messageId: string, update: Update) {
-  queryClient.setQueriesData<RootsPage | ThreadPage>({ queryKey: commentsKey(messageId) }, (page) =>
+export function updateAllComments(queryClient: QueryClient, targetId: string, update: Update) {
+  queryClient.setQueriesData<RootsPage | ThreadPage>({ queryKey: commentsKey(targetId) }, (page) =>
     isRootsPage(page) || isThreadPage(page) ? mapPage(page, update) : page,
   );
 }
@@ -186,10 +186,10 @@ export function updateCommentEverywhere(queryClient: QueryClient, update: Update
 }
 
 /** Все загруженные комментарии сообщения по id — и верх, и треды. */
-export function loadedComments(queryClient: QueryClient, messageId: string): Map<string, CommentItem> {
+export function loadedComments(queryClient: QueryClient, targetId: string): Map<string, CommentItem> {
   const found = new Map<string, CommentItem>();
 
-  for (const [, page] of queryClient.getQueriesData({ queryKey: commentsKey(messageId) })) {
+  for (const [, page] of queryClient.getQueriesData({ queryKey: commentsKey(targetId) })) {
     if (isRootsPage(page)) {
       for (const item of [...page.pinned, ...page.items]) found.set(item.id, item);
     } else if (isThreadPage(page)) {
@@ -201,10 +201,10 @@ export function loadedComments(queryClient: QueryClient, messageId: string): Map
 }
 
 /** Загруженные треды сообщения: id корня → страница. */
-export function loadedThreads(queryClient: QueryClient, messageId: string): Map<string, ThreadPage> {
+export function loadedThreads(queryClient: QueryClient, targetId: string): Map<string, ThreadPage> {
   const threads = new Map<string, ThreadPage>();
 
-  for (const [key, page] of queryClient.getQueriesData({ queryKey: [...commentsKey(messageId), 'thread'] })) {
+  for (const [key, page] of queryClient.getQueriesData({ queryKey: [...commentsKey(targetId), 'thread'] })) {
     const rootId = key[3];
 
     if (typeof rootId === 'string' && isThreadPage(page)) threads.set(rootId, page);
@@ -213,25 +213,25 @@ export function loadedThreads(queryClient: QueryClient, messageId: string): Map<
   return threads;
 }
 
-export function readRoots(queryClient: QueryClient, messageId: string): RootsPage | undefined {
-  return queryClient.getQueryData<RootsPage>(rootsKey(messageId));
+export function readRoots(queryClient: QueryClient, targetId: string): RootsPage | undefined {
+  return queryClient.getQueryData<RootsPage>(rootsKey(targetId));
 }
 
 /** Меняет загруженный верх; незагруженный не создаёт — пустой список соврал бы, что комментариев нет. */
 export function updateRoots(
   queryClient: QueryClient,
-  messageId: string,
+  targetId: string,
   update: (page: RootsPage) => RootsPage,
 ) {
-  queryClient.setQueryData<RootsPage>(rootsKey(messageId), (page) => (page ? update(page) : page));
+  queryClient.setQueryData<RootsPage>(rootsKey(targetId), (page) => (page ? update(page) : page));
 }
 
 export function readThread(
   queryClient: QueryClient,
-  messageId: string,
+  targetId: string,
   rootId: string,
 ): ThreadPage | undefined {
-  return queryClient.getQueryData<ThreadPage>(threadKey(messageId, rootId));
+  return queryClient.getQueryData<ThreadPage>(threadKey(targetId, rootId));
 }
 
 /**
@@ -240,12 +240,12 @@ export function readThread(
  */
 export function updateThread(
   queryClient: QueryClient,
-  messageId: string,
+  targetId: string,
   rootId: string,
   update: (page: ThreadPage) => ThreadPage,
   { create = false }: { create?: boolean } = {},
 ) {
-  queryClient.setQueryData<ThreadPage>(threadKey(messageId, rootId), (page) =>
+  queryClient.setQueryData<ThreadPage>(threadKey(targetId, rootId), (page) =>
     page ? update(page) : create ? update(EMPTY_THREAD) : page,
   );
 }
@@ -257,7 +257,7 @@ export function updateThread(
  */
 export function replaceComments(
   queryClient: QueryClient,
-  messageId: string,
+  targetId: string,
   fresh: Comment[],
   localPreviews: ReadonlyMap<string, string[]> = new Map(),
 ) {
@@ -265,7 +265,7 @@ export function replaceComments(
 
   const byId = new Map(fresh.map((comment) => [comment.id, comment]));
 
-  updateAllComments(queryClient, messageId, (item) => {
+  updateAllComments(queryClient, targetId, (item) => {
     const next = byId.get(item.id);
 
     if (!next) return item;

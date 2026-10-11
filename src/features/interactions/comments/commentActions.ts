@@ -20,6 +20,8 @@ export type CommentActionContext = {
   isOwn: boolean;
   /** Сообщение, к которому комментарий, живо: у удалённого новых комментариев не принимают. */
   targetLive: boolean;
+  /** Комментарии к попу пока не пересылаются. */
+  canForward?: boolean;
 };
 
 type CommentAction = ContextMenuAction<CommentActionId> & {
@@ -53,7 +55,7 @@ export const COMMENT_ACTIONS: readonly CommentAction[] = [
     id: 'forward',
     label: 'Переслать',
     // Переслать в свой чат может любой — так разговор и расходится.
-    isVisible: ({ comment }) => !isLocalMessage(comment),
+    isVisible: ({ comment, canForward = true }) => canForward && !isLocalMessage(comment),
   },
   {
     id: 'select',

@@ -5,7 +5,7 @@
 
 import { notifyManager, type QueryClient } from '@tanstack/react-query';
 
-import { editComment } from '@/api/comments';
+import { editComment, type CommentSubject } from '@/api/comments';
 import { errorCode } from '@/features/chats/messages/delivery';
 import {
   optimisticEdit,
@@ -21,9 +21,13 @@ import { removeUploadedMedia, storedPaths, type UploadedMedia } from '@/features
 import { showNotice } from '@/features/notifications/alertsStore';
 import { isNetworkError } from '@/lib/network';
 
-type EditContext = { queryClient: QueryClient; messageId: string; currentUserId: string | null };
+type EditContext = {
+  queryClient: QueryClient;
+  subject: CommentSubject;
+  currentUserId: string | null;
+};
 
-function explainFailure(cause: unknown, retry: () => void) {
+function explainFailure(cause: unknown, subject: CommentSubject, retry: () => void) {
   if (isNetworkError(cause)) {
     reportRequestFailed();
     showNotice('Изменения не сохранены: нет связи', 'error', { label: 'Повторить', run: retry });
@@ -33,7 +37,12 @@ function explainFailure(cause: unknown, retry: () => void) {
   const code = errorCode(cause);
 
   if (code === 'P0002') {
-    showNotice('Не удалось изменить: комментарий или сообщение удалены', 'error');
+    showNotice(
+      subject.type === 'pop'
+        ? 'Не удалось изменить: комментарий или поп удалены'
+        : 'Не удалось изменить: комментарий или сообщение удалены',
+      'error',
+    );
     return;
   }
 
@@ -50,8 +59,9 @@ export async function saveCommentEdit(
   original: CommentItem,
   result: EditResult,
 ): Promise<void> {
-  const { queryClient, messageId, currentUserId } = context;
-  const key = commentThreadKey(messageId);
+  const { queryClient, subject, currentUserId } = context;
+  const targetId = subject.id;
+  const key = commentThreadKey(targetId);
   const optimistic = optimisticEdit(original, result);
   const retry = () => void saveCommentEdit(context, original, result);
 
@@ -71,7 +81,7 @@ export async function saveCommentEdit(
       ? new Map([[saved.id, optimistic.localPreviews]])
       : undefined;
 
-    replaceComments(queryClient, messageId, [saved], previews);
+    replaceComments(queryClient, targetId, [saved], previews);
     notifyManager.schedule(() => clearPendingEdit(key, optimistic));
   } catch (cause) {
     clearPendingEdit(key, optimistic);
@@ -81,6 +91,6 @@ export async function saveCommentEdit(
       void Promise.all(uploaded.map((item) => removeUploadedMedia(storedPaths(item))));
     }
 
-    explainFailure(cause, retry);
+    explainFailure(cause, subject, retry);
   }
 }

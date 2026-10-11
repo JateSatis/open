@@ -35,17 +35,44 @@ export function updatePopEverywhere(
   });
 }
 
+/** Поп из любого загруженного списка — сетки или ленты просмотра. */
+export function findCachedPop(queryClient: QueryClient, popId: string): Pop | undefined {
+  for (const [, data] of queryClient.getQueriesData<InfiniteData<Pop[], unknown>>({
+    queryKey: ALL_POPS,
+  })) {
+    const found = data?.pages?.flat().find((pop) => pop.id === popId);
+
+    if (found) return found;
+  }
+
+  return undefined;
+}
+
 /** Свежие счётчики из базы — во все загруженные попсы. */
 export function applyPopCounters(queryClient: QueryClient, counters: PopCounters[]) {
   for (const fresh of counters) {
     updatePopEverywhere(queryClient, fresh.id, (pop) =>
       pop.viewsCount === fresh.viewsCount &&
+      pop.commentsCount === fresh.commentsCount &&
       pop.reactions.mine === fresh.reactions.mine &&
       sameCounts(pop.reactions.counts, fresh.reactions.counts)
         ? pop
-        : { ...pop, reactions: fresh.reactions, viewsCount: fresh.viewsCount },
+        : {
+            ...pop,
+            reactions: fresh.reactions,
+            viewsCount: fresh.viewsCount,
+            commentsCount: fresh.commentsCount,
+          },
     );
   }
+}
+
+/** Свой комментарий к попу в пути — число на кнопке сразу; точное догонит сигнал канала. */
+export function bumpPopComments(queryClient: QueryClient, popId: string, delta: number) {
+  updatePopEverywhere(queryClient, popId, (pop) => ({
+    ...pop,
+    commentsCount: Math.max(0, pop.commentsCount + delta),
+  }));
 }
 
 function sameCounts(a: Readonly<Record<string, number>>, b: Readonly<Record<string, number>>) {

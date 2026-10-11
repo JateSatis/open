@@ -1,4 +1,4 @@
-// Комментарии к сообщениям. Оставить может кто угодно — и посетитель, и
+// Комментарии к сообщениям и к попсам. Оставить может кто угодно — и посетитель, и
 // участник, — в любом чате: участие не проверяется нигде, это правило
 // продукта. Что проверяет база (миграция `20260930180000_comments.sql`):
 // автора и время не подделать, чат комментария совпадает с чатом сообщения,
@@ -7,7 +7,11 @@
 // функциями.
 //
 // С сообщениями комментарии не смешиваются: своя таблица, свои вложения, свой
-// топик Realtime (`comments:<message_id>`).
+// топик Realtime (`comments:<target_id>`).
+//
+// Цель комментария — сообщение или поп (миграция `20261011100000_pop_comments.sql`).
+// Id цели у них из одного пространства uuid, поэтому кеш, топик и выборки
+// ключуются голым id цели; тип нужен только отправке и шапке панели.
 //
 // Треды (миграция `20261004100000_comment_threads.sql`): верхнеуровневые
 // комментарии идут по рангу, ответ ложится в тред своего корня. Тред ответа
@@ -43,12 +47,17 @@ export const THREAD_PAGE_SIZE = 10;
 
 export type CommentKind = 'text' | 'media' | 'voice';
 
+/** К чему комментарии: сообщение или поп. */
+export type CommentSubject = { type: 'message' | 'pop'; id: string };
+
 /** Кто оставил комментарий: участник чата или посетитель. Решает база. */
 export type CommentAudience = 'member' | 'visitor';
 
 export type Comment = {
   id: string;
-  messageId: string;
+  /** Сообщение или поп, к которому комментарий. */
+  targetId: string;
+  /** Чат сообщения; у комментария к попу — чат постов канала. */
   chatId: string;
   authorId: string | null;
   /** `null` — аккаунт автора удалён. */
@@ -80,7 +89,18 @@ export type Comment = {
 /** Где кончилась страница верха: keyset по рангу. */
 export type RootCursor = { rank: number; id: string };
 
-/** Сообщение, к которому открыты комментарии, — каким оно сейчас. */
+/** Поп, к которому открыты комментарии, — то, что нужно панели. */
+export type CommentPop = {
+  id: string;
+  channelId: string;
+  /** Название канала — подпись в предпросмотре файлов. */
+  channelTitle: string;
+  /** Чат постов канала — чат комментариев попа. */
+  postsChatId: string;
+  commentsCount: number;
+};
+
+/** Сообщение или поп, к которому открыты комментарии, — каким оно сейчас. */
 export type CommentTarget =
   | {
       state: 'live';
@@ -89,11 +109,12 @@ export type CommentTarget =
       authorName: string | null;
       authorAvatarUrl: string | null;
     }
+  | { state: 'pop'; pop: CommentPop }
   | { state: 'deleted' }
   | { state: 'missing' };
 
 const COMMENT_COLUMNS =
-  `id, message_id, chat_id, author_id, kind, text, audience, created_at, edited_at, deleted_at, thread_root_id, replies_count, rank, author:profiles(display_name, avatar_url), comment_attachments(id, url, poster_url, mime_type, width, height, duration_ms, waveform), ${REACTION_COLUMNS}, replies:comment_replies!comment_replies_comment_fkey(position, quoted_id, quoted:comments!comment_replies_quoted_fkey(id, author_id, kind, text, created_at, edited_at, author:profiles(display_name), comment_attachments(url, poster_url, mime_type, duration_ms, position)))` as const;
+  `id, target_id, chat_id, author_id, kind, text, audience, created_at, edited_at, deleted_at, thread_root_id, replies_count, rank, author:profiles(display_name, avatar_url), comment_attachments(id, url, poster_url, mime_type, width, height, duration_ms, waveform), ${REACTION_COLUMNS}, replies:comment_replies!comment_replies_comment_fkey(position, quoted_id, quoted:comments!comment_replies_quoted_fkey(id, author_id, kind, text, created_at, edited_at, author:profiles(display_name), comment_attachments(url, poster_url, mime_type, duration_ms, position)))` as const;
 
 // Мозаика собирается в порядке выбора файлов, а PostgREST не гарантирует
 // порядок вложенной выборки без явного order.
@@ -110,14 +131,14 @@ const targetSelect = () =>
     .order('position', { referencedTable: 'attachments' });
 
 /**
- * Верх по рангу — функцией `list_thread_roots`: она же отдаёт заглушки
+ * Верх по рангу — функцией `list_comment_thread_roots`: она же отдаёт заглушки
  * удалённых корней с живыми ответами. Строки — те же, что у выборки из
  * таблицы, поэтому и разбор один.
  */
-const rootsSelect = (messageId: string, cursor: RootCursor | undefined, limit: number) =>
+const rootsSelect = (targetId: string, cursor: RootCursor | undefined, limit: number) =>
   supabase
-    .rpc('list_thread_roots', {
-      target_message: messageId,
+    .rpc('list_comment_thread_roots', {
+      target: targetId,
       after_rank: cursor?.rank,
       after_id: cursor?.id,
       page_size: limit,
@@ -158,7 +179,9 @@ function toKind(kind: string): CommentKind {
 export function toComment(row: CommentRow): Comment {
   return {
     id: row.id,
-    messageId: row.message_id,
+    // Вычисляемая колонка: генератор типов пишет её nullable, а база держит
+    // ровно одну цель у каждого комментария.
+    targetId: row.target_id ?? '',
     chatId: row.chat_id,
     authorId: row.author_id,
     // Аккаунт удалён — ссылка обнулилась; скрытый профиль база тоже не отдаёт.
@@ -194,12 +217,12 @@ export function toComment(row: CommentRow): Comment {
  * Ранг между страницами может вырасти — повторы отсекает клиент.
  */
 export async function listThreadRoots(
-  messageId: string,
+  targetId: string,
   params: { cursor?: RootCursor; limit?: number } = {},
 ): Promise<{ items: Comment[]; nextCursor: RootCursor | null }> {
   const limit = params.limit ?? COMMENT_PAGE_SIZE;
   // Лишняя строка — признак, что дальше ещё есть (как у ответов треда).
-  const { data, error } = await rootsSelect(messageId, params.cursor, limit + 1);
+  const { data, error } = await rootsSelect(targetId, params.cursor, limit + 1);
 
   if (error) throw error;
 
@@ -249,9 +272,9 @@ export async function listThreadReplies(
 }
 
 /** Пришедшие после `since`, от старых к новым, — дочитывание по сигналу. */
-export async function listCommentsSince(messageId: string, since: string): Promise<Comment[]> {
+export async function listCommentsSince(targetId: string, since: string): Promise<Comment[]> {
   const { data, error } = await commentsSelect()
-    .eq('message_id', messageId)
+    .eq('target_id', targetId)
     .is('deleted_at', null)
     .gt('created_at', since)
     .order('created_at', { ascending: true })
@@ -328,6 +351,45 @@ export async function sendComment(
 
   if (error) throw error;
   if (typeof id !== 'string') throw new Error('Не удалось отправить комментарий');
+
+  return fetchComment(id);
+}
+
+/** Текст или альбом с подписью к попу — функцией `send_pop_comment`. */
+export async function sendPopComment(
+  popId: string,
+  input: Parameters<typeof sendComment>[1],
+): Promise<Comment> {
+  const { data: id, error } = await supabase.rpc('send_pop_comment', {
+    target_pop: popId,
+    comment_text: input.text?.trim() ?? '',
+    media: (input.media ?? []).map(toMediaJson),
+    reply_to: input.replyTo?.length ? input.replyTo : undefined,
+    thread_root: input.threadRootId ?? undefined,
+  });
+
+  if (error) throw error;
+  if (typeof id !== 'string') throw new Error('Не удалось отправить комментарий');
+
+  return fetchComment(id);
+}
+
+/** Голосовое к попу — функцией `send_voice_pop_comment`. */
+export async function sendVoicePopComment(
+  popId: string,
+  voice: SendVoiceInput,
+  replyTo: string[] = [],
+  threadRootId: string | null = null,
+): Promise<Comment> {
+  const { data: id, error } = await supabase.rpc('send_voice_pop_comment', {
+    target_pop: popId,
+    voice: toVoiceJson(voice),
+    reply_to: replyTo.length ? replyTo : undefined,
+    thread_root: threadRootId ?? undefined,
+  });
+
+  if (error) throw error;
+  if (typeof id !== 'string') throw new Error('Не удалось отправить голосовое');
 
   return fetchComment(id);
 }
@@ -448,6 +510,33 @@ export async function getCommentTarget(messageId: string): Promise<CommentTarget
   return deleted.includes(messageId) ? { state: 'deleted' } : { state: 'missing' };
 }
 
+/**
+ * Поп, к которому открыты комментарии. Удалённый SELECT-политика не отдаёт —
+ * для панели это одно и то же: «Поп удалён», новых комментариев нет.
+ */
+export async function getPopCommentTarget(popId: string): Promise<CommentTarget> {
+  const { data, error } = await supabase
+    .from('pops')
+    .select('id, channel_id, comments_count, channel:channels(title, posts_chat_id)')
+    .eq('id', popId)
+    .maybeSingle();
+
+  if (error) throw error;
+
+  if (!data?.channel) return { state: 'deleted' };
+
+  return {
+    state: 'pop',
+    pop: {
+      id: data.id,
+      channelId: data.channel_id,
+      channelTitle: data.channel.title,
+      postsChatId: data.channel.posts_chat_id,
+      commentsCount: data.comments_count,
+    },
+  };
+}
+
 // =============================================================================
 // Realtime
 // =============================================================================
@@ -455,11 +544,11 @@ export async function getCommentTarget(messageId: string): Promise<CommentTarget
 export type { CommentTopicListener as CommentChannelHandlers } from '@/api/commentTopics';
 
 /**
- * Топик комментариев одного сообщения. Открыт всем аутентифицированным —
+ * Топик комментариев одного сообщения или попа. Открыт всем аутентифицированным —
  * комментарии публичны, — события в него кладёт только база. Канал общий
  * (`commentTopics`): его слушают и панель, и чаты с пересланными из этой
  * ветки комментариями. Отдаёт отписку: её обязательно звать в cleanup.
  */
-export function subscribeToComments(messageId: string, handlers: CommentTopicListener): () => void {
-  return acquireCommentTopic(messageId, handlers);
+export function subscribeToComments(targetId: string, handlers: CommentTopicListener): () => void {
+  return acquireCommentTopic(targetId, handlers);
 }

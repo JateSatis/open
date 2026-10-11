@@ -11,7 +11,7 @@ import type { ChatMessage } from '@/features/chats/messages/types';
 
 export type CommentItem = ChatMessage & {
   /** Сообщение, к которому комментарий. */
-  messageId: string;
+  targetId: string;
   audience: CommentAudience;
   /** `null` — аккаунт автора удалён. */
   authorName: string | null;
@@ -29,15 +29,15 @@ export type CommentItem = ChatMessage & {
  * черновиках поля ввода и правках в полёте. У чатов там ключ — id чата; с
  * префиксом они не пересекаются.
  */
-export function commentThreadKey(messageId: string): string {
-  return `comments:${messageId}`;
+export function commentThreadKey(targetId: string): string {
+  return `comments:${targetId}`;
 }
 
 export function toCommentItem(comment: Comment): CommentItem {
   return {
     id: comment.id,
     chatId: comment.chatId,
-    messageId: comment.messageId,
+    targetId: comment.targetId,
     authorId: comment.authorId,
     authorName: comment.authorName,
     authorAvatarUrl: comment.authorAvatarUrl,

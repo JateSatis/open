@@ -1,7 +1,12 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { deleteComment, listThreadRoots, subscribeToComments } from '@/api/comments';
+import {
+  deleteComment,
+  listThreadRoots,
+  subscribeToComments,
+  type CommentSubject,
+} from '@/api/comments';
 import { outgoingOf } from '@/features/chats/messages/delivery';
 import { usePendingEditsOf } from '@/features/chats/messages/pendingEdits';
 import type { EditResult, LiveQuote } from '@/features/chats/messages/types';
@@ -94,8 +99,8 @@ export type CommentsState = {
 };
 
 /** Правки и мои реакции в полёте поверх подтверждённых сервером. */
-function useOverlay(messageId: string) {
-  const pendingEdits = usePendingEditsOf(commentThreadKey(messageId));
+function useOverlay(targetId: string) {
+  const pendingEdits = usePendingEditsOf(commentThreadKey(targetId));
   const pendingReactions = usePendingReactionMap();
 
   return useCallback(
@@ -128,7 +133,7 @@ function useOverlay(messageId: string) {
 }
 
 /**
- * Комментарии к одному сообщению — всё, что нужно панели: подтверждённые
+ * Комментарии к одному сообщению или попу — всё, что нужно панели: подтверждённые
  * сервером — в кеше TanStack Query (верх и треды), свои неотправленные — в
  * Zustand (`commentOutbox`), правки в полёте — наложением поверх, свежесть —
  * топиком Realtime этого сообщения, открытым всем.
@@ -137,7 +142,7 @@ function useOverlay(messageId: string) {
  * открытие читает свежий ранг. На глазах порядок не меняется.
  */
 export function useComments(
-  messageId: string,
+  subject: CommentSubject,
   chatId: string,
   currentUserId: string | null,
   amMember = false,
@@ -145,8 +150,9 @@ export function useComments(
   const queryClient = useQueryClient();
   const connection = useConnectionStatus();
   const { data: me } = useMyProfile();
-  const outbox = useOutboxComments(messageId);
-  const overlay = useOverlay(messageId);
+  const targetId = subject.id;
+  const outbox = useOutboxComments(targetId);
+  const overlay = useOverlay(targetId);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const loadingMoreRef = useRef(false);
   const wasOfflineRef = useRef(false);
@@ -157,8 +163,8 @@ export function useComments(
   }, [currentUserId]);
 
   const { data, isPending, error } = useQuery({
-    queryKey: rootsKey(messageId),
-    queryFn: () => loadRoots(messageId),
+    queryKey: rootsKey(targetId),
+    queryFn: () => loadRoots(targetId),
     // Порядок верха меняется только новым открытием: сами по себе страницы не перечитываются.
     staleTime: Infinity,
     refetchOnReconnect: false,
@@ -167,19 +173,19 @@ export function useComments(
 
   // Панель закрыта — кеш забывается: следующее открытие — со свежим рангом.
   useEffect(
-    () => () => queryClient.removeQueries({ queryKey: commentsKey(messageId) }),
-    [messageId, queryClient],
+    () => () => queryClient.removeQueries({ queryKey: commentsKey(targetId) }),
+    [targetId, queryClient],
   );
 
   const context = useMemo<CommentSendContext>(
     () => ({
       queryClient,
-      messageId,
+      subject,
       chatId,
       currentUserId,
       me: { name: me?.displayName ?? null, avatarUrl: me?.avatarUrl ?? null },
     }),
-    [chatId, currentUserId, me, messageId, queryClient],
+    [chatId, currentUserId, me, subject, queryClient],
   );
 
   // ----------------------------------------------------------------- Realtime
@@ -199,22 +205,22 @@ export function useComments(
       timer = null;
 
       if (reactedIds.length > 0) {
-        syncCommentReactions(queryClient, messageId, reactedIds).catch(() => undefined);
+        syncCommentReactions(queryClient, targetId, reactedIds).catch(() => undefined);
       }
 
       if (batch.added.length === 0 && batch.changed.length === 0) return;
 
-      // Число в шапке панели живёт на сообщении — перечитываем его той же пачкой.
-      void queryClient.invalidateQueries({ queryKey: commentTargetQueryKey(messageId) });
+      // Число в шапке панели живёт на сообщении или попе — перечитываем его той же пачкой.
+      void queryClient.invalidateQueries({ queryKey: commentTargetQueryKey(targetId) });
       // Не вышло — дочитаем при следующем событии или переподключении.
-      syncComments(queryClient, messageId, meRef.current, batch).catch(() => undefined);
+      syncComments(queryClient, targetId, meRef.current, batch).catch(() => undefined);
     };
 
     const schedule = () => {
       if (!timer) timer = setTimeout(flush, BATCH_MS);
     };
 
-    const unsubscribe = subscribeToComments(messageId, {
+    const unsubscribe = subscribeToComments(targetId, {
       onAdded: (id) => {
         added.add(id);
         schedule();
@@ -232,11 +238,11 @@ export function useComments(
         schedule();
       },
       onTargetChanged: () => {
-        void queryClient.invalidateQueries({ queryKey: commentTargetQueryKey(messageId) });
+        void queryClient.invalidateQueries({ queryKey: commentTargetQueryKey(targetId) });
       },
       onReconnected: () => {
-        resyncComments(queryClient, messageId, meRef.current).catch(() => undefined);
-        void queryClient.invalidateQueries({ queryKey: commentTargetQueryKey(messageId) });
+        resyncComments(queryClient, targetId, meRef.current).catch(() => undefined);
+        void queryClient.invalidateQueries({ queryKey: commentTargetQueryKey(targetId) });
       },
     });
 
@@ -245,7 +251,7 @@ export function useComments(
 
       if (timer) clearTimeout(timer);
     };
-  }, [messageId, queryClient]);
+  }, [targetId, queryClient]);
 
   // Связь вернулась — дописываем то, что не ушло: человек уже нажал «отправить».
   useEffect(() => {
@@ -258,14 +264,14 @@ export function useComments(
 
     wasOfflineRef.current = false;
 
-    for (const item of outboxComments(messageId)) {
+    for (const item of outboxComments(targetId)) {
       const outgoing = item.status === 'failed' ? outgoingOf(item) : null;
 
       if (outgoing && item.localId) {
         void deliverComment(context, item.localId, outgoing, item.threadRootId);
       }
     }
-  }, [connection, context, messageId]);
+  }, [connection, context, targetId]);
 
   // ------------------------------------------------------------------ список
   const confirmed = useMemo(() => overlay(data ? rootsInOrder(data) : NONE), [data, overlay]);
@@ -299,16 +305,16 @@ export function useComments(
   }, [confirmed, pendingRoots]);
 
   const loadMore = useCallback(() => {
-    const cursor = readRoots(queryClient, messageId)?.nextCursor;
+    const cursor = readRoots(queryClient, targetId)?.nextCursor;
 
     if (!cursor || loadingMoreRef.current) return Promise.resolve();
 
     loadingMoreRef.current = true;
     setIsLoadingMore(true);
 
-    return listThreadRoots(messageId, { cursor })
+    return listThreadRoots(targetId, { cursor })
       .then((page) =>
-        updateRoots(queryClient, messageId, (current: RootsPage) =>
+        updateRoots(queryClient, targetId, (current: RootsPage) =>
           appendRoots(current, page.items, page.nextCursor),
         ),
       )
@@ -318,14 +324,14 @@ export function useComments(
         loadingMoreRef.current = false;
         setIsLoadingMore(false);
       });
-  }, [messageId, queryClient]);
+  }, [targetId, queryClient]);
 
   const remove = useCallback(
     async (comment: CommentItem) => {
       // Откат — к тому, что было в кеше до удаления: и верх, и треды.
-      const snapshot = queryClient.getQueriesData({ queryKey: commentsKey(messageId) });
+      const snapshot = queryClient.getQueriesData({ queryKey: commentsKey(targetId) });
 
-      updateAllComments(queryClient, messageId, (item) => {
+      updateAllComments(queryClient, targetId, (item) => {
         if (item.id === comment.id) {
           return !item.threadRootId && item.repliesCount > 0 ? asDeletedRoot(item) : null;
         }
@@ -345,9 +351,9 @@ export function useComments(
         throw cause;
       }
 
-      void queryClient.invalidateQueries({ queryKey: commentTargetQueryKey(messageId) });
+      void queryClient.invalidateQueries({ queryKey: commentTargetQueryKey(targetId) });
     },
-    [messageId, queryClient],
+    [targetId, queryClient],
   );
 
   return {
@@ -393,11 +399,11 @@ export function useComments(
       [amMember, currentUserId, me, queryClient],
     ),
     retry: useCallback((localId: string) => retryComment(context, localId), [context]),
-    discard: useCallback((localId: string) => discardComment(messageId, localId), [messageId]),
+    discard: useCallback((localId: string) => discardComment(targetId, localId), [targetId]),
     saveEdit: useCallback(
       (original: CommentItem, result: EditResult) =>
-        void saveCommentEdit({ queryClient, messageId, currentUserId }, original, result),
-      [currentUserId, messageId, queryClient],
+        void saveCommentEdit({ queryClient, subject, currentUserId }, original, result),
+      [currentUserId, subject, queryClient],
     ),
     remove,
     overlay,

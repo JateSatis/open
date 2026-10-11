@@ -34,6 +34,8 @@ export type PopPagerProps<T> = {
   height: number;
   onActiveIndex: (index: number) => void;
   keyOf: (item: T) => string;
+  /** Листание выключено — пока открыты комментарии к попу. */
+  locked?: boolean;
   /** Страница — для активной, соседних и прогрева; остальных в дереве нет. */
   renderPage: (item: T, index: number) => ReactNode;
 };
@@ -52,6 +54,7 @@ export function PopPager<T>({
   onActiveIndex,
   keyOf,
   renderPage,
+  locked = false,
 }: PopPagerProps<T>) {
   const index = useSharedValue(activeIndex);
   const offset = useSharedValue(-activeIndex * height);
@@ -109,6 +112,7 @@ export function PopPager<T>({
   const pan = useMemo(
     () =>
       Gesture.Pan()
+        .enabled(!locked)
         .activeOffsetY([-ACTIVATE, ACTIVATE])
         .failOffsetX([-FAIL_X, FAIL_X])
         .onUpdate((event) => {
@@ -141,7 +145,7 @@ export function PopPager<T>({
           // Страница становится активной сразу, пока доезжает: видео стартует без паузы.
           if (next !== at) runOnJS(reportIndex)(next);
         }),
-    [count, height, index, offset, rendered, reportIndex],
+    [count, height, index, locked, offset, rendered, reportIndex],
   );
   /* eslint-enable react-hooks/refs */
 
