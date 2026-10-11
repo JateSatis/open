@@ -7,7 +7,7 @@ function comment(id: string, extra: Partial<CommentItem> = {}): CommentItem {
   return {
     id,
     chatId: 'chat',
-    messageId: 'm',
+    targetId: 'm',
     authorId: 'u',
     authorName: 'U',
     authorAvatarUrl: null,

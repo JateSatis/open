@@ -8,7 +8,10 @@ import { styles } from './styles';
 import type { PanelActions } from './usePanelActions';
 
 import { SelectionActionBar } from '@/features/chats/SelectionActionBar';
-import { COMMENT_SELECTION_ACTIONS } from '@/features/interactions/comments/useCommentReplySelection';
+import {
+  COMMENT_SELECTION_ACTIONS,
+  POP_COMMENT_SELECTION_ACTIONS,
+} from '@/features/interactions/comments/useCommentReplySelection';
 import { useTheme } from '@/hooks/use-theme';
 
 export type PanelFooterProps = {
@@ -16,17 +19,26 @@ export type PanelFooterProps = {
   style: ComponentProps<typeof Animated.View>['style'];
   onHeight: (height: number) => void;
   actions: PanelActions;
-  /** Сообщение удалено — новые комментарии не принимаются. */
-  closed: boolean;
+  /** Сообщение или поп удалены — новые комментарии не принимаются; текст плашки. */
+  closedNotice: string | null;
   /** Подпись пустого поля: в окне треда — куда уйдёт сообщение. */
   placeholder: string;
+  /** Шапка предпросмотра файлов — чат сообщения или канал попа. */
+  title: string;
 };
 
 /**
  * Низ панели — у края экрана, над клавиатурой своего поля: поле ввода или,
  * в режиме выбора, панель действий над выбранным.
  */
-export function PanelFooter({ style, onHeight, actions, closed, placeholder }: PanelFooterProps) {
+export function PanelFooter({
+  style,
+  onHeight,
+  actions,
+  closedNotice,
+  placeholder,
+  title,
+}: PanelFooterProps) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { selection } = actions;
@@ -40,7 +52,7 @@ export function PanelFooter({ style, onHeight, actions, closed, placeholder }: P
       {selection.isActive ? (
         <SelectionActionBar
           context={actions.selectionContext}
-          actions={COMMENT_SELECTION_ACTIONS}
+          actions={actions.canForward ? COMMENT_SELECTION_ACTIONS : POP_COMMENT_SELECTION_ACTIONS}
           onAction={actions.runSelectionAction}
         />
       ) : null}
@@ -50,8 +62,9 @@ export function PanelFooter({ style, onHeight, actions, closed, placeholder }: P
           draft={actions.draft}
           edit={actions.edit}
           inputRef={actions.inputRef}
-          closed={closed}
+          closedNotice={closedNotice}
           placeholder={placeholder}
+          title={title}
           onSend={actions.submit}
           onSendVoice={actions.sendVoice}
         />

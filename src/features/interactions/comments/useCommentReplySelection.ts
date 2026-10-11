@@ -43,6 +43,10 @@ export const COMMENT_SELECTION_ACTIONS: readonly SelectionAction[] = SELECTION_A
       : action,
 );
 
+/** У комментариев к попу — без «Переслать»: их пересылка — отдельный этап. */
+export const POP_COMMENT_SELECTION_ACTIONS: readonly SelectionAction[] =
+  COMMENT_SELECTION_ACTIONS.filter((action) => action.id !== 'forward');
+
 type Options = {
   /** Комментарии на экране — в порядке строк сверху вниз. */
   comments: CommentItem[];

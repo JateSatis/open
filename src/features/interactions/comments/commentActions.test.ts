@@ -7,7 +7,7 @@ function comment(overrides: Partial<CommentItem> = {}): CommentItem {
   return {
     id: 'c1',
     chatId: 'chat-1',
-    messageId: 'm1',
+    targetId: 'm1',
     authorId: 'user-1',
     authorName: 'Я',
     authorAvatarUrl: null,

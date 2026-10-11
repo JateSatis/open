@@ -70,7 +70,7 @@ function forwardedOf(
 ): ForwardedComment {
   return {
     id: comment.id,
-    messageId: comment.messageId,
+    messageId: comment.targetId,
     chatId: comment.chatId,
     threadRootId: comment.threadRootId,
     authorId: comment.authorId,
@@ -120,11 +120,14 @@ export function usePanelActions({
 }: Options) {
   const queryClient = useQueryClient();
   const router = useRouter();
-  const { messageId } = target;
+  const { subject } = target;
+  const targetId = subject.id;
+  const canForward = subject.type === 'message';
   const { comments, rows, threadRows, amMember } = data;
-  const chatId = live?.message.chatId ?? target.chatId ?? '';
+  // Название чата нужно только пересылке — у попа её нет, и чат постов не читается.
+  const chatId = canForward ? (live?.message.chatId ?? target.chatId ?? '') : '';
   const { chat } = useChat(chatId);
-  const draft = useComposerDraft(commentThreadKey(messageId));
+  const draft = useComposerDraft(commentThreadKey(targetId));
   const menu = useMessageMenu<CommentItem>(measureViewport);
   const { close } = sheet;
   // Выбор — среди комментариев того окна, что на экране.
@@ -141,7 +144,7 @@ export function usePanelActions({
     [saveCommentEdit],
   );
   const edit = useMessageEdit({
-    chatId: commentThreadKey(messageId),
+    chatId: commentThreadKey(targetId),
     draft,
     composerRef: inputRef,
     saveEdit,
@@ -259,11 +262,11 @@ export function usePanelActions({
 
       if (!first) return null;
 
-      const quoted = loadedComments(queryClient, messageId).get(first.messageId);
+      const quoted = loadedComments(queryClient, targetId).get(first.messageId);
 
       return quoted ? threadOf(quoted) : first.messageId;
     },
-    [messageId, queryClient],
+    [targetId, queryClient],
   );
 
   /**
@@ -340,6 +343,7 @@ export function usePanelActions({
         comment: menuComment,
         isOwn: menuComment.authorId === currentUserId,
         targetLive: !closed,
+        canForward,
       })
     : [];
   const { react } = comments;
@@ -394,6 +398,7 @@ export function usePanelActions({
     menuReactions,
     runMenuAction,
     extraData,
+    canForward,
   };
 }
 

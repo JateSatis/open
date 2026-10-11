@@ -8,7 +8,7 @@ import { create } from 'zustand';
 import type { CommentItem } from '@/features/interactions/comments/commentItem';
 
 type CommentOutboxState = {
-  /** messageId → свои неподтверждённые, самые новые первыми. */
+  /** targetId → свои неподтверждённые, самые новые первыми. */
   byMessage: Record<string, CommentItem[]>;
 };
 
@@ -16,48 +16,48 @@ const EMPTY: CommentItem[] = [];
 
 const useCommentOutbox = create<CommentOutboxState>(() => ({ byMessage: {} }));
 
-function setThread(messageId: string, update: (items: CommentItem[]) => CommentItem[]) {
+function setThread(targetId: string, update: (items: CommentItem[]) => CommentItem[]) {
   useCommentOutbox.setState((state) => {
-    const current = state.byMessage[messageId] ?? EMPTY;
+    const current = state.byMessage[targetId] ?? EMPTY;
     const next = update(current);
 
     if (next === current) return state;
 
     const byMessage = { ...state.byMessage };
 
-    if (next.length === 0) delete byMessage[messageId];
-    else byMessage[messageId] = next;
+    if (next.length === 0) delete byMessage[targetId];
+    else byMessage[targetId] = next;
 
     return { byMessage };
   });
 }
 
-export function useOutboxComments(messageId: string): CommentItem[] {
-  return useCommentOutbox((state) => state.byMessage[messageId] ?? EMPTY);
+export function useOutboxComments(targetId: string): CommentItem[] {
+  return useCommentOutbox((state) => state.byMessage[targetId] ?? EMPTY);
 }
 
-export function outboxComments(messageId: string): CommentItem[] {
-  return useCommentOutbox.getState().byMessage[messageId] ?? EMPTY;
+export function outboxComments(targetId: string): CommentItem[] {
+  return useCommentOutbox.getState().byMessage[targetId] ?? EMPTY;
 }
 
-export function addOutboxComments(messageId: string, drafts: CommentItem[]) {
-  setThread(messageId, (current) => [...drafts, ...current]);
+export function addOutboxComments(targetId: string, drafts: CommentItem[]) {
+  setThread(targetId, (current) => [...drafts, ...current]);
 }
 
 export function setOutboxCommentStatus(
-  messageId: string,
+  targetId: string,
   localId: string,
   status: CommentItem['status'],
 ) {
-  setThread(messageId, (current) =>
+  setThread(targetId, (current) =>
     current.some((item) => item.localId === localId && item.status !== status)
       ? current.map((item) => (item.localId === localId ? { ...item, status } : item))
       : current,
   );
 }
 
-export function removeOutboxComment(messageId: string, localId: string) {
-  setThread(messageId, (current) =>
+export function removeOutboxComment(targetId: string, localId: string) {
+  setThread(targetId, (current) =>
     current.some((item) => item.localId === localId)
       ? current.filter((item) => item.localId !== localId)
       : current,

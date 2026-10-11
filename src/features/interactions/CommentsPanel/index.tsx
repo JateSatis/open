@@ -70,7 +70,7 @@ export function CommentsPanel({ onOpenPerson, hostChatId, lift }: CommentsPanelP
 
   return (
     <PanelWindow
-      key={`${target.messageId}:${target.rowKey ?? ''}`}
+      key={`${target.subject.id}:${target.rowKey ?? ''}`}
       target={target}
       onOpenPerson={onOpenPerson}
       hostChatId={hostChatId}

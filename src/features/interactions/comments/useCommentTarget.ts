@@ -1,14 +1,19 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import type { ChatSummary } from '@/api/chats';
-import { getCommentTarget, type CommentTarget } from '@/api/comments';
+import {
+  getCommentTarget,
+  getPopCommentTarget,
+  type CommentSubject,
+  type CommentTarget,
+} from '@/api/comments';
 import { originalAsMessage } from '@/features/chats/islands/rows';
 import { findOriginals } from '@/features/chats/islands/islandCache';
 import { readAllHistories, readHistory } from '@/features/chats/messages/historyCache';
 import { chatQueryKey } from '@/features/chats/useChat';
 
-export function commentTargetQueryKey(messageId: string) {
-  return ['comment-target', messageId] as const;
+export function commentTargetQueryKey(targetId: string) {
+  return ['comment-target', targetId] as const;
 }
 
 /**
@@ -17,12 +22,12 @@ export function commentTargetQueryKey(messageId: string) {
  */
 function fromChatCache(
   queryClient: ReturnType<typeof useQueryClient>,
-  messageId: string,
+  targetId: string,
   chatId: string | undefined,
 ): CommentTarget | undefined {
   // Оригинал, открытый из островка, лежит в кеше не своего чата, а в островке.
   const inIsland = readAllHistories(queryClient)
-    .flatMap((history) => findOriginals(history.items, new Set([messageId])))
+    .flatMap((history) => findOriginals(history.items, new Set([targetId])))
     .at(0);
 
   if (inIsland) {
@@ -36,7 +41,7 @@ function fromChatCache(
 
   if (!chatId) return undefined;
 
-  const message = readHistory(queryClient, chatId)?.items.find((item) => item.id === messageId);
+  const message = readHistory(queryClient, chatId)?.items.find((item) => item.id === targetId);
 
   if (!message) return undefined;
 
@@ -52,13 +57,15 @@ function fromChatCache(
   };
 }
 
-/** Сообщение, к которому открыты комментарии: живое, удалённое или не найденное. */
-export function useCommentTarget(messageId: string, chatId?: string) {
+/** Сообщение или поп, к которому открыты комментарии: живое, удалённое или не найденное. */
+export function useCommentTarget(subject: CommentSubject, chatId?: string) {
   const queryClient = useQueryClient();
+  const { type, id } = subject;
 
   return useQuery({
-    queryKey: commentTargetQueryKey(messageId),
-    queryFn: () => getCommentTarget(messageId),
-    placeholderData: () => fromChatCache(queryClient, messageId, chatId),
+    queryKey: commentTargetQueryKey(id),
+    queryFn: () => (type === 'pop' ? getPopCommentTarget(id) : getCommentTarget(id)),
+    placeholderData: () =>
+      type === 'message' ? fromChatCache(queryClient, id, chatId) : undefined,
   });
 }

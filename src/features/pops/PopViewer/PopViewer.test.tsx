@@ -78,6 +78,7 @@ function pop(id: string, extra: Partial<Pop> = {}): Pop {
     createdAt: '2026-10-10T10:00:00Z',
     reactions: { counts: {}, mine: null },
     viewsCount: 0,
+    commentsCount: 0,
     ...extra,
   };
 }

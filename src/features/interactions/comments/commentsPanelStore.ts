@@ -1,11 +1,12 @@
 import { create } from 'zustand';
 
+import type { CommentSubject } from '@/api/comments';
 import { canCommentOn } from '@/features/chats/messageActions';
 import type { ChatMessage } from '@/features/chats/messages/types';
 
-/** Какие комментарии открыты: к какому сообщению и, если известно, из какого чата. */
+/** Какие комментарии открыты: к какому сообщению или попу и, если известно, из какого чата. */
 export type CommentsPanelTarget = {
-  messageId: string;
+  subject: CommentSubject;
   /** Чат, из переписки которого открыли, — его кеш сразу даёт облачко сверху. */
   chatId?: string;
   /**
@@ -54,7 +55,18 @@ export function openComments(
   from?: CommentsLiftFrom,
 ) {
   usePanelStore.setState({
-    target: { messageId, chatId, amMember, focusCommentId, ...from },
+    target: { subject: { type: 'message', id: messageId }, chatId, amMember, focusCommentId, ...from },
+    openThread: null,
+  });
+}
+
+/**
+ * Открывает панель комментариев к попу — из просмотра попсов. `amMember` —
+ * я публикую в канале: догадка ряда для отклика моей реакции, решает база.
+ */
+export function openPopComments(popId: string, amMember = false) {
+  usePanelStore.setState({
+    target: { subject: { type: 'pop', id: popId }, amMember },
     openThread: null,
   });
 }

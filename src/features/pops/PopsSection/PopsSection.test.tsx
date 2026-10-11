@@ -62,6 +62,7 @@ const pop: Pop = {
   createdAt: '2026-10-08T10:00:00Z',
   reactions: { counts: {}, mine: null },
   viewsCount: 0,
+  commentsCount: 0,
 };
 
 const probe: { client: QueryClient | null } = { client: null };

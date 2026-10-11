@@ -36,7 +36,7 @@ export type CommentThreadState = {
  * что лежит за разрывом. `rootId: null` — тред закрыт, ничего не грузится.
  */
 export function useCommentThread(
-  messageId: string,
+  targetId: string,
   rootId: string | null,
   overlay: (items: CommentItem[]) => CommentItem[],
 ): CommentThreadState {
@@ -45,8 +45,8 @@ export function useCommentThread(
   const loadingMoreRef = useRef(false);
 
   const { data, refetch, isError, isFetching } = useQuery({
-    queryKey: threadKey(messageId, rootId ?? ''),
-    queryFn: () => loadThread(queryClient, messageId, rootId!),
+    queryKey: threadKey(targetId, rootId ?? ''),
+    queryFn: () => loadThread(queryClient, targetId, rootId!),
     enabled: rootId !== null,
     // Сами по себе страницы треда не перечитываются: свежесть — сигналами канала.
     staleTime: Infinity,
@@ -64,7 +64,7 @@ export function useCommentThread(
   const loadMore = useCallback(() => {
     if (!rootId) return Promise.resolve();
 
-    const page = readThread(queryClient, messageId, rootId);
+    const page = readThread(queryClient, targetId, rootId);
 
     if (!page?.headLoaded || page.nextCursor === null || loadingMoreRef.current) {
       return Promise.resolve();
@@ -75,7 +75,7 @@ export function useCommentThread(
 
     return listThreadReplies(rootId, { cursor: page.nextCursor })
       .then((next) =>
-        updateThread(queryClient, messageId, rootId, (current) =>
+        updateThread(queryClient, targetId, rootId, (current) =>
           appendThreadHead(current, next.items, next.nextCursor),
         ),
       )
@@ -84,7 +84,7 @@ export function useCommentThread(
         loadingMoreRef.current = false;
         setIsLoadingMore(false);
       });
-  }, [messageId, queryClient, rootId]);
+  }, [targetId, queryClient, rootId]);
 
   const head = useMemo(() => overlay(data?.head ?? NONE), [data, overlay]);
   const tail = useMemo(() => overlay(data?.tail ?? NONE), [data, overlay]);

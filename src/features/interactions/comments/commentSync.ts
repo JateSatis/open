@@ -43,8 +43,8 @@ import {
 const MAX_IDS = 500;
 
 /** Первая страница верха — свежий ранг. */
-export async function loadRoots(messageId: string): Promise<RootsPage> {
-  return rootsPageOf(await listThreadRoots(messageId));
+export async function loadRoots(targetId: string): Promise<RootsPage> {
+  return rootsPageOf(await listThreadRoots(targetId));
 }
 
 /**
@@ -53,24 +53,24 @@ export async function loadRoots(messageId: string): Promise<RootsPage> {
  */
 export async function loadThread(
   queryClient: QueryClient,
-  messageId: string,
+  targetId: string,
   rootId: string,
 ): Promise<ThreadPage> {
   const page = await listThreadReplies(rootId);
-  const tail = readThread(queryClient, messageId, rootId)?.tail ?? [];
+  const tail = readThread(queryClient, targetId, rootId)?.tail ?? [];
 
   return appendThreadHead({ ...EMPTY_THREAD, tail }, page.items, page.nextCursor);
 }
 
 /** Ответ — в конец своего треда, если тред дочитан; свой верхнеуровневый — наверх. */
-function placeAdded(queryClient: QueryClient, messageId: string, me: string | null, comment: Comment) {
+function placeAdded(queryClient: QueryClient, targetId: string, me: string | null, comment: Comment) {
   const item = toCommentItem(comment);
 
   if (comment.threadRootId) {
-    const thread = readThread(queryClient, messageId, comment.threadRootId);
+    const thread = readThread(queryClient, targetId, comment.threadRootId);
 
     if (isThreadComplete(thread)) {
-      updateThread(queryClient, messageId, comment.threadRootId, (page) => addToThread(page, item));
+      updateThread(queryClient, targetId, comment.threadRootId, (page) => addToThread(page, item));
     }
 
     return;
@@ -79,7 +79,7 @@ function placeAdded(queryClient: QueryClient, messageId: string, me: string | nu
   // Свой — отправленный с другого устройства. Чужой новый на глазах не
   // появляется: порядок не прыгает, он будет при следующем открытии.
   if (me && comment.authorId === me) {
-    updateRoots(queryClient, messageId, (page) =>
+    updateRoots(queryClient, targetId, (page) =>
       [...page.pinned, ...page.items].some((other) => other.id === item.id)
         ? page
         : pinRoot(page, item),
@@ -94,7 +94,7 @@ function placeAdded(queryClient: QueryClient, messageId: string, me: string | nu
  */
 function applyGone(
   queryClient: QueryClient,
-  messageId: string,
+  targetId: string,
   gone: CommentItem[],
   addedReplies: Map<string, number>,
 ) {
@@ -107,7 +107,7 @@ function applyGone(
     if (item.threadRootId) shift.set(item.threadRootId, (shift.get(item.threadRootId) ?? 0) - 1);
   }
 
-  updateAllComments(queryClient, messageId, (item) => {
+  updateAllComments(queryClient, targetId, (item) => {
     if (goneIds.has(item.id)) {
       return !item.threadRootId && item.repliesCount > 0 ? asDeletedRoot(item) : null;
     }
@@ -129,11 +129,11 @@ function applyGone(
  */
 export async function syncComments(
   queryClient: QueryClient,
-  messageId: string,
+  targetId: string,
   me: string | null,
   { added, changed }: { added: string[]; changed: string[] },
 ): Promise<void> {
-  const loaded = loadedComments(queryClient, messageId);
+  const loaded = loadedComments(queryClient, targetId);
   const known = changed.filter((id) => loaded.has(id));
   const ids = [...new Set([...added, ...known])].slice(0, MAX_IDS);
 
@@ -156,7 +156,7 @@ export async function syncComments(
 
   const rootIds = [...roots].filter((id) => loaded.has(id));
   const freshRoots = rootIds.length > 0 ? await listCommentsByIds(rootIds) : [];
-  const now = loadedComments(queryClient, messageId);
+  const now = loadedComments(queryClient, targetId);
   const gone = known.filter((id) => !alive.has(id)).flatMap((id) => now.get(id) ?? []);
   const addedReplies = new Map<string, number>();
 
@@ -167,27 +167,27 @@ export async function syncComments(
       addedReplies.set(comment.threadRootId, (addedReplies.get(comment.threadRootId) ?? 0) + 1);
     }
 
-    placeAdded(queryClient, messageId, me, comment);
+    placeAdded(queryClient, targetId, me, comment);
   }
 
   replaceComments(
     queryClient,
-    messageId,
+    targetId,
     [...fresh.filter((comment) => now.has(comment.id)), ...freshRoots],
   );
-  applyGone(queryClient, messageId, gone, addedReplies);
+  applyGone(queryClient, targetId, gone, addedReplies);
 }
 
 /** Свежие счётчики реакций этих комментариев — по сигналу канала, пачкой. */
 export async function syncCommentReactions(
   queryClient: QueryClient,
-  messageId: string,
+  targetId: string,
   ids: string[],
 ): Promise<void> {
   const fresh = await listCommentReactions(ids);
   const byId = new Map(fresh.map((row) => [row.id, row.reactions]));
 
-  updateAllComments(queryClient, messageId, (item) => {
+  updateAllComments(queryClient, targetId, (item) => {
     const reactions = byId.get(item.id);
 
     return reactions ? { ...item, reactions } : item;
@@ -200,21 +200,21 @@ export async function syncCommentReactions(
  */
 export async function resyncComments(
   queryClient: QueryClient,
-  messageId: string,
+  targetId: string,
   me: string | null,
 ): Promise<void> {
-  const loaded = [...loadedComments(queryClient, messageId).keys()];
-  const threads = [...loadedThreads(queryClient, messageId)].filter(([, page]) =>
+  const loaded = [...loadedComments(queryClient, targetId).keys()];
+  const threads = [...loadedThreads(queryClient, targetId)].filter(([, page]) =>
     isThreadComplete(page),
   );
 
   await Promise.all([
-    syncComments(queryClient, messageId, me, { added: [], changed: loaded }),
+    syncComments(queryClient, targetId, me, { added: [], changed: loaded }),
     ...threads.map(async ([rootId, page]) => {
       const last = page.head[page.head.length - 1];
       const newer = await listThreadReplies(rootId, { cursor: last?.createdAt });
 
-      for (const comment of newer.items) placeAdded(queryClient, messageId, me, comment);
+      for (const comment of newer.items) placeAdded(queryClient, targetId, me, comment);
     }),
   ]);
 }

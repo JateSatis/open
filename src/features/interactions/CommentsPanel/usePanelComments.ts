@@ -34,7 +34,7 @@ const NONE: CommentItem[] = [];
  * встают наверх, у ответа сразу, без въезда, открыто окно его треда. Отдаёт
  * id, к которому прыгнуть, когда он окажется в списке.
  */
-function useFocusComment(messageId: string, focusId: string | undefined) {
+function useFocusComment(targetId: string, focusId: string | undefined) {
   const queryClient = useQueryClient();
   const [ready, setReady] = useState<string | null>(null);
 
@@ -59,17 +59,17 @@ function useFocusComment(messageId: string, focusId: string | undefined) {
 
         // Верх мог ещё грузиться — закрепить корень можно, только когда он лёг.
         await queryClient.fetchQuery({
-          queryKey: rootsKey(messageId),
-          queryFn: () => loadRoots(messageId),
+          queryKey: rootsKey(targetId),
+          queryFn: () => loadRoots(targetId),
           staleTime: Infinity,
         });
 
         if (cancelled) return;
 
-        updateRoots(queryClient, messageId, (page) => pinRoot(page, root));
+        updateRoots(queryClient, targetId, (page) => pinRoot(page, root));
 
         if (comment.threadRootId) {
-          updateThread(queryClient, messageId, rootId, (page) => addToThread(page, comment), {
+          updateThread(queryClient, targetId, rootId, (page) => addToThread(page, comment), {
             create: true,
           });
           setOpenThread(rootId, true);
@@ -84,7 +84,7 @@ function useFocusComment(messageId: string, focusId: string | undefined) {
     return () => {
       cancelled = true;
     };
-  }, [focusId, messageId, queryClient]);
+  }, [focusId, targetId, queryClient]);
 
   return ready;
 }
@@ -101,19 +101,21 @@ export function usePanelComments(
   currentUserId: string | null,
   threadRootId: string | null,
 ) {
-  const { messageId } = target;
-  const { data: about } = useCommentTarget(messageId, target.chatId);
+  const { subject } = target;
+  const targetId = subject.id;
+  const { data: about } = useCommentTarget(subject, target.chatId);
   const live = about?.state === 'live' ? about : null;
+  const pop = about?.state === 'pop' ? about.pop : null;
   const amMember = target.amMember ?? false;
   const comments = useComments(
-    messageId,
-    live?.message.chatId ?? target.chatId ?? '',
+    subject,
+    live?.message.chatId ?? pop?.postsChatId ?? target.chatId ?? '',
     currentUserId,
     amMember,
   );
   const openThread = useOpenThread();
-  const thread = useCommentThread(messageId, threadRootId, comments.overlay);
-  const focusReady = useFocusComment(messageId, target.focusCommentId);
+  const thread = useCommentThread(targetId, threadRootId, comments.overlay);
+  const focusReady = useFocusComment(targetId, target.focusCommentId);
   const { roots, pendingReplies } = comments;
 
   const pendingCount = useCallback(
@@ -146,6 +148,7 @@ export function usePanelComments(
   return {
     about,
     live,
+    pop,
     amMember,
     comments,
     openThread,

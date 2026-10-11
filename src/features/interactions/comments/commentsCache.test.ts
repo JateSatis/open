@@ -23,7 +23,7 @@ import type { Comment } from '@/api/comments';
 function comment(id: string, minute: number, overrides: Partial<Comment> = {}): Comment {
   return {
     id,
-    messageId: 'm1',
+    targetId: 'm1',
     chatId: 'chat-1',
     authorId: 'user-1',
     authorName: 'Марина',

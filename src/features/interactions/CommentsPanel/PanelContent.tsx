@@ -25,6 +25,7 @@ import { canReactTo } from '@/features/chats/messageActions';
 import { MessageContextMenu } from '@/features/chats/MessageContextMenu';
 import { measureInWindow } from '@/features/chats/rowRegistry';
 import { DELETED_ACCOUNT } from '@/features/chats/messageQuote';
+import { useChatTitle } from '@/features/chats/useChatTitle';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
 import { visibleQuotes, type CommentItem } from '@/features/interactions/comments/commentItem';
 import { commentsCountLabel } from '@/features/interactions/comments/commentsCount';
@@ -40,7 +41,13 @@ import { showNotice } from '@/features/notifications/alertsStore';
 import { useTheme } from '@/hooks/use-theme';
 import { Spacing } from '@/theme';
 
-const MEMBER_BADGE = 'участник чата';
+/** Метка у имени автора-участника: у сообщения — участник чата, у попа — публикующий в канале. */
+const MEMBER_BADGE = { message: 'участник чата', pop: 'Автор' } as const;
+
+const CLOSED_NOTICE = {
+  message: 'Сообщение удалено — новые комментарии не принимаются.',
+  pop: 'Поп удалён — новые комментарии не принимаются.',
+} as const;
 
 const exitThread = () => setOpenThread(null);
 const noop = () => undefined;
@@ -79,7 +86,11 @@ export function PanelContent({
   const openThread = useOpenThread();
   const threadPane = useThreadPane({ openThread, width, onExit: exitThread });
   const data = usePanelComments(target, currentUserId, threadPane.shownRoot);
-  const { about, live, amMember, comments, thread, rows, threadRows } = data;
+  const { about, live, pop, amMember, comments, thread, rows, threadRows } = data;
+  const targetType = target.subject.type;
+  const memberBadge = MEMBER_BADGE[targetType];
+  const chatTitleText = useChatTitle(targetType === 'message' ? target.chatId : undefined);
+  const mediaTitle = targetType === 'pop' ? (pop?.channelTitle ?? '') : chatTitleText;
   const listRef = sheet.main.listRef as unknown as ListRef;
   const threadListRef = sheet.thread.listRef as unknown as ListRef;
   const inputRef = useRef<TextInput>(null);
@@ -231,7 +242,7 @@ export function PanelContent({
           showViews={false}
           authorName={item.authorName ?? DELETED_ACCOUNT}
           authorAvatarUrl={item.authorAvatarUrl}
-          authorBadge={item.audience === 'member' ? MEMBER_BADGE : null}
+          authorBadge={item.audience === 'member' ? memberBadge : null}
           mediaBounds={mediaBounds}
           onRetry={interactive ? retry : undefined}
           onAuthorPress={interactive && authorId ? () => openPerson(authorId) : undefined}
@@ -245,7 +256,7 @@ export function PanelContent({
         />
       );
     },
-    [actions, currentUserId, mediaBounds, myAudience, openPerson, react, retry],
+    [actions, currentUserId, mediaBounds, memberBadge, myAudience, openPerson, react, retry],
   );
 
   const { selection } = actions;
@@ -298,7 +309,7 @@ export function PanelContent({
     [rowRenderer, threadJump.highlight],
   );
 
-  const count = live?.message.commentsCount ?? 0;
+  const count = live?.message.commentsCount ?? pop?.commentsCount ?? 0;
   const inThread = openThread !== null;
   const listProps = {
     closed,
@@ -374,8 +385,9 @@ export function PanelContent({
         style={sheet.footerStyle}
         onHeight={setComposerHeight}
         actions={actions}
-        closed={closed}
+        closedNotice={closed ? CLOSED_NOTICE[targetType] : null}
         placeholder={inThread ? 'Ответить в треде' : 'Комментарий'}
+        title={mediaTitle}
       />
 
       <MessageContextMenu

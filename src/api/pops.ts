@@ -29,6 +29,7 @@ type PopRow = Pick<
   | 'created_at'
   | 'reactions'
   | 'views_count'
+  | 'comments_count'
 > & { my_reaction: { emoji: string } | null };
 
 export type Pop = {
@@ -46,6 +47,8 @@ export type Pop = {
   createdAt: string;
   reactions: PopReactions;
   viewsCount: number;
+  /** Комментарии к самому попу — не к посту с ним. */
+  commentsCount: number;
 };
 
 /**
@@ -57,7 +60,7 @@ export type PopReactions = { counts: ReactionCounts; mine: string | null };
 export const NO_POP_REACTIONS: PopReactions = { counts: {}, mine: null };
 
 /** Счётчики попа — то, что меняется, пока поп на экране. */
-export type PopCounters = Pick<Pop, 'id' | 'reactions' | 'viewsCount'>;
+export type PopCounters = Pick<Pop, 'id' | 'reactions' | 'viewsCount' | 'commentsCount'>;
 
 /** Загруженный файл попа — то, что `publish_pop` кладёт в строку попа. */
 export type PopMedia = {
@@ -82,18 +85,19 @@ export type PublishPopInput = {
   replyTo?: string[];
 };
 
-const COUNTER_COLUMNS = 'reactions, views_count, my_reaction(emoji)';
+const COUNTER_COLUMNS = 'reactions, views_count, comments_count, my_reaction(emoji)';
 
 const COLUMNS =
   `id, channel_id, author_id, caption, url, poster_url, mime_type, width, height, duration_ms, created_at, ${COUNTER_COLUMNS}` as const;
 
 function toCounters(
-  row: Pick<PopRow, 'id' | 'reactions' | 'views_count' | 'my_reaction'>,
+  row: Pick<PopRow, 'id' | 'reactions' | 'views_count' | 'comments_count' | 'my_reaction'>,
 ): PopCounters {
   return {
     id: row.id,
     reactions: { counts: toReactionCounts(row.reactions), mine: row.my_reaction?.emoji ?? null },
     viewsCount: row.views_count,
+    commentsCount: row.comments_count,
   };
 }
 
