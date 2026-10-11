@@ -4,6 +4,7 @@ import { StyleSheet, View, type TextInput } from 'react-native';
 import type { MyInvite } from '@/api/invites';
 import { ComposerPlate } from '@/features/chats/ComposerPlate';
 import type { ComposerMode } from '@/features/chats/composerDraftStore';
+import { ChatSubscribeBar } from '@/features/chats/ChatSubscribeBar';
 import { claimKeyboardForChat } from '@/features/chats/composerKeyboard';
 import { InviteResponseBar } from '@/features/chats/InviteResponseBar';
 import {
@@ -70,6 +71,8 @@ export type ChatFooterProps = {
     onAccept: () => void;
     onDecline: () => void;
   } | null;
+  /** Посторонний без подписки в чужом диалоге или группе: «Подписаться». */
+  subscribe: { chatId: string } | null;
   composer: {
     text: string;
     onChangeText: (text: string) => void;
@@ -89,11 +92,11 @@ export type ChatFooterProps = {
 };
 
 /**
- * Низ переписки: панель выбора, ответ на заявку или поле ввода с плашкой
- * режима. Что из них видно, решает состояние экрана; поле при этом не
- * размонтируется.
+ * Низ переписки: панель выбора, ответ на заявку, «Подписаться» или поле ввода
+ * с плашкой режима. Что из них видно, решает состояние экрана; поле при этом
+ * не размонтируется.
  */
-export function ChatFooter({ selection, invite, composer }: ChatFooterProps) {
+export function ChatFooter({ selection, invite, subscribe, composer }: ChatFooterProps) {
   return (
     <>
       {selection.isActive ? (
@@ -110,6 +113,8 @@ export function ChatFooter({ selection, invite, composer }: ChatFooterProps) {
             onDecline={invite.onDecline}
           />
         )
+      ) : subscribe ? (
+        selection.isActive ? null : <ChatSubscribeBar chatId={subscribe.chatId} />
       ) : composer ? (
         // На время выбора поле ввода прячется, а не размонтируется: черновик
         // и заранее подготовленный рекордер голосовых остаются как были.

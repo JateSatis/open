@@ -123,18 +123,24 @@ export function ToastCard({ alert, dismiss }: ToastCardProps) {
     router.push(`/chats/${alert.chatId}`);
   };
 
+  // Чужая переписка, на которую я подписан, — её названием, автор — в тексте.
+  const subscribedTitle = alert.kind === 'message' && !channel ? alert.subscribedChatTitle : null;
   const who = channel
     ? channel.title
-    : alert.kind === 'message'
-      ? alert.authorName
-      : alert.kind === 'invite'
-        ? alert.inviterName
-        : '';
+    : subscribedTitle
+      ? subscribedTitle
+      : alert.kind === 'message'
+        ? alert.authorName
+        : alert.kind === 'invite'
+          ? alert.inviterName
+          : '';
   const what =
     alert.kind === 'pop'
       ? 'Новый попс'
       : alert.kind === 'message'
-        ? (alert.text ?? 'Вложение')
+        ? subscribedTitle
+          ? `${alert.authorName}: ${alert.text ?? 'Вложение'}`
+          : (alert.text ?? 'Вложение')
         : alert.chatTitle
           ? `Зовёт вас в чат «${alert.chatTitle}»`
           : 'Зовёт вас в чат';
@@ -144,7 +150,9 @@ export function ToastCard({ alert, dismiss }: ToastCardProps) {
       : alert.kind === 'message'
         ? channel
           ? `Новый пост в канале ${who}`
-          : `Новое сообщение от ${who}`
+          : subscribedTitle
+            ? `Новое сообщение в «${who}» от ${alert.authorName}`
+            : `Новое сообщение от ${who}`
         : `Заявка в чат от ${who}`;
 
   return (

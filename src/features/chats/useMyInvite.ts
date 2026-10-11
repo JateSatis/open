@@ -8,14 +8,15 @@ export function myInviteQueryKey(chatId: string) {
 
 /**
  * Моя заявка в этот чат. Решает, что показать вместо поля ввода, пока я не
- * участник: кнопки ответа на заявку или просто «читать может кто угодно».
+ * участник: кнопки ответа на заявку или «Подписаться». `undefined` — ещё не
+ * известна: «Подписаться» не мигает перед панелью заявки.
  */
-export function useMyInvite(chatId: string, enabled: boolean): MyInvite | null {
+export function useMyInvite(chatId: string, enabled: boolean): MyInvite | null | undefined {
   const { data } = useQuery({
     queryKey: myInviteQueryKey(chatId),
     queryFn: () => getMyInvite(chatId),
     enabled,
   });
 
-  return data ?? null;
+  return data;
 }

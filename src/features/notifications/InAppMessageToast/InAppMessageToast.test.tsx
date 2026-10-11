@@ -50,6 +50,7 @@ const post: IncomingMessage = {
   text: 'новый трек',
   createdAt: '2026-10-11T10:00:00Z',
   channel,
+  subscribedChatTitle: null,
   notify: true,
 };
 const pop: IncomingPop = {
@@ -69,6 +70,7 @@ const incoming: IncomingMessage = {
   text: 'ты где',
   createdAt: '2026-09-16T10:00:00Z',
   channel: null,
+  subscribedChatTitle: null,
   notify: true,
 };
 
@@ -113,6 +115,35 @@ describe('InAppMessageToast', () => {
 
     expect(mockPush).toHaveBeenCalledWith('/chats/chat-1');
     await waitFor(() => expect(screen.queryByText('ты где')).toBeNull());
+  });
+
+  it('titles a message in a subscribed dialogue by the dialogue and names the author', async () => {
+    const user = userEvent.setup();
+
+    await renderWithQuery(<InAppMessageToast />);
+
+    deliver({
+      ...incoming,
+      chatId: 'their-chat',
+      authorName: 'Пётр',
+      text: 'Аня, привет',
+      subscribedChatTitle: 'Аня и Пётр',
+    });
+
+    expect(await screen.findByText('Аня и Пётр')).toBeTruthy();
+    expect(screen.getByText('Пётр: Аня, привет')).toBeTruthy();
+
+    await user.press(screen.getByText('Пётр: Аня, привет'));
+
+    expect(mockPush).toHaveBeenCalledWith('/chats/their-chat');
+  });
+
+  it('stays silent about a subscribed dialogue with notifications off', async () => {
+    await renderWithQuery(<InAppMessageToast />);
+
+    deliver({ ...incoming, subscribedChatTitle: 'Аня и Пётр', notify: false });
+
+    await waitFor(() => expect(screen.queryByText('Аня и Пётр')).toBeNull());
   });
 
   it('keeps quiet about the chat the user is already reading', async () => {
