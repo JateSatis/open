@@ -10,7 +10,7 @@ import { showNotice } from '@/features/notifications/alertsStore';
 import { isNetworkError } from '@/lib/network';
 
 type Options = {
-  thread: Pick<CommentsState, 'retry' | 'discard' | 'remove'>;
+  thread: Pick<CommentsState, 'retry' | 'discard' | 'remove' | 'pin' | 'unpin'>;
   /** «Изменить»: поле панели переходит в правку этого комментария. */
   edit: (comment: CommentItem) => void;
   /** «Ответить»: комментарий встаёт плашкой над полем. */
@@ -23,7 +23,7 @@ type Options = {
 
 /** Что делает каждый пункт меню комментария. */
 export function useCommentActionHandlers({ thread, edit, reply, select, forward }: Options) {
-  const { retry, discard, remove } = thread;
+  const { retry, discard, remove, pin, unpin } = thread;
 
   return useCallback(
     (id: CommentActionId, comment: CommentItem) => {
@@ -39,6 +39,12 @@ export function useCommentActionHandlers({ thread, edit, reply, select, forward 
           return;
         case 'forward':
           forward(comment);
+          return;
+        case 'pin':
+          pin(comment);
+          return;
+        case 'unpin':
+          unpin();
           return;
         case 'copy':
           void Clipboard.setStringAsync(comment.text ?? '').then(() => showNotice('Скопировано'));
@@ -74,6 +80,6 @@ export function useCommentActionHandlers({ thread, edit, reply, select, forward 
           return;
       }
     },
-    [discard, edit, forward, remove, reply, retry, select],
+    [discard, edit, forward, pin, remove, reply, retry, select, unpin],
   );
 }

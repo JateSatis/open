@@ -93,6 +93,7 @@ import { useChatCall } from '@/features/streams/useChatCall';
 import { stopVoice } from '@/features/media';
 import { showNotice } from '@/features/notifications/alertsStore';
 import { useMyProfile, useProfile } from '@/features/profile/queries';
+import { openPopViewer } from '@/features/pops/openPopViewer';
 import { useTheme } from '@/hooks/use-theme';
 import { setActiveChatId } from '@/store/activeChat';
 import { Spacing } from '@/theme';
@@ -456,14 +457,25 @@ export function ChatConversation({
 
   const { openComment } = navigation;
   const openForwardedComment = useCallback(
-    (comment: ForwardedComment) =>
+    (comment: ForwardedComment) => {
+      // Комментарий к попу — в просмотре попа, с открытыми комментариями.
+      // Поп удалён — идти некуда.
+      if (comment.subject.type === 'pop') {
+        if (comment.pop) {
+          openPopViewer(comment.pop.channelId, comment.pop.id, { focusCommentId: comment.id });
+        }
+
+        return;
+      }
+
       openComment(comment.chatId, {
-        messageId: comment.messageId,
+        messageId: comment.subject.id,
         commentId: comment.id,
         target: comment.target
           ? { key: comment.target.id, createdAt: comment.target.createdAt }
           : null,
-      }),
+      });
+    },
     [openComment],
   );
 

@@ -22,6 +22,8 @@ export type CommentItem = ChatMessage & {
   repliesCount: number;
   /** Удалённый корень с живыми ответами — на его месте заглушка. */
   deleted: boolean;
+  /** Ранг верха с сервера — по нему снятый закреп возвращается на место. У своих неотправленных нет. */
+  rank?: number;
 };
 
 /**
@@ -57,6 +59,7 @@ export function toCommentItem(comment: Comment): CommentItem {
     threadRootId: comment.threadRootId,
     repliesCount: comment.repliesCount,
     deleted: comment.deleted,
+    rank: comment.rank,
   };
 }
 

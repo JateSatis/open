@@ -283,6 +283,7 @@ export function PanelContent({
             comment={comment}
             threadRoot={item.threadRoot}
             replies={item.replies}
+            pinned={item.pinned}
             isOwn={comment.authorId !== null && comment.authorId === currentUserId}
             selectionMode={selection.isActive}
             selected={selection.isSelected(comment.id)}

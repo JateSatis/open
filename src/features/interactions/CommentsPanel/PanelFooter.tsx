@@ -10,7 +10,6 @@ import type { PanelActions } from './usePanelActions';
 import { SelectionActionBar } from '@/features/chats/SelectionActionBar';
 import {
   COMMENT_SELECTION_ACTIONS,
-  POP_COMMENT_SELECTION_ACTIONS,
 } from '@/features/interactions/comments/useCommentReplySelection';
 import { useTheme } from '@/hooks/use-theme';
 
@@ -52,7 +51,7 @@ export function PanelFooter({
       {selection.isActive ? (
         <SelectionActionBar
           context={actions.selectionContext}
-          actions={actions.canForward ? COMMENT_SELECTION_ACTIONS : POP_COMMENT_SELECTION_ACTIONS}
+          actions={COMMENT_SELECTION_ACTIONS}
           onAction={actions.runSelectionAction}
         />
       ) : null}

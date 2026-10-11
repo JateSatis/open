@@ -341,6 +341,48 @@ export type Database = {
           },
         ]
       }
+      comment_pins: {
+        Row: {
+          comment_id: string
+          created_at: string
+          deleted_at: string | null
+          id: string
+          pinned_by: string | null
+          target_id: string
+        }
+        Insert: {
+          comment_id: string
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          pinned_by?: string | null
+          target_id: string
+        }
+        Update: {
+          comment_id?: string
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          pinned_by?: string | null
+          target_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comment_pins_comment_id_target_id_fkey"
+            columns: ["comment_id", "target_id"]
+            isOneToOne: false
+            referencedRelation: "comments"
+            referencedColumns: ["id", "target_id"]
+          },
+          {
+            foreignKeyName: "comment_pins_pinned_by_fkey"
+            columns: ["pinned_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       comment_replies: {
         Row: {
           comment_id: string
@@ -1610,6 +1652,10 @@ export type Database = {
       }
       check_comment_shape: { Args: { target: string }; Returns: undefined }
       check_message_shape: { Args: { target: string }; Returns: undefined }
+      comment_pin_right: {
+        Args: { target: string; who: string }
+        Returns: boolean
+      }
       comment_rank: {
         Args: { created: string; reactions: number; replies: number }
         Returns: number
@@ -1900,9 +1946,39 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      pin_comment: { Args: { target_comment: string }; Returns: undefined }
       pin_message: {
         Args: { in_forward?: string; target_message: string }
         Returns: undefined
+      }
+      pinned_comment: {
+        Args: { target: string }
+        Returns: {
+          audience: string
+          author_id: string | null
+          chat_id: string
+          created_at: string
+          deleted_at: string | null
+          edited_at: string | null
+          id: string
+          kind: string
+          member_reactions: Json
+          message_id: string | null
+          pop_id: string | null
+          rank: number | null
+          reactions_count: number
+          replies_count: number
+          target_id: string | null
+          text: string | null
+          thread_root_id: string | null
+          visitor_reactions: Json
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "comments"
+          isOneToOne: false
+          isSetofReturn: true
+        }
       }
       post_comment: {
         Args: {
@@ -2112,6 +2188,7 @@ export type Database = {
       }
       stream_room_finished: { Args: { room: string }; Returns: string }
       touch_device: { Args: { p_installation_id: string }; Returns: boolean }
+      unpin_comment: { Args: { target: string }; Returns: undefined }
       unpin_message: {
         Args: { target_chat?: string; target_message: string }
         Returns: undefined

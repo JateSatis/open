@@ -20,6 +20,7 @@ import { sendReaction } from '@/features/interactions/reactionSender';
 import { audienceOf, nextReaction } from '@/features/interactions/reactionState';
 import type { ReactToMessage } from '@/features/interactions/useReactToMessage';
 import type { ReactionAudience } from '@/api/reactionCounts';
+import { openPopViewer } from '@/features/pops/openPopViewer';
 
 type Options = {
   chatId: string;
@@ -135,6 +136,7 @@ export function useChatBubbles({
       const { comment } = forward;
       const author = item.authorId ? participantsById.get(item.authorId) : undefined;
       const commentAuthorId = comment?.authorId ?? null;
+      const pop = comment?.pop ?? null;
       const shown: ChatMessage = comment
         ? {
             ...item,
@@ -174,6 +176,9 @@ export function useChatBubbles({
               isOwn={item.authorId === currentUserId}
               onOpenSource={
                 interactive && comment ? () => openForwardedComment(comment) : undefined
+              }
+              onOpenPop={
+                interactive && pop ? () => openPopViewer(pop.channelId, pop.id) : undefined
               }
               onOpenAuthor={
                 interactive && commentAuthorId ? () => openPerson(commentAuthorId) : undefined

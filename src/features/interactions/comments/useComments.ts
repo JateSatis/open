@@ -4,7 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   deleteComment,
   listThreadRoots,
+  pinComment,
   subscribeToComments,
+  unpinComment,
   type CommentSubject,
 } from '@/api/comments';
 import { outgoingOf } from '@/features/chats/messages/delivery';
@@ -32,6 +34,7 @@ import {
   readRoots,
   rootsInOrder,
   rootsKey,
+  setAuthorPin,
   updateAllComments,
   updateRoots,
   type RootsPage,
@@ -39,6 +42,7 @@ import {
 import {
   loadRoots,
   resyncComments,
+  syncAuthorPin,
   syncCommentReactions,
   syncComments,
 } from '@/features/interactions/comments/commentSync';
@@ -51,8 +55,9 @@ import {
   withMyReaction,
 } from '@/features/interactions/reactionState';
 import type { LocalMedia, OutgoingMedia } from '@/features/media';
+import { showNotice } from '@/features/notifications/alertsStore';
 import { useMyProfile } from '@/features/profile/queries';
-import { describeLoadError } from '@/lib/network';
+import { describeLoadError, isNetworkError } from '@/lib/network';
 
 /**
  * Столько копить события, прежде чем перечитать: под горячим сообщением
@@ -65,8 +70,17 @@ const NONE: CommentItem[] = [];
 const NO_REPLIES: ReadonlyMap<string, CommentItem[]> = new Map();
 
 export type CommentsState = {
-  /** Верх на экране: свои неотправленные, свои отправленные за это открытие, затем по рангу. */
+  /**
+   * Верх на экране: закреп автора, свои неотправленные, свои отправленные за
+   * это открытие, затем по рангу.
+   */
   roots: CommentItem[];
+  /** Закреплённый автором контента комментарий; `null` — закрепа нет. */
+  pinnedId: string | null;
+  /** Закрепить корень — сразу на экране; отказ сервера возвращает как было. */
+  pin: (comment: CommentItem) => void;
+  /** Снять закреп — так же. */
+  unpin: () => void;
   /** Свои неотправленные ответы — по тредам, в конец треда. */
   pendingReplies: ReadonlyMap<string, CommentItem[]>;
   isLoading: boolean;
@@ -240,6 +254,9 @@ export function useComments(
       onTargetChanged: () => {
         void queryClient.invalidateQueries({ queryKey: commentTargetQueryKey(targetId) });
       },
+      onPinChanged: () => {
+        syncAuthorPin(queryClient, targetId).catch(() => undefined);
+      },
       onReconnected: () => {
         resyncComments(queryClient, targetId, meRef.current).catch(() => undefined);
         void queryClient.invalidateQueries({ queryKey: commentTargetQueryKey(targetId) });
@@ -295,14 +312,49 @@ export function useComments(
     return { pendingRoots: roots, pendingReplies: replies };
   }, [outbox]);
 
+  const pinnedId = data?.authorPin?.id ?? null;
+
   const roots = useMemo(() => {
     if (pendingRoots.length === 0) return confirmed;
 
     const known = new Set(confirmed.map((item) => item.id));
     const pending = pendingRoots.filter((item) => !known.has(item.id));
 
-    return pending.length === 0 ? confirmed : [...pending, ...confirmed];
-  }, [confirmed, pendingRoots]);
+    if (pending.length === 0) return confirmed;
+
+    // Закреп автора первым всегда — и над своими неотправленными.
+    const [first, ...rest] = confirmed;
+
+    return first && first.id === pinnedId ? [first, ...pending, ...rest] : [...pending, ...confirmed];
+  }, [confirmed, pendingRoots, pinnedId]);
+
+  const changePin = useCallback(
+    (comment: CommentItem | null) => {
+      const before = readRoots(queryClient, targetId);
+
+      updateRoots(queryClient, targetId, (page) => setAuthorPin(page, comment));
+
+      (comment ? pinComment(comment.id) : unpinComment(targetId)).catch((cause: unknown) => {
+        // Откат — к закрепу из базы, а не к снимку: пока шёл запрос, закреп
+        // мог смениться и у других.
+        if (before) {
+          syncAuthorPin(queryClient, targetId).catch(() =>
+            updateRoots(queryClient, targetId, (page) => setAuthorPin(page, before.authorPin)),
+          );
+        }
+
+        const action = comment ? 'закрепить' : 'открепить';
+
+        showNotice(
+          isNetworkError(cause)
+            ? `Не удалось ${action} комментарий: нет связи`
+            : `Не удалось ${action} комментарий`,
+          'error',
+        );
+      });
+    },
+    [targetId, queryClient],
+  );
 
   const loadMore = useCallback(() => {
     const cursor = readRoots(queryClient, targetId)?.nextCursor;
@@ -343,6 +395,10 @@ export function useComments(
         // Корень-заглушка без ответов уходит вместе с последним.
         return item.deleted && repliesCount === 0 ? null : { ...item, repliesCount };
       });
+      // База снимет закреп удалённого — заглушка с ответами встаёт на место по рангу.
+      updateRoots(queryClient, targetId, (page) =>
+        page.authorPin?.id === comment.id ? setAuthorPin(page, null) : page,
+      );
 
       try {
         await deleteComment(comment.id);
@@ -358,6 +414,9 @@ export function useComments(
 
   return {
     roots,
+    pinnedId,
+    pin: useCallback((comment: CommentItem) => changePin(comment), [changePin]),
+    unpin: useCallback(() => changePin(null), [changePin]),
     pendingReplies,
     isLoading: isPending,
     isLoadingMore,

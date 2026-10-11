@@ -1,6 +1,7 @@
 import { SymbolView } from 'expo-symbols';
 import { Pressable, View } from 'react-native';
 
+import { PopQuote } from './PopQuote';
 import { styles } from './styles';
 
 import type { CommentForward, QuotedMessage } from '@/api/chats';
@@ -17,13 +18,16 @@ export type CommentForwardLeadProps = {
   isOwn: boolean;
   /** Тап по сниппету или чату — к комментарию в его ветке. Нет — не нажимается (копия в меню). */
   onOpenSource?: () => void;
+  /** У комментария к попу тап по цитате попа — сам поп, без комментариев. */
+  onOpenPop?: () => void;
   /** Тап по автору комментария — его профиль. */
   onOpenAuthor?: () => void;
 };
 
 /**
  * Верх облачка пересланного комментария: пометка «комментарий» с чатом,
- * сниппет сообщения, под которым он оставлен, и автор комментария. Сам
+ * сниппет сообщения (или цитата попа), под которым он оставлен, и автор
+ * комментария. Сам
  * комментарий — ниже, содержимым облачка. Так облачко читается в отрыве от
  * переписки и не путается с ответом: у ответа сверху цитата, а снизу
  * реплика того, кто отвечает, — здесь же снизу чужой комментарий со своим
@@ -33,6 +37,7 @@ export function CommentForwardLead({
   forward,
   isOwn,
   onOpenSource,
+  onOpenPop,
   onOpenAuthor,
 }: CommentForwardLeadProps) {
   const theme = useTheme();
@@ -56,6 +61,7 @@ export function CommentForwardLead({
   }
 
   const { target, chat } = comment;
+  const isPop = comment.subject.type === 'pop';
   const snippet: QuotedMessage = target
     ? {
         messageId: target.id,
@@ -66,7 +72,7 @@ export function CommentForwardLead({
         editedAt: null,
         preview: target.preview,
       }
-    : { messageId: comment.messageId, state: 'deleted' };
+    : { messageId: comment.subject.id, state: 'deleted' };
   const authorName = comment.authorName ?? DELETED_ACCOUNT;
 
   return (
@@ -87,7 +93,20 @@ export function CommentForwardLead({
         </Text>
       </Pressable>
 
-      <ReplyQuote quotes={[snippet]} isOwn={isOwn} onPress={onOpenSource ? () => onOpenSource() : undefined} />
+      {isPop ? (
+        <PopQuote
+          pop={comment.pop}
+          channelName={chat?.name ?? null}
+          isOwn={isOwn}
+          onPress={onOpenPop}
+        />
+      ) : (
+        <ReplyQuote
+          quotes={[snippet]}
+          isOwn={isOwn}
+          onPress={onOpenSource ? () => onOpenSource() : undefined}
+        />
+      )}
 
       <Pressable
         accessibilityRole={onOpenAuthor ? 'button' : undefined}

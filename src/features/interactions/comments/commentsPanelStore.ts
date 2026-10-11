@@ -62,13 +62,26 @@ export function openComments(
 
 /**
  * Открывает панель комментариев к попу — из просмотра попсов. `amMember` —
- * я публикую в канале: догадка ряда для отклика моей реакции, решает база.
+ * я публикую в канале: догадка ряда для отклика моей реакции и показ
+ * закрепа, решает база. `focusCommentId` — пришли по пересланному комментарию.
  */
-export function openPopComments(popId: string, amMember = false) {
+export function openPopComments(popId: string, amMember = false, focusCommentId?: string) {
   usePanelStore.setState({
-    target: { subject: { type: 'pop', id: popId }, amMember },
+    target: { subject: { type: 'pop', id: popId }, amMember, focusCommentId },
     openThread: null,
   });
+}
+
+/**
+ * Право публиковать в канале пришло позже, чем открыли комментарии к попу, —
+ * поправить догадку ряда и пункты закрепа у открытой панели.
+ */
+export function setCommentsAmMember(amMember: boolean) {
+  const { target } = usePanelStore.getState();
+
+  if (target && target.amMember !== amMember) {
+    usePanelStore.setState({ target: { ...target, amMember } });
+  }
 }
 
 export function closeComments() {

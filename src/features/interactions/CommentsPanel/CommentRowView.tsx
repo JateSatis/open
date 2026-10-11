@@ -1,3 +1,4 @@
+import { SymbolView } from 'expo-symbols';
 import { memo, type ReactNode } from 'react';
 import { View } from 'react-native';
 
@@ -10,6 +11,7 @@ import type { MenuAnchor } from '@/features/chats/MessageContextMenu';
 import { MessageRow } from '@/features/chats/MessageRow';
 import type { CommentItem } from '@/features/interactions/comments/commentItem';
 import { useTheme } from '@/hooks/use-theme';
+import { Sizes } from '@/theme';
 
 export type CommentRowViewProps = {
   comment: CommentItem;
@@ -17,6 +19,8 @@ export type CommentRowViewProps = {
   threadRoot: boolean;
   /** Число на кнопке «N ответов» под облачком; 0 — кнопки нет. */
   replies: number;
+  /** Закреплён автором контента: строкой над облачком «Закреплено автором». */
+  pinned?: boolean;
   isOwn: boolean;
   selectionMode: boolean;
   selected: boolean;
@@ -52,6 +56,27 @@ function DeletedRoot() {
 }
 
 /**
+ * Метка закрепа — строкой над облачком, а не у имени: рядом с именем уже
+ * стоит ряд («Автор», «участник чата»), и закреп с ним не спорит.
+ */
+function PinnedLabel() {
+  const theme = useTheme();
+
+  return (
+    <View testID="comment-pinned-label" style={styles.pinnedLabel}>
+      <SymbolView
+        name={{ ios: 'pin.fill', android: 'push_pin', web: 'push_pin' }}
+        size={Sizes.commentsIconQuiet}
+        tintColor={theme.textSecondary}
+      />
+      <Text variant="caption" color="textSecondary">
+        Закреплено автором
+      </Text>
+    </View>
+  );
+}
+
+/**
  * Строка комментария: облачко с жестами переписки — тап открывает меню,
  * долгое нажатие включает выбор, свайп влево отвечает. Под облачком корня с
  * ответами — «N ответов»; корень в окне треда — на фоне островка.
@@ -60,6 +85,7 @@ export const CommentRowView = memo(function CommentRowView({
   comment,
   threadRoot,
   replies,
+  pinned = false,
   isOwn,
   selectionMode,
   selected,
@@ -88,6 +114,7 @@ export const CommentRowView = memo(function CommentRowView({
   if (comment.deleted) {
     return (
       <View testID={threadRoot ? 'thread-root' : undefined} style={rowStyle}>
+        {pinned ? <PinnedLabel /> : null}
         <DeletedRoot />
         {button}
       </View>
@@ -98,6 +125,7 @@ export const CommentRowView = memo(function CommentRowView({
 
   return (
     <View testID={threadRoot ? 'thread-root' : undefined} style={rowStyle}>
+      {pinned ? <PinnedLabel /> : null}
       <MessageRow
         selectionMode={selectionMode}
         selectable={selectable}

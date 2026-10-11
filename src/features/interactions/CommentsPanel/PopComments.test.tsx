@@ -1,28 +1,37 @@
 import type { Session as SupabaseSession } from '@supabase/supabase-js';
-import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react-native';
 import { BackHandler } from 'react-native';
 
 import { CommentsPanel } from '.';
 
 import {
+  getPinnedComment,
   getPopCommentTarget,
   listThreadRoots,
+  pinComment,
   sendComment,
   sendPopComment,
   subscribeToComments,
+  unpinComment,
   type Comment,
   type CommentTarget,
 } from '@/api/comments';
 import { useSession } from '@/features/auth/useSession';
-import { resetComposerDrafts } from '@/features/chats/composerDraftStore';
+import {
+  finishForwardPick,
+  readChatDraft,
+  resetComposerDrafts,
+} from '@/features/chats/composerDraftStore';
 import { reportRealtimeJoined, resetConnectionState } from '@/features/connection/connectionStore';
 import { resetCommentOutbox } from '@/features/interactions/comments/commentOutbox';
 import { closeComments, openPopComments } from '@/features/interactions/comments/commentsPanelStore';
 import { renderWithQuery } from '@/test/renderWithQuery';
 
+const mockedPush = jest.fn();
+
 jest.mock('expo-router', () => ({
   useIsFocused: () => true,
-  useRouter: () => ({ push: jest.fn(), navigate: jest.fn(), back: jest.fn() }),
+  useRouter: () => ({ push: mockedPush, navigate: jest.fn(), back: jest.fn() }),
 }));
 jest.mock('@/api/profile', () => ({
   getProfile: jest.fn(() => Promise.resolve(null)),
@@ -39,6 +48,9 @@ jest.mock('@/api/pins', () => ({
   unpinMessage: jest.fn(),
 }));
 jest.mock('@/api/comments', () => ({
+  getPinnedComment: jest.fn(() => Promise.resolve(null)),
+  pinComment: jest.fn(() => Promise.resolve()),
+  unpinComment: jest.fn(() => Promise.resolve()),
   COMMENT_PAGE_SIZE: 30,
   THREAD_PAGE_SIZE: 10,
   listThreadRoots: jest.fn(),
@@ -84,6 +96,8 @@ const mockedSession = useSession as jest.MockedFunction<typeof useSession>;
 const mockedRoots = listThreadRoots as jest.MockedFunction<typeof listThreadRoots>;
 const mockedTarget = getPopCommentTarget as jest.MockedFunction<typeof getPopCommentTarget>;
 const mockedSendPop = sendPopComment as jest.MockedFunction<typeof sendPopComment>;
+const mockedPinned = getPinnedComment as jest.MockedFunction<typeof getPinnedComment>;
+const mockedSubscribe = subscribeToComments as jest.MockedFunction<typeof subscribeToComments>;
 
 const LIVE_POP: CommentTarget = {
   state: 'pop',
@@ -93,6 +107,8 @@ const LIVE_POP: CommentTarget = {
     channelTitle: 'Канал A',
     postsChatId: 'posts-1',
     commentsCount: 3,
+    posterUrl: 'https://cdn.test/p.jpg',
+    caption: 'Подпись попа',
   },
 };
 
@@ -134,6 +150,7 @@ beforeEach(() => {
     isLoading: false,
   });
   mockedTarget.mockResolvedValue(LIVE_POP);
+  mockedPinned.mockResolvedValue(null);
   mockedRoots.mockResolvedValue({
     items: [
       comment('c1', { authorName: 'Марина', authorId: 'user-1', audience: 'member' }),
@@ -146,11 +163,33 @@ beforeEach(() => {
     .mockImplementation(() => ({ remove: () => undefined }));
 });
 
-async function openPanel() {
+async function openPanel(asPublisher = false) {
   await renderWithQuery(<CommentsPanel onOpenPerson={jest.fn()} />);
-  await act(async () => openPopComments('pop-1'));
+  await act(async () => openPopComments('pop-1', asPublisher));
   await screen.findByTestId('comments-panel');
   await screen.findByText('комментарий c1');
+}
+
+/**
+ * Id комментария под меткой закрепа. Порядок строк по дереву не проверить:
+ * FlashList переиспользует ячейки, и их место в дереве — не место на экране.
+ */
+function pinnedShown(): string | null {
+  const labels = screen.queryAllByTestId('comment-pinned-label');
+
+  expect(labels.length).toBeLessThanOrEqual(1);
+
+  let node = labels[0]?.parent ?? null;
+
+  while (node) {
+    const [row] = within(node).queryAllByTestId(/^message-row-/);
+
+    if (row) return String(row.props.testID).replace('message-row-', '');
+
+    node = node.parent;
+  }
+
+  return null;
 }
 
 async function tapComment(id: string) {
@@ -186,19 +225,48 @@ describe('comments of a pop', () => {
     expect(sendComment).not.toHaveBeenCalled();
   });
 
-  it('offers no forwarding of a pop comment — neither in the menu nor in the selection bar', async () => {
+  it('forwards a pop comment from the menu: the chat will quote the pop under the channel’s name', async () => {
     await openPanel();
 
     await tapComment('c2');
-    await screen.findByTestId('message-menu');
+    await fireEvent.press(await screen.findByRole('menuitem', { name: 'Переслать' }));
 
-    expect(screen.getByRole('menuitem', { name: 'Ответить' })).toBeTruthy();
-    expect(screen.queryByRole('menuitem', { name: 'Переслать' })).toBeNull();
+    expect(mockedPush).toHaveBeenCalledWith(
+      expect.objectContaining({ pathname: '/chats/forward' }),
+    );
+    expect(finishForwardPick('chat-dest')).toBe(true);
 
-    await fireEvent.press(screen.getByRole('menuitem', { name: 'Выбрать' }));
+    const mode = readChatDraft('chat-dest').mode;
+    const [forwarded] = mode?.type === 'forward_comments' ? mode.comments : [];
 
-    await waitFor(() => expect(screen.getByLabelText('Ответить')).toBeTruthy());
-    expect(screen.queryByLabelText('Переслать')).toBeNull();
+    expect(forwarded).toMatchObject({
+      id: 'c2',
+      subject: { type: 'pop', id: 'pop-1' },
+      target: null,
+      pop: { id: 'pop-1', channelId: 'channel-1', caption: 'Подпись попа' },
+      chat: { id: 'posts-1', name: 'Канал A' },
+    });
+  });
+
+  it('forwards several pop comments from the selection bar', async () => {
+    await openPanel();
+
+    await tapComment('c2');
+    await fireEvent.press(await screen.findByRole('menuitem', { name: 'Выбрать' }));
+    await waitFor(() => expect(screen.getByLabelText('Переслать')).toBeTruthy());
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('message-row-c1'));
+    });
+    await fireEvent.press(screen.getByLabelText('Переслать'));
+
+    expect(finishForwardPick('chat-dest')).toBe(true);
+
+    const mode = readChatDraft('chat-dest').mode;
+
+    expect(mode?.type === 'forward_comments' ? mode.comments.map((c) => c.id).sort() : []).toEqual([
+      'c1',
+      'c2',
+    ]);
   });
 
   it('says the pop is gone and takes no new comments once it is deleted', async () => {
@@ -215,5 +283,66 @@ describe('comments of a pop', () => {
     await openPanel();
 
     expect(subscribeToComments).toHaveBeenCalledWith('pop-1', expect.anything());
+  });
+
+  describe('pin', () => {
+    it('shows the pinned comment first with the label, without a repeat below', async () => {
+      mockedPinned.mockResolvedValue(comment('c2', { text: 'закреплённый' }));
+      mockedRoots.mockResolvedValue({ items: [comment('c1')], nextCursor: null });
+      await openPanel();
+
+      expect(await screen.findByText('Закреплено автором')).toBeTruthy();
+      expect(pinnedShown()).toBe('c2');
+      // Ниже закреплённый не повторяется.
+      expect(screen.getAllByText('закреплённый')).toHaveLength(1);
+    });
+
+    it('lets the channel’s publisher pin a comment: it is marked at once', async () => {
+      await openPanel(true);
+      expect(pinnedShown()).toBeNull();
+
+      await tapComment('c2');
+      await fireEvent.press(await screen.findByRole('menuitem', { name: 'Закрепить' }));
+
+      expect(pinComment).toHaveBeenCalledWith('c2');
+      expect(await screen.findByText('Закреплено автором')).toBeTruthy();
+      expect(pinnedShown()).toBe('c2');
+    });
+
+    it('lets the publisher unpin: the comment stays, without the label', async () => {
+      mockedPinned.mockResolvedValue(comment('c2'));
+      mockedRoots.mockResolvedValue({ items: [comment('c1', { rank: 5 })], nextCursor: null });
+      await openPanel(true);
+      await screen.findByText('Закреплено автором');
+
+      await tapComment('c2');
+      await fireEvent.press(await screen.findByRole('menuitem', { name: 'Открепить' }));
+
+      expect(unpinComment).toHaveBeenCalledWith('pop-1');
+      await waitFor(() => expect(screen.queryByText('Закреплено автором')).toBeNull());
+      expect(screen.getByTestId('message-row-c2')).toBeTruthy();
+    });
+
+    it('offers no pin to a visitor', async () => {
+      await openPanel();
+
+      await tapComment('c2');
+      await screen.findByTestId('message-menu');
+
+      expect(screen.queryByRole('menuitem', { name: 'Закрепить' })).toBeNull();
+    });
+
+    it('picks up somebody else’s pin live from the topic', async () => {
+      await openPanel();
+      expect(screen.queryByText('Закреплено автором')).toBeNull();
+
+      mockedPinned.mockResolvedValue(comment('c2'));
+      const listener = mockedSubscribe.mock.calls[0][1];
+
+      await act(async () => listener.onPinChanged?.());
+
+      expect(await screen.findByText('Закреплено автором')).toBeTruthy();
+      expect(pinnedShown()).toBe('c2');
+    });
   });
 });

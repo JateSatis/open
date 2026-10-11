@@ -81,6 +81,8 @@ function fromPopCache(
       channelTitle: channel.title,
       postsChatId: channel.postsChatId,
       commentsCount: pop.commentsCount,
+      posterUrl: pop.posterUrl,
+      caption: pop.caption,
     },
   };
 }

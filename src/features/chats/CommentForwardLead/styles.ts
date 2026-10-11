@@ -1,6 +1,6 @@
 import { StyleSheet } from 'react-native';
 
-import { Spacing } from '@/theme';
+import { Radii, Sizes, Spacing, Typography } from '@/theme';
 
 export const styles = StyleSheet.create({
   lead: {
@@ -20,5 +20,35 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.one + Spacing.half,
     paddingTop: Spacing.one,
+  },
+  /** Цитата попа — как цитата сообщения (`ReplyQuote`), с вертикальной обложкой. */
+  popQuote: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    paddingRight: Spacing.two,
+    paddingVertical: Spacing.one,
+    borderRadius: Radii.sm,
+    overflow: 'hidden',
+  },
+  popQuoteAccent: {
+    alignSelf: 'stretch',
+    width: Sizes.quoteAccent,
+    marginVertical: -Spacing.one,
+  },
+  popQuoteCover: {
+    width: Sizes.popQuoteCoverWidth,
+    height: Sizes.popQuoteCoverHeight,
+    borderRadius: Radii.sm,
+  },
+  // Нулевая основа: длинная подпись не растягивает облачко за его край —
+  // ширину задают подпись «Комментарий из …» и сам комментарий.
+  popQuoteBody: {
+    flex: 1,
+    minHeight: Typography.smallBold.lineHeight + Typography.small.lineHeight,
+    justifyContent: 'center',
+  },
+  popQuoteDeleted: {
+    fontStyle: 'italic',
   },
 });

@@ -22,6 +22,8 @@ export type CommentTopicListener = {
   onReactionsChanged?: (commentId: string) => void;
   /** Сообщение, к которому комментарии, правили или удалили. */
   onTargetChanged?: () => void;
+  /** Закреп комментария цели поставили, сменили или сняли — закреп дочитывается из базы. */
+  onPinChanged?: () => void;
   /** Канал переподключился: пропущенное надо дочитать. */
   onReconnected?: () => void;
 };
@@ -69,6 +71,7 @@ function open(messageId: string): Entry {
 
   channel
     .on('broadcast', { event: 'target_changed' }, () => each((l) => l.onTargetChanged?.()))
+    .on('broadcast', { event: 'comment_pin_changed' }, () => each((l) => l.onPinChanged?.()))
     .subscribe((status) => {
       if (status !== 'SUBSCRIBED') return;
 

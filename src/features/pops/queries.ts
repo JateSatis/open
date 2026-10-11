@@ -22,10 +22,15 @@ export function usePops(channelId: string) {
 
 /** Могу ли я публиковать в канале. Пока не знаем — не могу: «+» не мигает постороннему. */
 export function useCanPublish(channelId: string): boolean {
+  return useCanPublishState(channelId).canPublish;
+}
+
+/** То же, плюс `known` — ответ уже пришёл, а не «пока нет». */
+export function useCanPublishState(channelId: string): { canPublish: boolean; known: boolean } {
   const { data } = useQuery({
     queryKey: canPublishQueryKey(channelId),
     queryFn: () => canPublishInChannel(channelId),
   });
 
-  return data === true;
+  return { canPublish: data === true, known: data !== undefined };
 }

@@ -1,6 +1,6 @@
 import { SymbolView } from 'expo-symbols';
 import { useIsFocused, useRouter } from 'expo-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, View, type LayoutChangeEvent } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -19,7 +19,7 @@ import type { Pop } from '@/api/pops';
 import { Text } from '@/components/Text';
 import { useChannel } from '@/features/channels/useChannel';
 import { CommentsPanel } from '@/features/interactions/CommentsPanel';
-import { useCanPublish } from '@/features/pops/queries';
+import { useCanPublishState } from '@/features/pops/queries';
 import { usePopCountersSync } from '@/features/pops/usePopCountersSync';
 import { usePopFeed } from '@/features/pops/usePopFeed';
 import { useTheme } from '@/hooks/use-theme';
@@ -28,20 +28,27 @@ import { Sizes } from '@/theme';
 
 const popKey = (pop: Pop) => pop.id;
 
-export type PopViewerProps = { channelId: string; startId: string };
+export type PopViewerProps = {
+  channelId: string;
+  startId: string;
+  /** Сразу с открытыми комментариями к стартовому попу. */
+  openComments?: boolean;
+  /** Комментарий, к которому пришли: наверху шита и подсвечен. */
+  focusCommentId?: string;
+};
 
 /**
  * Просмотр попсов канала, как в TikTok: на весь экран, страница за страницей
  * по вертикали, от выбранного — выше новее, ниже старше. Играет только
  * активная страница; следующая прогревает плеер, остальные — обложки.
  */
-export function PopViewer({ channelId, startId }: PopViewerProps) {
+export function PopViewer({ channelId, startId, openComments = false, focusCommentId }: PopViewerProps) {
   const theme = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const focused = useIsFocused();
   const appActive = useAppActive();
-  const canPublish = useCanPublish(channelId);
+  const { canPublish, known: rightsKnown } = useCanPublishState(channelId);
   const channel = useChannel(channelId);
   const feed = usePopFeed(channelId, startId);
   const { pops } = feed;
@@ -70,7 +77,13 @@ export function PopViewer({ channelId, startId }: PopViewerProps) {
   const live = focused && appActive;
   const { onReaction, onDoubleTap } = usePopReactionActions(canPublish);
   const onOpenChannel = useOpenChannel(channelId);
-  const { openPopId, onOpenComments, onOpenPerson } = usePopComments(canPublish);
+  const startReady = Boolean(size) && pops[activeIndex]?.id === startId;
+  const start = useMemo(
+    () =>
+      openComments ? { startId, focusCommentId, ready: startReady, rightsKnown } : undefined,
+    [focusCommentId, openComments, rightsKnown, startId, startReady],
+  );
+  const { openPopId, onOpenComments, onOpenPerson } = usePopComments(canPublish, start);
   const commentsOpen = openPopId !== null;
   const chromeStyle = useCommentsChromeFade(commentsOpen);
 

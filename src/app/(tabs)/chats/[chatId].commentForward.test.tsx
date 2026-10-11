@@ -15,6 +15,7 @@ import { resetOutbox } from '@/features/chats/messages/outbox';
 import { reportRealtimeJoined, resetConnectionState } from '@/features/connection/connectionStore';
 import { closeComments } from '@/features/interactions/comments/commentsPanelStore';
 import { showNotice } from '@/features/notifications/alertsStore';
+import { openPopViewer } from '@/features/pops/openPopViewer';
 import { renderWithQuery } from '@/test/renderWithQuery';
 
 type Route = { name: string; key: string; params?: Record<string, string> };
@@ -36,6 +37,7 @@ jest.mock('expo-router', () => ({
   Stack: { Screen: () => null },
 }));
 
+jest.mock('@/features/pops/openPopViewer', () => ({ openPopViewer: jest.fn() }));
 jest.mock('@/api/profile', () => ({
   getProfile: jest.fn(() => Promise.resolve(null)),
   getMyProfile: jest.fn(() => Promise.resolve({ id: 'user-3', displayName: 'Пётр', avatarUrl: null })),
@@ -58,6 +60,9 @@ jest.mock('@/api/chats', () => ({
   MESSAGE_PAGE_SIZE: 30,
 }));
 jest.mock('@/api/comments', () => ({
+  getPinnedComment: jest.fn(() => Promise.resolve(null)),
+  pinComment: jest.fn(() => Promise.resolve()),
+  unpinComment: jest.fn(() => Promise.resolve()),
   COMMENT_PAGE_SIZE: 30,
   THREAD_PAGE_SIZE: 10,
   listThreadRoots: jest.fn(),
@@ -161,7 +166,7 @@ function forwarded(
 ): ForwardedComment {
   return {
     id: 'c1',
-    messageId: targetId,
+    subject: { type: 'message', id: targetId },
     chatId,
     threadRootId: null,
     authorId: 'user-9',
@@ -187,6 +192,7 @@ function forwarded(
         durationMs: null,
       },
     },
+    pop: null,
     chat: { id: chatId, name: chatId === 'chat-1' ? 'Разговор' : 'Другой', amMember: false },
     ...overrides,
   };
@@ -374,5 +380,51 @@ describe('arriving at a forwarded comment', () => {
       { timeout: 4000 },
     );
     scrollToIndex.mockRestore();
+  });
+});
+
+describe('tapping a forwarded comment to a pop', () => {
+  const popComment = (pop: ForwardedComment['pop']) =>
+    forwarded('posts-1', 'pop-1', {
+      subject: { type: 'pop', id: 'pop-1' },
+      target: null,
+      pop,
+      chat: { id: 'posts-1', name: 'Pop Lab', amMember: false },
+    });
+  const live = { id: 'pop-1', channelId: 'channel-1', posterUrl: 'https://cdn.test/p.jpg', caption: null };
+
+  it('opens the pop from the quote, with comments closed', async () => {
+    mockedListMessages.mockResolvedValue({ items: withForward(popComment(live)), nextCursor: null });
+    await renderChat();
+
+    await fireEvent.press(screen.getByTestId('pop-quote'));
+
+    expect(openPopViewer).toHaveBeenCalledWith('channel-1', 'pop-1');
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  it('opens the pop with its comments and this one in focus from the label', async () => {
+    mockedListMessages.mockResolvedValue({ items: withForward(popComment(live)), nextCursor: null });
+    await renderChat();
+
+    await fireEvent.press(screen.getByText('Комментарий из «Pop Lab»'));
+
+    expect(openPopViewer).toHaveBeenCalledWith('channel-1', 'pop-1', { focusCommentId: 'c1' });
+  });
+
+  it('a deleted pop: «Поп удалён», taps open nothing, the comment stays', async () => {
+    mockedListMessages.mockResolvedValue({ items: withForward(popComment(null)), nextCursor: null });
+    await renderChat();
+
+    expect(screen.getByText('Поп удалён')).toBeTruthy();
+    expect(screen.getByText('пересланный комментарий')).toBeTruthy();
+
+    // Отключённая цитата отдаёт тап облачку — оно открывает своё меню, как у
+    // цитаты удалённого сообщения. Поэтому подпись — первой.
+    await fireEvent.press(screen.getByText('Комментарий из «Pop Lab»'));
+    await fireEvent.press(screen.getByTestId('pop-quote'));
+
+    expect(openPopViewer).not.toHaveBeenCalled();
+    expect(mockPush).not.toHaveBeenCalled();
   });
 });
