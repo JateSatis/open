@@ -68,6 +68,10 @@ $$;
 
 reset role;
 
+-- chat-info ставит группе имя `maestro_…` и стирает его; пишет только set_chat_username от
+-- участника, а уборка идёт владельцем схемы — колонка без истории, счётчиков у неё нет.
+update public.chats set username = null where username like 'maestro\_%';
+
 -- Итог одной строкой: обёртка печатает его в отчёт прогона (видно только последний SELECT).
 select
   (select count(*) from public.messages where text like 'maestro-%' and deleted_at is null) as messages_left,
