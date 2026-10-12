@@ -39,8 +39,10 @@ env:
 - evalScript: ${output.name = 'maestro_' + String(Date.now()).slice(-4)}
 - inputText: ${output.name}
 - assertVisible: "Имя свободно"
+# Клавиатура ещё может сдвигать кнопку: промах — повторить тап.
 - tapOn:
     id: "chat-username-save"
+    retryTapIfNoChange: true
 - assertVisible:
     id: "chat-info-username"
     text: "@${output.name}.di"
@@ -52,8 +54,8 @@ env:
     id: "chat-username-save"
 - assertNotVisible:
     id: "chat-info-username"
-# «Назад» — в переписку.
-- hideKeyboard
-- back
+# «Назад» в шапке — в переписку. Не `hideKeyboard`: при скрытой клавиатуре он сам жмёт
+# «назад» и уводит из чата.
+- tapOn: "Navigate up"
 - assertVisible:
     id: "messages-list"

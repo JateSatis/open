@@ -22,13 +22,13 @@ env:
           id: "channel-menu-button"
       - tapOn: "Отписаться"
 - assertVisible: "Подписаться"
-- assertVisible: "0 читателей"
+- assertVisible: "@.*.ch · 0 читателей"
 # «Посты»: подписка сразу кладёт канал в «Чаты», вопроса нет, внизу пусто.
 - tapOn:
     id: "channel-subscribe-button"
 - assertNotVisible:
     id: "channel-subscribe-bar"
-- assertVisible: "1 читатель"
+- assertVisible: "@.*.ch · 1 читатель"
 - assertNotVisible: "Хотите добавить в чаты?"
 # «⋮» читателя — три пункта.
 - tapOn:
@@ -46,7 +46,7 @@ env:
 - assertVisible: "Хотите добавить в чаты?"
 - tapOn: "Нет"
 - assertVisible: "Добавить в чаты"
-- assertVisible: "1 подписчик"
+- assertVisible: "@.*.ch · 1 подписчик"
 - tapOn:
     id: "channel-menu-button"
 - assertVisible: "Добавить в чаты"
