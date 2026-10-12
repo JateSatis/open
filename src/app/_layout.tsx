@@ -21,6 +21,8 @@ import { isNetworkError } from '@/lib/network';
 
 SplashScreen.preventAutoHideAsync();
 
+const QUERY_RETRY_DELAY_MS = 1000;
+
 /**
  * Каждый запрос и каждая мутация сообщают, дошли ли они до сервера. Это и есть
  * второй источник правды о связи, помимо сокета: отдельного «пинга» приложение
@@ -49,6 +51,11 @@ export default function RootLayout() {
             // Вернулась связь — данные перечитываются, даже если запрос сам по
             // себе ещё не считается устаревшим.
             refetchOnReconnect: 'always',
+            // Одна тихая повторная попытка вслед за первой: со сроком запроса
+            // (`REQUEST_TIMEOUT_MS`) это около 20 с до того, как экран честно
+            // скажет «не удалось загрузить», вместо минуты с лишним по умолчанию.
+            retry: 1,
+            retryDelay: QUERY_RETRY_DELAY_MS,
           },
         },
         queryCache: new QueryCache({
