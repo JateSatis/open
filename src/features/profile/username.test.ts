@@ -14,10 +14,6 @@ describe('validateUsername', () => {
     expect(validateUsername('   ')).toBeNull();
   });
 
-  it('asks for a username when it is required (a channel)', () => {
-    expect(validateUsername('   ', { required: true })).toBe('Придумайте имя пользователя');
-  });
-
   it.each(['a.b', 'news.ch', 'team.di', '.abc'])('rejects %s for the dot', (value) => {
     expect(validateUsername(value)).toBe('Точка в имени недопустима');
   });

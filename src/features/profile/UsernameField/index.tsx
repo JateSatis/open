@@ -56,8 +56,8 @@ export function UsernameField({
         suffix={USERNAME_SUFFIX[kind] || undefined}
         autoCapitalize="none"
         autoCorrect={false}
-        // Запас под вставку с суффиксом: `news.ch` должно влезть, чтобы срезаться.
-        maxLength={USERNAME_MAX_LENGTH + USERNAME_SUFFIX[kind].length}
+        // Запас под вставку с `@` и суффиксом: `@news.ch` должно влезть, чтобы срезаться.
+        maxLength={1 + USERNAME_MAX_LENGTH + USERNAME_SUFFIX[kind].length}
         placeholder="username"
       />
 

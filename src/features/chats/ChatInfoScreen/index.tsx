@@ -76,8 +76,10 @@ export function ChatInfoScreen({ chatId }: ChatInfoScreenProps) {
         </Text>
       </View>
 
-      {isChatMember(chat, currentUserId) ? (
-        <ChatUsernameForm chatId={chat.id} current={chat.username} />
+      {chat.kind === 'group' && isChatMember(chat, currentUserId) ? (
+        // Ключ — текущее имя: переименовал другой участник — поле показывает его
+        // имя, а не старое, которое кнопка «Сохранить» молча вернула бы назад.
+        <ChatUsernameForm key={chat.username ?? ''} chatId={chat.id} current={chat.username} />
       ) : null}
     </KeyboardAwareScrollView>
   );

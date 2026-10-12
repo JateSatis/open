@@ -39,7 +39,7 @@ export function useSetChatUsername(chatId: string) {
     onError: (error, username) => {
       if (error instanceof ChatUsernameTakenError && username) {
         void queryClient.invalidateQueries({
-          queryKey: usernameAvailabilityKey('group', username),
+          queryKey: usernameAvailabilityKey('group', username, chatId),
         });
       }
     },

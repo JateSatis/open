@@ -30,8 +30,9 @@ export type UsernameAvailabilityOptions = {
   current?: string | null;
 };
 
-export const usernameAvailabilityKey = (kind: UsernameKind, username: string) =>
-  ['username-available', kind, username.toLowerCase()] as const;
+// Ответ зависит и от того, чьё имя редактируют: своё имя занятым не считается.
+export const usernameAvailabilityKey = (kind: UsernameKind, username: string, ownId?: string) =>
+  ['username-available', kind, username.toLowerCase(), ownId ?? null] as const;
 
 /**
  * Проверка `@имени` на лету в пространстве своего вида: формат сразу,
@@ -53,7 +54,7 @@ export function useUsernameAvailability(
   }, [username]);
 
   const query = useQuery({
-    queryKey: usernameAvailabilityKey(kind, settled),
+    queryKey: usernameAvailabilityKey(kind, settled, ownId),
     queryFn: () => isUsernameAvailable(kind, settled, ownId),
     enabled: settled !== '' && settled === username && formatError === null && !unchanged,
     // Имя могут занять в любой момент: старый ответ не переиспользуем надолго.

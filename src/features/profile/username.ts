@@ -28,13 +28,14 @@ const USERNAME_PATTERN = /^[a-z][a-z0-9_]*$/;
 
 /**
  * Returns an error message to show under the field, or null when valid. Empty
- * is valid unless `required` — a username is mandatory only for a channel.
+ * is valid: a username is optional for people and groups, and the channel form
+ * requires one by keeping «Создать» disabled until the name is free.
  */
-export function validateUsername(value: string, { required = false } = {}): string | null {
+export function validateUsername(value: string): string | null {
   const username = value.trim();
 
   if (username.length === 0) {
-    return required ? 'Придумайте имя пользователя' : null;
+    return null;
   }
 
   if (username.includes('.')) {
