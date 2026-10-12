@@ -8,6 +8,8 @@ import {
   Keyboard,
   useWindowDimensions,
   View,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
   type TextInput,
 } from 'react-native';
 import Animated, { useAnimatedStyle } from 'react-native-reanimated';
@@ -117,6 +119,8 @@ const rowKey = (row: ChatListRow) => row.key;
 const KEEP_READING_POSITION = { minIndexForVisible: 0, autoscrollToTopThreshold: Spacing.six };
 /** Положение прокрутки нужно учёту просмотров лишь примерно: у низа или нет. */
 const VIEWS_SCROLL_THROTTLE_MS = 100;
+/** Ближе этой доли экрана к старейшему сообщению — пора догружать историю. */
+const HISTORY_EDGE = 0.4;
 
 export type ChatConversationProps = {
   chatId: string;
@@ -174,9 +178,10 @@ export function ChatConversation({
   const { chat, isLoading: isChatLoading, failed: chatFailed } = useChat(chatId);
   const chatMessages = useChatMessages(chatId, currentUserId);
   const { messages, isLoading, isLoadingMore, hasMore, error, activities } = chatMessages;
-  // Чат или его история не загрузились, и показать нечего: вместо крутилки —
-  // «не удалось» с повтором. Упавшее обновление поверх данных сюда не попадает.
-  const failed = chatFailed || chatMessages.failed;
+  // Показать нечего, а загрузить не вышло: вместо крутилки — «не удалось» с
+  // повтором. Упавшее обновление поверх данных сюда не попадает, как и упавший
+  // чат при уже загруженных сообщениях: их видно и без него.
+  const failed = chatMessages.failed || (chatFailed && !isLoading && messages.length === 0);
   const queryClient = useQueryClient();
   const reload = useCallback(
     () => reloadMissing(queryClient, [chatQueryKey(chatId), messagesQueryKey(chatId)]),
@@ -570,6 +575,18 @@ export function ChatConversation({
 
   // Прокрутили переписку — прокрученные вбок ряды реакций возвращаются в начало.
   const { onScroll: viewsOnScroll } = views;
+  const { resumeLoadMore } = chatMessages;
+  const onListDragStart = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+      // Список перевёрнут: старые сообщения — у конца содержимого.
+      const toOldest = contentSize.height - layoutMeasurement.height - contentOffset.y;
+
+      resumeLoadMore(toOldest < layoutMeasurement.height * HISTORY_EDGE);
+    },
+    [resumeLoadMore],
+  );
+
   const onListScroll = useCallback(
     (event: Parameters<typeof viewsOnScroll>[0]) => {
       viewsOnScroll(event);
@@ -803,7 +820,7 @@ export function ChatConversation({
                 viewabilityConfig={views.viewabilityConfig}
                 onViewableItemsChanged={views.onViewableItemsChanged}
                 onScroll={onListScroll}
-                onScrollBeginDrag={chatMessages.resumeLoadMore}
+                onScrollBeginDrag={onListDragStart}
                 scrollEventThrottle={VIEWS_SCROLL_THROTTLE_MS}
                 contentContainerStyle={styles.list}
                 // The list is inverted, so its "end" is the top of the screen:
@@ -813,7 +830,7 @@ export function ChatConversation({
                 // У самого низа переписки список по-прежнему едет за новым.
                 maintainVisibleContentPosition={KEEP_READING_POSITION}
                 onEndReached={hasMore ? loadMore : undefined}
-                onEndReachedThreshold={0.4}
+                onEndReachedThreshold={HISTORY_EDGE}
                 // Тап по облачку при открытой клавиатуре сразу открывает меню, а
                 // не только прячет клавиатуру; тап по пустому месту — прячет.
                 keyboardShouldPersistTaps="handled"

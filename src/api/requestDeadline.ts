@@ -70,9 +70,10 @@ export function withRequestDeadline(baseFetch: typeof fetch): typeof fetch {
       },
       timeoutFor(input, init),
     );
-    const forward = () => controller.abort();
+    // С причиной вызывающего: его отмена должна дойти до него его же ошибкой.
+    const forward = () => controller.abort(outer?.reason);
 
-    if (outer?.aborted) controller.abort();
+    if (outer?.aborted) forward();
     else outer?.addEventListener('abort', forward);
 
     try {

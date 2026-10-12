@@ -70,7 +70,7 @@ export type ChatMessagesState = {
   activities: UserActivity[];
   loadMore: () => void;
   /** Человек снова листает — догрузка истории после неудачи снова разрешена. */
-  resumeLoadMore: () => void;
+  resumeLoadMore: (atEdge: boolean) => void;
   /** Догружает историю назад до сообщения с этим временем. Отвечает, дошли ли. */
   loadUntil: (createdAt: string) => Promise<boolean>;
   /** Текст с альбомом; с цитатами — это ответ. */

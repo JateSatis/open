@@ -31,8 +31,12 @@ export type ChatHistoryState = {
    * сам, пока стоит у края, и без паузы повторял бы её по кругу.
    */
   loadMore: () => Promise<void>;
-  /** Человек снова листает — после неудачи догрузка пробует снова. */
-  resumeLoadMore: () => void;
+  /**
+   * Человек снова листает — после неудачи догрузка снова разрешена. У самого
+   * края истории (`atEdge`) она и пробует сразу: список второй раз не зовёт
+   * догрузку при той же длине содержимого.
+   */
+  resumeLoadMore: (atEdge: boolean) => void;
   /**
    * Догружает страницы назад, пока в истории не окажется сообщение с этим
    * временем, — по одной странице, «загрузить весь чат» не существует.
@@ -106,14 +110,15 @@ export function useChatHistory(chatId: string): ChatHistoryState {
     [fetchOlder],
   );
 
-  // Сразу и пробуем: список второй раз не зовёт догрузку при той же длине
-  // содержимого, и человек, листающий у края, иначе так и стоял бы на месте.
-  const resumeLoadMore = useCallback(() => {
-    if (!stalledRef.current) return;
+  const resumeLoadMore = useCallback(
+    (atEdge: boolean) => {
+      if (!stalledRef.current) return;
 
-    stalledRef.current = false;
-    void fetchOlder();
-  }, [fetchOlder]);
+      stalledRef.current = false;
+      if (atEdge) void fetchOlder();
+    },
+    [fetchOlder],
+  );
 
   const loadUntil = useCallback(
     async (createdAt: string): Promise<boolean> => {

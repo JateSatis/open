@@ -74,7 +74,7 @@ describe('useChatHistory: догрузка старых после сбоя', ()
       items: [message('old', '2026-10-11T10:00:00Z')],
       nextCursor: null,
     });
-    await act(async () => result.current.resumeLoadMore());
+    await act(async () => result.current.resumeLoadMore(true));
 
     await waitFor(() => expect(result.current.items.map((item) => item.id)).toContain('old'));
     expect(mockedList).toHaveBeenCalledTimes(3);
