@@ -1,5 +1,7 @@
 appId: com.openger.app
 name: Низ облачка — время вместо «Отправляется…»
+tags:
+  - chats
 env:
   CHAT: Plany
 ---

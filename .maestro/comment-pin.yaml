@@ -1,5 +1,10 @@
 appId: com.openger.app
 name: Закреп комментария к попу владельцем канала — метка «Закреплено автором», открепление, у ответа пунктов нет
+tags:
+  - comments
+  - pops
+  - channels
+  - video
 env:
   CHANNEL: Pop Lab
 ---

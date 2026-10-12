@@ -1,5 +1,9 @@
 appId: com.openger.app
 name: Шит комментариев из меню «Комментировать» — сообщение над шитом, закрытие свайпом и тапом по сообщению
+tags:
+  - smoke
+  - comments
+  - chats
 env:
   CHAT: Plany
 ---

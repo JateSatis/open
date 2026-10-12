@@ -1,5 +1,8 @@
 appId: com.openger.app
 name: Кнопка «+» открывает меню; «Групповой чат» только закрывает его, «Канал» ведёт к созданию канала
+tags:
+  - chats
+  - channels
 ---
 - runFlow: subflows/open-app.yaml
 - tapOn:

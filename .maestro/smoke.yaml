@@ -1,5 +1,7 @@
 appId: com.openger.app
 name: Запуск и вкладки
+tags:
+  - smoke
 ---
 - runFlow: subflows/open-app.yaml
 - tapOn: "Лента"
