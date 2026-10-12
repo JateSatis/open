@@ -396,13 +396,17 @@ describe('ChannelScreen subscription', () => {
     await openPops();
 
     const button = await screen.findByRole('button', { name: 'Подписаться' });
-    fireEvent.press(button);
-    fireEvent.press(button);
+    // fireEvent is async in RNTL 14: two un-awaited presses overlap act() and break every later
+    // test in the file. Awaited, the second tap lands on «Добавить в чаты» — only the guard stops it.
+    await fireEvent.press(button);
+    await fireEvent.press(button);
 
     expect(await screen.findAllByText('Хотите добавить в чаты?')).toHaveLength(1);
     fireEvent.press(screen.getByRole('button', { name: 'Нет' }));
     await waitFor(() => expect(subscribeToChannel).toHaveBeenCalledTimes(1));
     expect(screen.queryByText('Хотите добавить в чаты?')).toBeNull();
+    expect(await screen.findByRole('button', { name: 'Добавить в чаты' })).toBeTruthy();
+    expect(setChannelInChats).not.toHaveBeenCalled();
   });
 
   it('closing the question without an answer is «Нет»', async () => {
