@@ -1,5 +1,7 @@
 appId: com.openger.app
 name: Реакция из меню встаёт в нижнюю строку облачка с моим аватаром, тап по ней снимает
+tags:
+  - chats
 env:
   CHAT: Plany
 ---

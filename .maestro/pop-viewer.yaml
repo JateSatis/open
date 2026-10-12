@@ -1,5 +1,8 @@
 appId: com.openger.app
 name: Просмотр попа — открытие с плитки, пауза тапом, ❤️ двойным тапом, реакция из «+», возврат стрелкой
+tags:
+  - pops
+  - video
 env:
   CHANNEL: Test Kanal
 ---

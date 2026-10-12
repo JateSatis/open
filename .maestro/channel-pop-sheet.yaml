@@ -1,5 +1,9 @@
 appId: com.openger.app
 name: Канал — шит медиа в «Постах» с вкладками «Галерея» и «Pop», переключение и закрытие свайпом
+tags:
+  - channels
+  - media
+  - pops
 env:
   CHANNEL: Test Kanal
 ---

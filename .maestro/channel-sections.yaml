@@ -1,5 +1,8 @@
 appId: com.openger.app
 name: Канал — «Посты» и «Попсы» переключаются тапом по сегменту и свайпом
+tags:
+  - channels
+  - pops
 env:
   CHANNEL: Test Kanal
 ---

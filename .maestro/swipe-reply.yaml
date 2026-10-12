@@ -1,5 +1,7 @@
 appId: com.openger.app
 name: Свайп ответа открывает плашку и клавиатуру
+tags:
+  - chats
 env:
   CHAT: Plany
 ---

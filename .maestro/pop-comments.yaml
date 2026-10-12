@@ -1,5 +1,9 @@
 appId: com.openger.app
 name: Комментарии к попу — шит над уменьшенным видео, закрытие тапом по видео, «назад» и свайпом
+tags:
+  - comments
+  - pops
+  - video
 env:
   CHANNEL: Test Kanal
 ---
