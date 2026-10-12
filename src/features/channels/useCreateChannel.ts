@@ -1,9 +1,9 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { ChannelUsernameTakenError, createChannel, type CreatedChannel } from '@/api/channels';
-import { usernameAvailabilityKey } from '@/features/channels/useUsernameAvailability';
 import { chatsQueryKey } from '@/features/chats/useChats';
 import { removeUploadedMedia, uploadChannelAvatar } from '@/features/media';
+import { usernameAvailabilityKey } from '@/features/profile/useUsernameAvailability';
 import { DeadlineError, withDeadline } from '@/lib/deadline';
 import { isNetworkError } from '@/lib/network';
 
@@ -60,7 +60,7 @@ async function createWithAvatar(input: NewChannel, userId: string): Promise<Crea
 
 /** Текст сбоя создания для формы. */
 export function describeCreateChannelError(error: unknown): string {
-  if (error instanceof ChannelUsernameTakenError) return 'Это имя уже занято';
+  if (error instanceof ChannelUsernameTakenError) return 'Имя занято';
   if (isNetworkError(error)) return 'Нет связи. Проверьте интернет и попробуйте ещё раз.';
 
   return 'Не удалось создать канал. Попробуйте ещё раз.';
@@ -89,7 +89,7 @@ export function useCreateChannel(
     onError: (error, input) => {
       if (error instanceof ChannelUsernameTakenError) {
         void queryClient.invalidateQueries({
-          queryKey: usernameAvailabilityKey(input.username.trim()),
+          queryKey: usernameAvailabilityKey('channel', input.username.trim()),
         });
       }
     },

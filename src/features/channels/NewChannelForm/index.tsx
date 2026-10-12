@@ -19,10 +19,10 @@ import {
   CHANNEL_DESCRIPTION_MAX_LENGTH,
   CHANNEL_TITLE_MAX_LENGTH,
 } from '@/features/channels/limits';
-import { UsernameField } from '@/features/channels/UsernameField';
 import { describeCreateChannelError, useCreateChannel } from '@/features/channels/useCreateChannel';
-import { useUsernameAvailability } from '@/features/channels/useUsernameAvailability';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
+import { UsernameField } from '@/features/profile/UsernameField';
+import { useUsernameAvailability } from '@/features/profile/useUsernameAvailability';
 import { useTheme } from '@/hooks/use-theme';
 import { Spacing } from '@/theme';
 
@@ -48,7 +48,7 @@ export function NewChannelForm({ onCreated }: NewChannelFormProps) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [username, setUsername] = useState('');
-  const availability = useUsernameAvailability(username);
+  const availability = useUsernameAvailability(username, { kind: 'channel' });
   const create = useCreateChannel(userId, onCreated);
 
   // Что лежит под формой до низа окна — таб-бар: клавиатура поднимает низ на
@@ -110,7 +110,13 @@ export function NewChannelForm({ onCreated }: NewChannelFormProps) {
           placeholder="Необязательно"
         />
 
-        <UsernameField value={username} onChangeText={setUsername} availability={availability} />
+        <UsernameField
+          testID="channel-username"
+          kind="channel"
+          value={username}
+          onChangeText={setUsername}
+          availability={availability}
+        />
       </KeyboardAwareScrollView>
 
       <View
