@@ -19,5 +19,5 @@ export function useMyInvite(chatId: string, enabled: boolean): MyInvite | null |
   });
 
   // Не узнали — как будто заявки нет: низ переписки не остаётся пустым.
-  return data ?? (isError ? null : undefined);
+  return data === undefined && isError ? null : data;
 }

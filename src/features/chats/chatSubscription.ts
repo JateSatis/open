@@ -43,7 +43,7 @@ export function useChatSubscription(
 
   // Не узнали — считаем, что не подписан: иначе низ переписки остался бы
   // пустым. Повторная подписка базе не ошибка.
-  return data ?? (isError ? null : undefined);
+  return data === undefined && isError ? null : data;
 }
 
 type Snapshot = {

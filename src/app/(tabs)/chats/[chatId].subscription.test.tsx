@@ -299,6 +299,14 @@ describe("ChatScreen: someone else's dialogue", () => {
     expect(await screen.findByText('0 подписчиков')).toBeTruthy();
   });
 
+  it('still offers «Подписаться» when the subscription could not be read', async () => {
+    jest.mocked(getMyChatSubscription).mockRejectedValue(new Error('offline'));
+
+    await renderWithQuery(<ChatScreen />);
+
+    expect(await screen.findByTestId('chat-subscribe-button')).toBeTruthy();
+  });
+
   it('keeps the invite answer, not «Подписаться», for a pending invitee', async () => {
     mockedGetChat.mockImplementation(async () => ({
       ...chatWith([anna]),
