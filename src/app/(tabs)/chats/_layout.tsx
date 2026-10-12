@@ -25,6 +25,7 @@ export default function ChatsLayout() {
       <Stack.Screen name="channel/[channelId]" options={{ title: 'Канал' }} />
       <Stack.Screen name="channel-subscribers/[channelId]" options={{ title: 'Подписчики' }} />
       <Stack.Screen name="chat-subscribers/[chatId]" options={{ title: 'Подписчики' }} />
+      <Stack.Screen name="chat-info/[chatId]" options={{ title: 'О чате' }} />
     </Stack>
   );
 }
