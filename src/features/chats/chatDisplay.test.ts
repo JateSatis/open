@@ -3,6 +3,7 @@ import {
   chatAvatarUrl,
   chatTitle,
   counterpart,
+  dialogPair,
   formatChatTimestamp,
   isChatMember,
 } from './chatDisplay';
@@ -31,6 +32,7 @@ const direct: ChatSummary = {
   previewIsPop: false,
   subscription: null,
   hasUnread: false,
+  subscribersCount: 0,
   channel: null,
 };
 
@@ -58,6 +60,39 @@ describe('chatDisplay', () => {
   it('names a direct chat after the other side', () => {
     expect(chatTitle(direct, 'user-1')).toBe('Марина');
     expect(counterpart(direct, 'user-1')?.id).toBe('user-2');
+  });
+
+  it("names someone else's dialogue after both people for an outsider", () => {
+    const theirs: ChatSummary = {
+      ...direct,
+      participants: [
+        { ...direct.participants[1], displayName: 'Аня' },
+        { id: 'user-3', displayName: 'Пётр', avatarUrl: null, lastReadAt: '2026-09-16T10:00:00Z' },
+      ],
+    };
+
+    expect(chatTitle(theirs, 'user-9')).toBe('Аня и Пётр');
+    expect(dialogPair(theirs, 'user-9')?.map((person) => person.id)).toEqual(['user-2', 'user-3']);
+    expect(counterpart(theirs, 'user-9')).toBeNull();
+    // Хозяин видит свой диалог по собеседнику, как раньше.
+    expect(chatTitle(theirs, 'user-2')).toBe('Пётр');
+    expect(dialogPair(theirs, 'user-2')).toBeNull();
+  });
+
+  it('keeps an invited person on the inside of the dialogue', () => {
+    const pending: ChatSummary = {
+      ...direct,
+      participants: [direct.participants[1]],
+      waiting: [{ id: 'user-1', displayName: 'Я', avatarUrl: null }],
+    };
+
+    expect(chatTitle(pending, 'user-1')).toBe('Марина');
+    expect(chatTitle(pending, 'user-9')).toBe('Марина и Я');
+  });
+
+  it('keeps a group named by its title for an outsider too', () => {
+    expect(chatTitle(group, 'user-9')).toBe('Планёрка');
+    expect(dialogPair(group, 'user-9')).toBeNull();
   });
 
   it('keeps the group title and has no single counterpart', () => {

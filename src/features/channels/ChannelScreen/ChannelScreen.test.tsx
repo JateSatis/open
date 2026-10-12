@@ -159,6 +159,7 @@ const postsChat: ChatSummary = {
   previewIsPop: false,
   subscription: null,
   hasUnread: false,
+  subscribersCount: 0,
 };
 
 const post: Message = {

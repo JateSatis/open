@@ -1,0 +1,46 @@
+appId: com.openger.app
+name: Чужой диалог — «Аня и Пётр», подписка снизу, диалог в «Чатах», меню по долгому нажатию, отписка из «⋮»
+env:
+  # Диалог Артёма (@rain) и Максима (@jatesatis): основной аккаунт в нём не участник.
+  CHAT_ID: 54522973-b2a0-4dff-8754-441f5dc6dd7c
+  TITLE: Артём Данилов и Максим Данилов
+---
+- runFlow: subflows/open-app.yaml
+- openLink: openger://chats/${CHAT_ID}
+- assertVisible:
+    id: "messages-list"
+- assertVisible: ${TITLE}
+# Подписка от прошлого прогона — сначала отписаться.
+- runFlow:
+    when:
+      visible:
+        id: "chat-menu-button"
+    commands:
+      - tapOn:
+          id: "chat-menu-button"
+      - tapOn: "Отписаться"
+- assertVisible:
+    id: "chat-subscribe-button"
+- assertVisible: "0 подписчиков"
+# Подписка одного уровня: внизу пусто, число +1, «⋮» — два пункта.
+- tapOn:
+    id: "chat-subscribe-button"
+- assertNotVisible:
+    id: "chat-subscribe-bar"
+- assertVisible: "1 подписчик"
+- tapOn:
+    id: "chat-menu-button"
+- assertVisible: "Выключить уведомления"
+- assertVisible: "Отписаться"
+- assertNotVisible: "Не отображать в чатах"
+- pressKey: back
+# Диалог в «Чатах» — двое внахлёст; долгое нажатие — три пункта.
+- openLink: openger://chats
+- longPressOn:
+    id: "chat-avatar-pair"
+- assertVisible: "Прочитать все"
+- assertVisible: "Выключить уведомления"
+- assertNotVisible: "Не отображать в чатах"
+- tapOn: "Отписаться"
+- assertNotVisible:
+    id: "chat-avatar-pair"

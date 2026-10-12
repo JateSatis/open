@@ -174,6 +174,7 @@ const chat: ChatSummary = {
   previewIsPop: false,
   subscription: null,
   hasUnread: false,
+  subscribersCount: 0,
   channel: null,
 };
 
@@ -404,10 +405,9 @@ describe('comments panel', () => {
   it('opens with only the comments inside, an honest empty state and a field — for a visitor too', async () => {
     await renderChat();
 
-    // В самой переписке посетитель писать не может…
-    expect(
-      screen.getByText('Читать этот чат может кто угодно, писать — только участники.'),
-    ).toBeTruthy();
+    // В самой переписке посетитель писать не может — только подписаться…
+    expect(await screen.findByTestId('chat-subscribe-button')).toBeTruthy();
+    expect(screen.queryByPlaceholderText('Сообщение')).toBeNull();
 
     await openCommentsOf(3);
 

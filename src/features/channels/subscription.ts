@@ -62,11 +62,9 @@ function postsChatOf(queryClient: QueryClient, channelId: string): string | null
 function applySubscription(
   queryClient: QueryClient,
   channelId: string,
+  previous: ChannelSubscription | null,
   next: ChannelSubscription | null,
 ) {
-  const previous = queryClient.getQueryData<ChannelSubscription | null>(
-    channelSubscriptionQueryKey(channelId),
-  );
   const subscribersDelta = (next ? 1 : 0) - (previous ? 1 : 0);
   const readersDelta = (next?.inChats ? 1 : 0) - (previous?.inChats ? 1 : 0);
 
@@ -118,10 +116,14 @@ export function useSubscriptionActions(channelId: string): SubscriptionActions {
       failure: string,
     ): Promise<boolean> => {
       const snapshot = takeSnapshot(queryClient, channelId);
-      const current = snapshot.subscription ?? null;
+      // Из «Чатов» канал могли ещё не открывать — тогда подписка есть только
+      // в строке списка, и без неё «Прочитать все» убрало бы строку.
+      const listed = snapshot.chats?.find((chat) => chat.channel?.id === channelId)?.subscription;
+      const current =
+        snapshot.subscription ?? (listed?.channelId ? { ...listed, channelId: listed.channelId } : null);
 
       await queryClient.cancelQueries({ queryKey: channelSubscriptionQueryKey(channelId) });
-      applySubscription(queryClient, channelId, next(current));
+      applySubscription(queryClient, channelId, current, next(current));
 
       try {
         await withDeadline(request(), ACTION_DEADLINE_MS);

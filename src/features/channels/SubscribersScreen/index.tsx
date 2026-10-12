@@ -7,8 +7,9 @@ import { styles } from './styles';
 
 import {
   listChannelSubscribers,
+  listChatSubscribers,
   SUBSCRIBERS_PAGE_SIZE,
-  type ChannelSubscriber,
+  type Subscriber,
 } from '@/api/subscriptions';
 import { Avatar } from '@/components/Avatar';
 import { Text } from '@/components/Text';
@@ -19,22 +20,35 @@ import { describeLoadError } from '@/lib/network';
 export const channelSubscribersQueryKey = (channelId: string) =>
   ['channel', channelId, 'subscribers'] as const;
 
-export type SubscribersScreenProps = { channelId: string };
+export const chatSubscribersQueryKey = (chatId: string) =>
+  ['chat', chatId, 'subscribers'] as const;
 
-const subscriberKey = (subscriber: ChannelSubscriber) => subscriber.id;
+/** Чьи подписчики: канала (видит создатель) или чужого диалога и группы (видят участники). */
+export type SubscribersTarget = { kind: 'channel'; id: string } | { kind: 'chat'; id: string };
+
+export type SubscribersScreenProps = { target: SubscribersTarget };
+
+const subscriberKey = (subscriber: Subscriber) => subscriber.id;
 
 /**
- * Подписчики канала — экран создателя: свежие сверху, страницами, у читателей
- * пометка «в чатах». Тап — профиль. Остальным база этот список не отдаёт.
+ * Подписчики канала или чата: свежие сверху, страницами, у читателей канала
+ * пометка «в чатах» (у чата уровень один — пометки нет). Тап — профиль.
+ * Остальным база этот список не отдаёт.
  */
-export function SubscribersScreen({ channelId }: SubscribersScreenProps) {
+export function SubscribersScreen({ target }: SubscribersScreenProps) {
   const theme = useTheme();
   const router = useRouter();
   const currentUserId = useCurrentUserId();
   const query = useInfiniteQuery({
-    queryKey: channelSubscribersQueryKey(channelId),
-    queryFn: ({ pageParam }) => listChannelSubscribers(channelId, pageParam),
-    initialPageParam: null as ChannelSubscriber | null,
+    queryKey:
+      target.kind === 'channel'
+        ? channelSubscribersQueryKey(target.id)
+        : chatSubscribersQueryKey(target.id),
+    queryFn: ({ pageParam }) =>
+      target.kind === 'channel'
+        ? listChannelSubscribers(target.id, pageParam)
+        : listChatSubscribers(target.id, pageParam),
+    initialPageParam: null as Subscriber | null,
     getNextPageParam: (last) =>
       last.length < SUBSCRIBERS_PAGE_SIZE ? undefined : last[last.length - 1],
   });

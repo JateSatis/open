@@ -139,6 +139,7 @@ function chatWith(participants: ChatSummary['participants']): ChatSummary {
     previewIsPop: false,
     subscription: null,
     hasUnread: false,
+    subscribersCount: 0,
     channel: null,
   };
 }
@@ -207,7 +208,8 @@ describe('ChatScreen', () => {
 
     await renderWithQuery(<ChatScreen />);
 
-    expect(await screen.findByText('в отпуске до понедельника')).toBeTruthy();
+    // Рядом со статусом собеседника — число подписчиков переписки.
+    expect(await screen.findByText('в отпуске до понедельника · 0 подписчиков')).toBeTruthy();
     expect(mockedGetProfile).toHaveBeenCalledWith('user-2');
 
     await user.press(screen.getByLabelText('Профиль: Разговор'));
@@ -338,7 +340,7 @@ describe('ChatScreen', () => {
     expect(screen.getAllByTestId('message-views')).toHaveLength(1);
   });
 
-  it('hides the composer from an outsider and says why', async () => {
+  it('offers an outsider «Подписаться» instead of the composer', async () => {
     mockedGetChat.mockResolvedValue(
       chatWith([
         other,
@@ -348,9 +350,7 @@ describe('ChatScreen', () => {
 
     await renderWithQuery(<ChatScreen />);
 
-    expect(
-      await screen.findByText('Читать этот чат может кто угодно, писать — только участники.'),
-    ).toBeTruthy();
+    expect(await screen.findByTestId('chat-subscribe-button')).toBeTruthy();
     expect(screen.queryByLabelText('Сообщение')).toBeNull();
   });
 

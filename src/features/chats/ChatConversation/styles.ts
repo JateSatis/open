@@ -16,6 +16,12 @@ export const styles = StyleSheet.create({
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.two,
   },
+  /** Звонок и «⋮» справа в шапке участника. */
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.four,
+  },
   banner: {
     paddingHorizontal: Spacing.three,
     paddingBottom: Spacing.one,

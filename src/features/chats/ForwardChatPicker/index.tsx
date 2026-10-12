@@ -26,8 +26,13 @@ export function ForwardChatPicker({ onPick }: ForwardChatPickerProps) {
   const { chats, isLoading, error } = useChats();
   const [query, setQuery] = useState('');
 
+  // Подписки — каналы и чужие чаты в «Чатах» — тоже не сюда: писать в них
+  // я не могу, пересылку база отвергла бы.
   const found = useMemo(
-    () => chats.filter((chat) => matchesChatQuery(chat, query, currentUserId)),
+    () =>
+      chats.filter(
+        (chat) => !chat.subscription && matchesChatQuery(chat, query, currentUserId),
+      ),
     [chats, currentUserId, query],
   );
 

@@ -9,7 +9,7 @@ import type { QueryData, RealtimeChannel } from '@supabase/supabase-js';
 import { acquireChatTopic, type ChatActivity, type ChatTopicListener } from '@/api/chatTopics';
 import { MESSAGE_COLUMNS, messagesSelect, toMessage, type Message } from '@/api/messageRows';
 import { publishPop, type PublishPopInput } from '@/api/pops';
-import { listChatSubscriptions, type ChannelSubscription } from '@/api/subscriptions';
+import { listChatSubscriptions, type Subscription } from '@/api/subscriptions';
 import { supabase } from '@/api/supabase';
 
 export { toPreview, type MessagePreview } from '@/api/messagePreview';
@@ -85,13 +85,18 @@ export type ChatSummary = {
    * превью у него остаётся текстом поста.
    */
   previewIsPop: boolean;
-  /** Моя подписка на канал, если я его читаю, а не публикую в нём. */
-  subscription: ChannelSubscription | null;
+  /**
+   * Моя подписка: на канал, если я его читаю, а не публикую в нём, или на
+   * чужой диалог и группу. Только в «Чатах» — экран чата берёт её отдельно.
+   */
+  subscription: Subscription | null;
   /**
    * Участнику — последнее сообщение чужое и пришло после моей отметки.
-   * Подписчику — в канале есть непрочитанные посты или попсы.
+   * Подписчику — есть непрочитанные посты, попсы или сообщения.
    */
   hasUnread: boolean;
+  /** Подписчики чужого диалога или группы; у чата постов — 0, его числа у канала. */
+  subscribersCount: number;
 };
 
 /**
@@ -145,9 +150,9 @@ export type Page<T> = {
 };
 
 const CHAT_COLUMNS =
-  'id, kind, title, last_message_at, last_message_text, last_message_author_id, channel:channels(id, title, username, avatar_url, last_pop_at)';
+  'id, kind, title, last_message_at, last_message_text, last_message_author_id, subscribers_count, channel:channels(id, title, username, avatar_url, last_pop_at)';
 const MEMBER_COLUMNS =
-  'chat_id, user_id, last_read_at, profile:profiles(id, display_name, avatar_url)';
+  'chat_id, user_id, last_read_at, joined_at, profile:profiles(id, display_name, avatar_url)';
 const WAITING_COLUMNS = 'chat_id, user_id, display_name, avatar_url';
 export const chatsSelect = () => supabase.from('chats').select(CHAT_COLUMNS);
 const membersSelect = () => supabase.from('chat_members').select(MEMBER_COLUMNS);
@@ -200,7 +205,7 @@ export function toSummary(
   chat: ChatRow,
   people: ChatPeople,
   viewerId: string,
-  subscription: ChannelSubscription | null = null,
+  subscription: Subscription | null = null,
 ): ChatSummary {
   const participants = people.members.map(toParticipant);
   const mine = participants.find((participant) => participant.id === viewerId);
@@ -230,6 +235,7 @@ export function toSummary(
     hasUnread: subscription
       ? subscription.unreadPosts + subscription.unreadPops > 0
       : memberUnread,
+    subscribersCount: chat.subscribers_count,
   };
 }
 
@@ -251,14 +257,18 @@ export async function getCurrentUserId(): Promise<string> {
   return data.user.id;
 }
 
-/** Участники и ещё не принявшие — для нескольких чатов разом, двумя запросами. */
+/**
+ * Участники и ещё не принявшие — для нескольких чатов разом, двумя запросами.
+ * Участники — в порядке вступления: так же база называет чужой диалог в
+ * карточке подписчика («Аня и Пётр»), и имя не должно переставляться.
+ */
 export async function fetchChatPeople(chatIds: string[]): Promise<Map<string, ChatPeople>> {
   const byChat = new Map<string, ChatPeople>();
 
   if (chatIds.length === 0) return byChat;
 
   const [members, waiting] = await Promise.all([
-    membersSelect().in('chat_id', chatIds),
+    membersSelect().in('chat_id', chatIds).order('joined_at', { ascending: true }),
     waitingSelect().in('chat_id', chatIds).order('invited_at', { ascending: true }),
   ]);
 
@@ -291,8 +301,8 @@ export async function fetchChatPeople(chatIds: string[]): Promise<Map<string, Ch
 const NO_PEOPLE: ChatPeople = { members: [], waiting: [] };
 
 /**
- * «Чаты»: те, где я участник, и каналы, которые я читаю (подписка «в чатах»),
- * свежие сверху. Превью — из денормализованных колонок `chats` и
+ * «Чаты»: те, где я участник, каналы, которые я читаю (подписка «в чатах»), и
+ * чужие диалоги и группы, на которые я подписан, — свежие сверху. Превью — из денормализованных колонок `chats` и
  * `channels.last_pop_at`, непрочитанное подписчика — одним запросом на все
  * подписки: читать последнее сообщение по каждой строке было бы запросом на строку.
  */
@@ -301,9 +311,9 @@ export async function listChats(): Promise<ChatSummary[]> {
 
   const [membership, subscriptions] = await Promise.all([
     supabase.from('chat_members').select('chat_id').eq('user_id', userId),
-    // Сбой подписок не должен прятать свои диалоги и группы: каналы
+    // Сбой подписок не должен прятать свои диалоги и группы: подписки
     // вернутся со следующим перечитыванием.
-    listChatSubscriptions().catch((): ChannelSubscription[] => []),
+    listChatSubscriptions().catch((): Subscription[] => []),
   ]);
 
   if (membership.error) throw membership.error;
@@ -813,6 +823,11 @@ export type IncomingMessage = {
   /** Пост канала: подписан каналом, а не опубликовавшим человеком. */
   channel: IncomingChannel | null;
   /**
+   * Сообщение в чужом диалоге или группе, на которые я подписан: название
+   * глазами постороннего («Аня и Пётр»). Карточка подписана им, а не автором.
+   */
+  subscribedChatTitle: string | null;
+  /**
    * Показывать ли карточку. Читатель мог выключить уведомления канала —
    * событие всё равно приходит, чтобы поднять канал в списке.
    */
@@ -915,6 +930,7 @@ function toIncoming(payload: unknown): IncomingMessage | null {
     text: typeof row.text === 'string' ? row.text : null,
     createdAt: typeof row.created_at === 'string' ? row.created_at : new Date().toISOString(),
     channel: toIncomingChannel(row),
+    subscribedChatTitle: typeof row.chat_title === 'string' ? row.chat_title : null,
     notify: row.notify !== false,
   };
 }

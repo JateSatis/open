@@ -56,7 +56,7 @@ jest.mock('@/api/commentTopics', () => ({
   acquireCommentTopic: jest.fn(() => () => undefined),
 }));
 
-// Подписки на каналы — запросы к базе. По умолчанию я ни на что не подписан;
+// Подписки на каналы и чужие чаты — запросы к базе. По умолчанию я ни на что не подписан;
 // тест подписок подменяет функции сам (`jest.mocked(getMySubscription)`).
 jest.mock('@/api/subscriptions', () => ({
   SUBSCRIBERS_PAGE_SIZE: 30,
@@ -68,6 +68,12 @@ jest.mock('@/api/subscriptions', () => ({
   unsubscribeFromChannel: jest.fn(() => Promise.resolve()),
   markChannelRead: jest.fn(() => Promise.resolve()),
   listChannelSubscribers: jest.fn(() => Promise.resolve([])),
+  getMyChatSubscription: jest.fn(() => Promise.resolve(null)),
+  subscribeToChat: jest.fn(() => Promise.resolve()),
+  setChatNotifications: jest.fn(() => Promise.resolve()),
+  unsubscribeFromChat: jest.fn(() => Promise.resolve()),
+  markChatSubscriptionRead: jest.fn(() => Promise.resolve()),
+  listChatSubscribers: jest.fn(() => Promise.resolve([])),
 }));
 
 // LiveKit — нативный WebRTC: в тестах его нет и быть не должно. Звонок
