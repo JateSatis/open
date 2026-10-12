@@ -57,12 +57,13 @@ export function ChatInfoScreen({ chatId }: ChatInfoScreenProps) {
       style={[styles.flex, { backgroundColor: theme.background }]}
       contentContainerStyle={styles.content}
       keyboardShouldPersistTaps="handled"
-      bottomOffset={Spacing.four}
+      // Над клавиатурой — поле вместе с ответом под ним.
+      bottomOffset={Spacing.six}
     >
       <Avatar uri={chatAvatarUrl(chat, currentUserId)} name={title} size={AVATAR_SIZE} />
 
       <View style={styles.identity}>
-        <Text variant="title" style={styles.centered}>
+        <Text variant="title" style={styles.centeredText}>
           {title}
         </Text>
         {username ? (

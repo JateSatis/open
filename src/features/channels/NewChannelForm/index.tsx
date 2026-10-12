@@ -85,8 +85,9 @@ export function NewChannelForm({ onCreated }: NewChannelFormProps) {
         style={styles.flex}
         contentContainerStyle={styles.fields}
         keyboardShouldPersistTaps="handled"
-        // Поле в фокусе встаёт над кнопкой «Создать», а не только над клавиатурой.
-        bottomOffset={footerHeight + Spacing.three}
+        // Поле в фокусе встаёт над кнопкой «Создать», а не только над клавиатурой,
+        // вместе с ответом под ним («Имя свободно», ошибка в две строки).
+        bottomOffset={footerHeight + Spacing.six}
       >
         <ChannelAvatarPicker uri={avatarUri} onChange={setAvatarUri} disabled={create.isPending} />
 
