@@ -803,6 +803,7 @@ export function ChatConversation({
                 viewabilityConfig={views.viewabilityConfig}
                 onViewableItemsChanged={views.onViewableItemsChanged}
                 onScroll={onListScroll}
+                onScrollBeginDrag={chatMessages.resumeLoadMore}
                 scrollEventThrottle={VIEWS_SCROLL_THROTTLE_MS}
                 contentContainerStyle={styles.list}
                 // The list is inverted, so its "end" is the top of the screen:

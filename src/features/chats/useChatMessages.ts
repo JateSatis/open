@@ -69,6 +69,8 @@ export type ChatMessagesState = {
   /** Кто сейчас печатает или записывает голосовое, кроме меня. */
   activities: UserActivity[];
   loadMore: () => void;
+  /** Человек снова листает — догрузка истории после неудачи снова разрешена. */
+  resumeLoadMore: () => void;
   /** Догружает историю назад до сообщения с этим временем. Отвечает, дошли ли. */
   loadUntil: (createdAt: string) => Promise<boolean>;
   /** Текст с альбомом; с цитатами — это ответ. */
@@ -295,6 +297,7 @@ export function useChatMessages(chatId: string, currentUserId: string | null): C
     error: history.error,
     activities,
     loadMore,
+    resumeLoadMore: history.resumeLoadMore,
     loadUntil: history.loadUntil,
     send,
     sendVoice,
