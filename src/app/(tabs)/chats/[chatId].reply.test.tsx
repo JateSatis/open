@@ -129,6 +129,7 @@ function chatWith(participants: ChatSummary['participants']): ChatSummary {
     subscription: null,
     hasUnread: false,
     subscribersCount: 0,
+    username: null,
     channel: null,
   };
 }

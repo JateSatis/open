@@ -1,4 +1,4 @@
-import { ChannelUsernameTakenError, createChannel, isUsernameAvailable } from './channels';
+import { ChannelUsernameTakenError, createChannel } from './channels';
 
 import { supabase } from '@/api/supabase';
 
@@ -41,14 +41,5 @@ describe('createChannel', () => {
     mockedRpc.mockResolvedValue({ data: null, error: failure });
 
     await expect(createChannel({ title: 'Канал', username: 'kanal' })).rejects.toBe(failure);
-  });
-});
-
-describe('isUsernameAvailable', () => {
-  it('asks the shared handle registry', async () => {
-    mockedRpc.mockResolvedValue({ data: false, error: null });
-
-    await expect(isUsernameAvailable('Kanal')).resolves.toBe(false);
-    expect(mockedRpc).toHaveBeenCalledWith('is_handle_available', { candidate: 'Kanal' });
   });
 });

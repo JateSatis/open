@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.5"
+    PostgrestVersion: "14.17"
   }
   public: {
     Tables: {
@@ -250,6 +250,7 @@ export type Database = {
           last_message_text: string | null
           subscribers_count: number
           title: string | null
+          username: string | null
           chat_am_member: boolean | null
           chat_display_name: string | null
           chat_read_up_to: string | null
@@ -266,6 +267,7 @@ export type Database = {
           last_message_text?: string | null
           subscribers_count?: number
           title?: string | null
+          username?: string | null
         }
         Update: {
           created_at?: string
@@ -279,6 +281,7 @@ export type Database = {
           last_message_text?: string | null
           subscribers_count?: number
           title?: string | null
+          username?: string | null
         }
         Relationships: [
           {
@@ -745,45 +748,6 @@ export type Database = {
             columns: ["message_id"]
             isOneToOne: false
             referencedRelation: "messages"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      handles: {
-        Row: {
-          channel_id: string | null
-          created_at: string
-          handle: string
-          id: string
-          profile_id: string | null
-        }
-        Insert: {
-          channel_id?: string | null
-          created_at?: string
-          handle: string
-          id?: string
-          profile_id?: string | null
-        }
-        Update: {
-          channel_id?: string | null
-          created_at?: string
-          handle?: string
-          id?: string
-          profile_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "handles_channel_id_fkey"
-            columns: ["channel_id"]
-            isOneToOne: true
-            referencedRelation: "channels"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "handles_profile_id_fkey"
-            columns: ["profile_id"]
-            isOneToOne: true
-            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -1805,7 +1769,10 @@ export type Database = {
         Args: { root: string; target_message: string }
         Returns: boolean
       }
-      is_handle_available: { Args: { candidate: string }; Returns: boolean }
+      is_username_available: {
+        Args: { candidate: string; own_id?: string; target_kind: string }
+        Returns: boolean
+      }
       latest_chat_messages: {
         Args: { chat_ids: string[]; per_chat?: number }
         Returns: {
@@ -2309,6 +2276,10 @@ export type Database = {
       set_chat_notifications: {
         Args: { enabled: boolean; target_chat: string }
         Returns: undefined
+      }
+      set_chat_username: {
+        Args: { new_username: string; target_chat: string }
+        Returns: string
       }
       set_reaction: {
         Args: { reaction: string; target_id: string; target_type: string }
