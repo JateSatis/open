@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
 import { AppState } from 'react-native';
 
+import { withRequestDeadline } from '@/api/requestDeadline';
 import type { Database } from '@/api/types.gen';
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
@@ -23,6 +24,17 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false,
+  },
+  global: {
+    // Ни один запрос не висит вечно — см. `requestDeadline.ts`. Вызов через
+    // стрелку: глобальный `fetch` берётся в момент запроса, а не создания клиента.
+    fetch: withRequestDeadline((input, init) => fetch(input, init)),
+  },
+  db: {
+    // Свои повторы PostgREST (до трёх, паузы 1/2/4 с) складывались бы с
+    // повторами React Query, и сбой доходил бы до экрана за минуту с лишним.
+    // Повторяет один слой — React Query.
+    retry: false,
   },
 });
 

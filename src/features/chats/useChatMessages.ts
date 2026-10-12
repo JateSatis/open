@@ -61,12 +61,16 @@ export type ChatMessagesState = {
   /** Newest first — the list that renders them is inverted. */
   messages: ChatMessage[];
   isLoading: boolean;
+  /** История не загрузилась, и показать нечего. */
+  failed: boolean;
   isLoadingMore: boolean;
   hasMore: boolean;
   error: string | null;
   /** Кто сейчас печатает или записывает голосовое, кроме меня. */
   activities: UserActivity[];
   loadMore: () => void;
+  /** Человек снова листает — догрузка истории после неудачи снова разрешена. */
+  resumeLoadMore: (atEdge: boolean) => void;
   /** Догружает историю назад до сообщения с этим временем. Отвечает, дошли ли. */
   loadUntil: (createdAt: string) => Promise<boolean>;
   /** Текст с альбомом; с цитатами — это ответ. */
@@ -287,11 +291,13 @@ export function useChatMessages(chatId: string, currentUserId: string | null): C
   return {
     messages,
     isLoading: history.isLoading,
+    failed: history.failed,
     isLoadingMore: history.isLoadingMore,
     hasMore: history.hasMore,
     error: history.error,
     activities,
     loadMore,
+    resumeLoadMore: history.resumeLoadMore,
     loadUntil: history.loadUntil,
     send,
     sendVoice,

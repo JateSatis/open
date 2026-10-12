@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { useIsFocused, useNavigation, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react';
 import {
@@ -7,6 +8,8 @@ import {
   Keyboard,
   useWindowDimensions,
   View,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
   type TextInput,
 } from 'react-native';
 import Animated, { useAnimatedStyle } from 'react-native-reanimated';
@@ -17,6 +20,7 @@ import type { ChannelRef, ForwardedComment, IslandOriginal } from '@/api/chats';
 import type { Pop } from '@/api/pops';
 import type { DraftPop } from '@/features/chats/composerDraftStore';
 import type { LiveQuote } from '@/features/chats/messages/types';
+import { LoadFailed } from '@/components/LoadFailed';
 import { Text } from '@/components/Text';
 import { useMarkChannelSectionRead } from '@/features/channels/useMarkChannelSectionRead';
 import { subscribersLabel } from '@/features/channels/subscriberText';
@@ -67,7 +71,7 @@ import { useChatBubbles } from '@/features/chats/useChatBubbles';
 import { useChatKeyboardInset } from '@/features/chats/useChatKeyboardInset';
 import { useChatRowRenderer } from '@/features/chats/useChatRowRenderer';
 import { useComposerDraft } from '@/features/chats/useComposerDraft';
-import { useChat } from '@/features/chats/useChat';
+import { chatQueryKey, useChat } from '@/features/chats/useChat';
 import { useCommentsLiftHost } from '@/features/chats/useCommentsLiftHost';
 import { useChatMessages } from '@/features/chats/useChatMessages';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
@@ -78,6 +82,7 @@ import {
   useMarkChatSubscriptionRead,
 } from '@/features/chats/chatSubscription';
 import { useMessageViews } from '@/features/chats/useMessageViews';
+import { messagesQueryKey } from '@/features/chats/messages/historyCache';
 import { readChatDraft } from '@/features/chats/composerDraftStore';
 import { useMessageActionHandlers } from '@/features/chats/useMessageActionHandlers';
 import { useMessageEdit } from '@/features/chats/useMessageEdit';
@@ -98,6 +103,7 @@ import { useReactToMessage } from '@/features/interactions/useReactToMessage';
 import { CallButton } from '@/features/streams/CallButton';
 import { ChatCallBar } from '@/features/streams/ChatCallBar';
 import { useChatCall } from '@/features/streams/useChatCall';
+import { reloadMissing } from '@/lib/loadState';
 import { stopVoice } from '@/features/media';
 import { showNotice } from '@/features/notifications/alertsStore';
 import { useMyProfile, useProfile } from '@/features/profile/queries';
@@ -113,6 +119,8 @@ const rowKey = (row: ChatListRow) => row.key;
 const KEEP_READING_POSITION = { minIndexForVisible: 0, autoscrollToTopThreshold: Spacing.six };
 /** Положение прокрутки нужно учёту просмотров лишь примерно: у низа или нет. */
 const VIEWS_SCROLL_THROTTLE_MS = 100;
+/** Ближе этой доли экрана к старейшему сообщению — пора догружать историю. */
+const HISTORY_EDGE = 0.4;
 
 export type ChatConversationProps = {
   chatId: string;
@@ -167,9 +175,18 @@ export function ChatConversation({
     [isPosts, windowWidth],
   );
   const currentUserId = useCurrentUserId();
-  const { chat, isLoading: isChatLoading, error: chatError } = useChat(chatId);
+  const { chat, isLoading: isChatLoading, failed: chatFailed } = useChat(chatId);
   const chatMessages = useChatMessages(chatId, currentUserId);
   const { messages, isLoading, isLoadingMore, hasMore, error, activities } = chatMessages;
+  // Показать нечего, а загрузить не вышло: вместо крутилки — «не удалось» с
+  // повтором. Упавшее обновление поверх данных сюда не попадает, как и упавший
+  // чат при уже загруженных сообщениях: их видно и без него.
+  const failed = chatMessages.failed || (chatFailed && !isLoading && messages.length === 0);
+  const queryClient = useQueryClient();
+  const reload = useCallback(
+    () => reloadMissing(queryClient, [chatQueryKey(chatId), messagesQueryKey(chatId)]),
+    [chatId, queryClient],
+  );
   const { loadMore, retry, notifyTyping, notifyRecordingVoice } = chatMessages;
   const listRef = useRef<FlatList<ChatListRow>>(null);
   const composerRef = useRef<TextInput>(null);
@@ -558,6 +575,18 @@ export function ChatConversation({
 
   // Прокрутили переписку — прокрученные вбок ряды реакций возвращаются в начало.
   const { onScroll: viewsOnScroll } = views;
+  const { resumeLoadMore } = chatMessages;
+  const onListDragStart = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+      // Список перевёрнут: старые сообщения — у конца содержимого.
+      const toOldest = contentSize.height - layoutMeasurement.height - contentOffset.y;
+
+      resumeLoadMore(toOldest < layoutMeasurement.height * HISTORY_EDGE);
+    },
+    [resumeLoadMore],
+  );
+
   const onListScroll = useCallback(
     (event: Parameters<typeof viewsOnScroll>[0]) => {
       viewsOnScroll(event);
@@ -771,7 +800,9 @@ export function ChatConversation({
 
         <WaitingBanner waiting={waitingForOthers} />
 
-        {isChatLoading || isLoading ? (
+        {failed ? (
+          <LoadFailed message="Не удалось загрузить переписку" onRetry={reload} />
+        ) : isChatLoading || isLoading ? (
           <View style={styles.centered}>
             <ActivityIndicator accessibilityLabel="Загрузка переписки" />
           </View>
@@ -789,6 +820,7 @@ export function ChatConversation({
                 viewabilityConfig={views.viewabilityConfig}
                 onViewableItemsChanged={views.onViewableItemsChanged}
                 onScroll={onListScroll}
+                onScrollBeginDrag={onListDragStart}
                 scrollEventThrottle={VIEWS_SCROLL_THROTTLE_MS}
                 contentContainerStyle={styles.list}
                 // The list is inverted, so its "end" is the top of the screen:
@@ -798,7 +830,7 @@ export function ChatConversation({
                 // У самого низа переписки список по-прежнему едет за новым.
                 maintainVisibleContentPosition={KEEP_READING_POSITION}
                 onEndReached={hasMore ? loadMore : undefined}
-                onEndReachedThreshold={0.4}
+                onEndReachedThreshold={HISTORY_EDGE}
                 // Тап по облачку при открытой клавиатуре сразу открывает меню, а
                 // не только прячет клавиатуру; тап по пустому месту — прячет.
                 keyboardShouldPersistTaps="handled"
@@ -810,7 +842,7 @@ export function ChatConversation({
           </Animated.View>
         )}
 
-        {!isChatLoading && !isLoading && messages.length === 0 ? (
+        {!failed && !isChatLoading && !isLoading && messages.length === 0 ? (
           <View style={styles.centered}>
             <Text color="textSecondary">
               {isPosts
@@ -820,10 +852,10 @@ export function ChatConversation({
           </View>
         ) : null}
 
-        {chatError || error ? (
+        {error ? (
           <View style={styles.banner}>
             <Text variant="small" color="danger">
-              {chatError ?? error}
+              {error}
             </Text>
           </View>
         ) : null}
@@ -867,8 +899,9 @@ export function ChatConversation({
           // Постороннему писать некуда: поле ввода не показывается вовсе. Пока
           // чат грузится, оно смонтировано с надписью вместо поля (`canSend`
           // ложно): смонтированное заранее, оно встаёт над клавиатурой вовремя.
+          // Переписка не загрузилась — писать некуда, пока она не откроется.
           composer={
-            !isMember && (isPosts || chat !== null)
+            failed || (!isMember && (isPosts || chat !== null))
               ? null
               : {
                   text: draft.text,

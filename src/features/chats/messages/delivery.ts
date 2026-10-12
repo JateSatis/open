@@ -391,12 +391,12 @@ export async function deliver(
   } catch (cause) {
     // Сообщение в базу не попало (или упало на середине) — загруженные файлы
     // теперь ничьи, оставлять их в Storage незачем.
-    // Исключение — новый поп, не дождавшийся ответа: он мог создаться, и его
-    // файлы ждут повтора с тем же id.
-    const popUnanswered =
-      outgoing.type === 'pop_post' && outgoing.pop.type === 'new' && isNetworkError(cause);
+    // Исключение — сервер не ответил (обрыв, срок запроса): сообщение или
+    // новый поп могли создаться, и удалить их файлы значило бы оставить в
+    // переписке облачко с пустыми вложениями. Лишний файл в бакете дешевле.
+    const unanswered = isNetworkError(cause);
 
-    if (!saved && uploaded.length > 0 && !popUnanswered) {
+    if (!saved && uploaded.length > 0 && !unanswered) {
       void Promise.all(uploaded.map((item) => removeUploadedMedia(storedPaths(item))));
 
       if (outgoing.type === 'pop_post' && outgoing.pop.type === 'new') {
