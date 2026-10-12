@@ -26,6 +26,7 @@ import { useSession } from '@/features/auth/useSession';
 import { readChatDraft, resetComposerDrafts } from '@/features/chats/composerDraftStore';
 import { resetOutbox } from '@/features/chats/messages/outbox';
 import { reportRealtimeJoined, resetConnectionState } from '@/features/connection/connectionStore';
+import { DeadlineError } from '@/lib/deadline';
 import { renderWithQuery } from '@/test/renderWithQuery';
 
 const mockRedirect = jest.fn();
@@ -501,5 +502,34 @@ describe('ChatScreen for a posts chat', () => {
     await renderWithQuery(<ChatScreen />);
 
     await waitFor(() => expect(mockRedirect).toHaveBeenCalledWith('/chats/channel/channel-1'));
+  });
+});
+
+describe('ChannelScreen: не удалось открыть', () => {
+  beforeEach(() => signIn(OWNER));
+
+  it('сервер не ответил — «Не удалось открыть канал», «Повторить» открывает канал', async () => {
+    mockedGetChannel.mockRejectedValueOnce(new DeadlineError());
+
+    await renderWithQuery(<ChannelScreen channelId="channel-1" />);
+
+    expect(await screen.findByText('Не удалось открыть канал')).toBeTruthy();
+    expect(screen.queryByText('Нет связи')).toBeNull();
+
+    await act(async () => {
+      fireEvent.press(screen.getByText('Повторить'));
+    });
+
+    expect(await screen.findByText('первый пост')).toBeTruthy();
+    expect(screen.queryByText('Не удалось открыть канал')).toBeNull();
+  });
+
+  it('не загрузились посты — экран сбоя в «Постах», а не «Постов пока нет»', async () => {
+    mockedListMessages.mockRejectedValue(new DeadlineError());
+
+    await renderWithQuery(<ChannelScreen channelId="channel-1" />);
+
+    expect(await screen.findByText('Не удалось загрузить переписку')).toBeTruthy();
+    expect(screen.queryByText('Постов пока нет.')).toBeNull();
   });
 });

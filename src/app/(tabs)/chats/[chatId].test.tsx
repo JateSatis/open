@@ -1,5 +1,14 @@
 import type { Session as SupabaseSession } from '@supabase/supabase-js';
-import { act, fireEvent, screen, userEvent, waitFor, within } from '@testing-library/react-native';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  userEvent,
+  waitFor,
+  within,
+} from '@testing-library/react-native';
 
 import ChatScreen from './[chatId]';
 
@@ -13,6 +22,7 @@ import { formatMessageTime } from '@/features/chats/chatDisplay';
 import { resetComposerDrafts } from '@/features/chats/composerDraftStore';
 import { resetOutbox } from '@/features/chats/messages/outbox';
 import { reportRealtimeJoined, resetConnectionState } from '@/features/connection/connectionStore';
+import { DeadlineError } from '@/lib/deadline';
 import { renderWithQuery } from '@/test/renderWithQuery';
 
 const mockPush = jest.fn();
@@ -307,9 +317,7 @@ describe('ChatScreen', () => {
 
     await renderWithQuery(<ChatScreen />);
 
-    expect(
-      await screen.findByLabelText('Прочитано'),
-    ).toBeTruthy();
+    expect(await screen.findByLabelText('Прочитано')).toBeTruthy();
   });
 
   it('never marks an incoming message as read', async () => {
@@ -522,9 +530,7 @@ describe('ChatScreen', () => {
     ]);
     await act(async () => handlers?.onViewsChanged?.(['m1']));
 
-    expect(
-      await screen.findByLabelText('Прочитано'),
-    ).toBeTruthy();
+    expect(await screen.findByLabelText('Прочитано')).toBeTruthy();
     expect(screen.getByLabelText('Просмотры: 1')).toBeTruthy();
   });
 
@@ -611,5 +617,99 @@ describe('ChatScreen', () => {
     await screen.unmount();
 
     expect(unsubscribe).toHaveBeenCalled();
+  });
+});
+
+describe('ChatScreen: не удалось загрузить', () => {
+  const EMPTY = 'Сообщений пока нет. Всё, что здесь появится, сможет прочитать кто угодно.';
+
+  it('сервер не ответил, показать нечего — «не удалось» и «Повторить», без пустого состояния', async () => {
+    mockedGetChat.mockRejectedValue(new DeadlineError());
+    mockedListMessages.mockRejectedValue(new DeadlineError());
+
+    await renderWithQuery(<ChatScreen />);
+
+    expect(await screen.findByText('Не удалось загрузить переписку')).toBeTruthy();
+    expect(screen.getByText('Повторить')).toBeTruthy();
+    expect(screen.queryByText(EMPTY)).toBeNull();
+    expect(screen.queryByLabelText('Сообщение')).toBeNull();
+  });
+
+  it('«Повторить» начинает новую попытку и открывает переписку', async () => {
+    mockedGetChat.mockRejectedValueOnce(new DeadlineError());
+    mockedListMessages.mockResolvedValue({
+      items: [message('m1', 'привет', 'user-2')],
+      nextCursor: null,
+    });
+
+    await renderWithQuery(<ChatScreen />);
+    await fireEvent.press(await screen.findByText('Повторить'));
+
+    expect(await screen.findByText('привет')).toBeTruthy();
+    // Первая попытка упала, вторую начала кнопка, а не ожидание старой.
+    expect(mockedGetChat.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(screen.queryByText('Не удалось загрузить переписку')).toBeNull();
+  });
+
+  it('не загрузилась только история — тоже экран сбоя, а не «сообщений пока нет»; повтор её дочитывает', async () => {
+    mockedListMessages.mockRejectedValueOnce(new DeadlineError()).mockResolvedValue({
+      items: [message('m1', 'привет', 'user-2')],
+      nextCursor: null,
+    });
+
+    await renderWithQuery(<ChatScreen />);
+
+    expect(await screen.findByText('Не удалось загрузить переписку')).toBeTruthy();
+    expect(screen.queryByText(EMPTY)).toBeNull();
+
+    await fireEvent.press(screen.getByText('Повторить'));
+
+    expect(await screen.findByText('привет')).toBeTruthy();
+    expect(mockedListMessages).toHaveBeenCalledTimes(2);
+  });
+
+  it('посетитель после повтора видит переписку только для чтения', async () => {
+    const stranger = chatWith([
+      other,
+      { id: 'user-3', displayName: 'Пётр', avatarUrl: null, lastReadAt: READ_AT },
+    ]);
+    mockedGetChat.mockRejectedValueOnce(new DeadlineError()).mockResolvedValue(stranger);
+    mockedListMessages.mockResolvedValue({
+      items: [message('m1', 'привет', 'user-2')],
+      nextCursor: null,
+    });
+
+    await renderWithQuery(<ChatScreen />);
+    await fireEvent.press(await screen.findByText('Повторить'));
+
+    expect(await screen.findByText('привет')).toBeTruthy();
+    expect(await screen.findByTestId('chat-subscribe-button')).toBeTruthy();
+    expect(screen.queryByLabelText('Сообщение')).toBeNull();
+  });
+
+  it('обновление поверх загруженной переписки упало — сообщения остаются, экрана сбоя нет', async () => {
+    mockedListMessages.mockResolvedValue({
+      items: [message('m1', 'привет', 'user-2')],
+      nextCursor: null,
+    });
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: 0 } },
+    });
+
+    await render(
+      <QueryClientProvider client={queryClient}>
+        <ChatScreen />
+      </QueryClientProvider>,
+    );
+    await screen.findByText('привет');
+
+    mockedGetChat.mockRejectedValue(new DeadlineError());
+    listMessagesSince.mockRejectedValue(new DeadlineError());
+    await act(() => queryClient.invalidateQueries());
+
+    await waitFor(() => expect(listMessagesSince).toHaveBeenCalled());
+    expect(screen.getByText('привет')).toBeTruthy();
+    expect(screen.queryByText('Не удалось загрузить переписку')).toBeNull();
+    expect(screen.queryByText('Повторить')).toBeNull();
   });
 });

@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { Stack, useIsFocused, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, useWindowDimensions, View } from 'react-native';
@@ -7,6 +8,7 @@ import { styles } from './styles';
 
 import type { Channel } from '@/api/channels';
 import type { ChannelRef } from '@/api/chats';
+import { LoadFailed } from '@/components/LoadFailed';
 import { SegmentedControl } from '@/components/SegmentedControl';
 import { Text } from '@/components/Text';
 import { ChannelMenu } from '@/features/channels/ChannelMenu';
@@ -15,7 +17,7 @@ import { SubscribeBar } from '@/features/channels/SubscribeBar';
 import { readersLabel, subscribersLabel } from '@/features/channels/subscriberText';
 import { useChannelSubscription } from '@/features/channels/useChannelSubscription';
 import type { ChannelSection } from '@/features/channels/useMarkChannelSectionRead';
-import { useChannel } from '@/features/channels/useChannel';
+import { channelQueryKey, useChannel } from '@/features/channels/useChannel';
 import type { Pop } from '@/api/pops';
 import { ChatConversation } from '@/features/chats/ChatConversation';
 import { closeMediaSheet } from '@/features/chats/MediaPickerSheet';
@@ -24,7 +26,7 @@ import { popSheetSection } from '@/features/pops/popSheetSection';
 import { useCanPublish } from '@/features/pops/queries';
 import { PopsSection } from '@/features/pops/PopsSection';
 import { useTheme } from '@/hooks/use-theme';
-import { describeLoadError } from '@/lib/network';
+import { reloadMissing, loadStateOf } from '@/lib/loadState';
 
 const SECTIONS = ['Посты', 'Попсы'] as const;
 const SECTION_KEYS: readonly ChannelSection[] = ['posts', 'pops'];
@@ -41,18 +43,23 @@ export type ChannelScreenProps = {
  */
 export function ChannelScreen({ channelId, section = 'posts' }: ChannelScreenProps) {
   const theme = useTheme();
-  const { data: channel, error, fetchStatus } = useChannel(channelId);
-  // Без связи запрос стоит на паузе: крутилка обещала бы данные, которых не будет.
-  const offline = fetchStatus === 'paused';
+  const queryClient = useQueryClient();
+  const query = useChannel(channelId);
+  const channel = query.data;
+  const state = loadStateOf(query);
 
   if (!channel) {
     return (
       <View style={[styles.centered, { backgroundColor: theme.background }]}>
         <Stack.Screen options={{ title: 'Канал' }} />
-        {error || offline ? (
-          <Text color={offline ? 'textSecondary' : 'danger'}>
-            {describeLoadError(error, 'Не удалось открыть канал') ?? 'Нет связи'}
-          </Text>
+        {state === 'paused' ? (
+          // Без сети запрос стоит на паузе: крутилка обещала бы данные, которых не будет.
+          <Text color="textSecondary">Нет связи</Text>
+        ) : state === 'failed' ? (
+          <LoadFailed
+            message="Не удалось открыть канал"
+            onRetry={() => reloadMissing(queryClient, [channelQueryKey(channelId)])}
+          />
         ) : (
           <ActivityIndicator accessibilityLabel="Загрузка канала" />
         )}

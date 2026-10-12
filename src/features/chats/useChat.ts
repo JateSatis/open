@@ -1,8 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { getChat, type ChatSummary } from '@/api/chats';
-import { useConnectionStatus } from '@/features/connection/useConnectionStatus';
-import { describeLoadError } from '@/lib/network';
+import { loadStateOf } from '@/lib/loadState';
 
 const CHAT_STALE_MS = 10_000;
 
@@ -13,12 +12,12 @@ export function chatQueryKey(chatId: string) {
 export type ChatState = {
   chat: ChatSummary | null;
   isLoading: boolean;
-  error: string | null;
+  /** Чата нет, а все попытки его получить не удались — показать нечего. */
+  failed: boolean;
 };
 
 export function useChat(chatId: string): ChatState {
-  const connection = useConnectionStatus();
-  const { data, isPending, fetchStatus, error } = useQuery({
+  const query = useQuery({
     queryKey: chatQueryKey(chatId),
     queryFn: () => getChat(chatId),
     // Маршрут чата узнаёт вид чата раньше переписки (не канал ли это), и
@@ -26,15 +25,13 @@ export function useChat(chatId: string): ChatState {
     // Изменения состава приходят через Realtime и сбрасывают кеш сами.
     staleTime: CHAT_STALE_MS,
   });
+  const state = loadStateOf(query);
 
   return {
-    chat: data ?? null,
+    chat: query.data ?? null,
     // Без связи запрос стоит на паузе. Показывать в этот момент крутилку —
     // значит врать, что данные вот-вот придут: они не придут, пока сети нет.
-    isLoading: isPending && fetchStatus !== 'paused',
-    error:
-      data !== undefined || connection !== 'online'
-        ? null
-        : describeLoadError(error, 'Не удалось открыть чат'),
+    isLoading: state === 'loading',
+    failed: state === 'failed',
   };
 }

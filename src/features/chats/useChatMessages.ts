@@ -61,6 +61,8 @@ export type ChatMessagesState = {
   /** Newest first — the list that renders them is inverted. */
   messages: ChatMessage[];
   isLoading: boolean;
+  /** История не загрузилась, и показать нечего. */
+  failed: boolean;
   isLoadingMore: boolean;
   hasMore: boolean;
   error: string | null;
@@ -287,6 +289,7 @@ export function useChatMessages(chatId: string, currentUserId: string | null): C
   return {
     messages,
     isLoading: history.isLoading,
+    failed: history.failed,
     isLoadingMore: history.isLoadingMore,
     hasMore: history.hasMore,
     error: history.error,

@@ -11,6 +11,7 @@ import {
 } from '@/features/chats/messages/historyCache';
 import { loadHistory } from '@/features/chats/messages/sync';
 import type { ChatMessage } from '@/features/chats/messages/types';
+import { loadStateOf } from '@/lib/loadState';
 import { describeLoadError } from '@/lib/network';
 
 const NO_MESSAGES: ChatMessage[] = [];
@@ -19,6 +20,8 @@ export type ChatHistoryState = {
   /** Только подтверждённые сервером, самые новые первыми. */
   items: ChatMessage[];
   isLoading: boolean;
+  /** Истории нет, а все попытки её загрузить не удались — показать нечего. */
+  failed: boolean;
   isLoadingMore: boolean;
   hasMore: boolean;
   error: string | null;
@@ -44,7 +47,7 @@ function reached(history: ChatHistory | undefined, createdAt: string): boolean {
  */
 export function useChatHistory(chatId: string): ChatHistoryState {
   const queryClient = useQueryClient();
-  const { data, isPending, error } = useQuery({
+  const query = useQuery({
     queryKey: messagesQueryKey(chatId),
     // Повторный запрос — дочитывание, а не перезагрузка (см. `loadHistory`):
     // поэтому история спокойно перезапрашивается при каждом входе в чат и
@@ -53,6 +56,8 @@ export function useChatHistory(chatId: string): ChatHistoryState {
     // Возвращение связи и так перезапрашивает всё через `useConnectionWatch`.
     refetchOnReconnect: false,
   });
+  const { data } = query;
+  const state = loadStateOf(query);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [moreError, setMoreError] = useState<string | null>(null);
   const loadingMoreRef = useRef<Promise<void> | null>(null);
@@ -107,12 +112,15 @@ export function useChatHistory(chatId: string): ChatHistoryState {
 
   return {
     items: data?.items ?? NO_MESSAGES,
-    isLoading: isPending,
+    // Пустая история до первого ответа — не «сообщений пока нет», а «ещё не знаем».
+    isLoading: state === 'loading' || state === 'paused',
+    failed: state === 'failed',
     isLoadingMore,
     hasMore: Boolean(data?.nextCursor),
     // Не вышло дочитать поверх уже загруженного — не повод для плашки: следующее
-    // событие или вход в чат дочитают снова.
-    error: (data ? null : describeLoadError(error, 'Не удалось загрузить сообщения')) ?? moreError,
+    // событие или вход в чат дочитают снова. Не вышло загрузить вовсе — это
+    // `failed`, экран сбоя, а не плашка.
+    error: moreError,
     loadMore,
     loadUntil,
   };
