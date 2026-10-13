@@ -16,6 +16,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { Spacing } from '@/theme';
 
 const AVATAR_SIZE = Spacing.six * 1.5;
+const SHEET_OWNER = 'avatar:profile';
 
 /**
  * Аватар на экране редактирования. Тап по нему или по ссылке под ним сразу
@@ -45,7 +46,7 @@ export function AvatarEditor({ profile }: { profile: Profile }) {
 
   const open = () => {
     setPrepareFailed(false);
-    openMediaSheet('avatar');
+    openMediaSheet(SHEET_OWNER);
   };
 
   const errorText = prepareFailed
@@ -95,7 +96,7 @@ export function AvatarEditor({ profile }: { profile: Profile }) {
         </Text>
       ) : null}
 
-      <MediaAvatarSheet onDone={onDone} />
+      <MediaAvatarSheet owner={SHEET_OWNER} onDone={onDone} />
     </View>
   );
 }

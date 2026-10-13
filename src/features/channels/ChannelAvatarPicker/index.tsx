@@ -12,6 +12,8 @@ import type { PreparedAvatar } from '@/features/media';
 import { useTheme } from '@/hooks/use-theme';
 import { Sizes } from '@/theme';
 
+const SHEET_OWNER = 'avatar:channel';
+
 export type ChannelAvatarPickerProps = {
   /** Уже обрезанное до квадрата фото на устройстве; null — не выбрано. */
   uri: string | null;
@@ -48,7 +50,7 @@ export function ChannelAvatarPicker({ uri, onChange, disabled }: ChannelAvatarPi
         accessibilityRole="button"
         accessibilityLabel={uri ? 'Сменить аватарку канала' : 'Выбрать аватарку канала'}
         disabled={disabled || preparing}
-        onPress={() => openMediaSheet('avatar')}
+        onPress={() => openMediaSheet(SHEET_OWNER)}
         style={[styles.circle, { backgroundColor: theme.backgroundElement }]}
       >
         {preparing ? (
@@ -70,7 +72,7 @@ export function ChannelAvatarPicker({ uri, onChange, disabled }: ChannelAvatarPi
         </Text>
       ) : null}
 
-      <MediaAvatarSheet onDone={onDone} />
+      <MediaAvatarSheet owner={SHEET_OWNER} onDone={onDone} />
     </View>
   );
 }

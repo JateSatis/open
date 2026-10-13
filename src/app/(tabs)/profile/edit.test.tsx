@@ -205,7 +205,7 @@ describe('EditProfileScreen', () => {
     );
 
     await fireEvent.press(await findByLabelText('Изменить фото профиля'));
-    expect(openMediaSheetMock).toHaveBeenLastCalledWith('avatar');
+    expect(openMediaSheetMock).toHaveBeenLastCalledWith('avatar:profile');
 
     await fireEvent.press(getByText('Добавить фото'));
     expect(openMediaSheetMock).toHaveBeenCalledTimes(2);

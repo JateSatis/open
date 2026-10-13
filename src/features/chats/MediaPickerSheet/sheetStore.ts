@@ -13,12 +13,18 @@ export type MediaSheetPhase = 'closed' | 'armed' | 'open' | 'closing';
 
 /**
  * Кто открыл шит: строка под чатом, строка панели комментариев, экран,
- * которому нужен один файл (`pick` — видео попа), или аватарка (`avatar` —
+ * которому нужен один файл (`pick` — видео попа), или аватарка (`avatar:…` —
  * фото с правкой в редакторе). Шит на экране один, но
  * выбранное уходит туда, откуда его открыли, — поэтому каждый хозяин держит
  * свой экземпляр шита, а показывается только экземпляр хозяина.
  */
-export type MediaSheetOwner = 'chat' | 'comments' | 'pick' | 'avatar';
+export type MediaSheetOwner = 'chat' | 'comments' | 'pick' | AvatarSheetOwner;
+
+/**
+ * Хозяин шита аватарки — со своим именем: экраны профиля и нового канала
+ * живут в разных вкладках одновременно, и общий ключ открыл бы оба шита.
+ */
+export type AvatarSheetOwner = `avatar:${string}`;
 
 type MediaSheetState = {
   phase: MediaSheetPhase;

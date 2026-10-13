@@ -50,6 +50,7 @@ import {
   finishMediaSheetClose,
   getMediaSheetPhase,
   useMediaSheetPhase,
+  type AvatarSheetOwner,
   type MediaSheetOwner,
   type MediaSheetPhase,
 } from './sheetStore';
@@ -82,6 +83,7 @@ export {
   openMediaSheet,
   releaseMediaSheetArm,
   resetMediaSheet,
+  type AvatarSheetOwner,
   type MediaSheetOwner,
 } from './sheetStore';
 export { GALLERY_ONLY, gallerySection, type SheetSection, type SheetSectionSlot } from './sections';
@@ -106,7 +108,7 @@ type SheetComposerProps = {
 
 export type MediaPickerSheetProps = SheetComposerProps & {
   /** Чьё поле открывает этот экземпляр: показывается он только для своего хозяина. */
-  owner?: Exclude<MediaSheetOwner, 'pick' | 'avatar'>;
+  owner?: 'chat' | 'comments';
   /**
    * Разделы шита — вкладки внизу. Набор задаёт хозяин по виду чата; при одном
    * разделе вкладок нет. По умолчанию — только галерея.
@@ -117,6 +119,8 @@ export type MediaPickerSheetProps = SheetComposerProps & {
 export type MediaPickSheetProps = Required<GridPick>;
 
 export type AvatarPickSheetProps = {
+  /** Чей это шит: открывается `openMediaSheet(owner)`. */
+  owner: AvatarSheetOwner;
   /** «Готово» в редакторе: фото, правки которого ещё доступны, — шит закроется сам. */
   onPick: (asset: MediaLibraryItem) => void;
 };
@@ -175,11 +179,11 @@ export function MediaPickSheet({ accepts, onPick }: MediaPickSheetProps) {
  * Шит аватарки: галерея без кружков, с заголовком; тап по фото раскрывает
  * его в редактор, «Готово» отдаёт фото в `onPick` и закрывает шит. Правки
  * здесь — свои, шит чата их не видит, и живут они, только пока открыто окно.
- * Открывается `openMediaSheet('avatar')`. Хозяевам — `MediaAvatarSheet`: он
+ * Открывается `openMediaSheet(owner)`. Хозяевам — `MediaAvatarSheet`: он
  * сразу превращает фото в файл аватарки.
  */
-export function AvatarPickSheet({ onPick }: AvatarPickSheetProps) {
-  const phase = useSheetPhase('avatar');
+export function AvatarPickSheet({ owner, onPick }: AvatarPickSheetProps) {
+  const phase = useSheetPhase(owner);
   const avatar = useMemo(
     () => ({
       onDone: (asset: MediaLibraryItem) => {
