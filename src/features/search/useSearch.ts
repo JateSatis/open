@@ -1,5 +1,6 @@
-import { useInfiniteQuery, useQuery, type QueryKey } from '@tanstack/react-query';
-import { useEffect, useMemo, useState } from 'react';
+import { useInfiniteQuery, useQuery, useQueryClient, type QueryKey } from '@tanstack/react-query';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   searchEntities,
@@ -88,6 +89,21 @@ export function useSearch(query: string): SearchResults {
   const connection = useConnectionStatus();
   const currentUserId = useCurrentUserId();
   const { chats } = useChats();
+  const queryClient = useQueryClient();
+  const focusedBefore = useRef(false);
+
+  // Вернулись из открытого чата или канала: там могли подписаться или начать
+  // диалог — выдача того же запроса перечитывается, а не ждёт конца срока.
+  useFocusEffect(
+    useCallback(() => {
+      if (!focusedBefore.current) {
+        focusedBefore.current = true;
+        return;
+      }
+
+      void queryClient.invalidateQueries({ queryKey: searchQueryKey });
+    }, [queryClient]),
+  );
 
   const entities = useQuery({
     queryKey: [...searchQueryKey, 'entities', debounced],
@@ -116,7 +132,8 @@ export function useSearch(query: string): SearchResults {
     connection === 'offline' ||
     entities.fetchStatus === 'paused' ||
     messages.fetchStatus === 'paused';
-  const failed = entities.isError || messages.isError;
+  // Сбой догрузки следующей страницы сообщений не стирает уже показанное.
+  const failed = entities.isError || (messages.isError && messages.data === undefined);
   // Ответ сервера — про текущий запрос, а не прежний, показанный на время загрузки.
   const fresh = debounced === trimmed && entities.data !== undefined && !entities.isPlaceholderData;
   const serverEntities = failed || offline || parsed.text === '' ? [] : (entities.data ?? []);
@@ -141,7 +158,10 @@ export function useSearch(query: string): SearchResults {
 
   return {
     parsed,
-    mine: fresh && !failed ? serverEntities.filter((entity) => entity.section === 'mine') : local,
+    mine:
+      fresh && !failed && !offline
+        ? serverEntities.filter((entity) => entity.section === 'mine')
+        : local,
     global: serverEntities.filter((entity) => entity.section === 'global'),
     messages: messageItems,
     hasMoreMessages: Boolean(hasNextPage) && !offline && !failed,

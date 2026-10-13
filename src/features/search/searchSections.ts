@@ -1,5 +1,5 @@
 import type { SearchEntity, SearchMessage } from '@/api/search';
-import type { RecentSearch } from '@/features/search/recentSearches';
+import { recentKey, type RecentSearch } from '@/features/search/recentSearches';
 
 /** Сколько строк блока сущностей видно, пока он свёрнут. */
 export const COLLAPSED_ROWS = 3;
@@ -77,10 +77,7 @@ export function buildSearchSections(input: {
         expanded: false,
         data: input.recent.map((item) => ({
           type: 'recent',
-          key:
-            item.type === 'entity'
-              ? `recent:${item.entity.kind}:${item.entity.id}`
-              : `recent:message:${item.message.id}`,
+          key: `recent:${recentKey(item)}`,
           item,
         })),
       },

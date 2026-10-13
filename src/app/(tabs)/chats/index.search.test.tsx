@@ -24,18 +24,23 @@ import { renderWithQuery } from '@/test/renderWithQuery';
 
 const mockPush = jest.fn();
 const mockSetOptions = jest.fn();
-let mockFocusEffect: (() => void | (() => void)) | null = null;
+/** Эффекты фокуса смонтированных хуков — «вернуться на экран» зовёт их снова. */
+const mockFocusEffects = new Set<() => void | (() => void)>();
 
 jest.mock('expo-router', () => ({
   useIsFocused: () => true,
   useRouter: () => ({ push: mockPush }),
   useNavigation: () => ({ setOptions: mockSetOptions }),
-  // Экран в фокусе: эффект фокуса — обычный эффект, последний сохраняется.
+  // Экран в фокусе: эффект фокуса — обычный эффект; все живые запоминаются.
   useFocusEffect: (effect: () => void | (() => void)) => {
     const { useEffect } = jest.requireActual<typeof import('react')>('react');
     useEffect(() => {
-      mockFocusEffect = effect;
-      return effect() ?? undefined;
+      mockFocusEffects.add(effect);
+      const cleanup = effect();
+      return () => {
+        mockFocusEffects.delete(effect);
+        cleanup?.();
+      };
     }, [effect]);
   },
 }));
@@ -115,7 +120,7 @@ async function type(text: string) {
 
 beforeEach(() => {
   jest.clearAllMocks();
-  mockFocusEffect = null;
+  mockFocusEffects.clear();
   resetRecentSearches();
   jest.mocked(useSession).mockReturnValue({
     session: { user: { id: 'me' } } as unknown as SupabaseSession,
@@ -154,7 +159,7 @@ it('leaves the search on the system «back» instead of the app', async () => {
   });
 
   await openSearch();
-  expect(mockFocusEffect).not.toBeNull();
+  expect(mockFocusEffects.size).toBeGreaterThan(0);
 
   let handled = false;
   await act(async () => {
@@ -364,4 +369,57 @@ it('keeps the previous answer while the same query is typed further', async () =
 
   await waitFor(() => expect(mockedEntities).toHaveBeenCalledWith('елки', expect.anything()));
   expect(screen.getByText('@elki.ch')).toBeTruthy();
+});
+
+it('still shows my own chats offline when the query was already answered before', async () => {
+  mockedEntities.mockResolvedValue([
+    entity({
+      section: 'mine',
+      kind: 'direct',
+      id: 'chat-1',
+      chatId: 'chat-1',
+      channelId: null,
+      title: 'Анна Ёлкина',
+      username: null,
+    }),
+  ]);
+  await openSearch();
+  await type('анна');
+  await screen.findByText('Чаты');
+
+  await act(async () => reportDeviceNetwork(false));
+
+  expect(await screen.findByText('Нет связи — ищем только по вашим чатам.')).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Анна Ёлкина' })).toBeTruthy();
+});
+
+it('asks again when the screen is back in focus — a subscription may have moved a channel', async () => {
+  mockedEntities.mockResolvedValue([entity({})]);
+  await openSearch();
+  await type('елк');
+  await screen.findByText('Глобальный поиск');
+  const calls = mockedEntities.mock.calls.length;
+
+  await act(async () => {
+    mockFocusEffects.forEach((effect) => effect());
+  });
+
+  await waitFor(() => expect(mockedEntities.mock.calls.length).toBeGreaterThan(calls));
+});
+
+it('keeps the messages already shown when the next page fails', async () => {
+  mockedMessages.mockImplementation(async (_query, cursor) => {
+    if (cursor) throw new Error('timeout');
+    return { items: [post], nextCursor: { createdAt: post.createdAt, id: post.id } };
+  });
+  mockedEntities.mockResolvedValue([entity({})]);
+  await openSearch();
+  await type('елк');
+  await screen.findByTestId('search-message');
+
+  await fireEvent(screen.getByTestId('chats-search-results'), 'onEndReached');
+
+  await waitFor(() => expect(mockedMessages).toHaveBeenCalledTimes(2));
+  expect(screen.getByTestId('search-message')).toBeTruthy();
+  expect(screen.getByText('Глобальный поиск')).toBeTruthy();
 });

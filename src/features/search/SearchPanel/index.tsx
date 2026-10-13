@@ -5,6 +5,7 @@ import { styles } from './styles';
 
 import type { SearchEntity, SearchMessage } from '@/api/search';
 import { Text } from '@/components/Text';
+import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
 import { SearchEntityRow } from '@/features/search/SearchEntityRow';
 import { SearchMessageRow } from '@/features/search/SearchMessageRow';
 import { SearchSectionHeader } from '@/features/search/SearchSectionHeader';
@@ -45,7 +46,11 @@ export function SearchPanel({ query }: { query: string }) {
     [expansion, query],
   );
 
-  useEffect(loadRecentSearches, []);
+  const currentUserId = useCurrentUserId();
+
+  useEffect(() => {
+    if (currentUserId) loadRecentSearches(currentUserId);
+  }, [currentUserId]);
 
   const sections = useMemo(
     () =>
