@@ -7,6 +7,7 @@ import { LoadFailed } from '@/components/LoadFailed';
 import { ChatConversation } from '@/features/chats/ChatConversation';
 import { messagesQueryKey } from '@/features/chats/messages/historyCache';
 import { chatQueryKey, useChat } from '@/features/chats/useChat';
+import { pickJumpParams, type JumpParams } from '@/features/chats/jumpParams';
 import { chatsQueryKey } from '@/features/chats/useChats';
 import { useTheme } from '@/hooks/use-theme';
 import { reloadMissing } from '@/lib/loadState';
@@ -21,7 +22,8 @@ import { reloadMissing } from '@/lib/loadState';
  * — ожиданием самого чата.
  */
 export default function ChatScreen() {
-  const { chatId } = useLocalSearchParams<{ chatId: string }>();
+  const params = useLocalSearchParams<{ chatId: string } & JumpParams>();
+  const { chatId } = params;
   const theme = useTheme();
   const queryClient = useQueryClient();
   const listed = queryClient
@@ -30,7 +32,18 @@ export default function ChatScreen() {
   const { chat, isLoading, failed } = useChat(chatId);
   const known = chat ?? listed ?? null;
 
-  if (known?.channel) return <Redirect href={`/chats/channel/${known.channel.id}`} />;
+  // Прыжок к посту и шит комментария едут дальше, на экран канала: его
+  // «Посты» читают их из своего адреса.
+  if (known?.channel) {
+    return (
+      <Redirect
+        href={{
+          pathname: '/chats/channel/[channelId]',
+          params: { channelId: known.channel.id, ...pickJumpParams(params) },
+        }}
+      />
+    );
+  }
 
   // Сбой показывает сам маршрут, а не переписка: смонтированная поверх
   // упавшего запроса, она перезапросила бы его (повтор при монтировании),

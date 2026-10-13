@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { Stack, useIsFocused, useRouter } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, useWindowDimensions, View } from 'react-native';
 import { useSharedValue, withTiming } from 'react-native-reanimated';
 
@@ -36,13 +36,18 @@ export type ChannelScreenProps = {
   channelId: string;
   /** С какого раздела открыть. Из «Чатов» — тот, где свежее непрочитанное. */
   section?: ChannelSection;
+  /**
+   * Ключ перехода к посту снаружи (цитата, островок, пересланный комментарий).
+   * Новый ключ переключает экран на «Посты» — и уже открытый, ниже в стеке.
+   */
+  postsRequest?: string;
 };
 
 /**
  * Экран канала: под шапкой — «Посты» | «Попсы», разделы листаются свайпом и
  * тапом по сегменту. «Посты» — переписка чата постов, «Попсы» — сетка попсов канала.
  */
-export function ChannelScreen({ channelId, section = 'posts' }: ChannelScreenProps) {
+export function ChannelScreen({ channelId, section = 'posts', postsRequest }: ChannelScreenProps) {
   const theme = useTheme();
   const queryClient = useQueryClient();
   const query = useChannel(channelId);
@@ -68,10 +73,18 @@ export function ChannelScreen({ channelId, section = 'posts' }: ChannelScreenPro
     );
   }
 
-  return <ChannelSections channel={channel} initialIndex={SECTION_KEYS.indexOf(section)} />;
+  return (
+    <ChannelSections
+      channel={channel}
+      initialIndex={postsRequest ? 0 : SECTION_KEYS.indexOf(section)}
+      postsRequest={postsRequest}
+    />
+  );
 }
 
-function ChannelSections({ channel, initialIndex }: { channel: Channel; initialIndex: number }) {
+type ChannelSectionsProps = { channel: Channel; initialIndex: number; postsRequest?: string };
+
+function ChannelSections({ channel, initialIndex, postsRequest }: ChannelSectionsProps) {
   const theme = useTheme();
   const { width } = useWindowDimensions();
   const router = useRouter();
@@ -120,6 +133,20 @@ function ChannelSections({ channel, initialIndex }: { channel: Channel; initialI
     },
     [position],
   );
+
+  // Прыгать к посту можно только в «Постах»: уже открытый на «Попсах» экран,
+  // к которому вернулись, переключается. Ключ прошлого перехода остаётся в
+  // адресе, но эффект ждёт нового — раздел, выбранный после, он не трогает.
+  const [handledRequest, setHandledRequest] = useState(postsRequest);
+
+  if (postsRequest !== handledRequest) {
+    setHandledRequest(postsRequest);
+    if (postsRequest) setIndex(0);
+  }
+
+  useEffect(() => {
+    if (postsRequest) position.set(withTiming(0, { duration: SECTION_SETTLE_MS }));
+  }, [position, postsRequest]);
 
   // Подпись шапки — `@имя.ch` и число по разделу: у «Постов» читатели, у
   // «Попсов» все подписчики.
