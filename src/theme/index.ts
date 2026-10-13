@@ -6,3 +6,5 @@ export * from './sizes';
 export * from './opacity';
 export * from './shadows';
 export * from './drawPalette';
+export * from './motion';
+export * from './infoPage';
