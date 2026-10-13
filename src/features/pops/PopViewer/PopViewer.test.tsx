@@ -1,6 +1,6 @@
 import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
 
-import { PopViewer } from '.';
+import { ChannelPopViewer } from './ChannelPopViewer';
 
 import {
   canPublishInChannel,
@@ -111,7 +111,7 @@ async function open(
   (canPublishInChannel as jest.Mock).mockReturnValue(Promise.resolve(canPublish));
 
   await renderWithQuery(
-    <PopViewer
+    <ChannelPopViewer
       channelId="channel-1"
       startId={start.id}
       openComments={focusCommentId !== undefined}
@@ -384,7 +384,7 @@ describe('PopViewer', () => {
     (getPop as jest.Mock).mockResolvedValue(null);
     (canPublishInChannel as jest.Mock).mockResolvedValue(false);
 
-    await renderWithQuery(<PopViewer channelId="channel-1" startId="gone" />);
+    await renderWithQuery(<ChannelPopViewer channelId="channel-1" startId="gone" />);
     await fireEvent(screen.getByTestId('pop-viewer'), 'layout', {
       nativeEvent: { layout: { width: 400, height: 800 } },
     });

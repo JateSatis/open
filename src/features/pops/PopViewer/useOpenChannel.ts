@@ -32,20 +32,34 @@ function channelScreenBelow(state: { index: number; routes: NavRoute[] }, channe
 }
 
 /**
+ * Куда ведёт имя канала. `under` — просмотр попсов канала: канал открывается
+ * во вкладке чатов под просмотром, и просмотр закрывается. `over` — просмотр
+ * выдачи поиска: канал встаёт поверх просмотра экраном корневого стека, и
+ * «назад» возвращает к тому же попу.
+ */
+export type OpenChannelMode = 'under' | 'over';
+
+/**
  * Тап по имени канала. Открыт из этого канала — назад к нему, а не новым
  * экраном поверх; иначе — экран канала. Просмотр — экран корневого стека
- * поверх вкладок, а канал открывается во вкладке чатов под ним, поэтому
- * просмотр в обоих случаях сначала закрывается.
+ * поверх вкладок, а канал (`under`) открывается во вкладке чатов под ним,
+ * поэтому просмотр в обоих случаях сначала закрывается.
  */
-export function useOpenChannel(channelId: string): () => void {
+export function useOpenChannel(channelId: string, mode: OpenChannelMode = 'under'): () => void {
   const router = useRouter();
   const navigation = useNavigation();
 
   return useCallback(() => {
     const state = navigation.getState() as unknown as { index: number; routes: NavRoute[] };
 
+    if (mode === 'over') {
+      if (channelScreenBelow(state, channelId)) router.back();
+      else router.push({ pathname: '/channel/[channelId]', params: { channelId } });
+      return;
+    }
+
     router.back();
 
     if (!channelScreenBelow(state, channelId)) router.push(`/chats/channel/${channelId}`);
-  }, [channelId, navigation, router]);
+  }, [channelId, mode, navigation, router]);
 }

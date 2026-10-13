@@ -3,21 +3,35 @@ import { useEffect } from 'react';
 
 import { listPopCounters, type Pop } from '@/api/pops';
 import { acquirePopTopic } from '@/api/popTopics';
-import { popsQueryKey } from '@/features/pops/keys';
 import { applyPopCounters } from '@/features/pops/popsCache';
 
 /** События одной волны — одним запросом: реакции на горячем попе сыплются пачкой. */
 const BATCH_MS = 300;
 
+/** Префикс всех списков попсов: сетки каналов, ленты просмотра, выдача поиска. */
+const ALL_POPS = ['pops'] as const;
+
 /**
- * Живые счётчики попсов канала: реакции, комментарии и просмотры, пришедшие от других,
- * перечитываются из базы и ложатся во все загруженные списки — сетку и
- * просмотр. Топик общий на всё приложение (`popTopics.ts`).
+ * Живые счётчики попсов этих каналов: реакции, комментарии и просмотры,
+ * пришедшие от других, перечитываются из базы и ложатся во все загруженные
+ * списки — сетку, просмотр, выдачу поиска. Топики общие на всё приложение
+ * (`popTopics.ts`): канал, который слушают двое, открыт один раз.
+ *
+ * Каналы — массивом: просмотр выдачи поиска листает попсы многих каналов и
+ * слушает каналы активной и соседних страниц. Сменился набор — отпущены те,
+ * что ушли, взяты новые; одни и те же каналы не переподписываются.
  */
-export function usePopCountersSync(channelId: string) {
+export function usePopCountersSync(channels: string | readonly string[]) {
   const queryClient = useQueryClient();
+  const list = typeof channels === 'string' ? [channels] : channels;
+  // Ключ эффекта — состав, а не массив: новый массив того же состава не
+  // должен отпускать топики.
+  const key = [...new Set(list)].sort().join(',');
 
   useEffect(() => {
+    if (!key) return undefined;
+
+    const ids = key.split(',');
     const queued = new Set<string>();
     let timer: ReturnType<typeof setTimeout> | null = null;
     let alive = true;
@@ -25,10 +39,10 @@ export function usePopCountersSync(channelId: string) {
     const flush = () => {
       timer = null;
 
-      const ids = [...queued];
+      const popIds = [...queued];
 
       queued.clear();
-      listPopCounters(ids)
+      listPopCounters(popIds)
         .then((counters) => {
           if (alive) applyPopCounters(queryClient, counters);
         })
@@ -37,35 +51,38 @@ export function usePopCountersSync(channelId: string) {
         });
     };
 
-    const enqueue = (ids: string[]) => {
-      ids.forEach((id) => queued.add(id));
+    const enqueue = (popIds: string[]) => {
+      popIds.forEach((id) => queued.add(id));
 
       if (!timer) timer = setTimeout(flush, BATCH_MS);
     };
 
-    const release = acquirePopTopic(channelId, {
-      onReactionsChanged: (popId) => enqueue([popId]),
-      onCommentsChanged: (popId) => enqueue([popId]),
-      onViewsChanged: enqueue,
-      // Пропущенное за обрыв — только счётчики загруженных попсов. Ленту
-      // просмотра не перечитываем: её страницы собраны от выбранного попа, и
-      // перечитывание переложило бы их иначе, под пальцем.
-      onReconnected: () => {
-        const loaded = queryClient
-          .getQueriesData<InfiniteData<Pop[], unknown>>({ queryKey: popsQueryKey(channelId) })
-          .flatMap(([, data]) => data?.pages.flat() ?? [])
-          .map((pop) => pop.id);
+    const releases = ids.map((channelId) =>
+      acquirePopTopic(channelId, {
+        onReactionsChanged: (popId) => enqueue([popId]),
+        onCommentsChanged: (popId) => enqueue([popId]),
+        onViewsChanged: enqueue,
+        // Пропущенное за обрыв — только счётчики загруженных попсов канала.
+        // Ленту просмотра не перечитываем: её страницы собраны от выбранного
+        // попа, и перечитывание переложило бы их иначе, под пальцем.
+        onReconnected: () => {
+          const loaded = queryClient
+            .getQueriesData<InfiniteData<Pop[], unknown>>({ queryKey: ALL_POPS })
+            .flatMap(([, data]) => data?.pages?.flat() ?? [])
+            .filter((pop) => pop.channelId === channelId)
+            .map((pop) => pop.id);
 
-        enqueue([...new Set(loaded)]);
-      },
-    });
+          enqueue([...new Set(loaded)]);
+        },
+      }),
+    );
 
     return () => {
       alive = false;
 
       if (timer) clearTimeout(timer);
 
-      release();
+      releases.forEach((release) => release());
     };
-  }, [channelId, queryClient]);
+  }, [key, queryClient]);
 }
