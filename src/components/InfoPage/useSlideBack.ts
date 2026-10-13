@@ -1,6 +1,6 @@
 import { useIsFocused, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
-import { useWindowDimensions } from 'react-native';
+import { BackHandler, useWindowDimensions } from 'react-native';
 import { Gesture } from 'react-native-gesture-handler';
 import {
   Easing,
@@ -100,6 +100,20 @@ export function useSlideBack(): SlideBack {
       onBack: close,
     });
   }, [close, focused, gestureStart, offset, settle]);
+
+  // Где система не пускает «назад» через диспетчер (realme с выключенным
+  // predictive back), кнопка и жест приходят в React Native обычным
+  // `hardwareBackPress` — и тоже уводят страницу анимацией, а не рывком.
+  useEffect(() => {
+    if (!focused) return;
+
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      close();
+      return true;
+    });
+
+    return () => subscription.remove();
+  }, [close, focused]);
 
   const startX = useSharedValue(0);
   const startY = useSharedValue(0);

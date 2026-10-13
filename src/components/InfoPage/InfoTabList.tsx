@@ -11,6 +11,7 @@ import {
   type ReactElement,
 } from 'react';
 import {
+  StyleSheet,
   View,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
@@ -22,6 +23,7 @@ import Animated, {
   useAnimatedReaction,
   useAnimatedRef,
   useScrollOffset,
+  useSharedValue,
   runOnJS,
   type AnimatedRef,
 } from 'react-native-reanimated';
@@ -88,6 +90,11 @@ export function InfoTabList<T>({ tab, footer, ...props }: InfoTabListProps<T>) {
   const animatedRef = useAnimatedRef<Animated.ScrollView>();
   const offset = useScrollOffset(animatedRef);
   const [initialY] = useState(scroll.initialOffset);
+  // Список встаёт на своё начальное смещение только когда содержимого уже
+  // хватает: раньше нативный скролл обрезал бы его до нуля, и шапка
+  // мелькнула бы раскрытым фото. До того список не виден и шапку не ведёт.
+  const positioned = useSharedValue(initialY === 0);
+  const [shown, setShown] = useState(initialY === 0);
   const [contentHeight, setContentHeight] = useState(0);
   const momentum = useRef(false);
 
@@ -110,7 +117,7 @@ export function InfoTabList<T>({ tab, footer, ...props }: InfoTabListProps<T>) {
   useAnimatedReaction(
     () => offset.value,
     (y, previous) => {
-      if (activeTab.value !== tab) return;
+      if (activeTab.value !== tab || !positioned.value) return;
 
       scrollY.set(y);
 
@@ -187,25 +194,45 @@ export function InfoTabList<T>({ tab, footer, ...props }: InfoTabListProps<T>) {
     [filler, footer],
   );
   const onContentSizeChange = useCallback(
-    (_width: number, height: number) => setContentHeight(height - filler),
-    [filler],
+    (_width: number, height: number) => {
+      setContentHeight(height - filler);
+
+      if (shown || height < initialY + viewportHeight) return;
+
+      listRef.current?.scrollToOffset({ offset: initialY, animated: false });
+      requestAnimationFrame(() => {
+        positioned.set(true);
+        setShown(true);
+      });
+    },
+    [filler, initialY, positioned, shown, viewportHeight],
   );
 
   return (
     <ListRefContext.Provider value={animatedRef}>
-      <FlashList
-        {...props}
-        ref={listRef}
-        renderScrollComponent={TabScrollView}
-        ListHeaderComponent={header}
-        ListFooterComponent={tail}
-        contentOffset={{ x: 0, y: initialY }}
-        onContentSizeChange={onContentSizeChange}
-        onScrollBeginDrag={onScrollBeginDrag}
-        onScrollEndDrag={onScrollEndDrag}
-        onMomentumScrollBegin={onMomentumScrollBegin}
-        onMomentumScrollEnd={onMomentumScrollEnd}
-      />
+      <View style={[styles.fill, !shown && styles.hidden]}>
+        <FlashList
+          {...props}
+          ref={listRef}
+          renderScrollComponent={TabScrollView}
+          ListHeaderComponent={header}
+          ListFooterComponent={tail}
+          onContentSizeChange={onContentSizeChange}
+          onScrollBeginDrag={onScrollBeginDrag}
+          onScrollEndDrag={onScrollEndDrag}
+          onMomentumScrollBegin={onMomentumScrollBegin}
+          onMomentumScrollEnd={onMomentumScrollEnd}
+        />
+      </View>
     </ListRefContext.Provider>
   );
 }
+
+const styles = StyleSheet.create({
+  fill: {
+    flex: 1,
+  },
+  hidden: {
+    opacity: 0,
+  },
+});

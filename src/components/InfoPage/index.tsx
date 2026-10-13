@@ -1,4 +1,3 @@
-import { Canvas, LinearGradient, Rect, vec } from '@shopify/react-native-skia';
 import * as Haptics from 'expo-haptics';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
@@ -386,6 +385,11 @@ export function InfoPage({
   );
 }
 
+/**
+ * Вертикальный градиент — нативный фон вью: стоит в первом же кадре (холст
+ * Skia появлялся с задержкой). Сверху сплошной цвет на `solidShare` высоты —
+ * под фото, которое при раскрытии сдвигает градиент вниз.
+ */
 function Gradient({
   top,
   bottom,
@@ -399,17 +403,16 @@ function Gradient({
   width: number;
   height: number;
 }) {
+  const solid = `${(solidShare * 100).toFixed(2)}%`;
+
   return (
-    <Canvas style={{ width, height }}>
-      <Rect x={0} y={0} width={width} height={height}>
-        <LinearGradient
-          start={vec(0, 0)}
-          end={vec(0, height)}
-          colors={[top, top, bottom]}
-          positions={[0, solidShare, 1]}
-        />
-      </Rect>
-    </Canvas>
+    <View
+      style={{
+        width,
+        height,
+        experimental_backgroundImage: `linear-gradient(to bottom, ${top} 0%, ${top} ${solid}, ${bottom} 100%)`,
+      }}
+    />
   );
 }
 
