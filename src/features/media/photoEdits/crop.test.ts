@@ -13,6 +13,7 @@ import {
   resizeCrop,
   rotateQuarter,
   screenToSourceDelta,
+  squareCrop,
   totalAngle,
   withAngle,
   type Affine,
@@ -178,6 +179,25 @@ describe('обрезка: в рамке нет пустых краёв', () => {
     const to = defaultCrop(PORTRAIT);
 
     for (let step = 0; step <= 20; step += 1) expectNoEmptyEdges(lerpCrop(from, to, step / 20));
+  });
+});
+
+describe('обрезка аватарки: квадрат', () => {
+  it('начальная рамка — наибольший квадрат по центру, и у портрета, и у пейзажа', () => {
+    const portrait = squareCrop(PORTRAIT);
+    const landscape = squareCrop(LANDSCAPE);
+
+    expect([portrait.width, portrait.height]).toEqual([1, 1]);
+    expect([portrait.centerX, portrait.centerY]).toEqual([0.5, PORTRAIT / 2]);
+    expect([landscape.width, landscape.height]).toEqual([LANDSCAPE, LANDSCAPE]);
+    expect(isCovered(portrait)).toBe(true);
+    expect(isCovered(landscape)).toBe(true);
+  });
+
+  it('поворот на 90° и подгонка под фото квадрат не ломают', () => {
+    const turned = coverCrop(rotateQuarter(squareCrop(PORTRAIT)));
+
+    expect(turned.width).toBeCloseTo(turned.height, 9);
   });
 });
 
