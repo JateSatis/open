@@ -207,6 +207,14 @@ begin
   perform pg_temp.check('К5.3 сообщение из группы — с фото группы',
     (select chat_avatar_url from public.search_messages('гаудиофото') where chat_id = grp limit 1) = b1);
 
+  -- Один файл — одна группа: иначе удаление прежнего файла сломало бы другую.
+  begin
+    perform public.create_chat(array[a, d], 'Тот же файл', b1);
+    perform pg_temp.check('файл, уже стоящий у другой группы, — отказ', false);
+  exception when others then
+    perform pg_temp.check('файл, уже стоящий у другой группы, — отказ', sqlstate = '23505', sqlerrm);
+  end;
+
   -- К1.1: участник убирает.
   perform public.set_chat_avatar(grp, '  ');
   perform pg_temp.check('К1.1 участник убирает фото', pg_temp.avatar(grp) is null);
