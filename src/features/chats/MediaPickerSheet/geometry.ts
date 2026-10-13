@@ -1,4 +1,4 @@
-import { SHEET_TOP_HEIGHT } from './styles';
+import { SHEET_TITLE_HEIGHT, SHEET_TOP_HEIGHT } from './styles';
 
 /** Доля экрана, на которую шит открывается по кнопке медиа. */
 const COLLAPSED_RATIO = 0.55;
@@ -14,7 +14,7 @@ export type SheetGeometry = {
   /** Высота окна списка — от верхней безопасной зоны до низа экрана. */
   listWindowHeight: number;
   dismissDistance: number;
-  /** Полоса с ручкой над первой строкой сетки. */
+  /** Полоса с ручкой (и заголовком, если он есть) над первой строкой сетки. */
   topBarHeight: number;
 };
 
@@ -27,6 +27,7 @@ export function sheetGeometry(
   screenHeight: number,
   insetTop: number,
   scale: number,
+  titled = false,
 ): SheetGeometry {
   const snap = (dp: number) => Math.round(dp * scale) / scale;
 
@@ -39,6 +40,6 @@ export function sheetGeometry(
     listTop,
     listWindowHeight: screenHeight - listTop,
     dismissDistance: collapsedHeight * DISMISS_RATIO,
-    topBarHeight: snap(SHEET_TOP_HEIGHT),
+    topBarHeight: snap(SHEET_TOP_HEIGHT + (titled ? SHEET_TITLE_HEIGHT : 0)),
   };
 }

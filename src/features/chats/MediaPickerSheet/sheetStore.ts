@@ -12,12 +12,13 @@ import { create } from 'zustand';
 export type MediaSheetPhase = 'closed' | 'armed' | 'open' | 'closing';
 
 /**
- * Кто открыл шит: строка под чатом, строка панели комментариев или экран,
- * которому нужен один файл (`pick` — аватарка канала). Шит на экране один, но
+ * Кто открыл шит: строка под чатом, строка панели комментариев, экран,
+ * которому нужен один файл (`pick` — видео попа), или аватарка (`avatar` —
+ * фото с правкой в редакторе). Шит на экране один, но
  * выбранное уходит туда, откуда его открыли, — поэтому каждый хозяин держит
  * свой экземпляр шита, а показывается только экземпляр хозяина.
  */
-export type MediaSheetOwner = 'chat' | 'comments' | 'pick';
+export type MediaSheetOwner = 'chat' | 'comments' | 'pick' | 'avatar';
 
 type MediaSheetState = {
   phase: MediaSheetPhase;
