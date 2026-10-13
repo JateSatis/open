@@ -1,7 +1,11 @@
 import {
+  nextSearchPopsCursor,
   SEARCH_MESSAGES_PAGE_SIZE,
+  SEARCH_POPS_PAGE_SIZE,
+  searchChannels,
   searchEntities,
   searchMessages,
+  searchPops,
   type SearchMessage,
 } from './search';
 
@@ -198,5 +202,138 @@ describe('searchMessages', () => {
     respond({ data: null, error: failure });
 
     await expect(searchMessages('привет', null)).rejects.toBe(failure);
+  });
+});
+
+function popRow(index: number) {
+  return {
+    id: `p${index}`,
+    channel_id: 'ch-1',
+    author_id: 'u1',
+    title: index === 0 ? null : `Ёлка ${index}`,
+    caption: 'подпись',
+    url: 'https://cdn/p.mp4',
+    poster_url: 'https://cdn/p.jpg',
+    mime_type: 'video/mp4',
+    width: 720,
+    height: 1280,
+    duration_ms: 6000,
+    created_at: '2026-10-12T10:00:00Z',
+    reactions: { '❤️': 2 },
+    views_count: 10,
+    comments_count: 1,
+    my_reaction: index === 0 ? '❤️' : null,
+    channel_title: 'Ёлки',
+    channel_avatar_url: null,
+    rank: 7,
+    score: 0.123456789,
+    scored_at: '2026-10-13T10:00:00Z',
+  };
+}
+
+describe('searchChannels', () => {
+  it('asks for all channels and maps the subscription and ownership marks', async () => {
+    respond({
+      data: [
+        {
+          id: 'ch-1',
+          posts_chat_id: 'posts-1',
+          title: 'Ёлки',
+          username: 'elki',
+          avatar_url: null,
+          subscribers_count: 5,
+          subscribed: true,
+          mine: false,
+        },
+      ],
+      error: null,
+    });
+
+    await expect(searchChannels('@elki')).resolves.toEqual([
+      {
+        id: 'ch-1',
+        postsChatId: 'posts-1',
+        title: 'Ёлки',
+        username: 'elki',
+        avatarUrl: null,
+        subscribersCount: 5,
+        subscribed: true,
+        mine: false,
+      },
+    ]);
+    expect(mockedRpc).toHaveBeenCalledWith('search_channels', { query: '@elki', max_count: 50 });
+  });
+});
+
+describe('searchPops', () => {
+  it('the first page goes without a cursor and maps everything the tile and viewer need', async () => {
+    respond({ data: [popRow(0)], error: null });
+
+    const [pop] = await searchPops('елка', null);
+
+    expect(mockedRpc).toHaveBeenCalledWith('search_pops', {
+      query: 'елка',
+      as_of: undefined,
+      after_rank: undefined,
+      after_score: undefined,
+      after_id: undefined,
+      page_size: SEARCH_POPS_PAGE_SIZE,
+    });
+    expect(pop).toMatchObject({
+      id: 'p0',
+      channelId: 'ch-1',
+      title: null,
+      caption: 'подпись',
+      reactions: { counts: { '❤️': 2 }, mine: '❤️' },
+      viewsCount: 10,
+      commentsCount: 1,
+      channelTitle: 'Ёлки',
+      rank: 7,
+      score: 0.123456789,
+      scoredAt: '2026-10-13T10:00:00Z',
+    });
+  });
+
+  it('the next page carries the last row and the first page’s moment', async () => {
+    respond({ data: [], error: null });
+
+    await searchPops('елка', {
+      rank: 5,
+      score: 0.25,
+      id: 'p29',
+      scoredAt: '2026-10-13T10:00:00Z',
+    });
+
+    expect(mockedRpc).toHaveBeenCalledWith('search_pops', {
+      query: 'елка',
+      as_of: '2026-10-13T10:00:00Z',
+      after_rank: 5,
+      after_score: 0.25,
+      after_id: 'p29',
+      page_size: SEARCH_POPS_PAGE_SIZE,
+    });
+  });
+
+  it('a full page has a cursor, a short one does not', async () => {
+    respond({
+      data: Array.from({ length: SEARCH_POPS_PAGE_SIZE }, (_, i) => popRow(i + 1)),
+      error: null,
+    });
+
+    const page = await searchPops('елка', null);
+
+    expect(nextSearchPopsCursor(page)).toEqual({
+      rank: 7,
+      score: 0.123456789,
+      id: `p${SEARCH_POPS_PAGE_SIZE}`,
+      scoredAt: '2026-10-13T10:00:00Z',
+    });
+    expect(nextSearchPopsCursor(page.slice(1))).toBeNull();
+  });
+
+  it('passes the error on', async () => {
+    respond({ data: null, error: new Error('boom') });
+
+    await expect(searchPops('елка', null)).rejects.toThrow('boom');
   });
 });

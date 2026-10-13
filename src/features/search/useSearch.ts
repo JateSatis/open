@@ -24,7 +24,7 @@ import { describeLoadError } from '@/lib/network';
 export const SEARCH_DEBOUNCE_MS = 150;
 
 /** Ответ сервера живёт полминуты: стёр букву и вернул — выдача из кеша, без запроса. */
-const SEARCH_STALE_MS = 30_000;
+export const SEARCH_STALE_MS = 30_000;
 
 export const searchQueryKey = ['search'] as const;
 
@@ -33,9 +33,10 @@ export const searchQueryKey = ['search'] as const;
  * стирает тот же запрос. Ответ на другой, давний запрос (поле очистили и
  * набрали новое) обманул бы: лучше крутилка. React Query отдаёт сюда
  * последний запрос с данными, а не предыдущий ключ, — поэтому сравнение по
- * тексту, а не «был ли пустой запрос между ними».
+ * тексту, а не «был ли пустой запрос между ними». Текст запроса — третий
+ * элемент ключа, у всех запросов поиска.
  */
-function whileTyping(current: string) {
+export function whileTyping(current: string) {
   return <T>(previous: T | undefined, previousQuery?: { queryKey: QueryKey }): T | undefined => {
     const was = previousQuery?.queryKey[2];
 
@@ -58,7 +59,7 @@ export type SearchResults = {
   notice: string | null;
 };
 
-function useDebounced(value: string, delay: number): string {
+export function useDebounced(value: string, delay: number): string {
   const [debounced, setDebounced] = useState(value);
 
   useEffect(() => {

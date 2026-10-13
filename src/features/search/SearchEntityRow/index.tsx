@@ -16,6 +16,9 @@ export type SearchEntityRowProps = {
   entity: SearchEntity;
   query: ParsedQuery;
   onPress: (entity: SearchEntity) => void;
+  /** Что сказать после @имени вместо того, что строка выводит по виду сущности. */
+  detail?: string | null;
+  testID?: string;
 };
 
 function usernameKind(entity: SearchEntity): UsernameKind {
@@ -40,9 +43,15 @@ function detailOf(entity: SearchEntity): string | null {
 }
 
 /** Строка выдачи: чат, канал, человек или группа — аватар, название, `@имя`. */
-export function SearchEntityRow({ entity, query, onPress }: SearchEntityRowProps) {
+export function SearchEntityRow({
+  entity,
+  query,
+  onPress,
+  detail: detailOverride,
+  testID,
+}: SearchEntityRowProps) {
   const username = formatUsername(entity.username, usernameKind(entity));
-  const detail = detailOf(entity);
+  const detail = detailOverride !== undefined ? detailOverride : detailOf(entity);
   // В `@имя.ch` совпадение ищется по самому имени, со сдвигом на `@`.
   const usernameRanges =
     username && entity.username && query.username
@@ -56,7 +65,7 @@ export function SearchEntityRow({ entity, query, onPress }: SearchEntityRowProps
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={entity.title}
-      testID={`search-${entity.section}-${entity.kind}`}
+      testID={testID ?? `search-${entity.section}-${entity.kind}`}
       onPress={() => onPress(entity)}
       style={styles.row}
     >

@@ -15,17 +15,29 @@ export type SearchBarProps = {
   /** Тап по строке, пока поиск выключен. */
   onActivate: () => void;
   onCancel: () => void;
+  /** «Поиск» на клавиатуре. */
+  onSubmit?: () => void;
+  /** Начало testID кнопок и поля: у «Чатов» и «Ленты» свои. */
+  testIDPrefix?: string;
 };
 
 /**
- * Строка поиска над «Чатами». Своё поле, а не поиск в шапке стека: режим,
+ * Строка поиска над «Чатами» и «Лентой». Своё поле, а не поиск в шапке стека: режим,
  * «Отмена» и клавиатура ведут себя одинаково на Android и iOS.
  *
  * Пока поиск выключен, поля ввода нет — только кнопка в его виде: Android сам
  * отдаёт фокус первому полю окна при запуске, и приложение открывалось бы
  * сразу в режиме поиска.
  */
-export function SearchBar({ value, onChangeText, active, onActivate, onCancel }: SearchBarProps) {
+export function SearchBar({
+  value,
+  onChangeText,
+  active,
+  onActivate,
+  onCancel,
+  onSubmit,
+  testIDPrefix = 'chats-search',
+}: SearchBarProps) {
   const theme = useTheme();
   const magnifier = (
     <SymbolView
@@ -41,7 +53,7 @@ export function SearchBar({ value, onChangeText, active, onActivate, onCancel }:
         <Pressable
           accessibilityRole="search"
           accessibilityLabel="Поиск"
-          testID="chats-search-open"
+          testID={`${testIDPrefix}-open`}
           onPress={onActivate}
           style={[styles.field, { backgroundColor: theme.backgroundElement }]}
         >
@@ -58,7 +70,7 @@ export function SearchBar({ value, onChangeText, active, onActivate, onCancel }:
         {magnifier}
         <TextInput
           autoFocus
-          testID="chats-search-input"
+          testID={`${testIDPrefix}-input`}
           accessibilityLabel="Поиск"
           placeholder="Поиск"
           placeholderTextColor={theme.textSecondary}
@@ -67,6 +79,7 @@ export function SearchBar({ value, onChangeText, active, onActivate, onCancel }:
           autoCapitalize="none"
           autoCorrect={false}
           returnKeyType="search"
+          onSubmitEditing={onSubmit}
           style={[styles.input, { color: theme.text }]}
         />
         {value ? (
@@ -87,7 +100,7 @@ export function SearchBar({ value, onChangeText, active, onActivate, onCancel }:
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Отмена"
-        testID="chats-search-cancel"
+        testID={`${testIDPrefix}-cancel`}
         hitSlop={8}
         onPress={onCancel}
       >

@@ -36,6 +36,8 @@ export type PopViewerProps = {
   openComments?: boolean;
   /** Комментарий, к которому пришли: наверху шита и подсвечен. */
   focusCommentId?: string;
+  /** Активной стала другая страница. */
+  onActivePop?: (pop: Pop) => void;
 };
 
 /**
@@ -54,6 +56,7 @@ export function PopViewer({
   channelLink = 'under',
   openComments = false,
   focusCommentId,
+  onActivePop,
 }: PopViewerProps) {
   const theme = useTheme();
   const router = useRouter();
@@ -80,6 +83,13 @@ export function PopViewer({
   const activeChannelId = pops[activeIndex]?.channelId ?? null;
   const { canPublish, known: rightsKnown } = useCanPublishState(activeChannelId);
   const popsRef = useRef(pops);
+  const activePop = pops[activeIndex];
+
+  useEffect(() => {
+    if (activePop) onActivePop?.(activePop);
+    // Только смена страницы: обновление счётчиков того же попа — не повод.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activePop?.id, onActivePop]);
 
   useEffect(() => {
     popsRef.current = pops;
@@ -151,17 +161,20 @@ export function PopViewer({
       style={[styles.root, { backgroundColor: theme.viewerBackground }]}
       onLayout={onLayout}
     >
-      {size && pops.length > 0 ? (
-        <PopPager
-          items={pops}
-          activeIndex={activeIndex}
-          width={size.width}
-          height={size.height}
-          onActiveIndex={onActiveIndex}
-          keyOf={popKey}
-          renderPage={renderPage}
-          locked={commentsOpen}
-        />
+      {pops.length > 0 ? (
+        // Попсы уже есть, а экран ещё не измерен — пусто, а не «Поп удалён».
+        size ? (
+          <PopPager
+            items={pops}
+            activeIndex={activeIndex}
+            width={size.width}
+            height={size.height}
+            onActiveIndex={onActiveIndex}
+            keyOf={popKey}
+            renderPage={renderPage}
+            locked={commentsOpen}
+          />
+        ) : null
       ) : (
         <View style={styles.message}>
           {feed.isPending ? (
