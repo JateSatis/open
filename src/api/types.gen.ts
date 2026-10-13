@@ -2205,6 +2205,78 @@ export type Database = {
         }
         Returns: string
       }
+      search_entities: {
+        Args: { global_limit?: number; mine_limit?: number; query: string }
+        Returns: {
+          avatar_url: string
+          channel_id: string
+          chat_id: string
+          entity_kind: string
+          id: string
+          peer_id: string
+          section: string
+          subscribed: boolean
+          subscribers_count: number
+          title: string
+          username: string
+        }[]
+      }
+      search_level: { Args: { field: string; needle: string }; Returns: number }
+      search_like: { Args: { needle: string }; Returns: string }
+      search_messages: {
+        Args: {
+          before_created?: string
+          before_id?: string
+          page_size?: number
+          query: string
+        }
+        Returns: {
+          author_id: string
+          author_name: string
+          channel_id: string
+          chat_avatar_url: string
+          chat_id: string
+          chat_kind: string
+          chat_title: string
+          created_at: string
+          fuzzy: boolean
+          message_id: string
+          text: string
+        }[]
+      }
+      search_norm: { Args: { value: string }; Returns: string }
+      search_parse: {
+        Args: { query: string }
+        Returns: {
+          by_username: boolean
+          kind: string
+          text_query: string
+          username_query: string
+        }[]
+      }
+      search_tsquery: { Args: { needle: string }; Returns: unknown }
+      search_tsv: { Args: { value: string }; Returns: unknown }
+      search_words: { Args: { value: string }; Returns: string }
+      searchable_chat_ids: {
+        Args: never
+        Returns: {
+          chat_id: string
+        }[]
+      }
+      searchable_chats: {
+        Args: never
+        Returns: {
+          avatar_url: string
+          channel_id: string
+          chat_id: string
+          entity_kind: string
+          peer_id: string
+          subscribed: boolean
+          subscribers_count: number
+          title: string
+          username: string
+        }[]
+      }
       send_comment: {
         Args: {
           comment_text: string
