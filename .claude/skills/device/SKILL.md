@@ -72,7 +72,7 @@ Maestro, Open, Metro, сервер adb, эмулятор холодным ста
 ## Сценарии Maestro
 
 У каждого сценария в шапке `tags:` — области (`chats`, `comments`, `channels`, `pops`,
-`media`, `subscriptions`), `smoke` у дыма, `video` у тех, где открывается видео.
+`media`, `subscriptions`, `search`), `smoke` у дыма, `video` у тех, где открывается видео.
 
 | Набор | Что идёт | Когда |
 |---|---|---|

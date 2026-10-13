@@ -38,6 +38,7 @@ const AREAS = [
   [/^src\/features\/channels\//, ["channels", "subscriptions"]],
   [/^src\/(features\/pops|app\/pops|app\/pop-editor)\//, ["pops"]],
   [/^src\/features\/media\//, ["media"]],
+  [/^src\/features\/search\//, ["search"]],
   [/^src\/(api|components|lib|theme|features\/connection)\//, ["chats", "comments"]],
 ];
 
