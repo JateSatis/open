@@ -20,6 +20,7 @@ const mockedListChats = listChats as jest.MockedFunction<typeof listChats>;
 const chat: ChatSummary = {
   id: 'chat-1',
   kind: 'direct',
+  avatarUrl: null,
   title: null,
   participants: [],
   waiting: [],

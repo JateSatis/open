@@ -31,10 +31,12 @@ export {
 export {
   MediaUploadError,
   removeOwnAvatar,
+  removeOwnGroupAvatar,
   removeUploadedMedia,
   storedPaths,
   uploadAvatar,
   uploadChannelAvatar,
+  uploadGroupAvatar,
   uploadMedia,
   uploadPopMedia,
 } from './storage';

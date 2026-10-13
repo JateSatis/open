@@ -66,6 +66,7 @@ const READ_AT = '2026-09-16T09:00:00Z';
 const chat: ChatSummary = {
   id: 'chat-1',
   kind: 'direct',
+  avatarUrl: null,
   title: null,
   participants: [
     { id: 'user-1', displayName: 'Я', avatarUrl: null, lastReadAt: READ_AT },

@@ -2,7 +2,7 @@
 
 import { assertEquals } from 'jsr:@std/assert@1';
 
-import { createDeleteAccountHandler, type DeleteAccountDeps } from './handler.ts';
+import { avatarFolderOf, createDeleteAccountHandler, type DeleteAccountDeps } from './handler.ts';
 
 const VALID_TOKEN = 'token-of-alice';
 const ALICE = '00000000-0000-4000-8000-00000000a11c';
@@ -119,4 +119,13 @@ Deno.test('сбой удаления пользователя — 500, клие�
   const response = await handler(request());
 
   assertEquals(response.status, 500);
+});
+
+Deno.test('чистится только папка аватара профиля — фото групп и каналов остаются', () => {
+  assertEquals(avatarFolderOf(ALICE), `${ALICE}/avatar`);
+
+  for (const shared of ['group-avatar', 'channel-avatar']) {
+    const file = `${ALICE}/${shared}/photo.jpg`;
+    assertEquals(file.startsWith(`${avatarFolderOf(ALICE)}/`), false);
+  }
 });

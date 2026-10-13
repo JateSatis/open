@@ -66,6 +66,8 @@ export type ChatSummary = {
   title: string | null;
   /** `@имя` группы (без суффикса `.di`); у диалога и чата постов — null. */
   username: string | null;
+  /** Своё фото группы; у диалога (его лицо — собеседник) и чата постов — null. */
+  avatarUrl: string | null;
   /** Только у чата постов: его имя и аватарка — канала. */
   channel: ChannelRef | null;
   participants: ChatParticipant[];
@@ -152,7 +154,7 @@ export type Page<T> = {
 };
 
 const CHAT_COLUMNS =
-  'id, kind, title, username, last_message_at, last_message_text, last_message_author_id, subscribers_count, channel:channels(id, title, username, avatar_url, last_pop_at)';
+  'id, kind, title, username, avatar_url, last_message_at, last_message_text, last_message_author_id, subscribers_count, channel:channels(id, title, username, avatar_url, last_pop_at)';
 const MEMBER_COLUMNS =
   'chat_id, user_id, last_read_at, joined_at, profile:profiles(id, display_name, avatar_url)';
 const WAITING_COLUMNS = 'chat_id, user_id, display_name, avatar_url';
@@ -225,6 +227,7 @@ export function toSummary(
     kind: toChatKind(chat.kind),
     title: chat.title,
     username: chat.username,
+    avatarUrl: chat.avatar_url,
     channel: toChannelRef(chat.channel),
     participants,
     waiting: people.waiting,
@@ -431,6 +434,20 @@ export async function setChatUsername(chatId: string, username: string | null): 
     }
     throw error;
   }
+}
+
+/**
+ * Поставить или убрать (`null`) фото группы. Право — у любого участника, его
+ * проверяет база; адрес — только файл аватарки группы в моём префиксе
+ * бакета (`uploadGroupAvatar`).
+ */
+export async function setChatAvatar(chatId: string, avatarUrl: string | null): Promise<void> {
+  const { error } = await supabase.rpc('set_chat_avatar', {
+    target_chat: chatId,
+    new_avatar_url: avatarUrl ?? '',
+  });
+
+  if (error) throw error;
 }
 
 /**

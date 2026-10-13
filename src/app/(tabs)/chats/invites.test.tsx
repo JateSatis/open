@@ -41,6 +41,7 @@ const marina = { id: 'user-2', displayName: 'Марина', avatarUrl: null };
 const group: ChatSummary = {
   id: 'chat-7',
   kind: 'group',
+  avatarUrl: null,
   title: 'Поход',
   participants: [{ ...marina, lastReadAt: READ_AT }],
   waiting: [

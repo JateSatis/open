@@ -9,6 +9,15 @@
  * Deno-тестом без сети (`handler.test.ts`); настоящие — в `index.ts`.
  */
 
+/**
+ * Единственная папка, которую удаление аккаунта чистит в бакете, — аватар
+ * профиля. Фото групп (`group-avatar/`) и аватарки каналов остаются: группа
+ * общая, и её фото не должно пропасть, потому что ушёл тот, кто его поставил.
+ */
+export function avatarFolderOf(userId: string): string {
+  return `${userId}/avatar`;
+}
+
 export type DeleteAccountDeps = {
   /** Проверяет токен у Auth и возвращает id его владельца или null. */
   resolveUserId: (accessToken: string) => Promise<string | null>;

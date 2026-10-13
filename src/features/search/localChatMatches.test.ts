@@ -9,6 +9,7 @@ function chat(overrides: Partial<ChatSummary>): ChatSummary {
   return {
     id: 'chat',
     kind: 'direct',
+    avatarUrl: null,
     title: null,
     username: null,
     channel: null,
