@@ -190,7 +190,10 @@ export type SearchChannel = {
 export type SearchPop = Pop & {
   channelTitle: string;
   channelAvatarUrl: string | null;
-  /** Ранг совпадения: 5..8 — свой текст попа, 1..4 — только канал. */
+  /**
+   * Ранг совпадения: уровень × 2, у своего текста попа +1 — свой текст 3, 5,
+   * 7, 9, только канал 2, 4, 6, 8.
+   */
   rank: number;
   /** Скор популярности и свежести на момент `scoredAt`. */
   score: number;

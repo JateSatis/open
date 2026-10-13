@@ -1,6 +1,6 @@
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useMemo, useRef } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 
 import {
   nextSearchPopsCursor,
@@ -32,7 +32,13 @@ export const searchPopsQueryKey = (query: string) => ['pops', 'search', query] a
 
 const OFFLINE_NOTICE = 'Нет связи — поиск недоступен.';
 
-/** Попсы выдачи страницами — общий запрос сетки и просмотра. */
+/**
+ * Попсы выдачи страницами — общий запрос сетки и просмотра. Однажды
+ * загруженная выдача сама не перечитывается — ни по сроку, ни при входе
+ * просмотра, ни при возврате связи: страницы перечитались бы с новым
+ * моментом отсчёта скора и переложились под пальцем. Счётчики в ней живут
+ * событиями (`usePopCountersSync`), новая выдача — это новый запрос.
+ */
 export function useSearchPopsQuery(query: string, enabled = true) {
   return useInfiniteQuery({
     queryKey: searchPopsQueryKey(query),
@@ -41,7 +47,8 @@ export function useSearchPopsQuery(query: string, enabled = true) {
     getNextPageParam: nextSearchPopsCursor,
     enabled: enabled && query !== '',
     placeholderData: whileTyping(query),
-    staleTime: SEARCH_STALE_MS,
+    staleTime: Infinity,
+    refetchOnReconnect: false,
   });
 }
 
@@ -62,8 +69,12 @@ export function uniquePops(pages: SearchPop[][] | undefined): SearchPop[] {
 
 export type FeedSearchResults = {
   parsed: ParsedQuery;
-  /** Запрос, по которому пришла выдача, — ключ для просмотра. */
-  settledQuery: string;
+  /**
+   * Запрос, чьи попсы сейчас на экране, — ключ для просмотра. Пока новый
+   * запрос в пути, на экране ответ прежнего (`whileTyping`), и просмотр
+   * должен открыть именно его.
+   */
+  shownQuery: string;
   channels: SearchChannel[];
   pops: SearchPop[];
   hasMorePops: boolean;
@@ -114,6 +125,11 @@ export function useFeedSearch(query: string): FeedSearchResults {
   const pops = useSearchPopsQuery(debounced, enabled);
 
   const popItems = useMemo(() => uniquePops(pops.data?.pages), [pops.data]);
+  const [shownQuery, setShownQuery] = useState(debounced);
+
+  if (pops.data !== undefined && !pops.isPlaceholderData && shownQuery !== debounced) {
+    setShownQuery(debounced);
+  }
 
   const offline =
     connection === 'offline' || channels.fetchStatus === 'paused' || pops.fetchStatus === 'paused';
@@ -135,19 +151,25 @@ export function useFeedSearch(query: string): FeedSearchResults {
         ) ?? OFFLINE_NOTICE)
       : null;
 
-  const { fetchNextPage, hasNextPage, isFetchingNextPage } = pops;
+  const { fetchNextPage, hasNextPage, isFetchingNextPage, isFetchNextPageError } = pops;
   const empty = parsed.text === '';
+  // Не догрузилась следующая страница — показанное остаётся, крутилка внизу
+  // не крутится вечно: пояснение, а повтор — новой прокруткой до конца.
+  const pageNotice = isFetchNextPageError
+    ? (describeLoadError(pops.error, 'Не удалось загрузить ещё. Пролистайте ещё раз.') ??
+      OFFLINE_NOTICE)
+    : null;
 
   return {
     parsed,
-    settledQuery: debounced,
+    shownQuery,
     channels: empty ? [] : (channels.data ?? []),
     pops: empty ? [] : popItems,
-    hasMorePops: !empty && Boolean(hasNextPage) && !offline,
+    hasMorePops: !empty && Boolean(hasNextPage) && !offline && !isFetchNextPageError,
     loadMorePops: () => {
       if (hasNextPage && !isFetchingNextPage && !offline) void fetchNextPage();
     },
     isSearching: !empty && !offline && !failed && !settled,
-    notice: empty ? null : notice,
+    notice: empty ? null : (notice ?? pageNotice),
   };
 }

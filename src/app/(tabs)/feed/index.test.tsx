@@ -322,3 +322,22 @@ it('offline says so and keeps the results already shown', async () => {
   expect(screen.getAllByTestId('search-pop')).toHaveLength(1);
   expect(screen.queryByLabelText('Ищем')).toBeNull();
 });
+
+it('when the next page fails, keeps what is shown, explains and stops spinning', async () => {
+  const first = Array.from({ length: SEARCH_POPS_PAGE_SIZE }, (_, i) => pop(`p${i}`));
+  mockedPops.mockImplementation(async (_query, cursor) => {
+    if (cursor) throw new Error('boom');
+    return first;
+  });
+  await openSearch();
+  await type('елка');
+  await screen.findAllByTestId('search-pop');
+
+  await act(async () => {
+    fireEvent(screen.getByTestId('feed-search-results'), 'onEndReached');
+  });
+
+  expect(await screen.findByText('Не удалось загрузить ещё. Пролистайте ещё раз.')).toBeTruthy();
+  expect(screen.queryByLabelText('Ищем')).toBeNull();
+  expect(screen.getAllByTestId('search-pop').length).toBeGreaterThan(0);
+});

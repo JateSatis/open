@@ -81,7 +81,11 @@ export function PopViewer({
 
   const activeIndex = found >= 0 ? found : Math.min(active.at, Math.max(pops.length - 1, 0));
   const activeChannelId = pops[activeIndex]?.channelId ?? null;
-  const { canPublish, known: rightsKnown } = useCanPublishState(activeChannelId);
+  const {
+    canPublish,
+    known: rightsKnown,
+    failed: rightsFailed,
+  } = useCanPublishState(activeChannelId);
   const popsRef = useRef(pops);
   const activePop = pops[activeIndex];
 
@@ -110,7 +114,12 @@ export function PopViewer({
   );
 
   usePopCountersSync(nearbyChannels);
-  usePopViewCounting(pops, activeIndex, { canPublish, known: rightsKnown }, focused);
+  usePopViewCounting(
+    pops,
+    activeIndex,
+    { canPublish, known: rightsKnown, failed: rightsFailed },
+    focused,
+  );
   usePopFeedPaging(feed, activeIndex);
 
   const onLayout = useCallback((event: LayoutChangeEvent) => {

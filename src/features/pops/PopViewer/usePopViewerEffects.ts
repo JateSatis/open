@@ -20,15 +20,16 @@ const PREFETCH_PAGES = 3;
  *
  * Канал — у каждого попа свой: лента выдачи поиска листает попсы многих
  * каналов. `rights` — право в канале активного попа; пока ответа нет, показ
- * ждёт его, а не уходит наугад.
+ * ждёт его, а прежний поп уже не считается видимым. Спросить не удалось —
+ * показ уходит как от постороннего: публикующих база всё равно не засчитает.
  */
 export function usePopViewCounting(
   pops: Pop[],
   activeIndex: number,
-  rights: { canPublish: boolean; known: boolean },
+  rights: { canPublish: boolean; known: boolean; failed: boolean },
   focused: boolean,
 ) {
-  const { canPublish, known } = rights;
+  const { canPublish, known, failed } = rights;
   const queryClient = useQueryClient();
   const send = useCallback(
     (items: { id: string; channelId: string }[], sessionId: string) =>
@@ -54,12 +55,15 @@ export function usePopViewCounting(
   const { setVisible } = useViewBatcher({ isFocused: focused, send, repeat: 'appearance' });
 
   useEffect(() => {
-    if (!known || canPublish || pops.length === 0) return;
+    if ((!known && !failed) || canPublish || pops.length === 0) {
+      setVisible([]);
+      return;
+    }
 
     const { id, channelId } = pops[activeIndex];
 
     setVisible([{ id, channelId }]);
-  }, [activeIndex, canPublish, known, pops, setVisible]);
+  }, [activeIndex, canPublish, failed, known, pops, setVisible]);
 }
 
 /** Подгрузка соседних страниц ленты, когда активная подошла к краю загруженного. */

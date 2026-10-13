@@ -1,10 +1,11 @@
-import { FlashList, type FlashListRef, type ViewToken } from '@shopify/flash-list';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { FlashList, type FlashListRef } from '@shopify/flash-list';
+import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, useWindowDimensions, View } from 'react-native';
 
 import { FeedSearchRowView } from './FeedSearchRowView';
 import { POP_GAP, styles } from './styles';
+import { useRestoreLastSearchPop } from './useRestoreLastSearchPop';
 
 import type { SearchEntity, SearchPop } from '@/api/search';
 import { Text } from '@/components/Text';
@@ -12,7 +13,6 @@ import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
 import {
   buildFeedSearchRows,
   FEED_POP_COLUMNS,
-  rowOfPop,
   type FeedSearchRow,
 } from '@/features/search/feedSearchRows';
 import { useLastSearchPop } from '@/features/search/lastSearchPop';
@@ -41,7 +41,6 @@ export function FeedSearchPanel({ query, onPickRecent }: FeedSearchPanelProps) {
   const tileWidth =
     (width - Spacing.three * 2 - POP_GAP * (FEED_POP_COLUMNS - 1)) / FEED_POP_COLUMNS;
   const listRef = useRef<FlashListRef<FeedSearchRow>>(null);
-  const visibleKeys = useRef(new Set<string>());
   // Раскрытие — свойство запроса: новая буква сворачивает блок обратно.
   const [expandedFor, setExpandedFor] = useState<string | null>(null);
   const expanded = expandedFor === query;
@@ -81,14 +80,14 @@ export function FeedSearchPanel({ query, onPickRecent }: FeedSearchPanelProps) {
     [remember, router],
   );
 
-  const { settledQuery } = results;
+  const { shownQuery } = results;
   const openPop = useCallback(
     (pop: SearchPop) => {
       remember();
       useLastSearchPop.setState({ id: pop.id });
-      router.push({ pathname: '/pops/search', params: { q: settledQuery, start: pop.id } });
+      router.push({ pathname: '/pops/search', params: { q: shownQuery, start: pop.id } });
     },
-    [remember, router, settledQuery],
+    [remember, router, shownQuery],
   );
 
   const toggleChannels = useCallback(
@@ -96,39 +95,7 @@ export function FeedSearchPanel({ query, onPickRecent }: FeedSearchPanelProps) {
     [expanded, query],
   );
 
-  // Вернулись из просмотра: последний просмотренный поп ушёл с экрана —
-  // сетка встаёт так, чтобы он был виден.
-  const rowsRef = useRef(rows);
-
-  useEffect(() => {
-    rowsRef.current = rows;
-  }, [rows]);
-
-  useFocusEffect(
-    useCallback(() => {
-      const last = useLastSearchPop.getState().id;
-
-      if (!last) return;
-
-      useLastSearchPop.setState({ id: null });
-
-      const index = rowOfPop(rowsRef.current, last);
-      const row = rowsRef.current[index];
-
-      if (index < 0 || !row || visibleKeys.current.has(row.key)) return;
-
-      listRef.current?.scrollToIndex({ index, viewPosition: 0.5, animated: false });
-    }, []),
-  );
-
-  const onViewableItemsChanged = useCallback(
-    ({ viewableItems }: { viewableItems: ViewToken<FeedSearchRow>[] }) => {
-      visibleKeys.current = new Set(
-        viewableItems.filter((token) => token.isViewable).map((token) => token.item.key),
-      );
-    },
-    [],
-  );
+  const onViewableItemsChanged = useRestoreLastSearchPop(listRef, rows);
 
   const renderItem = ({ item }: { item: FeedSearchRow }) => (
     <FeedSearchRowView

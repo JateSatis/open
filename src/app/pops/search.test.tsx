@@ -158,6 +158,15 @@ it('does not count a view of a pop of my own channel', async () => {
   jest.useRealTimers();
 });
 
+it('counts the view even when the rights of the pop’s channel could not be asked', async () => {
+  jest.mocked(canPublishInChannel).mockRejectedValue(new Error('offline'));
+  jest.useFakeTimers();
+  await open(mixed, 'b');
+  await act(() => jest.advanceTimersByTime(2500));
+  expect(recordPopViews).toHaveBeenCalledWith(['b'], expect.any(String));
+  jest.useRealTimers();
+});
+
 it('loads the next page of results when the active pop nears the end', async () => {
   const page = Array.from({ length: SEARCH_POPS_PAGE_SIZE }, (_, i) =>
     pop(`p${i}`, i % 2 ? 'A' : 'B', { score: 1 - i / 100 }),
