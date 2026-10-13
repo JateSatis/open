@@ -5,12 +5,10 @@ import { createChat, DuplicateChatError, type CreateChatResult } from '@/api/inv
 import { chatsQueryKey } from '@/features/chats/useChats';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
 import { invitesQueryKey } from '@/features/chats/useInvites';
+import { GROUP_AVATAR_DEADLINE_MS } from '@/features/chats/useChangeGroupAvatar';
 import { removeUploadedMedia, uploadGroupAvatar } from '@/features/media';
 import { DeadlineError, withDeadline } from '@/lib/deadline';
 import { describeLoadError } from '@/lib/network';
-
-/** Дольше этого загрузку фото группы не ждём — дальше это потеря связи. */
-const UPLOAD_DEADLINE_MS = 30_000;
 
 export type NewChat = {
   inviteeIds: string[];
@@ -48,7 +46,7 @@ async function createWithAvatar(input: NewChat, userId: string | null): Promise<
   // понятную ошибку. Файл, доехавший после срока, убирается.
   const avatar = await withDeadline(
     uploadGroupAvatar(avatarUri, userId),
-    UPLOAD_DEADLINE_MS,
+    GROUP_AVATAR_DEADLINE_MS,
     (late) => {
       void removeUploadedMedia(late.path);
     },
@@ -56,7 +54,11 @@ async function createWithAvatar(input: NewChat, userId: string | null): Promise<
   let result: CreateChatResult;
 
   try {
-    result = await createChat({ inviteeIds, title, avatarUrl: avatar.url });
+    // Без связи запрос висел бы молча, как и загрузка.
+    result = await withDeadline(
+      createChat({ inviteeIds, title, avatarUrl: avatar.url }),
+      GROUP_AVATAR_DEADLINE_MS,
+    );
   } catch (error) {
     // Запрос, оборванный по сроку, мог дойти до базы, и файл тогда — фото
     // группы. Лишний файл дешевле битой аватарки.

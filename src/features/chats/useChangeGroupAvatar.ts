@@ -7,7 +7,7 @@ import { removeOwnGroupAvatar, removeUploadedMedia, uploadGroupAvatar } from '@/
 import { DeadlineError, withDeadline } from '@/lib/deadline';
 
 /** Дольше этого смену фото не ждём — дальше это потеря связи. */
-const SAVE_DEADLINE_MS = 30_000;
+export const GROUP_AVATAR_DEADLINE_MS = 30_000;
 
 export type GroupAvatarChange =
   /** Новое фото — файл уже квадратный и сжатый (`prepareAvatar`). */
@@ -15,8 +15,9 @@ export type GroupAvatarChange =
 
 /**
  * Поставить, сменить или убрать фото группы. Новый файл ложится в мой
- * префикс; прежний удаляется, только если он тоже мой — фото, поставленное
- * другим участником, лежит у него, и удалить его нельзя.
+ * префикс; заменённый удаляется, только если он тоже мой — фото, поставленное
+ * другим участником, лежит у него, и удалить его нельзя. Какой файл заменён,
+ * говорит база: кеш мог отстать.
  */
 export function useChangeGroupAvatar(chatId: string, userId: string | null) {
   const queryClient = useQueryClient();
@@ -28,14 +29,11 @@ export function useChangeGroupAvatar(chatId: string, userId: string | null) {
     mutationFn: async (change) => {
       if (!userId) throw new Error('Нет активной сессии');
 
-      const previous =
-        queryClient.getQueryData<ChatSummary>(chatQueryKey(chatId))?.avatarUrl ?? null;
-
       if (change.kind === 'remove') {
-        await withDeadline(setChatAvatar(chatId, null), SAVE_DEADLINE_MS);
+        const replaced = await withDeadline(setChatAvatar(chatId, null), GROUP_AVATAR_DEADLINE_MS);
         // Группа уже без фото; файл убирается без ожидания — без связи
         // удаление в Storage висело бы вместе с крутилкой.
-        void removeOwnGroupAvatar(previous, userId);
+        void removeOwnGroupAvatar(replaced, userId);
         return null;
       }
 
@@ -43,14 +41,18 @@ export function useChangeGroupAvatar(chatId: string, userId: string | null) {
       // ошибку. Файл, доехавший после срока, никому не нужен.
       const uploaded = await withDeadline(
         uploadGroupAvatar(change.uri, userId),
-        SAVE_DEADLINE_MS,
+        GROUP_AVATAR_DEADLINE_MS,
         (late) => {
           void removeUploadedMedia(late.path);
         },
       );
+      let replaced: string | null;
 
       try {
-        await withDeadline(setChatAvatar(chatId, uploaded.url), SAVE_DEADLINE_MS);
+        replaced = await withDeadline(
+          setChatAvatar(chatId, uploaded.url),
+          GROUP_AVATAR_DEADLINE_MS,
+        );
       } catch (error) {
         // База фото не приняла — файл никому не нужен. Кроме запроса,
         // оборванного по сроку: он мог дойти, и файл тогда — фото группы.
@@ -58,7 +60,7 @@ export function useChangeGroupAvatar(chatId: string, userId: string | null) {
         throw error;
       }
 
-      if (previous !== uploaded.url) void removeOwnGroupAvatar(previous, userId);
+      void removeOwnGroupAvatar(replaced, userId);
       return uploaded.url;
     },
     onSuccess: (avatarUrl) => {

@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { SymbolView } from 'expo-symbols';
-import { useCallback, useState } from 'react';
+import { useEffect } from 'react';
 import { ActivityIndicator, Keyboard, Pressable, View } from 'react-native';
 
 import { styles } from './styles';
@@ -8,9 +8,12 @@ import { styles } from './styles';
 import { Text } from '@/components/Text';
 import { openMediaSheet } from '@/features/chats/MediaPickerSheet';
 import { MediaAvatarSheet } from '@/features/chats/MediaPickerSheet/MediaAvatarSheet';
-import type { PreparedAvatar } from '@/features/media';
+import { usePreparedAvatar } from '@/features/chats/usePreparedAvatar';
+import { showNotice } from '@/features/notifications/alertsStore';
 import { useTheme } from '@/hooks/use-theme';
 import { Opacity, Sizes } from '@/theme';
+
+const FAILED_TEXT = 'Не удалось открыть фото. Выберите другое.';
 
 export type AvatarPickerProps = {
   /** Хозяин шита (`avatar:<имя>`): у каждой формы свой. */
@@ -45,20 +48,13 @@ export function AvatarPicker({
   compact,
 }: AvatarPickerProps) {
   const theme = useTheme();
-  const [preparing, setPreparing] = useState(false);
-  const [failed, setFailed] = useState(false);
+  const { preparing, failed, onDone } = usePreparedAvatar(onChange);
 
-  const onDone = useCallback(
-    (avatar: Promise<PreparedAvatar>) => {
-      setPreparing(true);
-      setFailed(false);
-      avatar
-        .then((prepared) => onChange(prepared.uri))
-        .catch(() => setFailed(true))
-        .finally(() => setPreparing(false));
-    },
-    [onChange],
-  );
+  // Маленький круг стоит в строке рядом с полем: текст под ним распёр бы
+  // строку и сжал поле. Там сбой говорит всплывашка.
+  useEffect(() => {
+    if (failed && compact) showNotice(FAILED_TEXT, 'error');
+  }, [compact, failed]);
 
   return (
     <View style={styles.wrap}>
@@ -96,9 +92,9 @@ export function AvatarPicker({
         )}
       </Pressable>
 
-      {failed ? (
+      {failed && !compact ? (
         <Text variant="small" color="danger">
-          Не удалось открыть фото. Выберите другое.
+          {FAILED_TEXT}
         </Text>
       ) : null}
 

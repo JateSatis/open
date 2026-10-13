@@ -4,11 +4,13 @@ import { AvatarPicker, type AvatarPickerProps } from '.';
 
 import { openMediaSheet } from '@/features/chats/MediaPickerSheet';
 import type { PreparedAvatar } from '@/features/media';
+import { showNotice } from '@/features/notifications/alertsStore';
 
 // Шит аватарки — свой тест; здесь — что круг открывает его и что делает с итогом.
 let sheetDone: ((avatar: Promise<PreparedAvatar>) => void) | null = null;
 
 jest.mock('@/features/chats/MediaPickerSheet', () => ({ openMediaSheet: jest.fn() }));
+jest.mock('@/features/notifications/alertsStore', () => ({ showNotice: jest.fn() }));
 jest.mock('@/features/chats/MediaPickerSheet/MediaAvatarSheet', () => ({
   MediaAvatarSheet: ({ onDone }: { onDone: (avatar: Promise<PreparedAvatar>) => void }) => {
     sheetDone = onDone;
@@ -73,5 +75,13 @@ describe('AvatarPicker', () => {
     expect(openMediaSheet).not.toHaveBeenCalled();
     expect(screen.getByTestId('group-avatar-picker-preview')).toBeTruthy();
     expect(screen.getByLabelText('Сменить аватарку канала')).toBeDisabled();
+  });
+
+  it('маленький круг говорит о сбое всплывашкой — строку с полем текст не распирает', async () => {
+    await render(<Picker compact />);
+    await act(async () => sheetDone?.(Promise.reject(new Error('decode'))));
+
+    expect(showNotice).toHaveBeenCalledWith('Не удалось открыть фото. Выберите другое.', 'error');
+    expect(screen.queryByText('Не удалось открыть фото. Выберите другое.')).toBeNull();
   });
 });

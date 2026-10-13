@@ -238,9 +238,7 @@ export function toSummary(
     lastActivityAt: previewIsPop ? lastPopAt : chat.last_message_at,
     previewIsPop,
     subscription,
-    hasUnread: subscription
-      ? subscription.unreadPosts + subscription.unreadPops > 0
-      : memberUnread,
+    hasUnread: subscription ? subscription.unreadPosts + subscription.unreadPops > 0 : memberUnread,
     subscribersCount: chat.subscribers_count,
   };
 }
@@ -326,7 +324,10 @@ export async function listChats(): Promise<ChatSummary[]> {
 
   const subscriptionByChat = new Map(subscriptions.map((item) => [item.chatId, item]));
   const chatIds = [
-    ...new Set([...(membership.data ?? []).map((row) => row.chat_id), ...subscriptionByChat.keys()]),
+    ...new Set([
+      ...(membership.data ?? []).map((row) => row.chat_id),
+      ...subscriptionByChat.keys(),
+    ]),
   ];
 
   if (chatIds.length === 0) return [];
@@ -439,15 +440,21 @@ export async function setChatUsername(chatId: string, username: string | null): 
 /**
  * Поставить или убрать (`null`) фото группы. Право — у любого участника, его
  * проверяет база; адрес — только файл аватарки группы в моём префиксе
- * бакета (`uploadGroupAvatar`).
+ * бакета (`uploadGroupAvatar`). Отдаёт адрес, который заменён на самом деле.
  */
-export async function setChatAvatar(chatId: string, avatarUrl: string | null): Promise<void> {
-  const { error } = await supabase.rpc('set_chat_avatar', {
+export async function setChatAvatar(
+  chatId: string,
+  avatarUrl: string | null,
+): Promise<string | null> {
+  const { data, error } = await supabase.rpc('set_chat_avatar', {
     target_chat: chatId,
     new_avatar_url: avatarUrl ?? '',
   });
 
   if (error) throw error;
+
+  // Скалярный ответ rpc генератор типов не размечает как nullable.
+  return (data as string | null) ?? null;
 }
 
 /**

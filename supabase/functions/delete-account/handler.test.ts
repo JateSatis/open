@@ -2,7 +2,12 @@
 
 import { assertEquals } from 'jsr:@std/assert@1';
 
-import { avatarFolderOf, createDeleteAccountHandler, type DeleteAccountDeps } from './handler.ts';
+import {
+  createDeleteAccountHandler,
+  createRemoveAvatarFiles,
+  type AvatarBucket,
+  type DeleteAccountDeps,
+} from './handler.ts';
 
 const VALID_TOKEN = 'token-of-alice';
 const ALICE = '00000000-0000-4000-8000-00000000a11c';
@@ -83,9 +88,7 @@ Deno.test('валидный токен — удаляется ровно вла�
 Deno.test('чужой id в теле запроса игнорируется', async () => {
   const { handler, deleted } = setup();
 
-  const response = await handler(
-    request({ body: { user_id: BOB, userId: BOB, id: BOB } }),
-  );
+  const response = await handler(request({ body: { user_id: BOB, userId: BOB, id: BOB } }));
 
   assertEquals(response.status, 200);
   assertEquals(deleted, [ALICE]);
@@ -121,11 +124,31 @@ Deno.test('сбой удаления пользователя — 500, клие�
   assertEquals(response.status, 500);
 });
 
-Deno.test('чистится только папка аватара профиля — фото групп и каналов остаются', () => {
-  assertEquals(avatarFolderOf(ALICE), `${ALICE}/avatar`);
+Deno.test('чистится только папка аватара профиля — фото групп и каналов остаются', async () => {
+  // Бакет с файлами Алисы во всех её папках: аватар, фото группы, аватарка канала.
+  const files: Record<string, string[]> = {
+    [`${ALICE}/avatar`]: ['me.jpg'],
+    [`${ALICE}/group-avatar`]: ['group.jpg'],
+    [`${ALICE}/channel-avatar`]: ['channel.jpg'],
+  };
+  const listed: string[] = [];
+  const removed: string[] = [];
+  const bucket: AvatarBucket = {
+    list: (folder) => {
+      listed.push(folder);
+      return Promise.resolve({
+        data: (files[folder] ?? []).map((name) => ({ name })),
+        error: null,
+      });
+    },
+    remove: (paths) => {
+      removed.push(...paths);
+      return Promise.resolve({ error: null });
+    },
+  };
 
-  for (const shared of ['group-avatar', 'channel-avatar']) {
-    const file = `${ALICE}/${shared}/photo.jpg`;
-    assertEquals(file.startsWith(`${avatarFolderOf(ALICE)}/`), false);
-  }
+  await createRemoveAvatarFiles(bucket)(ALICE);
+
+  assertEquals(listed, [`${ALICE}/avatar`]);
+  assertEquals(removed, [`${ALICE}/avatar/me.jpg`]);
 });

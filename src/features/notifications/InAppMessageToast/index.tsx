@@ -2,9 +2,8 @@ import { useQueryClient } from '@tanstack/react-query';
 
 import { ToastCard, type ToastGroup } from './ToastCard';
 
-import type { ChatSummary } from '@/api/chats';
+import { cachedChat } from '@/features/chats/cachedChat';
 import { chatTitle } from '@/features/chats/chatDisplay';
-import { chatsQueryKey } from '@/features/chats/chatsKey';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
 import { useInAppAlerts } from '@/features/notifications/useInAppAlerts';
 
@@ -19,13 +18,9 @@ export function InAppMessageToast() {
   const currentUserId = useCurrentUserId();
 
   // Сообщение группы подписано группой — её названием и фото, как пост
-  // каналом. Событие их не несёт: лицо берётся из списка чатов.
+  // каналом. Событие их не несёт: лицо берётся из кеша чатов.
   const chat =
-    alert?.kind === 'message' && !alert.channel
-      ? queryClient
-          .getQueryData<ChatSummary[]>(chatsQueryKey)
-          ?.find((candidate) => candidate.id === alert.chatId)
-      : undefined;
+    alert?.kind === 'message' && !alert.channel ? cachedChat(queryClient, alert.chatId) : undefined;
   const group: ToastGroup | null =
     chat?.kind === 'group'
       ? { title: chatTitle(chat, currentUserId), avatarUrl: chat.avatarUrl }

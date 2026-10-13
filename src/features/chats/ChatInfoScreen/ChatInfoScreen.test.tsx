@@ -95,7 +95,7 @@ beforeEach(() => {
   mockedGetChat.mockResolvedValue(group);
   mockedAvailable.mockResolvedValue(true);
   mockedSet.mockResolvedValue(undefined);
-  mockedSetAvatar.mockResolvedValue(undefined);
+  mockedSetAvatar.mockResolvedValue(null);
   mockedUpload.mockResolvedValue({
     url: 'https://x/media/me/group-avatar/new.jpg',
     path: 'me/group-avatar/new.jpg',
@@ -235,6 +235,8 @@ describe('ChatInfoScreen', () => {
       mockedGetChat
         .mockResolvedValueOnce({ ...group, avatarUrl: photo })
         .mockResolvedValue(group);
+      // База отдаёт заменённый адрес — его файл и удаляется (чужой функция пропустит).
+      mockedSetAvatar.mockResolvedValue(photo);
 
       await renderWithQuery(<ChatInfoScreen chatId="group-1" />);
       await fireEvent.press(await screen.findByText('Удалить фото'));

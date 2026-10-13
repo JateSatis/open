@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback } from 'react';
 import { ActivityIndicator, Pressable, View } from 'react-native';
 
 import { styles } from './styles';
@@ -9,7 +9,7 @@ import { Text } from '@/components/Text';
 import { openMediaSheet } from '@/features/chats/MediaPickerSheet';
 import { MediaAvatarSheet } from '@/features/chats/MediaPickerSheet/MediaAvatarSheet';
 import { useChangeGroupAvatar } from '@/features/chats/useChangeGroupAvatar';
-import type { PreparedAvatar } from '@/features/media';
+import { usePreparedAvatar } from '@/features/chats/usePreparedAvatar';
 import { useTheme } from '@/hooks/use-theme';
 import { isNetworkError } from '@/lib/network';
 
@@ -29,29 +29,28 @@ export type GroupAvatarEditorProps = {
  * сразу открывает шит аватарки; «Удалить фото» — отдельной ссылкой, когда
  * есть что удалять. Постороннему этот компонент не показывается.
  */
-export function GroupAvatarEditor({ chatId, userId, avatarUrl, name, size }: GroupAvatarEditorProps) {
+export function GroupAvatarEditor({
+  chatId,
+  userId,
+  avatarUrl,
+  name,
+  size,
+}: GroupAvatarEditorProps) {
   const theme = useTheme();
-  const [preparing, setPreparing] = useState(false);
-  const [prepareFailed, setPrepareFailed] = useState(false);
   const change = useChangeGroupAvatar(chatId, userId);
   const { mutate, reset } = change;
-  const busy = preparing || change.isPending;
-
-  const onDone = useCallback(
-    (avatar: Promise<PreparedAvatar>) => {
-      setPrepareFailed(false);
-      setPreparing(true);
+  const onReady = useCallback(
+    (uri: string) => {
       reset();
-      avatar
-        .then((prepared) => mutate({ kind: 'set', uri: prepared.uri }))
-        .catch(() => setPrepareFailed(true))
-        .finally(() => setPreparing(false));
+      mutate({ kind: 'set', uri });
     },
     [mutate, reset],
   );
+  const { preparing, failed: prepareFailed, onDone, clearFailed } = usePreparedAvatar(onReady);
+  const busy = preparing || change.isPending;
 
   const open = () => {
-    setPrepareFailed(false);
+    clearFailed();
     openMediaSheet(SHEET_OWNER);
   };
 
@@ -91,7 +90,7 @@ export function GroupAvatarEditor({ chatId, userId, avatarUrl, name, size }: Gro
           color="danger"
           disabled={busy}
           onPress={() => {
-            setPrepareFailed(false);
+            clearFailed();
             change.mutate({ kind: 'remove' });
           }}
         />
