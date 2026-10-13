@@ -239,6 +239,7 @@ export type Database = {
       }
       chats: {
         Row: {
+          avatar_url: string | null
           created_at: string
           created_by: string | null
           deleted_at: string | null
@@ -256,6 +257,7 @@ export type Database = {
           chat_read_up_to: string | null
         }
         Insert: {
+          avatar_url?: string | null
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null
@@ -270,6 +272,7 @@ export type Database = {
           username?: string | null
         }
         Update: {
+          avatar_url?: string | null
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null
@@ -1247,6 +1250,7 @@ export type Database = {
           reactions: Json
           reactions_count: number
           size_bytes: number | null
+          title: string | null
           unique_views_count: number
           url: string
           views_count: number
@@ -1279,6 +1283,7 @@ export type Database = {
           reactions?: Json
           reactions_count?: number
           size_bytes?: number | null
+          title?: string | null
           unique_views_count?: number
           url: string
           views_count?: number
@@ -1299,6 +1304,7 @@ export type Database = {
           reactions?: Json
           reactions_count?: number
           size_bytes?: number | null
+          title?: string | null
           unique_views_count?: number
           url?: string
           views_count?: number
@@ -1686,6 +1692,7 @@ export type Database = {
       }
       check_comment_shape: { Args: { target: string }; Returns: undefined }
       check_message_shape: { Args: { target: string }; Returns: undefined }
+      clean_group_avatar_url: { Args: { url: string }; Returns: string }
       comment_pin_right: {
         Args: { target: string; who: string }
         Returns: boolean
@@ -1708,7 +1715,11 @@ export type Database = {
         Returns: Json
       }
       create_chat: {
-        Args: { chat_title?: string; invitee_ids: string[] }
+        Args: {
+          chat_avatar_url?: string
+          chat_title?: string
+          invitee_ids: string[]
+        }
         Returns: Json
       }
       current_session_id: { Args: never; Returns: string }
@@ -2085,6 +2096,16 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      pop_search_score: {
+        Args: {
+          as_of: string
+          comments_count: number
+          created_at: string
+          reactions_count: number
+          views_count: number
+        }
+        Returns: number
+      }
       post_comment: {
         Args: {
           comment_text: string
@@ -2106,6 +2127,7 @@ export type Database = {
           post_text?: string
           reply_to?: string[]
           target_channel: string
+          title: string
         }
         Returns: Json
       }
@@ -2205,6 +2227,19 @@ export type Database = {
         }
         Returns: string
       }
+      search_channels: {
+        Args: { max_count?: number; query: string }
+        Returns: {
+          avatar_url: string
+          id: string
+          mine: boolean
+          posts_chat_id: string
+          subscribed: boolean
+          subscribers_count: number
+          title: string
+          username: string
+        }[]
+      }
       search_entities: {
         Args: { global_limit?: number; mine_limit?: number; query: string }
         Returns: {
@@ -2252,6 +2287,39 @@ export type Database = {
           kind: string
           text_query: string
           username_query: string
+        }[]
+      }
+      search_pops: {
+        Args: {
+          after_id?: string
+          after_rank?: number
+          after_score?: number
+          as_of?: string
+          page_size?: number
+          query: string
+        }
+        Returns: {
+          author_id: string
+          caption: string
+          channel_avatar_url: string
+          channel_id: string
+          channel_title: string
+          comments_count: number
+          created_at: string
+          duration_ms: number
+          height: number
+          id: string
+          mime_type: string
+          my_reaction: string
+          poster_url: string
+          rank: number
+          reactions: Json
+          score: number
+          scored_at: string
+          title: string
+          url: string
+          views_count: number
+          width: number
         }[]
       }
       search_tsquery: { Args: { needle: string }; Returns: unknown }
@@ -2344,6 +2412,10 @@ export type Database = {
       set_channel_notifications: {
         Args: { enabled: boolean; target_channel: string }
         Returns: undefined
+      }
+      set_chat_avatar: {
+        Args: { new_avatar_url: string; target_chat: string }
+        Returns: string
       }
       set_chat_notifications: {
         Args: { enabled: boolean; target_chat: string }
