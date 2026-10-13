@@ -58,6 +58,14 @@ export function defaultCrop(sourceRatio: number): PhotoCrop {
   };
 }
 
+/** Наибольший квадрат по центру — начальная рамка аватарки. */
+export function squareCrop(sourceRatio: number): PhotoCrop {
+  'worklet';
+  const side = Math.min(1, sourceRatio);
+
+  return { ...defaultCrop(sourceRatio), width: side, height: side };
+}
+
 function near(a: number, b: number): boolean {
   'worklet';
   return Math.abs(a - b) < EPSILON;

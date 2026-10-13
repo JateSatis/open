@@ -1,6 +1,11 @@
 import { create } from 'zustand';
 
-import { clearEditedThumbs, setEditedThumb } from './editedThumbs';
+import {
+  clearEditedThumbs,
+  restoreEditedThumbs,
+  setEditedThumb,
+  takeEditedThumbs,
+} from './editedThumbs';
 import { isEmptyEdit, normalizeEdit, type BakedPhoto, type PhotoEdit } from './types';
 
 type PhotoEditsState = {
@@ -69,4 +74,33 @@ export function clearPhotoEdits() {
 
   clearEditedThumbs();
   if (Object.keys(edits).length > 0) usePhotoEdits.setState({ edits: {}, baked: {} });
+}
+
+let isolated = false;
+
+/**
+ * Отдельный сеанс правок — для шита аватарки. Правки общие по id файла, и без
+ * этого правка фото для аватарки показалась бы потом в шите чата (и плиткой,
+ * и при отправке), а правка, начатая в чате, легла бы на аватарку. Правки
+ * чата на время сеанса откладываются в сторону — чат в соседней вкладке
+ * может держать выбор с правками, — а по возврату правки сеанса уходят и
+ * чат получает свои обратно.
+ */
+export function isolatePhotoEdits(): () => void {
+  const saved = usePhotoEdits.getState();
+  const thumbs = takeEditedThumbs();
+
+  isolated = true;
+  usePhotoEdits.setState({ edits: {}, baked: {} });
+
+  return () => {
+    isolated = false;
+    usePhotoEdits.setState({ edits: saved.edits, baked: saved.baked });
+    restoreEditedThumbs(thumbs);
+  };
+}
+
+/** Идёт отдельный сеанс правок: правка не выбирает фото в отправку чата. */
+export function arePhotoEditsIsolated(): boolean {
+  return isolated;
 }

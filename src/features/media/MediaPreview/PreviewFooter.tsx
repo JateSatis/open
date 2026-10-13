@@ -12,14 +12,22 @@ import { hasCrop, hasDrawing, isNeutralAdjust } from '@/features/media/photoEdit
 import { useTheme } from '@/hooks/use-theme';
 import { Spacing } from '@/theme';
 
-export type PreviewFooterProps = {
-  assetId: string;
-  isPhoto: boolean;
+/** Подпись к отправке — тот же черновик, что в поле шита и чата. */
+export type PreviewCaption = {
   text: string;
   onChangeText: (text: string) => void;
   placeholder: string;
-  /** Правка альбома: кнопка сохраняет, а не отправляет. */
-  editing: boolean;
+};
+
+/** Что делает кнопка справа: отправить, сохранить правку альбома, поставить аватарку. */
+export type PreviewAction = 'send' | 'save' | 'avatar';
+
+export type PreviewFooterProps = {
+  assetId: string;
+  isPhoto: boolean;
+  /** Нет — поля подписи нет (шит аватарки), кнопка встаёт в ряд инструментов. */
+  caption?: PreviewCaption;
+  action: PreviewAction;
   style: AnimatedStyle<ViewStyle>;
   /** Открыт инструмент: низ спрятан и не принимает касаний. */
   hidden: boolean;
@@ -51,19 +59,27 @@ const TOOLS: { key: ToolKey; label: string; icon: SymbolViewProps['name'] }[] = 
   },
 ];
 
+const ACTIONS: Record<PreviewAction, { label: string; icon: SymbolViewProps['name'] }> = {
+  send: {
+    label: 'Отправить',
+    icon: { ios: 'arrow.up', android: 'arrow_upward', web: 'arrow_upward' },
+  },
+  save: { label: 'Сохранить', icon: { ios: 'checkmark', android: 'check', web: 'check' } },
+  avatar: { label: 'Поставить фото', icon: { ios: 'checkmark', android: 'check', web: 'check' } },
+};
+
 /**
  * Низ предпросмотра: подпись — тот же черновик, что в поле шита и чата, —
- * отправка и ряд инструментов фото. Иконка инструмента подсвечена, если у
+ * отправка и ряд инструментов фото. Без подписи (шит аватарки) кнопка
+ * стоит справа в ряду инструментов. Иконка инструмента подсвечена, если у
  * этого фото есть его правки. Наложения — следующий этап: место в ряду
  * уже есть, но на тап оно пока не отвечает.
  */
 export function PreviewFooter({
   assetId,
   isPhoto,
-  text,
-  onChangeText,
-  placeholder,
-  editing,
+  caption,
+  action,
   style,
   hidden,
   onSend,
@@ -89,6 +105,18 @@ export function PreviewFooter({
     color: onOpenColor,
   };
 
+  const sendButton = (
+    <Pressable
+      testID="media-preview-send"
+      accessibilityRole="button"
+      accessibilityLabel={ACTIONS[action].label}
+      onPress={onSend}
+      style={[styles.sendButton, { backgroundColor: theme.primary }]}
+    >
+      <SymbolView name={ACTIONS[action].icon} size={Spacing.four} tintColor={theme.primaryText} />
+    </Pressable>
+  );
+
   return (
     <Animated.View
       testID="media-preview-footer"
@@ -102,73 +130,64 @@ export function PreviewFooter({
       ]}
       onLayout={(event) => onLayout(event.nativeEvent.layout.height)}
     >
-      <View style={styles.captionRow}>
-        <TextInput
-          testID="media-preview-caption"
-          accessibilityLabel="Подпись"
-          placeholder={placeholder}
-          placeholderTextColor={theme.textOnMediaSecondary}
-          value={text}
-          onChangeText={onChangeText}
-          multiline
-          onPressIn={claimKeyboardForSheet}
-          onFocus={claimKeyboardForSheet}
-          style={[
-            styles.captionField,
-            { color: theme.textOnMedia, backgroundColor: theme.mediaControl },
-          ]}
-        />
-        <Pressable
-          testID="media-preview-send"
-          accessibilityRole="button"
-          accessibilityLabel={editing ? 'Сохранить' : 'Отправить'}
-          onPress={onSend}
-          style={[styles.sendButton, { backgroundColor: theme.primary }]}
-        >
-          <SymbolView
-            name={
-              editing
-                ? { ios: 'checkmark', android: 'check', web: 'check' }
-                : { ios: 'arrow.up', android: 'arrow_upward', web: 'arrow_upward' }
-            }
-            size={Spacing.four}
-            tintColor={theme.primaryText}
+      {caption ? (
+        <View style={styles.captionRow}>
+          <TextInput
+            testID="media-preview-caption"
+            accessibilityLabel="Подпись"
+            placeholder={caption.placeholder}
+            placeholderTextColor={theme.textOnMediaSecondary}
+            value={caption.text}
+            onChangeText={caption.onChangeText}
+            multiline
+            onPressIn={claimKeyboardForSheet}
+            onFocus={claimKeyboardForSheet}
+            style={[
+              styles.captionField,
+              { color: theme.textOnMedia, backgroundColor: theme.mediaControl },
+            ]}
           />
-        </Pressable>
-      </View>
+          {sendButton}
+        </View>
+      ) : null}
 
-      {isPhoto ? (
-        <View style={styles.tools}>
-          {TOOLS.map((tool) => {
-            const onOpen = opens[tool.key];
+      {isPhoto || !caption ? (
+        <View style={styles.toolsRow}>
+          {isPhoto ? (
+            <View style={styles.tools}>
+              {TOOLS.map((tool) => {
+                const onOpen = opens[tool.key];
 
-            return (
-              <Pressable
-                key={tool.key}
-                testID={`media-preview-tool-${tool.key}`}
-                accessibilityRole="button"
-                accessibilityLabel={tool.label}
-                // Наложения — следующий этап: место в ряду есть, нажать нельзя.
-                disabled={!onOpen}
-                accessibilityState={{ selected: edited[tool.key], disabled: !onOpen }}
-                onPress={
-                  onOpen
-                    ? () => {
-                        void Haptics.selectionAsync();
-                        onOpen();
-                      }
-                    : undefined
-                }
-                style={styles.tool}
-              >
-                <SymbolView
-                  name={tool.icon}
-                  size={Spacing.four}
-                  tintColor={edited[tool.key] ? theme.primary : theme.textOnMedia}
-                />
-              </Pressable>
-            );
-          })}
+                return (
+                  <Pressable
+                    key={tool.key}
+                    testID={`media-preview-tool-${tool.key}`}
+                    accessibilityRole="button"
+                    accessibilityLabel={tool.label}
+                    // Наложения — следующий этап: место в ряду есть, нажать нельзя.
+                    disabled={!onOpen}
+                    accessibilityState={{ selected: edited[tool.key], disabled: !onOpen }}
+                    onPress={
+                      onOpen
+                        ? () => {
+                            void Haptics.selectionAsync();
+                            onOpen();
+                          }
+                        : undefined
+                    }
+                    style={styles.tool}
+                  >
+                    <SymbolView
+                      name={tool.icon}
+                      size={Spacing.four}
+                      tintColor={edited[tool.key] ? theme.primary : theme.textOnMedia}
+                    />
+                  </Pressable>
+                );
+              })}
+            </View>
+          ) : null}
+          {caption ? null : sendButton}
         </View>
       ) : null}
     </Animated.View>

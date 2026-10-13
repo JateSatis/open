@@ -15,6 +15,7 @@ import {
 
 import { commitPhotoEdit } from './commitEdit';
 import {
+  centerSquare,
   currentCrop,
   fittedFrame,
   isRecentering,
@@ -35,6 +36,7 @@ import {
   defaultCrop,
   mirrorCrop,
   rotateQuarter,
+  squareCrop,
   type Box,
   type PhotoCrop,
 } from '@/features/media/photoEdits/crop';
@@ -116,8 +118,11 @@ export function startCropTransition(
  * Заход в «Обрезку и поворот» для одного фото. Стартует с его текущей
  * обрезки; крестик возвращает её к состоянию на входе без вопроса, галочка
  * применяет (`commitPhotoEdit`).
+ *
+ * `square` — обрезка аватарки: рамка всегда квадратная, без обрезки на входе
+ * — наибольший квадрат по центру (он и стал бы аватаркой).
  */
-export function useCropTool(): CropToolState {
+export function useCropTool(square = false): CropToolState {
   const [open, setOpen] = useState(false);
   const [session, setSession] = useState<CropSession | null>(null);
   const entry = useRef<{ asset: MediaLibraryItem; crop: PhotoCrop } | null>(null);
@@ -138,10 +143,11 @@ export function useCropTool(): CropToolState {
   const grid = useSharedValue(0);
   const cover = useSharedValue(0);
   const rotationBase = useSharedValue<PhotoCrop | null>(null);
+  const page = useSharedValue<Box | null>(null);
 
   const motion = useMemo<CropMotion>(
-    () => ({ crop, from, twist, t, covering, frame, area, screen, enter, grid }),
-    [area, covering, crop, enter, frame, from, grid, screen, t, twist],
+    () => ({ crop, from, twist, t, covering, frame, area, screen, enter, grid, square, page }),
+    [area, covering, crop, enter, frame, from, grid, page, screen, square, t, twist],
   );
 
   const start = useCallback(
@@ -154,7 +160,11 @@ export function useCropTool(): CropToolState {
       void workingCopyOf(asset.id)
         .then((copy) => {
           const edit = photoEditOf(asset.id) ?? EMPTY_EDIT;
-          const initial = edit.crop ?? defaultCrop(copy.sourceHeight / copy.sourceWidth);
+          const ratio = copy.sourceHeight / copy.sourceWidth;
+          const initial = edit.crop ?? (square ? squareCrop(ratio) : defaultCrop(ratio));
+          // Страница аватарки без обрезки показывает фото целиком: рамка
+          // входит из его центрального квадрата и туда же уходит по «Отмене».
+          const whole = square && edit.crop === undefined;
 
           entry.current = { asset, crop: initial };
           // Одним ворклетом: кнопки и жесты читают обрезку на UI-потоке,
@@ -170,6 +180,7 @@ export function useCropTool(): CropToolState {
             enter.value = 0;
             grid.value = 0;
             rotationBase.value = null;
+            page.value = whole ? centerSquare(1 / ratio, screen.value) : null;
           })();
           const image = workingImageOf(asset.id, copy);
 
@@ -186,7 +197,7 @@ export function useCropTool(): CropToolState {
           starting.current = false;
         });
     },
-    [crop, enter, frame, from, grid, rotationBase, t, twist],
+    [crop, enter, frame, from, grid, page, rotationBase, screen, square, t, twist],
   );
 
   const ready = useCallback(() => {
@@ -214,9 +225,9 @@ export function useCropTool(): CropToolState {
     () =>
       turn((now) => {
         'worklet';
-        return defaultCrop(now.sourceRatio);
+        return square ? squareCrop(now.sourceRatio) : defaultCrop(now.sourceRatio);
       }),
-    [turn],
+    [square, turn],
   );
 
   const closed = useCallback(() => {
@@ -258,12 +269,14 @@ export function useCropTool(): CropToolState {
     // ещё тянуть фото за край — применяется то, куда оно спружинит.
     const result = coverCrop(crop.value);
 
+    // Страница теперь покажет обрезку — рамка уходит в неё, а не в квадрат целого фото.
+    page.value = null;
     leave();
     commitPhotoEdit(current.asset, {
       ...(photoEditOf(current.asset.id) ?? EMPTY_EDIT),
       crop: result,
     });
-  }, [crop, leave]);
+  }, [crop, leave, page]);
 
   return {
     open,
