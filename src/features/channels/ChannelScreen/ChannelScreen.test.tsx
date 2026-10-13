@@ -30,6 +30,7 @@ import { DeadlineError } from '@/lib/deadline';
 import { renderWithQuery } from '@/test/renderWithQuery';
 
 const mockRedirect = jest.fn();
+let mockParams: Record<string, string> = { chatId: 'posts-1' };
 
 jest.mock('@/api/messageViews');
 jest.mock('@/api/reactions', () => ({
@@ -45,9 +46,9 @@ jest.mock('expo-router', () => ({
     dispatch: jest.fn(),
     addListener: () => () => undefined,
   }),
-  useLocalSearchParams: () => ({ chatId: 'posts-1' }),
+  useLocalSearchParams: () => mockParams,
   useRouter: () => ({ push: jest.fn(), navigate: jest.fn(), replace: jest.fn() }),
-  Redirect: ({ href }: { href: string }) => {
+  Redirect: ({ href }: { href: unknown }) => {
     mockRedirect(href);
     return null;
   },
@@ -196,6 +197,7 @@ async function renderChannel() {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockParams = { chatId: 'posts-1' };
   resetOutbox();
   resetComposerDrafts();
   resetConnectionState();
@@ -284,6 +286,43 @@ describe('ChannelScreen', () => {
         selected: true,
       }),
     );
+  });
+});
+
+describe('ChannelScreen: переход к посту снаружи', () => {
+  const selected = (name: string) =>
+    screen.getByRole('tab', { name }).props.accessibilityState?.selected;
+
+  it('opens on «Посты» for a jump to a post, even when «Попсы» were asked', async () => {
+    await renderWithQuery(<ChannelScreen channelId="channel-1" section="pops" postsRequest="42" />);
+    await screen.findByText('первый пост');
+
+    expect(selected('Посты')).toBe(true);
+  });
+
+  it('switches a screen left on «Попсы» back to «Посты» on each new jump', async () => {
+    const view = await renderWithQuery(<ChannelScreen channelId="channel-1" section="pops" />);
+    await screen.findByText('первый пост');
+    expect(selected('Попсы')).toBe(true);
+
+    await act(async () => {
+      view.rerender(<ChannelScreen channelId="channel-1" section="pops" postsRequest="42" />);
+    });
+    expect(selected('Посты')).toBe(true);
+
+    // Тот же переход, оставшийся в адресе, раздел, выбранный после, не трогает.
+    await act(async () => {
+      fireEvent.press(screen.getByRole('tab', { name: 'Попсы' }));
+    });
+    await act(async () => {
+      view.rerender(<ChannelScreen channelId="channel-1" section="pops" postsRequest="42" />);
+    });
+    expect(selected('Попсы')).toBe(true);
+
+    await act(async () => {
+      view.rerender(<ChannelScreen channelId="channel-1" section="pops" postsRequest="43" />);
+    });
+    expect(selected('Посты')).toBe(true);
   });
 });
 
@@ -502,7 +541,39 @@ describe('ChatScreen for a posts chat', () => {
   it('opens the channel screen instead of the bare conversation', async () => {
     await renderWithQuery(<ChatScreen />);
 
-    await waitFor(() => expect(mockRedirect).toHaveBeenCalledWith('/chats/channel/channel-1'));
+    await waitFor(() =>
+      expect(mockRedirect).toHaveBeenCalledWith({
+        pathname: '/chats/channel/[channelId]',
+        params: { channelId: 'channel-1' },
+      }),
+    );
+  });
+
+  it('carries the jump to a post and its comment over to the channel screen', async () => {
+    mockParams = {
+      chatId: 'posts-1',
+      jumpTo: 'p1',
+      jumpAt: SENT_AT,
+      jumpKey: '42',
+      comments: 'p1',
+      comment: 'c1',
+    };
+
+    await renderWithQuery(<ChatScreen />);
+
+    await waitFor(() =>
+      expect(mockRedirect).toHaveBeenCalledWith({
+        pathname: '/chats/channel/[channelId]',
+        params: {
+          channelId: 'channel-1',
+          jumpTo: 'p1',
+          jumpAt: SENT_AT,
+          jumpKey: '42',
+          comments: 'p1',
+          comment: 'c1',
+        },
+      }),
+    );
   });
 });
 

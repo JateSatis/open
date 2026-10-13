@@ -19,10 +19,27 @@ begin
   select coalesce(jsonb_agg(jsonb_build_object('author', author_id, 'ids', ids)), '[]')
     into messages_jobs
     from (
+      -- delete_messages берёт сообщения одного чата: группа — автор и чат. Островки
+      -- пересылки тестовых сообщений (channel-post-jump) уходят вместе с ними.
       select author_id, array_agg(id) as ids
-        from public.messages
-       where text like 'maestro-%' and deleted_at is null and author_id = any (test_users)
-       group by author_id
+        from public.messages m
+       where deleted_at is null
+         and author_id = any (test_users)
+         and (
+           text like 'maestro-%'
+           -- Только островок из одних тестовых: живая пересылка рядом не трогается.
+           or (kind = 'forward' and not exists (
+             select 1
+               from public.forward_items fi
+               join public.messages o on o.id = fi.message_id
+              where fi.forward_id = m.id and fi.deleted_at is null
+                and coalesce(o.text, '') not like 'maestro-%'
+           ) and exists (
+             select 1 from public.forward_items fi
+              where fi.forward_id = m.id and fi.deleted_at is null
+           ))
+         )
+       group by author_id, chat_id
     ) m;
 
   select coalesce(jsonb_agg(jsonb_build_object('author', author_id, 'id', id)), '[]')
