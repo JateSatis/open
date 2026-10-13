@@ -149,7 +149,7 @@ export async function removeUploadedMedia(path: string | string[]): Promise<bool
   return !error;
 }
 
-/** Загружает подготовленный аватар (`pickAvatar`) и отдаёт его публичный URL. */
+/** Загружает подготовленный аватар (`prepareAvatar`) и отдаёт его публичный URL. */
 export async function uploadAvatar(uri: string, userId: string): Promise<string> {
   return (await uploadJpeg(uri, buildAvatarPath(userId))).url;
 }

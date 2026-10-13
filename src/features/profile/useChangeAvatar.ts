@@ -3,6 +3,10 @@ import { useMutation, useQueryClient, type QueryClient } from '@tanstack/react-q
 import { updateMyProfile, type Profile } from '@/api/profile';
 import { removeOwnAvatar, uploadAvatar } from '@/features/media';
 import { profileKeys } from '@/features/profile/queries';
+import { DeadlineError, withDeadline } from '@/lib/deadline';
+
+/** Дольше этого смену фото не ждём — дальше это потеря связи. */
+const SAVE_DEADLINE_MS = 30_000;
 
 function seedProfile(queryClient: QueryClient, profile: Profile) {
   queryClient.setQueryData(profileKeys.me(), profile);
@@ -10,31 +14,43 @@ function seedProfile(queryClient: QueryClient, profile: Profile) {
 }
 
 export type AvatarChange =
-  /** Новый аватар — файл уже квадратный и сжатый (`pickAvatar`). */
-  | { kind: 'set'; uri: string; profile: Profile }
-  | { kind: 'remove'; profile: Profile };
+  /** Новый аватар — файл уже квадратный и сжатый (`prepareAvatar`). */
+  { kind: 'set'; uri: string; profile: Profile } | { kind: 'remove'; profile: Profile };
 
 export function useChangeAvatar() {
   const queryClient = useQueryClient();
 
   return useMutation<Profile, Error, AvatarChange>({
+    // Без связи React Query ставит мутацию на паузу до её возвращения, и
+    // крутилка на аватаре висела бы молча. Смена пробуется сразу и честно падает.
+    networkMode: 'always',
     mutationFn: async (change) => {
       const { profile } = change;
 
       if (change.kind === 'remove') {
-        const updated = await updateMyProfile({ avatarUrl: null });
+        const updated = await withDeadline(updateMyProfile({ avatarUrl: null }), SAVE_DEADLINE_MS);
         await removeOwnAvatar(profile.avatarUrl, profile.id);
         return updated;
       }
 
-      const url = await uploadAvatar(change.uri, profile.id);
+      // Загрузка в Storage без связи не падает, а висит: срок превращает её в
+      // ошибку. Файл, доехавший после срока, никому не нужен.
+      const url = await withDeadline(
+        uploadAvatar(change.uri, profile.id),
+        SAVE_DEADLINE_MS,
+        (late) => {
+          void removeOwnAvatar(late, profile.id);
+        },
+      );
       let updated: Profile;
 
       try {
-        updated = await updateMyProfile({ avatarUrl: url });
+        updated = await withDeadline(updateMyProfile({ avatarUrl: url }), SAVE_DEADLINE_MS);
       } catch (error) {
-        // Профиль на новый файл так и не сослался — файл никому не нужен.
-        await removeOwnAvatar(url, profile.id);
+        // Профиль на новый файл так и не сослался — файл никому не нужен. Кроме
+        // запроса, оборванного по сроку: он мог дойти, и файл тогда — аватар.
+        // Без ожидания: без связи удаление висело бы так же, как загрузка.
+        if (!(error instanceof DeadlineError)) void removeOwnAvatar(url, profile.id);
         throw error;
       }
 

@@ -14,6 +14,9 @@ export const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: Radii.full,
   },
+  note: {
+    textAlign: 'center',
+  },
   error: {
     textAlign: 'center',
   },
