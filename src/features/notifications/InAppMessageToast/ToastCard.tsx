@@ -19,9 +19,13 @@ const NOTICE_VISIBLE_MS = 2000;
 const ACTION_VISIBLE_MS = 8000;
 const SLIDE_MS = 220;
 
+/** Группа, из которой пришло сообщение: карточка подписана ею. */
+export type ToastGroup = { title: string; avatarUrl: string | null };
+
 export type ToastCardProps = {
   alert: InAppAlert | null;
   dismiss: () => void;
+  group?: ToastGroup | null;
 };
 
 /**
@@ -29,7 +33,7 @@ export type ToastCardProps = {
  * («Скопировано»). Откуда брать карточку, решает обёртка — корневая
  * (`InAppMessageToast`) или внутри своего окна (`InAppNoticeToast`).
  */
-export function ToastCard({ alert, dismiss }: ToastCardProps) {
+export function ToastCard({ alert, dismiss, group = null }: ToastCardProps) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const theme = useTheme();
@@ -123,8 +127,9 @@ export function ToastCard({ alert, dismiss }: ToastCardProps) {
     router.push(`/chats/${alert.chatId}`);
   };
 
-  // Чужая переписка, на которую я подписан, — её названием, автор — в тексте.
-  const subscribedTitle = alert.kind === 'message' && !channel ? alert.subscribedChatTitle : null;
+  // Группа и чужая переписка, на которую я подписан, — их названием, автор — в тексте.
+  const subscribedTitle =
+    alert.kind === 'message' && !channel ? (group?.title ?? alert.subscribedChatTitle) : null;
   const who = channel
     ? channel.title
     : subscribedTitle
@@ -163,7 +168,11 @@ export function ToastCard({ alert, dismiss }: ToastCardProps) {
         onPress={open}
         style={[styles.card, cardColors]}
       >
-        <Avatar uri={channel?.avatarUrl ?? null} name={who} size={Spacing.five} />
+        <Avatar
+          uri={channel?.avatarUrl ?? group?.avatarUrl ?? null}
+          name={who}
+          size={Spacing.five}
+        />
 
         <View style={styles.body}>
           <Text variant="smallBold" numberOfLines={1}>

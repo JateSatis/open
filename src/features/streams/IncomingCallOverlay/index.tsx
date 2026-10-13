@@ -12,6 +12,7 @@ import type { ChatSummary } from '@/api/chats';
 import type { LiveStream } from '@/api/streams';
 import { Avatar } from '@/components/Avatar';
 import { Text } from '@/components/Text';
+import { chatAvatarUrl } from '@/features/chats/chatDisplay';
 import { chatsQueryKey } from '@/features/chats/useChats';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
 import { incomingTitle } from '@/features/streams/callText';
@@ -100,6 +101,11 @@ export function IncomingCallOverlay() {
   if (!ringing) return null;
 
   const title = incomingTitle(ringing);
+  // Лицо звонка — лицо чата: фото группы или собеседника, из кеша списка чатов.
+  const ringingChat = queryClient
+    .getQueryData<ChatSummary[]>(chatsQueryKey)
+    ?.find((candidate) => candidate.id === ringing.chatId);
+  const avatarUrl = ringingChat ? chatAvatarUrl(ringingChat, currentUserId) : null;
   const who = ringing.chatKind === 'group' ? `${ringing.hostName} звонит` : 'Звонит вам';
 
   return (
@@ -122,7 +128,7 @@ export function IncomingCallOverlay() {
         ]}
       >
         <View style={styles.header}>
-          <Avatar name={title} size={Sizes.incomingAvatar} />
+          <Avatar uri={avatarUrl} name={title} size={Sizes.incomingAvatar} />
           <Text variant="title" color="textOnMedia" numberOfLines={2} style={styles.centered}>
             {title}
           </Text>

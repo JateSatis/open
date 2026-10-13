@@ -74,6 +74,13 @@ it('opens a channel by its channel id', () => {
   expect(entity).toMatchObject({ kind: 'channel', id: 'ch', chatId: 'posts', channelId: 'ch' });
 });
 
+it('draws a group by its own photo', () => {
+  const withPhoto = chat({ ...group, avatarUrl: 'https://a/group.png' });
+  const [entity] = localChatMatches([withPhoto], parseSearchQuery('планы'), 'me');
+
+  expect(entity).toMatchObject({ kind: 'group', avatarUrl: 'https://a/group.png' });
+});
+
 it('finds by username and by title', () => {
   expect(titles('plans')).toEqual(['Планы на выходные']);
   expect(titles('выходн')).toEqual(['Планы на выходные']);
