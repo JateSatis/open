@@ -1,0 +1,47 @@
+appId: com.openger.app
+name: Переход к посту канала из диалога — экран канала, «Посты», тот же экземпляр
+tags:
+  - channels
+  - chats
+env:
+  CHANNEL: Test Kanal
+  CHAT: Plany
+---
+- runFlow: subflows/open-app.yaml
+- tapOn: ${CHANNEL}
+- evalScript: ${output.post = 'maestro-' + Date.now()}
+- tapOn: "Сообщение"
+- inputText: ${output.post}
+- tapOn: "Отправить"
+- assertVisible: ${output.post}
+# Пересылка в диалог: экран канала остаётся ниже в стеке.
+- tapOn: ${output.post}
+- tapOn: "Переслать"
+- tapOn: ${CHAT}
+- tapOn: "Отправить"
+- assertVisible:
+    id: "call-button"
+- assertVisible: ${output.post}
+# «Перейти к оригиналу» у облачка островка — к посту на том же экране канала.
+- tapOn: ${output.post}
+- tapOn: "Перейти к оригиналу"
+- assertVisible:
+    id: "segment-0"
+    selected: true
+- assertVisible: ${output.post}
+# Второго экземпляра канала нет: «назад» ведёт к списку чатов, а не в ещё один канал.
+- back
+- assertVisible:
+    id: "chat-list-item"
+# Уборка: пост удаляется в канале, островок — из диалога.
+- tapOn: ${CHAT}
+- tapOn: ${output.post}
+- tapOn: "Убрать из пересылки"
+- tapOn: "Убрать"
+- assertNotVisible: ${output.post}
+- back
+- tapOn: ${CHANNEL}
+- tapOn: ${output.post}
+- tapOn: "Удалить"
+- tapOn: "Удалить"
+- assertNotVisible: ${output.post}
