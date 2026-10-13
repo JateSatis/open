@@ -1,0 +1,43 @@
+appId: com.openger.app
+name: Новый поп — поле «Название» над подписью, без названия «Опубликовать» не публикует и объясняет почему
+tags:
+  - pops
+  - media
+env:
+  CHANNEL: Test Kanal
+---
+# Ничего не публикует: удаления попа в приложении нет, а каждый прогон оставлял бы поп
+# в канале и файл в Storage. Публикация с названием проверена тестами редактора.
+# В галерее телефона должно быть вертикальное видео до 90 с первым (open-test-pop.mp4).
+- runFlow: subflows/open-app.yaml
+- tapOn: ${CHANNEL}
+- tapOn:
+    id: "segment-1"
+- tapOn:
+    id: "pop-add-tile"
+- tapOn: "Выбрать видео"
+- tapOn:
+    id: "media-grid-pick"
+    index: 0
+- assertVisible:
+    id: "pop-title"
+- assertVisible:
+    id: "pop-caption"
+- assertNotVisible:
+    id: "pop-title-required"
+- tapOn: "Опубликовать"
+- assertVisible:
+    id: "pop-title-required"
+# Редактор не закрылся: поп не ушёл.
+- assertVisible:
+    id: "pop-title"
+- tapOn:
+    id: "pop-title"
+- inputText: "Elka"
+- assertNotVisible:
+    id: "pop-title-required"
+- hideKeyboard
+- tapOn:
+    id: "pop-editor-back"
+- assertVisible:
+    id: "pops-section"
