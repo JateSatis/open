@@ -97,7 +97,8 @@ begin
   posts := (public.create_channel('Канал', 'ga_posts_zz') ->> 'chat_id')::uuid;
 
   -- К1.1: участник ставит и убирает.
-  perform public.set_chat_avatar(grp, a2);
+  perform pg_temp.check('смена отдаёт прежний адрес — его файл и удаляет клиент',
+    public.set_chat_avatar(grp, a2) = a1);
   perform pg_temp.check('К1.1 участник (создатель) меняет фото', pg_temp.avatar(grp) = a2);
 
   perform pg_temp.act_as(b);
