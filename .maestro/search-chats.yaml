@@ -1,0 +1,56 @@
+appId: com.openger.app
+name: Поиск в «Чатах» — чужой канал, сообщение с прыжком, пост с прыжком, назад в поиск
+tags:
+  - chats
+  - channels
+  - search
+env:
+  # Чужой канал без подписки, сообщение диалога и пост своего канала — из
+  # постоянных данных основного аккаунта; поиск ничего не создаёт.
+  CHANNEL_QUERY: subs_test
+  CHANNEL: Канал подписок
+  MESSAGE_QUERY: plaintext
+  POST_QUERY: pervyi
+  POST: Pervyi post kana
+---
+- runFlow: subflows/open-app.yaml
+- tapOn:
+    id: "chats-search-open"
+- assertVisible:
+    id: "chats-search-cancel"
+# Чужой канал — в «Глобальном поиске», открывается экраном канала.
+- inputText: ${CHANNEL_QUERY}
+- assertVisible: "Глобальный поиск"
+- tapOn:
+    id: "search-global-channel"
+- assertVisible: "Подписаться"
+- back
+# Назад — тот же поиск с тем же запросом.
+- assertVisible:
+    id: "search-global-channel"
+# Сообщение — его чат с прыжком к нему.
+- tapOn: "Очистить запрос"
+- inputText: ${MESSAGE_QUERY}
+- tapOn:
+    id: "search-message"
+- assertVisible:
+    id: "call-button"
+- assertVisible: ${MESSAGE_QUERY}
+- back
+# Пост — экран канала, раздел «Посты», пост на экране.
+- tapOn: "Очистить запрос"
+- inputText: ${POST_QUERY}
+- tapOn:
+    id: "search-message"
+- assertVisible:
+    id: "segment-0"
+    selected: true
+- assertVisible: ${POST}
+- back
+# «Отмена» — обычный список чатов.
+- tapOn:
+    id: "chats-search-cancel"
+- assertVisible:
+    id: "chat-list-item"
+- assertVisible:
+    id: "chats-search-open"

@@ -19,6 +19,9 @@ import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
 import { useInvites } from '@/features/chats/useInvites';
 import type { ChatSummary } from '@/api/chats';
 import { useOnlineUsers } from '@/features/chats/useOnlineUsers';
+import { SearchBar } from '@/features/search/SearchBar';
+import { SearchPanel } from '@/features/search/SearchPanel';
+import { useSearchMode } from '@/features/search/useSearchMode';
 import { Sizes, Spacing } from '@/theme';
 
 /** Последняя строка списка встаёт над кнопкой «+», а не под неё. */
@@ -32,6 +35,7 @@ export default function ChatsScreen() {
   const { incoming, declined, error: invitesError, refresh: refreshInvites } = useInvites();
 
   const [rowMenu, setRowMenu] = useState<SubscriptionRowTarget | null>(null);
+  const search = useSearchMode();
 
   const openChat = useCallback(
     (chatId: string) => {
@@ -86,51 +90,63 @@ export default function ChatsScreen() {
     // системной навигации, и второй отступ поднял бы кнопку «+» выше, чем она
     // отстоит от правого края.
     <Screen
-      edges={['top']}
+      edges={search.active ? ['top'] : []}
       contentContainerStyle={{ paddingHorizontal: Spacing.three, paddingVertical: 0 }}
     >
-      {problem ? (
+      <SearchBar
+        value={search.query}
+        onChangeText={search.setQuery}
+        active={search.active}
+        onActivate={search.activate}
+        onCancel={search.cancel}
+      />
+
+      {problem && !search.active ? (
         <View style={{ paddingVertical: Spacing.two }}>
           <Text color="danger">{problem}</Text>
         </View>
       ) : null}
 
-      <FlatList
-        data={chats}
-        contentContainerStyle={{ paddingBottom: LIST_BOTTOM_INSET }}
-        keyExtractor={(chat) => chat.id}
-        refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={refreshAll} />}
-        ListHeaderComponent={
-          hasInvites ? (
-            <InvitesEntry
-              incomingCount={incoming.length}
-              onPress={() => router.push('/chats/invites')}
+      {search.active ? (
+        <SearchPanel query={search.query} />
+      ) : (
+        <FlatList
+          data={chats}
+          contentContainerStyle={{ paddingBottom: LIST_BOTTOM_INSET }}
+          keyExtractor={(chat) => chat.id}
+          refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={refreshAll} />}
+          ListHeaderComponent={
+            hasInvites ? (
+              <InvitesEntry
+                incomingCount={incoming.length}
+                onPress={() => router.push('/chats/invites')}
+              />
+            ) : null
+          }
+          renderItem={({ item }) => (
+            <ChatListItem
+              chat={item}
+              currentUserId={currentUserId}
+              isOnline={onlineIds.has(counterpart(item, currentUserId)?.id ?? '')}
+              onPress={openChat}
+              onLongPress={item.subscription ? openRowMenu : undefined}
             />
-          ) : null
-        }
-        renderItem={({ item }) => (
-          <ChatListItem
-            chat={item}
-            currentUserId={currentUserId}
-            isOnline={onlineIds.has(counterpart(item, currentUserId)?.id ?? '')}
-            onPress={openChat}
-            onLongPress={item.subscription ? openRowMenu : undefined}
-          />
-        )}
-        ListEmptyComponent={
-          problem ? null : (
-            <View style={{ gap: Spacing.three, paddingTop: Spacing.three }}>
-              <Text color="textSecondary">
-                Чатов пока нет. Позовите кого-нибудь — всё, что здесь появится, сможет прочитать кто
-                угодно.
-              </Text>
-              <Button label="Новый чат" onPress={() => router.push('/chats/new')} />
-            </View>
-          )
-        }
-      />
+          )}
+          ListEmptyComponent={
+            problem ? null : (
+              <View style={{ gap: Spacing.three, paddingTop: Spacing.three }}>
+                <Text color="textSecondary">
+                  Чатов пока нет. Позовите кого-нибудь — всё, что здесь появится, сможет прочитать
+                  кто угодно.
+                </Text>
+                <Button label="Новый чат" onPress={() => router.push('/chats/new')} />
+              </View>
+            )
+          }
+        />
+      )}
 
-      <CreateMenu onSelect={onCreate} />
+      {search.active ? null : <CreateMenu onSelect={onCreate} />}
 
       <SubscriptionRowMenu target={rowMenu} onClosed={closeRowMenu} />
     </Screen>
