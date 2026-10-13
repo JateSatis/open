@@ -24,6 +24,7 @@ export function PersonPickItem({ person, isSelected, onToggle }: PersonPickItemP
 
   return (
     <Pressable
+      testID="person-pick"
       accessibilityRole="checkbox"
       accessibilityLabel={person.displayName}
       accessibilityState={{ checked: isSelected }}

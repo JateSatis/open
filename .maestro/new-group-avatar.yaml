@@ -1,0 +1,55 @@
+appId: com.openger.app
+name: Фото группы на «Новый чат» — круг притушен до двоих, фото встаёт в круг и переживает сужение выбора
+tags:
+  - chats
+  - media
+---
+# Группу сценарий не создаёт: «Готово» лишь кладёт фото в круг на устройстве,
+# загрузка — только по «Позвать в группу».
+- runFlow: subflows/open-app.yaml
+- tapOn: "Новый чат"
+- assertVisible:
+    id: "group-avatar-picker"
+# Никого не выбрано — круг не открывает шит.
+- tapOn:
+    id: "group-avatar-picker"
+- assertNotVisible: "Выберите фото"
+# Один — всё ещё диалог.
+- tapOn:
+    id: "person-pick"
+    index: 0
+- assertVisible: "Позвать в диалог"
+- tapOn:
+    id: "group-avatar-picker"
+- assertNotVisible: "Выберите фото"
+# Двое — группа, круг открывает шит.
+- tapOn:
+    id: "person-pick"
+    index: 1
+- assertVisible: 'Позвать в группу \(2\)'
+- tapOn:
+    id: "group-avatar-picker"
+- assertVisible: "Выберите фото"
+- tapOn:
+    id: "media-grid-pick"
+    text: "Фото"
+- tapOn: "Поставить фото"
+- assertVisible:
+    id: "group-avatar-picker-preview"
+# Снял одного — круг притушен, фото в нём; снова двое — фото на месте.
+- tapOn:
+    id: "person-pick"
+    index: 1
+- assertVisible: "Позвать в диалог"
+- assertVisible:
+    id: "group-avatar-picker-preview"
+- tapOn:
+    id: "person-pick"
+    index: 1
+- assertVisible: 'Позвать в группу \(2\)'
+- assertVisible:
+    id: "group-avatar-picker-preview"
+# Уходим, ничего не создав.
+- tapOn: "Navigate up"
+- assertVisible:
+    id: "chat-list-item"
