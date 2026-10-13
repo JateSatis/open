@@ -6,6 +6,7 @@ import type { Channel } from '@/api/channels';
 import { listDeletedMessageIds, type ChatSummary, type QuotedMessage } from '@/api/chats';
 import { channelQueryKey } from '@/features/channels/keys';
 import { chatsQueryKey } from '@/features/chats/chatsKey';
+import { JUMP_PARAM_NAMES, jumpRequestOf, type JumpParams } from '@/features/chats/jumpParams';
 import { chatQueryKey } from '@/features/chats/useChat';
 import { islandItemKey } from '@/features/chats/islands/rows';
 import { showNotice } from '@/features/notifications/alertsStore';
@@ -58,12 +59,16 @@ function channelIdOfChat(queryClient: QueryClient, chatId: string): string | nul
   if (chat) return null;
 
   const channel = queryClient
-    .getQueriesData<Channel>({ queryKey: ['channel'] })
+    // Под тем же началом ключа — подписка и право публиковать: нужен сам канал.
+    .getQueriesData<Channel>({ queryKey: ['channel'], predicate: (q) => q.queryKey.length === 2 })
     .map(([, data]) => data)
     .find((data) => data?.postsChatId === chatId);
 
   return channel?.id ?? null;
 }
+
+/** Прыжок и шит прошлого перехода — стереть у экрана, к которому возвращаются. */
+const CLEARED_JUMP_PARAMS = Object.fromEntries(JUMP_PARAM_NAMES.map((name) => [name, undefined]));
 
 function reportJump(found: boolean) {
   if (!found) showNotice('Не удалось найти сообщение', 'error');
@@ -89,18 +94,10 @@ export function useQuoteNavigation(
   const router = useRouter();
   const navigation = useNavigation();
   const queryClient = useQueryClient();
-  const { jumpTo, jumpAt, jumpKey, comments, comment } = useLocalSearchParams<{
-    jumpTo?: string;
-    jumpAt?: string;
-    jumpKey?: string;
-    comments?: string;
-    comment?: string;
-  }>();
+  const params = useLocalSearchParams<JumpParams>();
+  const { jumpTo, jumpAt, comments, comment } = params;
   const handledJumpRef = useRef<string | null>(null);
-
-  // Ключ, а не id сообщения: к тому же оригиналу могут прийти и второй раз,
-  // вернувшись в уже открытый чат.
-  const requestedJump = jumpKey ?? jumpTo;
+  const requestedJump = jumpRequestOf(params);
 
   useEffect(() => {
     if (!isHistoryReady || !requestedJump || handledJumpRef.current === requestedJump) return;
@@ -183,10 +180,7 @@ export function useQuoteNavigation(
             type: 'SET_PARAMS',
             payload: {
               params: {
-                jumpTo: undefined,
-                jumpAt: undefined,
-                comments: undefined,
-                comment: undefined,
+                ...CLEARED_JUMP_PARAMS,
                 ...(state.routes[index].name === '[chatId]' ? { chatId: targetChatId } : {}),
                 ...jumpParams,
               },

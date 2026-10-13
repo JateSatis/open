@@ -7,7 +7,7 @@ export default function ChannelRoute() {
   const params = useLocalSearchParams<{ channelId: string; section?: string } & JumpParams>();
   // Переход к посту из другого чата: сами прыжок и шит исполняют «Посты» по
   // этим же параметрам, экрану канала — лишь открыть этот раздел.
-  const postsRequest = params.jumpTo || params.comments ? jumpRequestOf(params) : undefined;
+  const postsRequest = jumpRequestOf(params);
 
   return (
     <ChannelScreen

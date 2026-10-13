@@ -27,11 +27,16 @@ begin
          and author_id = any (test_users)
          and (
            text like 'maestro-%'
-           or (kind = 'forward' and exists (
+           -- Только островок из одних тестовых: живая пересылка рядом не трогается.
+           or (kind = 'forward' and not exists (
              select 1
                from public.forward_items fi
                join public.messages o on o.id = fi.message_id
-              where fi.forward_id = m.id and o.text like 'maestro-%'
+              where fi.forward_id = m.id and fi.deleted_at is null
+                and coalesce(o.text, '') not like 'maestro-%'
+           ) and exists (
+             select 1 from public.forward_items fi
+              where fi.forward_id = m.id and fi.deleted_at is null
            ))
          )
        group by author_id, chat_id

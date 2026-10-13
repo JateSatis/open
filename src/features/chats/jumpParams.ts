@@ -12,7 +12,7 @@ export type JumpParams = {
   comment?: string;
 };
 
-const JUMP_PARAM_NAMES = ['jumpTo', 'jumpAt', 'jumpKey', 'comments', 'comment'] as const;
+export const JUMP_PARAM_NAMES = ['jumpTo', 'jumpAt', 'jumpKey', 'comments', 'comment'] as const;
 
 /** Только заданные параметры прыжка — без чужих ключей адреса и без пустых. */
 export function pickJumpParams(params: JumpParams): JumpParams {
@@ -26,7 +26,15 @@ export function pickJumpParams(params: JumpParams): JumpParams {
   return picked;
 }
 
-/** Ключ перехода: по нему экран узнаёт новый приход, даже к тому же сообщению. */
+/**
+ * Ключ перехода, если по адресу есть что исполнить: шит комментария или
+ * прыжок к сообщению. Ключ, а не id сообщения: к тому же сообщению могут
+ * прийти и второй раз, вернувшись на уже открытый экран.
+ */
 export function jumpRequestOf(params: JumpParams): string | undefined {
-  return params.jumpKey ?? params.jumpTo;
+  const actionable = Boolean(
+    (params.comments && params.comment) || (params.jumpTo && params.jumpAt),
+  );
+
+  return actionable ? (params.jumpKey ?? params.jumpTo ?? params.comments) : undefined;
 }
