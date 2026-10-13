@@ -91,7 +91,7 @@ begin
   end;
 
   begin
-    perform public.publish_pop(chan, gen_random_uuid(), video, null, true, 'x', null);
+    perform public.publish_pop(chan, gen_random_uuid(), video, 'Поп', null, true, 'x', null);
     perform pg_temp.check('читатель: publish_pop — отказ', false);
   exception when others then
     perform pg_temp.check('читатель: publish_pop — отказ', sqlstate = '42501', sqlerrm);
@@ -164,8 +164,8 @@ begin
 
   perform pg_temp.act_as(a);
   insert into public.messages (chat_id, author_id, kind, text) values (chat, a, 'text', 'пост 1');
-  perform public.publish_pop(chan, pop1, video, null, false, null, null);
-  perform public.publish_pop(chan, pop2, video, null, true, 'пост с попом', null);
+  perform public.publish_pop(chan, pop1, video, 'Поп', null, false, null, null);
+  perform public.publish_pop(chan, pop2, video, 'Поп', null, true, 'пост с попом', null);
 
   perform pg_temp.check('last_pop_at — время свежего попа',
     (select last_pop_at = now() from public.channels where id = chan));
@@ -224,7 +224,7 @@ begin
   -- Удалённый до фиксации поп не рассылается.
   set constraints public.on_message_created, public.pops_broadcast_new deferred;
   perform pg_temp.act_as(a);
-  perform public.publish_pop(chan, '00000000-0000-4000-8000-0000000005f1', video, null, false, null, null);
+  perform public.publish_pop(chan, '00000000-0000-4000-8000-0000000005f1', video, 'Поп', null, false, null, null);
   perform set_config('role', 'postgres', true);
   update public.pops set deleted_at = now() where id = '00000000-0000-4000-8000-0000000005f1';
   set constraints public.on_message_created, public.pops_broadcast_new immediate;
