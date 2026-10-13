@@ -1,4 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 
@@ -33,6 +34,9 @@ export function ChatInfoScreen({ chatId }: ChatInfoScreenProps) {
   const queryClient = useQueryClient();
   const currentUserId = useCurrentUserId();
   const { chat, failed } = useChat(chatId);
+  // Высота формы имени: над клавиатурой должна встать вся форма, с кнопкой
+  // «Сохранить», а не только поле.
+  const [formHeight, setFormHeight] = useState(0);
 
   if (!chat) {
     return (
@@ -59,8 +63,8 @@ export function ChatInfoScreen({ chatId }: ChatInfoScreenProps) {
       style={[styles.flex, { backgroundColor: theme.background }]}
       contentContainerStyle={styles.content}
       keyboardShouldPersistTaps="handled"
-      // Над клавиатурой — поле вместе с ответом под ним.
-      bottomOffset={Spacing.six}
+      // Над клавиатурой — поле вместе с ответом под ним и кнопкой «Сохранить».
+      bottomOffset={Math.max(formHeight, Spacing.six)}
     >
       {member ? (
         <GroupAvatarEditor
@@ -91,7 +95,9 @@ export function ChatInfoScreen({ chatId }: ChatInfoScreenProps) {
       {member ? (
         // Ключ — текущее имя: переименовал другой участник — поле показывает его
         // имя, а не старое, которое кнопка «Сохранить» молча вернула бы назад.
-        <ChatUsernameForm key={chat.username ?? ''} chatId={chat.id} current={chat.username} />
+        <View onLayout={(event) => setFormHeight(event.nativeEvent.layout.height)}>
+          <ChatUsernameForm key={chat.username ?? ''} chatId={chat.id} current={chat.username} />
+        </View>
       ) : null}
     </KeyboardAwareScrollView>
   );
