@@ -21,7 +21,7 @@ type Builder = {
 
 function respond(result: { data: unknown; error: unknown }): Builder {
   const builder: Builder = {
-    abortSignal: jest.fn((): Builder => builder),
+    abortSignal: jest.fn((_signal: AbortSignal): Builder => builder),
     then: (resolve: (value: unknown) => unknown, reject: (reason: unknown) => unknown) =>
       Promise.resolve(result).then(resolve, reject),
   };
