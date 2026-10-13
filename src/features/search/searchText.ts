@@ -4,6 +4,9 @@
 // мгновенного прогона по своим чатам из кеша и для подсветки совпавшего в
 // строках выдачи. Нечёткого уровня тут нет: опечатки находит только сервер.
 
+/** С этой длины база ищет и внутри слова, а не только его начало. */
+const SHORT_NEEDLE = 3;
+
 export type SearchKindFilter = 'channel' | 'group' | null;
 
 export type ParsedQuery = {
@@ -189,7 +192,8 @@ export function findMatches(text: string, needle: string): TextRange[] {
   if (!text || !needle) return [];
 
   const normalized = normalizeWithMap(text);
-  let found = occurrences(normalized.text, needle, false);
+  // Короче трёх букв база ищет только с начала слова — подсветка тоже.
+  let found = occurrences(normalized.text, needle, needle.length < SHORT_NEEDLE);
 
   if (found.length === 0) {
     for (const word of words(needle).split(' ')) {

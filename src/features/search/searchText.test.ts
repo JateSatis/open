@@ -61,6 +61,10 @@ describe('findMatches', () => {
     expect(highlighted('Наша Ёлка', 'елка')).toEqual(['Ёлка']);
   });
 
+  it('highlights a short query only at word starts, as the database finds it', () => {
+    expect(highlighted('after the list', 't')).toEqual(['t']);
+  });
+
   it('highlights the middle of a word', () => {
     expect(highlighted('канал телеграм', 'грам')).toEqual(['грам']);
   });
