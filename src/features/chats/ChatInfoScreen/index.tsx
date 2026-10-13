@@ -1,46 +1,54 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
-import { ActivityIndicator, View } from 'react-native';
-import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import Animated, { useAnimatedStyle } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { styles } from './styles';
 
-import { Avatar } from '@/components/Avatar';
+import { InfoBarButton, useSlideBack } from '@/components/InfoPage';
 import { LoadFailed } from '@/components/LoadFailed';
-import { Text } from '@/components/Text';
-import { chatAvatarUrl, chatTitle, isChatMember } from '@/features/chats/chatDisplay';
-import { ChatUsernameForm } from '@/features/chats/ChatUsernameForm';
-import { GroupAvatarEditor } from '@/features/chats/GroupAvatarEditor';
+import { ChatInfoPage } from '@/features/chats/ChatInfoPage';
 import { chatQueryKey, useChat } from '@/features/chats/useChat';
-import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
-import { formatUsername } from '@/features/profile/username';
 import { useTheme } from '@/hooks/use-theme';
-import { plural } from '@/lib/plural';
 import { reloadMissing } from '@/lib/loadState';
-import { Spacing } from '@/theme';
-
-const AVATAR_SIZE = Spacing.six * 1.5;
 
 export type ChatInfoScreenProps = {
   chatId: string;
 };
 
 /**
- * «О чате» группы: аватар, название, число участников и `@имя.di`. Участник
- * может поставить, сменить и убрать фото и имя; посторонний их только видит.
+ * Страница информации о чате по адресу. Из переписки чат уже лежит в кеше, и
+ * страница стоит целиком в первом же кадре; без кеша — пустая страница со
+ * стрелкой, пока чат грузится.
  */
 export function ChatInfoScreen({ chatId }: ChatInfoScreenProps) {
-  const theme = useTheme();
-  const queryClient = useQueryClient();
-  const currentUserId = useCurrentUserId();
   const { chat, failed } = useChat(chatId);
-  // Высота формы имени: над клавиатурой должна встать вся форма, с кнопкой
-  // «Сохранить», а не только поле.
-  const [formHeight, setFormHeight] = useState(0);
 
-  if (!chat) {
-    return (
-      <View style={[styles.centered, { backgroundColor: theme.background }]}>
+  if (chat) return <ChatInfoPage chat={chat} />;
+
+  return <ChatInfoPlaceholder chatId={chatId} failed={failed} />;
+}
+
+function ChatInfoPlaceholder({ chatId, failed }: { chatId: string; failed: boolean }) {
+  const theme = useTheme();
+  const insets = useSafeAreaInsets();
+  const queryClient = useQueryClient();
+  const { offset, close } = useSlideBack();
+  const pageStyle = useAnimatedStyle(() => ({ transform: [{ translateX: offset.value }] }));
+
+  return (
+    <Animated.View
+      style={[StyleSheet.absoluteFill, { backgroundColor: theme.background }, pageStyle]}
+    >
+      <View style={[styles.bar, { marginTop: insets.top }]}>
+        <InfoBarButton
+          testID="info-back"
+          icon={{ ios: 'chevron.left', android: 'arrow_back', web: 'arrow_back' }}
+          accessibilityLabel="Назад"
+          onPress={close}
+        />
+      </View>
+      <View style={styles.centered}>
         {failed ? (
           <LoadFailed
             message="Не удалось открыть чат"
@@ -50,55 +58,6 @@ export function ChatInfoScreen({ chatId }: ChatInfoScreenProps) {
           <ActivityIndicator accessibilityLabel="Загрузка чата" />
         )}
       </View>
-    );
-  }
-
-  const title = chatTitle(chat, currentUserId);
-  const count = chat.participants.length;
-  const username = formatUsername(chat.username, 'group');
-  const member = chat.kind === 'group' && isChatMember(chat, currentUserId);
-
-  return (
-    <KeyboardAwareScrollView
-      style={[styles.flex, { backgroundColor: theme.background }]}
-      contentContainerStyle={styles.content}
-      keyboardShouldPersistTaps="handled"
-      // Над клавиатурой — поле вместе с ответом под ним и кнопкой «Сохранить».
-      bottomOffset={Math.max(formHeight, Spacing.six)}
-    >
-      {member ? (
-        <GroupAvatarEditor
-          chatId={chat.id}
-          userId={currentUserId}
-          avatarUrl={chat.avatarUrl}
-          name={title}
-          size={AVATAR_SIZE}
-        />
-      ) : (
-        <Avatar uri={chatAvatarUrl(chat, currentUserId)} name={title} size={AVATAR_SIZE} />
-      )}
-
-      <View style={styles.identity}>
-        <Text variant="title" style={styles.centeredText}>
-          {title}
-        </Text>
-        {username ? (
-          <Text testID="chat-info-username" variant="body" color="textSecondary">
-            {username}
-          </Text>
-        ) : null}
-        <Text variant="small" color="textSecondary">
-          {`${count} ${plural(count, 'участник', 'участника', 'участников')}`}
-        </Text>
-      </View>
-
-      {member ? (
-        // Ключ — текущее имя: переименовал другой участник — поле показывает его
-        // имя, а не старое, которое кнопка «Сохранить» молча вернула бы назад.
-        <View onLayout={(event) => setFormHeight(event.nativeEvent.layout.height)}>
-          <ChatUsernameForm key={chat.username ?? ''} chatId={chat.id} current={chat.username} />
-        </View>
-      ) : null}
-    </KeyboardAwareScrollView>
+    </Animated.View>
   );
 }

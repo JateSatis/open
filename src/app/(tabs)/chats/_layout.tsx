@@ -25,7 +25,14 @@ export default function ChatsLayout() {
       <Stack.Screen name="channel/[channelId]" options={{ title: 'Канал' }} />
       <Stack.Screen name="channel-subscribers/[channelId]" options={{ title: 'Подписчики' }} />
       <Stack.Screen name="chat-subscribers/[chatId]" options={{ title: 'Подписчики' }} />
-      <Stack.Screen name="chat-info/[chatId]" options={{ title: 'О чате' }} />
+      {/* Страница информации рисует свою панель и сама въезжает и уезжает:
+          прозрачная поверх переписки, чтобы та была видна, пока страницу
+          тянут назад (см. `useSlideBack`). */}
+      <Stack.Screen
+        name="chat-info/[chatId]"
+        options={{ headerShown: false, presentation: 'transparentModal', animation: 'none' }}
+      />
+      <Stack.Screen name="chat-edit/[chatId]" options={{ title: 'Изменить' }} />
     </Stack>
   );
 }
