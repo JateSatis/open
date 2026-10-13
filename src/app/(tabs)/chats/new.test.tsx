@@ -6,7 +6,9 @@ import NewChatScreen from './new';
 import { listPeople } from '@/api/chats';
 import { createChat, DuplicateChatError } from '@/api/invites';
 import { useSession } from '@/features/auth/useSession';
+import { openMediaSheet } from '@/features/chats/MediaPickerSheet';
 import { reportRealtimeJoined, resetConnectionState } from '@/features/connection/connectionStore';
+import { removeUploadedMedia, uploadGroupAvatar, type PreparedAvatar } from '@/features/media';
 import { renderWithQuery } from '@/test/renderWithQuery';
 
 const mockReplace = jest.fn();
@@ -39,6 +41,27 @@ jest.mock('@/api/invites', () => {
   return { createChat: jest.fn(), DuplicateChatError: MockDuplicateChatError };
 });
 
+jest.mock('@/features/media', () => ({
+  uploadGroupAvatar: jest.fn(),
+  removeUploadedMedia: jest.fn(),
+}));
+
+// Шит аватарки — свой тест; «Готово» шита — кнопка мока.
+jest.mock('@/features/chats/MediaPickerSheet', () => ({ openMediaSheet: jest.fn() }));
+jest.mock('@/features/chats/MediaPickerSheet/MediaAvatarSheet', () => {
+  const { Pressable } = jest.requireActual<typeof import('react-native')>('react-native');
+
+  return {
+    MediaAvatarSheet: ({ onDone }: { onDone: (avatar: Promise<PreparedAvatar>) => void }) => (
+      <Pressable
+        testID="avatar-sheet-done"
+        onPress={() => onDone(Promise.resolve({ uri: 'file:///g.jpg', size: 512 }))}
+      />
+    ),
+  };
+});
+
+const mockedUpload = uploadGroupAvatar as jest.MockedFunction<typeof uploadGroupAvatar>;
 const mockedPeople = listPeople as jest.MockedFunction<typeof listPeople>;
 const mockedCreate = createChat as jest.MockedFunction<typeof createChat>;
 const mockedSession = useSession as jest.MockedFunction<typeof useSession>;
@@ -55,6 +78,7 @@ beforeEach(() => {
     { id: 'user-3', displayName: 'Пётр', avatarUrl: null },
   ]);
   mockedCreate.mockResolvedValue({ outcome: 'created', chatId: 'chat-new' });
+  mockedUpload.mockResolvedValue({ url: 'https://x/g.jpg', path: 'user-1/group-avatar/g.jpg' });
   resetConnectionState();
   reportRealtimeJoined();
 });
@@ -74,10 +98,7 @@ describe('NewChatScreen', () => {
     await user.press(await screen.findByText('Марина'));
     await user.press(screen.getByText('Позвать в диалог'));
 
-    expect(mockedCreate).toHaveBeenCalledWith(
-      { inviteeIds: ['user-2'], title: '' },
-      expect.anything(),
-    );
+    expect(mockedCreate).toHaveBeenCalledWith({ inviteeIds: ['user-2'], title: '' });
     expect(mockReplace).toHaveBeenCalledWith('/chats/chat-new');
   });
 
@@ -90,10 +111,7 @@ describe('NewChatScreen', () => {
 
     expect(screen.getByRole('checkbox', { name: 'Пётр' })).toBeChecked();
     await user.press(screen.getByText('Позвать в диалог'));
-    expect(mockedCreate).toHaveBeenCalledWith(
-      { inviteeIds: ['user-3'], title: '' },
-      expect.anything(),
-    );
+    expect(mockedCreate).toHaveBeenCalledWith({ inviteeIds: ['user-3'], title: '' });
   });
 
   it('invites several people into a titled group', async () => {
@@ -105,10 +123,7 @@ describe('NewChatScreen', () => {
     await user.type(screen.getByLabelText('Название чата'), 'Поход');
     await user.press(screen.getByText('Позвать в группу (2)'));
 
-    expect(mockedCreate).toHaveBeenCalledWith(
-      { inviteeIds: ['user-2', 'user-3'], title: 'Поход' },
-      expect.anything(),
-    );
+    expect(mockedCreate).toHaveBeenCalledWith({ inviteeIds: ['user-2', 'user-3'], title: 'Поход' });
   });
 
   it('unpicks a person on a second tap', async () => {
@@ -172,5 +187,106 @@ describe('NewChatScreen', () => {
 
     expect(await screen.findByText('Не удалось создать чат')).toBeTruthy();
     expect(screen.queryByText(/permission/)).toBeNull();
+  });
+
+  describe('group photo', () => {
+    async function pickPhoto(user: ReturnType<typeof userEvent.setup>) {
+      await user.press(screen.getByLabelText('Выбрать фото группы'));
+      expect(openMediaSheet).toHaveBeenCalledWith('avatar:group-new');
+      await user.press(screen.getByTestId('avatar-sheet-done'));
+      await screen.findByTestId('group-avatar-picker-preview');
+    }
+
+    it('the circle is idle until two people are picked', async () => {
+      const user = userEvent.setup();
+
+      await renderWithQuery(<NewChatScreen />);
+      await user.press(await screen.findByText('Марина'));
+      await user.press(screen.getByLabelText('Выбрать фото группы'));
+
+      expect(screen.getByLabelText('Выбрать фото группы')).toBeDisabled();
+      expect(openMediaSheet).not.toHaveBeenCalled();
+
+      await user.press(screen.getByText('Пётр'));
+      expect(screen.getByLabelText('Выбрать фото группы')).toBeEnabled();
+    });
+
+    it('creates the group with the photo uploaded first', async () => {
+      const user = userEvent.setup();
+
+      await renderWithQuery(<NewChatScreen />);
+      await user.press(await screen.findByText('Марина'));
+      await user.press(screen.getByText('Пётр'));
+      await pickPhoto(user);
+      await user.press(screen.getByText('Позвать в группу (2)'));
+
+      expect(mockedUpload).toHaveBeenCalledWith('file:///g.jpg', 'user-1');
+      expect(mockedCreate).toHaveBeenCalledWith({
+        inviteeIds: ['user-2', 'user-3'],
+        title: '',
+        avatarUrl: 'https://x/g.jpg',
+      });
+      expect(removeUploadedMedia).not.toHaveBeenCalled();
+      expect(mockReplace).toHaveBeenCalledWith('/chats/chat-new');
+    });
+
+    it('keeps the photo while the choice narrows to one and back', async () => {
+      const user = userEvent.setup();
+
+      await renderWithQuery(<NewChatScreen />);
+      await user.press(await screen.findByText('Марина'));
+      await user.press(screen.getByText('Пётр'));
+      await pickPhoto(user);
+
+      await user.press(screen.getByText('Пётр'));
+      expect(screen.getByLabelText('Сменить фото группы')).toBeDisabled();
+      expect(screen.getByTestId('group-avatar-picker-preview')).toBeTruthy();
+
+      await user.press(screen.getByText('Пётр'));
+      expect(screen.getByLabelText('Сменить фото группы')).toBeEnabled();
+      expect(screen.getByTestId('group-avatar-picker-preview')).toBeTruthy();
+    });
+
+    it('a dialogue ignores the photo and uploads nothing', async () => {
+      const user = userEvent.setup();
+
+      await renderWithQuery(<NewChatScreen />);
+      await user.press(await screen.findByText('Марина'));
+      await user.press(screen.getByText('Пётр'));
+      await pickPhoto(user);
+      await user.press(screen.getByText('Пётр'));
+      await user.press(screen.getByText('Позвать в диалог'));
+
+      expect(mockedUpload).not.toHaveBeenCalled();
+      expect(mockedCreate).toHaveBeenCalledWith({ inviteeIds: ['user-2'], title: '' });
+    });
+
+    it('a repeat invite removes the uploaded photo', async () => {
+      mockedCreate.mockRejectedValue(new DuplicateChatError('chat-old'));
+      const user = userEvent.setup();
+
+      await renderWithQuery(<NewChatScreen />);
+      await user.press(await screen.findByText('Марина'));
+      await user.press(screen.getByText('Пётр'));
+      await pickPhoto(user);
+      await user.press(screen.getByText('Позвать в группу (2)'));
+
+      expect(await screen.findByText(/Вы уже позвали этих людей/)).toBeTruthy();
+      expect(removeUploadedMedia).toHaveBeenCalledWith('user-1/group-avatar/g.jpg');
+    });
+
+    it('an invite from the same people opens their chat and removes the unused photo', async () => {
+      mockedCreate.mockResolvedValue({ outcome: 'incoming_invite', chatId: 'chat-theirs' });
+      const user = userEvent.setup();
+
+      await renderWithQuery(<NewChatScreen />);
+      await user.press(await screen.findByText('Марина'));
+      await user.press(screen.getByText('Пётр'));
+      await pickPhoto(user);
+      await user.press(screen.getByText('Позвать в группу (2)'));
+
+      expect(mockReplace).toHaveBeenCalledWith('/chats/chat-theirs');
+      expect(removeUploadedMedia).toHaveBeenCalledWith('user-1/group-avatar/g.jpg');
+    });
   });
 });

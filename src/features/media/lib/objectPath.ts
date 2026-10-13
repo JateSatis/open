@@ -40,6 +40,17 @@ export function buildChannelAvatarPath(userId: string): string {
 }
 
 /**
+ * Аватарки групп. Лежат в префиксе того, кто поставил фото: запись в бакет
+ * разрешена только туда, и другой участник, сменив фото, чужой файл не удалит.
+ * `delete-account` эту папку не чистит — фото группы переживает аккаунт.
+ */
+export const GROUP_AVATAR_FOLDER = 'group-avatar';
+
+export function buildGroupAvatarPath(userId: string): string {
+  return `${userId}/${GROUP_AVATAR_FOLDER}/${randomId()}.jpg`;
+}
+
+/**
  * Попсы канала — своя папка: у попа своя жизнь (сетка канала, просмотр,
  * удаление попа), и чистить или переносить их удобнее отдельно от вложений
  * переписки. Видео и постер — одно имя, разные расширения.
@@ -53,11 +64,16 @@ export function buildPopPaths(userId: string, mimeType: string): { video: string
 }
 
 /**
- * Путь файла в бакете по его публичному URL — только если это аватар самого
- * `userId`. Аватар от провайдера (Google) или чужой файл даёт null: удалять
- * такое приложение не должно.
+ * Путь файла в бакете по его публичному URL — только если он лежит в папке
+ * `folder` самого `userId`. Внешний адрес (аватар от Google) или чужой файл
+ * даёт null: удалять такое приложение не должно.
  */
-export function ownAvatarPathFromUrl(url: string, bucket: string, userId: string): string | null {
+export function ownPathFromUrl(
+  url: string,
+  bucket: string,
+  userId: string,
+  folder: string,
+): string | null {
   const marker = `/object/public/${bucket}/`;
   const index = url.indexOf(marker);
 
@@ -65,5 +81,10 @@ export function ownAvatarPathFromUrl(url: string, bucket: string, userId: string
 
   const path = decodeURIComponent(url.slice(index + marker.length).split('?')[0]);
 
-  return path.startsWith(`${userId}/${AVATAR_FOLDER}/`) ? path : null;
+  return path.startsWith(`${userId}/${folder}/`) ? path : null;
+}
+
+/** Путь аватара профиля `userId` по URL; провайдерский или чужой — null. */
+export function ownAvatarPathFromUrl(url: string, bucket: string, userId: string): string | null {
+  return ownPathFromUrl(url, bucket, userId, AVATAR_FOLDER);
 }

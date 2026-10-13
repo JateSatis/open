@@ -1,16 +1,19 @@
 import type { Session as SupabaseSession } from '@supabase/supabase-js';
-import { act, screen, userEvent, waitFor } from '@testing-library/react-native';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { act, render, screen, userEvent, waitFor } from '@testing-library/react-native';
 
 import { InAppMessageToast } from './index';
 
 import {
   subscribeToUserEvents,
+  type ChatSummary,
   type IncomingInvite,
   type IncomingMessage,
   type IncomingPop,
   type UserChannelHandlers,
 } from '@/api/chats';
 import { useSession } from '@/features/auth/useSession';
+import { chatsQueryKey } from '@/features/chats/chatsKey';
 import { showNotice } from '@/features/notifications/alertsStore';
 import { setActiveChatId } from '@/store/activeChat';
 import { renderWithQuery } from '@/test/renderWithQuery';
@@ -115,6 +118,36 @@ describe('InAppMessageToast', () => {
 
     expect(mockPush).toHaveBeenCalledWith('/chats/chat-1');
     await waitFor(() => expect(screen.queryByText('ты где')).toBeNull());
+  });
+
+  it('signs a group message by the group — its title and photo — and names the author', async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { gcTime: Infinity } } });
+    queryClient.setQueryData<Partial<ChatSummary>[]>(chatsQueryKey, [
+      {
+        id: 'group-1',
+        kind: 'group',
+        title: 'Поход',
+        avatarUrl: 'https://x/g.jpg',
+        channel: null,
+        participants: [],
+        waiting: [],
+      },
+    ]);
+
+    await render(
+      <QueryClientProvider client={queryClient}>
+        <InAppMessageToast />
+      </QueryClientProvider>,
+    );
+
+    deliver({ ...incoming, chatId: 'group-1' });
+
+    expect(await screen.findByText('Марина: ты где')).toBeTruthy();
+    expect(screen.getByLabelText('Новое сообщение в «Поход» от Марина')).toBeTruthy();
+    // Фото группы подписано её названием; буквы на его месте нет.
+    expect(screen.getByLabelText('Поход')).toBeTruthy();
+    expect(screen.queryByText('П')).toBeNull();
+    queryClient.clear();
   });
 
   it('titles a message in a subscribed dialogue by the dialogue and names the author', async () => {
@@ -236,7 +269,9 @@ describe('InAppMessageToast', () => {
     const retry = jest.fn();
 
     await renderWithQuery(<InAppMessageToast />);
-    await act(async () => showNotice('Изменения не сохранены', 'error', { label: 'Повторить', run: retry }));
+    await act(async () =>
+      showNotice('Изменения не сохранены', 'error', { label: 'Повторить', run: retry }),
+    );
 
     await userEvent.setup().press(await screen.findByRole('button', { name: 'Повторить' }));
 

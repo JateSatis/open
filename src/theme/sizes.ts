@@ -143,9 +143,13 @@ export const Sizes = {
   /** Значок просмотров на плитке сетки попсов. */
   popTileViewsIcon: 14,
   /** Круг выбора аватарки на экране создания канала. */
-  channelAvatarPicker: 96,
+  avatarPicker: 96,
   /** Значок камеры в пустом круге аватарки. */
-  channelAvatarPickerIcon: 32,
+  avatarPickerIcon: 32,
+  /** Круг аватарки группы рядом с полем названия на «Новый чат» — в высоту поля. */
+  avatarPickerCompact: 52,
+  /** Значок камеры в маленьком круге. */
+  avatarPickerCompactIcon: 22,
   /** Пост канала шире сообщения: доля ширины ленты постов, как в Telegram-канале. */
   postBubbleShare: 0.9,
   /** Аватарка канала в шапке. */

@@ -2,7 +2,14 @@ import { fireEvent, screen, waitFor } from '@testing-library/react-native';
 
 import { ChatInfoScreen } from '.';
 
-import { getChat, setChatUsername, type ChatSummary } from '@/api/chats';
+import { getChat, setChatAvatar, setChatUsername, type ChatSummary } from '@/api/chats';
+import { openMediaSheet } from '@/features/chats/MediaPickerSheet';
+import {
+  removeOwnGroupAvatar,
+  removeUploadedMedia,
+  uploadGroupAvatar,
+  type PreparedAvatar,
+} from '@/features/media';
 import { isUsernameAvailable } from '@/api/usernames';
 import { renderWithQuery } from '@/test/renderWithQuery';
 
@@ -14,11 +21,34 @@ jest.mock('@/api/chats', () => {
   return {
     getChat: jest.fn(),
     setChatUsername: jest.fn(),
+    setChatAvatar: jest.fn(),
     ChatUsernameTakenError: MockTaken,
   };
 });
 
 jest.mock('@/api/usernames', () => ({ isUsernameAvailable: jest.fn() }));
+
+jest.mock('@/features/media', () => ({
+  uploadGroupAvatar: jest.fn(),
+  removeUploadedMedia: jest.fn(),
+  removeOwnGroupAvatar: jest.fn(),
+}));
+
+// Шит аватарки — свой тест; здесь — кто его открывает и что делает с итогом.
+// «Готово» шита — кнопка мока: нажатие идёт через act, как у живого пальца.
+jest.mock('@/features/chats/MediaPickerSheet', () => ({ openMediaSheet: jest.fn() }));
+jest.mock('@/features/chats/MediaPickerSheet/MediaAvatarSheet', () => {
+  const { Pressable } = jest.requireActual<typeof import('react-native')>('react-native');
+
+  return {
+    MediaAvatarSheet: ({ onDone }: { onDone: (avatar: Promise<PreparedAvatar>) => void }) => (
+      <Pressable
+        testID="avatar-sheet-done"
+        onPress={() => onDone(Promise.resolve({ uri: 'file:///g.jpg', size: 512 }))}
+      />
+    ),
+  };
+});
 
 let mockUserId = 'me';
 
@@ -29,6 +59,8 @@ jest.mock('@/features/chats/useCurrentUserId', () => ({
 const mockedGetChat = getChat as jest.MockedFunction<typeof getChat>;
 const mockedSet = setChatUsername as jest.MockedFunction<typeof setChatUsername>;
 const mockedAvailable = isUsernameAvailable as jest.MockedFunction<typeof isUsernameAvailable>;
+const mockedSetAvatar = setChatAvatar as jest.MockedFunction<typeof setChatAvatar>;
+const mockedUpload = uploadGroupAvatar as jest.MockedFunction<typeof uploadGroupAvatar>;
 
 const person = (id: string, displayName: string) => ({
   id,
@@ -40,6 +72,7 @@ const person = (id: string, displayName: string) => ({
 const group: ChatSummary = {
   id: 'group-1',
   kind: 'group',
+  avatarUrl: null,
   title: 'Команда',
   username: null,
   channel: null,
@@ -62,6 +95,11 @@ beforeEach(() => {
   mockedGetChat.mockResolvedValue(group);
   mockedAvailable.mockResolvedValue(true);
   mockedSet.mockResolvedValue(undefined);
+  mockedSetAvatar.mockResolvedValue(null);
+  mockedUpload.mockResolvedValue({
+    url: 'https://x/media/me/group-avatar/new.jpg',
+    path: 'me/group-avatar/new.jpg',
+  });
 });
 
 describe('ChatInfoScreen', () => {
@@ -153,5 +191,91 @@ describe('ChatInfoScreen', () => {
     expect(await screen.findByText('Команда')).toBeTruthy();
     expect(screen.queryByText(/@/)).toBeNull();
     expect(screen.queryByTestId('chat-username')).toBeNull();
+  });
+
+  describe('group photo', () => {
+    const photo = 'https://x/media/anna/group-avatar/old.jpg';
+
+    it('a member adds a photo through the avatar sheet', async () => {
+      mockedGetChat
+        .mockResolvedValueOnce(group)
+        .mockResolvedValue({ ...group, avatarUrl: 'https://x/media/me/group-avatar/new.jpg' });
+
+      await renderWithQuery(<ChatInfoScreen chatId="group-1" />);
+      await fireEvent.press(await screen.findByText('Добавить фото'));
+
+      expect(openMediaSheet).toHaveBeenCalledWith('avatar:group');
+      expect(screen.queryByText('Удалить фото')).toBeNull();
+
+      await fireEvent.press(screen.getByTestId('avatar-sheet-done'));
+
+      await waitFor(() =>
+        expect(mockedSetAvatar).toHaveBeenCalledWith(
+          'group-1',
+          'https://x/media/me/group-avatar/new.jpg',
+        ),
+      );
+      expect(mockedUpload).toHaveBeenCalledWith('file:///g.jpg', 'me');
+      expect(await screen.findByText('Изменить фото')).toBeTruthy();
+      expect(screen.getByText('Удалить фото')).toBeTruthy();
+      // Чат перечитан после смены — дальше на экране ничего не меняется.
+      await waitFor(() => expect(mockedGetChat).toHaveBeenCalledTimes(2));
+    });
+
+    it('tapping the photo opens the sheet straight away', async () => {
+      mockedGetChat.mockResolvedValue({ ...group, avatarUrl: photo });
+
+      await renderWithQuery(<ChatInfoScreen chatId="group-1" />);
+      await fireEvent.press(await screen.findByLabelText('Изменить фото группы'));
+
+      expect(openMediaSheet).toHaveBeenCalledWith('avatar:group');
+    });
+
+    it('a member removes the photo; a file someone else uploaded is left to them', async () => {
+      mockedGetChat
+        .mockResolvedValueOnce({ ...group, avatarUrl: photo })
+        .mockResolvedValue(group);
+      // База отдаёт заменённый адрес — его файл и удаляется (чужой функция пропустит).
+      mockedSetAvatar.mockResolvedValue(photo);
+
+      await renderWithQuery(<ChatInfoScreen chatId="group-1" />);
+      await fireEvent.press(await screen.findByText('Удалить фото'));
+
+      await waitFor(() => expect(mockedSetAvatar).toHaveBeenCalledWith('group-1', null));
+      expect(removeOwnGroupAvatar).toHaveBeenCalledWith(photo, 'me');
+      expect(await screen.findByText('Добавить фото')).toBeTruthy();
+      expect(screen.queryByText('Удалить фото')).toBeNull();
+    });
+
+    it('a refused photo is explained, the old one stays and the upload is cleaned up', async () => {
+      mockedGetChat.mockResolvedValue({ ...group, avatarUrl: photo });
+      mockedSetAvatar.mockRejectedValue(new TypeError('Network request failed'));
+
+      await renderWithQuery(<ChatInfoScreen chatId="group-1" />);
+      await screen.findByText('Изменить фото');
+      await fireEvent.press(screen.getByTestId('avatar-sheet-done'));
+
+      expect(
+        await screen.findByText('Нет связи. Проверьте интернет и попробуйте ещё раз.'),
+      ).toBeTruthy();
+      expect(removeUploadedMedia).toHaveBeenCalledWith('me/group-avatar/new.jpg');
+      expect(removeOwnGroupAvatar).not.toHaveBeenCalled();
+      expect(screen.queryByLabelText('Сохранение фото')).toBeNull();
+      expect(screen.getByText('Удалить фото')).toBeTruthy();
+    });
+
+    it('an outsider sees the photo but cannot change it', async () => {
+      mockUserId = 'stranger';
+      mockedGetChat.mockResolvedValue({ ...group, avatarUrl: photo });
+
+      await renderWithQuery(<ChatInfoScreen chatId="group-1" />);
+
+      expect(await screen.findByText('Команда')).toBeTruthy();
+      expect(screen.queryByText('Изменить фото')).toBeNull();
+      expect(screen.queryByText('Добавить фото')).toBeNull();
+      expect(screen.queryByText('Удалить фото')).toBeNull();
+      expect(screen.queryByLabelText('Изменить фото группы')).toBeNull();
+      expect(openMediaSheet).not.toHaveBeenCalled();
+    });
   });
 });

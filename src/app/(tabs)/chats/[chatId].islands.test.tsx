@@ -152,6 +152,7 @@ function chat(): ChatSummary {
   return {
     id: 'chat-1',
     kind: 'group',
+    avatarUrl: null,
     title: 'Вася и Света',
     participants: [
       { id: 'user-1', displayName: 'Вася', avatarUrl: null, lastReadAt: AT },

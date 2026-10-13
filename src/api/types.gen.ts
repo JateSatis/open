@@ -239,6 +239,7 @@ export type Database = {
       }
       chats: {
         Row: {
+          avatar_url: string | null
           created_at: string
           created_by: string | null
           deleted_at: string | null
@@ -256,6 +257,7 @@ export type Database = {
           chat_read_up_to: string | null
         }
         Insert: {
+          avatar_url?: string | null
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null
@@ -270,6 +272,7 @@ export type Database = {
           username?: string | null
         }
         Update: {
+          avatar_url?: string | null
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null
@@ -1686,6 +1689,7 @@ export type Database = {
       }
       check_comment_shape: { Args: { target: string }; Returns: undefined }
       check_message_shape: { Args: { target: string }; Returns: undefined }
+      clean_group_avatar_url: { Args: { url: string }; Returns: string }
       comment_pin_right: {
         Args: { target: string; who: string }
         Returns: boolean
@@ -1708,7 +1712,11 @@ export type Database = {
         Returns: Json
       }
       create_chat: {
-        Args: { chat_title?: string; invitee_ids: string[] }
+        Args: {
+          chat_avatar_url?: string
+          chat_title?: string
+          invitee_ids: string[]
+        }
         Returns: Json
       }
       current_session_id: { Args: never; Returns: string }
@@ -2344,6 +2352,10 @@ export type Database = {
       set_channel_notifications: {
         Args: { enabled: boolean; target_channel: string }
         Returns: undefined
+      }
+      set_chat_avatar: {
+        Args: { new_avatar_url: string; target_chat: string }
+        Returns: string
       }
       set_chat_notifications: {
         Args: { enabled: boolean; target_chat: string }

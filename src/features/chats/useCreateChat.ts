@@ -1,10 +1,24 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useState } from 'react';
 
-import { createChat, DuplicateChatError, type CreateChatInput } from '@/api/invites';
+import { createChat, DuplicateChatError, type CreateChatResult } from '@/api/invites';
 import { chatsQueryKey } from '@/features/chats/useChats';
+import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
 import { invitesQueryKey } from '@/features/chats/useInvites';
+import { GROUP_AVATAR_DEADLINE_MS } from '@/features/chats/useChangeGroupAvatar';
+import { removeUploadedMedia, uploadGroupAvatar } from '@/features/media';
+import { DeadlineError, withDeadline } from '@/lib/deadline';
 import { describeLoadError } from '@/lib/network';
+
+export type NewChat = {
+  inviteeIds: string[];
+  title?: string;
+  /**
+   * Фото группы — квадратное и сжатое, на устройстве. Берётся, только если
+   * получится группа (позвано двое и больше); у диалога своего фото нет.
+   */
+  avatarUri?: string | null;
+};
 
 export type CreateChatProblem =
   { kind: 'duplicate'; chatId: string } | { kind: 'failed'; message: string | null };
@@ -12,10 +26,49 @@ export type CreateChatProblem =
 export type CreateChatState = {
   isCreating: boolean;
   problem: CreateChatProblem | null;
-  create: (input: CreateChatInput) => void;
+  create: (input: NewChat) => void;
   /** Убрать сообщение о прошлой попытке: выбор изменился, и оно уже не о нём. */
   dismissProblem: () => void;
 };
+
+/**
+ * Фото группы загружается первым: группа создаётся сразу с его адресом. Если
+ * фото не пригодилось — чат не создан (дубль, сбой) или это встречная заявка в
+ * уже существующий чат, — файл убирается из бакета.
+ */
+async function createWithAvatar(input: NewChat, userId: string | null): Promise<CreateChatResult> {
+  const { inviteeIds, title, avatarUri } = input;
+
+  if (!avatarUri || inviteeIds.length < 2) return createChat({ inviteeIds, title });
+  if (!userId) throw new Error('Нет активной сессии');
+
+  // Без связи загрузка в Storage не падает, а висит: срок превращает её в
+  // понятную ошибку. Файл, доехавший после срока, убирается.
+  const avatar = await withDeadline(
+    uploadGroupAvatar(avatarUri, userId),
+    GROUP_AVATAR_DEADLINE_MS,
+    (late) => {
+      void removeUploadedMedia(late.path);
+    },
+  );
+  let result: CreateChatResult;
+
+  try {
+    // Без связи запрос висел бы молча, как и загрузка.
+    result = await withDeadline(
+      createChat({ inviteeIds, title, avatarUrl: avatar.url }),
+      GROUP_AVATAR_DEADLINE_MS,
+    );
+  } catch (error) {
+    // Запрос, оборванный по сроку, мог дойти до базы, и файл тогда — фото
+    // группы. Лишний файл дешевле битой аватарки.
+    if (!(error instanceof DeadlineError)) void removeUploadedMedia(avatar.path);
+    throw error;
+  }
+
+  if (result.outcome !== 'created') void removeUploadedMedia(avatar.path);
+  return result;
+}
 
 /**
  * Создаёт чат и отдаёт id чата, который надо открыть: новый или — при
@@ -23,10 +76,14 @@ export type CreateChatState = {
  */
 export function useCreateChat(onOpen: (chatId: string) => void): CreateChatState {
   const queryClient = useQueryClient();
+  const userId = useCurrentUserId();
   const [problem, setProblem] = useState<CreateChatProblem | null>(null);
 
   const mutation = useMutation({
-    mutationFn: createChat,
+    // Без связи React Query поставил бы создание на паузу, и кнопка крутилась
+    // бы молча. Создание пробуется сразу и честно падает.
+    networkMode: 'always',
+    mutationFn: (input: NewChat) => createWithAvatar(input, userId),
     onSuccess: (result) => {
       void queryClient.invalidateQueries({ queryKey: chatsQueryKey });
 
@@ -46,7 +103,7 @@ export function useCreateChat(onOpen: (chatId: string) => void): CreateChatState
   });
 
   const create = useCallback(
-    (input: CreateChatInput) => {
+    (input: NewChat) => {
       setProblem(null);
       mutation.mutate(input);
     },

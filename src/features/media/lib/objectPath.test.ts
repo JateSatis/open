@@ -1,4 +1,10 @@
-import { buildAvatarPath, buildObjectPath, ownAvatarPathFromUrl } from './objectPath';
+import {
+  buildAvatarPath,
+  buildGroupAvatarPath,
+  buildObjectPath,
+  ownAvatarPathFromUrl,
+  ownPathFromUrl,
+} from './objectPath';
 
 describe('buildObjectPath', () => {
   it('scopes the object to the owner and names it by media kind', () => {
@@ -32,5 +38,26 @@ describe('avatar paths', () => {
     expect(ownAvatarPathFromUrl(`${base}user-2/avatar/a.jpg`, 'media', 'user-1')).toBeNull();
     expect(ownAvatarPathFromUrl(`${base}user-1/photo/a.jpg`, 'media', 'user-1')).toBeNull();
     expect(ownAvatarPathFromUrl('https://lh3.googleusercontent.com/a/xyz', 'media', 'user-1')).toBeNull();
+  });
+});
+
+describe('group avatar paths', () => {
+  const base = 'https://x.supabase.co/storage/v1/object/public/media/';
+
+  // Такой же шаблон проверяет база (clean_group_avatar_url): путь вне него она не примет.
+  it('puts group avatars into the owner group-avatar folder', () => {
+    expect(buildGroupAvatarPath('user-1')).toMatch(/^user-1\/group-avatar\/[A-Za-z0-9_-]+\.jpg$/);
+  });
+
+  it('recognises only own group avatars', () => {
+    expect(ownPathFromUrl(`${base}user-1/group-avatar/g.jpg`, 'media', 'user-1', 'group-avatar')).toBe(
+      'user-1/group-avatar/g.jpg',
+    );
+    // Фото, поставленное другим участником, — его файл.
+    expect(
+      ownPathFromUrl(`${base}user-2/group-avatar/g.jpg`, 'media', 'user-1', 'group-avatar'),
+    ).toBeNull();
+    // Аватар профиля — не фото группы.
+    expect(ownPathFromUrl(`${base}user-1/avatar/a.jpg`, 'media', 'user-1', 'group-avatar')).toBeNull();
   });
 });

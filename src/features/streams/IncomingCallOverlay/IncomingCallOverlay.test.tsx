@@ -1,10 +1,12 @@
 import type { Session as SupabaseSession } from '@supabase/supabase-js';
-import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { Vibration } from 'react-native';
 
 import { IncomingCallOverlay } from './index';
 
-import type { IncomingCall } from '@/api/chats';
+import type { ChatSummary, IncomingCall } from '@/api/chats';
+import { chatsQueryKey } from '@/features/chats/chatsKey';
 import { useSession } from '@/features/auth/useSession';
 import { ensureCallMicrophone } from '@/features/streams/callPermissions';
 import { joinCall } from '@/features/streams/callSession';
@@ -117,4 +119,31 @@ it('личный диалог называется по человеку', async
 
   expect(screen.getByText('Марина')).toBeTruthy();
   expect(screen.getByText('Звонит вам')).toBeTruthy();
+});
+
+it('звонок в группе показывает фото группы из списка чатов', async () => {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { gcTime: Infinity } } });
+  queryClient.setQueryData<Partial<ChatSummary>[]>(chatsQueryKey, [
+    {
+      id: 'chat-1',
+      kind: 'group',
+      title: 'Поход',
+      avatarUrl: 'https://x/g.jpg',
+      channel: null,
+      participants: [],
+      waiting: [],
+    },
+  ]);
+
+  await render(
+    <QueryClientProvider client={queryClient}>
+      <IncomingCallOverlay />
+    </QueryClientProvider>,
+  );
+  await act(async () => ring(incoming()));
+
+  // Фото подписано названием группы; буквы на его месте нет.
+  expect(screen.getByLabelText('Поход')).toBeTruthy();
+  expect(screen.queryByText('П')).toBeNull();
+  queryClient.clear();
 });

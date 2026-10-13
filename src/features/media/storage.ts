@@ -4,9 +4,12 @@ import { MEDIA_BUCKET } from './constants';
 import {
   buildAvatarPath,
   buildChannelAvatarPath,
+  buildGroupAvatarPath,
+  GROUP_AVATAR_FOLDER,
   buildObjectPath,
   buildPopPaths,
   ownAvatarPathFromUrl,
+  ownPathFromUrl,
 } from './lib/objectPath';
 import type { LocalMedia, UploadedMedia } from './types';
 
@@ -165,6 +168,17 @@ export async function uploadChannelAvatar(
   return uploadJpeg(uri, buildChannelAvatarPath(userId));
 }
 
+/**
+ * Аватарка группы. Путь нужен вызывающему: если база фото не приняла (группа
+ * не создалась, смена сорвалась), файл надо убрать (`removeUploadedMedia`).
+ */
+export async function uploadGroupAvatar(
+  uri: string,
+  userId: string,
+): Promise<{ url: string; path: string }> {
+  return uploadJpeg(uri, buildGroupAvatarPath(userId));
+}
+
 async function uploadJpeg(uri: string, path: string): Promise<{ url: string; path: string }> {
   const file = new File(uri);
 
@@ -190,6 +204,17 @@ async function uploadJpeg(uri: string, path: string): Promise<{ url: string; pat
  */
 export async function removeOwnAvatar(url: string | null, userId: string): Promise<void> {
   const path = url ? ownAvatarPathFromUrl(url, MEDIA_BUCKET, userId) : null;
+
+  if (path) await removeUploadedMedia(path);
+}
+
+/**
+ * Убирает прежнее фото группы, если файл — мой: фото, поставленное другим
+ * участником, лежит в его префиксе, и удалить его нельзя (политика бакета).
+ * Сбой не ошибка — у группы уже новое фото.
+ */
+export async function removeOwnGroupAvatar(url: string | null, userId: string): Promise<void> {
+  const path = url ? ownPathFromUrl(url, MEDIA_BUCKET, userId, GROUP_AVATAR_FOLDER) : null;
 
   if (path) await removeUploadedMedia(path);
 }

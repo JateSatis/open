@@ -758,12 +758,14 @@ export function ChatConversation({
         avatar={
           channel
             ? { uri: channel.avatarUrl, name: channel.title }
-            : pair && pair.length === 2
-              ? [
-                  { uri: pair[0].avatarUrl, name: pair[0].displayName },
-                  { uri: pair[1].avatarUrl, name: pair[1].displayName },
-                ]
-              : undefined
+            : chat?.kind === 'group'
+              ? { uri: chat.avatarUrl, name: title }
+              : pair && pair.length === 2
+                ? [
+                    { uri: pair[0].avatarUrl, name: pair[0].displayName },
+                    { uri: pair[1].avatarUrl, name: pair[1].displayName },
+                  ]
+                : undefined
         }
         subtitle={channel ? (channelHeader?.subtitle ?? null) : chatSubtitle}
         onTitlePress={

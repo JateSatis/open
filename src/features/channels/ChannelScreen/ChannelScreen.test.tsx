@@ -149,6 +149,7 @@ const channel = {
 const postsChat: ChatSummary = {
   id: 'posts-1',
   kind: 'channel',
+  avatarUrl: null,
   title: null,
   channel: { id: 'channel-1', title: 'Мой канал', username: 'my_channel', avatarUrl: null },
   participants: [{ id: OWNER, displayName: 'Максим', avatarUrl: null, lastReadAt: SENT_AT }],

@@ -125,6 +125,7 @@ const AT = '2026-09-30T10:00:00Z';
 const chat: ChatSummary = {
   id: 'chat-1',
   kind: 'direct',
+  avatarUrl: null,
   title: 'Разговор',
   participants: [
     { id: 'user-1', displayName: 'Марина', avatarUrl: null, lastReadAt: AT },

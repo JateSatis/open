@@ -1,4 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 
@@ -9,6 +10,7 @@ import { LoadFailed } from '@/components/LoadFailed';
 import { Text } from '@/components/Text';
 import { chatAvatarUrl, chatTitle, isChatMember } from '@/features/chats/chatDisplay';
 import { ChatUsernameForm } from '@/features/chats/ChatUsernameForm';
+import { GroupAvatarEditor } from '@/features/chats/GroupAvatarEditor';
 import { chatQueryKey, useChat } from '@/features/chats/useChat';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
 import { formatUsername } from '@/features/profile/username';
@@ -25,13 +27,16 @@ export type ChatInfoScreenProps = {
 
 /**
  * «О чате» группы: аватар, название, число участников и `@имя.di`. Участник
- * может задать, сменить и стереть имя; посторонний видит его только текстом.
+ * может поставить, сменить и убрать фото и имя; посторонний их только видит.
  */
 export function ChatInfoScreen({ chatId }: ChatInfoScreenProps) {
   const theme = useTheme();
   const queryClient = useQueryClient();
   const currentUserId = useCurrentUserId();
   const { chat, failed } = useChat(chatId);
+  // Высота формы имени: над клавиатурой должна встать вся форма, с кнопкой
+  // «Сохранить», а не только поле.
+  const [formHeight, setFormHeight] = useState(0);
 
   if (!chat) {
     return (
@@ -51,16 +56,27 @@ export function ChatInfoScreen({ chatId }: ChatInfoScreenProps) {
   const title = chatTitle(chat, currentUserId);
   const count = chat.participants.length;
   const username = formatUsername(chat.username, 'group');
+  const member = chat.kind === 'group' && isChatMember(chat, currentUserId);
 
   return (
     <KeyboardAwareScrollView
       style={[styles.flex, { backgroundColor: theme.background }]}
       contentContainerStyle={styles.content}
       keyboardShouldPersistTaps="handled"
-      // Над клавиатурой — поле вместе с ответом под ним.
-      bottomOffset={Spacing.six}
+      // Над клавиатурой — поле вместе с ответом под ним и кнопкой «Сохранить».
+      bottomOffset={Math.max(formHeight, Spacing.six)}
     >
-      <Avatar uri={chatAvatarUrl(chat, currentUserId)} name={title} size={AVATAR_SIZE} />
+      {member ? (
+        <GroupAvatarEditor
+          chatId={chat.id}
+          userId={currentUserId}
+          avatarUrl={chat.avatarUrl}
+          name={title}
+          size={AVATAR_SIZE}
+        />
+      ) : (
+        <Avatar uri={chatAvatarUrl(chat, currentUserId)} name={title} size={AVATAR_SIZE} />
+      )}
 
       <View style={styles.identity}>
         <Text variant="title" style={styles.centeredText}>
@@ -76,10 +92,12 @@ export function ChatInfoScreen({ chatId }: ChatInfoScreenProps) {
         </Text>
       </View>
 
-      {chat.kind === 'group' && isChatMember(chat, currentUserId) ? (
+      {member ? (
         // Ключ — текущее имя: переименовал другой участник — поле показывает его
         // имя, а не старое, которое кнопка «Сохранить» молча вернула бы назад.
-        <ChatUsernameForm key={chat.username ?? ''} chatId={chat.id} current={chat.username} />
+        <View onLayout={(event) => setFormHeight(event.nativeEvent.layout.height)}>
+          <ChatUsernameForm key={chat.username ?? ''} chatId={chat.id} current={chat.username} />
+        </View>
       ) : null}
     </KeyboardAwareScrollView>
   );

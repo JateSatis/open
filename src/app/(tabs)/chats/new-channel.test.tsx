@@ -42,8 +42,8 @@ jest.mock('@/features/media', () => ({
 }));
 
 // Выбор фото — свой тест шита; здесь круг сразу отдаёт готовый квадрат.
-jest.mock('@/features/channels/ChannelAvatarPicker', () => ({
-  ChannelAvatarPicker: ({ onChange }: { onChange: (uri: string) => void }) => {
+jest.mock('@/features/chats/AvatarPicker', () => ({
+  AvatarPicker: ({ onChange }: { onChange: (uri: string) => void }) => {
     const { Pressable: MockPressable, Text: MockText } = jest.requireActual('react-native');
 
     return (

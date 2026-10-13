@@ -58,6 +58,7 @@ const READ_AT = '2026-10-13T09:00:00Z';
 const dialog: ChatSummary = {
   id: 'chat-1',
   kind: 'direct',
+  avatarUrl: null,
   title: null,
   username: null,
   channel: null,

@@ -9,6 +9,7 @@ function chat(overrides: Partial<ChatSummary>): ChatSummary {
   return {
     id: 'chat',
     kind: 'direct',
+    avatarUrl: null,
     title: null,
     username: null,
     channel: null,
@@ -71,6 +72,13 @@ it('opens a channel by its channel id', () => {
   const [entity] = localChatMatches([channel], parseSearchQuery('news'), 'me');
 
   expect(entity).toMatchObject({ kind: 'channel', id: 'ch', chatId: 'posts', channelId: 'ch' });
+});
+
+it('draws a group by its own photo', () => {
+  const withPhoto = chat({ ...group, avatarUrl: 'https://a/group.png' });
+  const [entity] = localChatMatches([withPhoto], parseSearchQuery('планы'), 'me');
+
+  expect(entity).toMatchObject({ kind: 'group', avatarUrl: 'https://a/group.png' });
 });
 
 it('finds by username and by title', () => {

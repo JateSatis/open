@@ -43,6 +43,8 @@ export type MyInvite = {
 export type CreateChatInput = {
   inviteeIds: string[];
   title?: string;
+  /** Фото группы, уже загруженное (`uploadGroupAvatar`). У диалога база его игнорирует. */
+  avatarUrl?: string | null;
 };
 
 export type CreateChatResult =
@@ -96,12 +98,14 @@ function toResult(data: unknown): CreateChatResult {
 export async function createChat({
   inviteeIds,
   title,
+  avatarUrl,
 }: CreateChatInput): Promise<CreateChatResult> {
   const { data, error } = await supabase.rpc('create_chat', {
     invitee_ids: inviteeIds,
     // Функция принимает NULL, но генератор типов не размечает скалярные
     // аргументы rpc как nullable — отсюда приведение.
     chat_title: (title?.trim() || null) as string,
+    chat_avatar_url: (avatarUrl ?? null) as string,
   });
 
   if (error) {

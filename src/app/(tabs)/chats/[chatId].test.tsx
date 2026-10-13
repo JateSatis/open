@@ -138,6 +138,7 @@ function chatWith(participants: ChatSummary['participants']): ChatSummary {
   return {
     id: 'chat-1',
     kind: 'direct',
+    avatarUrl: null,
     title: 'Разговор',
     participants,
     waiting: [],
@@ -236,6 +237,28 @@ describe('ChatScreen', () => {
 
     expect(mockPush).toHaveBeenCalledWith('/chats/chat-info/chat-1');
     expect(screen.queryByLabelText('Профиль: Разговор')).toBeNull();
+  });
+
+  it('draws the group photo in the header, or the first letter of its title', async () => {
+    mockedGetChat.mockResolvedValue({
+      ...chatWith([member, other]),
+      kind: 'group',
+      avatarUrl: 'https://x/g.jpg',
+    });
+
+    const { unmount } = await renderWithQuery(<ChatScreen />);
+    await screen.findByLabelText('О чате: Разговор');
+
+    // Фото подписано названием группы; буквы на его месте нет.
+    expect(screen.getByLabelText('Разговор')).toBeTruthy();
+    expect(screen.queryByText('Р')).toBeNull();
+    await unmount();
+
+    mockedGetChat.mockResolvedValue({ ...chatWith([member, other]), kind: 'group' });
+    await renderWithQuery(<ChatScreen />);
+    await screen.findByLabelText('О чате: Разговор');
+
+    expect(screen.getByText('Р')).toBeTruthy();
   });
 
   it('opens «О чате» for an outsider of a group too', async () => {
