@@ -50,12 +50,16 @@ export type LibraryAccess = 'granted' | 'denied';
  * Только фото и видео: голосовые и кружки в галерею телефона не попадают, а
  * аудиофайлы устройства (музыка) для чата не нужны.
  */
-export async function requestMediaLibraryAccess(): Promise<LibraryAccess> {
+export async function requestMediaLibraryAccess(): Promise<LibraryAccess | 'blocked'> {
   const response = await requestPermissionsAsync(false, ['photo', 'video']);
 
   // `limited` (часть библиотеки на iOS) — рабочий режим, а не отказ: грид
   // просто покажет то, на что доступ дан.
-  return response.granted || response.accessPrivileges === 'limited' ? 'granted' : 'denied';
+  if (response.granted || response.accessPrivileges === 'limited') return 'granted';
+
+  // Запрещено в настройках телефона: системное окно больше не появится, и
+  // выдать доступ можно только там.
+  return response.canAskAgain ? 'denied' : 'blocked';
 }
 
 /**

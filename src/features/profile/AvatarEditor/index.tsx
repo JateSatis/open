@@ -82,7 +82,10 @@ export function AvatarEditor({ profile }: { profile: Profile }) {
           label="Удалить фото"
           color="danger"
           disabled={busy}
-          onPress={() => change.mutate({ kind: 'remove', profile })}
+          onPress={() => {
+            setPrepareFailed(false);
+            change.mutate({ kind: 'remove', profile });
+          }}
         />
       ) : null}
 

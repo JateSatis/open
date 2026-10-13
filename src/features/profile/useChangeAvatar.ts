@@ -29,7 +29,9 @@ export function useChangeAvatar() {
 
       if (change.kind === 'remove') {
         const updated = await withDeadline(updateMyProfile({ avatarUrl: null }), SAVE_DEADLINE_MS);
-        await removeOwnAvatar(profile.avatarUrl, profile.id);
+        // Профиль уже без фото; файл убирается без ожидания — без связи
+        // удаление в Storage висело бы вместе с крутилкой.
+        void removeOwnAvatar(profile.avatarUrl, profile.id);
         return updated;
       }
 
@@ -54,7 +56,8 @@ export function useChangeAvatar() {
         throw error;
       }
 
-      await removeOwnAvatar(profile.avatarUrl, profile.id);
+      // Профиль уже на новом файле — прежний убирается без ожидания.
+      void removeOwnAvatar(profile.avatarUrl, profile.id);
       return updated;
     },
     onSuccess: (profile) => {

@@ -34,6 +34,7 @@ import {
   alignCrop,
   coverCrop,
   defaultCrop,
+  isPlainSquareCrop,
   mirrorCrop,
   rotateQuarter,
   squareCrop,
@@ -268,15 +269,19 @@ export function useCropTool(square = false): CropToolState {
     // Переход мог ещё идти — применяется то, куда он ведёт. Палец мог
     // ещё тянуть фото за край — применяется то, куда оно спружинит.
     const result = coverCrop(crop.value);
+    // Нетронутый квадрат аватарки — не правка: страница покажет фото целиком
+    // с кругом, а аватаркой и так станет центральный квадрат.
+    const plain = square && isPlainSquareCrop(result);
 
-    // Страница теперь покажет обрезку — рамка уходит в неё, а не в квадрат целого фото.
-    page.value = null;
+    // Рамка уходит туда, где её покажет страница: в обрезку или в центральный
+    // квадрат целого фото.
+    page.value = plain ? centerSquare(1 / result.sourceRatio, screen.value) : null;
     leave();
     commitPhotoEdit(current.asset, {
       ...(photoEditOf(current.asset.id) ?? EMPTY_EDIT),
-      crop: result,
+      crop: plain ? undefined : result,
     });
-  }, [crop, leave, page]);
+  }, [crop, leave, page, screen, square]);
 
   return {
     open,

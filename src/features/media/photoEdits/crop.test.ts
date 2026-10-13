@@ -8,6 +8,7 @@ import {
   defaultCrop,
   isCovered,
   isEmptyCrop,
+  isPlainSquareCrop,
   lerpCrop,
   mirrorCrop,
   resizeCrop,
@@ -192,6 +193,14 @@ describe('обрезка аватарки: квадрат', () => {
     expect([landscape.width, landscape.height]).toEqual([LANDSCAPE, LANDSCAPE]);
     expect(isCovered(portrait)).toBe(true);
     expect(isCovered(landscape)).toBe(true);
+  });
+
+  it('нетронутый квадрат — не правка, сдвинутый — правка', () => {
+    const plain = squareCrop(PORTRAIT);
+
+    expect(isPlainSquareCrop(plain)).toBe(true);
+    expect(isPlainSquareCrop({ ...plain, centerY: plain.centerY - 0.1 })).toBe(false);
+    expect(isPlainSquareCrop(rotateQuarter(plain))).toBe(false);
   });
 
   it('поворот на 90° и подгонка под фото квадрат не ломают', () => {

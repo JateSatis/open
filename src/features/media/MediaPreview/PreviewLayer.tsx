@@ -89,13 +89,13 @@ export function PreviewLayer(props: PreviewLayerProps) {
   const target = useMediaPreview((state) => state.target);
   // Текущий файл — по id: галерея может дочитаться и сдвинуться под ним.
   const [currentId, setCurrentId] = useState(target?.assetId ?? null);
-  const index = Math.max(
-    0,
-    gallery.findIndex((item) => item.id === currentId),
-  );
-  const current: MediaLibraryItem | undefined = gallery[index];
+  const found = gallery.findIndex((item) => item.id === currentId);
+  const index = Math.max(0, found);
   // Аватарку выбирают тапом в сетке, листать к соседям незачем: одна страница.
   const single = avatar !== null;
+  // Файла нет в галерее — у аватарки нечего показывать: подставить первый
+  // файл значило бы поставить аватаркой чужое фото.
+  const current: MediaLibraryItem | undefined = single && found === -1 ? undefined : gallery[index];
   const pages = useMemo(
     () => (single ? (current ? [current] : []) : gallery),
     [current, gallery, single],

@@ -92,6 +92,17 @@ export const MediaGridItem = memo(function MediaGridItem({
 
   const isSelected = slot > SLOT_FREE;
   const disabled = locked || slot === SLOT_BLOCKED;
+  // В выборе одного файла — над притушиванием: длительность читается и у
+  // видео, которое взять нельзя. В шите чата — под притушиванием лимита, как
+  // вся клетка. Касания пропускает к клетке.
+  const durationBadge =
+    asset.kind === 'video' ? (
+      <View pointerEvents="none" style={[styles.videoBadge, { backgroundColor: theme.mediaScrim }]}>
+        <Text variant="caption" color="textInverse">
+          {asset.durationMs !== null ? formatDuration(asset.durationMs) : '▶'}
+        </Text>
+      </View>
+    ) : null;
   const openPreview = () =>
     rootRef.current?.measureInWindow((x, y, width, height) =>
       openMediaPreview(asset, width > 0 ? { x, y, width, height } : null),
@@ -133,6 +144,8 @@ export const MediaGridItem = memo(function MediaGridItem({
         />
       )}
 
+      {pick ? null : durationBadge}
+
       {locked && !isSelected ? (
         <View
           testID="media-grid-locked"
@@ -146,18 +159,7 @@ export const MediaGridItem = memo(function MediaGridItem({
 
       {pick ? <PickCover asset={asset} pick={pick} onOpen={openPreview} /> : null}
 
-      {/* Над притушиванием выбора одного файла: длительность читается и у
-          видео, которое взять нельзя. Касания пропускает к клетке. */}
-      {asset.kind === 'video' ? (
-        <View
-          pointerEvents="none"
-          style={[styles.videoBadge, { backgroundColor: theme.mediaScrim }]}
-        >
-          <Text variant="caption" color="textInverse">
-            {asset.durationMs !== null ? formatDuration(asset.durationMs) : '▶'}
-          </Text>
-        </View>
-      ) : null}
+      {pick ? durationBadge : null}
 
       {pick ? null : (
         <>
