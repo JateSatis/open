@@ -9,6 +9,7 @@ import { closeComments } from '@/features/interactions/comments/commentsPanelSto
 import { resetPendingReactions } from '@/features/interactions/pendingReactions';
 import { useMediaSelection } from '@/features/media/selectionStore';
 import { resetPendingPops } from '@/features/pops/pendingPops';
+import { resetRecentSearches } from '@/features/search/recentSearches';
 import { setActiveChatId } from '@/store/activeChat';
 
 /**
@@ -19,7 +20,7 @@ import { setActiveChatId } from '@/store/activeChat';
  * прежнего.
  *
  * Черновики сообщений и комментариев — тоже: с ответом и пересылкой в них
- * лежат чужие сообщения.
+ * лежат чужие сообщения. И «Недавние» поиска — что человек открывал.
  */
 export function resetClientState(queryClient: QueryClient) {
   // cancel до clear: запрос, начатый под прежним пользователем, не должен
@@ -35,5 +36,6 @@ export function resetClientState(queryClient: QueryClient) {
   resetPendingPops();
   closeComments();
   resetComposerDrafts();
+  resetRecentSearches();
   setActiveChatId(null);
 }

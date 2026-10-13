@@ -25,6 +25,14 @@ const mockPush = jest.fn();
 jest.mock('expo-router', () => ({
   useIsFocused: () => true,
   useRouter: () => ({ push: mockPush }),
+  useNavigation: () => ({ setOptions: jest.fn() }),
+  useFocusEffect: jest.fn(),
+}));
+
+// Поиск — отдельный файл (index.search.test.tsx); здесь он лишь не ходит в сеть.
+jest.mock('@/api/search', () => ({
+  searchEntities: jest.fn().mockResolvedValue([]),
+  searchMessages: jest.fn().mockResolvedValue({ items: [], nextCursor: null }),
 }));
 
 jest.mock('@/features/auth/useSession', () => ({

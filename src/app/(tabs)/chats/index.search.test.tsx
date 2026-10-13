@@ -1,0 +1,326 @@
+import type { Session as SupabaseSession } from '@supabase/supabase-js';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
+import { BackHandler } from 'react-native';
+
+import ChatsScreen from './index';
+
+import type { ChatSummary } from '@/api/chats';
+import { listChats, subscribeToOnlineUsers } from '@/api/chats';
+import { listInvites } from '@/api/invites';
+import {
+  searchEntities,
+  searchMessages,
+  type SearchEntity,
+  type SearchMessage,
+} from '@/api/search';
+import { useSession } from '@/features/auth/useSession';
+import {
+  reportDeviceNetwork,
+  reportRealtimeJoined,
+  resetConnectionState,
+} from '@/features/connection/connectionStore';
+import { resetRecentSearches } from '@/features/search/recentSearches';
+import { renderWithQuery } from '@/test/renderWithQuery';
+
+const mockPush = jest.fn();
+const mockSetOptions = jest.fn();
+let mockFocusEffect: (() => void | (() => void)) | null = null;
+
+jest.mock('expo-router', () => ({
+  useIsFocused: () => true,
+  useRouter: () => ({ push: mockPush }),
+  useNavigation: () => ({ setOptions: mockSetOptions }),
+  // Экран в фокусе: эффект фокуса — обычный эффект, последний сохраняется.
+  useFocusEffect: (effect: () => void | (() => void)) => {
+    const { useEffect } = jest.requireActual<typeof import('react')>('react');
+    useEffect(() => {
+      mockFocusEffect = effect;
+      return effect() ?? undefined;
+    }, [effect]);
+  },
+}));
+
+jest.mock('@/features/auth/useSession', () => ({ useSession: jest.fn() }));
+jest.mock('@/api/chats', () => ({ listChats: jest.fn(), subscribeToOnlineUsers: jest.fn() }));
+jest.mock('@/api/invites', () => ({ listInvites: jest.fn() }));
+jest.mock('@/api/search', () => ({ searchEntities: jest.fn(), searchMessages: jest.fn() }));
+
+const mockedEntities = jest.mocked(searchEntities);
+const mockedMessages = jest.mocked(searchMessages);
+
+const READ_AT = '2026-10-13T09:00:00Z';
+
+const dialog: ChatSummary = {
+  id: 'chat-1',
+  kind: 'direct',
+  title: null,
+  username: null,
+  channel: null,
+  participants: [
+    { id: 'me', displayName: 'Я', avatarUrl: null, lastReadAt: READ_AT },
+    { id: 'anna', displayName: 'Анна Ёлкина', avatarUrl: null, lastReadAt: READ_AT },
+  ],
+  waiting: [],
+  lastMessagePreview: 'до встречи',
+  lastMessageAt: READ_AT,
+  lastMessageAuthorId: 'anna',
+  lastPopAt: null,
+  lastActivityAt: READ_AT,
+  previewIsPop: false,
+  subscription: null,
+  hasUnread: false,
+  subscribersCount: 0,
+};
+
+function entity(overrides: Partial<SearchEntity>): SearchEntity {
+  return {
+    section: 'global',
+    kind: 'channel',
+    id: 'ch-1',
+    chatId: 'posts-1',
+    channelId: 'ch-1',
+    personId: null,
+    title: 'Ёлки-палки',
+    username: 'elki',
+    avatarUrl: null,
+    subscribed: false,
+    subscribersCount: 3,
+    ...overrides,
+  };
+}
+
+const post: SearchMessage = {
+  id: 'msg-1',
+  chatId: 'posts-1',
+  chatKind: 'channel',
+  channelId: 'ch-1',
+  chatTitle: 'Ёлки-палки',
+  chatAvatarUrl: null,
+  authorId: 'anna',
+  authorName: 'Анна',
+  text: 'Ёлка уже стоит',
+  createdAt: '2026-10-12T10:00:00Z',
+  fuzzy: false,
+};
+
+async function openSearch() {
+  await renderWithQuery(<ChatsScreen />);
+  await screen.findByText('Анна Ёлкина');
+  await fireEvent(screen.getByTestId('chats-search-input'), 'focus');
+}
+
+async function type(text: string) {
+  await fireEvent.changeText(screen.getByTestId('chats-search-input'), text);
+}
+
+beforeEach(() => {
+  jest.clearAllMocks();
+  mockFocusEffect = null;
+  resetRecentSearches();
+  jest.mocked(useSession).mockReturnValue({
+    session: { user: { id: 'me' } } as unknown as SupabaseSession,
+    isAuthenticated: true,
+    isLoading: false,
+  });
+  jest.mocked(subscribeToOnlineUsers).mockReturnValue(() => {});
+  jest.mocked(listChats).mockResolvedValue([dialog]);
+  jest.mocked(listInvites).mockResolvedValue([]);
+  mockedEntities.mockResolvedValue([]);
+  mockedMessages.mockResolvedValue({ items: [], nextCursor: null });
+  resetConnectionState();
+  reportRealtimeJoined();
+});
+
+it('hides the chat list and the header while searching, and brings them back on «Отмена»', async () => {
+  await openSearch();
+
+  expect(screen.queryByText('до встречи')).toBeNull();
+  expect(mockSetOptions).toHaveBeenLastCalledWith({ headerShown: false });
+
+  await type('анна');
+  await fireEvent.press(screen.getByRole('button', { name: 'Отмена' }));
+
+  expect(await screen.findByText('до встречи')).toBeTruthy();
+  expect(screen.getByTestId('chats-search-input').props.value).toBe('');
+  expect(mockSetOptions).toHaveBeenLastCalledWith({ headerShown: true });
+});
+
+it('leaves the search on the system «back» instead of the app', async () => {
+  const listeners: (() => boolean)[] = [];
+  jest.spyOn(BackHandler, 'addEventListener').mockImplementation((_event, listener) => {
+    listeners.push(listener as () => boolean);
+    return { remove: jest.fn() };
+  });
+
+  await openSearch();
+  expect(mockFocusEffect).not.toBeNull();
+
+  let handled = false;
+  await act(async () => {
+    handled = listeners[listeners.length - 1]();
+  });
+
+  expect(handled).toBe(true);
+  expect(await screen.findByText('до встречи')).toBeTruthy();
+});
+
+it('finds my own chat at once from the cache, before the server answers', async () => {
+  mockedEntities.mockReturnValue(new Promise(() => {}));
+  await openSearch();
+
+  await type('елкина');
+
+  expect(await screen.findByText('Чаты')).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Анна Ёлкина' })).toBeTruthy();
+});
+
+it('shows the server blocks in order and asks for the last query only', async () => {
+  mockedEntities.mockImplementation(async (query) =>
+    query === 'елк'
+      ? [
+          entity({}),
+          entity({
+            section: 'global',
+            kind: 'person',
+            id: 'p1',
+            title: 'Ёлкин',
+            username: 'elkin',
+          }),
+        ]
+      : [],
+  );
+  mockedMessages.mockResolvedValue({ items: [post], nextCursor: null });
+  await openSearch();
+
+  await type('е');
+  await type('ел');
+  await type('елк');
+
+  expect(await screen.findByText('Глобальный поиск')).toBeTruthy();
+  expect(screen.getByText('Сообщения')).toBeTruthy();
+  expect(screen.getByText('@elki.ch')).toBeTruthy();
+  expect(screen.getByText('@elkin')).toBeTruthy();
+  // Набор быстрее паузы — на сервер уходит только итог.
+  expect(mockedEntities.mock.calls.map(([query]) => query)).toEqual(['елк']);
+});
+
+it('collapses a long block to three rows, expands and collapses it, and resets on a new letter', async () => {
+  const many = ['a', 'b', 'c', 'd'].map((id) =>
+    entity({ id, channelId: id, chatId: `posts-${id}`, title: `Новости ${id}`, username: id }),
+  );
+  mockedEntities.mockResolvedValue(many);
+  await openSearch();
+
+  await type('новости');
+  await screen.findByText('Новости a');
+  expect(screen.queryByText('Новости d')).toBeNull();
+
+  await fireEvent.press(screen.getByRole('button', { name: 'Показать ещё' }));
+  expect(screen.getByText('Новости d')).toBeTruthy();
+
+  await fireEvent.press(screen.getByRole('button', { name: 'Свернуть' }));
+  expect(screen.queryByText('Новости d')).toBeNull();
+
+  await fireEvent.press(screen.getByRole('button', { name: 'Показать ещё' }));
+  await type('новост');
+  await waitFor(() => expect(screen.queryByText('Новости d')).toBeNull());
+});
+
+it('opens a channel, a person and a post with a jump, and remembers them in «Недавние»', async () => {
+  mockedEntities.mockResolvedValue([
+    entity({}),
+    entity({
+      kind: 'person',
+      id: 'p1',
+      channelId: null,
+      chatId: null,
+      title: 'Ёлкин',
+      username: 'elkin',
+    }),
+  ]);
+  mockedMessages.mockResolvedValue({ items: [post], nextCursor: null });
+  await openSearch();
+  await type('елк');
+
+  await fireEvent.press(await screen.findByRole('button', { name: 'Ёлки-палки' }));
+  expect(mockPush).toHaveBeenLastCalledWith({
+    pathname: '/chats/channel/[channelId]',
+    params: { channelId: 'ch-1' },
+  });
+
+  await fireEvent.press(screen.getByRole('button', { name: 'Ёлкин' }));
+  expect(mockPush).toHaveBeenLastCalledWith({
+    pathname: '/chats/people/[userId]',
+    params: { userId: 'p1' },
+  });
+
+  await fireEvent.press(screen.getByTestId('search-message'));
+  expect(mockPush).toHaveBeenLastCalledWith({
+    pathname: '/chats/channel/[channelId]',
+    params: {
+      channelId: 'ch-1',
+      jumpTo: 'msg-1',
+      jumpAt: post.createdAt,
+      jumpKey: expect.any(String),
+    },
+  });
+
+  await type('');
+  expect(await screen.findByText('Недавние')).toBeTruthy();
+  const rows = screen.getAllByRole('button').map((button) => button.props.accessibilityLabel);
+  expect(rows.indexOf(`Ёлки-палки: ${post.text}`)).toBeLessThan(rows.indexOf('Ёлкин'));
+
+  await fireEvent.press(screen.getByRole('button', { name: 'Очистить' }));
+  expect(screen.queryByText('Недавние')).toBeNull();
+});
+
+it('opens a message of a group chat in that chat, with a new jump key every time', async () => {
+  const message: SearchMessage = { ...post, chatId: 'group-1', chatKind: 'group', channelId: null };
+  mockedMessages.mockResolvedValue({ items: [message], nextCursor: null });
+  await openSearch();
+  await type('елк');
+
+  await fireEvent.press(await screen.findByTestId('search-message'));
+  const first = mockPush.mock.calls.at(-1)?.[0];
+  jest.spyOn(Date, 'now').mockReturnValueOnce(Number(first.params.jumpKey) + 1);
+  await fireEvent.press(screen.getByTestId('search-message'));
+  const second = mockPush.mock.calls.at(-1)?.[0];
+
+  expect(first).toMatchObject({
+    pathname: '/chats/[chatId]',
+    params: { chatId: 'group-1', jumpTo: 'msg-1' },
+  });
+  expect(second.params.jumpKey).not.toBe(first.params.jumpKey);
+});
+
+it('without a network says so and still shows my own chats', async () => {
+  await openSearch();
+  await act(async () => reportDeviceNetwork(false));
+
+  await type('анна');
+
+  expect(await screen.findByText('Нет связи — ищем только по вашим чатам.')).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Анна Ёлкина' })).toBeTruthy();
+});
+
+it('loads the next page of messages when scrolled to the end', async () => {
+  mockedMessages.mockImplementation(async (_query, cursor) =>
+    cursor
+      ? { items: [{ ...post, id: 'msg-2', text: 'Ёлка вторая' }], nextCursor: null }
+      : { items: [post], nextCursor: { createdAt: post.createdAt, id: post.id } },
+  );
+  await openSearch();
+  await type('елк');
+  await screen.findByText('Сообщения');
+
+  await fireEvent(screen.getByTestId('chats-search-results'), 'onEndReached');
+
+  await waitFor(() =>
+    expect(mockedMessages).toHaveBeenLastCalledWith(
+      'елк',
+      { createdAt: post.createdAt, id: post.id },
+      expect.anything(),
+    ),
+  );
+  await waitFor(() => expect(screen.getAllByTestId('search-message')).toHaveLength(2));
+});
