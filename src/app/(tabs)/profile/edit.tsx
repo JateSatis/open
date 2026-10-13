@@ -14,9 +14,10 @@ import {
   BIO_MAX_LENGTH,
   DISPLAY_NAME_MAX_LENGTH,
   STATUS_MAX_LENGTH,
-  USERNAME_MAX_LENGTH,
   validateUsername,
 } from '@/features/profile/username';
+import { UsernameField } from '@/features/profile/UsernameField';
+import { useUsernameAvailability } from '@/features/profile/useUsernameAvailability';
 import { Spacing } from '@/theme';
 
 const styles = StyleSheet.create({
@@ -53,10 +54,16 @@ type FormValues = { username: string; displayName: string; status: string; bio: 
 function EditProfileForm({ initial }: { initial: FormValues }) {
   const [values, setValues] = useState(initial);
   const [usernameError, setUsernameError] = useState<string | null>(null);
+  const availability = useUsernameAvailability(values.username, {
+    kind: 'profile',
+    current: initial.username,
+  });
   const update = useUpdateMyProfile();
 
-  const setField = (field: keyof FormValues) => (value: string) =>
+  const setField = (field: keyof FormValues) => (value: string) => {
+    if (field === 'username') setUsernameError(null);
     setValues((current) => ({ ...current, [field]: value }));
+  };
 
   const onSave = () => {
     const username = values.username.trim();
@@ -67,10 +74,15 @@ function EditProfileForm({ initial }: { initial: FormValues }) {
       return;
     }
 
+    // Занятость, известная заранее, — не повод ходить на сервер. Пока ответа
+    // нет, сохраняем: уникальный индекс в базе всё равно проверит.
+    if (availability.status === 'taken') return;
+
     setUsernameError(null);
     update.mutate(
       {
-        username,
+        // Пустое поле — имени нет: у человека username необязателен.
+        username: username || null,
         displayName: values.displayName.trim() || null,
         status: values.status.trim() || null,
         bio: values.bio.trim() || null,
@@ -79,7 +91,7 @@ function EditProfileForm({ initial }: { initial: FormValues }) {
         onSuccess: () => router.back(),
         onError: (mutationError) => {
           if (mutationError instanceof UsernameTakenError) {
-            setUsernameError('Это имя уже занято');
+            setUsernameError('Имя занято');
           }
         },
       },
@@ -92,15 +104,14 @@ function EditProfileForm({ initial }: { initial: FormValues }) {
     <KeyboardAvoidingView
       style={styles.form}
       behavior={Platform.select({ ios: 'padding', default: undefined })}>
-      <Input
+      <UsernameField
+        testID="profile-username"
+        kind="profile"
         label="Имя пользователя"
         value={values.username}
         onChangeText={setField('username')}
-        error={usernameError ?? undefined}
-        autoCapitalize="none"
-        autoCorrect={false}
-        maxLength={USERNAME_MAX_LENGTH}
-        placeholder="username"
+        availability={availability}
+        error={usernameError}
       />
 
       <Input

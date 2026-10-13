@@ -1,4 +1,11 @@
-import { listMessages, markChatRead, sendMessage, sendVoiceMessage } from './chats';
+import {
+  ChatUsernameTakenError,
+  listMessages,
+  markChatRead,
+  sendMessage,
+  sendVoiceMessage,
+  setChatUsername,
+} from './chats';
 
 import { supabase } from '@/api/supabase';
 
@@ -351,5 +358,46 @@ describe('sendVoiceMessage', () => {
         waveform: null,
       }),
     ).rejects.toMatchObject({ message: expect.stringMatching(/row-level security/) });
+  });
+});
+
+describe('setChatUsername', () => {
+  const mockedRpc = supabase.rpc as jest.MockedFunction<typeof supabase.rpc>;
+
+  it('writes the group username only through the database function', async () => {
+    mockedRpc.mockResolvedValue({ data: 'team', error: null } as never);
+
+    await setChatUsername('chat-1', 'team');
+
+    expect(mockedRpc).toHaveBeenCalledWith('set_chat_username', {
+      target_chat: 'chat-1',
+      new_username: 'team',
+    });
+    expect(supabase.from).not.toHaveBeenCalledWith('chats');
+  });
+
+  it('clears the username with an empty value', async () => {
+    mockedRpc.mockResolvedValue({ data: null, error: null } as never);
+
+    await setChatUsername('chat-1', null);
+
+    expect(mockedRpc).toHaveBeenCalledWith('set_chat_username', {
+      target_chat: 'chat-1',
+      new_username: '',
+    });
+  });
+
+  it('turns OPN02 into a taken-username error', async () => {
+    mockedRpc.mockResolvedValue({ data: null, error: { code: 'OPN02', message: 'taken' } } as never);
+
+    await expect(setChatUsername('chat-1', 'team')).rejects.toBeInstanceOf(ChatUsernameTakenError);
+  });
+
+  it('passes the refusal for an outsider through', async () => {
+    const refusal = { code: '42501', message: 'Менять имя группы может только участник' };
+
+    mockedRpc.mockResolvedValue({ data: null, error: refusal } as never);
+
+    await expect(setChatUsername('chat-1', 'team')).rejects.toBe(refusal);
   });
 });

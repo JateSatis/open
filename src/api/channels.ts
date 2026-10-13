@@ -43,7 +43,7 @@ export type CreateChannelInput = {
 
 export type CreatedChannel = { channelId: string; chatId: string };
 
-/** `@имя` уже занято профилем или другим каналом. */
+/** `@имя` уже занято другим каналом. */
 export class ChannelUsernameTakenError extends Error {
   constructor(readonly username: string) {
     super(`Username "${username}" is already taken`);
@@ -98,15 +98,6 @@ export async function createChannel(
   }
 
   return { channelId: row.channel_id, chatId: row.chat_id };
-}
-
-/** Свободно ли `@имя` среди профилей и каналов вместе, без учёта регистра. */
-export async function isUsernameAvailable(username: string): Promise<boolean> {
-  const { data, error } = await supabase.rpc('is_handle_available', { candidate: username });
-
-  if (error) throw error;
-
-  return data === true;
 }
 
 export async function getChannel(channelId: string): Promise<Channel> {

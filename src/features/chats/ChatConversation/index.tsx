@@ -766,7 +766,14 @@ export function ChatConversation({
               : undefined
         }
         subtitle={channel ? (channelHeader?.subtitle ?? null) : chatSubtitle}
-        onTitlePress={other ? () => openPerson(other.id) : undefined}
+        onTitlePress={
+          chat?.kind === 'group'
+            ? () => router.push(`/chats/chat-info/${chatId}`)
+            : other
+              ? () => openPerson(other.id)
+              : undefined
+        }
+        titlePressLabel={chat?.kind === 'group' ? 'О чате' : 'Профиль'}
         selectedCount={selection.selected.length}
         onCancelSelection={clearSelection}
         right={

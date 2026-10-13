@@ -150,6 +150,7 @@ function chatWith(participants: ChatSummary['participants']): ChatSummary {
     subscription: null,
     hasUnread: false,
     subscribersCount: 0,
+    username: null,
     channel: null,
   };
 }
@@ -224,6 +225,30 @@ describe('ChatScreen', () => {
 
     await user.press(screen.getByLabelText('Профиль: Разговор'));
     expect(mockPush).toHaveBeenCalledWith('/chats/people/user-2');
+  });
+
+  it('opens «О чате» from a tap on the header of a group', async () => {
+    mockedGetChat.mockResolvedValue({ ...chatWith([member, other]), kind: 'group' });
+    const user = userEvent.setup();
+
+    await renderWithQuery(<ChatScreen />);
+    await user.press(await screen.findByLabelText('О чате: Разговор'));
+
+    expect(mockPush).toHaveBeenCalledWith('/chats/chat-info/chat-1');
+    expect(screen.queryByLabelText('Профиль: Разговор')).toBeNull();
+  });
+
+  it('opens «О чате» for an outsider of a group too', async () => {
+    mockedGetChat.mockResolvedValue({
+      ...chatWith([other, { ...other, id: 'user-3', displayName: 'Олег' }]),
+      kind: 'group',
+    });
+    const user = userEvent.setup();
+
+    await renderWithQuery(<ChatScreen />);
+    await user.press(await screen.findByLabelText('О чате: Разговор'));
+
+    expect(mockPush).toHaveBeenCalledWith('/chats/chat-info/chat-1');
   });
 
   it('opens the author profile from a tap on their avatar in a group', async () => {

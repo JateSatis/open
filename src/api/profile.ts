@@ -13,7 +13,7 @@ type ProfileRow = Pick<
 
 export type Profile = {
   id: string;
-  /** Null until the user picks one — the trigger that creates the row leaves it empty. */
+  /** Null until the user picks one or after they clear it — it is optional. */
   username: string | null;
   /** Null when the OAuth provider sent no name. */
   displayName: string | null;
@@ -119,9 +119,8 @@ export async function updateMyProfile(input: ProfileUpdateInput): Promise<Profil
     .single();
 
   if (error) {
-    // 23505 is Postgres unique_violation. The only unique keys a profile
-    // update can hit are its username and the shared handle registry (names of
-    // profiles and channels together), so the collision is the username.
+    // 23505 is Postgres unique_violation. The only unique key a profile
+    // update can hit is the username among other profiles.
     if (error.code === '23505' && typeof patch.username === 'string') {
       throw new UsernameTakenError(patch.username);
     }

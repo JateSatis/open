@@ -1,12 +1,21 @@
-import { displayNameOf, formatUsername, validateUsername } from './username';
+import {
+  displayNameOf,
+  formatUsername,
+  normalizeUsernameInput,
+  validateUsername,
+} from './username';
 
 describe('validateUsername', () => {
   it('accepts a plain lowercase handle', () => {
     expect(validateUsername('maxim_99')).toBeNull();
   });
 
-  it('asks for a username when the field is empty', () => {
-    expect(validateUsername('   ')).toBe('Придумайте имя пользователя');
+  it('accepts an empty field: a username is optional for people and groups', () => {
+    expect(validateUsername('   ')).toBeNull();
+  });
+
+  it.each(['a.b', 'news.ch', 'team.di', '.abc'])('rejects %s for the dot', (value) => {
+    expect(validateUsername(value)).toBe('Точка в имени недопустима');
   });
 
   it('rejects a handle that is too short', () => {
@@ -34,6 +43,25 @@ describe('formatUsername', () => {
 
   it('returns null when the username is not set yet', () => {
     expect(formatUsername(null)).toBeNull();
+    expect(formatUsername(null, 'group')).toBeNull();
+  });
+
+  it('adds the kind suffix: .ch for a channel, .di for a group, nothing for a person', () => {
+    expect(formatUsername('max', 'channel')).toBe('@max.ch');
+    expect(formatUsername('max', 'group')).toBe('@max.di');
+    expect(formatUsername('max', 'profile')).toBe('@max');
+  });
+});
+
+describe('normalizeUsernameInput', () => {
+  it('drops a pasted @ and the suffix of its own kind', () => {
+    expect(normalizeUsernameInput('@news.ch', 'channel')).toBe('news');
+    expect(normalizeUsernameInput('team.DI', 'group')).toBe('team');
+  });
+
+  it('keeps a foreign suffix so the dot error shows', () => {
+    expect(normalizeUsernameInput('news.di', 'channel')).toBe('news.di');
+    expect(normalizeUsernameInput('max.ch', 'profile')).toBe('max.ch');
   });
 });
 

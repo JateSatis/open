@@ -13,4 +13,16 @@ export const styles = StyleSheet.create({
     paddingHorizontal: Spacing.three,
     ...Typography.body,
   },
+  withSuffix: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.one,
+  },
+  // Отступы и рамку держит обёртка; у самого поля на Android свои отступы,
+  // которые иначе раздули бы высоту относительно поля без приставки.
+  bare: {
+    flex: 1,
+    padding: 0,
+    ...Typography.body,
+  },
 });

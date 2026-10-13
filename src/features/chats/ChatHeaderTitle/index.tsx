@@ -10,15 +10,23 @@ export type ChatHeaderTitleProps = {
   title: string;
   /** Статус собеседника в личном диалоге. */
   subtitle?: string | null;
-  /** Тап по шапке — профиль собеседника. */
+  /** Тап по шапке — профиль собеседника или «О чате» группы. */
   onPress?: () => void;
+  /** Куда ведёт тап — для озвучки. */
+  pressLabel?: string;
 };
 
 /**
  * Шапка переписки. Пока связи нет, говорит о связи, как и остальные экраны;
- * в остальное время — имя и статус собеседника, по тапу ведёт в его профиль.
+ * в остальное время — название и подпись, по тапу ведёт в профиль собеседника
+ * или в «О чате» группы.
  */
-export function ChatHeaderTitle({ title, subtitle, onPress }: ChatHeaderTitleProps) {
+export function ChatHeaderTitle({
+  title,
+  subtitle,
+  onPress,
+  pressLabel = 'Профиль',
+}: ChatHeaderTitleProps) {
   const status = useConnectionStatus();
 
   if (status !== 'online' || (!subtitle && !onPress)) {
@@ -28,7 +36,7 @@ export function ChatHeaderTitle({ title, subtitle, onPress }: ChatHeaderTitlePro
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`Профиль: ${title}`}
+      accessibilityLabel={`${pressLabel}: ${title}`}
       disabled={!onPress}
       onPress={onPress}
       hitSlop={8}

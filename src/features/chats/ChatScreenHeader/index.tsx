@@ -17,6 +17,8 @@ export type ChatScreenHeaderProps = {
   avatar?: AvatarPairPerson | [AvatarPairPerson, AvatarPairPerson];
   subtitle?: string | null;
   onTitlePress?: () => void;
+  /** Куда ведёт тап по шапке — для озвучки: «Профиль», «О чате». */
+  titlePressLabel?: string;
   /** Сколько отмечено; `0` — выбора нет. */
   selectedCount: number;
   onCancelSelection: () => void;
@@ -33,6 +35,7 @@ export function ChatScreenHeader({
   avatar,
   subtitle,
   onTitlePress,
+  titlePressLabel,
   selectedCount,
   onCancelSelection,
   right,
@@ -70,10 +73,20 @@ export function ChatScreenHeader({
                     ) : (
                       <Avatar uri={avatar.uri} name={avatar.name} size={Sizes.headerAvatar} />
                     )}
-                    <ChatHeaderTitle title={title} subtitle={subtitle} onPress={onTitlePress} />
+                    <ChatHeaderTitle
+                      title={title}
+                      subtitle={subtitle}
+                      onPress={onTitlePress}
+                      pressLabel={titlePressLabel}
+                    />
                   </View>
                 ) : (
-                  <ChatHeaderTitle title={title} subtitle={subtitle} onPress={onTitlePress} />
+                  <ChatHeaderTitle
+                    title={title}
+                    subtitle={subtitle}
+                    onPress={onTitlePress}
+                    pressLabel={titlePressLabel}
+                  />
                 ),
             }
       }

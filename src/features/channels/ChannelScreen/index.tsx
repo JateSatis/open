@@ -25,6 +25,7 @@ import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
 import { popSheetSection } from '@/features/pops/popSheetSection';
 import { useCanPublish } from '@/features/pops/queries';
 import { PopsSection } from '@/features/pops/PopsSection';
+import { formatUsername } from '@/features/profile/username';
 import { useTheme } from '@/hooks/use-theme';
 import { reloadMissing, loadStateOf } from '@/lib/loadState';
 
@@ -120,9 +121,14 @@ function ChannelSections({ channel, initialIndex }: { channel: Channel; initialI
     [position],
   );
 
-  // Подпись шапки — по разделу: у «Постов» читатели, у «Попсов» все подписчики.
-  const subtitle =
-    index === 0 ? readersLabel(channel.readersCount) : subscribersLabel(channel.subscribersCount);
+  // Подпись шапки — `@имя.ch` и число по разделу: у «Постов» читатели, у
+  // «Попсов» все подписчики.
+  const subtitle = [
+    formatUsername(channel.username, 'channel'),
+    index === 0 ? readersLabel(channel.readersCount) : subscribersLabel(channel.subscribersCount),
+  ]
+    .filter(Boolean)
+    .join(' · ');
   const isOwner = currentUserId !== null && channel.ownerId === currentUserId;
   const channelHeader = useMemo(
     () => ({ subtitle, right: <ChannelMenu channelId={channel.id} isOwner={isOwner} /> }),

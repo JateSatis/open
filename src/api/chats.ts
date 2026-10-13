@@ -64,6 +64,8 @@ export type ChatSummary = {
   id: string;
   kind: ChatKind;
   title: string | null;
+  /** `@имя` группы (без суффикса `.di`); у диалога и чата постов — null. */
+  username: string | null;
   /** Только у чата постов: его имя и аватарка — канала. */
   channel: ChannelRef | null;
   participants: ChatParticipant[];
@@ -150,7 +152,7 @@ export type Page<T> = {
 };
 
 const CHAT_COLUMNS =
-  'id, kind, title, last_message_at, last_message_text, last_message_author_id, subscribers_count, channel:channels(id, title, username, avatar_url, last_pop_at)';
+  'id, kind, title, username, last_message_at, last_message_text, last_message_author_id, subscribers_count, channel:channels(id, title, username, avatar_url, last_pop_at)';
 const MEMBER_COLUMNS =
   'chat_id, user_id, last_read_at, joined_at, profile:profiles(id, display_name, avatar_url)';
 const WAITING_COLUMNS = 'chat_id, user_id, display_name, avatar_url';
@@ -222,6 +224,7 @@ export function toSummary(
     id: chat.id,
     kind: toChatKind(chat.kind),
     title: chat.title,
+    username: chat.username,
     channel: toChannelRef(chat.channel),
     participants,
     waiting: people.waiting,
@@ -399,6 +402,35 @@ export async function getChat(chatId: string): Promise<ChatSummary> {
   const peopleByChat = await fetchChatPeople([chat.id]);
 
   return toSummary(chat, peopleByChat.get(chat.id) ?? NO_PEOPLE, userId);
+}
+
+/** `@имя` уже занято другой группой. */
+export class ChatUsernameTakenError extends Error {
+  constructor(readonly username: string) {
+    super(`Username "${username}" is already taken`);
+    this.name = 'ChatUsernameTakenError';
+  }
+}
+
+/** Код, которым `set_chat_username` отвергает занятое имя. */
+const CHAT_USERNAME_TAKEN_CODE = 'OPN02';
+
+/**
+ * Задать, сменить или убрать (`null`) `@имя` группы. Право — у любого
+ * участника; проверяет база, посторонний получит отказ.
+ */
+export async function setChatUsername(chatId: string, username: string | null): Promise<void> {
+  const { error } = await supabase.rpc('set_chat_username', {
+    target_chat: chatId,
+    new_username: username ?? '',
+  });
+
+  if (error) {
+    if (error.code === CHAT_USERNAME_TAKEN_CODE && username) {
+      throw new ChatUsernameTakenError(username);
+    }
+    throw error;
+  }
 }
 
 /**

@@ -32,6 +32,7 @@ const chat: ChatSummary = {
   subscription: null,
   hasUnread: false,
   subscribersCount: 0,
+  username: null,
   channel: null,
 };
 

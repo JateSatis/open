@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import EditProfileScreen from './edit';
 
 import { getMyProfile, updateMyProfile, UsernameTakenError } from '@/api/profile';
+import { isUsernameAvailable } from '@/api/usernames';
 import { pickAvatar, removeOwnAvatar, uploadAvatar } from '@/features/media';
 import { renderWithQuery } from '@/features/profile/renderWithQuery';
 
@@ -22,6 +23,10 @@ jest.mock('@/api/profile', () => {
   };
 });
 
+jest.mock('@/api/usernames', () => ({
+  isUsernameAvailable: jest.fn(),
+}));
+
 jest.mock('@/features/media', () => ({
   pickAvatar: jest.fn(),
   uploadAvatar: jest.fn(),
@@ -34,6 +39,7 @@ const removeOwnAvatarMock = removeOwnAvatar as jest.Mock;
 const getMyProfileMock = getMyProfile as jest.Mock;
 const updateMyProfileMock = updateMyProfile as jest.Mock;
 const backMock = router.back as jest.Mock;
+const availableMock = isUsernameAvailable as jest.Mock;
 
 const profile = {
   id: 'user-1',
@@ -49,6 +55,7 @@ beforeEach(() => {
   getMyProfileMock.mockResolvedValue(profile);
   updateMyProfileMock.mockResolvedValue(profile);
   removeOwnAvatarMock.mockResolvedValue(undefined);
+  availableMock.mockResolvedValue(true);
 });
 
 describe('EditProfileScreen', () => {
@@ -100,13 +107,60 @@ describe('EditProfileScreen', () => {
     await waitFor(() => expect(backMock).toHaveBeenCalled());
   });
 
+  it('saves a cleared username as no username at all', async () => {
+    const { findByPlaceholderText, getByText } = await renderWithQuery(<EditProfileScreen />);
+
+    await fireEvent.changeText(await findByPlaceholderText('username'), '');
+    await fireEvent.press(getByText('Сохранить'));
+
+    await waitFor(() =>
+      expect(updateMyProfileMock.mock.calls[0]?.[0]).toMatchObject({ username: null }),
+    );
+    await waitFor(() => expect(backMock).toHaveBeenCalled());
+  });
+
+  it('refuses a username with a dot and explains why', async () => {
+    const { findByPlaceholderText, getByText, findByText } = await renderWithQuery(
+      <EditProfileScreen />,
+    );
+
+    await fireEvent.changeText(await findByPlaceholderText('username'), 'a.b');
+
+    expect(await findByText('Точка в имени недопустима')).toBeTruthy();
+    await fireEvent.press(getByText('Сохранить'));
+    expect(updateMyProfileMock).not.toHaveBeenCalled();
+  });
+
+  it('checks the name among people only and says when another person has it', async () => {
+    availableMock.mockResolvedValue(false);
+
+    const { findByPlaceholderText, findByText, getByText } = await renderWithQuery(
+      <EditProfileScreen />,
+    );
+    await fireEvent.changeText(await findByPlaceholderText('username'), 'taken_name');
+
+    expect(await findByText('Имя занято')).toBeTruthy();
+    expect(availableMock).toHaveBeenCalledWith('profile', 'taken_name', undefined);
+    await fireEvent.press(getByText('Сохранить'));
+    expect(updateMyProfileMock).not.toHaveBeenCalled();
+  });
+
+  it('does not ask about the name the profile already has', async () => {
+    const { findByDisplayValue, queryByTestId } = await renderWithQuery(<EditProfileScreen />);
+
+    await findByDisplayValue('maxim');
+
+    expect(availableMock).not.toHaveBeenCalled();
+    expect(queryByTestId('username-status')).toBeNull();
+  });
+
   it('reports a taken username on the field', async () => {
     updateMyProfileMock.mockRejectedValue(new UsernameTakenError('maxim'));
 
     const { findByText, getByText } = await renderWithQuery(<EditProfileScreen />);
     await fireEvent.press(await findByText('Сохранить'));
 
-    expect(await findByText('Это имя уже занято')).toBeTruthy();
+    expect(await findByText('Имя занято')).toBeTruthy();
     expect(getByText('Сохранить')).toBeTruthy();
   });
 

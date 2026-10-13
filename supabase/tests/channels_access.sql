@@ -1,5 +1,5 @@
--- Каналы: кто публикует посты, кто может стать участником чата постов, общее
--- пространство имён профилей и каналов.
+-- Каналы: кто публикует посты, кто может стать участником чата постов, имена
+-- каналов (своё пространство, отдельное от профилей — usernames_access.sql).
 --
 -- Запуск против облачной базы, ничего не оставляет после себя — всё внутри
 -- транзакции с rollback:
@@ -60,12 +60,8 @@ begin
   values (chat, a, 'text', 'первый пост') returning id into msg;
   perform pg_temp.check('владелец публикует пост', msg is not null);
 
-  begin
-    perform public.create_channel('X', 'READER_B_ZZ');
-    perform pg_temp.check('имя профиля занято для канала (регистр не важен)', false);
-  exception when others then
-    perform pg_temp.check('имя профиля занято для канала (регистр не важен)', sqlstate = 'OPN02', sqlerrm);
-  end;
+  perform pg_temp.check('имя профиля свободно для канала',
+    (public.create_channel('X', 'READER_B_ZZ') ->> 'channel_id') is not null);
 
   begin
     perform public.create_channel('X', 'Chan_A_ZZ');
@@ -81,8 +77,8 @@ begin
     perform pg_temp.check('имя с пробелом и @ — отказ', sqlstate = '22023', sqlerrm);
   end;
 
-  perform pg_temp.check('проверка занятости: занято', not public.is_handle_available('CHAN_a_zz'));
-  perform pg_temp.check('проверка занятости: свободно', public.is_handle_available('free_name_zz'));
+  perform pg_temp.check('проверка занятости: занято', not public.is_username_available('channel', 'CHAN_a_zz'));
+  perform pg_temp.check('проверка занятости: свободно', public.is_username_available('channel', 'free_name_zz'));
 
   begin
     update public.chats set title = 'x' where id = chat;
@@ -124,13 +120,6 @@ begin
   end;
 
   begin
-    insert into public.handles (handle, profile_id) values ('hack_zz', b);
-    perform pg_temp.check('прямая запись в handles — отказ', false);
-  exception when others then
-    perform pg_temp.check('прямая запись в handles — отказ', sqlstate = '42501', sqlerrm);
-  end;
-
-  begin
     insert into public.chat_members (chat_id, user_id) values (chat, b);
     perform pg_temp.check('прямое вступление в чат постов — отказ', false);
   exception when others then
@@ -151,21 +140,10 @@ begin
     perform pg_temp.check('посторонний не звонит в канал', sqlstate = '42501', sqlerrm);
   end;
 
-  begin
-    update public.profiles set username = 'Chan_A_ZZ' where id = b;
-    perform pg_temp.check('профиль не берёт имя канала', false);
-  exception when others then
-    perform pg_temp.check('профиль не берёт имя канала', sqlstate = '23505', sqlerrm);
-  end;
-
-  update public.profiles set username = 'reader_b_zz', display_name = 'B' where id = b;
-  perform pg_temp.check('своё прежнее имя сохраняется',
-    (select handle from public.handles where profile_id = b) = 'reader_b_zz');
-
-  update public.profiles set username = 'reader_b2_zz' where id = b;
-  perform pg_temp.check('смена имени профиля освобождает прежнее',
-    public.is_handle_available('reader_b_zz')
-    and (select handle from public.handles where profile_id = b) = 'reader_b2_zz');
+  update public.profiles set username = 'Chan_A_ZZ' where id = b;
+  perform pg_temp.check('профиль берёт имя канала',
+    (select username from public.profiles where id = b) = 'Chan_A_ZZ');
+  update public.profiles set username = 'reader_b_zz' where id = b;
 
   select s.audience into aud from public.set_reaction('message', msg, emo) s;
   perform pg_temp.check('реакция постороннего — visitor', aud = 'visitor', aud);

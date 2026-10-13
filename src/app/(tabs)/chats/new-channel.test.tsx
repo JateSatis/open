@@ -3,7 +3,8 @@ import { fireEvent, screen, userEvent, waitFor } from '@testing-library/react-na
 
 import NewChannelScreen from './new-channel';
 
-import { ChannelUsernameTakenError, createChannel, isUsernameAvailable } from '@/api/channels';
+import { ChannelUsernameTakenError, createChannel } from '@/api/channels';
+import { isUsernameAvailable } from '@/api/usernames';
 import { useSession } from '@/features/auth/useSession';
 import { removeUploadedMedia, uploadChannelAvatar } from '@/features/media';
 import { renderWithQuery } from '@/test/renderWithQuery';
@@ -29,10 +30,11 @@ jest.mock('@/api/channels', () => {
 
   return {
     createChannel: jest.fn(),
-    isUsernameAvailable: jest.fn(),
     ChannelUsernameTakenError: MockTaken,
   };
 });
+
+jest.mock('@/api/usernames', () => ({ isUsernameAvailable: jest.fn() }));
 
 jest.mock('@/features/media', () => ({
   uploadChannelAvatar: jest.fn(),
@@ -64,7 +66,7 @@ beforeEach(() => {
     isAuthenticated: true,
     isLoading: false,
   });
-  mockedAvailable.mockImplementation(async (name) => name !== 'taken_name');
+  mockedAvailable.mockImplementation(async (_kind, name) => name !== 'taken_name');
   mockedCreate.mockResolvedValue({ channelId: 'channel-1', chatId: 'chat-1' });
   mockedUpload.mockResolvedValue({ url: 'https://cdn/avatar.jpg', path: 'user-1/channel-avatar/a.jpg' });
   mockedRemove.mockResolvedValue(true);
@@ -100,8 +102,31 @@ describe('NewChannelScreen', () => {
     await renderWithQuery(<NewChannelScreen />);
     await fill('Канал', 'taken_name');
 
-    expect(await screen.findByText('Это имя уже занято')).toBeTruthy();
+    expect(await screen.findByText('Имя занято')).toBeTruthy();
+    expect(mockedAvailable).toHaveBeenCalledWith('channel', 'taken_name', undefined);
     expect(createButton()).toBeDisabled();
+  });
+
+  it('shows the fixed .ch suffix next to the name', async () => {
+    await renderWithQuery(<NewChannelScreen />);
+
+    expect(screen.getByTestId('channel-username-suffix')).toHaveTextContent('.ch');
+  });
+
+  it('refuses a name with a dot and keeps «Создать» disabled', async () => {
+    await renderWithQuery(<NewChannelScreen />);
+    await fill('Канал', 'a.b');
+
+    expect(await screen.findByText('Точка в имени недопустима')).toBeTruthy();
+    expect(mockedAvailable).not.toHaveBeenCalled();
+    expect(createButton()).toBeDisabled();
+  });
+
+  it('drops a pasted .ch suffix and keeps only the name', async () => {
+    await renderWithQuery(<NewChannelScreen />);
+    await fill('Канал', '@news.ch');
+
+    expect(screen.getByTestId('channel-username')).toHaveDisplayValue('news');
   });
 
   it('creates a channel with a free name and replaces the form with it', async () => {
@@ -134,9 +159,7 @@ describe('NewChannelScreen', () => {
     await screen.findByText('Имя свободно');
     await user.press(createButton());
 
-    expect(await screen.findByTestId('create-channel-error')).toHaveTextContent(
-      'Это имя уже занято',
-    );
+    expect(await screen.findByTestId('create-channel-error')).toHaveTextContent('Имя занято');
     expect(mockedRemove).toHaveBeenCalledWith('user-1/channel-avatar/a.jpg');
     expect(screen.getByTestId('channel-title').props.value).toBe('Мой канал');
     expect(mockReplace).not.toHaveBeenCalled();

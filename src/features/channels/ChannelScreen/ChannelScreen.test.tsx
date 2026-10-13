@@ -161,6 +161,7 @@ const postsChat: ChatSummary = {
   subscription: null,
   hasUnread: false,
   subscribersCount: 0,
+  username: null,
 };
 
 const post: Message = {
@@ -349,13 +350,13 @@ describe('ChannelScreen subscription', () => {
     });
   });
 
-  it('tells readers on «Посты» and subscribers on «Попсы» in the header', async () => {
+  it('shows @name.ch with readers on «Посты» and subscribers on «Попсы» in the header', async () => {
     await renderAs('stranger-1', null);
 
-    expect(await screen.findByText('2 читателя')).toBeTruthy();
+    expect(await screen.findByText('@my_channel.ch · 2 читателя')).toBeTruthy();
     await openPops();
-    expect(await screen.findByText('3 подписчика')).toBeTruthy();
-    expect(screen.queryByText('2 читателя')).toBeNull();
+    expect(await screen.findByText('@my_channel.ch · 3 подписчика')).toBeTruthy();
+    expect(screen.queryByText('@my_channel.ch · 2 читателя')).toBeNull();
   });
 
   it('subscribes a stranger from «Посты» straight into chats, without a question', async () => {
@@ -366,7 +367,7 @@ describe('ChannelScreen subscription', () => {
     await waitFor(() => expect(subscribeToChannel).toHaveBeenCalledWith('channel-1', true));
     expect(screen.queryByText('Хотите добавить в чаты?')).toBeNull();
     await waitFor(() => expect(screen.queryByTestId('channel-subscribe-bar')).toBeNull());
-    expect(await screen.findByText('3 читателя')).toBeTruthy();
+    expect(await screen.findByText('@my_channel.ch · 3 читателя')).toBeTruthy();
   });
 
   it('counts a subscription made from «Попсы» among subscribers, not readers', async () => {
@@ -376,7 +377,7 @@ describe('ChannelScreen subscription', () => {
     fireEvent.press(await screen.findByRole('button', { name: 'Подписаться' }));
     fireEvent.press(await screen.findByRole('button', { name: 'Нет' }));
 
-    expect(await screen.findByText('4 подписчика')).toBeTruthy();
+    expect(await screen.findByText('@my_channel.ch · 4 подписчика')).toBeTruthy();
   });
 
   it('asks on «Попсы»; «Нет» leaves a subscriber offered «Добавить в чаты»', async () => {

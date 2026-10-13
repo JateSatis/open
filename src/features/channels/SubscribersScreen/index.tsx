@@ -14,6 +14,7 @@ import {
 import { Avatar } from '@/components/Avatar';
 import { Text } from '@/components/Text';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
+import { formatUsername } from '@/features/profile/username';
 import { useTheme } from '@/hooks/use-theme';
 import { describeLoadError } from '@/lib/network';
 
@@ -102,7 +103,7 @@ export function SubscribersScreen({ target }: SubscribersScreenProps) {
             </Text>
             {item.username ? (
               <Text variant="caption" color="textSecondary" numberOfLines={1}>
-                @{item.username}
+                {formatUsername(item.username)}
               </Text>
             ) : null}
           </View>
