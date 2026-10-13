@@ -133,14 +133,6 @@ export const MediaGridItem = memo(function MediaGridItem({
         />
       )}
 
-      {asset.kind === 'video' ? (
-        <View style={[styles.videoBadge, { backgroundColor: theme.mediaScrim }]}>
-          <Text variant="caption" color="textInverse">
-            {asset.durationMs !== null ? formatDuration(asset.durationMs) : '▶'}
-          </Text>
-        </View>
-      ) : null}
-
       {locked && !isSelected ? (
         <View
           testID="media-grid-locked"
@@ -152,9 +144,22 @@ export const MediaGridItem = memo(function MediaGridItem({
         />
       ) : null}
 
-      {pick ? (
-        <PickCover asset={asset} pick={pick} onOpen={openPreview} />
-      ) : (
+      {pick ? <PickCover asset={asset} pick={pick} onOpen={openPreview} /> : null}
+
+      {/* Над притушиванием выбора одного файла: длительность читается и у
+          видео, которое взять нельзя. Касания пропускает к клетке. */}
+      {asset.kind === 'video' ? (
+        <View
+          pointerEvents="none"
+          style={[styles.videoBadge, { backgroundColor: theme.mediaScrim }]}
+        >
+          <Text variant="caption" color="textInverse">
+            {asset.durationMs !== null ? formatDuration(asset.durationMs) : '▶'}
+          </Text>
+        </View>
+      ) : null}
+
+      {pick ? null : (
         <>
           {locked ? null : (
             <Pressable
