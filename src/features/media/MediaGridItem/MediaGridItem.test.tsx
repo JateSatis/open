@@ -194,3 +194,43 @@ describe('MediaGridItem in pick mode', () => {
     expect(onPick).not.toHaveBeenCalled();
   });
 });
+
+describe('MediaGridItem в шите аватарки', () => {
+  const photosOnly = (asset: MediaLibraryItem) => asset.kind === 'photo';
+
+  it('тап по фото раскрывает его в редактор, а не отдаёт сразу', async () => {
+    const user = userEvent.setup();
+
+    await render(
+      <MediaGridItem
+        asset={photo}
+        size={100}
+        onToggle={jest.fn()}
+        pick={{ accepts: photosOnly }}
+      />,
+    );
+    await user.press(screen.getByTestId('media-grid-pick'));
+
+    expect(useMediaPreview.getState().target?.assetId).toBe(photo.id);
+    expect(useMediaSelection.getState().order).toEqual([]);
+    expect(screen.queryByLabelText('Выбрать файл')).toBeNull();
+  });
+
+  it('видео видно с длительностью, но не нажимается', async () => {
+    const user = userEvent.setup();
+
+    await render(
+      <MediaGridItem
+        asset={video}
+        size={100}
+        onToggle={jest.fn()}
+        pick={{ accepts: photosOnly }}
+      />,
+    );
+    await user.press(screen.getByTestId('media-grid-pick'));
+
+    expect(screen.getByText('0:12')).toBeTruthy();
+    expect(screen.getByTestId('media-grid-pick')).toBeDisabled();
+    expect(useMediaPreview.getState().target).toBeNull();
+  });
+});

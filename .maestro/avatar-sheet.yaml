@@ -1,0 +1,50 @@
+appId: com.openger.app
+name: Шит аватарки — без меню, без кружков и подписи, фото раскрывается в редактор, «назад» возвращает в сетку
+tags:
+  - media
+  - profile
+---
+- runFlow: subflows/open-app.yaml
+- tapOn: "Профиль"
+- tapOn: "Редактировать профиль"
+- assertVisible: "Фото профиля видно всем"
+# Тап по аватарке — сразу шит, без меню выбора источника.
+- tapOn:
+    id: "profile-avatar-edit"
+- assertVisible: "Выберите фото"
+- assertNotVisible: "Снять фото"
+- assertVisible:
+    id: "media-grid-pick"
+# Кружков выбора у клеток нет.
+- assertNotVisible: "Выбрать файл"
+# Фото раскрывается в редактор: инструменты и «Поставить фото», без кружка и подписи.
+- tapOn:
+    id: "media-grid-pick"
+    text: "Фото"
+- assertVisible:
+    id: "media-preview"
+- assertVisible:
+    id: "media-preview-tool-crop"
+- assertVisible: "Поставить фото"
+- assertNotVisible:
+    id: "media-preview-select"
+- assertNotVisible:
+    id: "media-preview-caption"
+# Обрезка открывается и закрывается крестиком.
+- tapOn:
+    id: "media-preview-tool-crop"
+- assertVisible:
+    id: "crop-rotate"
+- tapOn:
+    id: "media-preview-tool-cancel"
+- assertNotVisible:
+    id: "crop-rotate"
+# «Назад» — в сетку шита, ещё раз — шит закрывается без вопроса о сбросе выбора.
+- back
+- assertNotVisible:
+    id: "media-preview"
+- assertVisible: "Выберите фото"
+- back
+- assertNotVisible: "Выберите фото"
+- assertNotVisible: "Отменить выбор файлов?"
+- assertVisible: "Фото профиля видно всем"

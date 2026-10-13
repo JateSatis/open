@@ -6,13 +6,13 @@ import { ActivityIndicator, Pressable, View } from 'react-native';
 import { styles } from './styles';
 
 import { Text } from '@/components/Text';
-import { MediaPickSheet, openMediaSheet } from '@/features/chats/MediaPickerSheet';
-import { prepareAvatar, resolveAssetUri, type MediaLibraryItem } from '@/features/media';
+import { openMediaSheet } from '@/features/chats/MediaPickerSheet';
+import { MediaAvatarSheet } from '@/features/chats/MediaPickerSheet/MediaAvatarSheet';
+import type { PreparedAvatar } from '@/features/media';
 import { useTheme } from '@/hooks/use-theme';
 import { Sizes } from '@/theme';
 
-/** Аватарка канала — только фото: видео в сетке видны, но не выбираются. */
-const acceptsPhoto = (asset: MediaLibraryItem) => asset.kind === 'photo';
+const SHEET_OWNER = 'avatar:channel';
 
 export type ChannelAvatarPickerProps = {
   /** Уже обрезанное до квадрата фото на устройстве; null — не выбрано. */
@@ -22,23 +22,20 @@ export type ChannelAvatarPickerProps = {
 };
 
 /**
- * Круг выбора аватарки. Тап открывает шит медиа в режиме одного фото; после
- * выбора шит закрывается сам, а фото обрезается до центрального квадрата —
- * редактора обрезки нет.
+ * Круг выбора аватарки. Тап открывает шит аватарки: фото раскрывается в
+ * редактор с кругом будущей аватарки, «Готово» закрывает шит, и фото — уже
+ * с правками, квадратное и сжатое — встаёт в круг.
  */
 export function ChannelAvatarPicker({ uri, onChange, disabled }: ChannelAvatarPickerProps) {
   const theme = useTheme();
   const [preparing, setPreparing] = useState(false);
   const [failed, setFailed] = useState(false);
 
-  const onPick = useCallback(
-    (asset: MediaLibraryItem) => {
+  const onDone = useCallback(
+    (avatar: Promise<PreparedAvatar>) => {
       setPreparing(true);
       setFailed(false);
-      // Размеры из медиатеки не учитывают поворот снимка — обрезка берёт их
-      // у самой картинки.
-      resolveAssetUri(asset.id)
-        .then((source) => prepareAvatar(source, null, null))
+      avatar
         .then((prepared) => onChange(prepared.uri))
         .catch(() => setFailed(true))
         .finally(() => setPreparing(false));
@@ -53,7 +50,7 @@ export function ChannelAvatarPicker({ uri, onChange, disabled }: ChannelAvatarPi
         accessibilityRole="button"
         accessibilityLabel={uri ? 'Сменить аватарку канала' : 'Выбрать аватарку канала'}
         disabled={disabled || preparing}
-        onPress={() => openMediaSheet('pick')}
+        onPress={() => openMediaSheet(SHEET_OWNER)}
         style={[styles.circle, { backgroundColor: theme.backgroundElement }]}
       >
         {preparing ? (
@@ -75,7 +72,7 @@ export function ChannelAvatarPicker({ uri, onChange, disabled }: ChannelAvatarPi
         </Text>
       ) : null}
 
-      <MediaPickSheet accepts={acceptsPhoto} onPick={onPick} />
+      <MediaAvatarSheet owner={SHEET_OWNER} onDone={onDone} />
     </View>
   );
 }

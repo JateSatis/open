@@ -1,11 +1,4 @@
-import {
-  act,
-  fireEvent,
-  render,
-  screen,
-  userEvent,
-  waitFor,
-} from '@testing-library/react-native';
+import { act, fireEvent, render, screen, userEvent, waitFor } from '@testing-library/react-native';
 
 import { PreviewLayer } from './PreviewLayer';
 import {
@@ -30,6 +23,12 @@ import { DrawPalette, Sizes } from '@/theme';
 // Skia, запекание и рабочая копия — нативные; здесь проверяется поведение слоя.
 jest.mock('./EditedPhoto', () => ({ EditedPhoto: () => null, PHOTO_SAMPLING: {} }));
 jest.mock('./CropOverlay', () => ({ CropOverlay: () => null }));
+jest.mock('./AvatarRing', () => {
+  const { View } = jest.requireActual<typeof import('react-native')>('react-native');
+
+  // Круг — Skia; здесь — только что он есть.
+  return { AvatarRing: () => <View testID="media-preview-avatar-ring" /> };
+});
 jest.mock('./AngleRuler', () => ({ AngleRuler: () => null }));
 jest.mock('@shopify/react-native-skia', () => {
   const none = () => null;
@@ -50,7 +49,9 @@ jest.mock('@shopify/react-native-skia', () => {
   };
 });
 jest.mock('./DrawAlphaSlider', () => ({ DrawAlphaSlider: () => null }));
-jest.mock('./eyedropperPixels', () => ({ visibleImageOf: jest.fn(() => ({ dispose: jest.fn() })) }));
+jest.mock('./eyedropperPixels', () => ({
+  visibleImageOf: jest.fn(() => ({ dispose: jest.fn() })),
+}));
 jest.mock('./Eyedropper', () => {
   const { Pressable } = jest.requireActual<typeof import('react-native')>('react-native');
 
@@ -532,5 +533,53 @@ describe('рисование', () => {
       expect(useDrawSettings.getState().colors.pen).toBe('#1e64c8ff');
       expect(screen.queryByTestId('eyedropper-release')).toBeNull();
     });
+  });
+});
+
+describe('предпросмотр в шите аватарки', () => {
+  async function renderAvatar(openOn: MediaLibraryItem, onDone = jest.fn()) {
+    publishPreviewGallery(GALLERY);
+    openMediaPreview(openOn, null);
+    await render(
+      <PreviewLayer mode="avatar" onDone={onDone} gridViewport={{ top: 0, bottom: 800 }} />,
+    );
+
+    return { onDone };
+  }
+
+  it('без кружка выбора и подписи, с инструментами, кругом и «Поставить фото»', async () => {
+    await renderAvatar(GALLERY[1]);
+
+    expect(screen.queryByTestId('media-preview-select')).toBeNull();
+    expect(screen.queryByTestId('media-preview-caption')).toBeNull();
+    expect(screen.getByTestId('media-preview-tool-crop')).toBeTruthy();
+    expect(screen.getByTestId('media-preview-tool-draw')).toBeTruthy();
+    expect(screen.getByTestId('media-preview-tool-color')).toBeTruthy();
+    expect(screen.getByLabelText('Поставить фото')).toBeTruthy();
+    expect(screen.getByTestId('media-preview-avatar-ring')).toBeTruthy();
+  });
+
+  it('к соседним фото не листает: страница одна', async () => {
+    await renderAvatar(GALLERY[1]);
+
+    expect(screen.getAllByTestId('media-preview-page')).toHaveLength(1);
+  });
+
+  it('«Поставить фото» отдаёт открытое фото и не трогает выбор чата', async () => {
+    const { onDone } = await renderAvatar(GALLERY[1]);
+    const user = userEvent.setup();
+
+    await user.press(screen.getByLabelText('Поставить фото'));
+
+    expect(onDone).toHaveBeenCalledWith(GALLERY[1]);
+    expect(useMediaSelection.getState().order).toEqual([]);
+  });
+});
+
+describe('круг аватарки только в шите аватарки', () => {
+  it('в шите чата круга нет', async () => {
+    await renderPreview(GALLERY[1]);
+
+    expect(screen.queryByTestId('media-preview-avatar-ring')).toBeNull();
   });
 });

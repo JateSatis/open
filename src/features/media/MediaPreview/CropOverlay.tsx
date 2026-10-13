@@ -35,7 +35,7 @@ export type CropOverlayProps = {
 
 /**
  * Фото в обрезке поверх страницы предпросмотра: внутри рамки — как будет,
- * снаружи — под затемнением; окантовка, уголки-ручки и сетка 3×3, пока
+ * снаружи — под затемнением (у аватарки — всё вне круга в рамке); окантовка, уголки-ручки и сетка 3×3, пока
  * тянут или крутят. Всё считается на UI-потоке из `CropMotion`, React на
  * кадр не перерисовывается.
  *
@@ -67,9 +67,13 @@ export function CropOverlay({ session, motion, rotationBase, active, onReady }: 
   const visual = useDerivedValue(() => cropVisual(motion));
   const group = useDerivedValue(() => affineToMatrix(visual.value.group));
   const placement = useDerivedValue(() => affineToMatrix(imagePlacement(visual.value, imageWidth)));
-  const { frameRect, dim, gridPath, corners } = useCropPaths(visual);
+  const { frameRect, dim, ring, gridPath, corners } = useCropPaths(visual);
+  const { square } = motion;
 
   const enter = useDerivedValue(() => motion.enter.value);
+  // Страница аватарки без обрезки показывает фото целиком: фото за рамкой
+  // видно и на входе — иначе его края пропали бы в первый же кадр.
+  const outside = useDerivedValue(() => (motion.page.value ? 1 : motion.enter.value));
   const gridOpacity = useDerivedValue(
     () => motion.grid.value * Opacity.cropLine * motion.enter.value,
   );
@@ -106,9 +110,14 @@ export function CropOverlay({ session, motion, rotationBase, active, onReady }: 
         <Canvas style={StyleSheet.absoluteFill}>
           <Group matrix={group}>
             {/* За рамкой фото проявляется на входе и гаснет на выходе. */}
-            <Group opacity={enter}>{photo}</Group>
-            <Path path={dim} color={theme.viewerBackground} opacity={dimOpacity} />
+            <Group opacity={square ? outside : enter}>{photo}</Group>
+            {square ? null : (
+              <Path path={dim} color={theme.viewerBackground} opacity={dimOpacity} />
+            )}
             <Group clip={frameRect}>{photo}</Group>
+            {/* Аватарка — круг в квадратной рамке: то же затемнение, что на
+                странице, поэтому вход и выход его не меняют. */}
+            {square ? <Path path={ring} color={theme.mediaScrim} /> : null}
             <Path
               path={gridPath}
               style="stroke"

@@ -37,7 +37,14 @@ import { Sizes, Spacing } from '@/theme';
 /** Удержание пальца на фото в инструменте — показать оригинал. */
 const HOLD_ORIGINAL_MS = 120;
 
-export type PreviewLayerProps = {
+type Viewport = {
+  /** Где в окне видна сетка: файл улетает в плитку, только если она видна. */
+  gridViewport: { top: number; bottom: number };
+};
+
+/** Отбор файлов в сообщение: листание галереи, кружок выбора, подпись. */
+export type ChatPreviewProps = Viewport & {
+  mode?: 'chat';
   /** Имя чата — в шапке. */
   title: string;
   text: string;
@@ -46,24 +53,32 @@ export type PreviewLayerProps = {
   editing: boolean;
   /** Отправить выбранное — как «отправить» шита; шит закроется сам. */
   onSend: () => void;
-  /** Где в окне видна сетка: файл улетает в плитку, только если она видна. */
-  gridViewport: { top: number; bottom: number };
 };
+
+/**
+ * Аватарка: одно фото, без листания, выбора и подписи — с инструментами и
+ * кругом будущей аватарки. «Готово» отдаёт фото наружу.
+ */
+export type AvatarPreviewProps = Viewport & {
+  mode: 'avatar';
+  onDone: (asset: MediaLibraryItem) => void;
+};
+
+export type PreviewLayerProps = ChatPreviewProps | AvatarPreviewProps;
 
 /**
  * Полноэкранный предпросмотр файлов шита: тёмный в обеих темах, поверх
  * сетки, в том же окне шита. Листает всю галерею в порядке сетки; кружок в
  * шапке выбирает текущий файл, внизу — подпись, отправка и инструменты фото.
+ * В режиме аватарки — только открытое фото, без выбора и подписи.
  */
-export function PreviewLayer({
-  title,
-  text,
-  onChangeText,
-  placeholder,
-  editing,
-  onSend,
-  gridViewport,
-}: PreviewLayerProps) {
+export function PreviewLayer(props: PreviewLayerProps) {
+  const { gridViewport } = props;
+  const avatar = props.mode === 'avatar' ? props : null;
+  const chat = props.mode === 'avatar' ? null : props;
+  const editing = chat?.editing ?? false;
+  const onSend = chat?.onSend;
+  const onDone = avatar?.onDone;
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const window = useWindowDimensions();
@@ -74,11 +89,17 @@ export function PreviewLayer({
   const target = useMediaPreview((state) => state.target);
   // Текущий файл — по id: галерея может дочитаться и сдвинуться под ним.
   const [currentId, setCurrentId] = useState(target?.assetId ?? null);
-  const index = Math.max(
-    0,
-    gallery.findIndex((item) => item.id === currentId),
+  const found = gallery.findIndex((item) => item.id === currentId);
+  const index = Math.max(0, found);
+  // Аватарку выбирают тапом в сетке, листать к соседям незачем: одна страница.
+  const single = avatar !== null;
+  // Файла нет в галерее — у аватарки нечего показывать: подставить первый
+  // файл значило бы поставить аватаркой чужое фото.
+  const current: MediaLibraryItem | undefined = single && found === -1 ? undefined : gallery[index];
+  const pages = useMemo(
+    () => (single ? (current ? [current] : []) : gallery),
+    [current, gallery, single],
   );
-  const current: MediaLibraryItem | undefined = gallery[index];
   const [footerHeight, setFooterHeight] = useState(0);
   const [toolHeight, setToolHeight] = useState(0);
   const [cropPanelHeight, setCropPanelHeight] = useState(0);
@@ -87,7 +108,7 @@ export function PreviewLayer({
   const [areaOf, setAreaOf] = useState<'color' | 'draw'>('color');
 
   const tool = useColorTool();
-  const crop = useCropTool();
+  const crop = useCropTool(single);
   const draw = useDrawTool();
   const toast = usePreviewToast();
   const keyboardHeight = useOwnKeyboardHeight('sheet');
@@ -173,6 +194,14 @@ export function PreviewLayer({
   }, [current, toast]);
 
   const send = useCallback(() => {
+    if (onDone) {
+      if (!current) return;
+
+      dissolve();
+      onDone(current);
+      return;
+    }
+
     const selection = useMediaSelection.getState();
 
     // Ничего не выбрано — уходит текущий файл, как в Telegram. В правке
@@ -183,8 +212,8 @@ export function PreviewLayer({
     if (!editing && useMediaSelection.getState().order.length === 0) return;
 
     dissolve();
-    onSend();
-  }, [current, dissolve, editing, onSend]);
+    onSend?.();
+  }, [current, dissolve, editing, onDone, onSend]);
 
   const onPage = useCallback(
     (asset: MediaLibraryItem) => {
@@ -260,8 +289,8 @@ export function PreviewLayer({
       <GestureDetector gesture={holdOriginal}>
         <View style={StyleSheet.absoluteFill}>
           <PreviewPager
-            gallery={gallery}
-            index={index}
+            gallery={pages}
+            index={single ? 0 : index}
             width={size.width}
             height={size.height}
             cellSize={cellSize}
@@ -272,6 +301,7 @@ export function PreviewLayer({
             leaving={leaving}
             onShown={launch}
             onPage={onPage}
+            ring={single}
           />
         </View>
       </GestureDetector>
@@ -287,21 +317,23 @@ export function PreviewLayer({
       ) : null}
 
       <PreviewHeader
-        title={title}
+        title={chat?.title ?? ''}
         assetId={current.id}
         style={chromeStyle}
         hidden={anyTool}
         onBack={goBack}
-        onToggle={toggleCurrent}
+        onToggle={chat ? toggleCurrent : undefined}
       />
 
       <PreviewFooter
         assetId={current.id}
         isPhoto={isPhoto}
-        text={text}
-        onChangeText={onChangeText}
-        placeholder={placeholder}
-        editing={editing}
+        caption={
+          chat
+            ? { text: chat.text, onChangeText: chat.onChangeText, placeholder: chat.placeholder }
+            : undefined
+        }
+        action={avatar ? 'avatar' : editing ? 'save' : 'send'}
         style={footerStyle}
         hidden={anyTool}
         onSend={send}

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Linking } from 'react-native';
 
 import { MediaLimits } from './constants';
 import { getGallerySnapshot, setGallerySnapshot } from './galleryPrefetch';
@@ -120,8 +121,10 @@ export function useGalleryAssets(enabled: boolean): GalleryAssets {
     void requestMediaLibraryAccess().then((access) => {
       if (cancelledRef.current) return;
 
-      if (access === 'denied') {
+      if (access !== 'granted') {
         setStatus('denied');
+        // Окна системы уже не будет — кнопка ведёт туда, где доступ выдают.
+        if (access === 'blocked') void Linking.openSettings();
         return;
       }
 

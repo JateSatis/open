@@ -26,6 +26,65 @@ export function hitEdges(frame: Box, x: number, y: number): number {
   return edges;
 }
 
+/**
+ * Насколько растёт квадратная рамка, когда тянут за `edges` на (dx, dy):
+ * за сторону — вдоль неё наружу, за угол — по оси, куда палец ушёл дальше.
+ */
+export function squareGrowth(edges: number, dx: number, dy: number): number {
+  'worklet';
+  const horizontal = edges & LEFT ? -dx : edges & RIGHT ? dx : null;
+  const vertical = edges & TOP ? -dy : edges & BOTTOM ? dy : null;
+
+  if (horizontal === null) return vertical ?? 0;
+  if (vertical === null) return horizontal;
+
+  return Math.abs(horizontal) > Math.abs(vertical) ? horizontal : vertical;
+}
+
+/**
+ * Квадратная рамка, выросшая на `growth`: противоположные стороны стоят, а
+ * ось, за которую не тянут, растёт от центра в обе стороны. Не меньше `min`
+ * и не за рабочим полем.
+ */
+export function squareFrame(
+  start: Box,
+  edges: number,
+  growth: number,
+  area: Box,
+  min: number,
+): Box {
+  'worklet';
+  const left = start.x;
+  const right = start.x + start.width;
+  const top = start.y;
+  const bottom = start.y + start.height;
+  const centerX = left + start.width / 2;
+  const centerY = top + start.height / 2;
+  const areaRight = area.x + area.width;
+  const areaBottom = area.y + area.height;
+
+  const roomX =
+    edges & LEFT
+      ? right - area.x
+      : edges & RIGHT
+        ? areaRight - left
+        : 2 * Math.min(centerX - area.x, areaRight - centerX);
+  const roomY =
+    edges & TOP
+      ? bottom - area.y
+      : edges & BOTTOM
+        ? areaBottom - top
+        : 2 * Math.min(centerY - area.y, areaBottom - centerY);
+  const side = Math.min(Math.max(min, start.width + growth), roomX, roomY);
+
+  return {
+    x: edges & LEFT ? right - side : edges & RIGHT ? left : centerX - side / 2,
+    y: edges & TOP ? bottom - side : edges & BOTTOM ? top : centerY - side / 2,
+    width: side,
+    height: side,
+  };
+}
+
 /** Рамка со сдвинутыми сторонами — не меньше `min` и не за рабочим полем. */
 export function movedFrame(
   start: Box,

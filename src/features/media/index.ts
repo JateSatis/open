@@ -39,7 +39,6 @@ export {
   uploadPopMedia,
 } from './storage';
 export { readVideoFrame, type VideoFrame } from './lib/videoFrame';
-export { pickAvatar, type AvatarSource, type PickAvatarResult } from './pickAvatar';
 export { prepareAvatar, type PreparedAvatar } from './lib/prepareAvatar';
 export { useVoiceRecorder, type VoiceRecorder as VoiceRecorderApi } from './useVoiceRecorder';
 export { useHoldToRecord, type HoldRecorder, type HoldToRecord } from './useHoldToRecord';

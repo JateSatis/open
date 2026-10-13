@@ -1,11 +1,12 @@
-import { fireEvent, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, waitFor } from '@testing-library/react-native';
 import { router } from 'expo-router';
 
 import EditProfileScreen from './edit';
 
 import { getMyProfile, updateMyProfile, UsernameTakenError } from '@/api/profile';
 import { isUsernameAvailable } from '@/api/usernames';
-import { pickAvatar, removeOwnAvatar, uploadAvatar } from '@/features/media';
+import { openMediaSheet } from '@/features/chats/MediaPickerSheet';
+import { removeOwnAvatar, uploadAvatar, type PreparedAvatar } from '@/features/media';
 import { renderWithQuery } from '@/features/profile/renderWithQuery';
 
 jest.mock('expo-router', () => ({
@@ -28,12 +29,22 @@ jest.mock('@/api/usernames', () => ({
 }));
 
 jest.mock('@/features/media', () => ({
-  pickAvatar: jest.fn(),
   uploadAvatar: jest.fn(),
   removeOwnAvatar: jest.fn(),
 }));
 
-const pickAvatarMock = pickAvatar as jest.Mock;
+// Шит аватарки — свой тест; здесь — что экран открывает его и что делает с итогом.
+let sheetDone: ((avatar: Promise<PreparedAvatar>) => void) | null = null;
+
+jest.mock('@/features/chats/MediaPickerSheet', () => ({ openMediaSheet: jest.fn() }));
+jest.mock('@/features/chats/MediaPickerSheet/MediaAvatarSheet', () => ({
+  MediaAvatarSheet: ({ onDone }: { onDone: (avatar: Promise<PreparedAvatar>) => void }) => {
+    sheetDone = onDone;
+    return null;
+  },
+}));
+
+const openMediaSheetMock = openMediaSheet as jest.Mock;
 const uploadAvatarMock = uploadAvatar as jest.Mock;
 const removeOwnAvatarMock = removeOwnAvatar as jest.Mock;
 const getMyProfileMock = getMyProfile as jest.Mock;
@@ -188,32 +199,72 @@ describe('EditProfileScreen', () => {
     );
   });
 
-  it('uploads a picked photo, points the profile at it and drops the old file', async () => {
-    const old = { ...profile, avatarUrl: 'https://x/storage/v1/object/public/media/user-1/avatar/old.jpg' };
+  it('opens the avatar sheet straight from the photo and from the link, without a menu', async () => {
+    const { findByLabelText, getByText, queryByText } = await renderWithQuery(
+      <EditProfileScreen />,
+    );
+
+    await fireEvent.press(await findByLabelText('Изменить фото профиля'));
+    expect(openMediaSheetMock).toHaveBeenLastCalledWith('avatar:profile');
+
+    await fireEvent.press(getByText('Добавить фото'));
+    expect(openMediaSheetMock).toHaveBeenCalledTimes(2);
+    expect(queryByText('Выбрать из галереи')).toBeNull();
+    expect(queryByText('Снять фото')).toBeNull();
+  });
+
+  it('says that the profile photo is public', async () => {
+    const { findByText } = await renderWithQuery(<EditProfileScreen />);
+
+    expect(await findByText('Фото профиля видно всем')).toBeTruthy();
+  });
+
+  it('uploads the photo from the sheet, points the profile at it and drops the old file', async () => {
+    const old = {
+      ...profile,
+      avatarUrl: 'https://x/storage/v1/object/public/media/user-1/avatar/old.jpg',
+    };
     getMyProfileMock.mockResolvedValue(old);
-    pickAvatarMock.mockResolvedValue({ status: 'picked', avatar: { uri: 'file:///a.jpg', size: 512 } });
     uploadAvatarMock.mockResolvedValue('https://x/new.jpg');
     updateMyProfileMock.mockResolvedValue({ ...old, avatarUrl: 'https://x/new.jpg' });
 
-    const { findByLabelText, getByText } = await renderWithQuery(<EditProfileScreen />);
-    await fireEvent.press(await findByLabelText('Изменить фото профиля'));
-    await fireEvent.press(getByText('Выбрать из галереи'));
+    const { findByText } = await renderWithQuery(<EditProfileScreen />);
+    await findByText('Изменить фото');
+    await act(async () => sheetDone?.(Promise.resolve({ uri: 'file:///a.jpg', size: 512 })));
 
     await waitFor(() => expect(uploadAvatarMock).toHaveBeenCalledWith('file:///a.jpg', 'user-1'));
     await waitFor(() =>
       expect(updateMyProfileMock.mock.calls[0]?.[0]).toEqual({ avatarUrl: 'https://x/new.jpg' }),
     );
-    await waitFor(() =>
-      expect(removeOwnAvatarMock).toHaveBeenCalledWith(old.avatarUrl, 'user-1'),
-    );
-    expect(pickAvatarMock).toHaveBeenCalledWith('library');
+    await waitFor(() => expect(removeOwnAvatarMock).toHaveBeenCalledWith(old.avatarUrl, 'user-1'));
+  });
+
+  it('explains a photo that could not be prepared and uploads nothing', async () => {
+    const { findByText } = await renderWithQuery(<EditProfileScreen />);
+    await findByText('Добавить фото');
+    await act(async () => sheetDone?.(Promise.reject(new Error('decode'))));
+
+    expect(await findByText('Не удалось открыть фото. Попробуйте ещё раз.')).toBeTruthy();
+    expect(uploadAvatarMock).not.toHaveBeenCalled();
+  });
+
+  it('explains a failed upload and keeps the old photo', async () => {
+    uploadAvatarMock.mockRejectedValue(new Error('Network request failed'));
+
+    const { findByText } = await renderWithQuery(<EditProfileScreen />);
+    await findByText('Добавить фото');
+    await act(async () => sheetDone?.(Promise.resolve({ uri: 'file:///a.jpg', size: 512 })));
+
+    expect(
+      await findByText('Не удалось сохранить фото. Проверьте интернет и попробуйте ещё раз.'),
+    ).toBeTruthy();
+    expect(updateMyProfileMock).not.toHaveBeenCalled();
   });
 
   it('offers to remove the photo only when there is one', async () => {
-    const { findByLabelText, getByText, queryByText } = await renderWithQuery(<EditProfileScreen />);
-    await fireEvent.press(await findByLabelText('Изменить фото профиля'));
+    const { findByText, queryByText } = await renderWithQuery(<EditProfileScreen />);
 
-    expect(getByText('Снять фото')).toBeTruthy();
+    expect(await findByText('Добавить фото')).toBeTruthy();
     expect(queryByText('Удалить фото')).toBeNull();
   });
 
@@ -221,24 +272,12 @@ describe('EditProfileScreen', () => {
     const withAvatar = { ...profile, avatarUrl: 'https://x/a.jpg' };
     getMyProfileMock.mockResolvedValue(withAvatar);
 
-    const { findByLabelText, getByText } = await renderWithQuery(<EditProfileScreen />);
-    await fireEvent.press(await findByLabelText('Изменить фото профиля'));
-    await fireEvent.press(getByText('Удалить фото'));
+    const { findByText } = await renderWithQuery(<EditProfileScreen />);
+    await fireEvent.press(await findByText('Удалить фото'));
 
     await waitFor(() =>
       expect(updateMyProfileMock.mock.calls[0]?.[0]).toEqual({ avatarUrl: null }),
     );
-    expect(uploadAvatarMock).not.toHaveBeenCalled();
-  });
-
-  it('explains a denied camera and does not upload anything', async () => {
-    pickAvatarMock.mockResolvedValue({ status: 'denied' });
-
-    const { findByLabelText, getByText, findByText } = await renderWithQuery(<EditProfileScreen />);
-    await fireEvent.press(await findByLabelText('Изменить фото профиля'));
-    await fireEvent.press(getByText('Снять фото'));
-
-    expect(await findByText('Нет доступа к камере. Разрешите его в настройках телефона.')).toBeTruthy();
     expect(uploadAvatarMock).not.toHaveBeenCalled();
   });
 });

@@ -1,4 +1,13 @@
-import { BOTTOM, hitEdges, LEFT, movedFrame, RIGHT, TOP } from './cropHandles';
+import {
+  BOTTOM,
+  hitEdges,
+  LEFT,
+  movedFrame,
+  RIGHT,
+  squareFrame,
+  squareGrowth,
+  TOP,
+} from './cropHandles';
 import { crossesZero, formatAngle, rulerAngle } from './rulerMath';
 
 import { Sizes } from '@/theme';
@@ -34,6 +43,40 @@ describe('ручки рамки', () => {
 
     expect(stretched.x).toBe(0);
     expect(stretched.y).toBe(0);
+  });
+});
+
+describe('квадратная рамка аватарки', () => {
+  const SQUARE = { x: 100, y: 100, width: 300, height: 300 };
+
+  it('за угол растёт по оси, куда палец ушёл дальше, противоположный угол стоит', () => {
+    const growth = squareGrowth(RIGHT | BOTTOM, -20, -60);
+
+    expect(growth).toBe(-60);
+    expect(squareFrame(SQUARE, RIGHT | BOTTOM, growth, AREA, 72)).toEqual({
+      x: 100,
+      y: 100,
+      width: 240,
+      height: 240,
+    });
+  });
+
+  it('за сторону остаётся квадратом: другая ось растёт от центра', () => {
+    const box = squareFrame(SQUARE, LEFT, squareGrowth(LEFT, 40, 999), AREA, 72);
+
+    expect(box).toEqual({ x: 140, y: 120, width: 260, height: 260 });
+  });
+
+  it('не вылезает за рабочее поле и не сжимается меньше предела', () => {
+    const big = squareFrame(SQUARE, RIGHT | BOTTOM, 1000, AREA, 72);
+
+    expect(big.width).toBe(big.height);
+    expect(big.x + big.width).toBeLessThanOrEqual(AREA.width);
+
+    const small = squareFrame(SQUARE, TOP, -1000, AREA, 72);
+
+    expect(small.width).toBe(72);
+    expect(small.height).toBe(72);
   });
 });
 

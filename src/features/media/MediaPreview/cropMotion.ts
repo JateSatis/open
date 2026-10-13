@@ -48,6 +48,14 @@ export type CropMotion = {
   enter: SharedValue<number>;
   /** Сетка 3×3: видна, пока тянут рамку или крутят. */
   grid: SharedValue<number>;
+  /** Рамка всегда квадратная — обрезка аватарки. */
+  square: boolean;
+  /**
+   * Где на странице стоит рамка входа, если это не всё фото страницы:
+   * у аватарки без обрезки страница показывает фото целиком, а рамка — его
+   * центральный квадрат. Нет — рамка на странице вписана в экран.
+   */
+  page: SharedValue<Box | null>;
 };
 
 export type CropVisual = {
@@ -154,7 +162,7 @@ export function cropVisual(m: CropMotion): CropVisual {
   if (enter < 1) {
     // Вход и выход: рамка с итоговой обрезкой ⇄ фото на странице.
     const fitted = fittedFrame(m.crop.value, m.area.value);
-    const page = fitRect(cropAspect(m.crop.value), m.screen.value);
+    const page = m.page.value ?? fitRect(cropAspect(m.crop.value), m.screen.value);
     const from = boxCenter(fitted);
     const to = boxCenter(page);
     const away = 1 - enter;
@@ -174,6 +182,20 @@ export function cropVisual(m: CropMotion): CropVisual {
   }
 
   return { crop, frame, group };
+}
+
+/** Центральный квадрат фото пропорций `aspect`, вписанного в `screen`. */
+export function centerSquare(aspect: number, screen: Box): Box {
+  'worklet';
+  const photo = fitRect(aspect, screen);
+  const side = Math.min(photo.width, photo.height);
+
+  return {
+    x: photo.x + (photo.width - side) / 2,
+    y: photo.y + (photo.height - side) / 2,
+    width: side,
+    height: side,
+  };
 }
 
 /** Пиксели картинки (`sourcePx` в ширину) → координаты рамки этого кадра. */

@@ -6,6 +6,7 @@ import {
   Fragment,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -42,12 +43,14 @@ import { sheetGeometry } from './geometry';
 import { GALLERY_ONLY, type SheetSection, type SheetSectionSlot } from './sections';
 import { SheetList, SheetListContext, type SheetListContextValue } from './SheetList';
 import { SheetShell } from './SheetShell';
+import { SheetTop } from './SheetTop';
 import { SheetTabs } from './SheetTabs';
 import {
   closeMediaSheet,
   finishMediaSheetClose,
   getMediaSheetPhase,
   useMediaSheetPhase,
+  type AvatarSheetOwner,
   type MediaSheetOwner,
   type MediaSheetPhase,
 } from './sheetStore';
@@ -64,14 +67,11 @@ import {
 } from '@/features/chats/composerKeyboard';
 import { MessageComposer } from '@/features/chats/MessageComposer';
 import type { ComposerDraft } from '@/features/chats/useComposerDraft';
-import type { GridPick } from '@/features/media';
+import type { GridPick, MediaLibraryItem } from '@/features/media';
 import { prefetchGallery } from '@/features/media/galleryPrefetch';
-import {
-  handlePreviewBack,
-  MediaPreview,
-  resetMediaPreview,
-} from '@/features/media/MediaPreview';
+import { handlePreviewBack, MediaPreview, resetMediaPreview } from '@/features/media/MediaPreview';
 import { countRender, perfMark } from '@/features/media/perf';
+import { isolatePhotoEdits } from '@/features/media/photoEdits/editsStore';
 import { useHasSelection, useMediaSelection } from '@/features/media/selectionStore';
 import { useTheme } from '@/hooks/use-theme';
 
@@ -83,6 +83,7 @@ export {
   openMediaSheet,
   releaseMediaSheetArm,
   resetMediaSheet,
+  type AvatarSheetOwner,
   type MediaSheetOwner,
 } from './sheetStore';
 export { GALLERY_ONLY, gallerySection, type SheetSection, type SheetSectionSlot } from './sections';
@@ -107,7 +108,7 @@ type SheetComposerProps = {
 
 export type MediaPickerSheetProps = SheetComposerProps & {
   /** Чьё поле открывает этот экземпляр: показывается он только для своего хозяина. */
-  owner?: Exclude<MediaSheetOwner, 'pick'>;
+  owner?: 'chat' | 'comments';
   /**
    * Разделы шита — вкладки внизу. Набор задаёт хозяин по виду чата; при одном
    * разделе вкладок нет. По умолчанию — только галерея.
@@ -115,7 +116,19 @@ export type MediaPickerSheetProps = SheetComposerProps & {
   sections?: SheetSection[];
 };
 
-export type MediaPickSheetProps = GridPick;
+export type MediaPickSheetProps = Required<GridPick>;
+
+export type AvatarPickSheetProps = {
+  /** Чей это шит: открывается `openMediaSheet(owner)`. */
+  owner: AvatarSheetOwner;
+  /** «Готово» в редакторе: фото, правки которого ещё доступны, — шит закроется сам. */
+  onPick: (asset: MediaLibraryItem) => void;
+};
+
+/** Аватарка пока только из фото; видео притушены — по `accepts` позже включатся видео-аватарки. */
+const acceptsPhoto = (asset: MediaLibraryItem) => asset.kind === 'photo';
+const AVATAR_PICK: GridPick = { accepts: acceptsPhoto };
+const AVATAR_TITLE = 'Выберите фото';
 
 /**
  * Шит выбора медиа. Открывается и закрывается через `sheetStore`: касание
@@ -162,6 +175,30 @@ export function MediaPickSheet({ accepts, onPick }: MediaPickSheetProps) {
   return <SheetWindow phase={phase} pick={pick} sections={GALLERY_ONLY} />;
 }
 
+/**
+ * Шит аватарки: галерея без кружков, с заголовком; тап по фото раскрывает
+ * его в редактор, «Готово» отдаёт фото в `onPick` и закрывает шит. Правки
+ * здесь — свои, шит чата их не видит, и живут они, только пока открыто окно.
+ * Открывается `openMediaSheet(owner)`. Хозяевам — `MediaAvatarSheet`: он
+ * сразу превращает фото в файл аватарки.
+ */
+export function AvatarPickSheet({ owner, onPick }: AvatarPickSheetProps) {
+  const phase = useSheetPhase(owner);
+  const avatar = useMemo(
+    () => ({
+      onDone: (asset: MediaLibraryItem) => {
+        onPick(asset);
+        closeMediaSheet();
+      },
+    }),
+    [onPick],
+  );
+
+  if (phase === 'closed') return null;
+
+  return <SheetWindow phase={phase} avatar={avatar} sections={GALLERY_ONLY} />;
+}
+
 /** Жизнь окна шита вокруг экземпляра хозяина `owner`. */
 function useSheetPhase(owner: MediaSheetOwner): MediaSheetPhase {
   const phase = useMediaSheetPhase(owner);
@@ -199,6 +236,8 @@ type SheetWindowProps = {
   composer?: SheetComposerProps;
   /** Шит выбора одного файла: без строки ввода. */
   pick?: GridPick;
+  /** Шит аватарки: заголовок, фото раскрывается в редактор. */
+  avatar?: { onDone: (asset: MediaLibraryItem) => void };
   sections: SheetSection[];
 };
 
@@ -227,16 +266,18 @@ const SHEET_EDIT = {
   recordDisabled: true,
 } as const;
 
-function SheetWindow({ phase, composer, pick, sections }: SheetWindowProps) {
+function SheetWindow({ phase, composer, pick: pickProp, avatar, sections }: SheetWindowProps) {
   // `composer` — новый объект на каждый рендер экрана; зависимостям нужен только факт.
   const hasComposer = composer !== undefined;
+  const pick = avatar ? AVATAR_PICK : pickProp;
+  const title = avatar ? AVATAR_TITLE : undefined;
   countRender('MediaPickerSheet');
 
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { height: screenHeight } = useWindowDimensions();
   const { travel, collapsedHeight, listTop, listWindowHeight, dismissDistance, topBarHeight } =
-    sheetGeometry(screenHeight, insets.top, PixelRatio.get());
+    sheetGeometry(screenHeight, insets.top, PixelRatio.get(), title !== undefined);
 
   const hasMedia = useHasSelection();
   const keyboardHeight = useOwnKeyboardHeight('sheet');
@@ -370,6 +411,12 @@ function SheetWindow({ phase, composer, pick, sections }: SheetWindowProps) {
   // Предпросмотр живёт в окне шита и уходит вместе с ним.
   useEffect(() => resetMediaPreview, []);
 
+  // Правки аватарки — свой сеанс на время окна. До отрисовки: плитки с
+  // правками чата не должны мелькнуть в первом кадре.
+  const isolated = avatar !== undefined;
+
+  useLayoutEffect(() => (isolated ? isolatePhotoEdits() : undefined), [isolated]);
+
   /**
    * Другой раздел — другой список: прежний скролл уходит, новый начинается с
    * верха шита в свёрнутом положении. Жест закрытия ждёт, пока новый список
@@ -437,12 +484,10 @@ function SheetWindow({ phase, composer, pick, sections }: SheetWindowProps) {
           onPress={requestClose}
         />
         {/* Верх шита с ручкой; фон под ним рисует подложка в содержимом списка. */}
-        <View style={[styles.sheetTop, { height: topBarHeight }]}>
-          <View style={[styles.handleBar, { backgroundColor: theme.border }]} />
-        </View>
+        <SheetTop height={topBarHeight} title={title} />
       </>
     ),
-    [requestClose, theme.border, topBarHeight, travel],
+    [requestClose, title, topBarHeight, travel],
   );
 
   const footer = useMemo(() => <View style={{ height: footerHeight }} />, [footerHeight]);
@@ -487,7 +532,12 @@ function SheetWindow({ phase, composer, pick, sections }: SheetWindowProps) {
         <Animated.View style={[styles.root, shiftStyle]}>
           <GestureDetector gesture={dismissPan}>
             <View style={[styles.listWindow, { top: listTop }]}>
-              <SheetShell top={travel} height={collapsedHeight} topBarHeight={topBarHeight} />
+              <SheetShell
+                top={travel}
+                height={collapsedHeight}
+                topBarHeight={topBarHeight}
+                title={title}
+              />
               {listMounted && active ? (
                 <SheetListContext.Provider value={listContext}>
                   <Fragment key={active.key}>{active.render(slot)}</Fragment>
@@ -537,6 +587,13 @@ function SheetWindow({ phase, composer, pick, sections }: SheetWindowProps) {
             editing={composer.editing ?? false}
             onSend={submit}
             gridViewport={{ top: listTop + topBarHeight, bottom: screenHeight - footerHeight }}
+          />
+        ) : null}
+        {avatar ? (
+          <MediaPreview
+            mode="avatar"
+            onDone={avatar.onDone}
+            gridViewport={{ top: listTop + topBarHeight, bottom: screenHeight }}
           />
         ) : null}
 

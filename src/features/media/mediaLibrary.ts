@@ -13,6 +13,7 @@ import {
   requestPermissionsAsync,
 } from 'expo-media-library';
 import { getAssetsAsync } from 'expo-media-library/legacy';
+import { Platform } from 'react-native';
 
 import { MediaLimits } from './constants';
 import { perfLog, perfTime } from './perf';
@@ -50,12 +51,16 @@ export type LibraryAccess = 'granted' | 'denied';
  * Только фото и видео: голосовые и кружки в галерею телефона не попадают, а
  * аудиофайлы устройства (музыка) для чата не нужны.
  */
-export async function requestMediaLibraryAccess(): Promise<LibraryAccess> {
+export async function requestMediaLibraryAccess(): Promise<LibraryAccess | 'blocked'> {
   const response = await requestPermissionsAsync(false, ['photo', 'video']);
 
   // `limited` (часть библиотеки на iOS) — рабочий режим, а не отказ: грид
   // просто покажет то, на что доступ дан.
-  return response.granted || response.accessPrivileges === 'limited' ? 'granted' : 'denied';
+  if (response.granted || response.accessPrivileges === 'limited') return 'granted';
+
+  // Запрещено в настройках телефона: системное окно больше не появится, и
+  // выдать доступ можно только там.
+  return response.canAskAgain ? 'denied' : 'blocked';
 }
 
 /**
@@ -80,6 +85,28 @@ function toMediaKind(mediaType: MediaType): MediaKind {
  * получит свой путь. Путь (`uri`) резолвится отдельно и лениво, см.
  * `resolveAssetUri`.
  */
+/**
+ * Порядок «Недавних» галереи телефона. На Android у файлов без EXIF —
+ * сохранённых из Telegram, скачанных — даты съёмки нет вовсе (`DATE_TAKEN`
+ * пуст), и сортировка по ней уносила их в самый конец, за предел чтения:
+ * часть галереи в шите просто не появлялась. Дата изменения есть у всех
+ * файлов — по ней выбирается, что прочитать, а внутри выборки порядок —
+ * по дате съёмки, где она есть. На iOS дата съёмки есть всегда.
+ */
+const RECENT_ORDER =
+  Platform.OS === 'android' ? AssetField.MODIFICATION_TIME : AssetField.CREATION_TIME;
+
+function recentTime(asset: { creationTime: number | null; modificationTime: number | null }) {
+  return asset.creationTime ?? asset.modificationTime ?? 0;
+}
+
+function byRecent(
+  a: { creationTime: number | null; modificationTime: number | null },
+  b: { creationTime: number | null; modificationTime: number | null },
+) {
+  return recentTime(b) - recentTime(a);
+}
+
 export async function queryRecentMedia(params: {
   offset: number;
   limit?: number;
@@ -87,12 +114,13 @@ export async function queryRecentMedia(params: {
   const limit = params.limit ?? MediaLimits.gallery.firstChunk;
 
   const startedAt = performance.now();
-  const assets = await new Query()
+  const queried = await new Query()
     .within(AssetField.MEDIA_TYPE, [MediaType.IMAGE, MediaType.VIDEO])
-    .orderBy({ key: AssetField.CREATION_TIME, ascending: false })
+    .orderBy({ key: RECENT_ORDER, ascending: false })
     .offset(params.offset)
     .limit(limit)
     .exeForMetadata();
+  const assets = Platform.OS === 'android' ? [...queried].sort(byRecent) : queried;
 
   perfLog('queryRecentMedia', {
     offset: params.offset,

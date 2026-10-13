@@ -1,6 +1,6 @@
 import { StyleSheet } from 'react-native';
 
-import { Radii, Sizes, Spacing } from '@/theme';
+import { Radii, Sizes, Spacing, Typography } from '@/theme';
 
 const HANDLE_BAR_WIDTH = Spacing.five + Spacing.one;
 const HANDLE_BAR_HEIGHT = Spacing.one;
@@ -11,6 +11,9 @@ const HANDLE_BAR_HEIGHT = Spacing.one;
  * положение строк формулой от этого начала.
  */
 export const SHEET_TOP_HEIGHT = Spacing.two * 2 + HANDLE_BAR_HEIGHT + Spacing.half;
+
+/** Заголовок шита под ручкой («Выберите фото») — строка текста и отступ до сетки. */
+export const SHEET_TITLE_HEIGHT = Typography.subtitle.lineHeight + Spacing.two;
 
 export const styles = StyleSheet.create({
   root: {
@@ -58,6 +61,12 @@ export const styles = StyleSheet.create({
   sheetTop: {
     alignItems: 'center',
     paddingTop: Spacing.two,
+  },
+  /** Заголовок под ручкой — слева, на всю ширину над сеткой. */
+  sheetTitle: {
+    alignSelf: 'stretch',
+    marginTop: SHEET_TOP_HEIGHT - Spacing.two - HANDLE_BAR_HEIGHT,
+    paddingHorizontal: Spacing.three,
   },
   handleBar: {
     width: HANDLE_BAR_WIDTH,

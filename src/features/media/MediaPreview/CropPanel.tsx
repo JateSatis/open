@@ -14,7 +14,7 @@ import type { CropMotion } from './cropMotion';
 import { styles } from './styles';
 import { ToolActions } from './ToolActions';
 
-import { isEmptyCrop, type PhotoCrop } from '@/features/media/photoEdits/crop';
+import { isEmptyCrop, isPlainSquareCrop, type PhotoCrop } from '@/features/media/photoEdits/crop';
 import { useTheme } from '@/hooks/use-theme';
 import { Spacing } from '@/theme';
 
@@ -54,7 +54,7 @@ export function CropPanel({
   const [changed, setChanged] = useState(false);
 
   useAnimatedReaction(
-    () => !isEmptyCrop(motion.crop.value),
+    () => !(motion.square ? isPlainSquareCrop(motion.crop.value) : isEmptyCrop(motion.crop.value)),
     (now, before) => {
       if (now !== before) runOnJS(setChanged)(now);
     },

@@ -4,10 +4,12 @@ import { memo, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, {
   useAnimatedStyle,
+  useDerivedValue,
   useSharedValue,
   type SharedValue,
 } from 'react-native-reanimated';
 
+import { AvatarRing } from './AvatarRing';
 import { NO_LAYERS, safeDrawingLayersOf, type DrawingLayers } from './drawingLayers';
 import { EditedPhoto, type LiveAdjust } from './EditedPhoto';
 import { fitRect, flightTransform } from './previewGeometry';
@@ -61,6 +63,8 @@ export type PreviewPageProps = {
    * бы виден чат, а не шит.
    */
   leaving?: boolean;
+  /** Шит аватарки: поверх фото — круг будущей аватарки. */
+  ring?: boolean;
 };
 
 /** Столько фото должно пробыть текущим, чтобы для него заранее готовилась рабочая копия. */
@@ -93,6 +97,7 @@ export const PreviewPage = memo(function PreviewPage({
   draw,
   onShown,
   leaving = false,
+  ring = false,
 }: PreviewPageProps) {
   const [imageAspect, setAspect] = useState(() => aspectOf(asset));
   const [thumbShown, setThumbShown] = useState(false);
@@ -151,6 +156,10 @@ export const PreviewPage = memo(function PreviewPage({
 
     return { transform: [{ scaleX: image.scaleX }, { scaleY: image.scaleY }] };
   });
+
+  const ringVisible = useDerivedValue(() =>
+    isActive ? motion.flight.value * motion.fade.value : 1,
+  );
 
   // Превью стороной в клетку сетки — той же, что в памяти, — растянутое до рамки.
   const thumbBox = {
@@ -266,6 +275,10 @@ export const PreviewPage = memo(function PreviewPage({
               layers={layers}
               draw={draw}
             />
+          ) : null}
+
+          {ring && isPhoto ? (
+            <AvatarRing width={base.width} height={base.height} visible={ringVisible} draw={draw} />
           ) : null}
         </Animated.View>
       </Animated.View>

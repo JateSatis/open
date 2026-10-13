@@ -75,11 +75,18 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  /** Ряд инструментов; без подписи справа в нём же кнопка. */
+  toolsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.two,
+    paddingBottom: Spacing.two,
+  },
   tools: {
+    flex: 1,
     flexDirection: 'row',
     justifyContent: 'space-around',
-    paddingHorizontal: Spacing.three,
-    paddingBottom: Spacing.two,
+    paddingHorizontal: Spacing.one,
   },
   tool: {
     width: Sizes.previewTool,
