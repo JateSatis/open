@@ -1,7 +1,12 @@
+import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef } from 'react';
 
-import { listDeletedMessageIds, type QuotedMessage } from '@/api/chats';
+import type { Channel } from '@/api/channels';
+import { listDeletedMessageIds, type ChatSummary, type QuotedMessage } from '@/api/chats';
+import { channelQueryKey } from '@/features/channels/keys';
+import { chatsQueryKey } from '@/features/chats/chatsKey';
+import { chatQueryKey } from '@/features/chats/useChat';
 import { islandItemKey } from '@/features/chats/islands/rows';
 import { showNotice } from '@/features/notifications/alertsStore';
 
@@ -40,6 +45,26 @@ type Options = {
   focusComment: (focus: CommentFocus) => void;
 };
 
+/**
+ * Канал, чей чат постов — `chatId`, если это видно из кеша: сам чат (вид
+ * чата с каналом), список чатов или загруженный канал. Не видно — null, и
+ * переход идёт через маршрут чата, который спросит сервер.
+ */
+function channelIdOfChat(queryClient: QueryClient, chatId: string): string | null {
+  const chat =
+    queryClient.getQueryData<ChatSummary | null>(chatQueryKey(chatId)) ??
+    queryClient.getQueryData<ChatSummary[]>(chatsQueryKey)?.find((item) => item.id === chatId);
+  if (chat?.channel) return chat.channel.id;
+  if (chat) return null;
+
+  const channel = queryClient
+    .getQueriesData<Channel>({ queryKey: ['channel'] })
+    .map(([, data]) => data)
+    .find((data) => data?.postsChatId === chatId);
+
+  return channel?.id ?? null;
+}
+
 function reportJump(found: boolean) {
   if (!found) showNotice('Не удалось найти сообщение', 'error');
 }
@@ -63,6 +88,7 @@ export function useQuoteNavigation(
 ): QuoteNavigation {
   const router = useRouter();
   const navigation = useNavigation();
+  const queryClient = useQueryClient();
   const { jumpTo, jumpAt, jumpKey, comments, comment } = useLocalSearchParams<{
     jumpTo?: string;
     jumpAt?: string;
@@ -109,7 +135,11 @@ export function useQuoteNavigation(
     requestedJump,
   ]);
 
-  /** В другой чат: к уже открытому ниже в стеке экрану, а не вторым экземпляром. */
+  /**
+   * В другой чат: к уже открытому ниже в стеке экрану, а не вторым
+   * экземпляром. Чат постов открывается экраном канала: если канал известен
+   * из кеша — сразу им, иначе через маршрут чата, который перенаправит.
+   */
   const goToChat = useCallback(
     (targetChatId: string, target: JumpTarget | null, focus?: CommentFocus) => {
       if (targetChatId === chatId) {
@@ -120,22 +150,30 @@ export function useQuoteNavigation(
 
       const to = focus ? focus.target : target;
       // Шит открывается по ключу перехода, даже когда прыгать некуда.
-      const params = {
-        chatId: targetChatId,
+      const jumpParams = {
         ...(to ? { jumpTo: to.key, jumpAt: to.createdAt } : {}),
         ...(focus ? { comments: focus.messageId, comment: focus.commentId } : {}),
         ...(to || focus ? { jumpKey: String(Date.now()) } : {}),
       };
+      const channelId = channelIdOfChat(queryClient, targetChatId);
 
       // Экран ищется по ключу: `dismissTo` сравнивает адрес вместе с
       // параметрами прыжка и не находит его.
       const state = navigation.getState();
       const index =
-        state?.routes.findIndex(
-          (route) =>
-            route.name === '[chatId]' &&
-            (route.params as { chatId?: string } | undefined)?.chatId === targetChatId,
-        ) ?? -1;
+        state?.routes.findIndex((route) => {
+          const params = route.params as { chatId?: string; channelId?: string } | undefined;
+
+          if (route.name === '[chatId]') return params?.chatId === targetChatId;
+          if (route.name !== 'channel/[channelId]' || !params?.channelId) return false;
+
+          // Экран канала держит в кеше свой канал — по нему видно, чей это чат постов.
+          return (
+            params.channelId === channelId ||
+            queryClient.getQueryData<Channel>(channelQueryKey(params.channelId))?.postsChatId ===
+              targetChatId
+          );
+        }) ?? -1;
 
       if (state && index !== -1) {
         if (to || focus) {
@@ -149,7 +187,8 @@ export function useQuoteNavigation(
                 jumpAt: undefined,
                 comments: undefined,
                 comment: undefined,
-                ...params,
+                ...(state.routes[index].name === '[chatId]' ? { chatId: targetChatId } : {}),
+                ...jumpParams,
               },
             },
             source: state.routes[index].key,
@@ -159,9 +198,17 @@ export function useQuoteNavigation(
         return;
       }
 
-      router.push({ pathname: '/chats/[chatId]', params });
+      if (channelId) {
+        router.push({
+          pathname: '/chats/channel/[channelId]',
+          params: { channelId, ...jumpParams },
+        });
+        return;
+      }
+
+      router.push({ pathname: '/chats/[chatId]', params: { chatId: targetChatId, ...jumpParams } });
     },
-    [chatId, focusComment, jump, navigation, router],
+    [chatId, focusComment, jump, navigation, queryClient, router],
   );
 
   const openQuote = useCallback(
