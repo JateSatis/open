@@ -8,8 +8,16 @@ export const styles = StyleSheet.create({
     gap: Spacing.two,
   },
   circle: {
-    width: Sizes.channelAvatarPicker,
-    height: Sizes.channelAvatarPicker,
+    width: Sizes.avatarPicker,
+    height: Sizes.avatarPicker,
+    borderRadius: Radii.full,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  compact: {
+    width: Sizes.avatarPickerCompact,
+    height: Sizes.avatarPickerCompact,
     borderRadius: Radii.full,
     overflow: 'hidden',
     alignItems: 'center',

@@ -14,17 +14,23 @@ import type { CreatedChannel } from '@/api/channels';
 import { Button } from '@/components/Button';
 import { Input } from '@/components/Input';
 import { Text } from '@/components/Text';
-import { ChannelAvatarPicker } from '@/features/channels/ChannelAvatarPicker';
 import {
   CHANNEL_DESCRIPTION_MAX_LENGTH,
   CHANNEL_TITLE_MAX_LENGTH,
 } from '@/features/channels/limits';
 import { describeCreateChannelError, useCreateChannel } from '@/features/channels/useCreateChannel';
+import { AvatarPicker } from '@/features/chats/AvatarPicker';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
 import { UsernameField } from '@/features/profile/UsernameField';
 import { useUsernameAvailability } from '@/features/profile/useUsernameAvailability';
 import { useTheme } from '@/hooks/use-theme';
 import { Spacing } from '@/theme';
+
+const CHANNEL_AVATAR_OWNER = 'avatar:channel';
+const CHANNEL_AVATAR_LABELS = {
+  pick: 'Выбрать аватарку канала',
+  change: 'Сменить аватарку канала',
+};
 
 export type NewChannelFormProps = {
   onCreated: (created: CreatedChannel) => void;
@@ -89,7 +95,14 @@ export function NewChannelForm({ onCreated }: NewChannelFormProps) {
         // вместе с ответом под ним («Имя свободно», ошибка в две строки).
         bottomOffset={footerHeight + Spacing.six}
       >
-        <ChannelAvatarPicker uri={avatarUri} onChange={setAvatarUri} disabled={create.isPending} />
+        <AvatarPicker
+          owner={CHANNEL_AVATAR_OWNER}
+          testID="channel-avatar-picker"
+          labels={CHANNEL_AVATAR_LABELS}
+          uri={avatarUri}
+          onChange={setAvatarUri}
+          disabled={create.isPending}
+        />
 
         <Input
           testID="channel-title"
