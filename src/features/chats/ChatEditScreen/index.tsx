@@ -154,7 +154,7 @@ function ChatEditForm({ chat }: { chat: ChatSummary }) {
         void confirm({
           title: 'Отменить изменения?',
           message: 'Новое фото, имя и название не сохранятся.',
-          confirmLabel: 'Отменить',
+          confirmLabel: 'Выйти',
           cancelLabel: 'Остаться',
           destructive: true,
         }).then((confirmed) => {
@@ -214,7 +214,7 @@ function ChatEditForm({ chat }: { chat: ChatSummary }) {
           <Pressable
             testID="chat-edit-photo"
             accessibilityRole="button"
-            accessibilityLabel="Установить новое фото"
+            accessibilityLabel="Фото группы"
             onPress={openSheet}
           >
             <Avatar uri={shownPhoto} name={name} size={InfoPageSizes.avatar} />
@@ -245,6 +245,7 @@ function ChatEditForm({ chat }: { chat: ChatSummary }) {
           value={title}
           onChangeText={setTitle}
           editable={canRename}
+          style={!canRename && { color: theme.textSecondary }}
           maxLength={TITLE_MAX_LENGTH}
           placeholder="Групповой чат"
         />
@@ -256,6 +257,7 @@ function ChatEditForm({ chat }: { chat: ChatSummary }) {
 
         <UsernameField
           testID="chat-username"
+          label="Имя группы"
           kind="group"
           value={username}
           onChangeText={setUsername}

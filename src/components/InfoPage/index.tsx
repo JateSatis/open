@@ -331,6 +331,7 @@ export function InfoPage({
                 <View style={{ height: expandedHeight }} pointerEvents="none" />
                 {cards ? (
                   <View
+                    testID="info-cards"
                     pointerEvents="box-none"
                     onLayout={(event) => setCardsHeight(event.nativeEvent.layout.height)}
                   >

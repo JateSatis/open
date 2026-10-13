@@ -48,6 +48,8 @@ export type InfoHeroProps = {
  */
 export function InfoHero({ geometry, scrollY, avatar, actions }: InfoHeroProps) {
   const { expand, collapse } = geometry;
+  // Двое внахлёст — сами по себе два круга: круглая маска срезала бы второго.
+  const masked = avatar.kind === 'single';
 
   const avatarStyle = useAnimatedStyle(() => {
     const rect = avatarRect(scrollY.value, geometry);
@@ -58,7 +60,7 @@ export function InfoHero({ geometry, scrollY, avatar, actions }: InfoHeroProps) 
       top: rect.y,
       width: rect.width,
       height: rect.height,
-      borderRadius: rect.radius,
+      borderRadius: masked ? rect.radius : 0,
       opacity: 1 - clamp01(p * 1.6),
       transform: [{ scale: lerp(1, 0.4, p) }],
     };
@@ -180,9 +182,11 @@ function InfoActions({
 const styles = StyleSheet.create({
   avatar: {
     position: 'absolute',
-    overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  masked: {
+    overflow: 'hidden',
   },
   fill: {
     width: '100%',
