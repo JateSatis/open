@@ -13,6 +13,8 @@ export type NewPop = {
   media: LocalMedia;
   /** Кадр видео на устройстве — обложка плитки, пока поп едет. */
   posterUri: string;
+  /** Обязательно для нового попа. */
+  title: string;
   caption: string | null;
   /** Заодно пост с этим попом; текст поста — копия подписи. */
   alsoPost: boolean;

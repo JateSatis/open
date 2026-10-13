@@ -38,7 +38,7 @@ jest.mock('@/features/chats/MediaPickerSheet', () => ({
   },
 }));
 jest.mock('@/features/media', () => ({
-  MediaLimits: { pop: { maxDurationMs: 90_000, maxCaptionLength: 300 } },
+  MediaLimits: { pop: { maxDurationMs: 90_000, maxCaptionLength: 300, maxTitleLength: 80 } },
   readVideoFrame: jest.fn(),
   resolveLibraryAsset: jest.fn((asset) => Promise.resolve({ ...asset, uri: 'file:///v.mp4' })),
   libraryAssetToLocalMedia: jest.fn((asset) => ({
@@ -119,6 +119,7 @@ describe('PopEditor', () => {
     expect(screen.getByRole('checkbox', { name: 'Опубликовать в посты' })).toBeChecked();
 
     await act(async () => {
+      fireEvent.changeText(screen.getByLabelText('Название'), ' Ёлка ');
       fireEvent.changeText(screen.getByLabelText('Подпись'), ' тест ');
     });
     await act(async () => {
@@ -130,6 +131,7 @@ describe('PopEditor', () => {
       'me',
       expect.objectContaining({
         channelId: 'channel-1',
+        title: 'Ёлка',
         caption: 'тест',
         alsoPost: true,
         posterUri: 'file:///frame.jpg',
@@ -139,16 +141,56 @@ describe('PopEditor', () => {
     expect(mockBack).toHaveBeenCalled();
   });
 
-  it('from «Посты» hands the video to the posts draft and goes back', async () => {
+  it('does not publish without a title and says why', async () => {
+    await render(<PopEditor channelId="channel-1" from="pops" />);
+    await pick({ width: 720, height: 1280 });
+
+    expect(screen.queryByTestId('pop-title-required')).toBeNull();
+
+    await act(async () => {
+      fireEvent.changeText(screen.getByLabelText('Название'), '   ');
+      fireEvent.press(screen.getByRole('button', { name: 'Опубликовать' }));
+    });
+
+    expect(publishNewPop).not.toHaveBeenCalled();
+    expect(mockBack).not.toHaveBeenCalled();
+    expect(screen.getByText('Добавьте название — без него поп не опубликовать')).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.changeText(screen.getByLabelText('Название'), 'Ёлка');
+    });
+
+    expect(screen.queryByTestId('pop-title-required')).toBeNull();
+  });
+
+  it('from «Посты» asks for a title, then hands the video to the posts draft', async () => {
     await render(<PopEditor channelId="channel-1" from="posts" />);
 
     expect(screen.queryByRole('button', { name: 'Опубликовать' })).toBeNull();
 
     await pick({ width: 720, height: 1280 });
 
-    expect(mockBack).toHaveBeenCalled();
+    // Подписи и галочки нет: текст у поста.
+    expect(screen.queryByLabelText('Подпись')).toBeNull();
+
+    await act(async () => {
+      fireEvent.press(screen.getByRole('button', { name: 'Готово' }));
+    });
+
+    expect(mockBack).not.toHaveBeenCalled();
+    expect(readChatDraft('posts-1').pop).toBeFalsy();
+    expect(screen.getByTestId('pop-title-required')).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.changeText(screen.getByLabelText('Название'), ' Ёлка ');
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByRole('button', { name: 'Готово' }));
+    });
+
     expect(readChatDraft('posts-1').pop).toMatchObject({
       type: 'new',
+      title: 'Ёлка',
       uri: 'file:///v.mp4',
       posterUri: 'file:///frame.jpg',
     });

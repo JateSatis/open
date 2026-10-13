@@ -38,7 +38,7 @@ export function acceptsPopVideo(asset: MediaLibraryItem): boolean {
  * Выбор видео для попа. Ориентацию честно говорит только кадр: горизонтальное
  * или квадратное видео не принимается, и человек видит почему.
  */
-export function usePopVideoPick(onAccepted: (video: PickedPopVideo) => void) {
+export function usePopVideoPick() {
   const [video, setVideo] = useState<PickedPopVideo | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
@@ -73,7 +73,6 @@ export function usePopVideoPick(onAccepted: (video: PickedPopVideo) => void) {
           const picked = { media: { ...media, width: frame.width, height: frame.height }, frame };
 
           setVideo(picked);
-          onAccepted(picked);
         } catch {
           setError(UNREADABLE);
         } finally {
@@ -81,7 +80,7 @@ export function usePopVideoPick(onAccepted: (video: PickedPopVideo) => void) {
         }
       })();
     },
-    [onAccepted],
+    [],
   );
 
   return { video, error, checking, onPick };

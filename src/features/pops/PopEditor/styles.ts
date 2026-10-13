@@ -41,6 +41,11 @@ export const styles = StyleSheet.create({
     paddingHorizontal: Spacing.three,
     paddingTop: Spacing.two,
   },
+  title: {
+    borderRadius: Radii.md,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
+  },
   caption: {
     borderRadius: Radii.md,
     paddingHorizontal: Spacing.three,

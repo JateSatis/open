@@ -81,6 +81,7 @@ function pop(id: string, extra: Partial<Pop> = {}): Pop {
     id,
     channelId: 'channel-1',
     authorId: 'author',
+    title: null,
     caption: `Подпись ${id}`,
     url: `https://cdn/${id}.mp4`,
     posterUrl: `https://cdn/${id}.jpg`,
@@ -214,6 +215,15 @@ describe('PopViewer', () => {
     expect(screen.getByTestId('pop-comments')).toBeTruthy();
     expect(screen.getByLabelText('Просмотры: 0')).toBeTruthy();
     expect(screen.getByTestId('pop-more')).toBeTruthy();
+    // Старый поп без названия — без пустой строки над подписью.
+    expect(screen.queryByTestId('pop-title')).toBeNull();
+  });
+
+  it('shows the title above the caption', async () => {
+    await open(pop('p1', { title: 'Ёлка' }));
+
+    expect(await screen.findByTestId('pop-title')).toHaveTextContent('Ёлка');
+    expect(screen.getByText('Подпись p1')).toBeTruthy();
   });
 
   it('a stranger reacts from «+»: the reaction shows at once and goes to the server', async () => {

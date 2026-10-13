@@ -28,8 +28,8 @@ import { randomUuid } from '@/lib/uuid';
 import { Sizes } from '@/theme';
 
 /**
- * Откуда открыт редактор: из «Постов» выбранное видео уходит вложением в пост,
- * из «Попсов» — публикуется отсюда же, с подписью.
+ * Откуда открыт редактор: из «Постов» выбранное видео с названием уходит
+ * вложением в пост, из «Попсов» — публикуется отсюда же, с подписью.
  */
 export type PopEditorSource = 'posts' | 'pops';
 
@@ -47,42 +47,61 @@ export function PopEditor({ channelId, from }: PopEditorProps) {
   const queryClient = useQueryClient();
   const userId = useCurrentUserId();
   const { data: channel } = useChannel(channelId);
+  const [title, setTitle] = useState('');
+  const [titleMissing, setTitleMissing] = useState(false);
   const [caption, setCaption] = useState('');
   const [alsoPost, setAlsoPost] = useState(true);
 
-  // Из «Постов» выбор сразу становится вложением поста: результат — через
-  // черновик чата постов, не через параметры маршрута.
-  const accept = useCallback(
-    (video: PickedPopVideo) => {
-      if (from !== 'posts' || !channel) return;
-
-      setDraftPop(channel.postsChatId, {
-        type: 'new',
-        popId: randomUuid(),
-        uri: video.media.uri,
-        posterUri: video.frame.uri,
-        mimeType: video.media.mimeType,
-        width: video.media.width,
-        height: video.media.height,
-        durationMs: video.media.durationMs,
-      });
-      router.back();
-    },
-    [channel, from, router],
-  );
-
-  const { video, error, checking, onPick } = usePopVideoPick(accept);
+  const { video, error, checking, onPick } = usePopVideoPick();
   const forPops = from === 'pops';
 
+  const changeTitle = useCallback((value: string) => {
+    setTitle(value);
+    if (value.trim()) setTitleMissing(false);
+  }, []);
+
+  // Название обязательно: без него кнопка не публикует, а объясняет почему.
+  const titled = (): string | null => {
+    const trimmed = title.trim();
+
+    if (!trimmed) setTitleMissing(true);
+
+    return trimmed || null;
+  };
+
   const publish = () => {
-    if (!video || !userId) return;
+    const name = titled();
+
+    if (!video || !userId || !name) return;
 
     publishNewPop(queryClient, userId, {
       channelId,
       media: video.media,
       posterUri: video.frame.uri,
+      title: name,
       caption: caption.trim() || null,
       alsoPost,
+    });
+    router.back();
+  };
+
+  // Из «Постов» видео с названием становится вложением поста: результат —
+  // через черновик чата постов, не через параметры маршрута.
+  const attach = (picked: PickedPopVideo) => {
+    const name = titled();
+
+    if (!channel || !name) return;
+
+    setDraftPop(channel.postsChatId, {
+      type: 'new',
+      popId: randomUuid(),
+      title: name,
+      uri: picked.media.uri,
+      posterUri: picked.frame.uri,
+      mimeType: picked.media.mimeType,
+      width: picked.media.width,
+      height: picked.media.height,
+      durationMs: picked.media.durationMs,
     });
     router.back();
   };
@@ -121,7 +140,7 @@ export function PopEditor({ channelId, from }: PopEditorProps) {
         </View>
 
         <View testID="pop-editor" style={styles.body}>
-          {video && forPops ? (
+          {video ? (
             <PopVideoPreview uri={video.media.uri} />
           ) : checking ? (
             <ActivityIndicator accessibilityLabel="Проверка видео" color={theme.textOnMedia} />
@@ -139,12 +158,21 @@ export function PopEditor({ channelId, from }: PopEditorProps) {
           </Text>
         ) : null}
 
-        {forPops && video ? (
+        {video ? (
           <PopPublishForm
-            caption={caption}
-            onChangeCaption={setCaption}
-            alsoPost={alsoPost}
-            onToggleAlsoPost={() => setAlsoPost((value) => !value)}
+            title={title}
+            onChangeTitle={changeTitle}
+            titleMissing={titleMissing}
+            details={
+              forPops
+                ? {
+                    caption,
+                    onChangeCaption: setCaption,
+                    alsoPost,
+                    onToggleAlsoPost: () => setAlsoPost((value) => !value),
+                  }
+                : undefined
+            }
           />
         ) : null}
 
@@ -160,6 +188,8 @@ export function PopEditor({ channelId, from }: PopEditorProps) {
           />
           {forPops ? (
             <Button label="Опубликовать" size="sm" disabled={!video || !userId} onPress={publish} />
+          ) : video ? (
+            <Button label="Готово" size="sm" disabled={!channel} onPress={() => attach(video)} />
           ) : null}
         </View>
       </KeyboardAvoidingView>

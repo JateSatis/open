@@ -19,6 +19,7 @@ type PopRow = Pick<
   | 'id'
   | 'channel_id'
   | 'author_id'
+  | 'title'
   | 'caption'
   | 'url'
   | 'poster_url'
@@ -37,6 +38,8 @@ export type Pop = {
   channelId: string;
   /** `null` — аккаунт автора удалён. */
   authorId: string | null;
+  /** У попсов, опубликованных до появления названий, — `null`. */
+  title: string | null;
   caption: string | null;
   url: string;
   posterUrl: string;
@@ -78,6 +81,8 @@ export type PublishPopInput = {
   /** Выбирает клиент: повтор после обрыва отдаёт уже созданный поп, а не второй. */
   popId: string;
   media: PopMedia;
+  /** Обязательно: без названия база поп не примет. */
+  title: string;
   caption: string | null;
   /** Заодно опубликовать пост с этим попом. */
   alsoPost: boolean;
@@ -88,7 +93,7 @@ export type PublishPopInput = {
 const COUNTER_COLUMNS = 'reactions, views_count, comments_count, my_reaction(emoji)';
 
 const COLUMNS =
-  `id, channel_id, author_id, caption, url, poster_url, mime_type, width, height, duration_ms, created_at, ${COUNTER_COLUMNS}` as const;
+  `id, channel_id, author_id, title, caption, url, poster_url, mime_type, width, height, duration_ms, created_at, ${COUNTER_COLUMNS}` as const;
 
 function toCounters(
   row: Pick<PopRow, 'id' | 'reactions' | 'views_count' | 'comments_count' | 'my_reaction'>,
@@ -106,6 +111,7 @@ function toPop(row: PopRow): Pop {
     ...toCounters(row),
     channelId: row.channel_id,
     authorId: row.author_id,
+    title: row.title,
     caption: row.caption,
     url: row.url,
     posterUrl: row.poster_url,
@@ -240,6 +246,7 @@ export async function publishPop(
       duration_ms: Math.round(input.media.durationMs),
       size_bytes: input.media.sizeBytes,
     },
+    title: input.title,
     caption: input.caption ?? undefined,
     also_post: input.alsoPost,
     post_text: input.postText ?? undefined,
