@@ -106,7 +106,7 @@ const post: SearchMessage = {
 async function openSearch() {
   await renderWithQuery(<ChatsScreen />);
   await screen.findByText('Анна Ёлкина');
-  await fireEvent(screen.getByTestId('chats-search-input'), 'focus');
+  await fireEvent.press(screen.getByTestId('chats-search-open'));
 }
 
 async function type(text: string) {
@@ -141,7 +141,8 @@ it('hides the chat list and the header while searching, and brings them back on 
   await fireEvent.press(screen.getByRole('button', { name: 'Отмена' }));
 
   expect(await screen.findByText('до встречи')).toBeTruthy();
-  expect(screen.getByTestId('chats-search-input').props.value).toBe('');
+  expect(screen.queryByTestId('chats-search-input')).toBeNull();
+  expect(screen.getByTestId('chats-search-open')).toBeTruthy();
   expect(mockSetOptions).toHaveBeenLastCalledWith({ headerShown: true });
 });
 
@@ -323,4 +324,44 @@ it('loads the next page of messages when scrolled to the end', async () => {
     ),
   );
   await waitFor(() => expect(screen.getAllByTestId('search-message')).toHaveLength(2));
+});
+
+it('does not say «Ничего не нашлось» while messages are still on their way', async () => {
+  mockedMessages.mockReturnValue(new Promise(() => {}));
+  await openSearch();
+
+  await type('zzz');
+
+  await waitFor(() => expect(mockedEntities).toHaveBeenCalledWith('zzz', expect.anything()));
+  expect(screen.queryByText('Ничего не нашлось')).toBeNull();
+  expect(screen.getByLabelText('Ищем')).toBeTruthy();
+});
+
+it('does not show the answer to an old query after the field was cleared', async () => {
+  mockedEntities.mockImplementation((query) =>
+    query === 'елк' ? Promise.resolve([entity({})]) : new Promise(() => {}),
+  );
+  await openSearch();
+  await type('елк');
+  expect(await screen.findByText('@elki.ch')).toBeTruthy();
+
+  await type('');
+  await type('новое');
+
+  await waitFor(() => expect(mockedEntities).toHaveBeenCalledWith('новое', expect.anything()));
+  expect(screen.queryByText('@elki.ch')).toBeNull();
+});
+
+it('keeps the previous answer while the same query is typed further', async () => {
+  mockedEntities.mockImplementation((query) =>
+    query === 'елк' ? Promise.resolve([entity({})]) : new Promise(() => {}),
+  );
+  await openSearch();
+  await type('елк');
+  expect(await screen.findByText('@elki.ch')).toBeTruthy();
+
+  await type('елки');
+
+  await waitFor(() => expect(mockedEntities).toHaveBeenCalledWith('елки', expect.anything()));
+  expect(screen.getByText('@elki.ch')).toBeTruthy();
 });

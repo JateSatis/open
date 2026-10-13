@@ -97,7 +97,7 @@ export default function ChatsScreen() {
         value={search.query}
         onChangeText={search.setQuery}
         active={search.active}
-        onFocus={search.activate}
+        onActivate={search.activate}
         onCancel={search.cancel}
       />
 

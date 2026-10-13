@@ -1,4 +1,4 @@
-import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery, type QueryKey } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 
 import {
@@ -26,6 +26,23 @@ export const SEARCH_DEBOUNCE_MS = 150;
 const SEARCH_STALE_MS = 30_000;
 
 export const searchQueryKey = ['search'] as const;
+
+/**
+ * Прежняя выдача на время загрузки — только если человек допечатывает или
+ * стирает тот же запрос. Ответ на другой, давний запрос (поле очистили и
+ * набрали новое) обманул бы: лучше крутилка. React Query отдаёт сюда
+ * последний запрос с данными, а не предыдущий ключ, — поэтому сравнение по
+ * тексту, а не «был ли пустой запрос между ними».
+ */
+function whileTyping(current: string) {
+  return <T>(previous: T | undefined, previousQuery?: { queryKey: QueryKey }): T | undefined => {
+    const was = previousQuery?.queryKey[2];
+
+    if (current === '' || typeof was !== 'string' || was === '') return undefined;
+
+    return current.startsWith(was) || was.startsWith(current) ? previous : undefined;
+  };
+}
 
 export type SearchResults = {
   parsed: ParsedQuery;
@@ -57,7 +74,7 @@ function useDebounced(value: string, delay: number): string {
  *
  * Устаревший ответ свежий не затирает: у каждого запроса свой ключ кеша, на
  * экран идут данные ключа текущего запроса, а пока их нет — прежние
- * (`keepPreviousData`), без мигания пустотой. Запрос, ключ которого уже не
+ * (`whileTyping`), без мигания пустотой. Запрос, ключ которого уже не
  * нужен, отменяется сигналом.
  *
  * Блок «Чаты» до ответа сервера на текущий запрос — локальный прогон по
@@ -76,7 +93,7 @@ export function useSearch(query: string): SearchResults {
     queryKey: [...searchQueryKey, 'entities', debounced],
     queryFn: ({ signal }) => searchEntities(debounced, signal),
     enabled,
-    placeholderData: keepPreviousData,
+    placeholderData: whileTyping(debounced),
     staleTime: SEARCH_STALE_MS,
   });
 
@@ -86,7 +103,7 @@ export function useSearch(query: string): SearchResults {
     initialPageParam: null as SearchMessagesCursor | null,
     getNextPageParam: (page) => page.nextCursor,
     enabled,
-    placeholderData: keepPreviousData,
+    placeholderData: whileTyping(debounced),
     staleTime: SEARCH_STALE_MS,
   });
 
@@ -131,8 +148,13 @@ export function useSearch(query: string): SearchResults {
     loadMoreMessages: () => {
       if (hasNextPage && !isFetchingNextPage) void fetchNextPage();
     },
+    // Сообщения отвечают отдельно от сущностей: пока их нет, «Ничего не
+    // нашлось» было бы неправдой.
     isSearching:
-      parsed.text !== '' && !offline && !failed && (!fresh || messages.isPlaceholderData),
+      parsed.text !== '' &&
+      !offline &&
+      !failed &&
+      (!fresh || messages.isPending || messages.isPlaceholderData),
     notice: parsed.text === '' ? null : notice,
   };
 }
