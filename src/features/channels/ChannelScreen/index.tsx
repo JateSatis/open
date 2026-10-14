@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { Stack, useIsFocused, useLocalSearchParams, useRouter } from 'expo-router';
+import { Stack, useIsFocused, useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, useWindowDimensions, View } from 'react-native';
 import { useSharedValue, withTiming } from 'react-native-reanimated';
@@ -95,7 +95,17 @@ function ChannelSections({ channel, initialIndex, postsRequest }: ChannelSection
   const position = useSharedValue(initialIndex);
   const [index, setIndex] = useState(initialIndex);
   const { subscription } = useChannelSubscription(channel.id);
-  const searching = useLocalSearchParams<ChatSearchParams>().search === '1' && index === 0;
+  const navigation = useNavigation();
+  const searchOpen = useLocalSearchParams<ChatSearchParams>().search === '1';
+  const searching = searchOpen && index === 0;
+
+  // Поиск — по постам: ушли на «Попсы» — поиск закрывается, иначе шапка
+  // осталась бы спрятанной, а сегменты встали бы под статус-бар.
+  useEffect(() => {
+    if (searchOpen && index !== 0) {
+      navigation.setParams({ search: undefined, searchKey: undefined } as never);
+    }
+  }, [index, navigation, searchOpen]);
 
   // Владелец сменил название, фото, `@имя` — шапка обновляется и здесь.
   useChannelChangedSignal(channel.id, channel.postsChatId);
