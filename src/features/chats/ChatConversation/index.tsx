@@ -339,20 +339,32 @@ export function ChatConversation({
   );
 
   // Кто писал в переписке: участники и те, кого среди них уже нет (ушли,
-  // удалены из группы), — их имя и аватар приходят с самим сообщением.
-  const peopleById = useMemo(() => {
-    const people = new Map<string, Person>();
+  // удалены из группы), — их имя и аватар приходят с самим сообщением. Карта
+  // пересобирается, только когда меняется состав таких авторов: новое
+  // сообщение не должно перерисовывать все облачка.
+  const departed = useMemo(() => {
+    const authors = new Map<string, Person>();
 
     for (const message of messages) {
-      if (message.authorId && message.author && !people.has(message.authorId)) {
-        people.set(message.authorId, { id: message.authorId, ...message.author });
+      const { authorId, author } = message;
+
+      if (authorId && author && !participantsById.has(authorId) && !authors.has(authorId)) {
+        authors.set(authorId, { id: authorId, ...author });
       }
     }
+
+    return authors;
+  }, [messages, participantsById]);
+  const departedKey = [...departed.keys()].join(',');
+  const peopleById = useMemo(() => {
+    const people = new Map<string, Person>(departed);
 
     participantsById.forEach((participant, id) => people.set(id, participant));
 
     return people;
-  }, [messages, participantsById]);
+    // Пересобрать по составу ушедших, а не по каждой новой карте сообщений.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [departedKey, participantsById]);
 
   // Я как поставивший реакцию — из участников: там свежий аватар.
   // Посетителя среди участников нет — тогда из моего профиля.

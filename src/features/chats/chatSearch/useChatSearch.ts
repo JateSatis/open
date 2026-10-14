@@ -59,17 +59,22 @@ export function useChatSearch(
   const debounced = useDebounced(query.trim(), CHAT_SEARCH_DEBOUNCE_MS);
   const enabled = active && debounced !== '';
 
+  // Не под ключом чата: перечитывание чата (прочтения, состав) не должно
+  // перезапрашивать выдачу и сдвигать совпадения под стрелками. Выдача живёт,
+  // пока открыт поиск, — новое совпадение найдётся при новом запросе.
   const results = useInfiniteQuery({
-    queryKey: ['chat', chatId, 'search', debounced],
+    queryKey: ['chatSearch', chatId, 'hits', debounced],
     queryFn: ({ pageParam, signal }) => searchChatMessages(chatId, debounced, pageParam, signal),
     initialPageParam: null as ChatSearchCursor | null,
     getNextPageParam: (last) => last.nextCursor ?? undefined,
     enabled,
+    staleTime: Infinity,
   });
   const count = useQuery({
-    queryKey: ['chat', chatId, 'search-count', debounced],
+    queryKey: ['chatSearch', chatId, 'count', debounced],
     queryFn: ({ signal }) => countChatSearch(chatId, debounced, signal),
     enabled,
+    staleTime: Infinity,
   });
 
   const hits = useMemo(
@@ -77,24 +82,29 @@ export function useChatSearch(
     [enabled, results.data],
   );
 
-  // Новый запрос — снова с самого свежего совпадения.
-  const [position, setPosition] = useState({ query: debounced, index: 0 });
-  const index = position.query === debounced ? position.index : 0;
+  // Номер совпадения — для этой выдачи: новый запрос (или та же строка после
+  // закрытия поиска) начинается снова с самого свежего совпадения, туда же
+  // прыгает и переписка.
   const first = hits[0];
+  const firstId = first?.id;
+  const [position, setPosition] = useState<{ query: string; firstId?: string; index: number }>({
+    query: '',
+    index: 0,
+  });
+  const index =
+    position.query === debounced && position.firstId === firstId ? position.index : 0;
 
   const goTo = useCallback(
     (hit: ChatSearchHit | undefined, at: number) => {
       if (!hit) return;
 
-      setPosition({ query: debounced, index: at });
+      setPosition({ query: debounced, firstId, index: at });
       void jump(hit.id, hit.createdAt);
     },
-    [debounced, jump],
+    [debounced, firstId, jump],
   );
 
   // Пришла выдача по новому запросу — переписка у самого свежего совпадения.
-  const firstId = first?.id;
-
   useEffect(() => {
     if (!first) return;
 
@@ -140,6 +150,7 @@ export function useChatSearch(
   const close = useCallback(() => {
     Keyboard.dismiss();
     setQuery('');
+    setPosition({ query: '', index: 0 });
     navigation.setParams({ search: undefined, searchKey: undefined } as never);
   }, [navigation]);
 

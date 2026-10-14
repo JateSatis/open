@@ -1,3 +1,4 @@
+import { useIsFocused } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { useEffect, useRef } from 'react';
 import { BackHandler, Pressable, TextInput, View } from 'react-native';
@@ -48,14 +49,20 @@ export function BarSearchField({
     return () => clearTimeout(timer);
   }, [focusWhen]);
 
+  // Системный «назад» — поиску, только пока его экран наверху: открытый
+  // поверх профиль иначе не закрывался бы, а под ним закрывался поиск.
+  const isScreenFocused = useIsFocused();
+
   useEffect(() => {
+    if (!isScreenFocused) return;
+
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
       onClose();
       return true;
     });
 
     return () => subscription.remove();
-  }, [onClose]);
+  }, [isScreenFocused, onClose]);
 
   return (
     <View style={styles.row}>

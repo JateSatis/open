@@ -69,11 +69,12 @@ export function ChatSearchPlate({ search, showingList, onToggleList }: ChatSearc
         testID="chat-search-list"
         accessibilityRole="button"
         accessibilityLabel={showingList ? 'К переписке' : 'Списком'}
-        disabled={hits.length === 0}
+        // Пустой список закрыть можно всегда: иначе он прятал бы переписку.
+        disabled={hits.length === 0 && !showingList}
         hitSlop={Spacing.two}
         onPress={onToggleList}
       >
-        <Text color={hits.length === 0 ? 'textSecondary' : 'primary'}>
+        <Text color={hits.length === 0 && !showingList ? 'textSecondary' : 'primary'}>
           {showingList ? 'В чате' : 'Списком'}
         </Text>
       </Pressable>
