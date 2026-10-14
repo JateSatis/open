@@ -2,6 +2,8 @@ import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
 
 import { ChatInfoPage } from '.';
 
+import { useSlideBack } from '@/components/InfoPage';
+
 import {
   getChatInfoSummary,
   getLastSeen,
@@ -136,6 +138,11 @@ const strangers: ChatSummary = {
   participants: [person('anna', 'Анна'), person('boris', 'Борис')],
 };
 
+/** Страница с въездом и уходом — как её отдаёт маршрут. */
+function Page({ chat }: { chat: ChatSummary }) {
+  return <ChatInfoPage chat={chat} slideBack={useSlideBack()} />;
+}
+
 /** В тестах раскладки нет: карточки «меряются» вручную, и вкладки монтируются. */
 async function layoutCards() {
   await fireEvent(screen.getByTestId('info-cards'), 'layout', {
@@ -163,7 +170,7 @@ beforeEach(() => {
 describe('ChatInfoPage', () => {
   describe('group, as a member', () => {
     it('shows the title and member count from the cached chat in the first frame', async () => {
-      await renderWithQuery(<ChatInfoPage chat={base} />);
+      await renderWithQuery(<Page chat={base} />);
 
       expect(screen.getByTestId('info-title')).toHaveTextContent('Команда');
       expect(screen.getByTestId('info-status')).toHaveTextContent('3 участника');
@@ -175,7 +182,7 @@ describe('ChatInfoPage', () => {
       mockOnline = new Set(['oleg']);
       mockedLastSeen.mockResolvedValue(new Map([['anna', null]]));
 
-      await renderWithQuery(<ChatInfoPage chat={base} />);
+      await renderWithQuery(<Page chat={base} />);
       await layoutCards();
 
       expect(await screen.findByText('владелец')).toBeTruthy();
@@ -185,7 +192,7 @@ describe('ChatInfoPage', () => {
     });
 
     it('opens a member profile on tap', async () => {
-      await renderWithQuery(<ChatInfoPage chat={base} />);
+      await renderWithQuery(<Page chat={base} />);
       await layoutCards();
 
       await fireEvent.press(await screen.findByTestId('info-member-anna'));
@@ -199,7 +206,7 @@ describe('ChatInfoPage', () => {
     it('hides empty tabs and shows the ones with content', async () => {
       mockedSummary.mockResolvedValue(summary({ photos: 2 }));
 
-      await renderWithQuery(<ChatInfoPage chat={base} />);
+      await renderWithQuery(<Page chat={base} />);
 
       expect(await screen.findByTestId('info-tab-media')).toBeTruthy();
       expect(screen.getByTestId('info-tab-members')).toBeTruthy();
@@ -207,12 +214,12 @@ describe('ChatInfoPage', () => {
     });
 
     it('shows @name.di in a card only when the group has one', async () => {
-      const { unmount } = await renderWithQuery(<ChatInfoPage chat={base} />);
+      const { unmount } = await renderWithQuery(<Page chat={base} />);
 
       expect(screen.queryByTestId('info-card')).toBeNull();
       await unmount();
 
-      await renderWithQuery(<ChatInfoPage chat={{ ...base, username: 'team' }} />);
+      await renderWithQuery(<Page chat={{ ...base, username: 'team' }} />);
       expect(screen.getByTestId('info-group-username')).toHaveTextContent(/@team\.di/);
     });
   });
@@ -221,7 +228,7 @@ describe('ChatInfoPage', () => {
     it('is about the other person: name, «в сети» and a call button', async () => {
       mockOnline = new Set(['anna']);
 
-      await renderWithQuery(<ChatInfoPage chat={dialog} />);
+      await renderWithQuery(<Page chat={dialog} />);
 
       expect(screen.getByTestId('info-title')).toHaveTextContent('Анна');
       expect(await screen.findByText('в сети')).toBeTruthy();
@@ -236,7 +243,7 @@ describe('ChatInfoPage', () => {
       today.setHours(16, 10, 0, 0);
       mockedLastSeen.mockResolvedValue(new Map([['anna', today.toISOString()]]));
 
-      await renderWithQuery(<ChatInfoPage chat={dialog} />);
+      await renderWithQuery(<Page chat={dialog} />);
 
       expect(await screen.findByText('был(а) в 16:10')).toBeTruthy();
     });
@@ -252,7 +259,7 @@ describe('ChatInfoPage', () => {
         },
       });
 
-      const { unmount } = await renderWithQuery(<ChatInfoPage chat={dialog} />);
+      const { unmount } = await renderWithQuery(<Page chat={dialog} />);
 
       expect(screen.getByTestId('info-bio')).toHaveTextContent(/Люблю горы/);
       expect(screen.getByTestId('info-username')).toHaveTextContent(/@anna/);
@@ -261,16 +268,29 @@ describe('ChatInfoPage', () => {
       mockedProfile.mockReturnValue({
         data: { id: 'anna', username: 'anna', displayName: 'Анна', bio: null, status: null },
       });
-      await renderWithQuery(<ChatInfoPage chat={dialog} />);
+      await renderWithQuery(<Page chat={dialog} />);
 
       expect(screen.queryByTestId('info-bio')).toBeNull();
       expect(screen.queryByText(/О себе/)).toBeNull();
     });
 
+    it('says plainly when the tabs could not be loaded, and retries', async () => {
+      mockedSummary
+        .mockRejectedValueOnce(new Error('сбой'))
+        .mockResolvedValue(summary({ photos: 1 }));
+
+      await renderWithQuery(<Page chat={dialog} />);
+
+      expect(await screen.findByText('Не удалось загрузить медиа и голосовые')).toBeTruthy();
+      await fireEvent.press(screen.getByText('Повторить'));
+
+      expect(await screen.findByTestId('info-tab-media')).toBeTruthy();
+    });
+
     it('shows «Общие группы» only when there are some', async () => {
       mockedSummary.mockResolvedValue(summary({ commonGroups: 1 }));
 
-      await renderWithQuery(<ChatInfoPage chat={dialog} />);
+      await renderWithQuery(<Page chat={dialog} />);
 
       expect(await screen.findByTestId('info-tab-groups')).toBeTruthy();
     });
@@ -282,7 +302,7 @@ describe('ChatInfoPage', () => {
     });
 
     it('sees two people in someone else’s dialog, without actions of a member', async () => {
-      await renderWithQuery(<ChatInfoPage chat={strangers} />);
+      await renderWithQuery(<Page chat={strangers} />);
 
       expect(screen.getByTestId('info-title')).toHaveTextContent('Анна и Борис');
       expect(screen.getByTestId('info-status')).toHaveTextContent('4 подписчика');
@@ -308,7 +328,7 @@ describe('ChatInfoPage', () => {
         unreadPops: 0,
       });
 
-      await renderWithQuery(<ChatInfoPage chat={strangers} />);
+      await renderWithQuery(<Page chat={strangers} />);
 
       await fireEvent.press(await screen.findByText('Подписаться на диалог'));
 
@@ -320,7 +340,7 @@ describe('ChatInfoPage', () => {
     it('rolls the subscription back with a plain message when it fails', async () => {
       jest.mocked(subscribeToChat).mockRejectedValueOnce(new TypeError('Network request failed'));
 
-      await renderWithQuery(<ChatInfoPage chat={strangers} />);
+      await renderWithQuery(<Page chat={strangers} />);
       await fireEvent.press(await screen.findByText('Подписаться на диалог'));
 
       await waitFor(() => expect(screen.getByText('Подписаться на диалог')).toBeTruthy());
@@ -331,7 +351,7 @@ describe('ChatInfoPage', () => {
     it('sees a foreign group with its members, but no pencil', async () => {
       jest.mocked(getMyChatSubscription).mockResolvedValue(null);
 
-      await renderWithQuery(<ChatInfoPage chat={{ ...base, username: 'team' }} />);
+      await renderWithQuery(<Page chat={{ ...base, username: 'team' }} />);
 
       expect(screen.queryByTestId('info-edit')).toBeNull();
       expect(screen.getByTestId('info-group-username')).toBeTruthy();

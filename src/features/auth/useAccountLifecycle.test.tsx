@@ -8,6 +8,7 @@ import { useSession } from './useSession';
 
 import { registerDevice, signOutLocally, touchDevice } from '@/api/account';
 import { markSeen } from '@/api/chatInfo';
+import { setPresenceVisible } from '@/api/chats';
 import { getMediaSheetPhase, openMediaSheet } from '@/features/chats/MediaPickerSheet/sheetStore';
 import type { MediaLibraryItem } from '@/features/media';
 import { useMediaSelection } from '@/features/media/selectionStore';
@@ -22,6 +23,7 @@ jest.mock('@/api/account', () => ({
 }));
 
 jest.mock('@/api/chatInfo', () => ({ markSeen: jest.fn(() => Promise.resolve()) }));
+jest.mock('@/api/chats', () => ({ setPresenceVisible: jest.fn() }));
 
 jest.mock('./signIn', () => ({ signOutOfGoogle: jest.fn(() => Promise.resolve()) }));
 
@@ -101,7 +103,10 @@ describe('AccountLifecycle', () => {
 
     queryClient.setQueryData(['chats'], [{ id: 'chat-of-a' }]);
     queryClient.setQueryData(['profile', 'me'], { id: 'user-a' });
-    useMediaSelection.setState({ order: ['asset-1'], items: { 'asset-1': {} as MediaLibraryItem } });
+    useMediaSelection.setState({
+      order: ['asset-1'],
+      items: { 'asset-1': {} as MediaLibraryItem },
+    });
     setActiveChatId('chat-of-a');
     openMediaSheet();
 
@@ -218,8 +223,11 @@ describe('AccountLifecycle', () => {
 
     await act(async () => appStateListener?.('background'));
     expect(mockedMarkSeen).toHaveBeenCalledTimes(2);
+    // В фоне я не «в сети», даже пока сокет жив.
+    expect(setPresenceVisible).toHaveBeenLastCalledWith(false);
 
     await act(async () => appStateListener?.('active'));
     expect(mockedMarkSeen).toHaveBeenCalledTimes(3);
+    expect(setPresenceVisible).toHaveBeenLastCalledWith(true);
   });
 });

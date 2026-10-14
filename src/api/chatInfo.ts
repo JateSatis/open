@@ -183,20 +183,29 @@ export async function listCommonGroups(
   };
 }
 
+/**
+ * Сколько id в одном запросе «был(а)»: id идут в адрес запроса, и у большой
+ * группы он упёрся бы в предел длины.
+ */
+const LAST_SEEN_CHUNK = 100;
+
 /** Когда люди были в приложении в последний раз: id → время или null («давно»). */
 export async function getLastSeen(userIds: string[]): Promise<Map<string, string | null>> {
   const seen = new Map<string, string | null>();
+  const chunks: string[][] = [];
 
-  if (userIds.length === 0) return seen;
+  for (let at = 0; at < userIds.length; at += LAST_SEEN_CHUNK) {
+    chunks.push(userIds.slice(at, at + LAST_SEEN_CHUNK));
+  }
 
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('id, last_seen_at')
-    .in('id', userIds);
+  const results = await Promise.all(
+    chunks.map((ids) => supabase.from('profiles').select('id, last_seen_at').in('id', ids)),
+  );
 
-  if (error) throw error;
-
-  for (const row of data ?? []) seen.set(row.id, row.last_seen_at);
+  for (const { data, error } of results) {
+    if (error) throw error;
+    for (const row of data ?? []) seen.set(row.id, row.last_seen_at);
+  }
 
   return seen;
 }

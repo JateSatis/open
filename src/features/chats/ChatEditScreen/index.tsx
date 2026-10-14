@@ -249,7 +249,7 @@ function ChatEditForm({ chat }: { chat: ChatSummary }) {
           maxLength={TITLE_MAX_LENGTH}
           placeholder="Групповой чат"
         />
-        {!canRename ? (
+        {summary && !canRename ? (
           <Text variant="caption" color="textSecondary">
             Название пока меняет только создатель группы.
           </Text>

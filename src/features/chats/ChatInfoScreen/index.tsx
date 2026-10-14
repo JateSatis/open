@@ -1,11 +1,13 @@
 import { useQueryClient } from '@tanstack/react-query';
+import { useRouter } from 'expo-router';
+import { useCallback } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { styles } from './styles';
 
-import { InfoBarButton, useSlideBack } from '@/components/InfoPage';
+import { InfoBarButton, useSlideBack, type SlideBack } from '@/components/InfoPage';
 import { LoadFailed } from '@/components/LoadFailed';
 import { ChatInfoPage } from '@/features/chats/ChatInfoPage';
 import { chatQueryKey, useChat } from '@/features/chats/useChat';
@@ -22,18 +24,31 @@ export type ChatInfoScreenProps = {
  * стрелкой, пока чат грузится.
  */
 export function ChatInfoScreen({ chatId }: ChatInfoScreenProps) {
+  const router = useRouter();
   const { chat, failed } = useChat(chatId);
+  // Одна на маршрут: заглушка и страница въезжают и уходят одним движением.
+  // Под страницей ничего нет (открыли ссылкой) — уйти в саму переписку.
+  const toChat = useCallback(() => router.replace(`/chats/${chatId}`), [chatId, router]);
+  const slideBack = useSlideBack(toChat);
 
-  if (chat) return <ChatInfoPage chat={chat} />;
+  if (chat) return <ChatInfoPage chat={chat} slideBack={slideBack} />;
 
-  return <ChatInfoPlaceholder chatId={chatId} failed={failed} />;
+  return <ChatInfoPlaceholder chatId={chatId} failed={failed} slideBack={slideBack} />;
 }
 
-function ChatInfoPlaceholder({ chatId, failed }: { chatId: string; failed: boolean }) {
+function ChatInfoPlaceholder({
+  chatId,
+  failed,
+  slideBack,
+}: {
+  chatId: string;
+  failed: boolean;
+  slideBack: SlideBack;
+}) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
-  const { offset, close } = useSlideBack();
+  const { offset, close } = slideBack;
   const pageStyle = useAnimatedStyle(() => ({ transform: [{ translateX: offset.value }] }));
 
   return (

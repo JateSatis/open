@@ -7,6 +7,7 @@ import { MediaTab } from './MediaTab';
 import { MembersTab } from './MembersTab';
 import { useChatInfoSummary, usePeopleStatus } from './queries';
 import { SubscribeCard } from './SubscribeCard';
+import { TabStatus } from './TabStatus';
 import { groupsSummary, mediaSummary, membersSummary, voicesSummary } from './summaries';
 import { VoicesTab } from './VoicesTab';
 
@@ -21,7 +22,7 @@ import {
   type InfoAvatar,
   type InfoStatus,
   type InfoTab,
-  useSlideBack,
+  type SlideBack,
 } from '@/components/InfoPage';
 import { subscribersLabel } from '@/features/channels/subscriberText';
 import { chatTitle, counterpart, dialogPair, isChatMember } from '@/features/chats/chatDisplay';
@@ -40,6 +41,8 @@ const CLEARED_JUMP = Object.fromEntries(JUMP_PARAM_NAMES.map((name) => [name, un
 
 export type ChatInfoPageProps = {
   chat: ChatSummary;
+  /** Въезд и уход — общие с заглушкой, пока чат грузился: страница не въезжает дважды. */
+  slideBack: SlideBack;
 };
 
 /**
@@ -47,20 +50,22 @@ export type ChatInfoPageProps = {
  * посторонний — всё публичное и главное своё действие, подписку. Свой диалог
  * — по сути страница собеседника; чужой — страница «двое».
  */
-export function ChatInfoPage({ chat }: ChatInfoPageProps) {
+export function ChatInfoPage({ chat, slideBack }: ChatInfoPageProps) {
   const router = useRouter();
   const navigation = useNavigation();
-  const slideBack = useSlideBack();
   const currentUserId = useCurrentUserId();
   const online = useOnlineUsers(currentUserId);
   const chatId = chat.id;
   const isGroup = chat.kind === 'group';
   const isMember = isChatMember(chat, currentUserId);
   const other = counterpart(chat, currentUserId);
-  const pair = dialogPair(chat, currentUserId);
+  // Новый массив на каждый рендер пересчитывал бы статусы людей каждый раз.
+  const pair = useMemo(() => dialogPair(chat, currentUserId), [chat, currentUserId]);
   const { data: otherProfile } = useProfile(other?.id);
   const subscription = useChatSubscription(chatId, !isMember);
-  const { data: summary } = useChatInfoSummary(chatId);
+  const summaryQuery = useChatInfoSummary(chatId);
+  const summary = summaryQuery.data;
+  const summaryFailed = summary === undefined && summaryQuery.isError;
   const call = useChatCall(chatId, chat, currentUserId, isMember);
   const [photoOpen, setPhotoOpen] = useState(false);
 
@@ -163,6 +168,14 @@ export function ChatInfoPage({ chat }: ChatInfoPageProps) {
 
   const cards = (
     <>
+      {/* Без сводки не понять, какие вкладки показывать, — честно сказать. */}
+      {summaryFailed ? (
+        <TabStatus
+          state="failed"
+          what="медиа и голосовые"
+          onRetry={() => void summaryQuery.refetch()}
+        />
+      ) : null}
       {!isMember ? (
         <SubscribeCard chatId={chatId} isGroup={isGroup} subscription={subscription} />
       ) : null}

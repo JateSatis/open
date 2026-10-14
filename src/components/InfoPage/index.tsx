@@ -16,6 +16,7 @@ import { clamp01, infoGeometry, snapTarget, syncedOffset } from './geometry';
 import { InfoBarButton } from './InfoBarButton';
 import { avatarRect, InfoHero } from './InfoHero';
 import { InfoTabsBar } from './InfoTabsBar';
+import { InfoTabList } from './InfoTabList';
 import { InfoTitle } from './InfoTitle';
 import { InfoScrollContext, type InfoScroll, type InfoTabListHandle } from './scroll';
 import type { InfoAction, InfoAvatar, InfoStatus, InfoTab } from './types';
@@ -33,6 +34,8 @@ export { useSlideBack, type SlideBack } from './useSlideBack';
 export type { InfoAction, InfoAvatar, InfoStatus, InfoTab } from './types';
 
 const S = InfoPageSizes;
+const EMPTY: never[] = [];
+const renderNothing = () => null;
 /** За столько dp до прилипания под именем начинает проступать сводка вкладки. */
 const STICK_FADE = 12;
 /** Палец сдвинулся дальше — это уже не тап по аватарке, а протяжка. */
@@ -104,6 +107,17 @@ export function InfoPage({
   const expanded = useSharedValue(false);
   const position = useSharedValue(0);
   const [index, setIndex] = useState(0);
+  const lastTab = Math.max(0, tabs.length - 1);
+
+  // Вкладок стало меньше (удалили последнее голосовое) — не стоять за краем.
+  const shownIndex = Math.min(index, lastTab);
+
+  useEffect(() => {
+    if (index <= lastTab) return;
+
+    position.set(lastTab);
+    activeTab.set(lastTab);
+  }, [activeTab, index, lastTab, position]);
   // Списки вкладок по номеру. Не ref: их читают и обработчики жестов.
   const [handles] = useState(() => new Map<number, InfoTabListHandle>());
 
@@ -214,7 +228,10 @@ export function InfoPage({
       return;
     }
 
-    handles.get(activeTab.value)?.scrollTo(0, true);
+    const handle = handles.get(activeTab.value);
+
+    if (handle) handle.scrollTo(0, true);
+    else onOpenPhoto?.();
   }, [activeTab, expandable, expanded, handles, onOpenPhoto]);
 
   // Тап по аватарке ловит вся страница: сама аватарка пропускает касания к
@@ -274,7 +291,7 @@ export function InfoPage({
     ),
   }));
 
-  const summary = tabs[index]?.summary ?? '';
+  const summary = tabs[shownIndex]?.summary ?? '';
   const ready = cardsHeight !== null;
 
   return (
@@ -290,12 +307,19 @@ export function InfoPage({
         >
           <InfoPhotoProgressContext.Provider value={photoProgress}>
             <InfoScrollContext.Provider value={scroll}>
+              {/* Без вкладок список всё равно нужен: шапку схлопывает и фото
+                  раскрывает его прокрутка. */}
+              {ready && tabs.length === 0 ? (
+                <View style={StyleSheet.absoluteFill}>
+                  <InfoTabList tab={0} data={EMPTY} renderItem={renderNothing} />
+                </View>
+              ) : null}
               {ready && tabs.length > 0 ? (
                 <View style={StyleSheet.absoluteFill}>
                   <SectionPager
                     position={position}
                     width={width}
-                    index={index}
+                    index={shownIndex}
                     onIndexChange={activate}
                     onDragStart={onPagerDragStart}
                     waitFor={swipeBack}
@@ -338,7 +362,12 @@ export function InfoPage({
                   </View>
                 ) : null}
                 {tabs.length > 0 ? (
-                  <InfoTabsBar tabs={tabs} index={index} position={position} onSelect={selectTab} />
+                  <InfoTabsBar
+                    tabs={tabs}
+                    index={shownIndex}
+                    position={position}
+                    onSelect={selectTab}
+                  />
                 ) : null}
               </Animated.View>
 

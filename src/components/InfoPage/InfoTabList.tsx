@@ -32,6 +32,8 @@ import { useInfoScroll } from './scroll';
 
 /** Скорость отпускания, ниже которой инерции не будет и доводка — сразу. */
 const STILL_VELOCITY = 0.05;
+/** Сколько ждать начала инерции после отпускания, прежде чем доводить без неё. */
+const MOMENTUM_WAIT_MS = 120;
 
 const ListRefContext = createContext<AnimatedRef<Animated.ScrollView> | null>(null);
 
@@ -147,7 +149,19 @@ export function InfoTabList<T>({ tab, footer, ...props }: InfoTabListProps<T>) {
 
   const { onSettle, onDragStart } = scroll;
 
+  // Инерция обещана, но не началась (на Android у самого края так бывает) —
+  // довести всё равно, иначе шапка осталась бы посередине.
+  const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(
+    () => () => {
+      if (settleTimer.current) clearTimeout(settleTimer.current);
+    },
+    [],
+  );
+
   const onScrollBeginDrag = useCallback(() => {
+    if (settleTimer.current) clearTimeout(settleTimer.current);
     momentum.current = false;
     dragging.set(true);
     onDragStart();
@@ -159,14 +173,20 @@ export function InfoTabList<T>({ tab, footer, ...props }: InfoTabListProps<T>) {
       const velocity = event.nativeEvent.velocity?.y ?? 0;
 
       // С инерцией — довести, когда она кончится.
-      if (Math.abs(velocity) > STILL_VELOCITY) return;
+      if (Math.abs(velocity) > STILL_VELOCITY) {
+        settleTimer.current = setTimeout(() => {
+          if (!momentum.current) onSettle(tab, offset.value);
+        }, MOMENTUM_WAIT_MS);
+        return;
+      }
 
       onSettle(tab, event.nativeEvent.contentOffset.y);
     },
-    [dragging, onSettle, tab],
+    [dragging, offset, onSettle, tab],
   );
 
   const onMomentumScrollBegin = useCallback(() => {
+    if (settleTimer.current) clearTimeout(settleTimer.current);
     momentum.current = true;
   }, []);
 

@@ -19,8 +19,11 @@ export const chatInfoKeys = {
   media: (chatId: string) => ['chat', chatId, 'info', 'media'] as const,
   voices: (chatId: string) => ['chat', chatId, 'info', 'voices'] as const,
   commonGroups: (userId: string) => ['commonGroups', userId] as const,
-  lastSeen: (userIds: string[]) => ['lastSeen', ...userIds] as const,
+  lastSeen: (userIds: string[]) => ['lastSeen', userIds.join(',')] as const,
 };
+
+/** Сколько подождать отметку ушедшего из сети, прежде чем её перечитать. */
+const LAST_SEEN_SETTLE_MS = 2500;
 
 export function useChatInfoSummary(chatId: string) {
   return useQuery({
@@ -80,7 +83,15 @@ export function usePeopleStatus(
     const left = [...wasOnline.current].some((id) => !online.has(id) && ids.includes(id));
 
     wasOnline.current = new Set(ids.filter((id) => online.has(id)));
-    if (left) void queryClient.invalidateQueries({ queryKey: chatInfoKeys.lastSeen(ids) });
+    if (!left) return;
+
+    // Ушедший отмечается сам, отдельным запросом, — дать ему дойти.
+    const timer = setTimeout(
+      () => void queryClient.invalidateQueries({ queryKey: chatInfoKeys.lastSeen(ids) }),
+      LAST_SEEN_SETTLE_MS,
+    );
+
+    return () => clearTimeout(timer);
   }, [ids, online, queryClient]);
 
   return useMemo(() => {

@@ -16,7 +16,7 @@ import { backGestureAvailable, interceptBackGesture } from '../../../modules/bac
 import { Motion } from '@/theme';
 
 /** Свайп за пределы этой доли ширины (или бросок) закрывает страницу. */
-const CLOSE_SHARE = 0.35;
+const CLOSE_SHARE = 0.4;
 /** Скорость броска вправо, dp/с, которая закрывает страницу и с короткого хода. */
 const CLOSE_VELOCITY = 800;
 /** Сдвиг пальца вправо, с которого жест узнаёт себя. */
@@ -47,29 +47,35 @@ export type SlideBack = {
  * приложениям), жест от края закрывает страницу анимацией ухода, а за пальцем
  * она едет от свайпа вправо внутри экрана — `makeSwipe`.
  */
-export function useSlideBack(): SlideBack {
+export function useSlideBack(fallback?: () => void): SlideBack {
   const router = useRouter();
   const focused = useIsFocused();
   const { width } = useWindowDimensions();
   const offset = useSharedValue(width);
   const leaving = useRef(false);
+  /** Страница уходит: тянуть её пальцем уже нельзя, иначе уход оборвался бы. */
+  const leavingNow = useSharedValue(false);
   /** Где был палец в начале системного жеста: страница едет на разницу. */
   const gestureStart = useSharedValue(0);
 
+  // Под страницей может не оказаться экрана (открыли ссылкой с холодного
+  // старта) — тогда уйти туда, куда скажет владелец.
   const finish = useCallback(() => {
     if (router.canGoBack()) router.back();
-  }, [router]);
+    else fallback?.();
+  }, [fallback, router]);
 
   const close = useCallback(() => {
     if (leaving.current) return;
 
     leaving.current = true;
+    leavingNow.set(true);
     offset.set(
       withTiming(width, { duration: Motion.pageMs, easing: Easing.in(Easing.cubic) }, (done) => {
         if (done) runOnJS(finish)();
       }),
     );
-  }, [finish, offset, width]);
+  }, [finish, leavingNow, offset, width]);
 
   const settle = useCallback(() => {
     offset.set(withSpring(0, Motion.pageSpring));
@@ -126,7 +132,7 @@ export function useSlideBack(): SlideBack {
         // прокрутке.
         .manualActivation(true)
         .onTouchesDown((event, manager) => {
-          if (!canStart.value) {
+          if (!canStart.value || leavingNow.value) {
             manager.fail();
             return;
           }
@@ -156,7 +162,7 @@ export function useSlideBack(): SlideBack {
             offset.set(withSpring(0, Motion.pageSpring));
           }
         }),
-    [close, offset, startX, startY, width],
+    [close, leavingNow, offset, startX, startY, width],
   );
 
   return useMemo(() => ({ offset, close, makeSwipe }), [close, makeSwipe, offset]);

@@ -4,6 +4,7 @@ import { AppState } from 'react-native';
 
 import { registerDevice, touchDevice } from '@/api/account';
 import { markSeen } from '@/api/chatInfo';
+import { setPresenceVisible } from '@/api/chats';
 import { sessionIdOf } from '@/lib/jwt';
 import { isNetworkError } from '@/lib/network';
 
@@ -13,11 +14,6 @@ import { resetClientState } from './resetClientState';
 import { signOutQuietly } from './signOut';
 import { useSession } from './useSession';
 
-/**
- * Жив ли ещё сеанс. Выданный access-токен работает до истечения, даже когда
- * сеанс завершили с другого устройства, поэтому спрашиваем базу. Сетевой сбой
- * — не повод выкидывать человека из аккаунта: ответа просто нет.
- */
 /**
  * Пока приложение открыто, отметка «был(а) в …» освежается так часто: если
  * приложение умрёт, не уйдя в фон, отметка отстанет не больше чем на это.
@@ -30,6 +26,11 @@ function markSeenQuietly() {
   });
 }
 
+/**
+ * Жив ли ещё сеанс. Выданный access-токен работает до истечения, даже когда
+ * сеанс завершили с другого устройства, поэтому спрашиваем базу. Сетевой сбой
+ * — не повод выкидывать человека из аккаунта: ответа просто нет.
+ */
 async function sessionIsAlive(): Promise<boolean> {
   try {
     return await touchDevice(await getInstallationId());
@@ -114,12 +115,16 @@ export function useAccountLifecycle() {
     // отметка возврата или последняя из открытого приложения.
     const subscription = AppState.addEventListener('change', (state) => {
       if (state === 'active') {
+        setPresenceVisible(true);
         markSeenQuietly();
         timer ??= setInterval(markSeenQuietly, SEEN_INTERVAL_MS);
         return;
       }
 
       if (state === 'background') {
+        // В фоне я не «в сети», даже пока сокет ещё жив, — иначе «был(а) в …»
+        // не появился бы, пока система не закроет соединение.
+        setPresenceVisible(false);
         markSeenQuietly();
         if (timer) clearInterval(timer);
         timer = null;
