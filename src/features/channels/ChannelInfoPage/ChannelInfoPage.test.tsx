@@ -41,16 +41,23 @@ jest.mock('expo-clipboard', () => ({ setStringAsync: jest.fn(() => Promise.resol
 const mockPush = jest.fn();
 const mockDispatch = jest.fn();
 
+type MockRoute = { key: string; name: string; params?: object };
+
+/** Стек «Чатов»: под страницей — экран этого канала. */
+const STACK_OVER_CHANNEL = {
+  index: 2,
+  routes: [
+    { key: 'chats', name: 'index' },
+    { key: 'channel-key', name: 'channel/[channelId]', params: { channelId: 'channel-1' } },
+    { key: 'info-key', name: 'channel-info/[channelId]', params: { channelId: 'channel-1' } },
+  ] as MockRoute[],
+};
+let mockStack = STACK_OVER_CHANNEL;
+
 jest.mock('expo-router', () => ({
   useIsFocused: () => true,
   useNavigation: () => ({
-    getState: () => ({
-      index: 1,
-      routes: [
-        { key: 'chats', name: 'index' },
-        { key: 'channel-key', name: 'channel/[channelId]', params: { channelId: 'channel-1' } },
-      ],
-    }),
+    getState: () => mockStack,
     dispatch: mockDispatch,
     addListener: () => () => undefined,
   }),
@@ -148,6 +155,7 @@ function serveSubscription(next: ChannelSubscription | null) {
 beforeEach(() => {
   jest.clearAllMocks();
   mockUserId = 'me';
+  mockStack = STACK_OVER_CHANNEL;
   serveSubscription(null);
   jest.mocked(getChannel).mockImplementation(() =>
     Promise.resolve({
@@ -386,6 +394,16 @@ describe('ChannelInfoPage', () => {
       expect(screen.getByTestId('info-subscriber-boris')).not.toHaveTextContent(/читатель/);
     });
 
+    it('keeps the subscribers tab with no subscribers, so its button leads somewhere', async () => {
+      jest.mocked(getChannel).mockResolvedValue({ ...channel, subscribersCount: 0, readersCount: 0 });
+
+      await renderPage();
+      await layoutCards();
+
+      expect(screen.getByTestId('info-tab-subscribers')).toBeTruthy();
+      expect(await screen.findByText('Подписчиков пока нет')).toBeTruthy();
+    });
+
     it('opens the edit screen from the pencil', async () => {
       await renderPage();
 
@@ -414,5 +432,44 @@ describe('ChannelInfoPage', () => {
         }),
       ),
     );
+  });
+
+  it('opens the channel on top when the same channel is only deeper in the stack', async () => {
+    mockStack = {
+      index: 3,
+      routes: [
+        ...STACK_OVER_CHANNEL.routes.slice(0, 2),
+        { key: 'person', name: 'people/[userId]', params: { userId: 'owner' } },
+        { key: 'info-key', name: 'channel-info/[channelId]', params: { channelId: 'channel-1' } },
+      ],
+    };
+
+    await renderPage();
+    await screen.findByTestId('info-subscribe');
+    await menuItems();
+    await fireEvent.press(screen.getByLabelText('Поиск по постам'));
+
+    await waitFor(() =>
+      expect(mockPush).toHaveBeenCalledWith({
+        pathname: '/chats/channel/[channelId]',
+        params: expect.objectContaining({ channelId: 'channel-1', search: '1' }),
+      }),
+    );
+    expect(mockDispatch).not.toHaveBeenCalled();
+  });
+
+  it('without the channel shows a back arrow and an honest failure with retry', async () => {
+    jest.mocked(getChannel).mockRejectedValue(new Error('boom'));
+
+    await renderWithQuery(<ChannelInfoScreen channelId="channel-1" />);
+
+    expect(screen.getByTestId('info-back')).toBeTruthy();
+    expect(await screen.findByText('Не удалось открыть канал')).toBeTruthy();
+    expect(screen.queryByTestId('channel-info-page')).toBeNull();
+
+    jest.mocked(getChannel).mockResolvedValue(channel);
+    await fireEvent.press(screen.getByText('Повторить'));
+
+    expect(await screen.findByTestId('channel-info-page')).toBeTruthy();
   });
 });

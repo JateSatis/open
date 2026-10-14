@@ -1,5 +1,5 @@
 import * as Clipboard from 'expo-clipboard';
-import { useNavigation, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 
 import { ChannelInfoCards } from './ChannelInfoCards';
@@ -7,6 +7,8 @@ import { ChannelInfoMenu, type ChannelInfoMenuItem, type ChannelRole } from './C
 import { channelInfoActions } from './channelInfoActions';
 import { channelInfoTabs } from './channelInfoTabs';
 import { useChannelInfoSummary } from './queries';
+import { useInfoSubscription } from './useInfoSubscription';
+import { useToPosts } from './useToPosts';
 
 import type { Channel } from '@/api/channels';
 import {
@@ -15,22 +17,15 @@ import {
   type InfoPageHandle,
   type SlideBack,
 } from '@/components/InfoPage';
-import { confirm } from '@/components/ConfirmDialog/store';
 import { channelLink } from '@/features/channels/channelLink';
 import { subscribersLabel } from '@/features/channels/subscriberText';
-import { useSubscriptionActions } from '@/features/channels/subscription';
 import { useChannelChangedSignal } from '@/features/channels/useChannelChangedSignal';
 import { useChannelSubscription } from '@/features/channels/useChannelSubscription';
-import { JUMP_PARAM_NAMES } from '@/features/chats/jumpParams';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
 import { useOnlineUsers } from '@/features/chats/useOnlineUsers';
 import { MediaViewer } from '@/features/media';
 import { showNotice } from '@/features/notifications/alertsStore';
 import { useProfile } from '@/features/profile/queries';
-
-const CLEARED_PARAMS = Object.fromEntries(
-  [...JUMP_PARAM_NAMES, 'search', 'searchKey', 'section'].map((name) => [name, undefined]),
-);
 
 export type ChannelInfoPageProps = {
   channel: Channel;
@@ -45,21 +40,19 @@ export type ChannelInfoPageProps = {
  */
 export function ChannelInfoPage({ channel, slideBack }: ChannelInfoPageProps) {
   const router = useRouter();
-  const navigation = useNavigation();
   const currentUserId = useCurrentUserId();
   const online = useOnlineUsers(currentUserId);
   const channelId = channel.id;
   const isOwner = currentUserId !== null && channel.ownerId === currentUserId;
   const { status, subscription } = useChannelSubscription(channelId);
   const role: ChannelRole = isOwner ? 'owner' : status;
-  const subscriptionActions = useSubscriptionActions(channelId);
+  const subscriptionActions = useInfoSubscription(channelId, role);
+  const { justSubscribed, subscribe, unsubscribe } = subscriptionActions;
   const summaryQuery = useChannelInfoSummary(channelId);
   const summary = summaryQuery.data;
   const { data: owner } = useProfile(channel.ownerId ?? undefined);
   const [page, setPage] = useState<InfoPageHandle | null>(null);
   const [photoOpen, setPhotoOpen] = useState(false);
-  // Подписался на этой странице: карточка ведёт к «Добавить в чаты».
-  const [justSubscribed, setJustSubscribed] = useState(false);
   // Поиск подписчиков: `null` — закрыт.
   const [subscriberQuery, setSubscriberQuery] = useState<string | null>(null);
 
@@ -78,41 +71,7 @@ export function ChannelInfoPage({ channel, slideBack }: ChannelInfoPageProps) {
     [currentUserId, router],
   );
 
-  // В тот же канал ниже в стеке — на «Посты», с прыжком к посту или в поиск.
-  const { close } = slideBack;
-  const toPosts = useCallback(
-    (params: Record<string, string>) => {
-      const state = navigation.getState();
-      const below = state?.routes.findIndex(
-        (route) =>
-          route.name === 'channel/[channelId]' &&
-          (route.params as { channelId?: string } | undefined)?.channelId === channelId,
-      );
-
-      if (state && below !== undefined && below !== -1) {
-        navigation.dispatch({
-          type: 'SET_PARAMS',
-          payload: { params: { ...CLEARED_PARAMS, channelId, ...params } },
-          source: state.routes[below].key,
-        });
-        close();
-        return;
-      }
-
-      router.push({ pathname: '/chats/channel/[channelId]', params: { channelId, ...params } });
-    },
-    [channelId, close, navigation, router],
-  );
-
-  const showInChat = useCallback(
-    (messageId: string, createdAt: string) =>
-      toPosts({ jumpTo: messageId, jumpAt: createdAt, jumpKey: String(Date.now()) }),
-    [toPosts],
-  );
-  const searchPosts = useCallback(
-    () => toPosts({ search: '1', searchKey: String(Date.now()) }),
-    [toPosts],
-  );
+  const { showInChat, searchPosts } = useToPosts(channelId, slideBack.close);
 
   const openSubscribers = useCallback(() => page?.focusTab('subscribers'), [page]);
   const searchSubscribers = useCallback(() => {
@@ -122,28 +81,6 @@ export function ChannelInfoPage({ channel, slideBack }: ChannelInfoPageProps) {
   const closeSubscriberSearch = useCallback(() => setSubscriberQuery(null), []);
 
   const onCopied = useCallback(() => showNotice('Скопировано'), []);
-
-  const subscribe = useCallback(async () => {
-    if (await subscriptionActions.subscribe(false)) setJustSubscribed(true);
-  }, [subscriptionActions]);
-
-  const unsubscribe = useCallback(async () => {
-    const confirmed = await confirm({
-      title: 'Отписаться от канала?',
-      message:
-        role === 'reader'
-          ? 'Канал уйдёт из «Чатов», новые посты перестанут приходить.'
-          : 'Канал перестанет быть в ваших подписках.',
-      confirmLabel: 'Отписаться',
-      cancelLabel: 'Отмена',
-      destructive: true,
-    });
-
-    if (!confirmed) return;
-
-    setJustSubscribed(false);
-    await subscriptionActions.unsubscribe();
-  }, [role, subscriptionActions]);
 
   const selectMenu = useCallback(
     (item: ChannelInfoMenuItem) => {

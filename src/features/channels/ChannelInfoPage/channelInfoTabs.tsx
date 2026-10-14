@@ -26,7 +26,8 @@ export type ChannelInfoTabsInput = {
 
 /**
  * Вкладки страницы канала: Подписчики (только владельцу), Попсы, Медиа,
- * Голосовые. Пустые не показываются; медиа и голосовые — из постов.
+ * Голосовые. Пустые не показываются, кроме «Подписчиков»; медиа и
+ * голосовые — из постов.
  */
 export function channelInfoTabs(input: ChannelInfoTabsInput): InfoTab[] {
   const { channel, summary } = input;
@@ -34,7 +35,9 @@ export function channelInfoTabs(input: ChannelInfoTabsInput): InfoTab[] {
   const photos = summary?.photos ?? 0;
   const videos = summary?.videos ?? 0;
 
-  if (input.isOwner && channel.subscribersCount > 0) {
+  // Владельцу — всегда, и пустая: на неё ведут его кнопка «Подписчики»,
+  // пункт меню и сводка, и с нуля подписчиков им нужно куда-то вести.
+  if (input.isOwner) {
     tabs.push({
       key: 'subscribers',
       title: 'Подписчики',

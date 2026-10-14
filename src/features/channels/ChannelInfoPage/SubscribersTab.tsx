@@ -90,9 +90,11 @@ export function SubscribersTab({ tab, channelId, online, query, onOpenPerson }: 
           <View style={styles.empty}>
             <ActivityIndicator accessibilityLabel="Загрузка подписчиков" />
           </View>
-        ) : needle && source.status !== 'error' ? (
+        ) : source.status !== 'error' ? (
           <View style={styles.empty}>
-            <Text color="textSecondary">Никого не нашлось</Text>
+            <Text color="textSecondary">
+              {needle ? 'Никого не нашлось' : 'Подписчиков пока нет'}
+            </Text>
           </View>
         ) : null
       }
