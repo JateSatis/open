@@ -16,6 +16,7 @@ import {
   sendVoiceComment,
   sendVoicePopComment,
   type Comment,
+  type CommentFragment,
   type CommentSubject,
 } from '@/api/comments';
 import { NO_REACTIONS } from '@/api/reactionCounts';
@@ -43,9 +44,13 @@ import { toCommentItem } from '@/features/interactions/comments/commentItem';
 import {
   addToThread,
   raiseRoot,
+  readRoots,
   updateRoots,
+  updateScopedRoots,
   updateThread,
 } from '@/features/interactions/comments/commentsCache';
+import { fragmentsKey } from '@/features/chats/fragments/useMessageFragments';
+
 import {
   removeUploadedMedia,
   storedPaths,
@@ -57,6 +62,15 @@ import { showNotice } from '@/features/notifications/alertsStore';
 import { bumpPopComments } from '@/features/pops/popsCache';
 import { isNetworkError } from '@/lib/network';
 
+/** Фрагмент, который панель уже знает в базе: после первой своей отправки. */
+function readScopedFragmentId(
+  queryClient: QueryClient,
+  targetId: string,
+  scopeKey: string,
+): string | null {
+  return readRoots(queryClient, targetId, scopeKey)?.scope?.fragmentId ?? null;
+}
+
 export type CommentSendContext = {
   queryClient: QueryClient;
   subject: CommentSubject;
@@ -64,7 +78,15 @@ export type CommentSendContext = {
   currentUserId: string | null;
   /** Имя и аватар — для своего пузыря до ответа сервера. */
   me: { name: string | null; avatarUrl: string | null };
+  /** Панель фрагмента: верхнеуровневый комментарий уходит к этому фрагменту. */
+  fragment?: FragmentScope;
 };
+
+/**
+ * Фрагмент панели: ключ её верха, фрагмент в базе (у своего нового — `null`
+ * до первой отправки) и как назвать его базе — свой диапазоном, чужой по id.
+ */
+export type FragmentScope = { key: string; fragmentId: string | null; request: CommentFragment };
 
 /** Ключи отправок, которые сейчас идут: повтор не стартует поверх незавершённой. */
 const delivering = new Set<string>();
@@ -72,7 +94,7 @@ const delivering = new Set<string>();
 const discarded = new Set<string>();
 
 function draftOf(
-  { subject, chatId, currentUserId, me }: CommentSendContext,
+  { subject, chatId, currentUserId, me, fragment }: CommentSendContext,
   at: number,
   content: Pick<CommentItem, 'kind' | 'text' | 'attachments' | 'threadRootId'> &
     Partial<Pick<CommentItem, 'pendingMedia' | 'pendingVoice' | 'localPreviews' | 'replies'>>,
@@ -101,6 +123,10 @@ function draftOf(
     status: 'sending',
     repliesCount: 0,
     deleted: false,
+    // Ответ в треде к фрагменту не привязывается.
+    ...(fragment && !content.threadRootId
+      ? { fragmentKey: fragment.key, fragmentId: fragment.fragmentId }
+      : null),
     ...content,
   };
 }
@@ -110,8 +136,27 @@ async function insert(
   outgoing: Outgoing,
   uploaded: UploadedMedia[],
   threadRootId: string | null,
+  fragment: CommentFragment | undefined,
 ): Promise<Comment> {
   if (outgoing.type === 'voice') {
+    if (subject.type === 'message') {
+      const [file] = uploaded;
+
+      return sendVoiceComment(
+        subject.id,
+        {
+          url: file.url,
+          mimeType: file.mimeType,
+          durationMs: file.durationMs ?? 0,
+          sizeBytes: file.sizeBytes,
+          waveform: file.waveform,
+        },
+        outgoing.replyTo,
+        threadRootId,
+        fragment,
+      );
+    }
+
     const [file] = uploaded;
 
     return (subject.type === 'pop' ? sendVoicePopComment : sendVoiceComment)(
@@ -135,6 +180,7 @@ async function insert(
     media: uploaded.map(toSendMedia),
     replyTo: outgoing.replyTo,
     threadRootId,
+    fragment,
   });
 }
 
@@ -145,9 +191,20 @@ async function insert(
  * своё начало он дочитает, а ответ уже лежит за разрывом.
  */
 function settle(queryClient: QueryClient, targetId: string, localId: string, saved: Comment) {
-  const localPreviews = outboxComments(targetId).find((item) => item.localId === localId)
-    ?.localPreviews;
+  const draft = outboxComments(targetId).find((item) => item.localId === localId);
+  const { localPreviews, fragmentKey } = draft ?? {};
   const item: CommentItem = { ...toCommentItem(saved), localPreviews };
+
+  // Панель фрагмента: первый комментарий к своему новому фрагменту называет
+  // его id — дальше её верх ловит и чужие комментарии к нему.
+  if (saved.fragmentId) {
+    updateScopedRoots(queryClient, targetId, (page, scope) =>
+      scope.key === fragmentKey || scope.fragmentId === saved.fragmentId
+        ? raiseRoot({ ...page, scope: { ...scope, fragmentId: saved.fragmentId } }, item)
+        : page,
+    );
+    void queryClient.invalidateQueries({ queryKey: fragmentsKey(targetId) });
+  }
 
   if (saved.threadRootId) {
     updateThread(queryClient, targetId, saved.threadRootId, (page) => addToThread(page, item), {
@@ -187,6 +244,22 @@ function explainRejection(cause: unknown, subject: CommentSubject) {
   }
 }
 
+/**
+ * Куда уходит верхнеуровневый из панели фрагмента. После первой отправки
+ * фрагмент уже есть в базе — дальше он по id, даже если диапазон в тексте
+ * съехал правкой. Повтор упавшего — из той же панели или нет, по черновику.
+ */
+function fragmentRequest(context: CommentSendContext, localId: string): CommentFragment | undefined {
+  const { fragment, subject } = context;
+  const draft = outboxComments(subject.id).find((item) => item.localId === localId);
+
+  if (!fragment || !draft?.fragmentKey || draft.fragmentKey !== fragment.key) return undefined;
+
+  const known = readScopedFragmentId(context.queryClient, subject.id, fragment.key);
+
+  return known ? { id: known } : fragment.request;
+}
+
 export async function deliverComment(
   context: CommentSendContext,
   localId: string,
@@ -218,7 +291,13 @@ export async function deliverComment(
 
     if (discarded.has(localId)) throw new Error('Отправка отменена');
 
-    saved = await insert(subject, outgoing, uploaded, threadRootId);
+    saved = await insert(
+      subject,
+      outgoing,
+      uploaded,
+      threadRootId,
+      threadRootId ? undefined : fragmentRequest(context, localId),
+    );
 
     // Уже в базе, но человек его удалил — удаляем и там, для всех.
     if (discarded.has(localId)) {

@@ -24,6 +24,8 @@ export type CommentTopicListener = {
   onTargetChanged?: () => void;
   /** Закреп комментария цели поставили, сменили или сняли — закреп дочитывается из базы. */
   onPinChanged?: () => void;
+  /** Реакции на фрагмент текста сообщения изменились — счётчики дочитываются из базы. */
+  onFragmentReactionsChanged?: (fragmentId: string) => void;
   /** Канал переподключился: пропущенное надо дочитать. */
   onReconnected?: () => void;
 };
@@ -72,6 +74,11 @@ function open(messageId: string): Entry {
   channel
     .on('broadcast', { event: 'target_changed' }, () => each((l) => l.onTargetChanged?.()))
     .on('broadcast', { event: 'comment_pin_changed' }, () => each((l) => l.onPinChanged?.()))
+    .on('broadcast', { event: 'fragment_reactions_changed' }, ({ payload }) => {
+      const id = stringField(payload, 'fragment_id');
+
+      if (id) each((l) => l.onFragmentReactionsChanged?.(id));
+    })
     .subscribe((status) => {
       if (status !== 'SUBSCRIBED') return;
 

@@ -14,6 +14,8 @@ export type TextSelection = {
   messageId: string;
   /** Чат сообщения — для комментариев и реакций оригинала островка. */
   chatId: string;
+  /** Я участник чата сообщения — догадка ряда реакции; решит база. */
+  amMember: boolean;
   text: string;
   start: number;
   end: number;

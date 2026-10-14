@@ -10,6 +10,8 @@ export type SelectableTextEntry = {
   /** Сообщение, чей это текст: у облачка островка — оригинал. */
   messageId: string;
   chatId: string;
+  /** Я участник чата сообщения — догадка ряда моей реакции на фрагмент. */
+  amMember: boolean;
 };
 
 const entries = new Map<string, SelectableTextEntry>();

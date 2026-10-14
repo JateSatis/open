@@ -104,7 +104,7 @@ export type MessageBubbleProps = {
    * В тексте можно выделять (режим фрагментов): строка облачка и сообщение,
    * чей это текст, — у облачка островка оригинал. Нет — обычный текст.
    */
-  selectableText?: { rowKey: string; messageId: string; chatId: string };
+  selectableText?: { rowKey: string; messageId: string; chatId: string; amMember: boolean };
 };
 
 const noop = () => undefined;
@@ -260,6 +260,7 @@ export function MessageBubble({
       rowKey={selectableText?.rowKey}
       messageId={selectableText?.messageId ?? message.id}
       chatId={selectableText?.chatId ?? message.chatId}
+      amMember={selectableText?.amMember ?? false}
     />
   ) : null;
 

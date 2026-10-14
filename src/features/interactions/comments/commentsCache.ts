@@ -19,7 +19,16 @@ import type { QueryClient } from '@tanstack/react-query';
 import type { Comment, RootCursor } from '@/api/comments';
 import { toCommentItem, type CommentItem } from '@/features/interactions/comments/commentItem';
 
+/**
+ * Верх панели фрагмента — только корни этого фрагмента. `key` — свой для
+ * панели (диапазон или кластер), `fragmentId` — фрагмент в базе; у своего
+ * нового его нет, пока не уйдёт первый комментарий.
+ */
+export type RootsScope = { key: string; fragmentId: string | null };
+
 export type RootsPage = {
+  /** Только корни фрагмента; нет — весь верх сообщения. */
+  scope?: RootsScope;
   /** Закреплённый автором контента — первым; в `raised` и `items` его нет. */
   authorPin: CommentItem | null;
   /** Свои отправленные за это открытие и выделенный — под закрепом, новыми вперёд. */
@@ -44,8 +53,11 @@ export function commentsKey(targetId: string) {
   return ['comments', targetId] as const;
 }
 
-export function rootsKey(targetId: string) {
-  return ['comments', targetId, 'roots'] as const;
+/** Верх цели; со `scopeKey` — верх панели фрагмента, отдельной страницей. */
+export function rootsKey(targetId: string, scopeKey?: string) {
+  return scopeKey
+    ? (['comments', targetId, 'roots', scopeKey] as const)
+    : (['comments', targetId, 'roots'] as const);
 }
 
 export function threadKey(targetId: string, rootId: string) {
@@ -272,8 +284,12 @@ export function loadedThreads(queryClient: QueryClient, targetId: string): Map<s
   return threads;
 }
 
-export function readRoots(queryClient: QueryClient, targetId: string): RootsPage | undefined {
-  return queryClient.getQueryData<RootsPage>(rootsKey(targetId));
+export function readRoots(
+  queryClient: QueryClient,
+  targetId: string,
+  scopeKey?: string,
+): RootsPage | undefined {
+  return queryClient.getQueryData<RootsPage>(rootsKey(targetId, scopeKey));
 }
 
 /** Меняет загруженный верх; незагруженный не создаёт — пустой список соврал бы, что комментариев нет. */
@@ -281,8 +297,23 @@ export function updateRoots(
   queryClient: QueryClient,
   targetId: string,
   update: (page: RootsPage) => RootsPage,
+  scopeKey?: string,
 ) {
-  queryClient.setQueryData<RootsPage>(rootsKey(targetId), (page) => (page ? update(page) : page));
+  queryClient.setQueryData<RootsPage>(rootsKey(targetId, scopeKey), (page) =>
+    page ? update(page) : page,
+  );
+}
+
+/** Меняет верх всех открытых панелей фрагментов цели. */
+export function updateScopedRoots(
+  queryClient: QueryClient,
+  targetId: string,
+  update: (page: RootsPage, scope: RootsScope) => RootsPage,
+) {
+  queryClient.setQueriesData<RootsPage>(
+    { queryKey: rootsKey(targetId), predicate: (query) => query.queryKey.length === 4 },
+    (page) => (page?.scope ? update(page, page.scope) : page),
+  );
 }
 
 export function readThread(

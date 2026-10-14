@@ -20,6 +20,7 @@ export type SelectableTextProps = {
   /** Сообщение, чей это текст: у облачка островка — оригинал. */
   messageId: string;
   chatId: string;
+  amMember: boolean;
 };
 
 /**
@@ -28,7 +29,14 @@ export type SelectableTextProps = {
  * (`textGeometry`) лежит под текстом, ручки — поверх. Жесты ручек ведёт строка
  * (`useSelectionHandles`), здесь только то, что видно.
  */
-export function SelectableText({ text, isOwn, rowKey, messageId, chatId }: SelectableTextProps) {
+export function SelectableText({
+  text,
+  isOwn,
+  rowKey,
+  messageId,
+  chatId,
+  amMember,
+}: SelectableTextProps) {
   const theme = useTheme();
   const ref = useRef<RNText>(null);
   const selection = useRowSelection(rowKey);
@@ -36,8 +44,8 @@ export function SelectableText({ text, isOwn, rowKey, messageId, chatId }: Selec
   useEffect(() => {
     if (!rowKey) return;
 
-    return registerSelectableText(rowKey, { ref, text, messageId, chatId });
-  }, [chatId, messageId, rowKey, text]);
+    return registerSelectableText(rowKey, { ref, text, messageId, chatId, amMember });
+  }, [amMember, chatId, messageId, rowKey, text]);
 
   return (
     <View>

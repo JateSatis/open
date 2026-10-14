@@ -127,3 +127,11 @@ jest.mock('livekit-client', () => {
 jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock'),
 );
+
+// Фрагменты текста — сеть. Экраны переписки и комментариев их подгружают;
+// тест фрагментов подменяет функции сам (`jest.mocked(listMessageFragments)`).
+jest.mock('@/api/fragments', () => ({
+  listMessageFragments: jest.fn(() => Promise.resolve([])),
+  setFragmentReaction: jest.fn(() => Promise.resolve({ fragmentId: null, mine: null })),
+  setFragmentReactionById: jest.fn(() => Promise.resolve(null)),
+}));

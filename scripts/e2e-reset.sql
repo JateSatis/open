@@ -14,6 +14,7 @@ declare
   messages_jobs jsonb;
   comment_jobs jsonb;
   reaction_jobs jsonb;
+  fragment_reaction_jobs jsonb;
 begin
   -- Список работы собираем до смены роли: дальше запросы идут уже под RLS.
   select coalesce(jsonb_agg(jsonb_build_object('author', author_id, 'ids', ids)), '[]')
@@ -59,6 +60,16 @@ begin
      and c.title = 'Test Kanal'
      and r.user_id = any (test_users);
 
+  -- fragment-panel ставит реакцию на фрагмент чужого сообщения и снимает её;
+  -- оборванный прогон оставил бы её. Реакции на фрагменты у тестовых
+  -- аккаунтов — только от сценариев.
+  select coalesce(jsonb_agg(jsonb_build_object('author', r.user_id, 'id', r.target_id)), '[]')
+    into fragment_reaction_jobs
+    from public.reactions r
+   where r.target_type = 'fragment'
+     and r.deleted_at is null
+     and r.user_id = any (test_users);
+
   perform set_config('role', 'authenticated', true);
 
   for job in select * from jsonb_array_elements(messages_jobs) loop
@@ -74,6 +85,11 @@ begin
   for job in select * from jsonb_array_elements(reaction_jobs) loop
     perform set_config('request.jwt.claims', jsonb_build_object('sub', job.value->>'author', 'role', 'authenticated')::text, true);
     perform public.set_reaction('pop', (job.value->>'id')::uuid, null);
+  end loop;
+
+  for job in select * from jsonb_array_elements(fragment_reaction_jobs) loop
+    perform set_config('request.jwt.claims', jsonb_build_object('sub', job.value->>'author', 'role', 'authenticated')::text, true);
+    perform public.set_reaction('fragment', (job.value->>'id')::uuid, null);
   end loop;
 
   raise notice 'e2e-reset: messages %, comments %, pop reactions %',

@@ -74,7 +74,9 @@ import { measureInWindow, RowRegistryContext } from '@/features/chats/rowRegistr
 import { useChatBubbles } from '@/features/chats/useChatBubbles';
 import { useChatKeyboardInset } from '@/features/chats/useChatKeyboardInset';
 import { useChatRowRenderer } from '@/features/chats/useChatRowRenderer';
-import { clearTextSelection } from '@/features/chats/fragments/fragmentStore';
+import type { Fragment, FragmentRange } from '@/api/fragments';
+import { FragmentMenu } from '@/features/chats/fragments/FragmentMenu';
+import { clearTextSelection, type TextSelection } from '@/features/chats/fragments/fragmentStore';
 import { useFragmentMode } from '@/features/chats/fragments/useFragmentMode';
 import { useComposerDraft } from '@/features/chats/useComposerDraft';
 import { chatQueryKey, useChat } from '@/features/chats/useChat';
@@ -101,7 +103,11 @@ import { useQuoteNavigation, type CommentFocus } from '@/features/chats/useQuote
 import { useReplyForward } from '@/features/chats/useReplyForward';
 import { useRespondToInvite } from '@/features/chats/useRespondToInvite';
 import { WaitingBanner } from '@/features/chats/WaitingBanner';
-import { CommentsPanel, openComments } from '@/features/interactions/CommentsPanel';
+import {
+  CommentsPanel,
+  openComments,
+  openFragmentComments,
+} from '@/features/interactions/CommentsPanel';
 import { resetScrolledRows } from '@/features/interactions/MessageReactions';
 import { menuReactionSet } from '@/features/interactions/reactionState';
 import { chatFade } from '@/features/interactions/comments/commentsLift';
@@ -590,6 +596,22 @@ export function ChatConversation({
 
   const fragments = useFragmentMode({ isMember, isFocused, isSelecting });
 
+  // Кнопка комментария в меню фрагмента: боковая панель этого куска текста.
+  // Выделение снимается, облачко остаётся в режиме фрагментов.
+  const commentOnFragment = useCallback(
+    (selection: TextSelection, range: FragmentRange, mine: Fragment | null) => {
+      clearTextSelection();
+      openFragmentComments(selection.messageId, selection.chatId, selection.amMember, {
+        kind: 'fragment',
+        key: `${selection.messageId}:${range.start}-${range.end}`,
+        fragmentId: mine && !mine.id.startsWith('local:') ? mine.id : null,
+        range,
+        focusInput: true,
+      });
+    },
+    [],
+  );
+
   const { renderItem, islandHeader, bubbleContent } = useChatRowRenderer({
     currentUserId,
     isMember,
@@ -1020,6 +1042,8 @@ export function ChatConversation({
           sections={sheetSections}
         />
       ) : null}
+
+      <FragmentMenu measureViewport={measureListFrame} onComment={commentOnFragment} />
 
       <MessageContextMenu
         anchor={menu.target?.anchor ?? null}

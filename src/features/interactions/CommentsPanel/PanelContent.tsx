@@ -1,5 +1,5 @@
 import type { FlashListRef, ListRenderItem } from '@shopify/flash-list';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { View, useWindowDimensions, type TextInput } from 'react-native';
 import { GestureDetector } from 'react-native-gesture-handler';
 import { KeyboardEvents } from 'react-native-keyboard-controller';
@@ -39,6 +39,7 @@ import { useJumpToComment } from '@/features/interactions/comments/useJumpToComm
 import { audienceOf } from '@/features/interactions/reactionState';
 import { showNotice } from '@/features/notifications/alertsStore';
 import { useTheme } from '@/hooks/use-theme';
+import { focusWithKeyboard } from '@/lib/windowFocus';
 import { Spacing } from '@/theme';
 
 /** Метка у имени автора-участника: у сообщения — участник чата, у попа — публикующий в канале. */
@@ -62,6 +63,15 @@ export type PanelContentProps = {
   hostChatId?: string;
   /** «Назад» сначала спрашивает содержимое: правка, выбор и окно треда выходят первыми. */
   backRef: { current: () => boolean };
+  /** Ширина окна панели; нет — во весь экран (шит). Боковая панель уже экрана. */
+  width?: number;
+  /**
+   * Своя шапка: заголовок и блок под ним (цитата и реакции фрагмента). В
+   * окне треда — обычная «Ответы».
+   */
+  header?: { title: string; extra: ReactNode };
+  /** Поле ввода получает фокус, как только станет `true` (панель доехала). */
+  focusInput?: boolean;
 };
 
 /**
@@ -78,10 +88,14 @@ export function PanelContent({
   onOpenPerson,
   hostChatId,
   backRef,
+  width: panelWidth,
+  header,
+  focusInput = false,
 }: PanelContentProps) {
   const theme = useTheme();
   const currentUserId = useCurrentUserId();
-  const { width } = useWindowDimensions();
+  const { width: windowWidth } = useWindowDimensions();
+  const width = panelWidth ?? windowWidth;
   const mediaBounds = useMemo(() => mosaicBounds(width - Spacing.three * 2), [width]);
   const openThread = useOpenThread();
   const threadPane = useThreadPane({ openThread, width, onExit: exitThread });
@@ -161,6 +175,10 @@ export function PanelContent({
   useEffect(() => {
     backRef.current = actions.back;
   }, [actions.back, backRef]);
+
+  useEffect(() => {
+    if (focusInput) focusWithKeyboard(inputRef, undefined, true);
+  }, [focusInput]);
 
   // Пришли к комментарию — он вспыхивает, когда встал в список: ответ — в
   // окне своего треда, верхнеуровневый — в основном. Виден и так — список не
@@ -373,10 +391,15 @@ export function PanelContent({
 
           <SheetHeader onHeight={sheet.setHeaderHeight} pan={sheet.headerPan}>
             <PanelHeader
-              title={inThread ? 'Ответы' : count > 0 ? commentsCountLabel(count) : 'Комментарии'}
+              title={
+                inThread
+                  ? 'Ответы'
+                  : (header?.title ?? (count > 0 ? commentsCountLabel(count) : 'Комментарии'))
+              }
               onClose={closeNow}
               onBack={inThread ? exitThread : undefined}
             />
+            {header && !inThread ? header.extra : null}
           </SheetHeader>
         </View>
       </Animated.View>

@@ -63,6 +63,7 @@ export async function beginTextSelection(rowKey: string, point: RowPoint): Promi
     rowKey,
     messageId: entry.messageId,
     chatId: entry.chatId,
+    amMember: entry.amMember,
     text: entry.text,
     start: word.start,
     end: word.end,

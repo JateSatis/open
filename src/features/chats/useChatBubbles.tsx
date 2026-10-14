@@ -236,7 +236,9 @@ export function useChatBubbles({
           showAvatar={showAvatars}
           // Выделять можно только в самой строке, не в её копиях (меню, шит).
           selectableText={
-            interactive ? { rowKey, messageId: item.id, chatId: item.chatId } : undefined
+            interactive
+              ? { rowKey, messageId: item.id, chatId: item.chatId, amMember: isMember }
+              : undefined
           }
         />
       );
@@ -305,7 +307,12 @@ export function useChatBubbles({
           // Фрагмент облачка островка — фрагмент оригинала, как и его реакции.
           selectableText={
             interactive
-              ? { rowKey: row.key, messageId: original.id, chatId: original.chatId }
+              ? {
+                  rowKey: row.key,
+                  messageId: original.id,
+                  chatId: original.chatId,
+                  amMember: home.amMember,
+                }
               : undefined
           }
         />

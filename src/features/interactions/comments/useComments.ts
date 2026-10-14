@@ -20,6 +20,7 @@ import {
   sendCommentPost,
   sendCommentVoice,
   type CommentSendContext,
+  type FragmentScope,
 } from '@/features/interactions/comments/commentDelivery';
 import { saveCommentEdit } from '@/features/interactions/comments/commentEditing';
 import {
@@ -37,6 +38,7 @@ import {
   setAuthorPin,
   updateAllComments,
   updateRoots,
+  updateScopedRoots,
   type RootsPage,
 } from '@/features/interactions/comments/commentsCache';
 import {
@@ -160,12 +162,24 @@ export function useComments(
   chatId: string,
   currentUserId: string | null,
   amMember = false,
+  fragment?: FragmentScope,
 ): CommentsState {
   const queryClient = useQueryClient();
   const connection = useConnectionStatus();
   const { data: me } = useMyProfile();
   const targetId = subject.id;
-  const outbox = useOutboxComments(targetId);
+  const scopeKey = fragment?.key;
+  const startFragmentId = fragment?.fragmentId ?? null;
+  const allOutbox = useOutboxComments(targetId);
+  // В панели фрагмента — свои неотправленные из неё же; ответы в тредах — все:
+  // треды открываются только у корней этой панели.
+  const outbox = useMemo(
+    () =>
+      scopeKey
+        ? allOutbox.filter((item) => item.threadRootId || item.fragmentKey === scopeKey)
+        : allOutbox,
+    [allOutbox, scopeKey],
+  );
   const overlay = useOverlay(targetId);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const loadingMoreRef = useRef(false);
@@ -177,8 +191,9 @@ export function useComments(
   }, [currentUserId]);
 
   const { data, isPending, error } = useQuery({
-    queryKey: rootsKey(targetId),
-    queryFn: () => loadRoots(targetId),
+    queryKey: rootsKey(targetId, scopeKey),
+    queryFn: () =>
+      loadRoots(targetId, scopeKey ? { key: scopeKey, fragmentId: startFragmentId } : undefined),
     // Порядок верха меняется только новым открытием: сами по себе страницы не перечитываются.
     staleTime: Infinity,
     refetchOnReconnect: false,
@@ -198,8 +213,9 @@ export function useComments(
       chatId,
       currentUserId,
       me: { name: me?.displayName ?? null, avatarUrl: me?.avatarUrl ?? null },
+      fragment,
     }),
-    [chatId, currentUserId, me, subject, queryClient],
+    [chatId, currentUserId, fragment, me, subject, queryClient],
   );
 
   // ----------------------------------------------------------------- Realtime
@@ -330,16 +346,21 @@ export function useComments(
 
   const changePin = useCallback(
     (comment: CommentItem | null) => {
-      const before = readRoots(queryClient, targetId);
+      const before = readRoots(queryClient, targetId, scopeKey);
 
-      updateRoots(queryClient, targetId, (page) => setAuthorPin(page, comment));
+      updateRoots(queryClient, targetId, (page) => setAuthorPin(page, comment), scopeKey);
 
       (comment ? pinComment(comment.id) : unpinComment(targetId)).catch((cause: unknown) => {
         // Откат — к закрепу из базы, а не к снимку: пока шёл запрос, закреп
         // мог смениться и у других.
         if (before) {
           syncAuthorPin(queryClient, targetId).catch(() =>
-            updateRoots(queryClient, targetId, (page) => setAuthorPin(page, before.authorPin)),
+            updateRoots(
+              queryClient,
+              targetId,
+              (page) => setAuthorPin(page, before.authorPin),
+              scopeKey,
+            ),
           );
         }
 
@@ -353,21 +374,25 @@ export function useComments(
         );
       });
     },
-    [targetId, queryClient],
+    [scopeKey, targetId, queryClient],
   );
 
   const loadMore = useCallback(() => {
-    const cursor = readRoots(queryClient, targetId)?.nextCursor;
+    const loaded = readRoots(queryClient, targetId, scopeKey);
+    const cursor = loaded?.nextCursor;
 
     if (!cursor || loadingMoreRef.current) return Promise.resolve();
 
     loadingMoreRef.current = true;
     setIsLoadingMore(true);
 
-    return listThreadRoots(targetId, { cursor })
+    return listThreadRoots(targetId, { cursor, fragmentId: loaded.scope?.fragmentId ?? undefined })
       .then((page) =>
-        updateRoots(queryClient, targetId, (current: RootsPage) =>
-          appendRoots(current, page.items, page.nextCursor),
+        updateRoots(
+          queryClient,
+          targetId,
+          (current: RootsPage) => appendRoots(current, page.items, page.nextCursor),
+          scopeKey,
         ),
       )
       // Не вышло — следующая прокрутка вниз попробует снова.
@@ -376,7 +401,7 @@ export function useComments(
         loadingMoreRef.current = false;
         setIsLoadingMore(false);
       });
-  }, [targetId, queryClient]);
+  }, [scopeKey, targetId, queryClient]);
 
   const remove = useCallback(
     async (comment: CommentItem) => {
@@ -396,9 +421,11 @@ export function useComments(
         return item.deleted && repliesCount === 0 ? null : { ...item, repliesCount };
       });
       // База снимет закреп удалённого — заглушка с ответами встаёт на место по рангу.
-      updateRoots(queryClient, targetId, (page) =>
-        page.authorPin?.id === comment.id ? setAuthorPin(page, null) : page,
-      );
+      const unpinRemoved = (page: RootsPage) =>
+        page.authorPin?.id === comment.id ? setAuthorPin(page, null) : page;
+
+      updateRoots(queryClient, targetId, unpinRemoved);
+      updateScopedRoots(queryClient, targetId, unpinRemoved);
 
       try {
         await deleteComment(comment.id);
