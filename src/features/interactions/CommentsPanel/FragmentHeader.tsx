@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 
 import { styles } from './styles';
@@ -9,6 +9,7 @@ import { sendFragmentReaction } from '@/features/chats/fragments/fragmentReactio
 import { myFragmentOn, useMessageFragments } from '@/features/chats/fragments/useMessageFragments';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
 import type { FragmentPanelSubject } from '@/features/interactions/comments/commentsPanelStore';
+import { updateScopedRoots } from '@/features/interactions/comments/commentsCache';
 import { pickerGeometry, ReactionPicker } from '@/features/interactions/ReactionPicker';
 import { audienceOf, menuReactionSet } from '@/features/interactions/reactionState';
 import { useTheme } from '@/hooks/use-theme';
@@ -52,6 +53,19 @@ export function FragmentHeader({ messageId, fragment, amMember, width }: Fragmen
     [shown],
   );
   const mine = shown?.mine ?? null;
+  const shownId = shown && !shown.id.startsWith('local:') ? shown.id : null;
+
+  // Фрагмент появился в базе (первой реакцией) — верх панели узнаёт его id и
+  // дальше ловит комментарии к нему от других.
+  useEffect(() => {
+    if (!shownId) return;
+
+    updateScopedRoots(queryClient, messageId, (page, scope) =>
+      scope.key === fragment.key && scope.fragmentId !== shownId
+        ? { ...page, scope: { ...scope, fragmentId: shownId } }
+        : page,
+    );
+  }, [fragment.key, messageId, queryClient, shownId]);
   const set = menuReactionSet(
     {
       members: shown?.memberReactions ?? {},

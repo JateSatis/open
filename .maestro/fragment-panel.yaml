@@ -12,7 +12,10 @@ env:
 - evalScript: ${output.msg = 'maestro-' + Date.now()}
 - openLink: ${FRAGMENT_CHAT_LINK}
 # Тап — режим фрагментов, долгое нажатие на текст — выделение и меню фрагмента.
-- tapOn: ${FRAGMENT_TEXT}
+# Смена фона — не смена дерева: повтор тапа выключил бы режим обратно.
+- tapOn:
+    text: ${FRAGMENT_TEXT}
+    retryTapIfNoChange: false
 - longPressOn: ${FRAGMENT_TEXT}
 - assertVisible:
     id: "fragment-menu"
@@ -24,7 +27,12 @@ env:
 - assertNotVisible:
     id: "fragment-menu"
 - longPressOn: ${FRAGMENT_TEXT}
-- assertVisible: "Снять реакцию 🔥.*"
+# Меню фрагмента, а не сообщения: у сообщения может быть своя 🔥.
+- assertVisible:
+    id: "fragment-menu"
+- assertVisible:
+    id: "reaction-option-🔥"
+    selected: true
 - tapOn:
     id: "reaction-option-🔥"
 - assertNotVisible:

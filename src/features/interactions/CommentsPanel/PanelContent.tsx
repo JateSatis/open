@@ -398,6 +398,8 @@ export function PanelContent({
               }
               onClose={closeNow}
               onBack={inThread ? exitThread : undefined}
+              // Своя шапка — у боковой панели: её не тянут вниз.
+              grabber={!header}
             />
             {header && !inThread ? header.extra : null}
           </SheetHeader>

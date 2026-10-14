@@ -147,8 +147,44 @@ function MenuBody({
         })
       : null;
 
+  // Тап мимо выделения его снимает. Подложка — вокруг текста с ручками: сам
+  // текст остаётся живым (ручки тянутся, тап по облачку снимает выделение
+  // через строку), всё остальное — переписка, шапка — ловит тап здесь.
+  const hole = frame
+    ? {
+        left: selection.textInWindow.x - frame.host.x - Sizes.selectionHandleHit,
+        top: selection.textInWindow.y - frame.host.y - Sizes.selectionHandleHit,
+        right:
+          selection.textInWindow.x - frame.host.x + selection.geometry.width + Sizes.selectionHandleHit,
+        bottom:
+          selection.textInWindow.y -
+          frame.host.y +
+          selection.geometry.height +
+          Sizes.selectionHandle +
+          Sizes.selectionHandleHit,
+      }
+    : null;
+
   return (
     <View ref={hostRef} pointerEvents="box-none" style={StyleSheet.absoluteFill}>
+      {hole && frame
+        ? [
+            { left: 0, right: 0, top: 0, height: Math.max(0, hole.top) },
+            { left: 0, right: 0, top: hole.bottom, bottom: 0 },
+            { left: 0, width: Math.max(0, hole.left), top: hole.top, height: hole.bottom - hole.top },
+            { left: hole.right, right: 0, top: hole.top, height: hole.bottom - hole.top },
+          ].map((area, index) => (
+            <Pressable
+              // Четыре куска одной подложки — порядок не меняется.
+              // eslint-disable-next-line react/no-array-index-key
+              key={index}
+              testID={index === 0 ? 'fragment-dismiss' : undefined}
+              accessibilityLabel="Снять выделение"
+              onPressIn={clearTextSelection}
+              style={[styles.scrim, area]}
+            />
+          ))
+        : null}
       {place && frame ? (
         <Animated.View
           testID="fragment-menu"

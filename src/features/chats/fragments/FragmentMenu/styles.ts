@@ -3,6 +3,10 @@ import { StyleSheet } from 'react-native';
 import { Radii, Shadows, Sizes } from '@/theme';
 
 export const styles = StyleSheet.create({
+  /** Прозрачная подложка вокруг выделения: тап мимо него снимает выделение. */
+  scrim: {
+    position: 'absolute',
+  },
   menu: {
     position: 'absolute',
     height: Sizes.fragmentCommentButton,

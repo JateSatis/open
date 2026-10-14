@@ -2,7 +2,7 @@ import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-quer
 import { useEffect } from 'react';
 
 import { listMessageFragments, type Fragment, type FragmentRange } from '@/api/fragments';
-import { subscribeToComments } from '@/api/comments';
+import { acquireCommentTopic } from '@/api/commentTopics';
 
 /** Фрагменты сообщения в кеше — по id сообщения. */
 export function fragmentsKey(messageId: string) {
@@ -65,7 +65,7 @@ export function useMessageFragments(messageId: string | null, live = false) {
     const refresh = () =>
       void queryClient.invalidateQueries({ queryKey: fragmentsKey(messageId) });
 
-    return subscribeToComments(messageId, {
+    return acquireCommentTopic(messageId, {
       onFragmentReactionsChanged: refresh,
       onAdded: refresh,
       onDeleted: refresh,
