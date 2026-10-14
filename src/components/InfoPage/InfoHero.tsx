@@ -70,7 +70,11 @@ export function InfoHero({ geometry, scrollY, avatar, actions }: InfoHeroProps) 
     <>
       {/* Касания проходят сквозь аватарку к списку: за неё тянут шапку. Тап по
           ней ловит страница (`avatarRect`). */}
-      <Animated.View testID="info-avatar" pointerEvents="none" style={[styles.avatar, avatarStyle]}>
+      <Animated.View
+        testID="info-avatar"
+        pointerEvents="none"
+        style={[styles.avatar, masked && styles.masked, avatarStyle]}
+      >
         <AvatarFace avatar={avatar} />
       </Animated.View>
 
