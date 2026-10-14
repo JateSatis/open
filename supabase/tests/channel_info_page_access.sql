@@ -164,6 +164,19 @@ begin
   perform pg_temp.check('старое имя больше не ведёт на канал',
     public.find_channel_by_username('info_test_ch') is null);
 
+  -- --------------------------------------------------------------- фото: один файл — один канал
+  perform pg_temp.as_admin();
+  insert into storage.objects (bucket_id, name, owner)
+  values ('media', a || '/channel-avatar/info_test.jpg', a);
+  perform pg_temp.act_as(a);
+  s := 'https://proj.supabase.co/storage/v1/object/public/media/' || a || '/channel-avatar/info_test.jpg';
+  code := pg_temp.denied(format('select public.set_channel_avatar(%L, %L)', ch, s));
+  perform pg_temp.check('владелец ставит своё фото', code is null, code);
+  code := pg_temp.denied(format('select public.set_channel_avatar(%L, %L)', other_ch, s));
+  perform pg_temp.check('то же фото у второго канала: понятный отказ', code = '22023', code);
+  code := pg_temp.denied(format('select public.create_channel(%L, %L, null, %L)', 'Третий', 'info_test_third', s));
+  perform pg_temp.check('создание с чужим фото — не «имя занято»', code = '22023', code);
+
   perform pg_temp.act_as(b);
   perform public.unsubscribe_from_channel(ch);
   perform pg_temp.act_as(c);
