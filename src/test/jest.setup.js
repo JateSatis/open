@@ -133,5 +133,4 @@ jest.mock('@react-native-async-storage/async-storage', () =>
 jest.mock('@/api/fragments', () => ({
   listMessageFragments: jest.fn(() => Promise.resolve([])),
   setFragmentReaction: jest.fn(() => Promise.resolve({ fragmentId: null, mine: null })),
-  setFragmentReactionById: jest.fn(() => Promise.resolve(null)),
 }));

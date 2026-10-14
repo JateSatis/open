@@ -83,24 +83,3 @@ export async function setFragmentReaction(
     mine: row?.emoji ? { emoji: row.emoji, audience: toAudience(row.audience) } : null,
   };
 }
-
-/**
- * Реакция на фрагмент по его id — из панели фрагмента: она может быть и
- * чужой. Тот же `set_reaction`, что у сообщений.
- */
-export async function setFragmentReactionById(
-  fragmentId: string,
-  emoji: string | null,
-): Promise<MyReaction | null> {
-  const { data, error } = await supabase.rpc('set_reaction', {
-    target_type: 'fragment',
-    target_id: fragmentId,
-    reaction: emoji as string,
-  });
-
-  if (error) throw error;
-
-  const row = data?.[0];
-
-  return row ? { emoji: row.emoji, audience: toAudience(row.audience) } : null;
-}

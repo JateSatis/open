@@ -74,7 +74,8 @@ import { measureInWindow, RowRegistryContext } from '@/features/chats/rowRegistr
 import { useChatBubbles } from '@/features/chats/useChatBubbles';
 import { useChatKeyboardInset } from '@/features/chats/useChatKeyboardInset';
 import { useChatRowRenderer } from '@/features/chats/useChatRowRenderer';
-import type { Fragment, FragmentRange } from '@/api/fragments';
+import { listMessageFragments, type Fragment, type FragmentRange } from '@/api/fragments';
+import { fragmentsKey, myFragmentOn } from '@/features/chats/fragments/useMessageFragments';
 import { FragmentMenu } from '@/features/chats/fragments/FragmentMenu';
 import { clearTextSelection, type TextSelection } from '@/features/chats/fragments/fragmentStore';
 import { useFragmentMode } from '@/features/chats/fragments/useFragmentMode';
@@ -599,8 +600,24 @@ export function ChatConversation({
   // Кнопка комментария в меню фрагмента: боковая панель этого куска текста.
   // Выделение снимается, облачко остаётся в режиме фрагментов.
   const commentOnFragment = useCallback(
-    (selection: TextSelection, range: FragmentRange, mine: Fragment | null) => {
+    async (selection: TextSelection, range: FragmentRange, known: Fragment | null) => {
       clearTextSelection();
+
+      // Список фрагментов мог ещё не прийти — без него панель не узнала бы
+      // мой прежний фрагмент и его комментарии.
+      const mine =
+        known ??
+        myFragmentOn(
+          await queryClient
+            .ensureQueryData({
+              queryKey: fragmentsKey(selection.messageId),
+              queryFn: () => listMessageFragments(selection.messageId),
+            })
+            .catch(() => undefined),
+          currentUserId,
+          range,
+        );
+
       openFragmentComments(selection.messageId, selection.chatId, selection.amMember, {
         kind: 'fragment',
         key: `${selection.messageId}:${range.start}-${range.end}`,
@@ -609,7 +626,7 @@ export function ChatConversation({
         focusInput: true,
       });
     },
-    [],
+    [currentUserId, queryClient],
   );
 
   const { renderItem, islandHeader, bubbleContent } = useChatRowRenderer({

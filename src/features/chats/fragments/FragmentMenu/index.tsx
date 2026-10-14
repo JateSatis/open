@@ -32,7 +32,7 @@ export type FragmentMenuProps = {
   /** Окно списка в координатах окна: меню не залезает на шапку и поле ввода. */
   measureViewport: () => Promise<AnchorRect | null>;
   /** Кнопка комментария: панель этого фрагмента. */
-  onComment: (selection: TextSelection, range: FragmentRange, mine: Fragment | null) => void;
+  onComment: (selection: TextSelection, range: FragmentRange, mine: Fragment | null) => unknown;
 };
 
 function reactionsOf(fragment: Fragment | null, amMember: boolean): MessageReactions {

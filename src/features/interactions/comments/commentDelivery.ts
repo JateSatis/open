@@ -44,7 +44,6 @@ import { toCommentItem } from '@/features/interactions/comments/commentItem';
 import {
   addToThread,
   raiseRoot,
-  readRoots,
   updateRoots,
   updateScopedRoots,
   updateThread,
@@ -61,15 +60,6 @@ import {
 import { showNotice } from '@/features/notifications/alertsStore';
 import { bumpPopComments } from '@/features/pops/popsCache';
 import { isNetworkError } from '@/lib/network';
-
-/** Фрагмент, который панель уже знает в базе: после первой своей отправки. */
-function readScopedFragmentId(
-  queryClient: QueryClient,
-  targetId: string,
-  scopeKey: string,
-): string | null {
-  return readRoots(queryClient, targetId, scopeKey)?.scope?.fragmentId ?? null;
-}
 
 export type CommentSendContext = {
   queryClient: QueryClient;
@@ -139,38 +129,18 @@ async function insert(
   fragment: CommentFragment | undefined,
 ): Promise<Comment> {
   if (outgoing.type === 'voice') {
-    if (subject.type === 'message') {
-      const [file] = uploaded;
-
-      return sendVoiceComment(
-        subject.id,
-        {
-          url: file.url,
-          mimeType: file.mimeType,
-          durationMs: file.durationMs ?? 0,
-          sizeBytes: file.sizeBytes,
-          waveform: file.waveform,
-        },
-        outgoing.replyTo,
-        threadRootId,
-        fragment,
-      );
-    }
-
     const [file] = uploaded;
+    const voice = {
+      url: file.url,
+      mimeType: file.mimeType,
+      durationMs: file.durationMs ?? 0,
+      sizeBytes: file.sizeBytes,
+      waveform: file.waveform,
+    };
 
-    return (subject.type === 'pop' ? sendVoicePopComment : sendVoiceComment)(
-      subject.id,
-      {
-        url: file.url,
-        mimeType: file.mimeType,
-        durationMs: file.durationMs ?? 0,
-        sizeBytes: file.sizeBytes,
-        waveform: file.waveform,
-      },
-      outgoing.replyTo,
-      threadRootId,
-    );
+    return subject.type === 'pop'
+      ? sendVoicePopComment(subject.id, voice, outgoing.replyTo, threadRootId)
+      : sendVoiceComment(subject.id, voice, outgoing.replyTo, threadRootId, fragment);
   }
 
   if (outgoing.type !== 'post') throw new Error('Комментарий не пересылается');
@@ -245,9 +215,8 @@ function explainRejection(cause: unknown, subject: CommentSubject) {
 }
 
 /**
- * Куда уходит верхнеуровневый из панели фрагмента. После первой отправки
- * фрагмент уже есть в базе — дальше он по id, даже если диапазон в тексте
- * съехал правкой. Повтор упавшего — из той же панели или нет, по черновику.
+ * Куда уходит верхнеуровневый из панели фрагмента — только черновик этой же
+ * панели. Свой фрагмент база находит по диапазону и будит, если он спал.
  */
 function fragmentRequest(context: CommentSendContext, localId: string): CommentFragment | undefined {
   const { fragment, subject } = context;
@@ -255,9 +224,7 @@ function fragmentRequest(context: CommentSendContext, localId: string): CommentF
 
   if (!fragment || !draft?.fragmentKey || draft.fragmentKey !== fragment.key) return undefined;
 
-  const known = readScopedFragmentId(context.queryClient, subject.id, fragment.key);
-
-  return known ? { id: known } : fragment.request;
+  return fragment.request;
 }
 
 export async function deliverComment(

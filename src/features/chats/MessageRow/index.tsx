@@ -21,6 +21,7 @@ import { useSelectionHandles } from '@/features/chats/fragments/useSelectionHand
 import type { MenuAnchor } from '@/features/chats/MessageContextMenu';
 import { RowRegistryContext } from '@/features/chats/rowRegistry';
 import { liftedRowKey } from '@/features/interactions/comments/commentsLift';
+import { useScreenReaderEnabled } from '@/hooks/use-screen-reader-enabled';
 import { useTheme } from '@/hooks/use-theme';
 
 /** Столько держать палец, чтобы открылось меню. */
@@ -199,7 +200,12 @@ export function MessageRow({
     [handles, longPress, swipe.gesture],
   );
 
-  // Скринридер долгого нажатия не делает: меню — его отдельным действием.
+  // Скринридер долгого нажатия жестом не делает: при нём тап по строке
+  // открывает меню, как раньше, а режим фрагментов остаётся без выделения.
+  const screenReader = useScreenReaderEnabled();
+  const press = screenReader && onOpenMenu ? () => openMenu(null) : onPress;
+
+  // И отдельным действием — где оно доступно.
   const accessibilityActions = useMemo(
     () => (!selectionMode && onOpenMenu ? [{ name: 'longpress', label: 'Открыть меню' }] : undefined),
     [onOpenMenu, selectionMode],
@@ -253,7 +259,7 @@ export function MessageRow({
             // Вне выбора строка не выключается и без тапа: «выключенность»
             // предка досталась бы кругу комментариев и кнопкам облачка.
             disabled={selectionMode && !selectable}
-            onPress={selectionMode ? onToggle : onPress}
+            onPress={selectionMode ? onToggle : press}
             style={styles.selectable}
           >
             {selectionMode ? (

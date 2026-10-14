@@ -56,7 +56,9 @@ export function useMessageFragments(messageId: string | null, live = false) {
     queryKey: fragmentsKey(messageId ?? ''),
     queryFn: () => listMessageFragments(messageId!),
     enabled: messageId !== null,
-    staleTime: 0,
+    // Меню встаёт заново после каждого отпускания ручки — список не
+    // перечитывается каждый раз: свежесть держат сигналы и свои реакции.
+    staleTime: 30_000,
   });
 
   useEffect(() => {
