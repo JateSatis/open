@@ -5,18 +5,20 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 
+import { DescriptionField } from './DescriptionField';
 import { styles } from './styles';
 
 import { setChatTitle } from '@/api/chatInfo';
 import type { ChatSummary } from '@/api/chats';
+import { setChatDescription } from '@/api/groups';
 import { Avatar } from '@/components/Avatar';
 import { confirm } from '@/components/ConfirmDialog/store';
 import { Input } from '@/components/Input';
 import { LinkButton } from '@/components/LinkButton';
 import { Text } from '@/components/Text';
-import { useChatInfoSummary } from '@/features/chats/ChatInfoPage/queries';
 import { chatTitle } from '@/features/chats/chatDisplay';
 import { chatsQueryKey } from '@/features/chats/chatsKey';
+import { GROUP_TITLE_MAX_LENGTH } from '@/features/chats/limits';
 import { openMediaSheet } from '@/features/chats/MediaPickerSheet';
 import { MediaAvatarSheet } from '@/features/chats/MediaPickerSheet/MediaAvatarSheet';
 import { useChangeGroupAvatar } from '@/features/chats/useChangeGroupAvatar';
@@ -36,24 +38,35 @@ import { isNetworkError } from '@/lib/network';
 import { InfoPageSizes, Spacing } from '@/theme';
 
 const SHEET_OWNER = 'avatar:group-edit';
-/** Дольше этого смену названия не ждём — дальше это потеря связи. */
-const TITLE_DEADLINE_MS = 20_000;
-/** Как в «Новом чате»: длиннее название в шапке не читается. */
-const TITLE_MAX_LENGTH = 80;
+/** Дольше этого смену названия и описания не ждём — дальше это потеря связи. */
+const TEXT_DEADLINE_MS = 20_000;
 
 /** Фото в черновике: не трогали, новое (готовый файл) или убрать. */
 type PhotoDraft = { kind: 'keep' } | { kind: 'set'; uri: string } | { kind: 'remove' };
 
 export type ChatEditScreenProps = { chatId: string };
 
-/** «Изменить» группы: фото, `@имя` и название — одним сохранением по галочке. */
+/**
+ * «Изменить» группы: фото, название, описание и `@имя` — одним сохранением
+ * по галочке. Только владелец: остальным карандаш не показывается, а база
+ * им откажет.
+ */
 export function ChatEditScreen({ chatId }: ChatEditScreenProps) {
   const { chat } = useChat(chatId);
+  const currentUserId = useCurrentUserId();
 
   if (!chat) {
     return (
       <View style={styles.centered}>
         <ActivityIndicator accessibilityLabel="Загрузка чата" />
+      </View>
+    );
+  }
+
+  if (chat.ownerId === null || chat.ownerId !== currentUserId) {
+    return (
+      <View style={styles.centered}>
+        <Text color="textSecondary">Изменять группу может только её владелец.</Text>
       </View>
     );
   }
@@ -67,12 +80,11 @@ function ChatEditForm({ chat }: { chat: ChatSummary }) {
   const navigation = useNavigation();
   const queryClient = useQueryClient();
   const currentUserId = useCurrentUserId();
-  const { data: summary } = useChatInfoSummary(chat.id);
-  const canRename = summary?.ownerId !== undefined && summary.ownerId === currentUserId;
 
   const [photo, setPhoto] = useState<PhotoDraft>({ kind: 'keep' });
   const [username, setUsername] = useState(chat.username ?? '');
   const [title, setTitle] = useState(chat.title ?? '');
+  const [description, setDescription] = useState(chat.description ?? '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const leaving = useRef(false);
@@ -90,10 +102,12 @@ function ChatEditForm({ chat }: { chat: ChatSummary }) {
 
   const cleanUsername = username.trim();
   const cleanTitle = title.trim();
+  const cleanDescription = description.trim();
   const usernameChanged = cleanUsername !== (chat.username ?? '');
-  const titleChanged = canRename && cleanTitle !== (chat.title ?? '');
+  const titleChanged = cleanTitle !== (chat.title ?? '');
+  const descriptionChanged = cleanDescription !== (chat.description ?? '');
   const photoChanged = photo.kind !== 'keep';
-  const dirty = usernameChanged || titleChanged || photoChanged;
+  const dirty = usernameChanged || titleChanged || descriptionChanged || photoChanged;
   const usernameInvalid =
     usernameChanged &&
     (validateUsername(cleanUsername) !== null ||
@@ -107,9 +121,21 @@ function ChatEditForm({ chat }: { chat: ChatSummary }) {
 
     try {
       if (titleChanged) {
-        await withDeadline(setChatTitle(chat.id, cleanTitle || null), TITLE_DEADLINE_MS);
+        await withDeadline(setChatTitle(chat.id, cleanTitle || null), TEXT_DEADLINE_MS);
         queryClient.setQueryData<ChatSummary>(chatQueryKey(chat.id), (current) =>
           current ? { ...current, title: cleanTitle || null } : current,
+        );
+      }
+
+      if (descriptionChanged) {
+        await withDeadline(
+          setChatDescription(chat.id, cleanDescription || null),
+          TEXT_DEADLINE_MS,
+        );
+        // Страница под этим экраном показывает новое описание сразу, не
+        // дожидаясь перечитывания.
+        queryClient.setQueryData<ChatSummary>(chatQueryKey(chat.id), (current) =>
+          current ? { ...current, description: cleanDescription || null } : current,
         );
       }
 
@@ -134,8 +160,10 @@ function ChatEditForm({ chat }: { chat: ChatSummary }) {
   }, [
     changePhoto,
     chat.id,
+    cleanDescription,
     cleanTitle,
     cleanUsername,
+    descriptionChanged,
     photo,
     queryClient,
     router,
@@ -153,7 +181,7 @@ function ChatEditForm({ chat }: { chat: ChatSummary }) {
         event.preventDefault();
         void confirm({
           title: 'Отменить изменения?',
-          message: 'Новое фото, имя и название не сохранятся.',
+          message: 'Новое фото, название, описание и имя не сохранятся.',
           confirmLabel: 'Выйти',
           cancelLabel: 'Остаться',
           destructive: true,
@@ -244,16 +272,11 @@ function ChatEditForm({ chat }: { chat: ChatSummary }) {
           label="Название"
           value={title}
           onChangeText={setTitle}
-          editable={canRename}
-          style={!canRename && { color: theme.textSecondary }}
-          maxLength={TITLE_MAX_LENGTH}
+          maxLength={GROUP_TITLE_MAX_LENGTH}
           placeholder="Групповой чат"
         />
-        {summary && !canRename ? (
-          <Text variant="caption" color="textSecondary">
-            Название пока меняет только создатель группы.
-          </Text>
-        ) : null}
+
+        <DescriptionField value={description} onChangeText={setDescription} />
 
         <UsernameField
           testID="chat-username"
@@ -264,7 +287,7 @@ function ChatEditForm({ chat }: { chat: ChatSummary }) {
           availability={availability}
         />
         <Text variant="caption" color="textSecondary">
-          Имя группы может задать и поменять любой участник. Оставьте пустым, чтобы убрать.
+          По имени группу находят в поиске. Оставьте пустым, чтобы убрать.
         </Text>
 
         {error ? (

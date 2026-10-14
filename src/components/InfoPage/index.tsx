@@ -1,9 +1,19 @@
 import * as Haptics from 'expo-haptics';
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+  type Ref,
+} from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   runOnJS,
+  useAnimatedReaction,
   useAnimatedStyle,
   useDerivedValue,
   useSharedValue,
@@ -19,19 +29,36 @@ import { InfoTabsBar } from './InfoTabsBar';
 import { InfoTabList } from './InfoTabList';
 import { InfoTitle } from './InfoTitle';
 import { InfoScrollContext, type InfoScroll, type InfoTabListHandle } from './scroll';
-import type { InfoAction, InfoAvatar, InfoStatus, InfoTab } from './types';
+import type {
+  InfoAction,
+  InfoAvatar,
+  InfoPageHandle,
+  InfoSearch,
+  InfoStatus,
+  InfoTab,
+} from './types';
 import type { SlideBack } from './useSlideBack';
 import { InfoPhotoProgressContext } from './visual';
 
+import { BarSearchField } from '@/components/BarSearchField';
 import { SECTION_SETTLE_MS, SectionPager } from '@/features/channels/SectionPager';
 import { useTheme } from '@/hooks/use-theme';
 import { InfoPageOpacity, InfoPageSizes, Spacing } from '@/theme';
 
 export { InfoBarButton, InfoBarIcon } from './InfoBarButton';
-export { InfoCard, InfoPersonRow, InfoTextRow } from './InfoCard';
+export { InfoCard, InfoTextRow } from './InfoCard';
+export { InfoLinkRow } from './InfoLinkRow';
+export { InfoPersonRow } from './InfoPersonRow';
 export { InfoTabList } from './InfoTabList';
 export { useSlideBack, type SlideBack } from './useSlideBack';
-export type { InfoAction, InfoAvatar, InfoStatus, InfoTab } from './types';
+export type {
+  InfoAction,
+  InfoAvatar,
+  InfoPageHandle,
+  InfoSearch,
+  InfoStatus,
+  InfoTab,
+} from './types';
 
 const S = InfoPageSizes;
 const EMPTY: never[] = [];
@@ -57,6 +84,10 @@ export type InfoPageProps = {
   tabs: InfoTab[];
   /** Тап по раскрытому фото: полноэкранный просмотр. Нет — фото не раскрывается. */
   onOpenPhoto?: () => void;
+  /** Открытый поиск — поле на месте панели; `null` — панель как обычно. */
+  search?: InfoSearch | null;
+  /** Управление снаружи: перейти на вкладку. */
+  ref?: Ref<InfoPageHandle>;
   testID?: string;
 };
 
@@ -80,6 +111,8 @@ export function InfoPage({
   cards,
   tabs,
   onOpenPhoto,
+  search = null,
+  ref,
   testID,
 }: InfoPageProps) {
   const theme = useTheme();
@@ -220,6 +253,60 @@ export function InfoPage({
 
   const onPagerDragStart = useCallback(() => syncOthers(scrollY.value), [scrollY, syncOthers]);
 
+  // Вкладки — новым массивом на каждый рендер владельца: хэндл читает их
+  // отсюда, иначе он пересоздавался бы каждый раз.
+  const tabsRef = useRef(tabs);
+
+  useEffect(() => {
+    tabsRef.current = tabs;
+  });
+
+  // Перейти на вкладку: шапка сворачивается до прилипания вкладок, а не
+  // дальше, если её уже пролистали.
+  useImperativeHandle(
+    ref,
+    () => ({
+      focusTab: (tabKey: string) => {
+        const at = tabsRef.current.findIndex((tab) => tab.key === tabKey);
+
+        if (at === -1) return;
+
+        if (at !== activeTab.value) selectTab(at);
+
+        const handle = handles.get(at);
+
+        handle?.scrollTo(Math.max(handle.offset.value, stickY), true);
+      },
+    }),
+    [activeTab, handles, selectTab, stickY],
+  );
+
+  // Пока открыт поиск, шапка свёрнута: короткая выдача иначе скатила бы
+  // список вверх, и под полем поиска снова развернулись бы фото и карточки.
+  const searchValue = search?.value;
+
+  useEffect(() => {
+    if (searchValue === undefined) return;
+
+    const frame = requestAnimationFrame(() => {
+      const handle = handles.get(activeTab.value);
+
+      if (handle && handle.offset.value < stickY) handle.scrollTo(stickY, false);
+    });
+
+    return () => cancelAnimationFrame(frame);
+  }, [activeTab, handles, searchValue, stickY]);
+
+  // Лупа вкладки — только на свёрнутой шапке: на развёрнутой ей нет места.
+  const [isStuck, setIsStuck] = useState(false);
+
+  useAnimatedReaction(
+    () => stuck.value > 0.5,
+    (now, before) => {
+      if (now !== before) runOnJS(setIsStuck)(now);
+    },
+  );
+
   const onAvatarPress = useCallback(() => {
     if (!expandable) return;
 
@@ -292,6 +379,7 @@ export function InfoPage({
   }));
 
   const summary = tabs[shownIndex]?.summary ?? '';
+  const searchTab = isStuck ? tabs[shownIndex]?.onSearch : undefined;
   const ready = cardsHeight !== null;
 
   return (
@@ -397,15 +485,46 @@ export function InfoPage({
                 />
               </View>
 
-              <View style={[styles.bar, { top: insets.top }]} pointerEvents="box-none">
-                <InfoBarButton
-                  testID="info-back"
-                  icon={{ ios: 'chevron.left', android: 'arrow_back', web: 'arrow_back' }}
-                  accessibilityLabel="Назад"
-                  onPress={close}
-                />
-                <View style={styles.barRight}>{barRight}</View>
-              </View>
+              {search ? (
+                <View
+                  style={[
+                    styles.searchBar,
+                    {
+                      height: barBottom,
+                      paddingTop: insets.top,
+                      backgroundColor: theme.background,
+                    },
+                  ]}
+                >
+                  <BarSearchField
+                    testID="info-search-input"
+                    value={search.value}
+                    onChangeText={search.onChangeText}
+                    onClose={search.onClose}
+                    placeholder={search.placeholder}
+                  />
+                </View>
+              ) : (
+                <View style={[styles.bar, { top: insets.top }]} pointerEvents="box-none">
+                  <InfoBarButton
+                    testID="info-back"
+                    icon={{ ios: 'chevron.left', android: 'arrow_back', web: 'arrow_back' }}
+                    accessibilityLabel="Назад"
+                    onPress={close}
+                  />
+                  <View style={styles.barRight}>
+                    {searchTab ? (
+                      <InfoBarButton
+                        testID="info-search"
+                        icon={{ ios: 'magnifyingglass', android: 'search', web: 'search' }}
+                        accessibilityLabel="Поиск"
+                        onPress={searchTab}
+                      />
+                    ) : null}
+                    {barRight}
+                  </View>
+                </View>
+              )}
             </InfoScrollContext.Provider>
           </InfoPhotoProgressContext.Provider>
         </Animated.View>
@@ -476,6 +595,15 @@ const styles = StyleSheet.create({
     left: Spacing.one,
     right: Spacing.one,
     height: S.barHeight,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  searchBar: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    paddingHorizontal: Spacing.one,
     flexDirection: 'row',
     alignItems: 'center',
   },

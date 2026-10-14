@@ -25,6 +25,9 @@ jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockPush }),
 }));
 
+// Звонок поднимает LiveKit и Supabase — здесь важно лишь, что из него выходят.
+jest.mock('@/features/streams/callSession', () => ({ leaveCall: jest.fn() }));
+
 jest.mock('@/features/auth/useSession', () => ({
   useSession: jest.fn(),
 }));

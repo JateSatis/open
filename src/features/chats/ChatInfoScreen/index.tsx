@@ -9,6 +9,7 @@ import { styles } from './styles';
 
 import { InfoBarButton, useSlideBack, type SlideBack } from '@/components/InfoPage';
 import { LoadFailed } from '@/components/LoadFailed';
+import { Text } from '@/components/Text';
 import { ChatInfoPage } from '@/features/chats/ChatInfoPage';
 import { chatQueryKey, useChat } from '@/features/chats/useChat';
 import { useTheme } from '@/hooks/use-theme';
@@ -25,7 +26,7 @@ export type ChatInfoScreenProps = {
  */
 export function ChatInfoScreen({ chatId }: ChatInfoScreenProps) {
   const router = useRouter();
-  const { chat, failed } = useChat(chatId);
+  const { chat, failed, gone } = useChat(chatId);
   // Одна на маршрут: заглушка и страница въезжают и уходят одним движением.
   // Под страницей ничего нет (открыли ссылкой) — уйти в саму переписку.
   const toChat = useCallback(() => router.replace(`/chats/${chatId}`), [chatId, router]);
@@ -33,16 +34,20 @@ export function ChatInfoScreen({ chatId }: ChatInfoScreenProps) {
 
   if (chat) return <ChatInfoPage chat={chat} slideBack={slideBack} />;
 
-  return <ChatInfoPlaceholder chatId={chatId} failed={failed} slideBack={slideBack} />;
+  return (
+    <ChatInfoPlaceholder chatId={chatId} failed={failed} gone={gone} slideBack={slideBack} />
+  );
 }
 
 function ChatInfoPlaceholder({
   chatId,
   failed,
+  gone,
   slideBack,
 }: {
   chatId: string;
   failed: boolean;
+  gone: boolean;
   slideBack: SlideBack;
 }) {
   const theme = useTheme();
@@ -64,7 +69,11 @@ function ChatInfoPlaceholder({
         />
       </View>
       <View style={styles.centered}>
-        {failed ? (
+        {gone ? (
+          <Text testID="chat-gone" color="textSecondary">
+            Чат удалён
+          </Text>
+        ) : failed ? (
           <LoadFailed
             message="Не удалось открыть чат"
             onRetry={() => reloadMissing(queryClient, [chatQueryKey(chatId)])}

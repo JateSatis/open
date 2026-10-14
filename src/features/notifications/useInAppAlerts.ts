@@ -15,6 +15,8 @@ import {
   useInAppAlert,
   type InAppAlert,
 } from '@/features/notifications/alertsStore';
+import { leaveCall } from '@/features/streams/callSession';
+import { getCall } from '@/features/streams/callStore';
 import { ring, resetRinging, stopRinging } from '@/features/streams/incomingCall';
 import { liveStreamQueryKey } from '@/features/streams/streamKeys';
 import { useActiveChatId } from '@/store/activeChat';
@@ -114,6 +116,13 @@ export function useInAppAlerts(): InAppAlertsState {
       },
       // Превью откатилось — например, последнее сообщение удалили.
       onChatChanged: refreshChat,
+      onMembershipEnded: (chatId) => {
+        refreshChat(chatId);
+
+        // Ушёл из группы (может, с другого устройства) или удалили: говорить
+        // в её звонке я больше не вправе.
+        if (getCall()?.chatId === chatId) void leaveCall();
+      },
       onReconnected: () => {
         // Канал возвращается после обрыва: сообщения и заявки, пришедшие за
         // это время, мимо него прошли, и списки о них не знают.

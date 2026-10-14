@@ -103,8 +103,20 @@ begin
 
   perform pg_temp.act_as(b);
   perform public.accept_chat_invite(grp);
+  -- Фото меняет только владелец (20261020100000_group_management.sql).
+  begin
+    perform public.set_chat_avatar(grp, b1);
+    perform pg_temp.check('участник-не-владелец — отказ', false);
+  exception when others then
+    perform pg_temp.check('участник-не-владелец — отказ', sqlstate = '42501', sqlerrm);
+  end;
+
+  -- Дальше B — владелец: проверки адресов идут от его префикса.
+  perform set_config('role', 'postgres', true);
+  update public.chats set owner_id = b where id = grp;
+  perform pg_temp.act_as(b);
   perform public.set_chat_avatar(grp, b1);
-  perform pg_temp.check('К1.1 / К2.1 другой участник ставит своё фото', pg_temp.avatar(grp) = b1);
+  perform pg_temp.check('К1.1 / К2.1 владелец ставит своё фото', pg_temp.avatar(grp) = b1);
 
   begin
     perform public.set_chat_avatar(grp, a1);

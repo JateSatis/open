@@ -163,6 +163,8 @@ const partner = { id: 'user-2', displayName: 'Олег', avatarUrl: null, lastRe
 const chat: ChatSummary = {
   id: 'chat-1',
   kind: 'direct',
+  ownerId: null,
+  description: null,
   avatarUrl: null,
   title: 'Разговор',
   participants: [author, partner],

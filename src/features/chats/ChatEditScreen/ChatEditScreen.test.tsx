@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { ChatEditScreen } from '.';
 
 import { getChatInfoSummary, setChatTitle } from '@/api/chatInfo';
+import { setChatDescription } from '@/api/groups';
 import { getChat, setChatAvatar, setChatUsername, type ChatSummary } from '@/api/chats';
 import { isUsernameAvailable } from '@/api/usernames';
 import { openMediaSheet } from '@/features/chats/MediaPickerSheet';
@@ -34,6 +35,7 @@ jest.mock('@/api/chatInfo', () => ({
 }));
 
 jest.mock('@/api/usernames', () => ({ isUsernameAvailable: jest.fn() }));
+jest.mock('@/api/groups', () => ({ setChatDescription: jest.fn() }));
 
 jest.mock('@/features/media', () => ({
   uploadGroupAvatar: jest.fn(),
@@ -91,6 +93,8 @@ const person = (id: string, displayName: string) => ({
 const group: ChatSummary = {
   id: 'group-1',
   kind: 'group',
+  ownerId: 'me',
+  description: null,
   avatarUrl: null,
   title: 'Команда',
   username: null,
@@ -192,27 +196,54 @@ describe('ChatEditScreen', () => {
     expect(mockBack).not.toHaveBeenCalled();
   });
 
-  it('lets only the creator rename the group', async () => {
-    const { unmount } = await renderWithQuery(<ChatEditScreen chatId="group-1" />);
-
-    expect(await screen.findByText('Название пока меняет только создатель группы.')).toBeTruthy();
-    expect(screen.getByTestId('chat-edit-title').props.editable).toBe(false);
-    await unmount();
-
-    mockedSummary.mockResolvedValue({
-      ownerId: 'me',
-      photos: 0,
-      videos: 0,
-      voices: 0,
-      commonGroups: 0,
-    });
+  it('opens only for the owner: another member is told so', async () => {
+    mockedGetChat.mockResolvedValue({ ...group, ownerId: 'anna' });
     await renderWithQuery(<ChatEditScreen chatId="group-1" />);
-    await waitFor(() => expect(screen.getByTestId('chat-edit-title').props.editable).toBe(true));
 
-    await fireEvent.changeText(screen.getByTestId('chat-edit-title'), '  Новая  ');
+    expect(await screen.findByText('Изменять группу может только её владелец.')).toBeTruthy();
+    expect(screen.queryByTestId('chat-edit-title')).toBeNull();
+  });
+
+  it('the owner renames the group', async () => {
+    await renderWithQuery(<ChatEditScreen chatId="group-1" />);
+
+    await fireEvent.changeText(await screen.findByTestId('chat-edit-title'), '  Новая  ');
     await fireEvent.press(screen.getByTestId('chat-edit-save'));
 
     await waitFor(() => expect(setChatTitle).toHaveBeenCalledWith('group-1', 'Новая'));
+  });
+
+  it('saves a multi-line description; a cleared one is removed', async () => {
+    const { unmount } = await renderWithQuery(<ChatEditScreen chatId="group-1" />);
+
+    await fireEvent.changeText(
+      await screen.findByTestId('chat-edit-description'),
+      ' Первая строка\nвторая ',
+    );
+    await fireEvent.press(screen.getByTestId('chat-edit-save'));
+
+    await waitFor(() =>
+      expect(setChatDescription).toHaveBeenCalledWith('group-1', 'Первая строка\nвторая'),
+    );
+    await unmount();
+
+    mockedGetChat.mockResolvedValue({ ...group, description: 'Было' });
+    await renderWithQuery(<ChatEditScreen chatId="group-1" />);
+    await fireEvent.changeText(await screen.findByTestId('chat-edit-description'), '   ');
+    await fireEvent.press(screen.getByTestId('chat-edit-save'));
+
+    await waitFor(() => expect(setChatDescription).toHaveBeenCalledWith('group-1', null));
+  });
+
+  it('shows how many characters are left near the limit', async () => {
+    await renderWithQuery(<ChatEditScreen chatId="group-1" />);
+    const field = await screen.findByTestId('chat-edit-description');
+
+    await fireEvent.changeText(field, 'а'.repeat(100));
+    expect(screen.queryByTestId('chat-edit-description-left')).toBeNull();
+
+    await fireEvent.changeText(field, 'а'.repeat(230));
+    expect(screen.getByTestId('chat-edit-description-left')).toHaveTextContent('25');
   });
 
   describe('group photo', () => {

@@ -29,4 +29,20 @@ export type InfoTab = {
   summary: string;
   /** Содержимое — `InfoTabList` с этим номером вкладки. */
   render: (tab: number) => ReactNode;
+  /** Поиск по вкладке: лупа в панели, пока шапка свёрнута и вкладка открыта. */
+  onSearch?: () => void;
+};
+
+/** Поиск, открытый на месте панели: поле вместо названия и кнопок. */
+export type InfoSearch = {
+  value: string;
+  onChangeText: (value: string) => void;
+  onClose: () => void;
+  placeholder: string;
+};
+
+/** Управление страницей снаружи — из меню владельца. */
+export type InfoPageHandle = {
+  /** Перейти на вкладку и свернуть шапку — например, к «Участникам» для поиска по ним. */
+  focusTab: (tabKey: string) => void;
 };

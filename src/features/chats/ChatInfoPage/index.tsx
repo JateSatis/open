@@ -1,43 +1,38 @@
 import { useNavigation, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 
+import { ChatInfoCards } from './ChatInfoCards';
 import { ChatInfoMenu } from './ChatInfoMenu';
-import { CommonGroupsTab } from './CommonGroupsTab';
-import { MediaTab } from './MediaTab';
-import { MembersTab } from './MembersTab';
+import { chatInfoTabs } from './chatInfoTabs';
 import { useChatInfoSummary, usePeopleStatus } from './queries';
-import { SubscribeCard } from './SubscribeCard';
-import { TabStatus } from './TabStatus';
-import { groupsSummary, mediaSummary, membersSummary, voicesSummary } from './summaries';
-import { VoicesTab } from './VoicesTab';
+import { useGroupActions } from './useGroupActions';
 
 import type { ChatSummary } from '@/api/chats';
 import {
   InfoBarButton,
-  InfoCard,
   InfoPage,
-  InfoPersonRow,
-  InfoTextRow,
   type InfoAction,
   type InfoAvatar,
+  type InfoPageHandle,
   type InfoStatus,
-  type InfoTab,
   type SlideBack,
 } from '@/components/InfoPage';
 import { subscribersLabel } from '@/features/channels/subscriberText';
 import { chatTitle, counterpart, dialogPair, isChatMember } from '@/features/chats/chatDisplay';
 import { useChatSubscription } from '@/features/chats/chatSubscription';
 import { JUMP_PARAM_NAMES } from '@/features/chats/jumpParams';
+import { useChatChangedSignal } from '@/features/chats/useChatChangedSignal';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
 import { useOnlineUsers } from '@/features/chats/useOnlineUsers';
 import { MediaViewer } from '@/features/media';
 import { showNotice } from '@/features/notifications/alertsStore';
 import { useProfile } from '@/features/profile/queries';
-import { formatUsername } from '@/features/profile/username';
 import { useChatCall } from '@/features/streams/useChatCall';
 import { plural } from '@/lib/plural';
 
-const CLEARED_JUMP = Object.fromEntries(JUMP_PARAM_NAMES.map((name) => [name, undefined]));
+const CLEARED_JUMP = Object.fromEntries(
+  [...JUMP_PARAM_NAMES, 'search', 'searchKey'].map((name) => [name, undefined]),
+);
 
 export type ChatInfoPageProps = {
   chat: ChatSummary;
@@ -58,6 +53,7 @@ export function ChatInfoPage({ chat, slideBack }: ChatInfoPageProps) {
   const chatId = chat.id;
   const isGroup = chat.kind === 'group';
   const isMember = isChatMember(chat, currentUserId);
+  const isOwner = isGroup && isMember && chat.ownerId === currentUserId;
   const other = counterpart(chat, currentUserId);
   // Новый массив на каждый рендер пересчитывал бы статусы людей каждый раз.
   const pair = useMemo(() => dialogPair(chat, currentUserId), [chat, currentUserId]);
@@ -65,9 +61,16 @@ export function ChatInfoPage({ chat, slideBack }: ChatInfoPageProps) {
   const subscription = useChatSubscription(chatId, !isMember);
   const summaryQuery = useChatInfoSummary(chatId);
   const summary = summaryQuery.data;
-  const summaryFailed = summary === undefined && summaryQuery.isError;
   const call = useChatCall(chatId, chat, currentUserId, isMember);
+  const groupActions = useGroupActions(chat, currentUserId);
+  // Хэндл страницы — состоянием, а не ref: им пользуются обработчики вкладок.
+  const [page, setPage] = useState<InfoPageHandle | null>(null);
   const [photoOpen, setPhotoOpen] = useState(false);
+  // Поиск участников: `null` — закрыт.
+  const [memberQuery, setMemberQuery] = useState<string | null>(null);
+
+  // Описание, состав, фото меняются, пока страница открыта, — и у постороннего.
+  useChatChangedSignal(chatId);
 
   const people = useMemo(
     () =>
@@ -101,11 +104,10 @@ export function ChatInfoPage({ chat, slideBack }: ChatInfoPageProps) {
     [router],
   );
 
-  // К сообщению — в ту же переписку ниже в стеке, с прыжком и подсветкой.
+  // В ту же переписку ниже в стеке — с прыжком к сообщению или в поиск.
   const { close } = slideBack;
-  const showInChat = useCallback(
-    (messageId: string, createdAt: string) => {
-      const jump = { jumpTo: messageId, jumpAt: createdAt, jumpKey: String(Date.now()) };
+  const toThisChat = useCallback(
+    (params: Record<string, string>) => {
       const state = navigation.getState();
       const below = state?.routes.findIndex(
         (route) =>
@@ -116,17 +118,33 @@ export function ChatInfoPage({ chat, slideBack }: ChatInfoPageProps) {
       if (state && below !== undefined && below !== -1) {
         navigation.dispatch({
           type: 'SET_PARAMS',
-          payload: { params: { ...CLEARED_JUMP, chatId, ...jump } },
+          payload: { params: { ...CLEARED_JUMP, chatId, ...params } },
           source: state.routes[below].key,
         });
         close();
         return;
       }
 
-      router.push({ pathname: '/chats/[chatId]', params: { chatId, ...jump } });
+      router.push({ pathname: '/chats/[chatId]', params: { chatId, ...params } });
     },
     [chatId, close, navigation, router],
   );
+
+  const showInChat = useCallback(
+    (messageId: string, createdAt: string) =>
+      toThisChat({ jumpTo: messageId, jumpAt: createdAt, jumpKey: String(Date.now()) }),
+    [toThisChat],
+  );
+  const searchChat = useCallback(
+    () => toThisChat({ search: '1', searchKey: String(Date.now()) }),
+    [toThisChat],
+  );
+
+  const searchMembers = useCallback(() => {
+    page?.focusTab('members');
+    setMemberQuery((current) => current ?? '');
+  }, [page]);
+  const closeMemberSearch = useCallback(() => setMemberQuery(null), []);
 
   const onCopied = useCallback(() => showNotice('Скопировано'), []);
 
@@ -150,146 +168,87 @@ export function ChatInfoPage({ chat, slideBack }: ChatInfoPageProps) {
       ? (statuses.get(other.id) ?? null)
       : { text: subscribersLabel(chat.subscribersCount) };
 
-  const actions: InfoAction[] =
-    !isGroup && isMember && other
-      ? [
-          {
-            id: 'call',
-            label: call.stream ? 'К звонку' : 'Звонок',
-            icon: { ios: 'phone.fill', android: 'call', web: 'call' },
-            onPress: call.startOrJoin,
-            disabled: call.busy,
-          },
-        ]
-      : [];
+  const actions: InfoAction[] = [];
 
-  const groupUsername = isGroup ? formatUsername(chat.username, 'group') : null;
-  const personUsername = other ? formatUsername(otherProfile?.username ?? null) : null;
-
-  const cards = (
-    <>
-      {/* Без сводки не понять, какие вкладки показывать, — честно сказать. */}
-      {summaryFailed ? (
-        <TabStatus
-          state="failed"
-          what="медиа и голосовые"
-          onRetry={() => void summaryQuery.refetch()}
-        />
-      ) : null}
-      {!isMember ? (
-        <SubscribeCard chatId={chatId} isGroup={isGroup} subscription={subscription} />
-      ) : null}
-      {isGroup ? (
-        <InfoCard testID="info-card">
-          {groupUsername ? (
-            <InfoTextRow
-              testID="info-group-username"
-              value={groupUsername}
-              caption="Имя группы"
-              onCopied={onCopied}
-            />
-          ) : null}
-        </InfoCard>
-      ) : other ? (
-        <InfoCard testID="info-card">
-          {otherProfile?.bio?.trim() ? (
-            <InfoTextRow
-              testID="info-bio"
-              value={otherProfile.bio.trim()}
-              caption="О себе"
-              onCopied={onCopied}
-            />
-          ) : null}
-          {personUsername ? (
-            <InfoTextRow
-              testID="info-username"
-              value={personUsername}
-              caption="Имя пользователя"
-              onCopied={onCopied}
-            />
-          ) : null}
-        </InfoCard>
-      ) : pair ? (
-        <InfoCard testID="info-card">
-          {pair.map((person) => (
-            <InfoPersonRow
-              key={person.id}
-              testID={`info-person-${person.id}`}
-              name={person.displayName}
-              avatarUrl={person.avatarUrl}
-              status={statuses.get(person.id) ?? null}
-              onPress={() => openPerson(person.id)}
-            />
-          ))}
-        </InfoCard>
-      ) : null}
-    </>
-  );
-
-  const tabs: InfoTab[] = [];
-  const media = (summary?.photos ?? 0) + (summary?.videos ?? 0);
-
-  if (isGroup) {
-    tabs.push({
-      key: 'members',
-      title: 'Участники',
-      summary: membersSummary(count),
-      render: (tab) => (
-        <MembersTab
-          tab={tab}
-          participants={chat.participants}
-          currentUserId={currentUserId}
-          ownerId={summary?.ownerId ?? null}
-          online={online}
-          statuses={statuses}
-          onOpenPerson={openPerson}
-        />
-      ),
+  if (!isGroup && isMember && other) {
+    actions.push({
+      id: 'call',
+      label: call.stream ? 'К звонку' : 'Звонок',
+      icon: { ios: 'phone.fill', android: 'call', web: 'call' },
+      onPress: call.startOrJoin,
+      disabled: call.busy,
     });
   }
 
-  if (media > 0) {
-    tabs.push({
-      key: 'media',
-      title: 'Медиа',
-      summary: mediaSummary(summary?.photos ?? 0, summary?.videos ?? 0),
-      render: (tab) => <MediaTab tab={tab} chatId={chatId} onShowInChat={showInChat} />,
+  if (isGroup && isMember) {
+    actions.push({
+      id: 'leave',
+      label: 'Покинуть',
+      icon: { ios: 'rectangle.portrait.and.arrow.right', android: 'logout', web: 'logout' },
+      onPress: () => void groupActions.leave(),
     });
   }
 
-  if ((summary?.voices ?? 0) > 0) {
-    tabs.push({
-      key: 'voices',
-      title: 'Голосовые',
-      summary: voicesSummary(summary?.voices ?? 0),
-      render: (tab) => <VoicesTab tab={tab} chatId={chatId} onShowInChat={showInChat} />,
-    });
-  }
-
-  if (other && isMember && (summary?.commonGroups ?? 0) > 0) {
-    tabs.push({
-      key: 'groups',
-      title: 'Общие группы',
-      summary: groupsSummary(summary?.commonGroups ?? 0),
-      render: (tab) => <CommonGroupsTab tab={tab} otherUserId={other.id} onOpenChat={openChat} />,
-    });
-  }
+  const tabs = chatInfoTabs({
+    chat,
+    summary,
+    isMember,
+    other,
+    currentUserId,
+    online,
+    statuses,
+    memberQuery,
+    onOpenPerson: openPerson,
+    onOpenChat: openChat,
+    onShowInChat: showInChat,
+    onRemoveMember: (person) => void groupActions.removeMember(person),
+    onCancelInvite: (person) => void groupActions.cancelInvite(person),
+    onSearchMembers: searchMembers,
+  });
 
   return (
     <>
       <InfoPage
+        ref={setPage}
         testID="chat-info-page"
         slideBack={slideBack}
         title={title}
         status={status}
         avatar={avatar}
         actions={actions}
-        cards={cards}
+        cards={
+          <ChatInfoCards
+            chat={chat}
+            isMember={isMember}
+            other={other}
+            otherProfile={otherProfile}
+            pair={pair}
+            statuses={statuses}
+            subscription={subscription}
+            summaryFailed={summary === undefined && summaryQuery.isError}
+            onRetrySummary={() => void summaryQuery.refetch()}
+            onCopied={onCopied}
+            onOpenPerson={openPerson}
+            onAddMembers={() =>
+              router.push({ pathname: '/chats/chat-invite/[chatId]', params: { chatId } })
+            }
+          />
+        }
         tabs={tabs}
         onOpenPhoto={photoUri ? () => setPhotoOpen(true) : undefined}
+        search={
+          memberQuery === null
+            ? null
+            : {
+                value: memberQuery,
+                onChangeText: setMemberQuery,
+                onClose: closeMemberSearch,
+                placeholder: 'Поиск участников',
+              }
+        }
         barRight={
           <>
-            {isGroup && isMember ? (
+            {isOwner ? (
               <InfoBarButton
                 testID="info-edit"
                 icon={{ ios: 'pencil', android: 'edit', web: 'edit' }}
@@ -303,6 +262,10 @@ export function ChatInfoPage({ chat, slideBack }: ChatInfoPageProps) {
               isGroup={isGroup}
               counterpartId={other?.id ?? null}
               subscription={subscription}
+              onSearchMembers={searchMembers}
+              onSearchChat={searchChat}
+              onLeave={() => void groupActions.leave()}
+              onDeleteChat={() => void groupActions.deleteDialog()}
             />
           </>
         }

@@ -33,6 +33,7 @@ export default function ChatsLayout() {
         options={{ headerShown: false, presentation: 'transparentModal', animation: 'none' }}
       />
       <Stack.Screen name="chat-edit/[chatId]" options={{ title: 'Изменить' }} />
+      <Stack.Screen name="chat-invite/[chatId]" options={{ title: 'Добавить участников' }} />
     </Stack>
   );
 }
