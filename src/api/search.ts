@@ -179,9 +179,6 @@ export type ChatSearchPage = {
 /** Сколько совпадений за раз. Стрелки листают их по одному, догружая страницы. */
 export const CHAT_SEARCH_PAGE_SIZE = 50;
 
-/** Предел счётчика «из N»: база дальше не считает. */
-export const CHAT_SEARCH_COUNT_CAP = 1000;
-
 /** Совпадения в тексте сообщений одного чата, свежие сверху, страницей. */
 export async function searchChatMessages(
   chatId: string,
@@ -221,7 +218,7 @@ export async function searchChatMessages(
   };
 }
 
-/** Сколько всего совпадений в чате, но не больше `CHAT_SEARCH_COUNT_CAP`. */
+/** Сколько всего совпадений в чате; дальше 1000 база не считает. */
 export async function countChatSearch(
   chatId: string,
   query: string,

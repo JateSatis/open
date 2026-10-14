@@ -281,6 +281,22 @@ export function InfoPage({
     [activeTab, handles, selectTab, stickY],
   );
 
+  // Пока открыт поиск, шапка свёрнута: короткая выдача иначе скатила бы
+  // список вверх, и под полем поиска снова развернулись бы фото и карточки.
+  const searchValue = search?.value;
+
+  useEffect(() => {
+    if (searchValue === undefined) return;
+
+    const frame = requestAnimationFrame(() => {
+      const handle = handles.get(activeTab.value);
+
+      if (handle && handle.offset.value < stickY) handle.scrollTo(stickY, false);
+    });
+
+    return () => cancelAnimationFrame(frame);
+  }, [activeTab, handles, searchValue, stickY]);
+
   // Лупа вкладки — только на свёрнутой шапке: на развёрнутой ей нет места.
   const [isStuck, setIsStuck] = useState(false);
 

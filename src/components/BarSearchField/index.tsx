@@ -1,5 +1,5 @@
 import { SymbolView } from 'expo-symbols';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { BackHandler, Pressable, TextInput, View } from 'react-native';
 
 import { styles } from './styles';
@@ -7,12 +7,20 @@ import { styles } from './styles';
 import { useTheme } from '@/hooks/use-theme';
 import { InfoPageSizes, Sizes } from '@/theme';
 
+const FOCUS_DELAY_MS = 100;
+
 export type BarSearchFieldProps = {
   value: string;
   onChangeText: (value: string) => void;
   /** Стрелка «назад» и системный «назад»: поиск закрывается, экран остаётся. */
   onClose: () => void;
   placeholder: string;
+  /**
+   * Отдать полю фокус, когда это станет `true`, — если экран под полем
+   * открывается из-под другого (страница чата ещё уезжает), `autoFocus`
+   * срабатывает слишком рано. Не задано — фокус сразу.
+   */
+  focusWhen?: boolean;
   testID?: string;
 };
 
@@ -25,9 +33,20 @@ export function BarSearchField({
   onChangeText,
   onClose,
   placeholder,
+  focusWhen,
   testID,
 }: BarSearchFieldProps) {
   const theme = useTheme();
+  const inputRef = useRef<TextInput>(null);
+
+  useEffect(() => {
+    if (!focusWhen) return;
+
+    // Кадр на то, чтобы экран принял фокус после ухода страницы сверху.
+    const timer = setTimeout(() => inputRef.current?.focus(), FOCUS_DELAY_MS);
+
+    return () => clearTimeout(timer);
+  }, [focusWhen]);
 
   useEffect(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
@@ -55,7 +74,8 @@ export function BarSearchField({
         />
       </Pressable>
       <TextInput
-        autoFocus
+        ref={inputRef}
+        autoFocus={focusWhen === undefined}
         testID={testID}
         accessibilityLabel={placeholder}
         placeholder={placeholder}

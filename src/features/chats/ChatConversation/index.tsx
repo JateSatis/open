@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useIsFocused, useNavigation, useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   ActivityIndicator,
   BackHandler,
@@ -27,6 +27,10 @@ import { subscribersLabel } from '@/features/channels/subscriberText';
 import { ChatFooter, modePlate } from '@/features/chats/ChatFooter';
 import { ChatMenu } from '@/features/chats/ChatMenu';
 import { ChatScreenHeader } from '@/features/chats/ChatScreenHeader';
+import { ChatSearchHeader } from '@/features/chats/chatSearch/ChatSearchHeader';
+import { ChatSearchPlate } from '@/features/chats/chatSearch/ChatSearchPlate';
+import { ChatSearchResults } from '@/features/chats/chatSearch/ChatSearchResults';
+import { useChatSearch } from '@/features/chats/chatSearch/useChatSearch';
 import { DeletedOriginal } from '@/features/chats/DeletedOriginal';
 import {
   commentsHomeOf,
@@ -196,6 +200,22 @@ export function ChatConversation({
   const pinCursor = usePinnedCursor(pins.pins);
   const selection = useMessageSelection(rows, currentUserId);
   const jump = useJumpToMessage(listRef, rows, chatMessages.loadUntil);
+  // Поиск по чату — со страницы чата: поле вместо шапки, плашка вместо поля ввода.
+  const chatSearch = useChatSearch(chatId, jump.jump);
+  const [searchListShown, setSearchListShown] = useState(false);
+  const showSearchList = chatSearch.active && searchListShown;
+  const { close: closeSearch, select: selectSearchHit } = chatSearch;
+  const leaveSearch = useCallback(() => {
+    setSearchListShown(false);
+    closeSearch();
+  }, [closeSearch]);
+  const openSearchHit = useCallback(
+    (at: number) => {
+      setSearchListShown(false);
+      selectSearchHit(at);
+    },
+    [selectSearchHit],
+  );
   const listFrameRef = useRef<View>(null);
   const measureListFrame = useCallback(() => measureInWindow(listFrameRef.current), []);
   const menu = useMessageMenu<ChatListRow>(measureListFrame);
@@ -776,6 +796,7 @@ export function ChatConversation({
             : undefined
         }
         titlePressLabel="О чате"
+        searching={chatSearch.active}
         selectedCount={selection.selected.length}
         onCancelSelection={clearSelection}
         right={
@@ -795,6 +816,8 @@ export function ChatConversation({
           ) : undefined
         }
       />
+
+      {chatSearch.active ? <ChatSearchHeader search={chatSearch} onClose={leaveSearch} /> : null}
 
       <Animated.View testID="chat-keyboard-area" style={[styles.flex, keyboardInsetStyle]}>
         {/* Звонок срочнее закрепа: он идёт прямо сейчас. */}
@@ -855,6 +878,8 @@ export function ChatConversation({
           </Animated.View>
         )}
 
+        {showSearchList ? <ChatSearchResults search={chatSearch} onSelect={openSearchHit} /> : null}
+
         {!gone && !failed && !isChatLoading && !isLoading && messages.length === 0 ? (
           <View style={styles.centered}>
             <Text color="textSecondary">
@@ -881,59 +906,67 @@ export function ChatConversation({
           </View>
         ) : null}
 
-        <ChatFooter
-          selection={{
-            isActive: isSelecting,
-            context: { selected: selection.selected, currentUserId, isMember },
-            onAction: runSelectionAction,
-          }}
-          invite={
-            !isMember && myInvite && hasOpenInvite
-              ? {
-                  value: myInvite,
-                  responding: invite.pending?.chatId === chatId ? invite.pending.answer : null,
-                  error: invite.error,
-                  onAccept: () => invite.respond(chatId, 'accept'),
-                  onDecline: () => invite.respond(chatId, 'decline'),
-                }
-              : null
-          }
-          subscribe={
-            !gone &&
-            !isPosts &&
-            chat !== null &&
-            !isMember &&
-            // Заявки нет вовсе: принятая — значит, я вот-вот появлюсь среди
-            // участников, отклонённая — её панель и так внизу.
-            myInvite === null &&
-            subscription === null
-              ? { chatId }
-              : null
-          }
-          // Постороннему писать некуда: поле ввода не показывается вовсе. Пока
-          // чат грузится, оно смонтировано с надписью вместо поля (`canSend`
-          // ложно): смонтированное заранее, оно встаёт над клавиатурой вовремя.
-          // Переписка не загрузилась — писать некуда, пока она не откроется.
-          composer={
-            failed || gone || (!isMember && (isPosts || chat !== null))
-              ? null
-              : {
-                  text: draft.text,
-                  onChangeText: draft.setText,
-                  mode: draft.mode,
-                  onCloseMode: closeMode,
-                  edit: editPlate,
-                  canSend: isMember,
-                  onSend: submit,
-                  onTyping: notifyTyping,
-                  onSendVoice: isEditing ? edit.recorded : replyForward.sendVoice,
-                  // Запись в правке не уходит в чат — и «записывает голосовое…» не правда.
-                  onRecordingVoice: isEditing ? noop : notifyRecordingVoice,
-                  inputRef: composerRef,
-                  pop: isEditing ? null : popChip,
-                }
-          }
-        />
+        {chatSearch.active ? (
+          <ChatSearchPlate
+            search={chatSearch}
+            showingList={showSearchList}
+            onToggleList={() => setSearchListShown((shown) => !shown)}
+          />
+        ) : (
+          <ChatFooter
+            selection={{
+              isActive: isSelecting,
+              context: { selected: selection.selected, currentUserId, isMember },
+              onAction: runSelectionAction,
+            }}
+            invite={
+              !isMember && myInvite && hasOpenInvite
+                ? {
+                    value: myInvite,
+                    responding: invite.pending?.chatId === chatId ? invite.pending.answer : null,
+                    error: invite.error,
+                    onAccept: () => invite.respond(chatId, 'accept'),
+                    onDecline: () => invite.respond(chatId, 'decline'),
+                  }
+                : null
+            }
+            subscribe={
+              !gone &&
+              !isPosts &&
+              chat !== null &&
+              !isMember &&
+              // Заявки нет вовсе: принятая — значит, я вот-вот появлюсь среди
+              // участников, отклонённая — её панель и так внизу.
+              myInvite === null &&
+              subscription === null
+                ? { chatId }
+                : null
+            }
+            // Постороннему писать некуда: поле ввода не показывается вовсе. Пока
+            // чат грузится, оно смонтировано с надписью вместо поля (`canSend`
+            // ложно): смонтированное заранее, оно встаёт над клавиатурой вовремя.
+            // Переписка не загрузилась — писать некуда, пока она не откроется.
+            composer={
+              failed || gone || (!isMember && (isPosts || chat !== null))
+                ? null
+                : {
+                    text: draft.text,
+                    onChangeText: draft.setText,
+                    mode: draft.mode,
+                    onCloseMode: closeMode,
+                    edit: editPlate,
+                    canSend: isMember,
+                    onSend: submit,
+                    onTyping: notifyTyping,
+                    onSendVoice: isEditing ? edit.recorded : replyForward.sendVoice,
+                    // Запись в правке не уходит в чат — и «записывает голосовое…» не правда.
+                    onRecordingVoice: isEditing ? noop : notifyRecordingVoice,
+                    inputRef: composerRef,
+                    pop: isEditing ? null : popChip,
+                  }
+            }
+          />
+        )}
       </Animated.View>
 
       {/* Сторы шитов общие: в стеке бывает два экрана чата (переход по
