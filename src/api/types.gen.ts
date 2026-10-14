@@ -1273,6 +1273,7 @@ export type Database = {
           reactions: Json
           reactions_count: number
           size_bytes: number | null
+          title: string | null
           unique_views_count: number
           url: string
           views_count: number
@@ -1305,6 +1306,7 @@ export type Database = {
           reactions?: Json
           reactions_count?: number
           size_bytes?: number | null
+          title?: string | null
           unique_views_count?: number
           url: string
           views_count?: number
@@ -1325,6 +1327,7 @@ export type Database = {
           reactions?: Json
           reactions_count?: number
           size_bytes?: number | null
+          title?: string | null
           unique_views_count?: number
           url?: string
           views_count?: number
@@ -1690,6 +1693,10 @@ export type Database = {
         Args: { ended: string; started: string }
         Returns: string
       }
+      can_manage_channel: {
+        Args: { target_channel: string; who?: string }
+        Returns: boolean
+      }
       can_manage_chat: {
         Args: { target_chat: string; who?: string }
         Returns: boolean
@@ -1703,6 +1710,17 @@ export type Database = {
       cancel_chat_invite: {
         Args: { target_chat: string; target_user: string }
         Returns: undefined
+      }
+      channel_info_summary: {
+        Args: { target_channel: string }
+        Returns: {
+          photos: number
+          pops: number
+          readers: number
+          subscribers: number
+          videos: number
+          voices: number
+        }[]
       }
       chat_am_member: {
         Args: { "": Database["public"]["Tables"]["chats"]["Row"] }
@@ -1735,6 +1753,10 @@ export type Database = {
       check_comment_shape: { Args: { target: string }; Returns: undefined }
       check_message_shape: { Args: { target: string }; Returns: undefined }
       clean_group_avatar_url: { Args: { url: string }; Returns: string }
+      clean_own_avatar_url: {
+        Args: { folder: string; url: string }
+        Returns: string
+      }
       comment_pin_right: {
         Args: { target: string; who: string }
         Returns: boolean
@@ -1793,6 +1815,7 @@ export type Database = {
       }
       end_device_session: { Args: { p_device_id: string }; Returns: undefined }
       end_other_sessions: { Args: never; Returns: undefined }
+      find_channel_by_username: { Args: { name: string }; Returns: string }
       finish_abandoned_streams: { Args: never; Returns: number }
       finish_stream: {
         Args: { reason: string; target_stream: string }
@@ -1872,6 +1895,7 @@ export type Database = {
           before_created?: string
           before_id?: string
           page_size?: number
+          query?: string
           target_channel: string
         }
         Returns: {
@@ -2025,6 +2049,10 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      lock_managed_channel: {
+        Args: { target_channel: string; what: string }
+        Returns: undefined
+      }
       mark_channel_read: {
         Args: {
           read_pops?: boolean
@@ -2176,6 +2204,10 @@ export type Database = {
           unread_posts: number
         }[]
       }
+      notify_channel_changed: {
+        Args: { target_channel: string }
+        Returns: undefined
+      }
       notify_chat_changed: {
         Args: { extra?: string[]; target_chat: string }
         Returns: undefined
@@ -2219,6 +2251,16 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      pop_search_score: {
+        Args: {
+          as_of: string
+          comments_count: number
+          created_at: string
+          reactions_count: number
+          views_count: number
+        }
+        Returns: number
+      }
       post_comment: {
         Args: {
           comment_text: string
@@ -2249,6 +2291,7 @@ export type Database = {
           post_text?: string
           reply_to?: string[]
           target_channel: string
+          title: string
         }
         Returns: Json
       }
@@ -2352,6 +2395,19 @@ export type Database = {
         }
         Returns: string
       }
+      search_channels: {
+        Args: { max_count?: number; query: string }
+        Returns: {
+          avatar_url: string
+          id: string
+          mine: boolean
+          posts_chat_id: string
+          subscribed: boolean
+          subscribers_count: number
+          title: string
+          username: string
+        }[]
+      }
       search_chat_messages: {
         Args: {
           before_created?: string
@@ -2429,6 +2485,39 @@ export type Database = {
           display_name: string
           id: string
           username: string
+        }[]
+      }
+      search_pops: {
+        Args: {
+          after_id?: string
+          after_rank?: number
+          after_score?: number
+          as_of?: string
+          page_size?: number
+          query: string
+        }
+        Returns: {
+          author_id: string
+          caption: string
+          channel_avatar_url: string
+          channel_id: string
+          channel_title: string
+          comments_count: number
+          created_at: string
+          duration_ms: number
+          height: number
+          id: string
+          mime_type: string
+          my_reaction: string
+          poster_url: string
+          rank: number
+          reactions: Json
+          score: number
+          scored_at: string
+          title: string
+          url: string
+          views_count: number
+          width: number
         }[]
       }
       search_tsquery: { Args: { needle: string }; Returns: unknown }
@@ -2514,6 +2603,14 @@ export type Database = {
         }
         Returns: string
       }
+      set_channel_avatar: {
+        Args: { new_avatar_url: string; target_channel: string }
+        Returns: string
+      }
+      set_channel_description: {
+        Args: { new_description: string; target_channel: string }
+        Returns: undefined
+      }
       set_channel_in_chats: {
         Args: { target_channel: string; value: boolean }
         Returns: undefined
@@ -2521,6 +2618,14 @@ export type Database = {
       set_channel_notifications: {
         Args: { enabled: boolean; target_channel: string }
         Returns: undefined
+      }
+      set_channel_title: {
+        Args: { new_title: string; target_channel: string }
+        Returns: undefined
+      }
+      set_channel_username: {
+        Args: { new_username: string; target_channel: string }
+        Returns: string
       }
       set_chat_avatar: {
         Args: { new_avatar_url: string; target_chat: string }
