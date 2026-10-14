@@ -3,6 +3,8 @@ import { useEffect, useRef } from 'react';
 import { AppState } from 'react-native';
 
 import { registerDevice, touchDevice } from '@/api/account';
+import { markSeen } from '@/api/chatInfo';
+import { setPresenceVisible } from '@/api/chats';
 import { sessionIdOf } from '@/lib/jwt';
 import { isNetworkError } from '@/lib/network';
 
@@ -11,6 +13,18 @@ import { getInstallationId } from './installationId';
 import { resetClientState } from './resetClientState';
 import { signOutQuietly } from './signOut';
 import { useSession } from './useSession';
+
+/**
+ * Пока приложение открыто, отметка «был(а) в …» освежается так часто: если
+ * приложение умрёт, не уйдя в фон, отметка отстанет не больше чем на это.
+ */
+const SEEN_INTERVAL_MS = 4 * 60 * 1000;
+
+function markSeenQuietly() {
+  markSeen().catch((error: unknown) => {
+    if (!isNetworkError(error) && __DEV__) console.warn('mark_seen:', error);
+  });
+}
 
 /**
  * Жив ли ещё сеанс. Выданный access-токен работает до истечения, даже когда
@@ -32,7 +46,9 @@ async function sessionIsAlive(): Promise<boolean> {
  * - новый сеанс (вход, привязка способа входа) — устройство регистрирует себя;
  * - возврат в приложение — отметка активности и проверка, что сеанс жив;
  *   мёртвый сеанс — тихий выход;
- * - сессия пропала или сменился пользователь — кеш и сторы очищаются.
+ * - сессия пропала или сменился пользователь — кеш и сторы очищаются;
+ * - отметка «был(а) в …»: при входе, при уходе в фон и при возврате, и
+ *   изредка, пока приложение открыто.
  */
 export function useAccountLifecycle() {
   const { session } = useSession();
@@ -83,5 +99,41 @@ export function useAccountLifecycle() {
     });
 
     return () => subscription.remove();
+  }, [sessionId]);
+
+  useEffect(() => {
+    if (!sessionId) return;
+
+    markSeenQuietly();
+    let timer: ReturnType<typeof setInterval> | null = setInterval(
+      markSeenQuietly,
+      SEEN_INTERVAL_MS,
+    );
+
+    // Уход в фон — главная точка: «был(а) в 16:10» — это когда свернули.
+    // Запрос уходит сразу, пока JS ещё не заморожен; не успел — останется
+    // отметка возврата или последняя из открытого приложения.
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        setPresenceVisible(true);
+        markSeenQuietly();
+        timer ??= setInterval(markSeenQuietly, SEEN_INTERVAL_MS);
+        return;
+      }
+
+      if (state === 'background') {
+        // В фоне я не «в сети», даже пока сокет ещё жив, — иначе «был(а) в …»
+        // не появился бы, пока система не закроет соединение.
+        setPresenceVisible(false);
+        markSeenQuietly();
+        if (timer) clearInterval(timer);
+        timer = null;
+      }
+    });
+
+    return () => {
+      subscription.remove();
+      if (timer) clearInterval(timer);
+    };
   }, [sessionId]);
 }

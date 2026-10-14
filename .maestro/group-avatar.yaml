@@ -1,5 +1,5 @@
 appId: com.openger.app
-name: Фото группы на «О чате» — участник открывает шит аватарки ссылкой и тапом по фото, фото раскрывается в редактор
+name: Фото группы в «Изменить» — участник открывает шит аватарки ссылкой и тапом по фото, фото раскрывается в редактор
 tags:
   - chats
   - media
@@ -15,9 +15,11 @@ env:
 - assertVisible:
     id: "messages-list"
 - tapOn: "О чате: ${TITLE}"
-- assertVisible: "О чате"
-# Ссылка под фото — «Добавить» или «Изменить», смотря что сейчас у группы.
-- tapOn: "(Добавить|Изменить) фото"
+- tapOn:
+    id: "info-edit"
+- assertVisible:
+    id: "chat-edit-save"
+- tapOn: "Установить новое фото"
 - assertVisible: "Выберите фото"
 - assertNotVisible: "Снять фото"
 - tapOn:
@@ -26,15 +28,19 @@ env:
 - assertVisible:
     id: "media-preview"
 - assertVisible: "Поставить фото"
-# «Назад» — в сетку, ещё раз — шит закрыт, фото группы прежнее.
+# «Назад» — в сетку, ещё раз — шит закрыт, фото в черновике прежнее.
 - back
 - assertVisible: "Выберите фото"
 - back
 - assertNotVisible: "Выберите фото"
 # Тап по самому фото — тот же шит, без меню.
 - tapOn:
-    id: "group-avatar-edit"
+    id: "chat-edit-photo"
 - assertVisible: "Выберите фото"
 - back
 - assertNotVisible: "Выберите фото"
-- assertVisible: "О чате"
+# Ничего не изменилось — уход без вопроса, на страницу группы.
+- tapOn: "Navigate up"
+- assertVisible:
+    id: "info-title"
+    text: ${TITLE}

@@ -15,6 +15,8 @@ export type VideoNotePlayerProps = {
   /** Diameter of the circle in points. */
   size?: number;
   style?: StyleProp<ViewStyle>;
+  /** Начать сразу — кружок открыли тапом, чтобы послушать. */
+  autoPlay?: boolean;
 };
 
 /**
@@ -22,13 +24,20 @@ export type VideoNotePlayerProps = {
  * is a normal rectangular video, so `contentFit="cover"` fills the circle and
  * the sides are clipped rather than letterboxed.
  */
-export function VideoNotePlayer({ uri, durationMs, size = 240, style }: VideoNotePlayerProps) {
-  const [isPlaying, setIsPlaying] = useState(false);
+export function VideoNotePlayer({
+  uri,
+  durationMs,
+  size = 240,
+  style,
+  autoPlay = false,
+}: VideoNotePlayerProps) {
+  const [isPlaying, setIsPlaying] = useState(autoPlay);
 
   const player = useVideoPlayer(uri, (instance) => {
     // A video note is short and read like a message, so it repeats until the
     // viewer stops it, the way Telegram plays them.
     instance.loop = true;
+    if (autoPlay) instance.play();
   });
 
   const togglePlayback = () => {

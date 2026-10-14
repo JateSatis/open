@@ -1332,6 +1332,7 @@ export type Database = {
           deleted_at: string | null
           display_name: string | null
           id: string
+          last_seen_at: string | null
           status: string | null
           username: string | null
         }
@@ -1342,6 +1343,7 @@ export type Database = {
           deleted_at?: string | null
           display_name?: string | null
           id: string
+          last_seen_at?: string | null
           status?: string | null
           username?: string | null
         }
@@ -1352,6 +1354,7 @@ export type Database = {
           deleted_at?: string | null
           display_name?: string | null
           id?: string
+          last_seen_at?: string | null
           status?: string | null
           username?: string | null
         }
@@ -1681,6 +1684,16 @@ export type Database = {
           error: true
         } & "the function public.chat_display_name with parameter or with a single unnamed json/jsonb parameter, but no matches were found in the schema cache"
       }
+      chat_info_summary: {
+        Args: { target_chat: string }
+        Returns: {
+          common_groups: number
+          owner_id: string
+          photos: number
+          videos: number
+          voices: number
+        }[]
+      }
       chat_read_up_to: {
         Args: { "": Database["public"]["Tables"]["chats"]["Row"] }
         Returns: {
@@ -1828,6 +1841,26 @@ export type Database = {
           username: string
         }[]
       }
+      list_chat_media: {
+        Args: {
+          before_at?: string
+          before_id?: string
+          page_size?: number
+          target_chat: string
+        }
+        Returns: {
+          attachment_id: string
+          created_at: string
+          duration_ms: number
+          height: number
+          message_id: string
+          mime_type: string
+          position: number
+          poster_url: string
+          url: string
+          width: number
+        }[]
+      }
       list_chat_subscribers: {
         Args: {
           before_created?: string
@@ -1842,6 +1875,27 @@ export type Database = {
           subscribed_at: string
           subscriber_id: string
           username: string
+        }[]
+      }
+      list_chat_voices: {
+        Args: {
+          before_at?: string
+          before_id?: string
+          page_size?: number
+          target_chat: string
+        }
+        Returns: {
+          attachment_id: string
+          author_id: string
+          author_name: string
+          created_at: string
+          duration_ms: number
+          kind: string
+          message_id: string
+          mime_type: string
+          poster_url: string
+          url: string
+          waveform: number[]
         }[]
       }
       list_comment_thread_roots: {
@@ -1877,6 +1931,22 @@ export type Database = {
           isOneToOne: false
           isSetofReturn: true
         }
+      }
+      list_common_groups: {
+        Args: {
+          before_at?: string
+          before_id?: string
+          other_user: string
+          page_size?: number
+        }
+        Returns: {
+          avatar_url: string
+          chat_id: string
+          created_at: string
+          members_count: number
+          title: string
+          username: string
+        }[]
       }
       list_thread_roots: {
         Args: {
@@ -1929,6 +1999,7 @@ export type Database = {
         Args: { p_installation_id: string }
         Returns: undefined
       }
+      mark_seen: { Args: never; Returns: undefined }
       message_edits: {
         Args: { message_ids: string[] }
         Returns: {
@@ -2359,6 +2430,10 @@ export type Database = {
       }
       set_chat_notifications: {
         Args: { enabled: boolean; target_chat: string }
+        Returns: undefined
+      }
+      set_chat_title: {
+        Args: { new_title: string; target_chat: string }
         Returns: undefined
       }
       set_chat_username: {

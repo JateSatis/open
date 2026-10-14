@@ -7,6 +7,8 @@ import { AccountLifecycle } from './AccountLifecycle';
 import { useSession } from './useSession';
 
 import { registerDevice, signOutLocally, touchDevice } from '@/api/account';
+import { markSeen } from '@/api/chatInfo';
+import { setPresenceVisible } from '@/api/chats';
 import { getMediaSheetPhase, openMediaSheet } from '@/features/chats/MediaPickerSheet/sheetStore';
 import type { MediaLibraryItem } from '@/features/media';
 import { useMediaSelection } from '@/features/media/selectionStore';
@@ -19,6 +21,9 @@ jest.mock('@/api/account', () => ({
   touchDevice: jest.fn(),
   signOutLocally: jest.fn(),
 }));
+
+jest.mock('@/api/chatInfo', () => ({ markSeen: jest.fn(() => Promise.resolve()) }));
+jest.mock('@/api/chats', () => ({ setPresenceVisible: jest.fn() }));
 
 jest.mock('./signIn', () => ({ signOutOfGoogle: jest.fn(() => Promise.resolve()) }));
 
@@ -63,6 +68,8 @@ function signedIn(session: Session | null) {
   });
 }
 
+let appStateListeners: ((state: AppStateStatus) => void)[] = [];
+// Хук слушает смену состояния в нескольких местах — событие получают все.
 let appStateListener: ((state: AppStateStatus) => void) | null = null;
 
 beforeEach(() => {
@@ -70,8 +77,10 @@ beforeEach(() => {
   mockedTouch.mockResolvedValue(true);
   mockedRegister.mockResolvedValue(undefined);
   mockedSignOut.mockResolvedValue(undefined);
+  appStateListeners = [];
+  appStateListener = (state) => appStateListeners.forEach((listener) => listener(state));
   jest.spyOn(AppState, 'addEventListener').mockImplementation((_type, listener) => {
-    appStateListener = listener as (state: AppStateStatus) => void;
+    appStateListeners.push(listener as (state: AppStateStatus) => void);
     return { remove: jest.fn() } as never;
   });
 });
@@ -94,7 +103,10 @@ describe('AccountLifecycle', () => {
 
     queryClient.setQueryData(['chats'], [{ id: 'chat-of-a' }]);
     queryClient.setQueryData(['profile', 'me'], { id: 'user-a' });
-    useMediaSelection.setState({ order: ['asset-1'], items: { 'asset-1': {} as MediaLibraryItem } });
+    useMediaSelection.setState({
+      order: ['asset-1'],
+      items: { 'asset-1': {} as MediaLibraryItem },
+    });
     setActiveChatId('chat-of-a');
     openMediaSheet();
 
@@ -200,5 +212,22 @@ describe('AccountLifecycle', () => {
 
     await waitFor(() => expect(mockedRegister).toHaveBeenCalled());
     expect(mockedSignOut).not.toHaveBeenCalled();
+  });
+
+  it('marks «last seen» on sign-in, when the app goes to the background and when it returns', async () => {
+    const mockedMarkSeen = markSeen as jest.Mock;
+    signedIn(sessionOf('user-a', 'session-a'));
+    await setup();
+
+    await waitFor(() => expect(mockedMarkSeen).toHaveBeenCalledTimes(1));
+
+    await act(async () => appStateListener?.('background'));
+    expect(mockedMarkSeen).toHaveBeenCalledTimes(2);
+    // В фоне я не «в сети», даже пока сокет жив.
+    expect(setPresenceVisible).toHaveBeenLastCalledWith(false);
+
+    await act(async () => appStateListener?.('active'));
+    expect(mockedMarkSeen).toHaveBeenCalledTimes(3);
+    expect(setPresenceVisible).toHaveBeenLastCalledWith(true);
   });
 });

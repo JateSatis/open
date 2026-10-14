@@ -1,5 +1,5 @@
 import { SymbolView } from 'expo-symbols';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useRef, useState, type ReactNode } from 'react';
 import { Pressable, useWindowDimensions, type View } from 'react-native';
 import { useAnimatedStyle } from 'react-native-reanimated';
 
@@ -19,6 +19,8 @@ export type HeaderMenuProps<Id extends string> = {
   accessibilityLabel: string;
   /** Префикс testID: `<prefix>-button`, `<prefix>`, `<prefix>-backdrop`. */
   testID: string;
+  /** Своя иконка кнопки вместо акцентного «⋮» — например, белеющая поверх фото. */
+  icon?: ReactNode;
 };
 
 /**
@@ -30,6 +32,7 @@ export function HeaderMenu<Id extends string>({
   onSelect,
   accessibilityLabel,
   testID,
+  icon,
 }: HeaderMenuProps<Id>) {
   const theme = useTheme();
   const buttonRef = useRef<View>(null);
@@ -46,9 +49,7 @@ export function HeaderMenu<Id extends string>({
   if (actions.length === 0) return null;
 
   const open = () => {
-    buttonRef.current?.measureInWindow((x, y, width, height) =>
-      setAnchor({ x, y, width, height }),
-    );
+    buttonRef.current?.measureInWindow((x, y, width, height) => setAnchor({ x, y, width, height }));
   };
 
   const position = anchor
@@ -68,11 +69,13 @@ export function HeaderMenu<Id extends string>({
         hitSlop={Spacing.three}
         onPress={open}
       >
-        <SymbolView
-          name={{ ios: 'ellipsis', android: 'more_vert', web: 'more_vert' }}
-          size={Sizes.callIcon + Spacing.one}
-          tintColor={theme.primary}
-        />
+        {icon ?? (
+          <SymbolView
+            name={{ ios: 'ellipsis', android: 'more_vert', web: 'more_vert' }}
+            size={Sizes.callIcon + Spacing.one}
+            tintColor={theme.primary}
+          />
+        )}
       </Pressable>
 
       <MenuModal

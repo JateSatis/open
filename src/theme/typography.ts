@@ -43,6 +43,8 @@ export const Typography = {
   reactionCount: { fontSize: 10, lineHeight: 13, fontWeight: '600' },
   /** Эмодзи в блоке реакций над облачком. */
   emoji: { fontSize: 26, lineHeight: 32, fontWeight: '400' },
+  /** Имя в шапке страницы информации. */
+  infoName: { fontSize: 24, lineHeight: 30, fontWeight: '700' },
   /** Сердце двойного тапа по видео попа. */
   popHeart: { fontSize: 88, lineHeight: 104, fontWeight: '400' },
 } as const;

@@ -1175,30 +1175,113 @@ export function subscribeToUserEvents(userId: string, handlers: UserChannelHandl
   };
 }
 
+type PresenceEntry = {
+  channel: RealtimeChannel;
+  userId: string;
+  listeners: Set<(userIds: string[]) => void>;
+  ids: string[];
+  joined: boolean;
+  /** Ушёл последний слушатель — канал ещё немного живёт, вдруг вернутся. */
+  closing: ReturnType<typeof setTimeout> | null;
+};
+
+/**
+ * Сколько держать канал Presence без слушателей. Переход между экранами
+ * отпускает его и тут же берёт снова, а закрывающийся канал
+ * `supabase.channel()` отдал бы повторно, уже неживым (как в `chatTopics.ts`).
+ */
+const PRESENCE_LINGER_MS = 3000;
+
+let presence: PresenceEntry | null = null;
+/** Видно ли меня в Presence: в фоне я не «в сети», даже пока сокет жив. */
+let presenceVisible = true;
+
+function trackPresence(entry: PresenceEntry) {
+  if (!entry.joined) return;
+
+  void (presenceVisible
+    ? entry.channel.track({ onlineAt: new Date().toISOString() })
+    : entry.channel.untrack());
+}
+
 /**
  * Presence of everyone currently in the app, used for the "в сети" status in
- * the chat list. Returns the unsubscribe function — leaking this channel is
- * what makes Realtime go quiet after a few screen transitions.
+ * the chat list and on the chat info page. Returns the unsubscribe function —
+ * leaking this channel is what makes Realtime go quiet after a few screen
+ * transitions.
+ *
+ * Канал один на приложение, со счётчиком слушателей: `supabase.channel()` с
+ * тем же топиком отдаёт тот же экземпляр, и отписка одного экрана глушила бы
+ * «в сети» у остальных (см. `chatTopics.ts`).
  */
 export function subscribeToOnlineUsers(
   userId: string,
   onChange: (userIds: string[]) => void,
 ): () => void {
-  const channel: RealtimeChannel = supabase.channel('presence:online', {
-    config: { presence: { key: userId } },
-  });
+  if (presence && presence.userId !== userId) {
+    if (presence.closing) clearTimeout(presence.closing);
+    void supabase.removeChannel(presence.channel);
+    presence = null;
+  }
 
-  channel
-    .on('presence', { event: 'sync' }, () => onChange(Object.keys(channel.presenceState())))
-    .subscribe((status) => {
-      if (status === 'SUBSCRIBED') {
-        void channel.track({ onlineAt: new Date().toISOString() });
-      }
+  if (!presence) {
+    const channel: RealtimeChannel = supabase.channel('presence:online', {
+      config: { presence: { key: userId } },
     });
+    const entry: PresenceEntry = {
+      channel,
+      userId,
+      listeners: new Set(),
+      ids: [],
+      joined: false,
+      closing: null,
+    };
+
+    channel
+      .on('presence', { event: 'sync' }, () => {
+        entry.ids = Object.keys(channel.presenceState());
+        entry.listeners.forEach((listener) => listener(entry.ids));
+      })
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          entry.joined = true;
+          trackPresence(entry);
+        }
+      });
+
+    presence = entry;
+  }
+
+  const entry = presence;
+
+  if (entry.closing) {
+    clearTimeout(entry.closing);
+    entry.closing = null;
+  }
+
+  entry.listeners.add(onChange);
+  if (entry.ids.length > 0) onChange(entry.ids);
 
   return () => {
-    void supabase.removeChannel(channel);
+    entry.listeners.delete(onChange);
+
+    if (entry.listeners.size > 0 || presence !== entry) return;
+
+    entry.closing = setTimeout(() => {
+      if (presence !== entry || entry.listeners.size > 0) return;
+
+      presence = null;
+      void supabase.removeChannel(entry.channel);
+    }, PRESENCE_LINGER_MS);
   };
+}
+
+/** Показываться ли «в сети»: приложение ушло в фон — нет, вернулось — да. */
+export function setPresenceVisible(visible: boolean) {
+  if (presenceVisible === visible) return;
+
+  presenceVisible = visible;
+  if (presence) trackPresence(presence);
 }
 
 // Посты канала с попом — обычные сообщения его чата постов; поп публикует

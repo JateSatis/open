@@ -768,14 +768,14 @@ export function ChatConversation({
                 : undefined
         }
         subtitle={channel ? (channelHeader?.subtitle ?? null) : chatSubtitle}
+        // Группа, свой и чужой диалог — страница информации; канал ведёт
+        // свой раздел (`channelHeader`), его шапку не трогаем.
         onTitlePress={
-          chat?.kind === 'group'
+          chat && !channel && chat.kind !== 'channel'
             ? () => router.push(`/chats/chat-info/${chatId}`)
-            : other
-              ? () => openPerson(other.id)
-              : undefined
+            : undefined
         }
-        titlePressLabel={chat?.kind === 'group' ? 'О чате' : 'Профиль'}
+        titlePressLabel="О чате"
         selectedCount={selection.selected.length}
         onCancelSelection={clearSelection}
         right={

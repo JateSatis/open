@@ -13,7 +13,9 @@ export const styles = StyleSheet.create({
   },
   item: {
     height: Sizes.menuRowHeight,
-    justifyContent: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three,
     paddingHorizontal: Spacing.three,
   },
 });

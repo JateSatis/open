@@ -14,6 +14,10 @@ export type AvatarProps = {
   size?: number;
 };
 
+function largeLetter(size: number) {
+  return { fontSize: size * 0.4, lineHeight: size * 0.5 };
+}
+
 export function Avatar({ uri, name, size = 40 }: AvatarProps) {
   const theme = useTheme();
   const dimension = { width: size, height: size, borderRadius: size / 2 };
@@ -25,7 +29,12 @@ export function Avatar({ uri, name, size = 40 }: AvatarProps) {
   return (
     <View style={[styles.fallback, dimension, { backgroundColor: theme.backgroundSelected }]}>
       {/* Мелкий аватар (под реакцией) — буква мельче, иначе вылезает за круг. */}
-      <Text variant={size <= Sizes.reactionAvatar ? 'meta' : 'bodyBold'} accessibilityLabel={name}>
+      <Text
+        variant={size <= Sizes.reactionAvatar ? 'meta' : 'bodyBold'}
+        // Крупная аватарка (шапка страницы) — буква по размеру круга, а не строчная.
+        style={size >= Sizes.avatarLargeLetter ? largeLetter(size) : undefined}
+        accessibilityLabel={name}
+      >
         {name.trim().charAt(0).toUpperCase() || '?'}
       </Text>
     </View>

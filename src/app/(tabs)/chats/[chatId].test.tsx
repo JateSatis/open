@@ -215,7 +215,7 @@ beforeEach(() => {
 });
 
 describe('ChatScreen', () => {
-  it('shows the counterpart status in the header and opens their profile on tap', async () => {
+  it('shows the counterpart status in the header and opens the chat info page on tap', async () => {
     const user = userEvent.setup();
 
     await renderWithQuery(<ChatScreen />);
@@ -224,8 +224,9 @@ describe('ChatScreen', () => {
     expect(await screen.findByText('в отпуске до понедельника · 0 подписчиков')).toBeTruthy();
     expect(mockedGetProfile).toHaveBeenCalledWith('user-2');
 
-    await user.press(screen.getByLabelText('Профиль: Разговор'));
-    expect(mockPush).toHaveBeenCalledWith('/chats/people/user-2');
+    // Свой диалог, как и группа, ведёт на страницу информации, а не в профиль.
+    await user.press(screen.getByLabelText('О чате: Разговор'));
+    expect(mockPush).toHaveBeenCalledWith('/chats/chat-info/chat-1');
   });
 
   it('opens «О чате» from a tap on the header of a group', async () => {

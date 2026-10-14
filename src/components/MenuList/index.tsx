@@ -1,3 +1,4 @@
+import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import type { ComponentProps } from 'react';
 import { Pressable } from 'react-native';
 import Animated from 'react-native-reanimated';
@@ -14,6 +15,8 @@ export type MenuAction<Id extends string = string> = {
   label: string;
   /** Красным — разрушительное действие. */
   destructive?: boolean;
+  /** Иконка слева от подписи. */
+  icon?: SymbolViewProps['name'];
 };
 
 export type MenuListProps<Id extends string> = {
@@ -57,6 +60,13 @@ export function MenuList<Id extends string>({
             pressed && { backgroundColor: theme.backgroundSelected },
           ]}
         >
+          {action.icon ? (
+            <SymbolView
+              name={action.icon}
+              size={Sizes.menuIcon}
+              tintColor={action.destructive ? theme.danger : theme.textSecondary}
+            />
+          ) : null}
           <Text color={action.destructive ? 'danger' : 'text'} numberOfLines={1}>
             {action.label}
           </Text>
