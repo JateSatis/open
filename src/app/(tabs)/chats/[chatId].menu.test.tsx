@@ -136,6 +136,8 @@ function chatWith(participants: ChatSummary['participants']): ChatSummary {
   return {
     id: 'chat-1',
     kind: 'direct',
+    ownerId: null,
+    description: null,
     avatarUrl: null,
     title: 'Разговор',
     participants,

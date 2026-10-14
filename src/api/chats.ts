@@ -6,6 +6,7 @@
 
 import type { QueryData, RealtimeChannel } from '@supabase/supabase-js';
 
+import { ChatGoneError } from '@/api/chatGone';
 import { acquireChatTopic, type ChatActivity, type ChatTopicListener } from '@/api/chatTopics';
 import { MESSAGE_COLUMNS, messagesSelect, toMessage, type Message } from '@/api/messageRows';
 import { publishPop, type PublishPopInput } from '@/api/pops';
@@ -19,6 +20,8 @@ export {
   toMessage,
   toMessageKind,
   type CallMark,
+  type MemberEvent,
+  type MemberMark,
   type ChatRef,
   type CommentForward,
   type ForwardedComment,
@@ -34,6 +37,7 @@ export {
   type QuotedMessage,
 } from '@/api/messageRows';
 export type { ChatActivity } from '@/api/chatTopics';
+export { ChatGoneError } from '@/api/chatGone';
 
 export const MESSAGE_PAGE_SIZE = 30;
 
@@ -53,6 +57,8 @@ export type Person = {
   id: string;
   displayName: string;
   avatarUrl: string | null;
+  /** `@имя` без `@`; есть не во всех списках — там, где по нему ищут. */
+  username?: string | null;
 };
 
 export type ChatParticipant = Person & {
@@ -68,6 +74,13 @@ export type ChatSummary = {
   username: string | null;
   /** Своё фото группы; у диалога (его лицо — собеседник) и чата постов — null. */
   avatarUrl: string | null;
+  /**
+   * Владелец группы — настраивает её и удаляет участников. У диалога, чата
+   * постов и группы, где не осталось участников, — null.
+   */
+  ownerId: string | null;
+  /** Описание группы; у остальных чатов — null. */
+  description: string | null;
   /** Только у чата постов: его имя и аватарка — канала. */
   channel: ChannelRef | null;
   participants: ChatParticipant[];
@@ -154,10 +167,10 @@ export type Page<T> = {
 };
 
 const CHAT_COLUMNS =
-  'id, kind, title, username, avatar_url, last_message_at, last_message_text, last_message_author_id, subscribers_count, channel:channels(id, title, username, avatar_url, last_pop_at)';
+  'id, kind, title, username, avatar_url, owner_id, description, last_message_at, last_message_text, last_message_author_id, subscribers_count, channel:channels(id, title, username, avatar_url, last_pop_at)';
 const MEMBER_COLUMNS =
-  'chat_id, user_id, last_read_at, joined_at, profile:profiles(id, display_name, avatar_url)';
-const WAITING_COLUMNS = 'chat_id, user_id, display_name, avatar_url';
+  'chat_id, user_id, last_read_at, joined_at, profile:profiles(id, display_name, avatar_url, username)';
+const WAITING_COLUMNS = 'chat_id, user_id, display_name, avatar_url, username';
 export const chatsSelect = () => supabase.from('chats').select(CHAT_COLUMNS);
 const membersSelect = () => supabase.from('chat_members').select(MEMBER_COLUMNS);
 const waitingSelect = () => supabase.from('chat_waiting_invitees').select(WAITING_COLUMNS);
@@ -183,6 +196,7 @@ function toParticipant(row: MemberRow): ChatParticipant {
     id: row.user_id,
     displayName: row.profile?.display_name ?? 'Без имени',
     avatarUrl: row.profile?.avatar_url ?? null,
+    username: row.profile?.username ?? null,
     lastReadAt: row.last_read_at,
   };
 }
@@ -196,6 +210,7 @@ function toWaiting(row: WaitingRow): Person | null {
     id: row.user_id,
     displayName: row.display_name ?? 'Без имени',
     avatarUrl: row.avatar_url,
+    username: row.username,
   };
 }
 
@@ -228,6 +243,8 @@ export function toSummary(
     title: chat.title,
     username: chat.username,
     avatarUrl: chat.avatar_url,
+    ownerId: chat.owner_id,
+    description: chat.description,
     channel: toChannelRef(chat.channel),
     participants,
     waiting: people.waiting,
@@ -400,7 +417,7 @@ export async function getChat(chatId: string): Promise<ChatSummary> {
   const { data, error } = await chatsSelect().eq('id', chatId).is('deleted_at', null).maybeSingle();
 
   if (error) throw error;
-  if (!data) throw new Error('Чат не найден');
+  if (!data) throw new ChatGoneError(chatId);
 
   const chat = data;
   const peopleByChat = await fetchChatPeople([chat.id]);
@@ -935,6 +952,8 @@ export type ChatChannelHandlers = {
   onRead: () => void;
   /** Кто-то принял заявку: состав участников изменился. */
   onMembersChanged: () => void;
+  /** Чат изменился (название, описание, состав, заявки) или удалён. */
+  onChatChanged?: () => void;
   /**
    * Сообщения удалены. Payload — только подсказка, какие: подделать событие
    * может любой, поэтому что удалено на самом деле, подписчик спрашивает у
@@ -1060,6 +1079,11 @@ export type UserChannelHandlers = {
   onMemberJoined: (chatId: string) => void;
   /** Превью чата изменилось не из-за нового сообщения — например, последнее удалили. */
   onChatChanged: (chatId: string) => void;
+  /**
+   * Я больше не участник чата: ушёл (возможно, с другого устройства) или меня
+   * удалили. Звонок в этом чате пора покинуть.
+   */
+  onMembershipEnded?: (chatId: string) => void;
   /** Мне звонят: в чате, где я участник, начали звонок. */
   onIncomingCall?: (call: IncomingCall) => void;
   /** Звонок в чате, где я участник, завершился — входящий пора погасить. */
@@ -1145,6 +1169,11 @@ export function subscribeToUserEvents(userId: string, handlers: UserChannelHandl
       const chatId = chatIdOf(payload);
 
       if (chatId) handlers.onChatChanged(chatId);
+    })
+    .on('broadcast', { event: 'membership_ended' }, ({ payload }) => {
+      const chatId = chatIdOf(payload);
+
+      if (chatId) handlers.onMembershipEnded?.(chatId);
     })
     .on('broadcast', { event: 'incoming_call' }, ({ payload }) => {
       const call = toIncomingCall(payload);

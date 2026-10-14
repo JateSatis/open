@@ -160,3 +160,80 @@ export async function searchMessages(
         : null,
   };
 }
+
+/** Совпадение поиска по одному чату. */
+export type ChatSearchHit = {
+  id: string;
+  authorId: string | null;
+  /** `null` — аккаунт автора удалён. */
+  authorName: string | null;
+  text: string;
+  createdAt: string;
+};
+
+export type ChatSearchPage = {
+  items: ChatSearchHit[];
+  nextCursor: SearchMessagesCursor | null;
+};
+
+/** Сколько совпадений за раз. Стрелки листают их по одному, догружая страницы. */
+export const CHAT_SEARCH_PAGE_SIZE = 50;
+
+/** Предел счётчика «из N»: база дальше не считает. */
+export const CHAT_SEARCH_COUNT_CAP = 1000;
+
+/** Совпадения в тексте сообщений одного чата, свежие сверху, страницей. */
+export async function searchChatMessages(
+  chatId: string,
+  query: string,
+  cursor: SearchMessagesCursor | null,
+  signal?: AbortSignal,
+): Promise<ChatSearchPage> {
+  let request = supabase.rpc('search_chat_messages', {
+    target_chat: chatId,
+    query,
+    before_created: cursor?.createdAt,
+    before_id: cursor?.id,
+    page_size: CHAT_SEARCH_PAGE_SIZE,
+  });
+
+  if (signal) request = request.abortSignal(signal);
+
+  const { data, error } = await request;
+
+  if (error) throw error;
+
+  const items: ChatSearchHit[] = (data ?? []).map((row) => ({
+    id: row.message_id,
+    authorId: row.author_id ?? null,
+    authorName: row.author_name ?? null,
+    text: row.text ?? '',
+    createdAt: row.created_at,
+  }));
+  const last = items[items.length - 1];
+
+  return {
+    items,
+    nextCursor:
+      items.length === CHAT_SEARCH_PAGE_SIZE && last
+        ? { createdAt: last.createdAt, id: last.id }
+        : null,
+  };
+}
+
+/** Сколько всего совпадений в чате, но не больше `CHAT_SEARCH_COUNT_CAP`. */
+export async function countChatSearch(
+  chatId: string,
+  query: string,
+  signal?: AbortSignal,
+): Promise<number> {
+  let request = supabase.rpc('count_chat_search', { target_chat: chatId, query });
+
+  if (signal) request = request.abortSignal(signal);
+
+  const { data, error } = await request;
+
+  if (error) throw error;
+
+  return data ?? 0;
+}

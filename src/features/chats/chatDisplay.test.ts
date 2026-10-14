@@ -13,6 +13,8 @@ import type { ChatSummary } from '@/api/chats';
 const direct: ChatSummary = {
   id: 'chat-1',
   kind: 'direct',
+  ownerId: null,
+  description: null,
   avatarUrl: null,
   title: null,
   participants: [

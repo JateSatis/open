@@ -175,7 +175,7 @@ export function ChatConversation({
     [isPosts, windowWidth],
   );
   const currentUserId = useCurrentUserId();
-  const { chat, isLoading: isChatLoading, failed: chatFailed } = useChat(chatId);
+  const { chat, isLoading: isChatLoading, failed: chatFailed, gone } = useChat(chatId);
   const chatMessages = useChatMessages(chatId, currentUserId);
   const { messages, isLoading, isLoadingMore, hasMore, error, activities } = chatMessages;
   // Показать нечего, а загрузить не вышло: вместо крутилки — «не удалось» с
@@ -790,7 +790,7 @@ export function ChatConversation({
               />
               <ChatMenu chatId={chatId} isMember subscription={null} />
             </View>
-          ) : chat ? (
+          ) : chat && !gone ? (
             <ChatMenu chatId={chatId} isMember={false} subscription={subscription} />
           ) : undefined
         }
@@ -809,7 +809,11 @@ export function ChatConversation({
 
         <WaitingBanner waiting={waitingForOthers} />
 
-        {failed ? (
+        {gone ? (
+          <View testID="chat-gone" style={styles.centered}>
+            <Text color="textSecondary">Чат удалён</Text>
+          </View>
+        ) : failed ? (
           <LoadFailed message="Не удалось загрузить переписку" onRetry={reload} />
         ) : isChatLoading || isLoading ? (
           <View style={styles.centered}>
@@ -851,7 +855,7 @@ export function ChatConversation({
           </Animated.View>
         )}
 
-        {!failed && !isChatLoading && !isLoading && messages.length === 0 ? (
+        {!gone && !failed && !isChatLoading && !isLoading && messages.length === 0 ? (
           <View style={styles.centered}>
             <Text color="textSecondary">
               {isPosts
@@ -895,6 +899,7 @@ export function ChatConversation({
               : null
           }
           subscribe={
+            !gone &&
             !isPosts &&
             chat !== null &&
             !isMember &&
@@ -910,7 +915,7 @@ export function ChatConversation({
           // ложно): смонтированное заранее, оно встаёт над клавиатурой вовремя.
           // Переписка не загрузилась — писать некуда, пока она не откроется.
           composer={
-            failed || (!isMember && (isPosts || chat !== null))
+            failed || gone || (!isMember && (isPosts || chat !== null))
               ? null
               : {
                   text: draft.text,

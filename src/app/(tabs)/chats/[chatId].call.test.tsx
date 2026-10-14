@@ -114,6 +114,8 @@ const marina = { id: 'user-2', displayName: 'Марина', avatarUrl: null, las
 const chat: ChatSummary = {
   id: 'chat-1',
   kind: 'direct',
+  ownerId: null,
+  description: null,
   avatarUrl: null,
   title: null,
   participants: [me, marina],

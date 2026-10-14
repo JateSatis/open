@@ -125,6 +125,10 @@ export function useChatChannel(chatId: string, currentUserId: string | null): Ch
         // Кто-то принял заявку: состав и «ещё не ответил» живут в чате.
         void queryClient.invalidateQueries({ queryKey: chatQueryKey(chatId) });
       },
+      onChatChanged: () => {
+        // Название, описание, состав, заявки — или чат удалили.
+        void queryClient.invalidateQueries({ queryKey: chatQueryKey(chatId) });
+      },
       onRead: () => {
         // Отметка собеседника живёт в участниках чата, а не в сообщениях —
         // перечитываем именно чат, история при этом не дёргается.
