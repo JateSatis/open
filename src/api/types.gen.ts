@@ -535,6 +535,7 @@ export type Database = {
           created_at: string
           deleted_at: string | null
           edited_at: string | null
+          fragment_id: string | null
           id: string
           kind: string
           member_reactions: Json
@@ -579,6 +580,7 @@ export type Database = {
           created_at?: string
           deleted_at?: string | null
           edited_at?: string | null
+          fragment_id?: string | null
           id?: string
           kind: string
           member_reactions?: Json
@@ -599,6 +601,7 @@ export type Database = {
           created_at?: string
           deleted_at?: string | null
           edited_at?: string | null
+          fragment_id?: string | null
           id?: string
           kind?: string
           member_reactions?: Json
@@ -626,6 +629,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "chats"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comments_fragment_fkey"
+            columns: ["fragment_id", "message_id"]
+            isOneToOne: false
+            referencedRelation: "message_fragments"
+            referencedColumns: ["id", "message_id"]
           },
           {
             foreignKeyName: "comments_message_fkey"
@@ -846,6 +856,96 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "forward_items"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      message_fragments: {
+        Row: {
+          anchor_state: string
+          author_id: string | null
+          chat_id: string
+          comments_count: number
+          created_at: string
+          deleted_at: string | null
+          end_offset: number
+          exact_text: string
+          id: string
+          member_reactions: Json
+          message_id: string
+          prefix_text: string
+          reactions_count: number
+          start_offset: number
+          suffix_text: string
+          text_version: string
+          updated_at: string
+          visitor_reactions: Json
+          my_reaction: {
+            audience: string
+            chat_id: string | null
+            created_at: string
+            deleted_at: string | null
+            emoji: string
+            id: string
+            target_id: string
+            target_type: string
+            updated_at: string
+            user_id: string | null
+          } | null
+        }
+        Insert: {
+          anchor_state?: string
+          author_id?: string | null
+          chat_id: string
+          comments_count?: number
+          created_at?: string
+          deleted_at?: string | null
+          end_offset: number
+          exact_text: string
+          id?: string
+          member_reactions?: Json
+          message_id: string
+          prefix_text?: string
+          reactions_count?: number
+          start_offset: number
+          suffix_text?: string
+          text_version: string
+          updated_at?: string
+          visitor_reactions?: Json
+        }
+        Update: {
+          anchor_state?: string
+          author_id?: string | null
+          chat_id?: string
+          comments_count?: number
+          created_at?: string
+          deleted_at?: string | null
+          end_offset?: number
+          exact_text?: string
+          id?: string
+          member_reactions?: Json
+          message_id?: string
+          prefix_text?: string
+          reactions_count?: number
+          start_offset?: number
+          suffix_text?: string
+          text_version?: string
+          updated_at?: string
+          visitor_reactions?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "message_fragments_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_fragments_message_fkey"
+            columns: ["message_id", "chat_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id", "chat_id"]
           },
         ]
       }
@@ -1076,6 +1176,7 @@ export type Database = {
           deleted_at: string | null
           edited_at: string | null
           forwarded_comment_id: string | null
+          fragments_count: number
           id: string
           kind: string
           member_reactions: Json
@@ -1134,6 +1235,7 @@ export type Database = {
           deleted_at?: string | null
           edited_at?: string | null
           forwarded_comment_id?: string | null
+          fragments_count?: number
           id?: string
           kind: string
           member_reactions?: Json
@@ -1156,6 +1258,7 @@ export type Database = {
           deleted_at?: string | null
           edited_at?: string | null
           forwarded_comment_id?: string | null
+          fragments_count?: number
           id?: string
           kind?: string
           member_reactions?: Json
@@ -1766,6 +1869,8 @@ export type Database = {
         Args: { reply_to: string[]; target_message: string }
         Returns: string
       }
+      common_prefix_length: { Args: { a: string; b: string }; Returns: number }
+      common_suffix_length: { Args: { a: string; b: string }; Returns: number }
       count_chat_search: {
         Args: { query: string; target_chat: string }
         Returns: number
@@ -1812,6 +1917,15 @@ export type Database = {
       }
       end_device_session: { Args: { p_device_id: string }; Returns: undefined }
       end_other_sessions: { Args: never; Returns: undefined }
+      ensure_fragment: {
+        Args: {
+          range_end: number
+          range_start: number
+          range_text: string
+          target_message: string
+        }
+        Returns: string
+      }
       find_channel_by_username: { Args: { name: string }; Returns: string }
       finish_abandoned_streams: { Args: never; Returns: number }
       finish_stream: {
@@ -1832,6 +1946,11 @@ export type Database = {
           source_chat: string
           target_chat: string
         }
+        Returns: string
+      }
+      fragment_context_length: { Args: never; Returns: number }
+      fragment_from_request: {
+        Args: { fragment: Json; target_message: string }
         Returns: string
       }
       insert_pop_post: {
@@ -1865,6 +1984,7 @@ export type Database = {
           deleted_at: string | null
           edited_at: string | null
           forwarded_comment_id: string | null
+          fragments_count: number
           id: string
           kind: string
           member_reactions: Json
@@ -1966,6 +2086,7 @@ export type Database = {
         Args: {
           after_id?: string
           after_rank?: number
+          fragment?: string
           page_size?: number
           target: string
         }
@@ -1976,6 +2097,7 @@ export type Database = {
           created_at: string
           deleted_at: string | null
           edited_at: string | null
+          fragment_id: string | null
           id: string
           kind: string
           member_reactions: Json
@@ -2012,6 +2134,24 @@ export type Database = {
           username: string
         }[]
       }
+      list_message_fragments: {
+        Args: { target_message: string }
+        Returns: {
+          anchor_state: string
+          author_id: string
+          comments_count: number
+          created_at: string
+          end_offset: number
+          exact_text: string
+          id: string
+          member_reactions: Json
+          message_id: string
+          my_emoji: string
+          reactions_count: number
+          start_offset: number
+          visitor_reactions: Json
+        }[]
+      }
       list_thread_roots: {
         Args: {
           after_id?: string
@@ -2026,6 +2166,7 @@ export type Database = {
           created_at: string
           deleted_at: string | null
           edited_at: string | null
+          fragment_id: string | null
           id: string
           kind: string
           member_reactions: Json
@@ -2122,6 +2263,29 @@ export type Database = {
             }
             SetofOptions: {
               from: "comments"
+              to: "reactions"
+              isOneToOne: true
+              isSetofReturn: true
+            }
+          }
+        | {
+            Args: {
+              "": Database["public"]["Tables"]["message_fragments"]["Row"]
+            }
+            Returns: {
+              audience: string
+              chat_id: string | null
+              created_at: string
+              deleted_at: string | null
+              emoji: string
+              id: string
+              target_id: string
+              target_type: string
+              updated_at: string
+              user_id: string | null
+            }
+            SetofOptions: {
+              from: "message_fragments"
               to: "reactions"
               isOneToOne: true
               isSetofReturn: true
@@ -2228,6 +2392,7 @@ export type Database = {
           created_at: string
           deleted_at: string | null
           edited_at: string | null
+          fragment_id: string | null
           id: string
           kind: string
           member_reactions: Json
@@ -2251,6 +2416,7 @@ export type Database = {
       post_comment: {
         Args: {
           comment_text: string
+          fragment?: Json
           media: Json
           reply_to: string[]
           target_message: string
@@ -2486,6 +2652,7 @@ export type Database = {
       send_comment: {
         Args: {
           comment_text: string
+          fragment?: Json
           media?: Json
           reply_to?: string[]
           target_message: string
@@ -2523,6 +2690,7 @@ export type Database = {
       }
       send_voice_comment: {
         Args: {
+          fragment?: Json
           reply_to?: string[]
           target_message: string
           thread_root?: string
@@ -2586,6 +2754,20 @@ export type Database = {
       set_chat_username: {
         Args: { new_username: string; target_chat: string }
         Returns: string
+      }
+      set_fragment_reaction: {
+        Args: {
+          range_end: number
+          range_start: number
+          range_text: string
+          reaction: string
+          target_message: string
+        }
+        Returns: {
+          audience: string
+          emoji: string
+          fragment_id: string
+        }[]
       }
       set_reaction: {
         Args: { reaction: string; target_id: string; target_type: string }
