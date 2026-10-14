@@ -215,14 +215,17 @@ export async function removeOwnAvatar(url: string | null, userId: string): Promi
  * Сбой не ошибка — у группы уже новое фото.
  */
 export async function removeOwnGroupAvatar(url: string | null, userId: string): Promise<void> {
-  const path = url ? ownPathFromUrl(url, MEDIA_BUCKET, userId, GROUP_AVATAR_FOLDER) : null;
-
-  if (path) await removeUploadedMedia(path);
+  await removeOwnFileIn(GROUP_AVATAR_FOLDER, url, userId);
 }
 
 /** Убирает прежнее фото канала, если файл — мой. Сбой не ошибка — у канала уже новое. */
 export async function removeOwnChannelAvatar(url: string | null, userId: string): Promise<void> {
-  const path = url ? ownPathFromUrl(url, MEDIA_BUCKET, userId, CHANNEL_AVATAR_FOLDER) : null;
+  await removeOwnFileIn(CHANNEL_AVATAR_FOLDER, url, userId);
+}
+
+/** Удалить файл по адресу, только если он лежит в папке `folder` моего префикса. */
+async function removeOwnFileIn(folder: string, url: string | null, userId: string): Promise<void> {
+  const path = url ? ownPathFromUrl(url, MEDIA_BUCKET, userId, folder) : null;
 
   if (path) await removeUploadedMedia(path);
 }

@@ -1,17 +1,16 @@
-import { Stack, useNavigation, useRouter } from 'expo-router';
-import { SymbolView } from 'expo-symbols';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, View } from 'react-native';
+import { Stack, useRouter } from 'expo-router';
+import { useCallback, useRef, useState } from 'react';
+import { ActivityIndicator, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 
+import { PhotoField } from './PhotoField';
+import { SaveCheck } from './SaveCheck';
 import { styles } from './styles';
+import { useConfirmLeave } from './useConfirmLeave';
 import { describeSaveChannelError, useSaveChannel, type PhotoDraft } from './useSaveChannel';
 
 import type { Channel } from '@/api/channels';
-import { Avatar } from '@/components/Avatar';
-import { confirm } from '@/components/ConfirmDialog/store';
 import { Input } from '@/components/Input';
-import { LinkButton } from '@/components/LinkButton';
 import { Text } from '@/components/Text';
 import {
   CHANNEL_DESCRIPTION_COUNTER_FROM,
@@ -28,7 +27,7 @@ import { validateUsername } from '@/features/profile/username';
 import { UsernameField } from '@/features/profile/UsernameField';
 import { useUsernameAvailability } from '@/features/profile/useUsernameAvailability';
 import { useTheme } from '@/hooks/use-theme';
-import { InfoPageSizes, Spacing } from '@/theme';
+import { Spacing } from '@/theme';
 
 const SHEET_OWNER = 'avatar:channel-edit';
 
@@ -65,7 +64,6 @@ export function ChannelEditScreen({ channelId }: ChannelEditScreenProps) {
 function ChannelEditForm({ channel }: { channel: Channel }) {
   const theme = useTheme();
   const router = useRouter();
-  const navigation = useNavigation();
   const currentUserId = useCurrentUserId();
   const save = useSaveChannel(channel, currentUserId);
 
@@ -135,28 +133,7 @@ function ChannelEditForm({ channel }: { channel: Channel }) {
     usernameChanged,
   ]);
 
-  // Уход с несохранённым — только после вопроса.
-  useEffect(
-    () =>
-      navigation.addListener('beforeRemove', (event) => {
-        if (!dirty || leaving.current) return;
-
-        event.preventDefault();
-        void confirm({
-          title: 'Отменить изменения?',
-          message: 'Новое фото, название, описание и имя не сохранятся.',
-          confirmLabel: 'Выйти',
-          cancelLabel: 'Остаться',
-          destructive: true,
-        }).then((confirmed) => {
-          if (!confirmed) return;
-
-          leaving.current = true;
-          navigation.dispatch(event.data.action);
-        });
-      }),
-    [dirty, navigation],
-  );
+  useConfirmLeave(dirty, leaving);
 
   const shownPhoto =
     photo.kind === 'set' ? photo.uri : photo.kind === 'remove' ? null : channel.avatarUrl;
@@ -172,25 +149,7 @@ function ChannelEditForm({ channel }: { channel: Channel }) {
         options={{
           title: 'Изменить',
           headerRight: () => (
-            <Pressable
-              testID="channel-edit-save"
-              accessibilityRole="button"
-              accessibilityLabel="Сохранить"
-              accessibilityState={{ disabled: !canSave }}
-              disabled={!canSave}
-              hitSlop={Spacing.three}
-              onPress={() => void submit()}
-            >
-              {saving ? (
-                <ActivityIndicator accessibilityLabel="Сохранение" />
-              ) : (
-                <SymbolView
-                  name={{ ios: 'checkmark', android: 'check', web: 'check' }}
-                  size={InfoPageSizes.barIcon}
-                  tintColor={canSave ? theme.primary : theme.textSecondary}
-                />
-              )}
-            </Pressable>
+            <SaveCheck enabled={canSave} saving={saving} onPress={() => void submit()} />
           ),
         }}
       />
@@ -200,38 +159,14 @@ function ChannelEditForm({ channel }: { channel: Channel }) {
         keyboardShouldPersistTaps="handled"
         bottomOffset={Spacing.six}
       >
-        <View style={styles.photo}>
-          <Pressable
-            testID="channel-edit-photo"
-            accessibilityRole="button"
-            accessibilityLabel="Фото канала"
-            onPress={openSheet}
-          >
-            <Avatar
-              uri={shownPhoto}
-              name={cleanTitle || channel.title}
-              size={InfoPageSizes.avatar}
-            />
-            {prepared.preparing ? (
-              <View style={[styles.busy, { backgroundColor: theme.mediaScrim }]}>
-                <ActivityIndicator color={theme.textOnMedia} />
-              </View>
-            ) : null}
-          </Pressable>
-          <LinkButton label="Установить новое фото" onPress={openSheet} />
-          {shownPhoto ? (
-            <LinkButton
-              label="Удалить фото"
-              color="danger"
-              onPress={() => setPhoto({ kind: 'remove' })}
-            />
-          ) : null}
-          {prepared.failed ? (
-            <Text variant="small" color="danger">
-              Не удалось открыть фото. Попробуйте ещё раз.
-            </Text>
-          ) : null}
-        </View>
+        <PhotoField
+          uri={shownPhoto}
+          name={cleanTitle || channel.title}
+          preparing={prepared.preparing}
+          failed={prepared.failed}
+          onPick={openSheet}
+          onRemove={() => setPhoto({ kind: 'remove' })}
+        />
 
         <Input
           testID="channel-edit-title"
