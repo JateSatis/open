@@ -1,5 +1,5 @@
 appId: com.openger.app
-name: Тап по сообщению открывает меню с реакциями, тап мимо сворачивает их, «назад» закрывает
+name: Долгое нажатие на сообщение открывает меню с реакциями, тап мимо сворачивает их, «назад» закрывает
 tags:
   - chats
 env:
@@ -7,15 +7,15 @@ env:
 ---
 - runFlow: subflows/open-app.yaml
 - tapOn: ${CHAT}
-# Время в облачке — часть строки и не перехватывает тап, в отличие от фото и цитат.
-- tapOn:
+# Время в облачке — часть строки, в отличие от фото и цитат.
+- longPressOn:
     id: "message-time"
     index: 0
 - assertVisible:
     id: "message-menu"
 - assertVisible: "Комментировать"
-# Выбор — долгим нажатием, в меню его нет.
-- assertNotVisible: "Выбрать"
+# Выбор нескольких — пунктом меню.
+- assertVisible: "Выбрать"
 - tapOn:
     id: "reaction-picker-expand"
 - assertVisible:

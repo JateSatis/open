@@ -316,6 +316,14 @@ forward_items        позиции островка: ссылка на ориг
                      островок (message_replies.quoted_forward_id, message_pins.forward_id)
 legacy_forward_copies журнал переноса старых копий пересылки в островки. Только для
                      модерации, пользователям закрыта
+message_fragments    фрагмент текста сообщения: кусок [start_offset, end_offset) в code points
+                     + якорь exact_text / prefix_text / suffix_text, автор, свои ряды реакций
+                     и comments_count. Рождается спящим (deleted_at) первой реакцией или
+                     комментарием (set_fragment_reaction, send_comment / send_voice_comment
+                     с fragment) и засыпает, когда не осталось ни того ни другого. Один
+                     живой на автора и диапазон. Правка текста перепривязывает
+                     (anchor_state exact | shifted | lost). Пишут только функции; видимых у
+                     сообщения — messages.fragments_count, список — list_message_fragments
 message_revisions    прежние версии сообщения после правки: вид, текст, снимок вложений.
                      Только для модерации, пользователям закрыта
 message_views        кто видел сообщение: пара сообщение + зритель, сессия последнего
@@ -333,7 +341,8 @@ comments             комментарии к сообщению или к по
                      can_publish_in_channel («Автор»). Счётчик — messages.comments_count
                      или pops.comments_count. Отправка: send_comment / send_voice_comment
                      (сообщение), send_pop_comment / send_voice_pop_comment (поп), верх
-                     — list_comment_thread_roots(target)
+                     — list_comment_thread_roots(target, …, fragment). fragment_id — у
+                     корня, комментарий к фрагменту того же сообщения (составной FK)
 comment_attachments  медиа комментария: те же инварианты, что у attachments
 comment_replies      цитаты ответа на комментарий: только комментарии той же ветки
                      (составной FK по target_id), по порядку, до 100. Пишут только
@@ -348,7 +357,7 @@ comment_pins         закреплённый комментарий цели: t
                      pinned_comment; страницы ранга — целиком, дубль убирает клиент
 comment_revisions    прежние версии комментария после правки, с целью (message_id |
                      pop_id). Только для модерации
-reactions            полиморфные: target_type = message | comment | pop + target_id; ряд
+reactions            полиморфные: target_type = message | comment | pop | fragment + target_id; ряд
                      audience = member | visitor ставит база по chat_members чата цели
                      (у попа — по can_publish_in_channel), не клиент. chat_id у попа —
                      чат постов канала. Одна живая на человека и цель. Счётчики — в

@@ -21,6 +21,7 @@ import { resetOutbox } from '@/features/chats/messages/outbox';
 import { reportRealtimeJoined, resetConnectionState } from '@/features/connection/connectionStore';
 import { useInAppAlert } from '@/features/notifications/alertsStore';
 import { renderWithQuery } from '@/test/renderWithQuery';
+import { longPressMessage, startSelecting } from '@/test/messageGestures';
 
 const mockPush = jest.fn();
 
@@ -156,23 +157,11 @@ function message(id: string, text: string, authorId: string, minute = 0): Messag
   };
 }
 
-/** Тап по облачку — так открывается его меню. */
-/** Долгое нажатие — так, как его видит жест-обработчик: включает выбор. */
-async function longPress(rowKey: string) {
-  await act(async () => {
-    fireGestureHandler(getByGestureTestId(`message-long-press-${rowKey}`), [
-      { state: State.BEGAN },
-      { state: State.ACTIVE },
-      { state: State.END },
-    ]);
-  });
-}
+/** Меню облачка → «Выбрать»: включает выбор. */
+const longPress = startSelecting;
 
-async function tapMessage(messageId: string) {
-  await act(async () => {
-    fireEvent.press(screen.getByTestId(`message-row-${messageId}`));
-  });
-}
+/** Долгое нажатие на облачко — так открывается его меню. */
+const tapMessage = longPressMessage;
 
 async function choose(label: string) {
   fireEvent.press(await screen.findByRole('menuitem', { name: label }));

@@ -74,6 +74,11 @@ import { measureInWindow, RowRegistryContext } from '@/features/chats/rowRegistr
 import { useChatBubbles } from '@/features/chats/useChatBubbles';
 import { useChatKeyboardInset } from '@/features/chats/useChatKeyboardInset';
 import { useChatRowRenderer } from '@/features/chats/useChatRowRenderer';
+import { listMessageFragments, type Fragment, type FragmentRange } from '@/api/fragments';
+import { fragmentsKey, myFragmentOn } from '@/features/chats/fragments/useMessageFragments';
+import { FragmentMenu } from '@/features/chats/fragments/FragmentMenu';
+import { clearTextSelection, type TextSelection } from '@/features/chats/fragments/fragmentStore';
+import { useFragmentMode } from '@/features/chats/fragments/useFragmentMode';
 import { useComposerDraft } from '@/features/chats/useComposerDraft';
 import { chatQueryKey, useChat } from '@/features/chats/useChat';
 import { useCommentsLiftHost } from '@/features/chats/useCommentsLiftHost';
@@ -91,7 +96,7 @@ import { readChatDraft } from '@/features/chats/composerDraftStore';
 import { useMessageActionHandlers } from '@/features/chats/useMessageActionHandlers';
 import { useMessageEdit } from '@/features/chats/useMessageEdit';
 import { useMessageMenu } from '@/features/chats/useMessageMenu';
-import { useMessageSelection } from '@/features/chats/useMessageSelection';
+import { isSelectableRow, useMessageSelection } from '@/features/chats/useMessageSelection';
 import { useMyInvite } from '@/features/chats/useMyInvite';
 import { usePinnedCursor } from '@/features/chats/usePinnedCursor';
 import { usePinnedMessages } from '@/features/chats/usePinnedMessages';
@@ -99,7 +104,11 @@ import { useQuoteNavigation, type CommentFocus } from '@/features/chats/useQuote
 import { useReplyForward } from '@/features/chats/useReplyForward';
 import { useRespondToInvite } from '@/features/chats/useRespondToInvite';
 import { WaitingBanner } from '@/features/chats/WaitingBanner';
-import { CommentsPanel, openComments } from '@/features/interactions/CommentsPanel';
+import {
+  CommentsPanel,
+  openComments,
+  openFragmentComments,
+} from '@/features/interactions/CommentsPanel';
 import { resetScrolledRows } from '@/features/interactions/MessageReactions';
 import { menuReactionSet } from '@/features/interactions/reactionState';
 import { chatFade } from '@/features/interactions/comments/commentsLift';
@@ -547,11 +556,6 @@ export function ChatConversation({
     return () => subscription.remove();
   }, [clearSelection, isSelecting]);
 
-  const selectIsland = useCallback(
-    (island: Parameters<typeof runIslandAction>[1]) => runIslandAction('select_all', island),
-    [runIslandAction],
-  );
-
   const { openComment } = navigation;
   const openForwardedComment = useCallback(
     (comment: ForwardedComment) => {
@@ -591,14 +595,46 @@ export function ChatConversation({
     postAuthor: channel?.title ?? null,
   });
 
+  const fragments = useFragmentMode({ isMember, isFocused, isSelecting });
+
+  // Кнопка комментария в меню фрагмента: боковая панель этого куска текста.
+  // Выделение снимается, облачко остаётся в режиме фрагментов.
+  const commentOnFragment = useCallback(
+    async (selection: TextSelection, range: FragmentRange, known: Fragment | null) => {
+      clearTextSelection();
+
+      // Список фрагментов мог ещё не прийти — без него панель не узнала бы
+      // мой прежний фрагмент и его комментарии.
+      const mine =
+        known ??
+        myFragmentOn(
+          await queryClient
+            .ensureQueryData({
+              queryKey: fragmentsKey(selection.messageId),
+              queryFn: () => listMessageFragments(selection.messageId),
+            })
+            .catch(() => undefined),
+          currentUserId,
+          range,
+        );
+
+      openFragmentComments(selection.messageId, selection.chatId, selection.amMember, {
+        kind: 'fragment',
+        key: `${selection.messageId}:${range.start}-${range.end}`,
+        fragmentId: mine && !mine.id.startsWith('local:') ? mine.id : null,
+        range,
+        focusInput: true,
+      });
+    },
+    [currentUserId, queryClient],
+  );
+
   const { renderItem, islandHeader, bubbleContent } = useChatRowRenderer({
     currentUserId,
     isMember,
     isSelecting,
     isSelected: selection.isSelected,
     toggleSelected: selection.toggle,
-    startSelection: selection.start,
-    selectIsland,
     editingId,
     highlight: jump.highlight,
     bubbleFor,
@@ -606,6 +642,8 @@ export function ChatConversation({
     startReply,
     // В постах свайп листает разделы канала; ответить можно из меню.
     swipeReply: !isPosts,
+    pressRow: fragments.pressRow,
+    longPressAt: fragments.longPressAt,
     retry,
     hostName: authorName,
   });
@@ -631,6 +669,9 @@ export function ChatConversation({
       const toOldest = contentSize.height - layoutMeasurement.height - contentOffset.y;
 
       resumeLoadMore(toOldest < layoutMeasurement.height * HISTORY_EDGE);
+      // Выделение привязано к месту на экране: тронули прокрутку — снимается,
+      // режим фрагментов остаётся.
+      clearTextSelection();
     },
     [resumeLoadMore],
   );
@@ -667,6 +708,7 @@ export function ChatConversation({
       isMember,
       isPinned: pins.isPinned(menuContent.id),
       island: menuRow.type === 'island-item' ? { isMine: islandMine } : null,
+      selectable: isSelectableRow(menuRow, currentUserId),
     });
   }, [currentUserId, isMember, menuContent, menuRow, pins]);
 
@@ -1017,6 +1059,8 @@ export function ChatConversation({
           sections={sheetSections}
         />
       ) : null}
+
+      <FragmentMenu measureViewport={measureListFrame} onComment={commentOnFragment} />
 
       <MessageContextMenu
         anchor={menu.target?.anchor ?? null}

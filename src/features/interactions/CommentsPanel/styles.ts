@@ -165,4 +165,40 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.two,
   },
+  /** Боковая панель фрагмента — у правого края, слева видна переписка. */
+  sidePanel: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+  },
+  /** Шапка панели фрагмента: цитата и строка реакций под заголовком. */
+  fragmentHeader: {
+    paddingHorizontal: Spacing.three,
+    paddingBottom: Spacing.two,
+    gap: Spacing.two,
+  },
+  fragmentQuote: {
+    borderLeftWidth: Sizes.quoteAccent,
+    borderRadius: Radii.sm,
+    paddingHorizontal: Spacing.two,
+    paddingVertical: Spacing.one,
+  },
+  fragmentReactions: {
+    gap: Spacing.one,
+  },
+  fragmentChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.one,
+    minWidth: Sizes.reactionCell,
+    height: Sizes.reactionCell - Spacing.two,
+    paddingHorizontal: Spacing.two,
+    borderRadius: Radii.full,
+    justifyContent: 'center',
+  },
+  /** Полный набор реакций под строкой — блок `ReactionPicker` стоит в нём. */
+  fragmentPicker: {
+    position: 'relative',
+  },
 });

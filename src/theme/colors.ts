@@ -31,6 +31,21 @@ export const Colors = {
     waveformRestOnPrimary: 'rgba(255, 255, 255, 0.45)',
     /** Фон строки выбранного сообщения и короткая подсветка того, к которому прыгнули. */
     messageHighlight: 'rgba(60, 135, 247, 0.18)',
+    /**
+     * Облачко в режиме фрагментов — чужое: заметно иной фон, не путается с
+     * подсветкой выбора (`messageHighlight`), текст читается как обычно.
+     */
+    fragmentBubble: '#D6E5FD',
+    /** То же у своего облачка — темнее `primary`, белый текст читается. */
+    fragmentBubbleOwn: '#2468D1',
+    /** Заливка выделенного текста в чужом облачке. */
+    textSelection: 'rgba(60, 135, 247, 0.34)',
+    /** То же в своём облачке, на синем. */
+    textSelectionOnPrimary: 'rgba(255, 255, 255, 0.38)',
+    /** Ручки выделения в чужом облачке. */
+    selectionHandle: '#3C87F7',
+    /** Ручки в своём облачке — белые на синем. */
+    selectionHandleOnPrimary: '#ffffff',
     /** Подложка цитаты в чужом облачке. */
     quoteBackground: 'rgba(60, 135, 247, 0.10)',
     /** То же в своём облачке, на `primary`. */
@@ -96,6 +111,12 @@ export const Colors = {
     waveformRest: 'rgba(176, 180, 186, 0.35)',
     waveformRestOnPrimary: 'rgba(255, 255, 255, 0.45)',
     messageHighlight: 'rgba(60, 135, 247, 0.28)',
+    fragmentBubble: '#1B2B47',
+    fragmentBubbleOwn: '#255BB0',
+    textSelection: 'rgba(60, 135, 247, 0.5)',
+    textSelectionOnPrimary: 'rgba(255, 255, 255, 0.34)',
+    selectionHandle: '#5A9BFF',
+    selectionHandleOnPrimary: '#ffffff',
     quoteBackground: 'rgba(60, 135, 247, 0.18)',
     quoteBackgroundOnPrimary: 'rgba(255, 255, 255, 0.18)',
     reactionChip: 'rgba(60, 135, 247, 0.22)',

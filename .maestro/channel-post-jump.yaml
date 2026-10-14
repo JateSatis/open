@@ -15,7 +15,7 @@ env:
 - tapOn: "Отправить"
 - assertVisible: ${output.post}
 # Пересылка в диалог: экран канала остаётся ниже в стеке.
-- tapOn: ${output.post}
+- longPressOn: ${output.post}
 - tapOn: "Переслать"
 - tapOn: ${CHAT}
 - tapOn: "Отправить"
@@ -23,7 +23,7 @@ env:
     id: "call-button"
 - assertVisible: ${output.post}
 # «Перейти к оригиналу» у облачка островка — к посту на том же экране канала.
-- tapOn: ${output.post}
+- longPressOn: ${output.post}
 - tapOn: "Перейти к оригиналу"
 - assertVisible:
     id: "segment-0"
@@ -35,13 +35,13 @@ env:
     id: "chat-list-item"
 # Уборка: пост удаляется в канале, островок — из диалога.
 - tapOn: ${CHAT}
-- tapOn: ${output.post}
+- longPressOn: ${output.post}
 - tapOn: "Убрать из пересылки"
 - tapOn: "Убрать"
 - assertNotVisible: ${output.post}
 - back
 - tapOn: ${CHANNEL}
-- tapOn: ${output.post}
+- longPressOn: ${output.post}
 - tapOn: "Удалить"
 - tapOn: "Удалить"
 - assertNotVisible: ${output.post}

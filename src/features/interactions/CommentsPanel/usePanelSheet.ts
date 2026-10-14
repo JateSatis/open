@@ -4,7 +4,7 @@
 /* eslint-disable react-hooks/immutability */
 import type { FlashListRef } from '@shopify/flash-list';
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
-import { PixelRatio, type ScrollView } from 'react-native';
+import { PixelRatio, type ScrollView, type ViewStyle } from 'react-native';
 import { Gesture, type PanGesture } from 'react-native-gesture-handler';
 import { KeyboardController } from 'react-native-keyboard-controller';
 import {
@@ -308,18 +308,24 @@ export function usePanelSheet({ windowHeight, prepareClose }: Options) {
   );
 
   /** Весь шит целиком: и список, и строка ввода уезжают вместе. */
-  const shiftStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: dismissY.value }],
-  }));
+  // Стили — общего вида `ViewStyle`: боковая панель (`useSidePanel`) двигает
+  // то же содержимое по горизонтали.
+  const shiftStyle = useAnimatedStyle(
+    (): ViewStyle => ({ transform: [{ translateY: dismissY.value }] }),
+  );
 
   /**
    * Строка ввода — ровно над клавиатурой своего поля и уезжает вниз вместе
    * с шитом. Высота клавиатуры меряется от низа экрана и уже покрывает
    * полосу навигации, под которую у строки свой отступ.
    */
-  const footerStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: dismissY.value - Math.max(keyboardHeight.value - insets.bottom, 0) }],
-  }));
+  const footerStyle = useAnimatedStyle(
+    (): ViewStyle => ({
+      transform: [
+        { translateY: dismissY.value - Math.max(keyboardHeight.value - insets.bottom, 0) },
+      ],
+    }),
+  );
 
   const markShown = useCallback(() => setShown(true), []);
   const markReady = useCallback(() => setReady(true), []);

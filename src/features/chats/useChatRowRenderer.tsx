@@ -10,6 +10,7 @@ import {
   type ChatListRow,
   type IslandHeaderRow,
 } from '@/features/chats/islands/rows';
+import type { RowPoint } from '@/features/chats/fragments/fragmentSelection';
 import { isLocalMessage } from '@/features/chats/messageActions';
 import type { MenuAnchor } from '@/features/chats/MessageContextMenu';
 import { MessageRow } from '@/features/chats/MessageRow';
@@ -26,10 +27,6 @@ type Options = {
   isSelecting: boolean;
   isSelected: (rowKey: string) => boolean;
   toggleSelected: (rowKey: string) => void;
-  /** Долгое нажатие — выбор с этим облачком уже отмеченным. */
-  startSelection: (rowKey: string) => void;
-  /** Долгое нажатие на плашку островка — отмечены все его облачка. */
-  selectIsland: (island: IslandHeaderRow['island']) => void;
   /** Строка, чьё сообщение сейчас правится. */
   editingId: string | null;
   highlight: JumpHighlight | null;
@@ -38,6 +35,10 @@ type Options = {
   startReply: (rows: BubbleRow[]) => void;
   /** Свайп влево отвечает. В постах канала его нет: там свайп листает разделы. */
   swipeReply?: boolean;
+  /** Тап по облачку — режим фрагментов. */
+  pressRow?: (row: BubbleRow) => void;
+  /** Долгое нажатие в режиме фрагментов — выделение текста, если палец на нём. */
+  longPressAt?: (rowKey: string, point: RowPoint) => boolean | Promise<boolean>;
   retry: (localId: string) => void;
   hostName: (authorId: string | null) => string;
 };
@@ -53,20 +54,20 @@ export function useChatRowRenderer({
   isSelecting,
   isSelected,
   toggleSelected,
-  startSelection,
-  selectIsland,
   editingId,
   highlight,
   bubbleFor,
   openMenu,
   startReply,
   swipeReply = true,
+  pressRow,
+  longPressAt,
   retry,
   hostName,
 }: Options) {
   /**
-   * Плашка островка — и в строке, и копией в меню. Тап по ней — меню
-   * островка, как у облачка; переход в исходный чат — его первый пункт.
+   * Плашка островка — и в строке, и копией в меню. Долгое нажатие на неё —
+   * меню островка, как у облачка; переход в исходный чат — его первый пункт.
    */
   const islandHeader = useCallback(
     (row: IslandHeaderRow, interactive: boolean) => {
@@ -109,7 +110,6 @@ export function useChatRowRenderer({
             highlightKey={highlightKey}
             messageId={row.key}
             onOpenMenu={(anchor) => openMenu(row, anchor)}
-            onSelect={isLocalMessage(row.island) ? undefined : () => selectIsland(row.island)}
             onToggle={noop}
             frame={<IslandBorder top bottom={false} />}
           >
@@ -149,7 +149,8 @@ export function useChatRowRenderer({
           highlightKey={highlightKey}
           messageId={row.key}
           onOpenMenu={hasMenu ? (anchor) => openMenu(row, anchor) : undefined}
-          onSelect={selectable ? () => startSelection(row.key) : undefined}
+          onPress={pressRow && content ? () => pressRow(row) : undefined}
+          onLongPressAt={longPressAt ? (point) => longPressAt(row.key, point) : undefined}
           onToggle={() => toggleSelected(row.key)}
           // Ответ — это отправка: свайп есть только у участника и только у
           // сообщений, которые уже на сервере.
@@ -172,10 +173,10 @@ export function useChatRowRenderer({
       isSelected,
       isSelecting,
       islandHeader,
+      longPressAt,
       openMenu,
-      selectIsland,
+      pressRow,
       startReply,
-      startSelection,
       swipeReply,
       toggleSelected,
     ],

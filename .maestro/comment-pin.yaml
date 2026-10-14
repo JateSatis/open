@@ -27,7 +27,7 @@ env:
 - inputText: ${output.msg}
 - tapOn: "Отправить"
 - assertVisible: ${output.msg}
-- tapOn: ${output.msg}
+- longPressOn: ${output.msg}
 - tapOn: "Закрепить"
 - assertVisible:
     id: "comment-pinned-label"
@@ -40,26 +40,26 @@ env:
 - inputText: ${output.reply}
 - tapOn: "Отправить"
 - assertVisible: ${output.reply}
-- tapOn: ${output.reply}
+- longPressOn: ${output.reply}
 - assertVisible: "Ответить"
 - assertNotVisible: "Закрепить"
 - assertNotVisible: "Открепить"
 - back
 - back
 # Открепление — метка уходит, комментарий остаётся.
-- tapOn: ${output.msg}
+- longPressOn: ${output.msg}
 - tapOn: "Открепить"
 - assertNotVisible:
     id: "comment-pinned-label"
 - assertVisible: ${output.msg}
 # Уборка: свой комментарий удаляется вместе с ответом в ветке.
 - tapOn: "1 ответ"
-- tapOn: ${output.reply}
+- longPressOn: ${output.reply}
 - tapOn: "Удалить"
 - tapOn: "Удалить"
 - assertNotVisible: ${output.reply}
 - back
-- tapOn: ${output.msg}
+- longPressOn: ${output.msg}
 - tapOn: "Удалить"
 - tapOn: "Удалить"
 - assertNotVisible: ${output.msg}

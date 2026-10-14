@@ -1,0 +1,86 @@
+appId: com.openger.app
+name: Фрагмент текста — тап в режим, выделение, реакция из меню, комментарий из боковой панели и он же в шите
+tags:
+  - chats
+  - comments
+env:
+  # Публичная группа, основной аккаунт в ней посетитель — тап входит в режим фрагментов.
+  FRAGMENT_CHAT_LINK: "openger://chats/2d929436-099b-4cc9-89ba-e764c0ad8306"
+  FRAGMENT_TEXT: "Самойлова, ты дура!"
+---
+- runFlow: subflows/open-app.yaml
+- evalScript: ${output.msg = 'maestro-' + Date.now()}
+- openLink: ${FRAGMENT_CHAT_LINK}
+# Тап — режим фрагментов, долгое нажатие на текст — выделение и меню фрагмента.
+# Смена фона — не смена дерева: повтор тапа выключил бы режим обратно.
+- tapOn:
+    text: ${FRAGMENT_TEXT}
+    retryTapIfNoChange: false
+- longPressOn: ${FRAGMENT_TEXT}
+- assertVisible:
+    id: "fragment-menu"
+- assertVisible:
+    id: "text-selection"
+# Реакция — меню и выделение уходят, повторное выделение показывает её отмеченной.
+- tapOn:
+    id: "reaction-option-🔥"
+- assertNotVisible:
+    id: "fragment-menu"
+- longPressOn: ${FRAGMENT_TEXT}
+# Меню фрагмента, а не сообщения: у сообщения может быть своя 🔥.
+- assertVisible:
+    id: "fragment-menu"
+- assertVisible:
+    id: "reaction-option-🔥"
+    selected: true
+- tapOn:
+    id: "reaction-option-🔥"
+- assertNotVisible:
+    id: "fragment-menu"
+# Комментарий — из боковой панели фрагмента.
+- longPressOn: ${FRAGMENT_TEXT}
+- tapOn:
+    id: "fragment-comment"
+- assertVisible:
+    id: "fragment-quote"
+- tapOn: "Комментарий"
+- inputText: ${output.msg}
+- tapOn: "Отправить"
+- assertVisible: ${output.msg}
+# Ответ в треде — как в шите: свайп влево по комментарию, ответ ложится в тред.
+- evalScript: ${output.reply = 'maestro-reply-' + Date.now()}
+- swipe:
+    from: ${output.msg}
+    direction: LEFT
+- inputText: ${output.reply}
+- tapOn: "Отправить"
+- assertVisible: ${output.reply}
+- back
+- back
+- assertVisible: "1 ответ"
+# Тап по затемнённой переписке слева закрывает панель.
+- tapOn:
+    point: "4%,50%"
+- assertNotVisible:
+    id: "fragment-quote"
+# В обычном шите комментариев сообщения — тот же комментарий.
+- tapOn:
+    id: "comments-circle"
+    index: 0
+- assertVisible:
+    id: "comments-panel"
+- scrollUntilVisible:
+    element: ${output.msg}
+    direction: DOWN
+    timeout: 20000
+# Убрать за собой: ответ, потом сам комментарий.
+- tapOn: "1 ответ"
+- longPressOn: ${output.reply}
+- tapOn: "Удалить"
+- tapOn: "Удалить"
+- assertNotVisible: ${output.reply}
+- back
+- longPressOn: ${output.msg}
+- tapOn: "Удалить"
+- tapOn: "Удалить"
+- assertNotVisible: ${output.msg}

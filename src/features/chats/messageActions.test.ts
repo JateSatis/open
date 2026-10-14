@@ -111,11 +111,16 @@ describe('message menu', () => {
     ]);
   });
 
-  it('never offers «Выбрать» — selection starts with a long press', () => {
-    expect(
-      labels({ message: message({ authorId: 'user-1' }), isOwn: true, isMember: true, isPinned: false }),
-    ).not.toContain('Выбрать');
-    expect(deletedOriginalActions(true).map((action) => action.label)).not.toContain('Выбрать');
+  it('offers «Выбрать» right after «Копировать», only for a bubble that can be marked', () => {
+    const own = { message: message({ authorId: 'user-1' }), isOwn: true, isMember: true, isPinned: false };
+
+    expect(labels(own)).not.toContain('Выбрать');
+    expect(labels({ ...own, selectable: true }).slice(1, 4)).toEqual([
+      'Комментировать',
+      'Копировать',
+      'Выбрать',
+    ]);
+    expect(deletedOriginalActions(true).map((action) => action.label)).toContain('Выбрать');
   });
 
   it('offers no commenting on a system message, a forwarded comment or one not sent yet', () => {
@@ -186,6 +191,7 @@ describe('message menu of a bubble in a forward island', () => {
 
   it('offers only removal on a deleted original, and only to the forwarder', () => {
     expect(deletedOriginalActions(true).map((action) => action.label)).toEqual([
+      'Выбрать',
       'Убрать из пересылки',
     ]);
     expect(deletedOriginalActions(false)).toEqual([]);

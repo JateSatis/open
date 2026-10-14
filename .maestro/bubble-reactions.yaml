@@ -13,7 +13,7 @@ env:
 - tapOn: "Отправить"
 - assertVisible: ${output.msg}
 # Реакция из меню: участник ставит её в крупный ряд нижней строки.
-- tapOn: ${output.msg}
+- longPressOn: ${output.msg}
 - tapOn:
     id: "reaction-option-👍"
 - assertVisible:
@@ -32,7 +32,7 @@ env:
 - assertNotVisible:
     id: "message-menu"
 # Уборка: тестовое сообщение удаляется.
-- tapOn: ${output.msg}
+- longPressOn: ${output.msg}
 - tapOn: "Удалить"
 - assertVisible: "Удалить сообщение?"
 - tapOn: "Удалить"

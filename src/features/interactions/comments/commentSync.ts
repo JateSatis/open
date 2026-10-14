@@ -37,27 +37,52 @@ import {
   rootsPageOf,
   updateAllComments,
   updateRoots,
+  updateScopedRoots,
   updateThread,
   type RootsPage,
+  type RootsScope,
   type ThreadPage,
 } from '@/features/interactions/comments/commentsCache';
 
 /** Столько id сверяется одним запросом. */
 const MAX_IDS = 500;
 
-/** Первая страница верха — свежий ранг — и закреп автора над ней. */
-export async function loadRoots(targetId: string): Promise<RootsPage> {
-  const [page, pinned] = await Promise.all([listThreadRoots(targetId), getPinnedComment(targetId)]);
+/**
+ * Первая страница верха — свежий ранг — и закреп автора над ней. В панели
+ * фрагмента — только его корни, и закреп — только если закреплён его
+ * комментарий. Своего нового фрагмента в базе ещё нет — и комментариев нет.
+ */
+export async function loadRoots(targetId: string, scope?: RootsScope): Promise<RootsPage> {
+  if (scope && !scope.fragmentId) {
+    return { scope, authorPin: null, raised: [], items: [], nextCursor: null };
+  }
 
-  return rootsPageOf(page, pinned);
+  const fragmentId = scope?.fragmentId ?? undefined;
+  const [page, pinned] = await Promise.all([
+    fragmentId ? listThreadRoots(targetId, { fragmentId }) : listThreadRoots(targetId),
+    getPinnedComment(targetId),
+  ]);
+
+  if (!scope) return rootsPageOf(page, pinned);
+
+  return { ...rootsPageOf(page, pinned?.fragmentId === fragmentId ? pinned : null), scope };
+}
+
+/** Закреп этой панели: в панели фрагмента — только комментарий фрагмента. */
+function pinOf(pinned: CommentItem | null, scope: RootsScope | undefined): CommentItem | null {
+  if (!scope) return pinned;
+
+  return pinned && scope.fragmentId && pinned.fragmentId === scope.fragmentId ? pinned : null;
 }
 
 /** Закреп сменился (сигнал канала или своё действие не прошло) — берём его из базы. */
 export async function syncAuthorPin(queryClient: QueryClient, targetId: string): Promise<void> {
-  const pinned = await getPinnedComment(targetId);
+  const fresh = await getPinnedComment(targetId);
+  const pinned = fresh ? toCommentItem(fresh) : null;
 
-  updateRoots(queryClient, targetId, (page) =>
-    setAuthorPin(page, pinned ? toCommentItem(pinned) : null),
+  updateRoots(queryClient, targetId, (page) => setAuthorPin(page, pinned));
+  updateScopedRoots(queryClient, targetId, (page, scope) =>
+    setAuthorPin(page, pinOf(pinned, scope)),
   );
 }
 
@@ -95,6 +120,17 @@ function placeAdded(queryClient: QueryClient, targetId: string, me: string | nul
   if (me && comment.authorId === me) {
     updateRoots(queryClient, targetId, (page) =>
       rootsInOrder(page).some((other) => other.id === item.id) ? page : raiseRoot(page, item),
+    );
+  }
+
+  // В панели фрагмента — и чужой: разговор о куске текста короткий, и новое
+  // в нём видно сразу.
+  if (comment.fragmentId) {
+    updateScopedRoots(queryClient, targetId, (page, scope) =>
+      scope.fragmentId !== comment.fragmentId ||
+      rootsInOrder(page).some((other) => other.id === item.id)
+        ? page
+        : raiseRoot(page, item),
     );
   }
 }

@@ -46,7 +46,7 @@ env:
     id: "chat-search-plate"
 - assertVisible: "Сообщение"
 # Уборка.
-- tapOn: ${output.msg}
+- longPressOn: ${output.msg}
 - tapOn: "Удалить"
 - assertVisible: "Удалить сообщение?"
 - tapOn: "Удалить"

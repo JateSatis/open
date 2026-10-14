@@ -24,6 +24,10 @@ export type CommentItem = ChatMessage & {
   deleted: boolean;
   /** Ранг верха с сервера — по нему снятый закреп возвращается на место. У своих неотправленных нет. */
   rank?: number;
+  /** Фрагмент текста сообщения, к которому комментарий; у неотправленного может быть ещё неизвестен. */
+  fragmentId?: string | null;
+  /** Своё неотправленное — из панели этого фрагмента (`FragmentScope.key`). */
+  fragmentKey?: string;
 };
 
 /**
@@ -60,6 +64,7 @@ export function toCommentItem(comment: Comment): CommentItem {
     repliesCount: comment.repliesCount,
     deleted: comment.deleted,
     rank: comment.rank,
+    fragmentId: comment.fragmentId,
   };
 }
 

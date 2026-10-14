@@ -21,6 +21,7 @@ import {
   useOpenThread,
   type CommentsPanelTarget,
 } from '@/features/interactions/comments/commentsPanelStore';
+import type { FragmentScope } from '@/features/interactions/comments/commentDelivery';
 import { loadRoots } from '@/features/interactions/comments/commentSync';
 import { useComments } from '@/features/interactions/comments/useComments';
 import { useCommentTarget } from '@/features/interactions/comments/useCommentTarget';
@@ -107,11 +108,23 @@ export function usePanelComments(
   const live = about?.state === 'live' ? about : null;
   const pop = about?.state === 'pop' ? about.pop : null;
   const amMember = target.amMember ?? false;
+  const { fragment } = target;
+  // Панель фрагмента: свой фрагмент база находит по диапазону — и новый
+  // создаёт первым комментарием. Объект один на открытие панели: от него
+  // зависят отправки.
+  const fragmentScope = useMemo<FragmentScope | undefined>(
+    () =>
+      fragment
+        ? { key: fragment.key, fragmentId: fragment.fragmentId, request: fragment.range }
+        : undefined,
+    [fragment],
+  );
   const comments = useComments(
     subject,
     live?.message.chatId ?? pop?.postsChatId ?? target.chatId ?? '',
     currentUserId,
     amMember,
+    fragmentScope,
   );
   const openThread = useOpenThread();
   const thread = useCommentThread(targetId, threadRootId, comments.overlay);

@@ -234,6 +234,12 @@ export function useChatBubbles({
           comments={commentsEntry(item, chatId, interactive, isMember, rowKey)}
           commentsSlot
           showAvatar={showAvatars}
+          // Выделять можно только в самой строке, не в её копиях (меню, шит).
+          selectableText={
+            interactive
+              ? { rowKey, messageId: item.id, chatId: item.chatId, amMember: isMember }
+              : undefined
+          }
         />
       );
     },
@@ -298,6 +304,17 @@ export function useChatBubbles({
           comments={commentsEntry(message, home.chatId, interactive, home.amMember, row.key)}
           commentsSlot
           showAvatar={showAvatars}
+          // Фрагмент облачка островка — фрагмент оригинала, как и его реакции.
+          selectableText={
+            interactive
+              ? {
+                  rowKey: row.key,
+                  messageId: original.id,
+                  chatId: original.chatId,
+                  amMember: home.amMember,
+                }
+              : undefined
+          }
         />
       );
     },
