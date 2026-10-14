@@ -307,11 +307,34 @@ begin
   select anchor_state into s from public.message_fragments where message_id = m and author_id = d and id = frag;
   perform pg_temp.check('нет exact_text — потерян', s = 'lost', s);
 
+  perform pg_temp.as_service();
+  select prefix_text || '|' || suffix_text into s from public.message_fragments where id = dfrag;
+  perform pg_temp.check('потерянный забыл соседний текст', s = '|', s);
+
+  -- ===================================== фрагмент назначает только база
+  perform pg_temp.act_as(d);
+  perform pg_temp.refused('fragment_id прямой вставкой комментария не пишется',
+    format('insert into public.comments (chat_id, message_id, author_id, kind, text, fragment_id) values (%L, %L, %L, %L, %L, %L)',
+      chat, m, d, 'text', 'мимо', frag),
+    '42501');
+  perform pg_temp.refused('пустой фрагмент мимо реакции и комментария не создать',
+    format('select public.fragment_from_request(%L, %L::jsonb)', m, '{"start":0,"end":3,"text":"Ну "}'),
+    '42501');
+
   -- ===================================== обычные реакции не тронуты
   perform pg_temp.act_as(d);
   select audience into s from public.set_reaction('message', m, '👍');
   select reactions_count into n from public.messages where id = m;
   perform pg_temp.check('обычная реакция на сообщение работает и считается', n = 1 and s = 'visitor', n::text);
+
+  -- ===================================== удалённое сообщение прячет фрагменты
+  select count(*) into n from public.message_fragments where message_id = post;
+  perform pg_temp.check('фрагменты живого поста видны', n > 0, n::text);
+  perform pg_temp.act_as(a);
+  perform public.delete_messages(array[post]);
+  perform pg_temp.act_as(d);
+  select count(*) into n from public.message_fragments where message_id = post;
+  perform pg_temp.check('фрагменты удалённого сообщения не читаются', n = 0, n::text);
 end;
 $$;
 
