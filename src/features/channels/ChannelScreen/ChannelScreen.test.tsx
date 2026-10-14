@@ -84,6 +84,7 @@ jest.mock('@/api/chats', () => ({
   markChatRead: jest.fn(() => Promise.resolve()),
   sendMessage: jest.fn(),
   subscribeToChat: jest.fn(),
+  subscribeToChatSignals: jest.fn(() => () => undefined),
   deleteMessages: jest.fn(),
   listDeletedMessageIds: jest.fn(),
   listMessageEdits: jest.fn(() => Promise.resolve([])),

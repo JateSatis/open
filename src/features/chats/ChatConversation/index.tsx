@@ -148,7 +148,7 @@ export type ChatConversationProps = {
    * Шапка канала: подпись под названием и правая часть. Их знает экран
    * канала — подпись зависит от открытого раздела, а не от «Постов».
    */
-  channelHeader?: { subtitle: string | null; right: ReactNode };
+  channelHeader?: { subtitle: string | null; right: ReactNode; onTitlePress?: () => void };
 };
 
 /**
@@ -816,14 +816,16 @@ export function ChatConversation({
                 : undefined
         }
         subtitle={channel ? (channelHeader?.subtitle ?? null) : chatSubtitle}
-        // Группа, свой и чужой диалог — страница информации; канал ведёт
-        // свой раздел (`channelHeader`), его шапку не трогаем.
+        // Группа, свой и чужой диалог — страница информации; куда ведёт
+        // шапка канала, знает экран канала (`channelHeader`).
         onTitlePress={
-          chat && !channel && chat.kind !== 'channel'
-            ? () => router.push(`/chats/chat-info/${chatId}`)
-            : undefined
+          channel
+            ? channelHeader?.onTitlePress
+            : chat && chat.kind !== 'channel'
+              ? () => router.push(`/chats/chat-info/${chatId}`)
+              : undefined
         }
-        titlePressLabel="О чате"
+        titlePressLabel={channel ? 'О канале' : 'О чате'}
         searching={chatSearch.active}
         selectedCount={selection.selected.length}
         onCancelSelection={clearSelection}

@@ -15,6 +15,7 @@ import { ChannelMenu } from '@/features/channels/ChannelMenu';
 import { SECTION_SETTLE_MS, SectionPager } from '@/features/channels/SectionPager';
 import { SubscribeBar } from '@/features/channels/SubscribeBar';
 import { readersLabel, subscribersLabel } from '@/features/channels/subscriberText';
+import { useChannelChangedSignal } from '@/features/channels/useChannelChangedSignal';
 import { useChannelSubscription } from '@/features/channels/useChannelSubscription';
 import type { ChannelSection } from '@/features/channels/useMarkChannelSectionRead';
 import { channelQueryKey, useChannel } from '@/features/channels/useChannel';
@@ -94,6 +95,9 @@ function ChannelSections({ channel, initialIndex, postsRequest }: ChannelSection
   const [index, setIndex] = useState(initialIndex);
   const { subscription } = useChannelSubscription(channel.id);
 
+  // Владелец сменил название, фото, `@имя` — шапка обновляется и здесь.
+  useChannelChangedSignal(channel.id, channel.postsChatId);
+
   // Право публиковать — одно на канал (`can_publish_in_channel`), а не участие в чате.
   const canPublish = useCanPublish(channel.id);
 
@@ -158,8 +162,13 @@ function ChannelSections({ channel, initialIndex, postsRequest }: ChannelSection
     .join(' · ');
   const isOwner = currentUserId !== null && channel.ownerId === currentUserId;
   const channelHeader = useMemo(
-    () => ({ subtitle, right: <ChannelMenu channelId={channel.id} isOwner={isOwner} /> }),
-    [channel.id, isOwner, subtitle],
+    () => ({
+      subtitle,
+      right: <ChannelMenu channelId={channel.id} isOwner={isOwner} />,
+      onTitlePress: () =>
+        router.push({ pathname: '/chats/channel-info/[channelId]', params: { channelId: channel.id } }),
+    }),
+    [channel.id, isOwner, router, subtitle],
   );
 
   const pages = useMemo(
