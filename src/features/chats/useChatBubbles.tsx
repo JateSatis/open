@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback } from 'react';
 
-import type { ChatParticipant, ForwardedComment } from '@/api/chats';
+import type { ForwardedComment, Person } from '@/api/chats';
 import { CommentForwardLead } from '@/features/chats/CommentForwardLead';
 import { MessageBubble } from '@/features/chats/MessageBubble';
 import {
@@ -26,7 +26,8 @@ type Options = {
   chatId: string;
   currentUserId: string | null;
   isMember: boolean;
-  participantsById: ReadonlyMap<string, ChatParticipant>;
+  /** Люди переписки: участники и авторы, которых среди участников уже нет. */
+  participantsById: ReadonlyMap<string, Person>;
   mediaBounds: MosaicBounds;
   retry: (localId: string) => void;
   openPerson: (personId: string) => void;

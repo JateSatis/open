@@ -489,7 +489,11 @@ export function InfoPage({
                 <View
                   style={[
                     styles.searchBar,
-                    { height: barBottom, paddingTop: insets.top, backgroundColor: theme.background },
+                    {
+                      height: barBottom,
+                      paddingTop: insets.top,
+                      backgroundColor: theme.background,
+                    },
                   ]}
                 >
                   <BarSearchField

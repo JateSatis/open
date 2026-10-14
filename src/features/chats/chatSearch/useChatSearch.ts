@@ -6,9 +6,9 @@ import { Keyboard } from 'react-native';
 import {
   countChatSearch,
   searchChatMessages,
+  type ChatSearchCursor,
   type ChatSearchHit,
-  type SearchMessagesCursor,
-} from '@/api/search';
+} from '@/api/chats';
 import { useDebounced } from '@/lib/useDebounced';
 
 /** Пауза после последней буквы: переписка не прыгает на каждую букву. */
@@ -62,7 +62,7 @@ export function useChatSearch(
   const results = useInfiniteQuery({
     queryKey: ['chat', chatId, 'search', debounced],
     queryFn: ({ pageParam, signal }) => searchChatMessages(chatId, debounced, pageParam, signal),
-    initialPageParam: null as SearchMessagesCursor | null,
+    initialPageParam: null as ChatSearchCursor | null,
     getNextPageParam: (last) => last.nextCursor ?? undefined,
     enabled,
   });

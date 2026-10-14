@@ -16,7 +16,7 @@ import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 
 import { styles } from './styles';
 
-import type { ChannelRef, ForwardedComment, IslandOriginal } from '@/api/chats';
+import type { ChannelRef, ForwardedComment, IslandOriginal, Person } from '@/api/chats';
 import type { Pop } from '@/api/pops';
 import type { DraftPop } from '@/features/chats/composerDraftStore';
 import type { LiveQuote } from '@/features/chats/messages/types';
@@ -338,6 +338,22 @@ export function ChatConversation({
     [chat],
   );
 
+  // Кто писал в переписке: участники и те, кого среди них уже нет (ушли,
+  // удалены из группы), — их имя и аватар приходят с самим сообщением.
+  const peopleById = useMemo(() => {
+    const people = new Map<string, Person>();
+
+    for (const message of messages) {
+      if (message.authorId && message.author && !people.has(message.authorId)) {
+        people.set(message.authorId, { id: message.authorId, ...message.author });
+      }
+    }
+
+    participantsById.forEach((participant, id) => people.set(id, participant));
+
+    return people;
+  }, [messages, participantsById]);
+
   // Я как поставивший реакцию — из участников: там свежий аватар.
   // Посетителя среди участников нет — тогда из моего профиля.
   const { data: myProfile } = useMyProfile();
@@ -356,8 +372,8 @@ export function ChatConversation({
 
   const authorName = useCallback(
     (authorId: string | null) =>
-      (authorId ? participantsById.get(authorId)?.displayName : undefined) ?? DELETED_ACCOUNT,
-    [participantsById],
+      (authorId ? peopleById.get(authorId)?.displayName : undefined) ?? DELETED_ACCOUNT,
+    [peopleById],
   );
 
   // Этот чат глазами смотрящего — заголовок островка, если пересылать отсюда,
@@ -372,7 +388,7 @@ export function ChatConversation({
       if (row.type === 'island-item') return row.item.original;
 
       const { message } = row;
-      const author = message.authorId ? participantsById.get(message.authorId) : undefined;
+      const author = message.authorId ? peopleById.get(message.authorId) : undefined;
 
       return {
         ...message,
@@ -381,7 +397,7 @@ export function ChatConversation({
         chat: { ...thisChat, readUpTo, amMember: isMember },
       };
     },
-    [isMember, participantsById, readUpTo, thisChat],
+    [isMember, peopleById, readUpTo, thisChat],
   );
 
   // Пост с попом — только в «Постах» канала.
@@ -552,7 +568,7 @@ export function ChatConversation({
     chatId,
     currentUserId,
     isMember,
-    participantsById,
+    participantsById: peopleById,
     mediaBounds,
     retry,
     openPerson,

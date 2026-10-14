@@ -2,7 +2,7 @@ import { FlatList, Pressable, StyleSheet, View } from 'react-native';
 
 import type { ChatSearch } from './useChatSearch';
 
-import type { ChatSearchHit } from '@/api/search';
+import type { ChatSearchHit } from '@/api/chats';
 import { Text } from '@/components/Text';
 import { formatChatTimestamp } from '@/features/chats/chatDisplay';
 import { DELETED_ACCOUNT } from '@/features/chats/messageQuote';
