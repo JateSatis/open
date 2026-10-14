@@ -91,7 +91,7 @@ import { readChatDraft } from '@/features/chats/composerDraftStore';
 import { useMessageActionHandlers } from '@/features/chats/useMessageActionHandlers';
 import { useMessageEdit } from '@/features/chats/useMessageEdit';
 import { useMessageMenu } from '@/features/chats/useMessageMenu';
-import { useMessageSelection } from '@/features/chats/useMessageSelection';
+import { isSelectableRow, useMessageSelection } from '@/features/chats/useMessageSelection';
 import { useMyInvite } from '@/features/chats/useMyInvite';
 import { usePinnedCursor } from '@/features/chats/usePinnedCursor';
 import { usePinnedMessages } from '@/features/chats/usePinnedMessages';
@@ -547,11 +547,6 @@ export function ChatConversation({
     return () => subscription.remove();
   }, [clearSelection, isSelecting]);
 
-  const selectIsland = useCallback(
-    (island: Parameters<typeof runIslandAction>[1]) => runIslandAction('select_all', island),
-    [runIslandAction],
-  );
-
   const { openComment } = navigation;
   const openForwardedComment = useCallback(
     (comment: ForwardedComment) => {
@@ -597,8 +592,6 @@ export function ChatConversation({
     isSelecting,
     isSelected: selection.isSelected,
     toggleSelected: selection.toggle,
-    startSelection: selection.start,
-    selectIsland,
     editingId,
     highlight: jump.highlight,
     bubbleFor,
@@ -667,6 +660,7 @@ export function ChatConversation({
       isMember,
       isPinned: pins.isPinned(menuContent.id),
       island: menuRow.type === 'island-item' ? { isMine: islandMine } : null,
+      selectable: isSelectableRow(menuRow, currentUserId),
     });
   }, [currentUserId, isMember, menuContent, menuRow, pins]);
 

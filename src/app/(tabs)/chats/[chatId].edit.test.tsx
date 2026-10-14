@@ -31,6 +31,7 @@ import { reportRealtimeJoined, resetConnectionState } from '@/features/connectio
 import { useInAppAlert } from '@/features/notifications/alertsStore';
 import { island, original } from '@/test/islands';
 import { renderWithQuery } from '@/test/renderWithQuery';
+import { longPressMessage, startSelecting } from '@/test/messageGestures';
 
 jest.mock('@/api/messageViews');
 jest.mock('@/api/reactions', () => ({
@@ -240,12 +241,8 @@ const voiceFile: MessageAttachment = {
 
 let channel: ChatChannelHandlers | null = null;
 
-/** Тап по облачку — так открывается его меню. */
-async function tapMessage(messageId: string) {
-  await act(async () => {
-    fireEvent.press(screen.getByTestId(`message-row-${messageId}`));
-  });
-}
+/** Долгое нажатие на облачко — так открывается его меню. */
+const tapMessage = longPressMessage;
 
 async function choose(label: string) {
   fireEvent.press(await screen.findByRole('menuitem', { name: label }));

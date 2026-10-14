@@ -290,7 +290,6 @@ export function PanelContent({
             editing={comment.id === editingId}
             highlightKey={highlight?.id === comment.id ? highlight.key : null}
             onOpenMenu={actions.openMenu}
-            onSelect={actions.selectOne}
             onToggle={actions.toggleSelected}
             onSwipeReply={closed ? undefined : actions.replyTo}
             onOpenThread={actions.openThread}

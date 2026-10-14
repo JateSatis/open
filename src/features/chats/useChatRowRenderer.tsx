@@ -26,10 +26,6 @@ type Options = {
   isSelecting: boolean;
   isSelected: (rowKey: string) => boolean;
   toggleSelected: (rowKey: string) => void;
-  /** Долгое нажатие — выбор с этим облачком уже отмеченным. */
-  startSelection: (rowKey: string) => void;
-  /** Долгое нажатие на плашку островка — отмечены все его облачка. */
-  selectIsland: (island: IslandHeaderRow['island']) => void;
   /** Строка, чьё сообщение сейчас правится. */
   editingId: string | null;
   highlight: JumpHighlight | null;
@@ -53,8 +49,6 @@ export function useChatRowRenderer({
   isSelecting,
   isSelected,
   toggleSelected,
-  startSelection,
-  selectIsland,
   editingId,
   highlight,
   bubbleFor,
@@ -65,8 +59,8 @@ export function useChatRowRenderer({
   hostName,
 }: Options) {
   /**
-   * Плашка островка — и в строке, и копией в меню. Тап по ней — меню
-   * островка, как у облачка; переход в исходный чат — его первый пункт.
+   * Плашка островка — и в строке, и копией в меню. Долгое нажатие на неё —
+   * меню островка, как у облачка; переход в исходный чат — его первый пункт.
    */
   const islandHeader = useCallback(
     (row: IslandHeaderRow, interactive: boolean) => {
@@ -109,7 +103,6 @@ export function useChatRowRenderer({
             highlightKey={highlightKey}
             messageId={row.key}
             onOpenMenu={(anchor) => openMenu(row, anchor)}
-            onSelect={isLocalMessage(row.island) ? undefined : () => selectIsland(row.island)}
             onToggle={noop}
             frame={<IslandBorder top bottom={false} />}
           >
@@ -149,7 +142,6 @@ export function useChatRowRenderer({
           highlightKey={highlightKey}
           messageId={row.key}
           onOpenMenu={hasMenu ? (anchor) => openMenu(row, anchor) : undefined}
-          onSelect={selectable ? () => startSelection(row.key) : undefined}
           onToggle={() => toggleSelected(row.key)}
           // Ответ — это отправка: свайп есть только у участника и только у
           // сообщений, которые уже на сервере.
@@ -173,9 +165,7 @@ export function useChatRowRenderer({
       isSelecting,
       islandHeader,
       openMenu,
-      selectIsland,
       startReply,
-      startSelection,
       swipeReply,
       toggleSelected,
     ],

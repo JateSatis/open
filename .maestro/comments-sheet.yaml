@@ -10,7 +10,7 @@ env:
 - runFlow: subflows/open-app.yaml
 - tapOn: ${CHAT}
 # Участник: у сообщения без комментариев круга нет — первый пишут из меню.
-- tapOn:
+- longPressOn:
     id: "message-time"
     index: 0
 - tapOn: "Комментировать"
@@ -26,7 +26,7 @@ env:
 - assertNotVisible:
     id: "comments-panel"
 # Участник: у сообщения без комментариев круга нет — первый пишут из меню.
-- tapOn:
+- longPressOn:
     id: "message-time"
     index: 0
 - tapOn: "Комментировать"

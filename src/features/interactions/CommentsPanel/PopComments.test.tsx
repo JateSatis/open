@@ -26,6 +26,7 @@ import { reportRealtimeJoined, resetConnectionState } from '@/features/connectio
 import { resetCommentOutbox } from '@/features/interactions/comments/commentOutbox';
 import { closeComments, openPopComments } from '@/features/interactions/comments/commentsPanelStore';
 import { renderWithQuery } from '@/test/renderWithQuery';
+import { longPressMessage } from '@/test/messageGestures';
 
 const mockedPush = jest.fn();
 
@@ -192,11 +193,8 @@ function pinnedShown(): string | null {
   return null;
 }
 
-async function tapComment(id: string) {
-  await act(async () => {
-    fireEvent.press(screen.getByTestId(`message-row-${id}`));
-  });
-}
+/** Долгое нажатие на комментарий — его меню. */
+const tapComment = longPressMessage;
 
 describe('comments of a pop', () => {
   it('lists the pop’s comments with the count and marks the channel’s publisher as the author', async () => {

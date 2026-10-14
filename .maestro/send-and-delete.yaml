@@ -14,7 +14,7 @@ env:
 - tapOn: "Отправить"
 - assertVisible: ${output.msg}
 # Одиночный тап по сообщению открывает меню.
-- tapOn: ${output.msg}
+- longPressOn: ${output.msg}
 - tapOn: "Удалить"
 - assertVisible: "Удалить сообщение?"
 - tapOn: "Удалить"

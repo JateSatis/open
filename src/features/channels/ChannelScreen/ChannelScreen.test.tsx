@@ -28,6 +28,7 @@ import { resetOutbox } from '@/features/chats/messages/outbox';
 import { reportRealtimeJoined, resetConnectionState } from '@/features/connection/connectionStore';
 import { DeadlineError } from '@/lib/deadline';
 import { renderWithQuery } from '@/test/renderWithQuery';
+import { longPressMessage } from '@/test/messageGestures';
 
 const mockRedirect = jest.fn();
 let mockParams: Record<string, string> = { chatId: 'posts-1' };
@@ -251,9 +252,7 @@ describe('ChannelScreen', () => {
     });
     expect(readChatDraft('posts-1').mode).toBeNull();
 
-    await act(async () => {
-      fireEvent.press(screen.getByTestId('message-row-p1'));
-    });
+    await longPressMessage('p1');
     fireEvent.press(await screen.findByRole('menuitem', { name: 'Ответить' }));
     await waitFor(() => expect(readChatDraft('posts-1').mode?.type).toBe('reply'));
   });

@@ -27,6 +27,7 @@ import { resetCommentOutbox } from '@/features/interactions/comments/commentOutb
 import { closeComments } from '@/features/interactions/comments/commentsPanelStore';
 import { island, original } from '@/test/islands';
 import { renderWithQuery } from '@/test/renderWithQuery';
+import { longPressMessage, startSelecting } from '@/test/messageGestures';
 
 let mockFocused = true;
 const mockPush = jest.fn();
@@ -392,9 +393,7 @@ describe('a member and the comments circle', () => {
   it('writes the first comment from the message menu', async () => {
     await renderChat();
 
-    await act(async () => {
-      fireEvent.press(screen.getByTestId('message-row-m1'));
-    });
+    await longPressMessage('m1');
     fireEvent.press(await screen.findByRole('menuitem', { name: 'Комментировать' }));
 
     expect(await screen.findByTestId('comments-panel')).toBeTruthy();
@@ -580,12 +579,8 @@ describe('comments panel', () => {
 });
 
 describe('a visitor in the comments', () => {
-  /** Тап по облачку комментария — его меню. */
-  async function tapComment(id: string) {
-    await act(async () => {
-      fireEvent.press(screen.getByTestId(`message-row-${id}`));
-    });
-  }
+  /** Долгое нажатие на облачко комментария — его меню. */
+  const tapComment = longPressMessage;
 
   it('puts a reaction on a comment from its menu, and it lands in the one row of the comment at once', async () => {
     const mockedReact = setCommentReaction as jest.MockedFunction<typeof setCommentReaction>;
@@ -722,12 +717,8 @@ describe('threads', () => {
     await screen.findByText('второй ответ');
   }
 
-  /** Тап по облачку комментария — его меню. */
-  async function tapComment(id: string) {
-    await act(async () => {
-      fireEvent.press(screen.getAllByTestId(`message-row-${id}`).at(-1)!);
-    });
-  }
+  /** Долгое нажатие на облачко комментария — его меню. */
+  const tapComment = longPressMessage;
 
   it('puts the replies button only under a comment with replies and opens nothing in the list', async () => {
     await renderChat();
@@ -820,15 +811,9 @@ describe('threads', () => {
   });
 
   it('system back leaves selection first, then the thread, then closes the sheet', async () => {
-    const { fireGestureHandler, getByGestureTestId } = jest.requireActual(
-      'react-native-gesture-handler/jest-utils',
-    ) as typeof import('react-native-gesture-handler/jest-utils');
-
     await openThread();
 
-    await act(async () => {
-      fireGestureHandler(getByGestureTestId('message-long-press-r1'), [{ state: 4 }]);
-    });
+    await startSelecting('r1');
     await screen.findByRole('button', { name: 'Ответить' });
 
     await fireEvent(screen.getByTestId('comments-panel'), 'requestClose');
@@ -887,18 +872,12 @@ describe('threads', () => {
   });
 
   it('will not reply to two top-level comments at once — they are two threads', async () => {
-    const { fireGestureHandler, getByGestureTestId } = jest.requireActual(
-      'react-native-gesture-handler/jest-utils',
-    ) as typeof import('react-native-gesture-handler/jest-utils');
-
     await renderChat();
     await openCommentsOf(3);
     await screen.findByText('корень');
 
-    // Долгое нажатие — выбор, тап по другому — добавить к выбору.
-    await act(async () => {
-      fireGestureHandler(getByGestureTestId('message-long-press-root'), [{ state: 4 }]);
-    });
+    // «Выбрать» из меню, тап по другому — добавить к выбору.
+    await startSelecting('root');
     await act(async () => {
       fireEvent.press(screen.getAllByTestId('message-row-other')[0]);
     });
@@ -921,9 +900,7 @@ describe('two chat screens in the stack', () => {
 describe('pinning a comment under a message', () => {
   async function menuOfFirstComment() {
     await screen.findByText('комментарий c1');
-    await act(async () => {
-      fireEvent.press(screen.getByTestId('message-row-c1'));
-    });
+    await longPressMessage('c1');
     await screen.findByTestId('message-menu');
   }
 

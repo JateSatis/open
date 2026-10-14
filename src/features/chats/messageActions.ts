@@ -24,6 +24,8 @@ export type MessageActionContext = {
    * «удалить» — убрать из островка, и только переславшему.
    */
   island?: { isMine: boolean } | null;
+  /** Облачко можно отметить — в меню есть «Выбрать» (`isSelectableRow`). */
+  selectable?: boolean;
 };
 
 export type MessageActionId =
@@ -31,6 +33,7 @@ export type MessageActionId =
   | 'reply'
   | 'comment'
   | 'copy'
+  | 'select'
   | 'edit'
   | 'pin'
   | 'unpin'
@@ -115,6 +118,12 @@ export const MESSAGE_ACTIONS: readonly MessageAction[] = [
     isVisible: ({ message }) => !isLocalMessage(message) && hasCopyableText(message),
   },
   {
+    id: 'select',
+    label: 'Выбрать',
+    // Выбор нескольких — отсюда: долгое нажатие открывает меню.
+    isVisible: ({ selectable = false }) => selectable,
+  },
+  {
     id: 'edit',
     label: 'Изменить',
     // Оригинал правят там, где он живёт, — в островке его только показывают.
@@ -167,11 +176,16 @@ export function visibleMessageActions(context: MessageActionContext): MessageAct
   return MESSAGE_ACTIONS.filter((action) => action.isVisible(context));
 }
 
-/** Пункты облачка-заглушки: оригинал удалён, остаётся только убрать его из своего островка. */
+/**
+ * Пункты облачка-заглушки: оригинал удалён, остаётся только убрать его из
+ * своего островка — одно или выбрав несколько.
+ */
 export function deletedOriginalActions(isMine: boolean): MessageAction[] {
   if (!isMine) return [];
 
-  return MESSAGE_ACTIONS.filter((action) => action.id === 'remove_from_island');
+  return MESSAGE_ACTIONS.filter(
+    (action) => action.id === 'select' || action.id === 'remove_from_island',
+  );
 }
 
 export type IslandActionId = 'open_source' | 'retry' | 'select_all' | 'delete_island';
@@ -179,9 +193,9 @@ export type IslandActionId = 'open_source' | 'retry' | 'select_all' | 'delete_is
 export type IslandAction = { id: IslandActionId; label: string; destructive?: boolean };
 
 /**
- * Пункты островка целиком — по тапу на плашку, как меню облачка. Реакций и
+ * Пункты островка целиком — по долгому нажатию на плашку, как меню облачка. Реакций и
  * комментариев здесь нет: островок не сообщение. Первым — переход в чат,
- * откуда переслали: раньше это и был тап по плашке.
+ * откуда переслали.
  */
 export function islandActions(island: ChatMessage, isMine: boolean): IslandAction[] {
   const actions: IslandAction[] = [];
