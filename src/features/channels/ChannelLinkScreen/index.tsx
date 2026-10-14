@@ -26,13 +26,16 @@ export type ChannelLinkScreenProps = { username: string };
  */
 export function ChannelLinkScreen({ username }: ChannelLinkScreenProps) {
   const { isAuthenticated, isLoading } = useSession();
+  const signedOut = !isLoading && !isAuthenticated;
+
+  // Без сессии ссылка ждёт входа: после него вход ведёт по ней, а не в «Чаты».
+  useEffect(() => {
+    if (signedOut) setPendingLink(`/c/${encodeURIComponent(username)}`);
+  }, [signedOut, username]);
 
   if (isLoading) return null;
 
-  if (!isAuthenticated) {
-    setPendingLink(`/c/${encodeURIComponent(username)}`);
-    return <Redirect href="/(auth)/sign-in" />;
-  }
+  if (signedOut) return <Redirect href="/(auth)/sign-in" />;
 
   return <ChannelLinkResolver username={username} />;
 }
