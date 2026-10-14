@@ -1,7 +1,7 @@
 import { impactAsync, ImpactFeedbackStyle } from 'expo-haptics';
 import { useCallback, useContext, useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { Pressable, View, type AccessibilityActionEvent } from 'react-native';
-import { Gesture, GestureDetector, type GestureType } from 'react-native-gesture-handler';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   runOnJS,
   useAnimatedStyle,
@@ -16,6 +16,8 @@ import { useSwipeReply } from './useSwipeReply';
 
 import { HorizontalGestureScope } from '@/components/HorizontalGestureScope';
 import { Text } from '@/components/Text';
+import type { RowPoint } from '@/features/chats/fragments/fragmentSelection';
+import { useSelectionHandles } from '@/features/chats/fragments/useSelectionHandles';
 import type { MenuAnchor } from '@/features/chats/MessageContextMenu';
 import { RowRegistryContext } from '@/features/chats/rowRegistry';
 import { liftedRowKey } from '@/features/interactions/comments/commentsLift';
@@ -52,16 +54,11 @@ export type MessageRowProps = {
    * Долгое нажатие сначала спрашивает его: точка в окне. Вернул `true` —
    * нажатие забрано (выделение текста), меню не открывается.
    */
-  onLongPressAt?: (point: { x: number; y: number }) => boolean | Promise<boolean>;
+  onLongPressAt?: (point: RowPoint) => boolean | Promise<boolean>;
   /** Тап вне режима выбора. Нет обработчика — тап ничего не делает. */
   onPress?: () => void;
   /** Тап (и долгое нажатие) в режиме выбора — снять или поставить отметку. */
   onToggle: () => void;
-  /**
-   * Свой жест строки, первым в гонке: перетаскивание ручки выделения. Узнав
-   * себя, он отменяет свайп, долгое нажатие и прокрутку.
-   */
-  extraGesture?: GestureType;
   /** Свайп влево — ответить. Без обработчика (посетитель, неотправленное) жеста нет. */
   onSwipeReply?: () => void;
   /**
@@ -96,12 +93,14 @@ export function MessageRow({
   onPress,
   onToggle,
   onSwipeReply,
-  extraGesture,
   frame,
 }: MessageRowProps) {
   const theme = useTheme();
   const highlight = useSharedValue(0);
   const swipe = useSwipeReply(messageId, !selectionMode, onSwipeReply);
+  // Ручки выделения текста — первыми в гонке: узнав себя, отменяют свайп,
+  // долгое нажатие и прокрутку.
+  const handles = useSelectionHandles(messageId);
   const contentRef = useRef<View>(null);
   const registry = useContext(RowRegistryContext);
 
@@ -147,7 +146,7 @@ export function MessageRow({
   );
 
   const longPressed = useCallback(
-    (x: number, y: number) => {
+    (x: number, y: number, localX: number, localY: number) => {
       if (selectionMode) {
         onToggle();
         return;
@@ -157,7 +156,7 @@ export function MessageRow({
         impactAsync(ImpactFeedbackStyle.Light).catch(() => undefined);
         openMenu(y);
       };
-      const taken = onLongPressAt?.({ x, y }) ?? false;
+      const taken = onLongPressAt?.({ x, y, localX, localY }) ?? false;
 
       if (taken === true) return;
       if (taken === false) {
@@ -183,7 +182,7 @@ export function MessageRow({
         .enabled(hasLongPress)
         .withTestId(`message-long-press-${messageId}`)
         .onStart((event) => {
-          runOnJS(longPressed)(event.absoluteX, event.absoluteY);
+          runOnJS(longPressed)(event.absoluteX, event.absoluteY, event.x, event.y);
         }),
     [hasLongPress, longPressed, messageId],
   );
@@ -194,10 +193,10 @@ export function MessageRow({
   // узнаёт себя сразу при касании.
   const gesture = useMemo(
     () =>
-      extraGesture
-        ? Gesture.Race(extraGesture, swipe.gesture, longPress)
+      handles
+        ? Gesture.Race(handles, swipe.gesture, longPress)
         : Gesture.Race(swipe.gesture, longPress),
-    [extraGesture, longPress, swipe.gesture],
+    [handles, longPress, swipe.gesture],
   );
 
   // Скринридер долгого нажатия не делает: меню — его отдельным действием.

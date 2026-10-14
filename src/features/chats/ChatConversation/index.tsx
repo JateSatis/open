@@ -74,6 +74,8 @@ import { measureInWindow, RowRegistryContext } from '@/features/chats/rowRegistr
 import { useChatBubbles } from '@/features/chats/useChatBubbles';
 import { useChatKeyboardInset } from '@/features/chats/useChatKeyboardInset';
 import { useChatRowRenderer } from '@/features/chats/useChatRowRenderer';
+import { clearTextSelection } from '@/features/chats/fragments/fragmentStore';
+import { useFragmentMode } from '@/features/chats/fragments/useFragmentMode';
 import { useComposerDraft } from '@/features/chats/useComposerDraft';
 import { chatQueryKey, useChat } from '@/features/chats/useChat';
 import { useCommentsLiftHost } from '@/features/chats/useCommentsLiftHost';
@@ -586,6 +588,8 @@ export function ChatConversation({
     postAuthor: channel?.title ?? null,
   });
 
+  const fragments = useFragmentMode({ isMember, isFocused, isSelecting });
+
   const { renderItem, islandHeader, bubbleContent } = useChatRowRenderer({
     currentUserId,
     isMember,
@@ -599,6 +603,8 @@ export function ChatConversation({
     startReply,
     // В постах свайп листает разделы канала; ответить можно из меню.
     swipeReply: !isPosts,
+    pressRow: fragments.pressRow,
+    longPressAt: fragments.longPressAt,
     retry,
     hostName: authorName,
   });
@@ -624,6 +630,9 @@ export function ChatConversation({
       const toOldest = contentSize.height - layoutMeasurement.height - contentOffset.y;
 
       resumeLoadMore(toOldest < layoutMeasurement.height * HISTORY_EDGE);
+      // Выделение привязано к месту на экране: тронули прокрутку — снимается,
+      // режим фрагментов остаётся.
+      clearTextSelection();
     },
     [resumeLoadMore],
   );

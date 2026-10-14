@@ -20,6 +20,8 @@ import { ReplyQuote } from '@/features/chats/ReplyQuote';
 import type { ChatMessage } from '@/features/chats/useChatMessages';
 import { ViewsCount, type ViewsCountTone } from '@/features/chats/ViewsCount';
 import { VoiceMessage } from '@/features/chats/VoiceMessage';
+import { useFragmentModeActive } from '@/features/chats/fragments/fragmentStore';
+import { SelectableText } from '@/features/chats/fragments/SelectableText';
 import { CommentsCircle } from '@/features/interactions/CommentsCircle';
 import {
   LargeReactionRow,
@@ -98,6 +100,11 @@ export type MessageBubbleProps = {
    * откуда он и под каким сообщением оставлен.
    */
   lead?: ReactNode;
+  /**
+   * В тексте можно выделять (режим фрагментов): строка облачка и сообщение,
+   * чей это текст, — у облачка островка оригинал. Нет — обычный текст.
+   */
+  selectableText?: { rowKey: string; messageId: string; chatId: string };
 };
 
 const noop = () => undefined;
@@ -125,8 +132,10 @@ export function MessageBubble({
   showAvatar = true,
   wide = false,
   lead,
+  selectableText,
 }: MessageBubbleProps) {
   const theme = useTheme();
+  const fragmentMode = useFragmentModeActive(selectableText?.rowKey);
   const isMediaMessage = message.kind === 'media' && message.attachments.length > 0;
   // Пост с попом: обложка попа, а не мозаика; тап — просмотр попсов его канала.
   const isPopPost = isMediaMessage && Boolean(message.attachments[0]?.popId);
@@ -147,7 +156,13 @@ export function MessageBubble({
   const hasVisitorLine =
     reactionsLayout === 'split' && Object.keys(message.reactions.visitors).length > 0;
   const textColor = isOwn ? 'primaryText' : 'text';
-  const bubbleColor = isOwn ? theme.primary : theme.backgroundElement;
+  const bubbleColor = fragmentMode
+    ? isOwn
+      ? theme.fragmentBubbleOwn
+      : theme.fragmentBubble
+    : isOwn
+      ? theme.primary
+      : theme.backgroundElement;
 
   // Список сообщений — горячий путь: раскладка пересчитывается только при
   // смене вложений или ширины, а не на каждую перерисовку строки.
@@ -238,6 +253,16 @@ export function MessageBubble({
       </View>
     ) : null;
 
+  const body = message.text ? (
+    <SelectableText
+      text={message.text}
+      isOwn={isOwn}
+      rowKey={selectableText?.rowKey}
+      messageId={selectableText?.messageId ?? message.id}
+      chatId={selectableText?.chatId ?? message.chatId}
+    />
+  ) : null;
+
   const authorLine = (style?: StyleProp<TextStyle>) => (
     <Text variant="smallBold" color={textColor} style={style}>
       {isOwn ? null : (
@@ -322,7 +347,7 @@ export function MessageBubble({
 
             {message.text ? (
               <View style={styles.caption}>
-                <Text color={textColor}>{message.text}</Text>
+                {body}
                 {footer}
               </View>
             ) : anyReactions ? (
@@ -362,7 +387,7 @@ export function MessageBubble({
               </View>
             ) : null}
 
-            {message.text ? <Text color={textColor}>{message.text}</Text> : null}
+            {body}
           </View>
 
           {footer}

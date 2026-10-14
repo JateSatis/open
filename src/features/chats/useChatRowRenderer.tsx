@@ -10,6 +10,7 @@ import {
   type ChatListRow,
   type IslandHeaderRow,
 } from '@/features/chats/islands/rows';
+import type { RowPoint } from '@/features/chats/fragments/fragmentSelection';
 import { isLocalMessage } from '@/features/chats/messageActions';
 import type { MenuAnchor } from '@/features/chats/MessageContextMenu';
 import { MessageRow } from '@/features/chats/MessageRow';
@@ -34,6 +35,10 @@ type Options = {
   startReply: (rows: BubbleRow[]) => void;
   /** Свайп влево отвечает. В постах канала его нет: там свайп листает разделы. */
   swipeReply?: boolean;
+  /** Тап по облачку — режим фрагментов. */
+  pressRow?: (row: BubbleRow) => void;
+  /** Долгое нажатие в режиме фрагментов — выделение текста, если палец на нём. */
+  longPressAt?: (rowKey: string, point: RowPoint) => boolean | Promise<boolean>;
   retry: (localId: string) => void;
   hostName: (authorId: string | null) => string;
 };
@@ -55,6 +60,8 @@ export function useChatRowRenderer({
   openMenu,
   startReply,
   swipeReply = true,
+  pressRow,
+  longPressAt,
   retry,
   hostName,
 }: Options) {
@@ -142,6 +149,8 @@ export function useChatRowRenderer({
           highlightKey={highlightKey}
           messageId={row.key}
           onOpenMenu={hasMenu ? (anchor) => openMenu(row, anchor) : undefined}
+          onPress={pressRow && content ? () => pressRow(row) : undefined}
+          onLongPressAt={longPressAt ? (point) => longPressAt(row.key, point) : undefined}
           onToggle={() => toggleSelected(row.key)}
           // Ответ — это отправка: свайп есть только у участника и только у
           // сообщений, которые уже на сервере.
@@ -164,7 +173,9 @@ export function useChatRowRenderer({
       isSelected,
       isSelecting,
       islandHeader,
+      longPressAt,
       openMenu,
+      pressRow,
       startReply,
       swipeReply,
       toggleSelected,
