@@ -1,0 +1,72 @@
+appId: com.openger.app
+name: Страница канала из «Попсов» — подписка карточкой, «Добавить в чаты», «Без звука», «⋮», отписка после вопроса, назад в «Попсы»
+tags:
+  - channels
+  - subscriptions
+env:
+  # Канал тестового владельца «Тест Подписки»: основной аккаунт в нём не публикует.
+  CHANNEL_ID: b01b50da-c050-4ef2-bb9c-6ef379d2b887
+  CHANNEL: Канал подписок
+---
+- runFlow: subflows/open-app.yaml
+- openLink: openger://chats/channel/${CHANNEL_ID}?section=pops
+- assertVisible:
+    id: "segment-1"
+- tapOn:
+    id: "chat-header-avatar"
+- assertVisible:
+    id: "channel-info-page"
+# Подписка от прошлого прогона — сначала отписаться.
+- runFlow:
+    when:
+      visible:
+        id: "info-action-unsubscribe"
+    commands:
+      # По подписи: в центре кнопки на dev-сборке лежит шестерёнка «Tools».
+      - tapOn: "Отписаться"
+      - tapOn: "Отписаться"
+- assertVisible:
+    id: "info-subscribe"
+- assertNotVisible:
+    id: "info-edit"
+- assertVisible: "@subs_test_zz.ch"
+# Постороннему в «⋮» — поиск и ссылка.
+- tapOn:
+    id: "info-menu-button"
+- assertVisible: "Поиск по постам"
+- assertVisible: "Скопировать ссылку"
+- assertNotVisible: "Отписаться"
+- tapOn: "Скопировать ссылку"
+# Меню закрывается анимацией — тап до её конца ушёл бы в него.
+- assertNotVisible: "Поиск по постам"
+# Подписка — без «Чатов», следующим шагом карточка предлагает их.
+- tapOn:
+    id: "info-subscribe"
+- assertVisible:
+    id: "info-subscribed"
+- assertVisible:
+    id: "info-action-add-to-chats"
+- tapOn:
+    id: "info-add-to-chats"
+- assertNotVisible:
+    id: "info-add-to-chats"
+- assertVisible:
+    id: "info-action-mute"
+- tapOn:
+    id: "info-action-mute"
+- assertVisible: "Включить звук"
+- tapOn:
+    id: "info-action-mute"
+- assertVisible: "Без звука"
+- tapOn: "Отписаться"
+- assertVisible: "Отписаться от канала?"
+- tapOn: "Отписаться"
+- assertVisible:
+    id: "info-subscribe"
+- tapOn:
+    id: "info-back"
+- assertNotVisible:
+    id: "channel-info-page"
+# Вернулись туда же, откуда пришли, — в «Попсы».
+- assertVisible:
+    id: "pops-section"
