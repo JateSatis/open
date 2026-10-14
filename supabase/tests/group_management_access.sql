@@ -121,6 +121,13 @@ begin
   code := pg_temp.denied(format('select public.set_chat_description(%L, %L)', dm, 'x'));
   perform pg_temp.check('описание у диалога: отказ', code = '22023', code);
 
+  -- --------------------------------------------------------------- ссылка состава в обычном сообщении
+  perform pg_temp.act_as(b);
+  code := pg_temp.denied(format(
+    'insert into public.messages (chat_id, author_id, kind, text, system_user_id) values (%L, %L, %L, %L, %L)',
+    grp, b, 'text', 'подделка', c));
+  perform pg_temp.check('обычное сообщение со «вторым человеком события»: отказ', code is not null, code);
+
   -- --------------------------------------------------------------- приглашение
   perform pg_temp.act_as(d);
   code := pg_temp.denied(format('select public.invite_to_chat(%L, array[%L]::uuid[])', grp, e));
