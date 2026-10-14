@@ -60,7 +60,7 @@ export function ChannelSubscribeCard({
           size={InfoPageSizes.actionIcon}
           tintColor={theme.textSecondary}
         />
-        <Text variant="bodyBold" color="textSecondary" numberOfLines={1}>
+        <Text variant="bodyBold" color="textSecondary" numberOfLines={1} adjustsFontSizeToFit>
           Вы подписаны
         </Text>
       </View>
@@ -75,12 +75,7 @@ export function ChannelSubscribeCard({
           pressed && styles.pressed,
         ]}
       >
-        <SymbolView
-          name={{ ios: 'bubble.left.and.bubble.right', android: 'forum', web: 'forum' }}
-          size={InfoPageSizes.actionIcon}
-          tintColor={theme.primaryText}
-        />
-        <Text variant="bodyBold" color="primaryText" numberOfLines={1}>
+        <Text variant="bodyBold" color="primaryText" numberOfLines={1} adjustsFontSizeToFit>
           Добавить в чаты
         </Text>
       </Pressable>
