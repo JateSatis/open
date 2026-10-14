@@ -10,6 +10,7 @@ import {
   toPreview,
   type MessagePreview,
 } from '@/api/messagePreview';
+import { FRAGMENT_QUOTE_COLUMNS, toFragmentQuote, type FragmentQuote } from '@/api/fragmentQuote';
 import { REACTION_COLUMNS, toReactions, type MessageReactions } from '@/api/reactionCounts';
 import { supabase } from '@/api/supabase';
 
@@ -193,6 +194,10 @@ export type ForwardedComment = {
   } | null;
   /** Поп под комментарием; `null` — удалён или комментарий к сообщению. */
   pop: ForwardedCommentPop | null;
+  /** Фрагмент текста, к которому комментарий: в облачке его цитата вместо сниппета. */
+  fragmentId: string | null;
+  /** Цитата фрагмента; `null` при `fragmentId` — сообщение удалено. */
+  fragmentQuote: FragmentQuote | null;
   /** Чат комментария; `null` — удалён. `amMember` — ряд моей реакции. У попа — имя канала. */
   chat: (ChatRef & { amMember: boolean }) | null;
 };
@@ -246,7 +251,7 @@ const REPLY_COLUMNS =
 const REACTION_AND_COMMENT_COLUMNS = `${REACTION_COLUMNS}, comments_count, views_count, read_at` as const;
 const ORIGINAL_COLUMNS = `id, chat_id, author_id, kind, text, created_at, edited_at, attachments(${MESSAGE_ATTACHMENT_COLUMNS}), ${REPLY_COLUMNS}, ${REACTION_AND_COMMENT_COLUMNS}, author:profiles!messages_author_id_fkey(display_name, avatar_url), chat:chats!messages_chat_id_fkey(id, chat_display_name, chat_read_up_to, chat_am_member)` as const;
 
-const FORWARDED_COMMENT_COLUMNS = `forwarded_comment_id, forwarded:comments!messages_forwarded_comment_fkey(id, message_id, pop_id, chat_id, thread_root_id, author_id, kind, text, created_at, edited_at, ${REACTION_COLUMNS}, author:profiles(display_name, avatar_url), comment_attachments(${ATTACHMENT_COLUMNS}), chat:chats!comments_chat_id_fkey(id, chat_display_name, chat_am_member), target:messages!comments_message_fkey(id, author_id, kind, text, created_at, author:profiles!messages_author_id_fkey(display_name), attachments(${PREVIEW_ATTACHMENT_COLUMNS})), pop:pops!comments_pop_id_fkey(id, channel_id, poster_url, caption))` as const;
+const FORWARDED_COMMENT_COLUMNS = `forwarded_comment_id, forwarded:comments!messages_forwarded_comment_fkey(id, message_id, pop_id, chat_id, thread_root_id, fragment_id, ${FRAGMENT_QUOTE_COLUMNS}, author_id, kind, text, created_at, edited_at, ${REACTION_COLUMNS}, author:profiles(display_name, avatar_url), comment_attachments(${ATTACHMENT_COLUMNS}), chat:chats!comments_chat_id_fkey(id, chat_display_name, chat_am_member), target:messages!comments_message_fkey(id, author_id, kind, text, created_at, author:profiles!messages_author_id_fkey(display_name), attachments(${PREVIEW_ATTACHMENT_COLUMNS})), pop:pops!comments_pop_id_fkey(id, channel_id, poster_url, caption))` as const;
 
 // Островок приходит сразу с оригиналами: их текст, файлы, автор, чат,
 // реакции и комментарии — той же выборкой. Своя реакция — вычисляемой связью
@@ -504,6 +509,8 @@ function toForwardedComment(row: ForwardedRow): ForwardedComment {
           caption: row.pop.caption,
         }
       : null,
+    fragmentId: row.fragment_id,
+    fragmentQuote: toFragmentQuote(row.fragment_id, row.fragment),
     chat: row.chat
       ? {
           id: row.chat.id,

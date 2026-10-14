@@ -187,6 +187,8 @@ function forwarded(
     editedAt: null,
     attachments: [],
     reactions: NO_REACTIONS,
+    fragmentId: null,
+    fragmentQuote: null,
     target: {
       id: targetId,
       createdAt: '2026-09-30T10:01:00Z',

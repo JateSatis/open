@@ -18,6 +18,7 @@ import {
   type Comment,
   type CommentFragment,
   type CommentSubject,
+  type FragmentQuote,
 } from '@/api/comments';
 import { NO_REACTIONS } from '@/api/reactionCounts';
 import {
@@ -83,6 +84,17 @@ const delivering = new Set<string>();
 /** Своё неотправленное удалили, пока оно ехало. */
 const discarded = new Set<string>();
 
+/**
+ * Плашка своего неотправленного — сразу, из выделенного куска: с ответом
+ * сервера приходит та же цитата, и плашка не мигает. Чужой фрагмент по id —
+ * без цитаты до ответа (панель так не отправляет).
+ */
+function optimisticQuote(request: CommentFragment): FragmentQuote | null {
+  return 'text' in request
+    ? { text: request.text, start: request.start, end: request.end, lost: false }
+    : null;
+}
+
 function draftOf(
   { subject, chatId, currentUserId, me, fragment }: CommentSendContext,
   at: number,
@@ -115,7 +127,11 @@ function draftOf(
     deleted: false,
     // Ответ в треде к фрагменту не привязывается.
     ...(fragment && !content.threadRootId
-      ? { fragmentKey: fragment.key, fragmentId: fragment.fragmentId }
+      ? {
+          fragmentKey: fragment.key,
+          fragmentId: fragment.fragmentId,
+          fragmentQuote: optimisticQuote(fragment.request),
+        }
       : null),
     ...content,
   };

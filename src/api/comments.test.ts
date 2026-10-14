@@ -127,3 +127,56 @@ describe('listThreadRoots', () => {
     expect(page.nextCursor).toEqual({ rank: row(30).rank, id: 'c30' });
   });
 });
+
+describe('fragment quote', () => {
+  function serveRows(data: unknown[]) {
+    mockedRpc.mockImplementation(() => chain({ data, error: null }, []));
+  }
+
+  it('a comment to a fragment carries its quote, current range and whether it is lost', async () => {
+    serveRows([
+      {
+        ...row(1),
+        thread_root_id: null,
+        fragment_id: 'f1',
+        fragment: {
+          start_offset: 4,
+          end_offset: 27,
+          exact_text: 'какой-то другой уровень',
+          anchor_state: 'shifted',
+        },
+      },
+      {
+        ...row(2),
+        thread_root_id: null,
+        fragment_id: 'f2',
+        fragment: { start_offset: 0, end_offset: 5, exact_text: 'было', anchor_state: 'lost' },
+      },
+    ]);
+
+    const { items } = await listThreadRoots('m1', { fragmentId: 'f1' });
+
+    expect(items[0]).toMatchObject({
+      fragmentId: 'f1',
+      fragmentQuote: { text: 'какой-то другой уровень', start: 4, end: 27, lost: false },
+    });
+    expect(items[1].fragmentQuote).toMatchObject({ text: 'было', lost: true });
+  });
+
+  it('a plain comment has no quote', async () => {
+    serveRows([{ ...row(1), fragment_id: null, fragment: null }]);
+
+    const { items } = await listThreadRoots('m1');
+
+    expect(items[0].fragmentId).toBeNull();
+    expect(items[0].fragmentQuote).toBeNull();
+  });
+
+  it('a fragment hidden with its deleted message leaves the id without a quote', async () => {
+    serveRows([{ ...row(1), fragment_id: 'f1', fragment: null }]);
+
+    const { items } = await listThreadRoots('m1');
+
+    expect(items[0]).toMatchObject({ fragmentId: 'f1', fragmentQuote: null });
+  });
+});

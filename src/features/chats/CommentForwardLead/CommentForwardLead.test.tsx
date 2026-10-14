@@ -21,6 +21,8 @@ const forward: CommentForward = {
     editedAt: null,
     attachments: [],
     reactions: NO_REACTIONS,
+    fragmentId: null,
+    fragmentQuote: null,
     target: {
       id: 'm1',
       createdAt: '2026-10-04T09:00:00Z',
