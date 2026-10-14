@@ -157,12 +157,15 @@ export async function markChannelRead(
 export async function listChannelSubscribers(
   channelId: string,
   after: Subscriber | null,
+  /** По имени или `@имени`; пусто — все. */
+  query?: string,
 ): Promise<Subscriber[]> {
   const { data, error } = await supabase.rpc('list_channel_subscribers', {
     target_channel: channelId,
     before_created: after?.subscribedAt,
     before_id: after?.id,
     page_size: SUBSCRIBERS_PAGE_SIZE,
+    query: query?.trim() || undefined,
   });
 
   if (error) throw error;

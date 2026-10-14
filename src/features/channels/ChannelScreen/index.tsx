@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { Stack, useIsFocused, useRouter } from 'expo-router';
+import { Stack, useIsFocused, useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, useWindowDimensions, View } from 'react-native';
 import { useSharedValue, withTiming } from 'react-native-reanimated';
@@ -15,11 +15,13 @@ import { ChannelMenu } from '@/features/channels/ChannelMenu';
 import { SECTION_SETTLE_MS, SectionPager } from '@/features/channels/SectionPager';
 import { SubscribeBar } from '@/features/channels/SubscribeBar';
 import { readersLabel, subscribersLabel } from '@/features/channels/subscriberText';
+import { useChannelChangedSignal } from '@/features/channels/useChannelChangedSignal';
 import { useChannelSubscription } from '@/features/channels/useChannelSubscription';
 import type { ChannelSection } from '@/features/channels/useMarkChannelSectionRead';
 import { channelQueryKey, useChannel } from '@/features/channels/useChannel';
 import type { Pop } from '@/api/pops';
 import { ChatConversation } from '@/features/chats/ChatConversation';
+import type { ChatSearchParams } from '@/features/chats/chatSearch/useChatSearch';
 import { closeMediaSheet } from '@/features/chats/MediaPickerSheet';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
 import { popSheetSection } from '@/features/pops/popSheetSection';
@@ -93,6 +95,20 @@ function ChannelSections({ channel, initialIndex, postsRequest }: ChannelSection
   const position = useSharedValue(initialIndex);
   const [index, setIndex] = useState(initialIndex);
   const { subscription } = useChannelSubscription(channel.id);
+  const navigation = useNavigation();
+  const searchOpen = useLocalSearchParams<ChatSearchParams>().search === '1';
+  const searching = searchOpen && index === 0;
+
+  // Поиск — по постам: ушли на «Попсы» — поиск закрывается, иначе шапка
+  // осталась бы спрятанной, а сегменты встали бы под статус-бар.
+  useEffect(() => {
+    if (searchOpen && index !== 0) {
+      navigation.setParams({ search: undefined, searchKey: undefined } as never);
+    }
+  }, [index, navigation, searchOpen]);
+
+  // Владелец сменил название, фото, `@имя` — шапка обновляется и здесь.
+  useChannelChangedSignal(channel.id, channel.postsChatId);
 
   // Право публиковать — одно на канал (`can_publish_in_channel`), а не участие в чате.
   const canPublish = useCanPublish(channel.id);
@@ -158,8 +174,13 @@ function ChannelSections({ channel, initialIndex, postsRequest }: ChannelSection
     .join(' · ');
   const isOwner = currentUserId !== null && channel.ownerId === currentUserId;
   const channelHeader = useMemo(
-    () => ({ subtitle, right: <ChannelMenu channelId={channel.id} isOwner={isOwner} /> }),
-    [channel.id, isOwner, subtitle],
+    () => ({
+      subtitle,
+      right: <ChannelMenu channelId={channel.id} isOwner={isOwner} />,
+      onTitlePress: () =>
+        router.push({ pathname: '/chats/channel-info/[channelId]', params: { channelId: channel.id } }),
+    }),
+    [channel.id, isOwner, router, subtitle],
   );
 
   const pages = useMemo(
@@ -185,15 +206,19 @@ function ChannelSections({ channel, initialIndex, postsRequest }: ChannelSection
 
   return (
     <View style={[styles.flex, { backgroundColor: theme.background }]}>
-      <View style={styles.segments}>
-        <SegmentedControl
-          segments={SECTIONS}
-          position={position}
-          selectedIndex={index}
-          onSelect={select}
-          badges={badges}
-        />
-      </View>
+      {/* Поиск по постам ставит своё поле на место шапки — сегменты над ним
+          оказались бы под статус-баром. */}
+      {searching ? null : (
+        <View style={styles.segments}>
+          <SegmentedControl
+            segments={SECTIONS}
+            position={position}
+            selectedIndex={index}
+            onSelect={select}
+            badges={badges}
+          />
+        </View>
+      )}
 
       <SectionPager
         position={position}

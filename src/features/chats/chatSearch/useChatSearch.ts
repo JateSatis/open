@@ -56,6 +56,9 @@ export function useChatSearch(
   const navigation = useNavigation();
   const active = params.search === '1';
   const [query, setQuery] = useState('');
+
+  // Поиск закрыли снаружи (ушли из раздела) — следующий начнётся с пустого поля.
+  if (!active && query !== '') setQuery('');
   const debounced = useDebounced(query.trim(), CHAT_SEARCH_DEBOUNCE_MS);
   const enabled = active && debounced !== '';
 

@@ -80,7 +80,17 @@ export function ChatScreenHeader({
                           size={Sizes.headerAvatar}
                         />
                       ) : (
-                        <Avatar uri={avatar.uri} name={avatar.name} size={Sizes.headerAvatar} />
+                        // Аватарка — та же шапка: тап по ней ведёт туда же,
+                        // озвучивает же её подпись рядом.
+                        <Pressable
+                          testID="chat-header-avatar"
+                          accessible={false}
+                          disabled={!onTitlePress}
+                          onPress={onTitlePress}
+                          hitSlop={Spacing.one}
+                        >
+                          <Avatar uri={avatar.uri} name={avatar.name} size={Sizes.headerAvatar} />
+                        </Pressable>
                       )}
                       <ChatHeaderTitle
                         title={title}

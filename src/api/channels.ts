@@ -126,3 +126,99 @@ export async function findChannelIdByChat(chatId: string): Promise<string | null
 
   return data?.id ?? null;
 }
+
+/** Канал по `@имени`, без учёта регистра и `@`; нет такого — null. */
+export async function findChannelByUsername(username: string): Promise<string | null> {
+  const { data, error } = await supabase.rpc('find_channel_by_username', { name: username });
+
+  if (error) throw error;
+
+  // Скалярный ответ rpc генератор типов не размечает как nullable.
+  return (data as string | null) ?? null;
+}
+
+// Правка канала — только функциями базы, право владельца проверяет она.
+
+/** Сменить название. Пустое база отвергает. */
+export async function setChannelTitle(channelId: string, title: string): Promise<void> {
+  const { error } = await supabase.rpc('set_channel_title', {
+    target_channel: channelId,
+    new_title: title,
+  });
+
+  if (error) throw error;
+}
+
+/** Задать или убрать (`null`) описание. */
+export async function setChannelDescription(
+  channelId: string,
+  description: string | null,
+): Promise<void> {
+  const { error } = await supabase.rpc('set_channel_description', {
+    target_channel: channelId,
+    new_description: description ?? '',
+  });
+
+  if (error) throw error;
+}
+
+/** Сменить `@имя`. Занятое другим каналом — `ChannelUsernameTakenError`. */
+export async function setChannelUsername(channelId: string, username: string): Promise<void> {
+  const { error } = await supabase.rpc('set_channel_username', {
+    target_channel: channelId,
+    new_username: username,
+  });
+
+  if (error) {
+    if (error.code === USERNAME_TAKEN_CODE) throw new ChannelUsernameTakenError(username);
+    throw error;
+  }
+}
+
+/**
+ * Поставить или убрать (`null`) фото канала. Адрес — только файл аватарки
+ * канала в моём префиксе бакета (`uploadChannelAvatar`). Отдаёт адрес,
+ * который заменён на самом деле.
+ */
+export async function setChannelAvatar(
+  channelId: string,
+  avatarUrl: string | null,
+): Promise<string | null> {
+  const { data, error } = await supabase.rpc('set_channel_avatar', {
+    target_channel: channelId,
+    new_avatar_url: avatarUrl ?? '',
+  });
+
+  if (error) throw error;
+
+  return (data as string | null) ?? null;
+}
+
+/** Счётчики вкладок страницы канала. */
+export type ChannelInfoSummary = {
+  subscribers: number;
+  readers: number;
+  pops: number;
+  photos: number;
+  videos: number;
+  voices: number;
+};
+
+export async function getChannelInfoSummary(channelId: string): Promise<ChannelInfoSummary> {
+  const { data, error } = await supabase.rpc('channel_info_summary', {
+    target_channel: channelId,
+  });
+
+  if (error) throw error;
+
+  const row = data?.[0];
+
+  return {
+    subscribers: row?.subscribers ?? 0,
+    readers: row?.readers ?? 0,
+    pops: row?.pops ?? 0,
+    photos: row?.photos ?? 0,
+    videos: row?.videos ?? 0,
+    voices: row?.voices ?? 0,
+  };
+}

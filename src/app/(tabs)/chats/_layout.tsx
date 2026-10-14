@@ -3,6 +3,10 @@ import { Stack } from 'expo-router';
 import { NewChatButton } from '@/features/chats/NewChatButton';
 import { ConnectionTitle } from '@/features/connection/ConnectionTitle';
 
+// Открыли канал ссылкой при холодном старте — под ним всё равно «Чаты»:
+// «назад» ведёт в список, а не из приложения.
+export const unstable_settings = { initialRouteName: 'index' };
+
 export default function ChatsLayout() {
   return (
     <Stack>
@@ -32,7 +36,12 @@ export default function ChatsLayout() {
         name="chat-info/[chatId]"
         options={{ headerShown: false, presentation: 'transparentModal', animation: 'none' }}
       />
+      <Stack.Screen
+        name="channel-info/[channelId]"
+        options={{ headerShown: false, presentation: 'transparentModal', animation: 'none' }}
+      />
       <Stack.Screen name="chat-edit/[chatId]" options={{ title: 'Изменить' }} />
+      <Stack.Screen name="channel-edit/[channelId]" options={{ title: 'Изменить' }} />
       <Stack.Screen name="chat-invite/[chatId]" options={{ title: 'Добавить участников' }} />
     </Stack>
   );
