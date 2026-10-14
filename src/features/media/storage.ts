@@ -5,6 +5,7 @@ import {
   buildAvatarPath,
   buildChannelAvatarPath,
   buildGroupAvatarPath,
+  CHANNEL_AVATAR_FOLDER,
   GROUP_AVATAR_FOLDER,
   buildObjectPath,
   buildPopPaths,
@@ -215,6 +216,13 @@ export async function removeOwnAvatar(url: string | null, userId: string): Promi
  */
 export async function removeOwnGroupAvatar(url: string | null, userId: string): Promise<void> {
   const path = url ? ownPathFromUrl(url, MEDIA_BUCKET, userId, GROUP_AVATAR_FOLDER) : null;
+
+  if (path) await removeUploadedMedia(path);
+}
+
+/** Убирает прежнее фото канала, если файл — мой. Сбой не ошибка — у канала уже новое. */
+export async function removeOwnChannelAvatar(url: string | null, userId: string): Promise<void> {
+  const path = url ? ownPathFromUrl(url, MEDIA_BUCKET, userId, CHANNEL_AVATAR_FOLDER) : null;
 
   if (path) await removeUploadedMedia(path);
 }

@@ -11,11 +11,21 @@ import { Spacing } from '@/theme';
 export type DescriptionFieldProps = {
   value: string;
   onChangeText: (value: string) => void;
+  /** Пределы и подсказка — по умолчанию группы; канал передаёт свои. */
+  maxLength?: number;
+  counterFrom?: number;
+  placeholder?: string;
 };
 
-/** Описание группы: многострочное, у предела — сколько символов осталось. */
-export function DescriptionField({ value, onChangeText }: DescriptionFieldProps) {
-  const left = GROUP_DESCRIPTION_MAX_LENGTH - value.length;
+/** Описание группы или канала: многострочное, у предела — сколько символов осталось. */
+export function DescriptionField({
+  value,
+  onChangeText,
+  maxLength = GROUP_DESCRIPTION_MAX_LENGTH,
+  counterFrom = GROUP_DESCRIPTION_COUNTER_FROM,
+  placeholder = 'О чём эта группа',
+}: DescriptionFieldProps) {
+  const left = maxLength - value.length;
 
   return (
     <View style={styles.field}>
@@ -24,12 +34,12 @@ export function DescriptionField({ value, onChangeText }: DescriptionFieldProps)
         label="Описание (необязательно)"
         value={value}
         onChangeText={onChangeText}
-        maxLength={GROUP_DESCRIPTION_MAX_LENGTH}
+        maxLength={maxLength}
         multiline
         style={styles.input}
-        placeholder="О чём эта группа"
+        placeholder={placeholder}
       />
-      {left <= GROUP_DESCRIPTION_COUNTER_FROM ? (
+      {left <= counterFrom ? (
         <Text
           testID="chat-edit-description-left"
           variant="caption"

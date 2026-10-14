@@ -31,6 +31,7 @@ export {
 export {
   MediaUploadError,
   removeOwnAvatar,
+  removeOwnChannelAvatar,
   removeOwnGroupAvatar,
   removeUploadedMedia,
   storedPaths,
