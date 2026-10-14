@@ -47,6 +47,17 @@ env:
 - inputText: ${output.msg}
 - tapOn: "Отправить"
 - assertVisible: ${output.msg}
+# Ответ в треде — как в шите: свайп влево по комментарию, ответ ложится в тред.
+- evalScript: ${output.reply = 'maestro-reply-' + Date.now()}
+- swipe:
+    from: ${output.msg}
+    direction: LEFT
+- inputText: ${output.reply}
+- tapOn: "Отправить"
+- assertVisible: ${output.reply}
+- back
+- back
+- assertVisible: "1 ответ"
 # Тап по затемнённой переписке слева закрывает панель.
 - tapOn:
     point: "4%,50%"
@@ -62,7 +73,13 @@ env:
     element: ${output.msg}
     direction: DOWN
     timeout: 20000
-# Убрать за собой.
+# Убрать за собой: ответ, потом сам комментарий.
+- tapOn: "1 ответ"
+- longPressOn: ${output.reply}
+- tapOn: "Удалить"
+- tapOn: "Удалить"
+- assertNotVisible: ${output.reply}
+- back
 - longPressOn: ${output.msg}
 - tapOn: "Удалить"
 - tapOn: "Удалить"
