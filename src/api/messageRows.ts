@@ -89,6 +89,28 @@ export type CallMark = {
   joinedByMe: boolean;
 };
 
+/** Событие состава группы — системная строка в переписке. */
+export type MemberEvent =
+  | 'member_invited'
+  | 'member_joined'
+  | 'member_left'
+  | 'member_removed'
+  | 'owner_changed';
+
+/**
+ * Системная строка состава. Имена — нынешние, из профилей: переименовался —
+ * строка показывает новое имя. `null` — аккаунт удалён.
+ */
+export type MemberMark = {
+  event: MemberEvent;
+  /** Кто пригласил, вступил, ушёл, удалил. У «Владельцем стал(а)» — нет. */
+  actorId: string | null;
+  actorName: string | null;
+  /** Кого пригласили, удалили, кто стал владельцем. */
+  subjectId: string | null;
+  subjectName: string | null;
+};
+
 /** Чат, как его называют чужому глазу: заданное название или люди. */
 export type ChatRef = { id: string; name: string };
 
@@ -202,6 +224,8 @@ export type Message = {
   readAt: string | null;
   /** Метка звонка у системного сообщения; нет — это не звонок. */
   call?: CallMark | null;
+  /** Событие состава группы у системного сообщения; нет — это не оно. */
+  member?: MemberMark | null;
   /** Пересланный комментарий (вид `comment_forward`). У остальных нет. */
   commentForward?: CommentForward | null;
 };
@@ -223,7 +247,7 @@ const FORWARDED_COMMENT_COLUMNS = `forwarded_comment_id, forwarded:comments!mess
 // реакции и комментарии — той же выборкой. Своя реакция — вычисляемой связью
 // `my_reaction`, и у оригинала тоже.
 export const MESSAGE_COLUMNS =
-  `id, chat_id, author_id, kind, text, created_at, edited_at, attachments(${MESSAGE_ATTACHMENT_COLUMNS}), ${REPLY_COLUMNS}, ${REACTION_AND_COMMENT_COLUMNS}, stream_id, system_event, stream:streams!messages_stream_id_fkey(host_id, started_at, ended_at), my_call:my_stream_participation(id), source_chat:chats!messages_source_chat_id_fkey(id, chat_display_name), items:forward_items!forward_items_forward_fkey(id, position, message_id, original:messages!forward_items_message_fkey(${ORIGINAL_COLUMNS})), ${FORWARDED_COMMENT_COLUMNS}` as const;
+  `id, chat_id, author_id, kind, text, created_at, edited_at, attachments(${MESSAGE_ATTACHMENT_COLUMNS}), ${REPLY_COLUMNS}, ${REACTION_AND_COMMENT_COLUMNS}, stream_id, system_event, system_user_id, actor:profiles!messages_author_id_fkey(display_name), subject:profiles!messages_system_user_id_fkey(display_name), stream:streams!messages_stream_id_fkey(host_id, started_at, ended_at), my_call:my_stream_participation(id), source_chat:chats!messages_source_chat_id_fkey(id, chat_display_name), items:forward_items!forward_items_forward_fkey(id, position, message_id, original:messages!forward_items_message_fkey(${ORIGINAL_COLUMNS})), ${FORWARDED_COMMENT_COLUMNS}` as const;
 
 // Мозаика в облачке должна собираться в порядке выбора файлов, а PostgREST
 // не гарантирует порядок вложенной выборки сам по себе — нужен явный order
@@ -335,6 +359,29 @@ function toCallMark(row: MessageRow): CallMark | null {
     startedAt: row.stream.started_at,
     endedAt: row.stream.ended_at,
     joinedByMe: row.my_call !== null && row.my_call !== undefined,
+  };
+}
+
+const MEMBER_EVENTS = new Set<string>([
+  'member_invited',
+  'member_joined',
+  'member_left',
+  'member_removed',
+  'owner_changed',
+]);
+
+function toMemberMark(row: MessageRow): MemberMark | null {
+  if (row.kind !== 'system' || !row.system_event || !MEMBER_EVENTS.has(row.system_event)) {
+    return null;
+  }
+
+  return {
+    event: row.system_event as MemberEvent,
+    actorId: row.author_id,
+    // Профиль удалён — ссылка обнулилась, и связь пустая.
+    actorName: row.author_id ? (row.actor?.display_name ?? 'Без имени') : null,
+    subjectId: row.system_user_id,
+    subjectName: row.system_user_id ? (row.subject?.display_name ?? 'Без имени') : null,
   };
 }
 
@@ -477,6 +524,7 @@ export function toMessage(row: MessageRow): Message {
     ...toContent(row),
     forward: toIsland(row),
     call: toCallMark(row),
+    member: toMemberMark(row),
     commentForward: toCommentForward(row),
   };
 }
