@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Redirect, useRouter } from 'expo-router';
+import { useEffect } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -49,10 +50,30 @@ function ChannelLinkResolver({ username }: ChannelLinkScreenProps) {
     gcTime: 0,
   });
   const state = loadStateOf(query);
+  const channelId = query.data;
 
-  if (query.data) {
+  // Нашли — экран канала вместо этого. Под ссылкой уже есть вкладки — снять
+  // её и открыть канал в их «Чатах»: `replace` поставил бы на её место
+  // второй экземпляр вкладок, и «назад» из канала было бы некуда. Холодный
+  // старт — под ссылкой ничего, тогда замена (под каналом встанут «Чаты»).
+  useEffect(() => {
+    if (!channelId) return;
+
+    const href = { pathname: '/chats/channel/[channelId]', params: { channelId } } as const;
+
+    if (router.canGoBack()) {
+      router.back();
+      router.push(href);
+    } else {
+      router.replace(href);
+    }
+  }, [channelId, router]);
+
+  if (channelId) {
     return (
-      <Redirect href={{ pathname: '/chats/channel/[channelId]', params: { channelId: query.data } }} />
+      <View style={[styles.centered, { backgroundColor: theme.background }]}>
+        <ActivityIndicator accessibilityLabel="Открываем канал" />
+      </View>
     );
   }
 
