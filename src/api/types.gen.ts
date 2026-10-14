@@ -1652,6 +1652,7 @@ export type Database = {
           display_name: string | null
           invited_at: string | null
           user_id: string | null
+          username: string | null
         }
         Relationships: [
           {
@@ -1715,7 +1716,6 @@ export type Database = {
           error: true
         } & "the function public.chat_display_name with parameter or with a single unnamed json/jsonb parameter, but no matches were found in the schema cache"
       }
-      chat_heir: { Args: { target_chat: string }; Returns: string }
       chat_info_summary: {
         Args: { target_chat: string }
         Returns: {
@@ -2431,7 +2431,6 @@ export type Database = {
           username: string
         }[]
       }
-
       search_tsquery: { Args: { needle: string }; Returns: unknown }
       search_tsv: { Args: { value: string }; Returns: unknown }
       search_words: { Args: { value: string }; Returns: string }

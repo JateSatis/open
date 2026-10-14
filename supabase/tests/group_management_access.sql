@@ -201,8 +201,6 @@ begin
   perform pg_temp.check('посторонний выходит: отказ', code = '42501', code);
 
   perform pg_temp.act_as(a);
-  perform pg_temp.check('наследник — самый давний участник', public.chat_heir(grp) = b,
-    public.chat_heir(grp)::text);
   perform public.leave_chat(grp);
   perform pg_temp.check('владелец ушёл — владение у самого давнего',
     (select owner_id from public.chats where id = grp) = b);
