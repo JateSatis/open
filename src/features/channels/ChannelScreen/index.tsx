@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { Stack, useIsFocused, useRouter } from 'expo-router';
+import { Stack, useIsFocused, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, useWindowDimensions, View } from 'react-native';
 import { useSharedValue, withTiming } from 'react-native-reanimated';
@@ -21,6 +21,7 @@ import type { ChannelSection } from '@/features/channels/useMarkChannelSectionRe
 import { channelQueryKey, useChannel } from '@/features/channels/useChannel';
 import type { Pop } from '@/api/pops';
 import { ChatConversation } from '@/features/chats/ChatConversation';
+import type { ChatSearchParams } from '@/features/chats/chatSearch/useChatSearch';
 import { closeMediaSheet } from '@/features/chats/MediaPickerSheet';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
 import { popSheetSection } from '@/features/pops/popSheetSection';
@@ -94,6 +95,7 @@ function ChannelSections({ channel, initialIndex, postsRequest }: ChannelSection
   const position = useSharedValue(initialIndex);
   const [index, setIndex] = useState(initialIndex);
   const { subscription } = useChannelSubscription(channel.id);
+  const searching = useLocalSearchParams<ChatSearchParams>().search === '1' && index === 0;
 
   // Владелец сменил название, фото, `@имя` — шапка обновляется и здесь.
   useChannelChangedSignal(channel.id, channel.postsChatId);
@@ -194,15 +196,19 @@ function ChannelSections({ channel, initialIndex, postsRequest }: ChannelSection
 
   return (
     <View style={[styles.flex, { backgroundColor: theme.background }]}>
-      <View style={styles.segments}>
-        <SegmentedControl
-          segments={SECTIONS}
-          position={position}
-          selectedIndex={index}
-          onSelect={select}
-          badges={badges}
-        />
-      </View>
+      {/* Поиск по постам ставит своё поле на место шапки — сегменты над ним
+          оказались бы под статус-баром. */}
+      {searching ? null : (
+        <View style={styles.segments}>
+          <SegmentedControl
+            segments={SECTIONS}
+            position={position}
+            selectedIndex={index}
+            onSelect={select}
+            badges={badges}
+          />
+        </View>
+      )}
 
       <SectionPager
         position={position}
