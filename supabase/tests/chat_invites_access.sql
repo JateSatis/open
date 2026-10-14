@@ -117,9 +117,14 @@ begin
   exception when others then perform pg_temp.check('создатель не меняет исходный набор', true, sqlerrm);
   end;
 
-  update public.chats set title = 'Переименован' where id = chat_ab;
-  select title into s from public.chats where id = chat_ab;
-  perform pg_temp.check('создатель переименовывает чат', s = 'Переименован', s);
+  -- Название меняет только `set_chat_title` и только у группы
+  -- (20261020100000_group_management.sql): прямого UPDATE нет и у создателя.
+  begin
+    update public.chats set title = 'Переименован' where id = chat_ab;
+    perform pg_temp.check('прямой UPDATE названия — отказ и создателю', false, 'прошло');
+  exception when others then
+    perform pg_temp.check('прямой UPDATE названия — отказ и создателю', sqlstate = '42501', sqlerrm);
+  end;
 
   select count(*) into n from public.chat_invites where chat_id = chat_ab;
   perform pg_temp.check('создатель не видит строк chat_invites', n = 0, n::text);
