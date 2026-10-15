@@ -21,6 +21,8 @@ import { COLLAPSED_ROWS } from '@/features/search/searchSections';
 import { useFeedSearch } from '@/features/search/useFeedSearch';
 import { Spacing } from '@/theme';
 
+const NO_POSITION_HOLD = { disabled: true } as const;
+
 export type FeedSearchPanelProps = {
   query: string;
   /** Тап по недавнему запросу — поиск по нему заново. */
@@ -126,6 +128,10 @@ export function FeedSearchPanel({ query, onPickRecent }: FeedSearchPanelProps) {
       renderItem={renderItem}
       keyboardDismissMode="on-drag"
       keyboardShouldPersistTaps="handled"
+      // FlashList по умолчанию держит видимую строку, когда сверху добавляются
+      // новые: каналы, ответившие позже попсов, встали бы над экраном. Попсы
+      // догружаются снизу — удерживать нечего.
+      maintainVisibleContentPosition={NO_POSITION_HOLD}
       contentContainerStyle={styles.content}
       onEndReached={results.loadMorePops}
       onEndReachedThreshold={0.5}
