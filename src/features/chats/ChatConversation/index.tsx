@@ -77,7 +77,12 @@ import { useChatRowRenderer } from '@/features/chats/useChatRowRenderer';
 import { listMessageFragments, type Fragment, type FragmentRange } from '@/api/fragments';
 import { fragmentsKey, myFragmentOn } from '@/features/chats/fragments/useMessageFragments';
 import { FragmentMenu } from '@/features/chats/fragments/FragmentMenu';
-import { clearTextSelection, type TextSelection } from '@/features/chats/fragments/fragmentStore';
+import {
+  clearQuoteHighlight,
+  clearTextSelection,
+  type TextSelection,
+} from '@/features/chats/fragments/fragmentStore';
+import { useFragmentJump } from '@/features/chats/fragments/useFragmentJump';
 import { useFragmentMode } from '@/features/chats/fragments/useFragmentMode';
 import { useComposerDraft } from '@/features/chats/useComposerDraft';
 import { chatQueryKey, useChat } from '@/features/chats/useChat';
@@ -596,6 +601,7 @@ export function ChatConversation({
   });
 
   const fragments = useFragmentMode({ isMember, isFocused, isSelecting });
+  useFragmentJump({ chatId, rows, jump: jumpTo, isFocused });
 
   // Кнопка комментария в меню фрагмента: боковая панель этого куска текста.
   // Выделение снимается, облачко остаётся в режиме фрагментов.
@@ -618,13 +624,19 @@ export function ChatConversation({
           range,
         );
 
-      openFragmentComments(selection.messageId, selection.chatId, selection.amMember, {
-        kind: 'fragment',
-        key: `${selection.messageId}:${range.start}-${range.end}`,
-        fragmentId: mine && !mine.id.startsWith('local:') ? mine.id : null,
-        range,
-        focusInput: true,
-      });
+      openFragmentComments(
+        selection.messageId,
+        selection.chatId,
+        selection.amMember,
+        {
+          kind: 'fragment',
+          key: `${selection.messageId}:${range.start}-${range.end}`,
+          fragmentId: mine && !mine.id.startsWith('local:') ? mine.id : null,
+          range,
+          focusInput: true,
+        },
+        selection.rowKey,
+      );
     },
     [currentUserId, queryClient],
   );
@@ -672,6 +684,7 @@ export function ChatConversation({
       // Выделение привязано к месту на экране: тронули прокрутку — снимается,
       // режим фрагментов остаётся.
       clearTextSelection();
+      clearQuoteHighlight();
     },
     [resumeLoadMore],
   );
@@ -841,6 +854,9 @@ export function ChatConversation({
     <View
       ref={containerRef}
       onLayout={measureBottomOffset}
+      // Подсветка куска после перехода по цитате держится до первого касания.
+      // Касание само по себе делает своё: это не перехват ответчика.
+      onTouchStart={clearQuoteHighlight}
       style={[styles.flex, { backgroundColor: theme.background }]}
     >
       <ChatScreenHeader

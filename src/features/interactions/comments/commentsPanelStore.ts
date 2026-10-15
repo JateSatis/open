@@ -75,7 +75,13 @@ export function openComments(
   from?: CommentsLiftFrom,
 ) {
   usePanelStore.setState({
-    target: { subject: { type: 'message', id: messageId }, chatId, amMember, focusCommentId, ...from },
+    target: {
+      subject: { type: 'message', id: messageId },
+      chatId,
+      amMember,
+      focusCommentId,
+      ...from,
+    },
     openThread: null,
   });
 }
@@ -83,15 +89,18 @@ export function openComments(
 /**
  * Открывает боковую панель фрагмента текста сообщения. `chatId` и `amMember`
  * — чата, где живёт сообщение (у облачка островка — чата оригинала).
+ * `rowKey` — облачко, где выделяли: туда ведёт цитата над комментарием.
+ * Сообщение над боковой панелью не поднимается.
  */
 export function openFragmentComments(
   messageId: string,
   chatId: string,
   amMember: boolean,
   fragment: FragmentPanelSubject,
+  rowKey?: string,
 ) {
   usePanelStore.setState({
-    target: { subject: { type: 'message', id: messageId }, chatId, amMember, fragment },
+    target: { subject: { type: 'message', id: messageId }, chatId, amMember, fragment, rowKey },
     openThread: null,
   });
 }

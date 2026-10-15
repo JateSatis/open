@@ -91,6 +91,19 @@ export function graphemeBoundaries(text: string): number[] {
   return bounds;
 }
 
+/**
+ * Не больше `max` символов (графем) текста; длиннее — обрезка с многоточием.
+ * Эмодзи и буква с ударением не разрезаются.
+ */
+export function truncateGraphemes(text: string, max: number): string {
+  const bounds = graphemeBoundaries(text);
+
+  // Границ на одну больше, чем графем: и начало, и конец текста.
+  if (bounds.length - 1 <= max) return text;
+
+  return `${text.slice(0, bounds[max])}…`;
+}
+
 /** Ближайшая граница графемы к смещению: та, что не дальше, при равенстве — левая. */
 export function snapToBoundary(bounds: readonly number[], offset: number): number {
   let best = bounds[0] ?? 0;

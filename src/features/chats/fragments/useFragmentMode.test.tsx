@@ -133,7 +133,7 @@ describe('fragment mode', () => {
     await act(async () => setTextSelection(selectionIn('m1')));
     await act(async () => result.current.pressRow(row('m1')));
 
-    expect(getFragmentState()).toEqual({ activeKey: 'm1', selection: null });
+    expect(getFragmentState()).toEqual({ activeKey: 'm1', selection: null, quote: null });
   });
 
   it('system back drops the selection first, then leaves the mode', async () => {
@@ -143,7 +143,7 @@ describe('fragment mode', () => {
     await act(async () => setTextSelection(selectionIn('m1')));
 
     await act(async () => void backHandler?.({} as never));
-    expect(getFragmentState()).toEqual({ activeKey: 'm1', selection: null });
+    expect(getFragmentState()).toEqual({ activeKey: 'm1', selection: null, quote: null });
 
     await act(async () => void backHandler?.({} as never));
     expect(getFragmentState().activeKey).toBeNull();

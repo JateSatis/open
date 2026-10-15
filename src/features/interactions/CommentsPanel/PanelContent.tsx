@@ -17,8 +17,10 @@ import { ThreadGapRow } from './ThreadGapRow';
 import { usePanelActions } from './usePanelActions';
 import { usePanelComments } from './usePanelComments';
 import type { PanelSheet } from './usePanelSheet';
+import { useGoToFragment } from './useGoToFragment';
 import { useThreadPane } from './useThreadPane';
 
+import { FragmentQuote } from '@/features/chats/FragmentQuote';
 import { mosaicBounds } from '@/features/chats/lib/mosaicLayout';
 import { MessageBubble } from '@/features/chats/MessageBubble';
 import { canReactTo } from '@/features/chats/messageActions';
@@ -243,17 +245,29 @@ export function PanelContent({
     };
   }, []);
 
+  const goToFragment = useGoToFragment(target, live?.message ?? null, close);
   const { retry, react } = comments;
   const myAudience = audienceOf(amMember);
   const renderBubble = useCallback(
     (item: CommentItem, interactive = true) => {
-      const { authorId } = item;
+      const { authorId, fragmentId, fragmentQuote } = item;
       const quotes = visibleQuotes(item);
+      const isOwn = authorId !== null && authorId === currentUserId;
 
       return (
         <MessageBubble
           message={quotes === item.replies ? item : { ...item, replies: quotes }}
-          isOwn={authorId !== null && authorId === currentUserId}
+          isOwn={isOwn}
+          lead={
+            fragmentId || fragmentQuote ? (
+              <FragmentQuote
+                text={fragmentQuote?.text ?? null}
+                isOwn={isOwn}
+                // Своё неотправленное ещё не знает фрагмента — переходить не к чему.
+                onPress={interactive && fragmentId ? () => void goToFragment(item) : undefined}
+              />
+            ) : undefined
+          }
           isRead={false}
           // Галочки у комментария ничего не значат: прочтений у него нет.
           receipts={false}
@@ -264,7 +278,9 @@ export function PanelContent({
           mediaBounds={mediaBounds}
           onRetry={interactive ? retry : undefined}
           onAuthorPress={interactive && authorId ? () => openPerson(authorId) : undefined}
-          onQuotePress={interactive ? (quote) => void actions.jumpToQuote(quote.messageId) : undefined}
+          onQuotePress={
+            interactive ? (quote) => void actions.jumpToQuote(quote.messageId) : undefined
+          }
           reactionAudience={myAudience}
           onReactionToggle={
             interactive && canReactTo(item) ? (emoji) => react(item, emoji) : undefined
@@ -274,7 +290,17 @@ export function PanelContent({
         />
       );
     },
-    [actions, currentUserId, mediaBounds, memberBadge, myAudience, openPerson, react, retry],
+    [
+      actions,
+      currentUserId,
+      goToFragment,
+      mediaBounds,
+      memberBadge,
+      myAudience,
+      openPerson,
+      react,
+      retry,
+    ],
   );
 
   const { selection } = actions;
@@ -369,7 +395,11 @@ export function PanelContent({
           <GestureDetector gesture={threadPane.edgePan}>
             <Animated.View
               testID="comments-thread"
-              style={[styles.threadPane, { backgroundColor: theme.background }, threadPane.paneStyle]}
+              style={[
+                styles.threadPane,
+                { backgroundColor: theme.background },
+                threadPane.paneStyle,
+              ]}
               pointerEvents={inThread ? 'auto' : 'none'}
             >
               <PaneList

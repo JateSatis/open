@@ -7,6 +7,7 @@ import {
   toCodePointOffset,
   toServerRange,
   toUtf16Offset,
+  truncateGraphemes,
   wordAt,
 } from './textOffsets';
 
@@ -137,5 +138,28 @@ describe('UTF-16 and code points', () => {
 
     expect(range).toEqual({ start: 6, end: 11, text: '👨‍👩‍👧' });
     expect(fromServerRange(text, range.start, range.end)).toEqual({ start, end });
+  });
+});
+
+describe('truncating to graphemes', () => {
+  it('keeps a short text as is', () => {
+    expect(truncateGraphemes('какой-то другой уровень', 100)).toBe('какой-то другой уровень');
+  });
+
+  it('cuts a long text at exactly the limit and adds an ellipsis', () => {
+    const cut = truncateGraphemes('а'.repeat(150), 100);
+
+    expect(cut).toBe(`${'а'.repeat(100)}…`);
+  });
+
+  it('a text of exactly the limit is not cut', () => {
+    expect(truncateGraphemes('б'.repeat(100), 100)).toBe('б'.repeat(100));
+  });
+
+  it('does not split an emoji sitting on the limit', () => {
+    const family = '👨‍👩‍👧';
+    const cut = truncateGraphemes(`${'в'.repeat(99)}${family}${'г'.repeat(10)}`, 100);
+
+    expect(cut).toBe(`${'в'.repeat(99)}${family}…`);
   });
 });

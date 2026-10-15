@@ -17,6 +17,7 @@ import {
   type Comment,
   type CommentChannelHandlers,
 } from '@/api/comments';
+import { locateFragment } from '@/api/fragments';
 import { listPinnedMessages } from '@/api/pins';
 import { NO_REACTIONS } from '@/api/reactionCounts';
 import { useSession } from '@/features/auth/useSession';
@@ -25,6 +26,7 @@ import { resetOutbox } from '@/features/chats/messages/outbox';
 import { reportRealtimeJoined, resetConnectionState } from '@/features/connection/connectionStore';
 import { resetCommentOutbox } from '@/features/interactions/comments/commentOutbox';
 import { closeComments } from '@/features/interactions/comments/commentsPanelStore';
+import { useInAppAlert } from '@/features/notifications/alertsStore';
 import { island, original } from '@/test/islands';
 import { renderWithQuery } from '@/test/renderWithQuery';
 import { longPressMessage, startSelecting } from '@/test/messageGestures';
@@ -104,6 +106,36 @@ jest.mock('@/api/comments', () => ({
   subscribeToComments: jest.fn(),
 }));
 jest.mock('@/api/messageViews');
+jest.mock('@/api/fragments', () => ({
+  listMessageFragments: jest.fn(() => Promise.resolve([])),
+  setFragmentReaction: jest.fn(),
+  locateFragment: jest.fn(),
+}));
+// Геометрия текста облачка: одна строка, по 10 dp на символ.
+jest.mock('../../../../modules/text-geometry', () => ({
+  textGeometryAvailable: true,
+  measureText: jest.fn((view: { props?: { children?: unknown } } | null) => {
+    const text = String(view?.props?.children ?? '');
+
+    return Promise.resolve({
+      text,
+      width: text.length * 10,
+      height: 20,
+      lines: [
+        {
+          start: 0,
+          end: text.length,
+          top: 0,
+          bottom: 20,
+          baseline: 16,
+          left: 0,
+          right: text.length * 10,
+        },
+      ],
+      xs: Array.from({ length: text.length }, (_, i) => i * 10),
+    });
+  }),
+}));
 jest.mock('@/api/reactions', () => ({
   ...jest.requireActual('@/api/reactionCounts'),
   listMessageReactions: jest.fn(() => Promise.resolve([])),
@@ -389,7 +421,9 @@ describe('a member and the comments circle', () => {
 
     // o4, m3 и m2 с комментариями; у m1 их нет — и круга нет.
     expect(buttons()).toHaveLength(3);
-    expect(within(screen.getByTestId('message-row-m1')).queryByTestId('comments-circle')).toBeNull();
+    expect(
+      within(screen.getByTestId('message-row-m1')).queryByTestId('comments-circle'),
+    ).toBeNull();
   });
 
   it('writes the first comment from the message menu', async () => {
@@ -965,5 +999,115 @@ describe('pinning a comment under a message', () => {
     await menuOfFirstComment();
 
     expect(screen.getByRole('menuitem', { name: 'Закрепить' })).toBeTruthy();
+  });
+});
+
+describe('fragment quote over a comment', () => {
+  const mockedLocate = locateFragment as jest.MockedFunction<typeof locateFragment>;
+  const quoted = comment('cf', {
+    text: 'про кусок',
+    fragmentId: 'f1',
+    fragmentQuote: { text: 'm1', start: 6, end: 8, lost: false },
+  });
+
+  beforeEach(() => {
+    useInAppAlert.setState({ alert: null });
+    mockedListComments.mockResolvedValue({
+      items: [quoted, comment('plain', { text: 'обычный' })],
+      nextCursor: null,
+    });
+  });
+
+  async function openSheet() {
+    await renderChat();
+    await openCommentsOf(3);
+    await screen.findByText('про кусок');
+  }
+
+  it('stands over a comment to a fragment and nowhere else', async () => {
+    await openSheet();
+
+    const plates = screen.getAllByTestId('comment-fragment-quote');
+
+    expect(plates).toHaveLength(1);
+    expect(within(plates[0]).getByText('m1')).toBeTruthy();
+  });
+
+  it('closes the sheet and highlights the quoted piece in the message', async () => {
+    mockedLocate.mockResolvedValue({
+      state: 'live',
+      start: 6,
+      end: 8,
+      lost: false,
+      messageCreatedAt: '2026-09-30T10:01:00Z',
+    });
+
+    await openSheet();
+    await fireEvent.press(screen.getByTestId('comment-fragment-quote'));
+
+    await waitFor(() => expect(screen.queryByTestId('comments-panel')).toBeNull());
+    const highlight = await screen.findByTestId('quote-highlight');
+
+    // Ровно «m1»: с шестого символа по восьмой.
+    expect(highlight.children).toHaveLength(1);
+    expect((highlight.children[0] as unknown as { props: { style: unknown } }).props.style).toEqual(
+      expect.arrayContaining([expect.objectContaining({ left: 60, width: 20 })]),
+    );
+
+    // Первое же касание экрана снимает подсветку.
+    await fireEvent(screen.getByText('текст m1'), 'touchStart');
+    await waitFor(() => expect(screen.queryByTestId('quote-highlight')).toBeNull());
+  });
+
+  it('flashes the whole message and says so when an edit took the piece away', async () => {
+    mockedLocate.mockResolvedValue({
+      state: 'live',
+      start: 0,
+      end: 2,
+      lost: true,
+      messageCreatedAt: '2026-09-30T10:01:00Z',
+    });
+
+    await openSheet();
+    await fireEvent.press(screen.getByTestId('comment-fragment-quote'));
+
+    await waitFor(() => expect(screen.queryByTestId('comments-panel')).toBeNull());
+    await waitFor(() =>
+      expect(useInAppAlert.getState().alert).toMatchObject({ text: 'Этот кусок текста изменён' }),
+    );
+    expect(screen.queryByTestId('quote-highlight')).toBeNull();
+  });
+
+  it('stands over the root in the thread window, not over the replies', async () => {
+    mockedListComments.mockResolvedValue({
+      items: [{ ...quoted, repliesCount: 1 }],
+      nextCursor: null,
+    });
+    mockedReplies.mockResolvedValue({
+      items: [comment('r1', { threadRootId: 'cf', text: 'ответ в треде' })],
+      nextCursor: null,
+    });
+
+    await openSheet();
+    await fireEvent.press(screen.getByLabelText('Показать 1 ответ'));
+    await screen.findByText('ответ в треде');
+
+    expect(
+      within(screen.getByTestId('thread-root')).getByTestId('comment-fragment-quote'),
+    ).toBeTruthy();
+    // Корень дважды — в основном списке и в окне треда; у ответа плашки нет.
+    expect(screen.getAllByTestId('comment-fragment-quote')).toHaveLength(2);
+  });
+
+  it('keeps the sheet open when the message is deleted', async () => {
+    mockedLocate.mockResolvedValue({ state: 'deleted' });
+
+    await openSheet();
+    await fireEvent.press(screen.getByTestId('comment-fragment-quote'));
+
+    await waitFor(() =>
+      expect(useInAppAlert.getState().alert).toMatchObject({ text: 'Сообщение удалено' }),
+    );
+    expect(screen.getByTestId('comments-panel')).toBeTruthy();
   });
 });
