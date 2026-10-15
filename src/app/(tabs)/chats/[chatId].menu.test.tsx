@@ -24,6 +24,7 @@ import { resetOutbox } from '@/features/chats/messages/outbox';
 import { useInAppAlert } from '@/features/notifications/alertsStore';
 import { reportRealtimeJoined, resetConnectionState } from '@/features/connection/connectionStore';
 import { renderWithQuery } from '@/test/renderWithQuery';
+import { longPressMessage, startSelecting } from '@/test/messageGestures';
 
 // Шапку экран ставит через Stack.Screen — мок рисует и заголовок, и правую
 // кнопку прямо в дереве: так видно «Выбрано: N» и «Отмена».
@@ -136,6 +137,9 @@ function chatWith(participants: ChatSummary['participants']): ChatSummary {
   return {
     id: 'chat-1',
     kind: 'direct',
+    ownerId: null,
+    description: null,
+    avatarUrl: null,
     title: 'Разговор',
     participants,
     waiting: [],
@@ -175,23 +179,11 @@ function message(id: string, text: string, authorId: string, minute = 0): Messag
 let handlers: ChatChannelHandlers | null = null;
 let backHandler: Parameters<typeof BackHandler.addEventListener>[1] | null = null;
 
-/** Тап по облачку — так открывается его меню. */
-async function tapMessage(messageId: string) {
-  await act(async () => {
-    fireEvent.press(screen.getByTestId(`message-row-${messageId}`));
-  });
-}
+/** Долгое нажатие на облачко — так открывается его меню. */
+const tapMessage = longPressMessage;
 
-/** Долгое нажатие — так, как его видит жест-обработчик. */
-async function longPress(messageId: string) {
-  await act(async () => {
-    fireGestureHandler(getByGestureTestId(`message-long-press-${messageId}`), [
-      { state: State.BEGAN },
-      { state: State.ACTIVE },
-      { state: State.END },
-    ]);
-  });
-}
+/** Меню облачка → «Выбрать»: включает выбор. */
+const longPress = startSelecting;
 
 async function menuItems(): Promise<string[]> {
   await screen.findByTestId('message-menu');
@@ -254,6 +246,7 @@ describe('message menu', () => {
       'Ответить',
       'Комментировать',
       'Копировать',
+      'Выбрать',
       'Изменить',
       'Закрепить',
       'Переслать',
@@ -271,6 +264,7 @@ describe('message menu', () => {
       'Ответить',
       'Комментировать',
       'Копировать',
+      'Выбрать',
       'Закрепить',
       'Переслать',
     ]);
@@ -286,7 +280,7 @@ describe('message menu', () => {
 
     await tapMessage('m2');
 
-    expect(await menuItems()).toEqual(['Комментировать', 'Копировать', 'Переслать']);
+    expect(await menuItems()).toEqual(['Комментировать', 'Копировать', 'Выбрать', 'Переслать']);
   });
 
   it('closes on a tap outside and on the system back button', async () => {
@@ -578,18 +572,19 @@ describe('gestures on a message', () => {
     expect(await screen.findByTestId('message-menu')).toBeTruthy();
   });
 
-  it('opens the menu without vibrating; a long press still vibrates', async () => {
+  it('a long press opens the menu with a light vibration; a tap opens nothing', async () => {
     await renderWithQuery(<ChatScreen />);
     await screen.findByText('привет');
 
-    await tapMessage('m2');
-    await screen.findByTestId('message-menu');
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('message-row-m2'));
+    });
 
+    expect(screen.queryByTestId('message-menu')).toBeNull();
     expect(impactAsync).not.toHaveBeenCalled();
 
-    fireEvent.press(screen.getByTestId('message-menu-backdrop'));
-    await waitFor(() => expect(screen.queryByTestId('message-menu')).toBeNull());
-    await longPress('m3');
+    await tapMessage('m2');
+    await screen.findByTestId('message-menu');
 
     expect(impactAsync).toHaveBeenCalled();
   });
@@ -619,7 +614,7 @@ describe('gestures on a message', () => {
     expect(isHidden()).toBe(false);
   });
 
-  it('a long press starts selection with that message already marked, without the menu', async () => {
+  it('«Выбрать» in the menu starts selection with that message already marked', async () => {
     await renderWithQuery(<ChatScreen />);
     await screen.findByText('привет');
 
@@ -637,10 +632,28 @@ describe('gestures on a message', () => {
     await screen.findByText('привет');
 
     await longPress('m2');
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('message-row-m3'));
+    });
+
+    expect(await screen.findByText('Выбрано: 2')).toBeTruthy();
+    expect(screen.queryByTestId('message-menu')).toBeNull();
+  });
+
+  it('in selection a long press toggles the mark too, and unmarking the last ends selection', async () => {
+    await renderWithQuery(<ChatScreen />);
+    await screen.findByText('привет');
+
+    await longPress('m2');
     await tapMessage('m3');
 
     expect(await screen.findByText('Выбрано: 2')).toBeTruthy();
     expect(screen.queryByTestId('message-menu')).toBeNull();
+
+    await tapMessage('m3');
+    await tapMessage('m2');
+
+    await waitFor(() => expect(screen.queryByText(/Выбрано/)).toBeNull());
   });
 
   it('a tap on a photo tile opens the viewer, not the menu', async () => {

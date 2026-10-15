@@ -24,7 +24,7 @@ env:
       id: "message-time"
     timeout: 10000
 # Убрать за собой.
-- tapOn: ${output.msg}
+- longPressOn: ${output.msg}
 - tapOn: "Удалить"
 - assertVisible: "Удалить сообщение?"
 - tapOn: "Удалить"

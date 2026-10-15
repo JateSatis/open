@@ -3,6 +3,10 @@ import { Stack } from 'expo-router';
 import { NewChatButton } from '@/features/chats/NewChatButton';
 import { ConnectionTitle } from '@/features/connection/ConnectionTitle';
 
+// Открыли канал ссылкой при холодном старте — под ним всё равно «Чаты»:
+// «назад» ведёт в список, а не из приложения.
+export const unstable_settings = { initialRouteName: 'index' };
+
 export default function ChatsLayout() {
   return (
     <Stack>
@@ -25,7 +29,20 @@ export default function ChatsLayout() {
       <Stack.Screen name="channel/[channelId]" options={{ title: 'Канал' }} />
       <Stack.Screen name="channel-subscribers/[channelId]" options={{ title: 'Подписчики' }} />
       <Stack.Screen name="chat-subscribers/[chatId]" options={{ title: 'Подписчики' }} />
-      <Stack.Screen name="chat-info/[chatId]" options={{ title: 'О чате' }} />
+      {/* Страница информации рисует свою панель и сама въезжает и уезжает:
+          прозрачная поверх переписки, чтобы та была видна, пока страницу
+          тянут назад (см. `useSlideBack`). */}
+      <Stack.Screen
+        name="chat-info/[chatId]"
+        options={{ headerShown: false, presentation: 'transparentModal', animation: 'none' }}
+      />
+      <Stack.Screen
+        name="channel-info/[channelId]"
+        options={{ headerShown: false, presentation: 'transparentModal', animation: 'none' }}
+      />
+      <Stack.Screen name="chat-edit/[chatId]" options={{ title: 'Изменить' }} />
+      <Stack.Screen name="channel-edit/[channelId]" options={{ title: 'Изменить' }} />
+      <Stack.Screen name="chat-invite/[chatId]" options={{ title: 'Добавить участников' }} />
     </Stack>
   );
 }

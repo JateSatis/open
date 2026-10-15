@@ -96,8 +96,10 @@ export function chatTitle(chat: ChatSummary, currentUserId: string | null): stri
   return chat.kind === 'group' ? 'Групповой чат' : 'Диалог';
 }
 
+/** Лицо чата: у канала — его аватарка, у группы — своё фото, у диалога — собеседник. */
 export function chatAvatarUrl(chat: ChatSummary, currentUserId: string | null): string | null {
   if (chat.channel) return chat.channel.avatarUrl;
+  if (chat.kind === 'group') return chat.avatarUrl;
 
   return counterpart(chat, currentUserId)?.avatarUrl ?? null;
 }

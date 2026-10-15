@@ -5,6 +5,7 @@ import { styles } from './styles';
 import type { Message } from '@/api/chats';
 import { Text } from '@/components/Text';
 import { formatMessageTime } from '@/features/chats/chatDisplay';
+import { memberEventText } from '@/features/chats/memberEventText';
 import { callMarkText, isMissedCall } from '@/features/streams/callText';
 import { useTheme } from '@/hooks/use-theme';
 
@@ -25,7 +26,9 @@ export function SystemMessage({ message, currentUserId, isMember, hostName }: Sy
   const viewer = { id: currentUserId, isMember };
   const text = message.call
     ? `📞 ${callMarkText(message.call, viewer, hostName)}`
-    : (message.text ?? 'Служебное сообщение');
+    : message.member
+      ? memberEventText(message.member)
+      : (message.text ?? 'Служебное сообщение');
   const missed = message.call ? isMissedCall(message.call, viewer) : false;
 
   return (

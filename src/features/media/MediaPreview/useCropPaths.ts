@@ -9,8 +9,8 @@ import { Sizes } from '@/theme';
 const DIM_REACH = 4000;
 
 /**
- * Фигуры поверх фото в обрезке — рамка, затемнение снаружи, сетка 3×3 и
- * уголки-ручки — по рамке этого кадра, на UI-потоке.
+ * Фигуры поверх фото в обрезке — рамка, затемнение снаружи, круг аватарки,
+ * сетка 3×3 и уголки-ручки — по рамке этого кадра, на UI-потоке.
  */
 export function useCropPaths(visual: SharedValue<CropVisual>) {
   const frameRect = useDerivedValue(() => {
@@ -77,5 +77,24 @@ export function useCropPaths(visual: SharedValue<CropVisual>) {
     return path;
   });
 
-  return { frameRect, dim, gridPath, corners };
+  // Круг аватарки, вписанный в рамку: затемнено всё, кроме него.
+  const ring = useDerivedValue(() => {
+    const { frame } = visual.value;
+    const path = Skia.Path.Make();
+
+    path.addRect(
+      Skia.XYWHRect(
+        frame.x - DIM_REACH,
+        frame.y - DIM_REACH,
+        frame.width + DIM_REACH * 2,
+        frame.height + DIM_REACH * 2,
+      ),
+    );
+    path.addOval(Skia.XYWHRect(frame.x, frame.y, frame.width, frame.height));
+    path.setFillType(FillType.EvenOdd);
+
+    return path;
+  });
+
+  return { frameRect, dim, ring, gridPath, corners };
 }

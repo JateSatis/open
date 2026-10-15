@@ -87,7 +87,16 @@ begin
     perform pg_temp.check('у чата постов нет своего названия', sqlstate = '23514', sqlerrm);
   end;
 
-  delete from public.chat_members where chat_id = chat and user_id = a;
+  -- Прямого DELETE участников нет ни у кого: уходят функцией (`leave_chat`),
+  -- а она чат постов не принимает.
+  begin
+    delete from public.chat_members where chat_id = chat and user_id = a;
+  exception when others then null;
+  end;
+  begin
+    perform public.leave_chat(chat);
+  exception when others then null;
+  end;
   perform pg_temp.check('владелец не уходит из чата постов сам',
     exists (select 1 from public.chat_members where chat_id = chat and user_id = a));
 

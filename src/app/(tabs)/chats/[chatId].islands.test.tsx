@@ -23,6 +23,7 @@ import { reportRealtimeJoined, resetConnectionState } from '@/features/connectio
 import { resetPendingReactions } from '@/features/interactions/pendingReactions';
 import { island, original } from '@/test/islands';
 import { renderWithQuery } from '@/test/renderWithQuery';
+import { longPressMessage, startSelecting } from '@/test/messageGestures';
 
 const mockPush = jest.fn();
 
@@ -152,6 +153,9 @@ function chat(): ChatSummary {
   return {
     id: 'chat-1',
     kind: 'group',
+    ownerId: null,
+    description: null,
+    avatarUrl: null,
     title: 'Вася и Света',
     participants: [
       { id: 'user-1', displayName: 'Вася', avatarUrl: null, lastReadAt: AT },
@@ -196,23 +200,11 @@ const ISLAND = island('isl', AT, [o1, o2, o3, null], {
   sourceChat: { id: 'chat-hate', name: 'Хейтеры Джигана' },
 });
 
-/** Тап по облачку — так открывается его меню. */
-/** Долгое нажатие — так, как его видит жест-обработчик: включает выбор. */
-async function longPress(rowKey: string) {
-  await act(async () => {
-    fireGestureHandler(getByGestureTestId(`message-long-press-${rowKey}`), [
-      { state: State.BEGAN },
-      { state: State.ACTIVE },
-      { state: State.END },
-    ]);
-  });
-}
+/** Меню облачка → «Выбрать»: включает выбор. */
+const longPress = startSelecting;
 
-async function tapMessage(rowKey: string) {
-  await act(async () => {
-    fireEvent.press(screen.getByTestId(`message-row-${rowKey}`));
-  });
-}
+/** Долгое нажатие на облачко — так открывается его меню. */
+const tapMessage = longPressMessage;
 
 async function choose(label: string) {
   fireEvent.press(await screen.findByRole('menuitem', { name: label }));

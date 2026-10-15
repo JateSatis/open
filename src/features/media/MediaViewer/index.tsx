@@ -21,23 +21,50 @@ export type MediaViewerProps = {
   items: MediaViewerItem[];
   initialIndex: number;
   onClose: () => void;
+  /** Листнули на другую страницу — например, чтобы подгрузить дальше. */
+  onIndexChange?: (index: number) => void;
 };
 
 /**
- * Полноэкранный просмотр вложений одного сообщения. Видео проигрывается
+ * Полноэкранный просмотр вложений одного сообщения или всех медиа чата. Видео проигрывается
  * само и останавливается по тапу — сложный плеер (перемотка, громкость)
  * сюда сознательно не входит, это следующая задача.
  *
  * Окно рождается заново на каждое открытие: листание, увеличение и уход
  * вниз начинаются с нуля.
  */
-export function MediaViewer({ visible, items, initialIndex, onClose }: MediaViewerProps) {
+export function MediaViewer({
+  visible,
+  items,
+  initialIndex,
+  onClose,
+  onIndexChange,
+}: MediaViewerProps) {
   if (!visible) return null;
 
-  return <ViewerWindow items={items} initialIndex={initialIndex} onClose={onClose} />;
+  return (
+    <ViewerWindow
+      items={items}
+      initialIndex={initialIndex}
+      onClose={onClose}
+      onIndexChange={onIndexChange}
+    />
+  );
 }
 
-function ViewerWindow({ items, initialIndex, onClose }: Omit<MediaViewerProps, 'visible'>) {
+/**
+ * Сколько страниц по обе стороны от активной держать готовыми. Остальные —
+ * пустые места: листают и сотни медиа чата, а плеер и картинка на каждую
+ * сразу заморозили бы открытие.
+ */
+const PAGE_WINDOW = 1;
+
+function ViewerWindow({
+  items,
+  initialIndex,
+  onClose,
+  onIndexChange,
+}: Omit<MediaViewerProps, 'visible'>) {
   const theme = useTheme();
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -55,6 +82,14 @@ function ViewerWindow({ items, initialIndex, onClose }: Omit<MediaViewerProps, '
     [active, height, width],
   );
 
+  const onPageChange = useCallback(
+    (index: number) => {
+      setActiveIndex(index);
+      onIndexChange?.(index);
+    },
+    [onIndexChange],
+  );
+
   const onTap = useCallback(() => togglesRef.current.get(activeIndex)?.(), [activeIndex]);
 
   const { gesture, pagerStyle, activeStyle, backgroundStyle } = useViewerGestures({
@@ -64,7 +99,7 @@ function ViewerWindow({ items, initialIndex, onClose }: Omit<MediaViewerProps, '
     height,
     contentWidth: content.width,
     contentHeight: content.height,
-    onPageChange: setActiveIndex,
+    onPageChange,
     onTap,
     onClose,
   });
@@ -98,15 +133,19 @@ function ViewerWindow({ items, initialIndex, onClose }: Omit<MediaViewerProps, '
                   key={item.id}
                   style={[styles.page, { left: index * width, width, height }]}
                 >
-                  <Animated.View style={[styles.container, index === activeIndex && activeStyle]}>
-                    <MediaViewerPage
-                      item={item}
-                      width={width}
-                      height={height}
-                      isActive={index === activeIndex}
-                      onToggleReady={(toggle) => registerToggle(index, toggle)}
-                    />
-                  </Animated.View>
+                  {Math.abs(index - activeIndex) <= PAGE_WINDOW ? (
+                    <Animated.View
+                      style={[styles.container, index === activeIndex && activeStyle]}
+                    >
+                      <MediaViewerPage
+                        item={item}
+                        width={width}
+                        height={height}
+                        isActive={index === activeIndex}
+                        onToggleReady={(toggle) => registerToggle(index, toggle)}
+                      />
+                    </Animated.View>
+                  ) : null}
                 </View>
               ))}
             </Animated.View>

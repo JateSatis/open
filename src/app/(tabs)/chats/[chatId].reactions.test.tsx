@@ -17,6 +17,7 @@ import { useInAppAlert } from '@/features/notifications/alertsStore';
 import { reportRealtimeJoined, resetConnectionState } from '@/features/connection/connectionStore';
 import { PRIMARY_REACTIONS } from '@/features/interactions/reactionSet';
 import { renderWithQuery } from '@/test/renderWithQuery';
+import { longPressMessage, startSelecting } from '@/test/messageGestures';
 
 // Шапку экран ставит через Stack.Screen — мок рисует и заголовок, и правую
 // кнопку прямо в дереве: так видно «Выбрано: N» и «Отмена».
@@ -126,6 +127,9 @@ function chatWith(participants: ChatSummary['participants']): ChatSummary {
   return {
     id: 'chat-1',
     kind: 'direct',
+    ownerId: null,
+    description: null,
+    avatarUrl: null,
     title: 'Разговор',
     participants,
     waiting: [],
@@ -164,12 +168,8 @@ function message(id: string, text: string, authorId: string, minute = 0): Messag
 
 let handlers: ChatChannelHandlers | null = null;
 
-/** Тап по облачку — так открывается его меню. */
-async function tapMessage(messageId: string) {
-  await act(async () => {
-    fireEvent.press(screen.getByTestId(`message-row-${messageId}`));
-  });
-}
+/** Долгое нажатие на облачко — так открывается его меню. */
+const tapMessage = longPressMessage;
 
 beforeEach(() => {
   jest.clearAllMocks();

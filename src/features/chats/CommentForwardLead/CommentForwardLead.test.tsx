@@ -21,6 +21,8 @@ const forward: CommentForward = {
     editedAt: null,
     attachments: [],
     reactions: NO_REACTIONS,
+    fragmentId: null,
+    fragmentQuote: null,
     target: {
       id: 'm1',
       createdAt: '2026-10-04T09:00:00Z',
@@ -86,6 +88,53 @@ describe('CommentForwardLead', () => {
     await render(<CommentForwardLead forward={{ commentId: 'c1', comment: null }} isOwn={false} />);
 
     expect(screen.getByText('Комментарий удалён')).toBeTruthy();
+  });
+
+  describe('comment to a fragment', () => {
+    const fragmentForward: CommentForward = {
+      commentId: 'c1',
+      comment: {
+        ...forward.comment!,
+        fragmentId: 'f1',
+        fragmentQuote: { text: 'другой уровень', start: 9, end: 23, lost: false },
+      },
+    };
+
+    it('quotes the fragment instead of the whole message', async () => {
+      await render(<CommentForwardLead forward={fragmentForward} isOwn={false} />);
+
+      expect(screen.getByTestId('comment-fragment-quote')).toBeTruthy();
+      expect(screen.getByText('другой уровень')).toBeTruthy();
+      expect(screen.queryByText('исходное сообщение')).toBeNull();
+      expect(screen.queryByTestId('reply-quote')).toBeNull();
+      expect(screen.getByText('Олег')).toBeTruthy();
+    });
+
+    it('leads to the comment in its thread from the quote', async () => {
+      const openSource = jest.fn();
+
+      await render(
+        <CommentForwardLead forward={fragmentForward} isOwn={false} onOpenSource={openSource} />,
+      );
+
+      await fireEvent.press(screen.getByTestId('comment-fragment-quote'));
+
+      expect(openSource).toHaveBeenCalledTimes(1);
+    });
+
+    it('cuts a long quote at 100 characters', async () => {
+      const long: CommentForward = {
+        commentId: 'c1',
+        comment: {
+          ...fragmentForward.comment!,
+          fragmentQuote: { text: 'я'.repeat(150), start: 0, end: 150, lost: false },
+        },
+      };
+
+      await render(<CommentForwardLead forward={long} isOwn={false} />);
+
+      expect(screen.getByText(`${'я'.repeat(100)}…`)).toBeTruthy();
+    });
   });
 
   describe('comment to a pop', () => {

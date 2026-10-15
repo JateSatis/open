@@ -1,6 +1,6 @@
 import { useInfiniteQuery, useQuery, useQueryClient, type QueryKey } from '@tanstack/react-query';
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 
 import {
   searchEntities,
@@ -15,6 +15,7 @@ import { useConnectionStatus } from '@/features/connection/useConnectionStatus';
 import { localChatMatches } from '@/features/search/localChatMatches';
 import { parseSearchQuery, type ParsedQuery } from '@/features/search/searchText';
 import { describeLoadError } from '@/lib/network';
+import { useDebounced } from '@/lib/useDebounced';
 
 /**
  * Пауза после последней буквы перед запросом к серверу. Короткая: локальный
@@ -58,18 +59,6 @@ export type SearchResults = {
   /** Человеческое объяснение, почему выдача неполная; null — всё в порядке. */
   notice: string | null;
 };
-
-export function useDebounced(value: string, delay: number): string {
-  const [debounced, setDebounced] = useState(value);
-
-  useEffect(() => {
-    // Пустой запрос — сразу: «Недавние» не ждут паузы.
-    const timer = setTimeout(() => setDebounced(value), value === '' ? 0 : delay);
-    return () => clearTimeout(timer);
-  }, [delay, value]);
-
-  return value === '' ? '' : debounced;
-}
 
 /**
  * Выдача поиска в «Чатах» для `query`.

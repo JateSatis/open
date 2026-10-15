@@ -26,6 +26,9 @@ function chat(id: string, overrides: Partial<ChatSummary>): ChatSummary {
   return {
     id,
     kind: 'direct',
+    ownerId: null,
+    description: null,
+    avatarUrl: null,
     title: null,
     participants: [],
     waiting: [],

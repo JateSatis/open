@@ -23,7 +23,8 @@ export type PreviewHeaderProps = {
   /** Открыт инструмент: шапка спрятана и не принимает касаний. */
   hidden: boolean;
   onBack: () => void;
-  onToggle: () => void;
+  /** Нет — файл не выбирают (шит аватарки): кружка и счётчика нет. */
+  onToggle?: () => void;
 };
 
 /**
@@ -31,6 +32,7 @@ export type PreviewHeaderProps = {
  * Выбранный файл — номер в отправке на акцентной заливке; невыбранный —
  * пустой кружок со счётчиком всего выбранного, чтобы при листании было
  * видно, сколько уже уходит. Числа — из того же стора, что у клеток сетки.
+ * Без `onToggle` на месте кружка пусто — заголовок остаётся по центру.
  */
 export function PreviewHeader({
   title,
@@ -42,10 +44,6 @@ export function PreviewHeader({
 }: PreviewHeaderProps) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const slot = useSelectionSlot(assetId);
-  const count = useSelectionCount();
-  const isSelected = slot > SLOT_FREE;
-  const label = isSelected ? slot : count > 0 ? count : null;
 
   return (
     <Animated.View
@@ -78,34 +76,46 @@ export function PreviewHeader({
       </Text>
 
       <View style={styles.headerButton}>
-        <Pressable
-          testID="media-preview-select"
-          accessibilityRole="button"
-          accessibilityLabel={isSelected ? 'Убрать из выбранного' : 'Выбрать файл'}
-          accessibilityHint={count > 0 ? `Выбрано файлов: ${count}` : undefined}
-          accessibilityState={{ selected: isSelected }}
-          hitSlop={Spacing.two}
-          onPress={onToggle}
-          style={[
-            styles.circle,
-            {
-              borderColor: theme.textOnMedia,
-              backgroundColor: isSelected ? theme.primary : theme.mediaScrim,
-              opacity: slot === SLOT_BLOCKED ? Opacity.unavailable : 1,
-            },
-          ]}
-        >
-          {label !== null ? (
-            <Text
-              testID="media-preview-select-count"
-              variant="smallBold"
-              color={isSelected ? 'primaryText' : 'textOnMedia'}
-            >
-              {label}
-            </Text>
-          ) : null}
-        </Pressable>
+        {onToggle ? <SelectionCircle assetId={assetId} onToggle={onToggle} /> : null}
       </View>
     </Animated.View>
+  );
+}
+
+function SelectionCircle({ assetId, onToggle }: { assetId: string; onToggle: () => void }) {
+  const theme = useTheme();
+  const slot = useSelectionSlot(assetId);
+  const count = useSelectionCount();
+  const isSelected = slot > SLOT_FREE;
+  const label = isSelected ? slot : count > 0 ? count : null;
+
+  return (
+    <Pressable
+      testID="media-preview-select"
+      accessibilityRole="button"
+      accessibilityLabel={isSelected ? 'Убрать из выбранного' : 'Выбрать файл'}
+      accessibilityHint={count > 0 ? `Выбрано файлов: ${count}` : undefined}
+      accessibilityState={{ selected: isSelected }}
+      hitSlop={Spacing.two}
+      onPress={onToggle}
+      style={[
+        styles.circle,
+        {
+          borderColor: theme.textOnMedia,
+          backgroundColor: isSelected ? theme.primary : theme.mediaScrim,
+          opacity: slot === SLOT_BLOCKED ? Opacity.unavailable : 1,
+        },
+      ]}
+    >
+      {label !== null ? (
+        <Text
+          testID="media-preview-select-count"
+          variant="smallBold"
+          color={isSelected ? 'primaryText' : 'textOnMedia'}
+        >
+          {label}
+        </Text>
+      ) : null}
+    </Pressable>
   );
 }

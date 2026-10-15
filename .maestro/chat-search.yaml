@@ -1,0 +1,53 @@
+appId: com.openger.app
+name: Поиск по чату со страницы чата — поле с клавиатурой, «1 из 1», «Списком», выход к полю ввода
+tags:
+  - chats
+  - search
+env:
+  CHAT: Plany
+---
+- runFlow: subflows/open-app.yaml
+- tapOn: ${CHAT}
+- evalScript: ${output.msg = 'maestro-' + Date.now()}
+- tapOn: "Сообщение"
+- inputText: ${output.msg}
+- tapOn: "Отправить"
+- assertVisible: ${output.msg}
+- hideKeyboard
+# Со страницы чата — «⋮» → «Поиск по чату».
+- tapOn: "О чате: ${CHAT}"
+- assertVisible:
+    id: "chat-info-page"
+- tapOn:
+    id: "info-menu-button"
+- tapOn: "Поиск по чату"
+# Вместо шапки — поле, вместо поля ввода — плашка.
+- assertVisible:
+    id: "chat-search-input"
+- assertVisible:
+    id: "chat-search-plate"
+- assertNotVisible: "Сообщение"
+- inputText: ${output.msg}
+- assertVisible:
+    id: "chat-search-counter"
+    text: "1 из 1"
+- tapOn:
+    id: "chat-search-list"
+- assertVisible:
+    id: "chat-search-result"
+- tapOn:
+    id: "chat-search-result"
+- assertNotVisible:
+    id: "chat-search-results"
+# Выход — обычная переписка с полем ввода.
+- tapOn:
+    id: "chat-search-input-close"
+- assertNotVisible:
+    id: "chat-search-plate"
+- assertVisible: "Сообщение"
+# Уборка.
+- longPressOn: ${output.msg}
+- tapOn: "Удалить"
+- assertVisible: "Удалить сообщение?"
+- tapOn: "Удалить"
+- assertNotVisible: ${output.msg}

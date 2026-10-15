@@ -12,13 +12,9 @@ import {
 } from '@/api/search';
 import { useConnectionStatus } from '@/features/connection/useConnectionStatus';
 import { parseSearchQuery, type ParsedQuery } from '@/features/search/searchText';
-import {
-  SEARCH_DEBOUNCE_MS,
-  SEARCH_STALE_MS,
-  useDebounced,
-  whileTyping,
-} from '@/features/search/useSearch';
+import { SEARCH_DEBOUNCE_MS, SEARCH_STALE_MS, whileTyping } from '@/features/search/useSearch';
 import { describeLoadError } from '@/lib/network';
+import { useDebounced } from '@/lib/useDebounced';
 
 /** Каналы выдачи «Ленты». Текст запроса — третий элемент ключа, как у всех запросов поиска. */
 export const feedChannelsQueryKey = ['search', 'feed-channels'] as const;

@@ -10,6 +10,7 @@ import {
   toPreview,
   type MessagePreview,
 } from '@/api/messagePreview';
+import { FRAGMENT_QUOTE_COLUMNS, toFragmentQuote, type FragmentQuote } from '@/api/fragmentQuote';
 import { REACTION_COLUMNS, toReactions, type MessageReactions } from '@/api/reactionCounts';
 import { supabase } from '@/api/supabase';
 
@@ -87,6 +88,28 @@ export type CallMark = {
   endedAt: string | null;
   /** Я входил в этот звонок (хоть раз). */
   joinedByMe: boolean;
+};
+
+/** Событие состава группы — системная строка в переписке. */
+export type MemberEvent =
+  | 'member_invited'
+  | 'member_joined'
+  | 'member_left'
+  | 'member_removed'
+  | 'owner_changed';
+
+/**
+ * Системная строка состава. Имена — нынешние, из профилей: переименовался —
+ * строка показывает новое имя. `null` — аккаунт удалён.
+ */
+export type MemberMark = {
+  event: MemberEvent;
+  /** Кто пригласил, вступил, ушёл, удалил. У «Владельцем стал(а)» — нет. */
+  actorId: string | null;
+  actorName: string | null;
+  /** Кого пригласили, удалили, кто стал владельцем. */
+  subjectId: string | null;
+  subjectName: string | null;
 };
 
 /** Чат, как его называют чужому глазу: заданное название или люди. */
@@ -171,6 +194,10 @@ export type ForwardedComment = {
   } | null;
   /** Поп под комментарием; `null` — удалён или комментарий к сообщению. */
   pop: ForwardedCommentPop | null;
+  /** Фрагмент текста, к которому комментарий: в облачке его цитата вместо сниппета. */
+  fragmentId: string | null;
+  /** Цитата фрагмента; `null` при `fragmentId` — сообщение удалено. */
+  fragmentQuote: FragmentQuote | null;
   /** Чат комментария; `null` — удалён. `amMember` — ряд моей реакции. У попа — имя канала. */
   chat: (ChatRef & { amMember: boolean }) | null;
 };
@@ -202,6 +229,13 @@ export type Message = {
   readAt: string | null;
   /** Метка звонка у системного сообщения; нет — это не звонок. */
   call?: CallMark | null;
+  /** Событие состава группы у системного сообщения; нет — это не оно. */
+  member?: MemberMark | null;
+  /**
+   * Автор, как его знает профиль, — для тех, кого уже нет среди участников
+   * (ушёл или удалён из группы). `null` — аккаунт удалён.
+   */
+  author?: { displayName: string; avatarUrl: string | null } | null;
   /** Пересланный комментарий (вид `comment_forward`). У остальных нет. */
   commentForward?: CommentForward | null;
 };
@@ -217,13 +251,13 @@ const REPLY_COLUMNS =
 const REACTION_AND_COMMENT_COLUMNS = `${REACTION_COLUMNS}, comments_count, views_count, read_at` as const;
 const ORIGINAL_COLUMNS = `id, chat_id, author_id, kind, text, created_at, edited_at, attachments(${MESSAGE_ATTACHMENT_COLUMNS}), ${REPLY_COLUMNS}, ${REACTION_AND_COMMENT_COLUMNS}, author:profiles!messages_author_id_fkey(display_name, avatar_url), chat:chats!messages_chat_id_fkey(id, chat_display_name, chat_read_up_to, chat_am_member)` as const;
 
-const FORWARDED_COMMENT_COLUMNS = `forwarded_comment_id, forwarded:comments!messages_forwarded_comment_fkey(id, message_id, pop_id, chat_id, thread_root_id, author_id, kind, text, created_at, edited_at, ${REACTION_COLUMNS}, author:profiles(display_name, avatar_url), comment_attachments(${ATTACHMENT_COLUMNS}), chat:chats!comments_chat_id_fkey(id, chat_display_name, chat_am_member), target:messages!comments_message_fkey(id, author_id, kind, text, created_at, author:profiles!messages_author_id_fkey(display_name), attachments(${PREVIEW_ATTACHMENT_COLUMNS})), pop:pops!comments_pop_id_fkey(id, channel_id, poster_url, caption))` as const;
+const FORWARDED_COMMENT_COLUMNS = `forwarded_comment_id, forwarded:comments!messages_forwarded_comment_fkey(id, message_id, pop_id, chat_id, thread_root_id, fragment_id, ${FRAGMENT_QUOTE_COLUMNS}, author_id, kind, text, created_at, edited_at, ${REACTION_COLUMNS}, author:profiles(display_name, avatar_url), comment_attachments(${ATTACHMENT_COLUMNS}), chat:chats!comments_chat_id_fkey(id, chat_display_name, chat_am_member), target:messages!comments_message_fkey(id, author_id, kind, text, created_at, author:profiles!messages_author_id_fkey(display_name), attachments(${PREVIEW_ATTACHMENT_COLUMNS})), pop:pops!comments_pop_id_fkey(id, channel_id, poster_url, caption))` as const;
 
 // Островок приходит сразу с оригиналами: их текст, файлы, автор, чат,
 // реакции и комментарии — той же выборкой. Своя реакция — вычисляемой связью
 // `my_reaction`, и у оригинала тоже.
 export const MESSAGE_COLUMNS =
-  `id, chat_id, author_id, kind, text, created_at, edited_at, attachments(${MESSAGE_ATTACHMENT_COLUMNS}), ${REPLY_COLUMNS}, ${REACTION_AND_COMMENT_COLUMNS}, stream_id, system_event, stream:streams!messages_stream_id_fkey(host_id, started_at, ended_at), my_call:my_stream_participation(id), source_chat:chats!messages_source_chat_id_fkey(id, chat_display_name), items:forward_items!forward_items_forward_fkey(id, position, message_id, original:messages!forward_items_message_fkey(${ORIGINAL_COLUMNS})), ${FORWARDED_COMMENT_COLUMNS}` as const;
+  `id, chat_id, author_id, kind, text, created_at, edited_at, attachments(${MESSAGE_ATTACHMENT_COLUMNS}), ${REPLY_COLUMNS}, ${REACTION_AND_COMMENT_COLUMNS}, stream_id, system_event, system_user_id, author:profiles!messages_author_id_fkey(display_name, avatar_url), subject:profiles!messages_system_user_id_fkey(display_name), stream:streams!messages_stream_id_fkey(host_id, started_at, ended_at), my_call:my_stream_participation(id), source_chat:chats!messages_source_chat_id_fkey(id, chat_display_name), items:forward_items!forward_items_forward_fkey(id, position, message_id, original:messages!forward_items_message_fkey(${ORIGINAL_COLUMNS})), ${FORWARDED_COMMENT_COLUMNS}` as const;
 
 // Мозаика в облачке должна собираться в порядке выбора файлов, а PostgREST
 // не гарантирует порядок вложенной выборки сам по себе — нужен явный order
@@ -335,6 +369,29 @@ function toCallMark(row: MessageRow): CallMark | null {
     startedAt: row.stream.started_at,
     endedAt: row.stream.ended_at,
     joinedByMe: row.my_call !== null && row.my_call !== undefined,
+  };
+}
+
+const MEMBER_EVENTS = new Set<string>([
+  'member_invited',
+  'member_joined',
+  'member_left',
+  'member_removed',
+  'owner_changed',
+]);
+
+function toMemberMark(row: MessageRow): MemberMark | null {
+  if (row.kind !== 'system' || !row.system_event || !MEMBER_EVENTS.has(row.system_event)) {
+    return null;
+  }
+
+  return {
+    event: row.system_event as MemberEvent,
+    actorId: row.author_id,
+    // Профиль удалён — ссылка обнулилась, и связь пустая.
+    actorName: row.author_id ? (row.author?.display_name ?? 'Без имени') : null,
+    subjectId: row.system_user_id,
+    subjectName: row.system_user_id ? (row.subject?.display_name ?? 'Без имени') : null,
   };
 }
 
@@ -452,6 +509,8 @@ function toForwardedComment(row: ForwardedRow): ForwardedComment {
           caption: row.pop.caption,
         }
       : null,
+    fragmentId: row.fragment_id,
+    fragmentQuote: toFragmentQuote(row.fragment_id, row.fragment),
     chat: row.chat
       ? {
           id: row.chat.id,
@@ -477,6 +536,10 @@ export function toMessage(row: MessageRow): Message {
     ...toContent(row),
     forward: toIsland(row),
     call: toCallMark(row),
+    member: toMemberMark(row),
+    author: row.author
+      ? { displayName: row.author.display_name ?? 'Без имени', avatarUrl: row.author.avatar_url }
+      : null,
     commentForward: toCommentForward(row),
   };
 }

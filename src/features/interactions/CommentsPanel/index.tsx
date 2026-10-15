@@ -1,6 +1,7 @@
 import { useIsFocused } from 'expo-router';
 import { useEffect, useRef } from 'react';
 
+import { FragmentPanelWindow } from './FragmentPanelWindow';
 import { PanelWindow } from './PanelWindow';
 
 import { setCommentsKeyboardWindowOpen } from '@/features/chats/composerKeyboard';
@@ -17,6 +18,7 @@ export {
   closeComments,
   commentsEntry,
   openComments,
+  openFragmentComments,
 } from '@/features/interactions/comments/commentsPanelStore';
 
 export type CommentsPanelProps = {
@@ -67,6 +69,17 @@ export function CommentsPanel({ onOpenPerson, hostChatId, lift }: CommentsPanelP
   );
 
   if (!target || !open) return null;
+
+  if (target.fragment) {
+    return (
+      <FragmentPanelWindow
+        key={`${target.subject.id}:${target.fragment.key}`}
+        target={{ ...target, fragment: target.fragment }}
+        onOpenPerson={onOpenPerson}
+        hostChatId={hostChatId}
+      />
+    );
+  }
 
   return (
     <PanelWindow

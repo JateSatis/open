@@ -58,16 +58,21 @@ export function defaultCrop(sourceRatio: number): PhotoCrop {
   };
 }
 
+/** Наибольший квадрат по центру — начальная рамка аватарки. */
+export function squareCrop(sourceRatio: number): PhotoCrop {
+  'worklet';
+  const side = Math.min(1, sourceRatio);
+
+  return { ...defaultCrop(sourceRatio), width: side, height: side };
+}
+
 function near(a: number, b: number): boolean {
   'worklet';
   return Math.abs(a - b) < EPSILON;
 }
 
-/** Нетронутая обрезка — то же, что её отсутствие. */
-export function isEmptyCrop(crop: PhotoCrop): boolean {
+function isSameCrop(crop: PhotoCrop, plain: PhotoCrop): boolean {
   'worklet';
-  const plain = defaultCrop(crop.sourceRatio);
-
   return (
     !crop.mirrored &&
     crop.quarter === 0 &&
@@ -77,6 +82,21 @@ export function isEmptyCrop(crop: PhotoCrop): boolean {
     near(crop.width, plain.width) &&
     near(crop.height, plain.height)
   );
+}
+
+/** Нетронутая обрезка — то же, что её отсутствие. */
+export function isEmptyCrop(crop: PhotoCrop): boolean {
+  'worklet';
+  return isSameCrop(crop, defaultCrop(crop.sourceRatio));
+}
+
+/**
+ * Нетронутая обрезка аватарки — центральный квадрат: его аватарка и без
+ * обрезки (`prepareAvatar`), так что правкой он не считается.
+ */
+export function isPlainSquareCrop(crop: PhotoCrop): boolean {
+  'worklet';
+  return isSameCrop(crop, squareCrop(crop.sourceRatio));
 }
 
 /** Полный угол поворота по часовой, градусы. */

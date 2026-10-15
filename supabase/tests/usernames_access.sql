@@ -75,8 +75,17 @@ begin
   perform public.accept_chat_invite(grp);
 
   perform pg_temp.check('свободно до установки', public.is_username_available('group', 'SAME_ZZ'));
+  -- Имя группы ставит только владелец (20261020100000_group_management.sql).
+  begin
+    perform public.set_chat_username(grp, 'same_zz');
+    perform pg_temp.check('участник-не-владелец не ставит имя группе', false);
+  exception when others then
+    perform pg_temp.check('участник-не-владелец не ставит имя группе', sqlstate = '42501', sqlerrm);
+  end;
+  perform pg_temp.act_as(a);
   perform public.set_chat_username(grp, 'same_zz');
-  perform pg_temp.check('К1.5 участник ставит имя группе',
+  perform pg_temp.act_as(b);
+  perform pg_temp.check('К1.5 владелец ставит имя группе',
     (select username from public.chats where id = grp) = 'same_zz');
   perform pg_temp.check('своё имя группы не занято для неё самой',
     public.is_username_available('group', 'same_zz', grp));
@@ -98,12 +107,14 @@ begin
     perform pg_temp.check('К1.4 прямой UPDATE профиля с точкой — отказ', sqlstate = '23514', sqlerrm);
   end;
 
+  perform pg_temp.act_as(a);
   begin
     perform public.set_chat_username(grp, 'g.dot');
     perform pg_temp.check('К1.4 имя группы с точкой — отказ', false);
   exception when others then
     perform pg_temp.check('К1.4 имя группы с точкой — отказ', sqlstate = '22023', sqlerrm);
   end;
+  perform pg_temp.act_as(b);
 
   begin
     update public.chats set username = 'direct_zz' where id = grp;
@@ -179,9 +190,9 @@ begin
     public.is_username_available('profile', 'same_zz') and not public.is_username_available('channel', 'same_zz'));
 
   -- Участник убирает имя группы.
-  perform pg_temp.act_as(b);
+  perform pg_temp.act_as(a);
   perform public.set_chat_username(grp, '  ');
-  perform pg_temp.check('К5.2 участник убирает имя группы',
+  perform pg_temp.check('К5.2 владелец убирает имя группы',
     (select username from public.chats where id = grp) is null);
 
   -- В обход функций, даже от владельца схемы: инварианты в самой таблице.

@@ -24,6 +24,8 @@ export type ChatScreenHeaderProps = {
   onCancelSelection: () => void;
   /** Справа в обычном режиме — например, «Позвонить». */
   right?: ReactNode;
+  /** Поиск по чату: шапки нет, на её месте поле переписки. */
+  searching?: boolean;
 };
 
 /**
@@ -39,56 +41,73 @@ export function ChatScreenHeader({
   selectedCount,
   onCancelSelection,
   right,
+  searching = false,
 }: ChatScreenHeaderProps) {
   return (
     <Stack.Screen
       options={
-        selectedCount > 0
-          ? {
-              headerBackVisible: false,
-              headerTitle: () => <ChatHeaderTitle title={`Выбрано: ${selectedCount}`} />,
-              headerRight: () => (
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={onCancelSelection}
-                  hitSlop={Spacing.two}
-                >
-                  <Text color="primary">Отмена</Text>
-                </Pressable>
-              ),
-            }
-          : {
-              headerBackVisible: true,
-              headerRight: right ? () => right : undefined,
-              headerTitle: () =>
-                avatar ? (
-                  <View style={styles.withAvatar}>
-                    {Array.isArray(avatar) ? (
-                      <AvatarPair
-                        testID="chat-header-avatar-pair"
-                        first={avatar[0]}
-                        second={avatar[1]}
-                        size={Sizes.headerAvatar}
+        searching
+          ? // Поле поиска рисует сама переписка: в нативной шапке Android
+            // не отдаёт полю фокус, и клавиатура не открывалась бы.
+            { headerShown: false }
+          : selectedCount > 0
+            ? {
+                headerShown: true,
+                headerBackVisible: false,
+                headerTitle: () => <ChatHeaderTitle title={`Выбрано: ${selectedCount}`} />,
+                headerRight: () => (
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={onCancelSelection}
+                    hitSlop={Spacing.two}
+                  >
+                    <Text color="primary">Отмена</Text>
+                  </Pressable>
+                ),
+              }
+            : {
+                headerShown: true,
+                headerBackVisible: true,
+                headerRight: right ? () => right : undefined,
+                headerTitle: () =>
+                  avatar ? (
+                    <View style={styles.withAvatar}>
+                      {Array.isArray(avatar) ? (
+                        <AvatarPair
+                          testID="chat-header-avatar-pair"
+                          first={avatar[0]}
+                          second={avatar[1]}
+                          size={Sizes.headerAvatar}
+                        />
+                      ) : (
+                        // Аватарка — та же шапка: тап по ней ведёт туда же,
+                        // озвучивает же её подпись рядом.
+                        <Pressable
+                          testID="chat-header-avatar"
+                          accessible={false}
+                          disabled={!onTitlePress}
+                          onPress={onTitlePress}
+                          hitSlop={Spacing.one}
+                        >
+                          <Avatar uri={avatar.uri} name={avatar.name} size={Sizes.headerAvatar} />
+                        </Pressable>
+                      )}
+                      <ChatHeaderTitle
+                        title={title}
+                        subtitle={subtitle}
+                        onPress={onTitlePress}
+                        pressLabel={titlePressLabel}
                       />
-                    ) : (
-                      <Avatar uri={avatar.uri} name={avatar.name} size={Sizes.headerAvatar} />
-                    )}
+                    </View>
+                  ) : (
                     <ChatHeaderTitle
                       title={title}
                       subtitle={subtitle}
                       onPress={onTitlePress}
                       pressLabel={titlePressLabel}
                     />
-                  </View>
-                ) : (
-                  <ChatHeaderTitle
-                    title={title}
-                    subtitle={subtitle}
-                    onPress={onTitlePress}
-                    pressLabel={titlePressLabel}
-                  />
-                ),
-            }
+                  ),
+              }
       }
     />
   );

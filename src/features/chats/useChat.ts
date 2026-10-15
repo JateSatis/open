@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 
+import { ChatGoneError } from '@/api/chatGone';
 import { getChat, type ChatSummary } from '@/api/chats';
 import { loadStateOf } from '@/lib/loadState';
 
@@ -14,6 +15,11 @@ export type ChatState = {
   isLoading: boolean;
   /** Чата нет, а все попытки его получить не удались — показать нечего. */
   failed: boolean;
+  /**
+   * Чат удалён (личный диалог удаляют для всех). Прежние данные из кеша
+   * уже не правда: писать в него и показывать его нельзя.
+   */
+  gone: boolean;
 };
 
 export function useChat(chatId: string): ChatState {
@@ -26,12 +32,14 @@ export function useChat(chatId: string): ChatState {
     staleTime: CHAT_STALE_MS,
   });
   const state = loadStateOf(query);
+  const gone = query.error instanceof ChatGoneError;
 
   return {
-    chat: query.data ?? null,
+    chat: gone ? null : (query.data ?? null),
+    gone,
     // Без связи запрос стоит на паузе. Показывать в этот момент крутилку —
     // значит врать, что данные вот-вот придут: они не придут, пока сети нет.
     isLoading: state === 'loading',
-    failed: state === 'failed',
+    failed: !gone && state === 'failed',
   };
 }

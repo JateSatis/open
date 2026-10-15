@@ -83,6 +83,8 @@ function forwardedOf(
     editedAt: comment.editedAt,
     attachments: comment.attachments,
     reactions: comment.reactions,
+    fragmentId: comment.fragmentId ?? null,
+    fragmentQuote: comment.fragmentQuote ?? null,
     target: live
       ? {
           id: live.message.id,

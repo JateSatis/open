@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useIsFocused, useNavigation, useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   ActivityIndicator,
   BackHandler,
@@ -16,7 +16,7 @@ import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 
 import { styles } from './styles';
 
-import type { ChannelRef, ForwardedComment, IslandOriginal } from '@/api/chats';
+import type { ChannelRef, ForwardedComment, IslandOriginal, Person } from '@/api/chats';
 import type { Pop } from '@/api/pops';
 import type { DraftPop } from '@/features/chats/composerDraftStore';
 import type { LiveQuote } from '@/features/chats/messages/types';
@@ -27,6 +27,10 @@ import { subscribersLabel } from '@/features/channels/subscriberText';
 import { ChatFooter, modePlate } from '@/features/chats/ChatFooter';
 import { ChatMenu } from '@/features/chats/ChatMenu';
 import { ChatScreenHeader } from '@/features/chats/ChatScreenHeader';
+import { ChatSearchHeader } from '@/features/chats/chatSearch/ChatSearchHeader';
+import { ChatSearchPlate } from '@/features/chats/chatSearch/ChatSearchPlate';
+import { ChatSearchResults } from '@/features/chats/chatSearch/ChatSearchResults';
+import { useChatSearch } from '@/features/chats/chatSearch/useChatSearch';
 import { DeletedOriginal } from '@/features/chats/DeletedOriginal';
 import {
   commentsHomeOf,
@@ -70,6 +74,16 @@ import { measureInWindow, RowRegistryContext } from '@/features/chats/rowRegistr
 import { useChatBubbles } from '@/features/chats/useChatBubbles';
 import { useChatKeyboardInset } from '@/features/chats/useChatKeyboardInset';
 import { useChatRowRenderer } from '@/features/chats/useChatRowRenderer';
+import { listMessageFragments, type Fragment, type FragmentRange } from '@/api/fragments';
+import { fragmentsKey, myFragmentOn } from '@/features/chats/fragments/useMessageFragments';
+import { FragmentMenu } from '@/features/chats/fragments/FragmentMenu';
+import {
+  clearQuoteHighlight,
+  clearTextSelection,
+  type TextSelection,
+} from '@/features/chats/fragments/fragmentStore';
+import { useFragmentJump } from '@/features/chats/fragments/useFragmentJump';
+import { useFragmentMode } from '@/features/chats/fragments/useFragmentMode';
 import { useComposerDraft } from '@/features/chats/useComposerDraft';
 import { chatQueryKey, useChat } from '@/features/chats/useChat';
 import { useCommentsLiftHost } from '@/features/chats/useCommentsLiftHost';
@@ -87,7 +101,7 @@ import { readChatDraft } from '@/features/chats/composerDraftStore';
 import { useMessageActionHandlers } from '@/features/chats/useMessageActionHandlers';
 import { useMessageEdit } from '@/features/chats/useMessageEdit';
 import { useMessageMenu } from '@/features/chats/useMessageMenu';
-import { useMessageSelection } from '@/features/chats/useMessageSelection';
+import { isSelectableRow, useMessageSelection } from '@/features/chats/useMessageSelection';
 import { useMyInvite } from '@/features/chats/useMyInvite';
 import { usePinnedCursor } from '@/features/chats/usePinnedCursor';
 import { usePinnedMessages } from '@/features/chats/usePinnedMessages';
@@ -95,7 +109,11 @@ import { useQuoteNavigation, type CommentFocus } from '@/features/chats/useQuote
 import { useReplyForward } from '@/features/chats/useReplyForward';
 import { useRespondToInvite } from '@/features/chats/useRespondToInvite';
 import { WaitingBanner } from '@/features/chats/WaitingBanner';
-import { CommentsPanel, openComments } from '@/features/interactions/CommentsPanel';
+import {
+  CommentsPanel,
+  openComments,
+  openFragmentComments,
+} from '@/features/interactions/CommentsPanel';
 import { resetScrolledRows } from '@/features/interactions/MessageReactions';
 import { menuReactionSet } from '@/features/interactions/reactionState';
 import { chatFade } from '@/features/interactions/comments/commentsLift';
@@ -144,7 +162,7 @@ export type ChatConversationProps = {
    * Шапка канала: подпись под названием и правая часть. Их знает экран
    * канала — подпись зависит от открытого раздела, а не от «Постов».
    */
-  channelHeader?: { subtitle: string | null; right: ReactNode };
+  channelHeader?: { subtitle: string | null; right: ReactNode; onTitlePress?: () => void };
 };
 
 /**
@@ -175,7 +193,7 @@ export function ChatConversation({
     [isPosts, windowWidth],
   );
   const currentUserId = useCurrentUserId();
-  const { chat, isLoading: isChatLoading, failed: chatFailed } = useChat(chatId);
+  const { chat, isLoading: isChatLoading, failed: chatFailed, gone } = useChat(chatId);
   const chatMessages = useChatMessages(chatId, currentUserId);
   const { messages, isLoading, isLoadingMore, hasMore, error, activities } = chatMessages;
   // Показать нечего, а загрузить не вышло: вместо крутилки — «не удалось» с
@@ -196,6 +214,22 @@ export function ChatConversation({
   const pinCursor = usePinnedCursor(pins.pins);
   const selection = useMessageSelection(rows, currentUserId);
   const jump = useJumpToMessage(listRef, rows, chatMessages.loadUntil);
+  // Поиск по чату — со страницы чата: поле вместо шапки, плашка вместо поля ввода.
+  const chatSearch = useChatSearch(chatId, jump.jump);
+  const [searchListShown, setSearchListShown] = useState(false);
+  const showSearchList = chatSearch.active && searchListShown;
+  const { close: closeSearch, select: selectSearchHit } = chatSearch;
+  const leaveSearch = useCallback(() => {
+    setSearchListShown(false);
+    closeSearch();
+  }, [closeSearch]);
+  const openSearchHit = useCallback(
+    (at: number) => {
+      setSearchListShown(false);
+      selectSearchHit(at);
+    },
+    [selectSearchHit],
+  );
   const listFrameRef = useRef<View>(null);
   const measureListFrame = useCallback(() => measureInWindow(listFrameRef.current), []);
   const menu = useMessageMenu<ChatListRow>(measureListFrame);
@@ -318,6 +352,34 @@ export function ChatConversation({
     [chat],
   );
 
+  // Кто писал в переписке: участники и те, кого среди них уже нет (ушли,
+  // удалены из группы), — их имя и аватар приходят с самим сообщением. Карта
+  // пересобирается, только когда меняется состав таких авторов: новое
+  // сообщение не должно перерисовывать все облачка.
+  const departed = useMemo(() => {
+    const authors = new Map<string, Person>();
+
+    for (const message of messages) {
+      const { authorId, author } = message;
+
+      if (authorId && author && !participantsById.has(authorId) && !authors.has(authorId)) {
+        authors.set(authorId, { id: authorId, ...author });
+      }
+    }
+
+    return authors;
+  }, [messages, participantsById]);
+  const departedKey = [...departed.keys()].join(',');
+  const peopleById = useMemo(() => {
+    const people = new Map<string, Person>(departed);
+
+    participantsById.forEach((participant, id) => people.set(id, participant));
+
+    return people;
+    // Пересобрать по составу ушедших, а не по каждой новой карте сообщений.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [departedKey, participantsById]);
+
   // Я как поставивший реакцию — из участников: там свежий аватар.
   // Посетителя среди участников нет — тогда из моего профиля.
   const { data: myProfile } = useMyProfile();
@@ -336,8 +398,8 @@ export function ChatConversation({
 
   const authorName = useCallback(
     (authorId: string | null) =>
-      (authorId ? participantsById.get(authorId)?.displayName : undefined) ?? DELETED_ACCOUNT,
-    [participantsById],
+      (authorId ? peopleById.get(authorId)?.displayName : undefined) ?? DELETED_ACCOUNT,
+    [peopleById],
   );
 
   // Этот чат глазами смотрящего — заголовок островка, если пересылать отсюда,
@@ -352,7 +414,7 @@ export function ChatConversation({
       if (row.type === 'island-item') return row.item.original;
 
       const { message } = row;
-      const author = message.authorId ? participantsById.get(message.authorId) : undefined;
+      const author = message.authorId ? peopleById.get(message.authorId) : undefined;
 
       return {
         ...message,
@@ -361,7 +423,7 @@ export function ChatConversation({
         chat: { ...thisChat, readUpTo, amMember: isMember },
       };
     },
-    [isMember, participantsById, readUpTo, thisChat],
+    [isMember, peopleById, readUpTo, thisChat],
   );
 
   // Пост с попом — только в «Постах» канала.
@@ -499,11 +561,6 @@ export function ChatConversation({
     return () => subscription.remove();
   }, [clearSelection, isSelecting]);
 
-  const selectIsland = useCallback(
-    (island: Parameters<typeof runIslandAction>[1]) => runIslandAction('select_all', island),
-    [runIslandAction],
-  );
-
   const { openComment } = navigation;
   const openForwardedComment = useCallback(
     (comment: ForwardedComment) => {
@@ -532,7 +589,7 @@ export function ChatConversation({
     chatId,
     currentUserId,
     isMember,
-    participantsById,
+    participantsById: peopleById,
     mediaBounds,
     retry,
     openPerson,
@@ -543,14 +600,53 @@ export function ChatConversation({
     postAuthor: channel?.title ?? null,
   });
 
+  const fragments = useFragmentMode({ isMember, isFocused, isSelecting });
+  useFragmentJump({ chatId, rows, jump: jumpTo, isFocused });
+
+  // Кнопка комментария в меню фрагмента: боковая панель этого куска текста.
+  // Выделение снимается, облачко остаётся в режиме фрагментов.
+  const commentOnFragment = useCallback(
+    async (selection: TextSelection, range: FragmentRange, known: Fragment | null) => {
+      clearTextSelection();
+
+      // Список фрагментов мог ещё не прийти — без него панель не узнала бы
+      // мой прежний фрагмент и его комментарии.
+      const mine =
+        known ??
+        myFragmentOn(
+          await queryClient
+            .ensureQueryData({
+              queryKey: fragmentsKey(selection.messageId),
+              queryFn: () => listMessageFragments(selection.messageId),
+            })
+            .catch(() => undefined),
+          currentUserId,
+          range,
+        );
+
+      openFragmentComments(
+        selection.messageId,
+        selection.chatId,
+        selection.amMember,
+        {
+          kind: 'fragment',
+          key: `${selection.messageId}:${range.start}-${range.end}`,
+          fragmentId: mine && !mine.id.startsWith('local:') ? mine.id : null,
+          range,
+          focusInput: true,
+        },
+        selection.rowKey,
+      );
+    },
+    [currentUserId, queryClient],
+  );
+
   const { renderItem, islandHeader, bubbleContent } = useChatRowRenderer({
     currentUserId,
     isMember,
     isSelecting,
     isSelected: selection.isSelected,
     toggleSelected: selection.toggle,
-    startSelection: selection.start,
-    selectIsland,
     editingId,
     highlight: jump.highlight,
     bubbleFor,
@@ -558,6 +654,8 @@ export function ChatConversation({
     startReply,
     // В постах свайп листает разделы канала; ответить можно из меню.
     swipeReply: !isPosts,
+    pressRow: fragments.pressRow,
+    longPressAt: fragments.longPressAt,
     retry,
     hostName: authorName,
   });
@@ -583,6 +681,10 @@ export function ChatConversation({
       const toOldest = contentSize.height - layoutMeasurement.height - contentOffset.y;
 
       resumeLoadMore(toOldest < layoutMeasurement.height * HISTORY_EDGE);
+      // Выделение привязано к месту на экране: тронули прокрутку — снимается,
+      // режим фрагментов остаётся.
+      clearTextSelection();
+      clearQuoteHighlight();
     },
     [resumeLoadMore],
   );
@@ -619,6 +721,7 @@ export function ChatConversation({
       isMember,
       isPinned: pins.isPinned(menuContent.id),
       island: menuRow.type === 'island-item' ? { isMine: islandMine } : null,
+      selectable: isSelectableRow(menuRow, currentUserId),
     });
   }, [currentUserId, isMember, menuContent, menuRow, pins]);
 
@@ -751,6 +854,9 @@ export function ChatConversation({
     <View
       ref={containerRef}
       onLayout={measureBottomOffset}
+      // Подсветка куска после перехода по цитате держится до первого касания.
+      // Касание само по себе делает своё: это не перехват ответчика.
+      onTouchStart={clearQuoteHighlight}
       style={[styles.flex, { backgroundColor: theme.background }]}
     >
       <ChatScreenHeader
@@ -758,22 +864,27 @@ export function ChatConversation({
         avatar={
           channel
             ? { uri: channel.avatarUrl, name: channel.title }
-            : pair && pair.length === 2
-              ? [
-                  { uri: pair[0].avatarUrl, name: pair[0].displayName },
-                  { uri: pair[1].avatarUrl, name: pair[1].displayName },
-                ]
-              : undefined
+            : chat?.kind === 'group'
+              ? { uri: chat.avatarUrl, name: title }
+              : pair && pair.length === 2
+                ? [
+                    { uri: pair[0].avatarUrl, name: pair[0].displayName },
+                    { uri: pair[1].avatarUrl, name: pair[1].displayName },
+                  ]
+                : undefined
         }
         subtitle={channel ? (channelHeader?.subtitle ?? null) : chatSubtitle}
+        // Группа, свой и чужой диалог — страница информации; куда ведёт
+        // шапка канала, знает экран канала (`channelHeader`).
         onTitlePress={
-          chat?.kind === 'group'
-            ? () => router.push(`/chats/chat-info/${chatId}`)
-            : other
-              ? () => openPerson(other.id)
+          channel
+            ? channelHeader?.onTitlePress
+            : chat && chat.kind !== 'channel'
+              ? () => router.push(`/chats/chat-info/${chatId}`)
               : undefined
         }
-        titlePressLabel={chat?.kind === 'group' ? 'О чате' : 'Профиль'}
+        titlePressLabel={channel ? 'О канале' : 'О чате'}
+        searching={chatSearch.active}
         selectedCount={selection.selected.length}
         onCancelSelection={clearSelection}
         right={
@@ -788,11 +899,13 @@ export function ChatConversation({
               />
               <ChatMenu chatId={chatId} isMember subscription={null} />
             </View>
-          ) : chat ? (
+          ) : chat && !gone ? (
             <ChatMenu chatId={chatId} isMember={false} subscription={subscription} />
           ) : undefined
         }
       />
+
+      {chatSearch.active ? <ChatSearchHeader search={chatSearch} onClose={leaveSearch} /> : null}
 
       <Animated.View testID="chat-keyboard-area" style={[styles.flex, keyboardInsetStyle]}>
         {/* Звонок срочнее закрепа: он идёт прямо сейчас. */}
@@ -807,7 +920,11 @@ export function ChatConversation({
 
         <WaitingBanner waiting={waitingForOthers} />
 
-        {failed ? (
+        {gone ? (
+          <View testID="chat-gone" style={styles.centered}>
+            <Text color="textSecondary">Чат удалён</Text>
+          </View>
+        ) : failed ? (
           <LoadFailed message="Не удалось загрузить переписку" onRetry={reload} />
         ) : isChatLoading || isLoading ? (
           <View style={styles.centered}>
@@ -849,7 +966,9 @@ export function ChatConversation({
           </Animated.View>
         )}
 
-        {!failed && !isChatLoading && !isLoading && messages.length === 0 ? (
+        {showSearchList ? <ChatSearchResults search={chatSearch} onSelect={openSearchHit} /> : null}
+
+        {!gone && !failed && !isChatLoading && !isLoading && messages.length === 0 ? (
           <View style={styles.centered}>
             <Text color="textSecondary">
               {isPosts
@@ -875,58 +994,67 @@ export function ChatConversation({
           </View>
         ) : null}
 
-        <ChatFooter
-          selection={{
-            isActive: isSelecting,
-            context: { selected: selection.selected, currentUserId, isMember },
-            onAction: runSelectionAction,
-          }}
-          invite={
-            !isMember && myInvite && hasOpenInvite
-              ? {
-                  value: myInvite,
-                  responding: invite.pending?.chatId === chatId ? invite.pending.answer : null,
-                  error: invite.error,
-                  onAccept: () => invite.respond(chatId, 'accept'),
-                  onDecline: () => invite.respond(chatId, 'decline'),
-                }
-              : null
-          }
-          subscribe={
-            !isPosts &&
-            chat !== null &&
-            !isMember &&
-            // Заявки нет вовсе: принятая — значит, я вот-вот появлюсь среди
-            // участников, отклонённая — её панель и так внизу.
-            myInvite === null &&
-            subscription === null
-              ? { chatId }
-              : null
-          }
-          // Постороннему писать некуда: поле ввода не показывается вовсе. Пока
-          // чат грузится, оно смонтировано с надписью вместо поля (`canSend`
-          // ложно): смонтированное заранее, оно встаёт над клавиатурой вовремя.
-          // Переписка не загрузилась — писать некуда, пока она не откроется.
-          composer={
-            failed || (!isMember && (isPosts || chat !== null))
-              ? null
-              : {
-                  text: draft.text,
-                  onChangeText: draft.setText,
-                  mode: draft.mode,
-                  onCloseMode: closeMode,
-                  edit: editPlate,
-                  canSend: isMember,
-                  onSend: submit,
-                  onTyping: notifyTyping,
-                  onSendVoice: isEditing ? edit.recorded : replyForward.sendVoice,
-                  // Запись в правке не уходит в чат — и «записывает голосовое…» не правда.
-                  onRecordingVoice: isEditing ? noop : notifyRecordingVoice,
-                  inputRef: composerRef,
-                  pop: isEditing ? null : popChip,
-                }
-          }
-        />
+        {chatSearch.active ? (
+          <ChatSearchPlate
+            search={chatSearch}
+            showingList={showSearchList}
+            onToggleList={() => setSearchListShown((shown) => !shown)}
+          />
+        ) : (
+          <ChatFooter
+            selection={{
+              isActive: isSelecting,
+              context: { selected: selection.selected, currentUserId, isMember },
+              onAction: runSelectionAction,
+            }}
+            invite={
+              !isMember && myInvite && hasOpenInvite
+                ? {
+                    value: myInvite,
+                    responding: invite.pending?.chatId === chatId ? invite.pending.answer : null,
+                    error: invite.error,
+                    onAccept: () => invite.respond(chatId, 'accept'),
+                    onDecline: () => invite.respond(chatId, 'decline'),
+                  }
+                : null
+            }
+            subscribe={
+              !gone &&
+              !isPosts &&
+              chat !== null &&
+              !isMember &&
+              // Заявки нет вовсе: принятая — значит, я вот-вот появлюсь среди
+              // участников, отклонённая — её панель и так внизу.
+              myInvite === null &&
+              subscription === null
+                ? { chatId }
+                : null
+            }
+            // Постороннему писать некуда: поле ввода не показывается вовсе. Пока
+            // чат грузится, оно смонтировано с надписью вместо поля (`canSend`
+            // ложно): смонтированное заранее, оно встаёт над клавиатурой вовремя.
+            // Переписка не загрузилась — писать некуда, пока она не откроется.
+            composer={
+              failed || gone || (!isMember && (isPosts || chat !== null))
+                ? null
+                : {
+                    text: draft.text,
+                    onChangeText: draft.setText,
+                    mode: draft.mode,
+                    onCloseMode: closeMode,
+                    edit: editPlate,
+                    canSend: isMember,
+                    onSend: submit,
+                    onTyping: notifyTyping,
+                    onSendVoice: isEditing ? edit.recorded : replyForward.sendVoice,
+                    // Запись в правке не уходит в чат — и «записывает голосовое…» не правда.
+                    onRecordingVoice: isEditing ? noop : notifyRecordingVoice,
+                    inputRef: composerRef,
+                    pop: isEditing ? null : popChip,
+                  }
+            }
+          />
+        )}
       </Animated.View>
 
       {/* Сторы шитов общие: в стеке бывает два экрана чата (переход по
@@ -947,6 +1075,8 @@ export function ChatConversation({
           sections={sheetSections}
         />
       ) : null}
+
+      <FragmentMenu measureViewport={measureListFrame} onComment={commentOnFragment} />
 
       <MessageContextMenu
         anchor={menu.target?.anchor ?? null}

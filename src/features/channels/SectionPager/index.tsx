@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { Gesture, GestureDetector, type GestureType } from 'react-native-gesture-handler';
 import Animated, {
   cancelAnimation,
   runOnJS,
@@ -31,6 +31,10 @@ export type SectionPagerProps = {
   /** Выбранный раздел — там, где ряд стоит в покое. */
   index: number;
   onIndexChange: (index: number) => void;
+  /** Палец начал листать разделы — например, чтобы подровнять соседние. */
+  onDragStart?: () => void;
+  /** Жест над пейджером, которому свайп достаётся первым (тянуть страницу назад). */
+  waitFor?: GestureType;
 };
 
 /**
@@ -41,7 +45,15 @@ export type SectionPagerProps = {
  * Полноэкранный просмотр, шиты и меню — отдельные окна (`Modal`): касания в
  * них сюда не доходят, и пейджер под ними не листается.
  */
-export function SectionPager({ position, width, pages, index, onIndexChange }: SectionPagerProps) {
+export function SectionPager({
+  position,
+  width,
+  pages,
+  index,
+  onIndexChange,
+  onDragStart,
+  waitFor,
+}: SectionPagerProps) {
   const start = useSharedValue(0);
   const dragging = useSharedValue(false);
   const count = pages.length;
@@ -56,36 +68,37 @@ export function SectionPager({ position, width, pages, index, onIndexChange }: S
     return () => clearTimeout(timer);
   }, [index]);
 
-  const pan = useMemo(
-    () =>
-      Gesture.Pan()
-        .activeOffsetX([-ACTIVATION_X, ACTIVATION_X])
-        // Край экрана слева на iOS — системное «назад»: пейджер его не берёт.
-        .hitSlop({ left: -IOS_BACK_EDGE })
-        .failOffsetY([-FAIL_Y, FAIL_Y])
-        // С момента, как жест узнал себя: простое касание поста не трогает
-        // докатывающуюся после тапа по контролу позицию.
-        .onStart(() => {
-          cancelAnimation(position);
-          start.set(position.get());
-          dragging.set(true);
-        })
-        .onUpdate((event) => {
-          if (!dragging.get()) return;
+  const pan = useMemo(() => {
+    const gesture = Gesture.Pan()
+      .activeOffsetX([-ACTIVATION_X, ACTIVATION_X])
+      // Край экрана слева на iOS — системное «назад»: пейджер его не берёт.
+      .hitSlop({ left: -IOS_BACK_EDGE })
+      .failOffsetY([-FAIL_Y, FAIL_Y])
+      // С момента, как жест узнал себя: простое касание поста не трогает
+      // докатывающуюся после тапа по контролу позицию.
+      .onStart(() => {
+        cancelAnimation(position);
+        start.set(position.get());
+        dragging.set(true);
+        if (onDragStart) runOnJS(onDragStart)();
+      })
+      .onUpdate((event) => {
+        if (!dragging.get()) return;
 
-          position.set(dragPosition(start.get(), event.translationX, width, count));
-        })
-        .onFinalize((event) => {
-          if (!dragging.get()) return;
+        position.set(dragPosition(start.get(), event.translationX, width, count));
+      })
+      .onFinalize((event) => {
+        if (!dragging.get()) return;
 
-          dragging.set(false);
-          const target = resolveSection(position.get(), event.velocityX, count);
+        dragging.set(false);
+        const target = resolveSection(position.get(), event.velocityX, count);
 
-          position.set(withTiming(target, { duration: SECTION_SETTLE_MS }));
-          runOnJS(onIndexChange)(target);
-        }),
-    [count, dragging, onIndexChange, position, start, width],
-  );
+        position.set(withTiming(target, { duration: SECTION_SETTLE_MS }));
+        runOnJS(onIndexChange)(target);
+      });
+
+    return waitFor ? gesture.requireExternalGestureToFail(waitFor) : gesture;
+  }, [count, dragging, onDragStart, onIndexChange, position, start, waitFor, width]);
 
   const rowStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: -position.get() * width }],

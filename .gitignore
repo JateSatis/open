@@ -49,3 +49,6 @@ deno.lock
 
 # Журнал прогонов Maestro: живёт на машине между ветками, пишет scripts/maestro.mjs
 .maestro/stats.json
+
+# Кеш Gradle нативных модулей (modules/*/android)
+.gradle/

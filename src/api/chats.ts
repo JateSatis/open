@@ -6,6 +6,7 @@
 
 import type { QueryData, RealtimeChannel } from '@supabase/supabase-js';
 
+import { ChatGoneError } from '@/api/chatGone';
 import { acquireChatTopic, type ChatActivity, type ChatTopicListener } from '@/api/chatTopics';
 import { MESSAGE_COLUMNS, messagesSelect, toMessage, type Message } from '@/api/messageRows';
 import { publishPop, type PublishPopInput } from '@/api/pops';
@@ -19,6 +20,8 @@ export {
   toMessage,
   toMessageKind,
   type CallMark,
+  type MemberEvent,
+  type MemberMark,
   type ChatRef,
   type CommentForward,
   type ForwardedComment,
@@ -34,6 +37,7 @@ export {
   type QuotedMessage,
 } from '@/api/messageRows';
 export type { ChatActivity } from '@/api/chatTopics';
+export { ChatGoneError } from '@/api/chatGone';
 
 export const MESSAGE_PAGE_SIZE = 30;
 
@@ -53,6 +57,8 @@ export type Person = {
   id: string;
   displayName: string;
   avatarUrl: string | null;
+  /** `@имя` без `@`; есть не во всех списках — там, где по нему ищут. */
+  username?: string | null;
 };
 
 export type ChatParticipant = Person & {
@@ -66,6 +72,15 @@ export type ChatSummary = {
   title: string | null;
   /** `@имя` группы (без суффикса `.di`); у диалога и чата постов — null. */
   username: string | null;
+  /** Своё фото группы; у диалога (его лицо — собеседник) и чата постов — null. */
+  avatarUrl: string | null;
+  /**
+   * Владелец группы — настраивает её и удаляет участников. У диалога, чата
+   * постов и группы, где не осталось участников, — null.
+   */
+  ownerId: string | null;
+  /** Описание группы; у остальных чатов — null. */
+  description: string | null;
   /** Только у чата постов: его имя и аватарка — канала. */
   channel: ChannelRef | null;
   participants: ChatParticipant[];
@@ -152,10 +167,10 @@ export type Page<T> = {
 };
 
 const CHAT_COLUMNS =
-  'id, kind, title, username, last_message_at, last_message_text, last_message_author_id, subscribers_count, channel:channels(id, title, username, avatar_url, last_pop_at)';
+  'id, kind, title, username, avatar_url, owner_id, description, last_message_at, last_message_text, last_message_author_id, subscribers_count, channel:channels(id, title, username, avatar_url, last_pop_at)';
 const MEMBER_COLUMNS =
-  'chat_id, user_id, last_read_at, joined_at, profile:profiles(id, display_name, avatar_url)';
-const WAITING_COLUMNS = 'chat_id, user_id, display_name, avatar_url';
+  'chat_id, user_id, last_read_at, joined_at, profile:profiles(id, display_name, avatar_url, username)';
+const WAITING_COLUMNS = 'chat_id, user_id, display_name, avatar_url, username';
 export const chatsSelect = () => supabase.from('chats').select(CHAT_COLUMNS);
 const membersSelect = () => supabase.from('chat_members').select(MEMBER_COLUMNS);
 const waitingSelect = () => supabase.from('chat_waiting_invitees').select(WAITING_COLUMNS);
@@ -181,6 +196,7 @@ function toParticipant(row: MemberRow): ChatParticipant {
     id: row.user_id,
     displayName: row.profile?.display_name ?? 'Без имени',
     avatarUrl: row.profile?.avatar_url ?? null,
+    username: row.profile?.username ?? null,
     lastReadAt: row.last_read_at,
   };
 }
@@ -194,6 +210,7 @@ function toWaiting(row: WaitingRow): Person | null {
     id: row.user_id,
     displayName: row.display_name ?? 'Без имени',
     avatarUrl: row.avatar_url,
+    username: row.username,
   };
 }
 
@@ -225,6 +242,9 @@ export function toSummary(
     kind: toChatKind(chat.kind),
     title: chat.title,
     username: chat.username,
+    avatarUrl: chat.avatar_url,
+    ownerId: chat.owner_id,
+    description: chat.description,
     channel: toChannelRef(chat.channel),
     participants,
     waiting: people.waiting,
@@ -235,9 +255,7 @@ export function toSummary(
     lastActivityAt: previewIsPop ? lastPopAt : chat.last_message_at,
     previewIsPop,
     subscription,
-    hasUnread: subscription
-      ? subscription.unreadPosts + subscription.unreadPops > 0
-      : memberUnread,
+    hasUnread: subscription ? subscription.unreadPosts + subscription.unreadPops > 0 : memberUnread,
     subscribersCount: chat.subscribers_count,
   };
 }
@@ -323,7 +341,10 @@ export async function listChats(): Promise<ChatSummary[]> {
 
   const subscriptionByChat = new Map(subscriptions.map((item) => [item.chatId, item]));
   const chatIds = [
-    ...new Set([...(membership.data ?? []).map((row) => row.chat_id), ...subscriptionByChat.keys()]),
+    ...new Set([
+      ...(membership.data ?? []).map((row) => row.chat_id),
+      ...subscriptionByChat.keys(),
+    ]),
   ];
 
   if (chatIds.length === 0) return [];
@@ -396,7 +417,7 @@ export async function getChat(chatId: string): Promise<ChatSummary> {
   const { data, error } = await chatsSelect().eq('id', chatId).is('deleted_at', null).maybeSingle();
 
   if (error) throw error;
-  if (!data) throw new Error('Чат не найден');
+  if (!data) throw new ChatGoneError(chatId);
 
   const chat = data;
   const peopleByChat = await fetchChatPeople([chat.id]);
@@ -431,6 +452,26 @@ export async function setChatUsername(chatId: string, username: string | null): 
     }
     throw error;
   }
+}
+
+/**
+ * Поставить или убрать (`null`) фото группы. Право — у любого участника, его
+ * проверяет база; адрес — только файл аватарки группы в моём префиксе
+ * бакета (`uploadGroupAvatar`). Отдаёт адрес, который заменён на самом деле.
+ */
+export async function setChatAvatar(
+  chatId: string,
+  avatarUrl: string | null,
+): Promise<string | null> {
+  const { data, error } = await supabase.rpc('set_chat_avatar', {
+    target_chat: chatId,
+    new_avatar_url: avatarUrl ?? '',
+  });
+
+  if (error) throw error;
+
+  // Скалярный ответ rpc генератор типов не размечает как nullable.
+  return (data as string | null) ?? null;
 }
 
 /**
@@ -911,6 +952,8 @@ export type ChatChannelHandlers = {
   onRead: () => void;
   /** Кто-то принял заявку: состав участников изменился. */
   onMembersChanged: () => void;
+  /** Чат изменился (название, описание, состав, заявки) или удалён. */
+  onChatChanged?: () => void;
   /**
    * Сообщения удалены. Payload — только подсказка, какие: подделать событие
    * может любой, поэтому что удалено на самом деле, подписчик спрашивает у
@@ -1036,6 +1079,11 @@ export type UserChannelHandlers = {
   onMemberJoined: (chatId: string) => void;
   /** Превью чата изменилось не из-за нового сообщения — например, последнее удалили. */
   onChatChanged: (chatId: string) => void;
+  /**
+   * Я больше не участник чата: ушёл (возможно, с другого устройства) или меня
+   * удалили. Звонок в этом чате пора покинуть.
+   */
+  onMembershipEnded?: (chatId: string) => void;
   /** Мне звонят: в чате, где я участник, начали звонок. */
   onIncomingCall?: (call: IncomingCall) => void;
   /** Звонок в чате, где я участник, завершился — входящий пора погасить. */
@@ -1122,6 +1170,11 @@ export function subscribeToUserEvents(userId: string, handlers: UserChannelHandl
 
       if (chatId) handlers.onChatChanged(chatId);
     })
+    .on('broadcast', { event: 'membership_ended' }, ({ payload }) => {
+      const chatId = chatIdOf(payload);
+
+      if (chatId) handlers.onMembershipEnded?.(chatId);
+    })
     .on('broadcast', { event: 'incoming_call' }, ({ payload }) => {
       const call = toIncomingCall(payload);
 
@@ -1151,30 +1204,113 @@ export function subscribeToUserEvents(userId: string, handlers: UserChannelHandl
   };
 }
 
+type PresenceEntry = {
+  channel: RealtimeChannel;
+  userId: string;
+  listeners: Set<(userIds: string[]) => void>;
+  ids: string[];
+  joined: boolean;
+  /** Ушёл последний слушатель — канал ещё немного живёт, вдруг вернутся. */
+  closing: ReturnType<typeof setTimeout> | null;
+};
+
+/**
+ * Сколько держать канал Presence без слушателей. Переход между экранами
+ * отпускает его и тут же берёт снова, а закрывающийся канал
+ * `supabase.channel()` отдал бы повторно, уже неживым (как в `chatTopics.ts`).
+ */
+const PRESENCE_LINGER_MS = 3000;
+
+let presence: PresenceEntry | null = null;
+/** Видно ли меня в Presence: в фоне я не «в сети», даже пока сокет жив. */
+let presenceVisible = true;
+
+function trackPresence(entry: PresenceEntry) {
+  if (!entry.joined) return;
+
+  void (presenceVisible
+    ? entry.channel.track({ onlineAt: new Date().toISOString() })
+    : entry.channel.untrack());
+}
+
 /**
  * Presence of everyone currently in the app, used for the "в сети" status in
- * the chat list. Returns the unsubscribe function — leaking this channel is
- * what makes Realtime go quiet after a few screen transitions.
+ * the chat list and on the chat info page. Returns the unsubscribe function —
+ * leaking this channel is what makes Realtime go quiet after a few screen
+ * transitions.
+ *
+ * Канал один на приложение, со счётчиком слушателей: `supabase.channel()` с
+ * тем же топиком отдаёт тот же экземпляр, и отписка одного экрана глушила бы
+ * «в сети» у остальных (см. `chatTopics.ts`).
  */
 export function subscribeToOnlineUsers(
   userId: string,
   onChange: (userIds: string[]) => void,
 ): () => void {
-  const channel: RealtimeChannel = supabase.channel('presence:online', {
-    config: { presence: { key: userId } },
-  });
+  if (presence && presence.userId !== userId) {
+    if (presence.closing) clearTimeout(presence.closing);
+    void supabase.removeChannel(presence.channel);
+    presence = null;
+  }
 
-  channel
-    .on('presence', { event: 'sync' }, () => onChange(Object.keys(channel.presenceState())))
-    .subscribe((status) => {
-      if (status === 'SUBSCRIBED') {
-        void channel.track({ onlineAt: new Date().toISOString() });
-      }
+  if (!presence) {
+    const channel: RealtimeChannel = supabase.channel('presence:online', {
+      config: { presence: { key: userId } },
     });
+    const entry: PresenceEntry = {
+      channel,
+      userId,
+      listeners: new Set(),
+      ids: [],
+      joined: false,
+      closing: null,
+    };
+
+    channel
+      .on('presence', { event: 'sync' }, () => {
+        entry.ids = Object.keys(channel.presenceState());
+        entry.listeners.forEach((listener) => listener(entry.ids));
+      })
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          entry.joined = true;
+          trackPresence(entry);
+        }
+      });
+
+    presence = entry;
+  }
+
+  const entry = presence;
+
+  if (entry.closing) {
+    clearTimeout(entry.closing);
+    entry.closing = null;
+  }
+
+  entry.listeners.add(onChange);
+  if (entry.ids.length > 0) onChange(entry.ids);
 
   return () => {
-    void supabase.removeChannel(channel);
+    entry.listeners.delete(onChange);
+
+    if (entry.listeners.size > 0 || presence !== entry) return;
+
+    entry.closing = setTimeout(() => {
+      if (presence !== entry || entry.listeners.size > 0) return;
+
+      presence = null;
+      void supabase.removeChannel(entry.channel);
+    }, PRESENCE_LINGER_MS);
   };
+}
+
+/** Показываться ли «в сети»: приложение ушло в фон — нет, вернулось — да. */
+export function setPresenceVisible(visible: boolean) {
+  if (presenceVisible === visible) return;
+
+  presenceVisible = visible;
+  if (presence) trackPresence(presence);
 }
 
 // Посты канала с попом — обычные сообщения его чата постов; поп публикует
@@ -1217,4 +1353,85 @@ export async function sendPopPost(
   if (typeof messageId !== 'string') throw new Error('Не удалось опубликовать пост');
 
   return fetchPost(messageId);
+}
+
+// =============================================================================
+// Поиск по одному чату
+// =============================================================================
+
+/** Ключ следующей страницы совпадений: последнее совпадение прошлой. */
+export type ChatSearchCursor = { createdAt: string; id: string };
+
+/** Совпадение поиска по одному чату. */
+export type ChatSearchHit = {
+  id: string;
+  authorId: string | null;
+  /** `null` — аккаунт автора удалён. */
+  authorName: string | null;
+  text: string;
+  createdAt: string;
+};
+
+export type ChatSearchPage = {
+  items: ChatSearchHit[];
+  nextCursor: ChatSearchCursor | null;
+};
+
+/** Сколько совпадений за раз. Стрелки листают их по одному, догружая страницы. */
+export const CHAT_SEARCH_PAGE_SIZE = 50;
+
+/** Совпадения в тексте сообщений одного чата, свежие сверху, страницей. */
+export async function searchChatMessages(
+  chatId: string,
+  query: string,
+  cursor: ChatSearchCursor | null,
+  signal?: AbortSignal,
+): Promise<ChatSearchPage> {
+  let request = supabase.rpc('search_chat_messages', {
+    target_chat: chatId,
+    query,
+    before_created: cursor?.createdAt,
+    before_id: cursor?.id,
+    page_size: CHAT_SEARCH_PAGE_SIZE,
+  });
+
+  if (signal) request = request.abortSignal(signal);
+
+  const { data, error } = await request;
+
+  if (error) throw error;
+
+  const items: ChatSearchHit[] = (data ?? []).map((row) => ({
+    id: row.message_id,
+    authorId: row.author_id ?? null,
+    authorName: row.author_name ?? null,
+    text: row.text ?? '',
+    createdAt: row.created_at,
+  }));
+  const last = items[items.length - 1];
+
+  return {
+    items,
+    nextCursor:
+      items.length === CHAT_SEARCH_PAGE_SIZE && last
+        ? { createdAt: last.createdAt, id: last.id }
+        : null,
+  };
+}
+
+/** Сколько всего совпадений в чате; дальше 1000 база не считает. */
+export async function countChatSearch(
+  chatId: string,
+  query: string,
+  signal?: AbortSignal,
+): Promise<number> {
+  let request = supabase.rpc('count_chat_search', { target_chat: chatId, query });
+
+  if (signal) request = request.abortSignal(signal);
+
+  const { data, error } = await request;
+
+  if (error) throw error;
+
+  return data ?? 0;
 }

@@ -5,7 +5,7 @@
 // цитаты здесь — id комментария. Островка и своих комментариев у
 // комментария нет — эти поля всегда пустые.
 
-import type { Comment, CommentAudience } from '@/api/comments';
+import type { Comment, CommentAudience, FragmentQuote } from '@/api/comments';
 import { NO_REACTIONS } from '@/api/reactionCounts';
 import type { ChatMessage } from '@/features/chats/messages/types';
 
@@ -24,6 +24,15 @@ export type CommentItem = ChatMessage & {
   deleted: boolean;
   /** Ранг верха с сервера — по нему снятый закреп возвращается на место. У своих неотправленных нет. */
   rank?: number;
+  /** Фрагмент текста сообщения, к которому комментарий; у неотправленного может быть ещё неизвестен. */
+  fragmentId?: string | null;
+  /**
+   * Цитата фрагмента — плашкой над комментарием. У своего неотправленного —
+   * из выделенного диапазона. `null` при `fragmentId` — сообщение удалено.
+   */
+  fragmentQuote?: FragmentQuote | null;
+  /** Своё неотправленное — из панели этого фрагмента (`FragmentScope.key`). */
+  fragmentKey?: string;
 };
 
 /**
@@ -60,6 +69,8 @@ export function toCommentItem(comment: Comment): CommentItem {
     repliesCount: comment.repliesCount,
     deleted: comment.deleted,
     rank: comment.rank,
+    fragmentId: comment.fragmentId,
+    fragmentQuote: comment.fragmentQuote,
   };
 }
 
@@ -78,6 +89,7 @@ export function asDeletedRoot(item: CommentItem): CommentItem {
     replies: [],
     reactions: NO_REACTIONS,
     localPreviews: undefined,
+    fragmentQuote: null,
   };
 }
 

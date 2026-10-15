@@ -1,6 +1,6 @@
 import { impactAsync, ImpactFeedbackStyle } from 'expo-haptics';
 import { useCallback, useContext, useEffect, useMemo, useRef, type ReactNode } from 'react';
-import { Pressable, View, type GestureResponderEvent } from 'react-native';
+import { Pressable, View, type AccessibilityActionEvent } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   runOnJS,
@@ -16,12 +16,15 @@ import { useSwipeReply } from './useSwipeReply';
 
 import { HorizontalGestureScope } from '@/components/HorizontalGestureScope';
 import { Text } from '@/components/Text';
+import type { RowPoint } from '@/features/chats/fragments/fragmentSelection';
+import { useSelectionHandles } from '@/features/chats/fragments/useSelectionHandles';
 import type { MenuAnchor } from '@/features/chats/MessageContextMenu';
 import { RowRegistryContext } from '@/features/chats/rowRegistry';
 import { liftedRowKey } from '@/features/interactions/comments/commentsLift';
+import { useScreenReaderEnabled } from '@/hooks/use-screen-reader-enabled';
 import { useTheme } from '@/hooks/use-theme';
 
-/** Столько держать палец, чтобы включился выбор. */
+/** Столько держать палец, чтобы открылось меню. */
 const LONG_PRESS_MS = 350;
 /** Подсветка сообщения, к которому прыгнули: вспыхивает, когда прокрутка доехала, держится секунду. */
 const HIGHLIGHT_DELAY_MS = 300;
@@ -31,7 +34,7 @@ const HIGHLIGHT_FADE_MS = 400;
 
 export type MessageRowProps = {
   children: ReactNode;
-  /** Режим выбора: тап отмечает, а не открывает. */
+  /** Режим выбора: тап и долгое нажатие отмечают, а не открывают. */
   selectionMode: boolean;
   /** Сообщение можно отметить (неотправленное — нельзя). */
   selectable: boolean;
@@ -46,11 +49,16 @@ export type MessageRowProps = {
    * прячется.
    */
   messageId: string;
-  /** Тап по облачку — меню у строки. Нет обработчика — тап ничего не делает. */
+  /** Долгое нажатие — меню у пальца. Нет обработчика — долгого нажатия нет. */
   onOpenMenu?: (anchor: MenuAnchor) => void;
-  /** Долгое нажатие — выбор с этим облачком уже отмеченным. Нет — долгого нажатия нет. */
-  onSelect?: () => void;
-  /** Тап в режиме выбора — снять или поставить отметку. */
+  /**
+   * Долгое нажатие сначала спрашивает его: точка в окне. Вернул `true` —
+   * нажатие забрано (выделение текста), меню не открывается.
+   */
+  onLongPressAt?: (point: RowPoint) => boolean | Promise<boolean>;
+  /** Тап вне режима выбора. Нет обработчика — тап ничего не делает. */
+  onPress?: () => void;
+  /** Тап (и долгое нажатие) в режиме выбора — снять или поставить отметку. */
   onToggle: () => void;
   /** Свайп влево — ответить. Без обработчика (посетитель, неотправленное) жеста нет. */
   onSwipeReply?: () => void;
@@ -62,16 +70,16 @@ export type MessageRowProps = {
 };
 
 /**
- * Строка переписки вокруг облачка, как в Telegram на Android: тап открывает
- * меню, долгое нажатие включает выбор, свайп влево — ответ. В режиме выбора
- * слева появляется кружок, а тап по строке отмечает сообщение.
+ * Строка переписки вокруг облачка: долгое нажатие открывает меню (в нём —
+ * «Выбрать»), тап — то, что дал экран (режим фрагментов), свайп влево —
+ * ответ. В режиме выбора слева появляется кружок, а тап по строке отмечает
+ * сообщение.
  *
  * Тап ловит обычный `Pressable` строки, а не жест-обработчик: касание в RN
  * достаётся самому глубокому, кто его хочет, — плитка альбома, цитата, имя
- * автора, реакции и кнопки внутри облачка берут свой тап сами, и меню не
- * открывается. Перемотку голосового, свайп и долгое нажатие ведут
- * жест-обработчики: узнав себя, они отменяют касание строки, и тап уже не
- * случится.
+ * автора, реакции и кнопки внутри облачка берут свой тап сами. Перемотку
+ * голосового, свайп и долгое нажатие ведут жест-обработчики: узнав себя, они
+ * отменяют касание строки, и тап уже не случится.
  */
 export function MessageRow({
   children,
@@ -82,7 +90,8 @@ export function MessageRow({
   highlightKey,
   messageId,
   onOpenMenu,
-  onSelect,
+  onLongPressAt,
+  onPress,
   onToggle,
   onSwipeReply,
   frame,
@@ -90,6 +99,9 @@ export function MessageRow({
   const theme = useTheme();
   const highlight = useSharedValue(0);
   const swipe = useSwipeReply(messageId, !selectionMode, onSwipeReply);
+  // Ручки выделения текста — первыми в гонке: узнав себя, отменяют свайп,
+  // долгое нажатие и прокрутку.
+  const handles = useSelectionHandles(messageId);
   const contentRef = useRef<View>(null);
   const registry = useContext(RowRegistryContext);
 
@@ -121,14 +133,12 @@ export function MessageRow({
   const highlightStyle = useAnimatedStyle(() => ({ opacity: highlight.value }));
 
   const openMenu = useCallback(
-    (event?: GestureResponderEvent) => {
+    (touchY: number | null) => {
       if (!onOpenMenu) return;
 
       // Меню встаёт у пальца, копия облачка — ровно на его место: нужны
-      // касание и угол с размером строки в окне. Без события (доступность,
-      // тесты) касания нет — меню встанет у облачка.
-      const touchY = event?.nativeEvent?.pageY ?? null;
-
+      // касание и угол с размером строки в окне. Без касания (доступность,
+      // тесты) меню встанет у облачка.
       contentRef.current?.measureInWindow((x, y, width, height) =>
         onOpenMenu({ x, y, width, height, touchY }),
       );
@@ -136,28 +146,75 @@ export function MessageRow({
     [onOpenMenu],
   );
 
-  const select = useCallback(() => {
-    impactAsync(ImpactFeedbackStyle.Light).catch(() => undefined);
-    onSelect?.();
-  }, [onSelect]);
+  const longPressed = useCallback(
+    (x: number, y: number, localX: number, localY: number) => {
+      if (selectionMode) {
+        onToggle();
+        return;
+      }
 
+      const menuNow = () => {
+        impactAsync(ImpactFeedbackStyle.Light).catch(() => undefined);
+        openMenu(y);
+      };
+      const taken = onLongPressAt?.({ x, y, localX, localY }) ?? false;
+
+      if (taken === true) return;
+      if (taken === false) {
+        menuNow();
+        return;
+      }
+
+      void taken.then((yes) => {
+        if (!yes) menuNow();
+      });
+    },
+    [onLongPressAt, onToggle, openMenu, selectionMode],
+  );
+
+  const hasLongPress = selectionMode ? selectable : onOpenMenu !== undefined;
+  // `longPressed` меряет строку через ref, но зовётся по жесту, а не в
+  // рендере: линтер видит передачу в ворклет внутри useMemo как чтение.
+  /* eslint-disable react-hooks/refs */
   const longPress = useMemo(
     () =>
       Gesture.LongPress()
         .minDuration(LONG_PRESS_MS)
-        .enabled(!selectionMode && onSelect !== undefined)
+        .enabled(hasLongPress)
         .withTestId(`message-long-press-${messageId}`)
-        .onStart(() => {
-          runOnJS(select)();
+        .onStart((event) => {
+          runOnJS(longPressed)(event.absoluteX, event.absoluteY, event.x, event.y);
         }),
-    [messageId, onSelect, select, selectionMode],
+    [hasLongPress, longPressed, messageId],
   );
+  /* eslint-enable react-hooks/refs */
 
   // Кто первым узнал себя, тот и ведёт: сдвиг пальца отменяет долгое
-  // нажатие, а удержание на месте не даёт начаться свайпу.
+  // нажатие, а удержание на месте не даёт начаться свайпу. Ручка выделения
+  // узнаёт себя сразу при касании.
   const gesture = useMemo(
-    () => Gesture.Race(swipe.gesture, longPress),
-    [longPress, swipe.gesture],
+    () =>
+      handles
+        ? Gesture.Race(handles, swipe.gesture, longPress)
+        : Gesture.Race(swipe.gesture, longPress),
+    [handles, longPress, swipe.gesture],
+  );
+
+  // Скринридер долгого нажатия жестом не делает: при нём тап по строке
+  // открывает меню, как раньше, а режим фрагментов остаётся без выделения.
+  const screenReader = useScreenReaderEnabled();
+  const press = screenReader && onOpenMenu ? () => openMenu(null) : onPress;
+
+  // И отдельным действием — где оно доступно.
+  const accessibilityActions = useMemo(
+    () => (!selectionMode && onOpenMenu ? [{ name: 'longpress', label: 'Открыть меню' }] : undefined),
+    [onOpenMenu, selectionMode],
+  );
+  const onAccessibilityAction = useCallback(
+    (event: AccessibilityActionEvent) => {
+      if (event.nativeEvent.actionName === 'longpress') openMenu(null);
+    },
+    [openMenu],
   );
 
   // Дерево строки одно и то же в обоих режимах: переключение выбора меняет
@@ -196,9 +253,13 @@ export function MessageRow({
               selectionMode ? (selected ? 'Снять отметку' : 'Отметить сообщение') : undefined
             }
             accessible={selectionMode}
+            accessibilityActions={accessibilityActions}
+            onAccessibilityAction={onAccessibilityAction}
             testID={`message-row-${messageId}`}
-            disabled={selectionMode ? !selectable : !onOpenMenu}
-            onPress={selectionMode ? onToggle : openMenu}
+            // Вне выбора строка не выключается и без тапа: «выключенность»
+            // предка досталась бы кругу комментариев и кнопкам облачка.
+            disabled={selectionMode && !selectable}
+            onPress={selectionMode ? onToggle : press}
             style={styles.selectable}
           >
             {selectionMode ? (

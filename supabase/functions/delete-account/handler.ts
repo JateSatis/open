@@ -9,6 +9,37 @@
  * Deno-тестом без сети (`handler.test.ts`); настоящие — в `index.ts`.
  */
 
+/** Нужное удалению от бакета Storage — то, что отдаёт `storage.from(bucket)`. */
+export type AvatarBucket = {
+  list: (
+    folder: string,
+    options: { limit: number },
+  ) => Promise<{ data: { name: string }[] | null; error: unknown }>;
+  remove: (paths: string[]) => Promise<{ error: unknown }>;
+};
+
+/**
+ * Удаление файлов аватара профиля. Единственная папка, которую удаление
+ * аккаунта чистит в бакете, — `{id}/avatar/`. Фото групп (`group-avatar/`) и
+ * аватарки каналов остаются: группа общая, и её фото не должно пропасть
+ * оттого, что ушёл тот, кто его поставил.
+ */
+export function createRemoveAvatarFiles(bucket: AvatarBucket) {
+  return async (userId: string): Promise<void> => {
+    const folder = `${userId}/avatar`;
+    const { data, error } = await bucket.list(folder, { limit: 100 });
+
+    if (error) throw error;
+    if (!data || data.length === 0) return;
+
+    const { error: removeError } = await bucket.remove(
+      data.map((file) => `${folder}/${file.name}`),
+    );
+
+    if (removeError) throw removeError;
+  };
+}
+
 export type DeleteAccountDeps = {
   /** Проверяет токен у Auth и возвращает id его владельца или null. */
   resolveUserId: (accessToken: string) => Promise<string | null>;

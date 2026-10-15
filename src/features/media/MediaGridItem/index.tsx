@@ -20,13 +20,17 @@ import { useTheme } from '@/hooks/use-theme';
 import { Opacity, Spacing } from '@/theme';
 
 /**
- * Выбор одного файла вместо отбора в альбом: тап по клетке сразу отдаёт файл,
- * кружка нет. Неподходящие файлы видны, но притушены и не нажимаются.
- * Общий выбор (`selectionStore`) в этом режиме не трогается.
+ * Выбор одного файла вместо отбора в альбом: кружка нет. Неподходящие файлы
+ * видны, но притушены и не нажимаются. Общий выбор (`selectionStore`) в этом
+ * режиме не трогается.
  */
 export type GridPick = {
   accepts: (asset: MediaLibraryItem) => boolean;
-  onPick: (asset: MediaLibraryItem) => void;
+  /**
+   * Тап сразу отдаёт файл. Нет — тап раскрывает файл в предпросмотр, и
+   * решение принимается там (шит аватарки: сначала правка, потом «Готово»).
+   */
+  onPick?: (asset: MediaLibraryItem) => void;
 };
 
 export type MediaGridItemProps = {
@@ -88,6 +92,21 @@ export const MediaGridItem = memo(function MediaGridItem({
 
   const isSelected = slot > SLOT_FREE;
   const disabled = locked || slot === SLOT_BLOCKED;
+  // В выборе одного файла — над притушиванием: длительность читается и у
+  // видео, которое взять нельзя. В шите чата — под притушиванием лимита, как
+  // вся клетка. Касания пропускает к клетке.
+  const durationBadge =
+    asset.kind === 'video' ? (
+      <View pointerEvents="none" style={[styles.videoBadge, { backgroundColor: theme.mediaScrim }]}>
+        <Text variant="caption" color="textInverse">
+          {asset.durationMs !== null ? formatDuration(asset.durationMs) : '▶'}
+        </Text>
+      </View>
+    ) : null;
+  const openPreview = () =>
+    rootRef.current?.measureInWindow((x, y, width, height) =>
+      openMediaPreview(asset, width > 0 ? { x, y, width, height } : null),
+    );
 
   return (
     <View ref={rootRef} style={{ width: size, height: size }}>
@@ -125,13 +144,7 @@ export const MediaGridItem = memo(function MediaGridItem({
         />
       )}
 
-      {asset.kind === 'video' ? (
-        <View style={[styles.videoBadge, { backgroundColor: theme.mediaScrim }]}>
-          <Text variant="caption" color="textInverse">
-            {asset.durationMs !== null ? formatDuration(asset.durationMs) : '▶'}
-          </Text>
-        </View>
-      ) : null}
+      {pick ? null : durationBadge}
 
       {locked && !isSelected ? (
         <View
@@ -144,20 +157,18 @@ export const MediaGridItem = memo(function MediaGridItem({
         />
       ) : null}
 
-      {pick ? (
-        <PickCover asset={asset} pick={pick} />
-      ) : (
+      {pick ? <PickCover asset={asset} pick={pick} onOpen={openPreview} /> : null}
+
+      {pick ? durationBadge : null}
+
+      {pick ? null : (
         <>
           {locked ? null : (
             <Pressable
               testID="media-grid-open"
               accessibilityRole="imagebutton"
               accessibilityLabel={asset.kind === 'video' ? 'Открыть видео' : 'Открыть фото'}
-              onPress={() =>
-                rootRef.current?.measureInWindow((x, y, width, height) =>
-                  openMediaPreview(asset, width > 0 ? { x, y, width, height } : null),
-                )
-              }
+              onPress={openPreview}
               style={styles.thumbnail}
             />
           )}
@@ -189,8 +200,15 @@ export const MediaGridItem = memo(function MediaGridItem({
   );
 });
 
+type PickCoverProps = {
+  asset: MediaLibraryItem;
+  pick: GridPick;
+  /** Раскрыть файл в предпросмотр из этой плитки. */
+  onOpen: () => void;
+};
+
 /** Вся клетка — кнопка выбора; неподходящий файл притушен и не нажимается. */
-function PickCover({ asset, pick }: { asset: MediaLibraryItem; pick: GridPick }) {
+function PickCover({ asset, pick, onOpen }: PickCoverProps) {
   const theme = useTheme();
   const accepted = pick.accepts(asset);
 
@@ -201,7 +219,7 @@ function PickCover({ asset, pick }: { asset: MediaLibraryItem; pick: GridPick })
       accessibilityLabel={asset.kind === 'video' ? 'Видео' : 'Фото'}
       accessibilityState={{ disabled: !accepted }}
       disabled={!accepted}
-      onPress={() => pick.onPick(asset)}
+      onPress={() => (pick.onPick ? pick.onPick(asset) : onOpen())}
       style={[
         styles.thumbnail,
         !accepted && { backgroundColor: theme.background, opacity: Opacity.unavailable },

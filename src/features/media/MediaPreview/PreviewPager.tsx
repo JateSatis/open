@@ -29,6 +29,8 @@ export type PreviewPagerProps = {
   onShown: () => void;
   /** Пролистали к другому файлу. */
   onPage: (asset: MediaLibraryItem) => void;
+  /** Шит аватарки: круг будущей аватарки поверх фото. */
+  ring?: boolean;
 };
 
 /**
@@ -50,6 +52,7 @@ export function PreviewPager({
   leaving,
   onShown,
   onPage,
+  ring = false,
 }: PreviewPagerProps) {
   const listRef = useRef<FlatList<MediaLibraryItem>>(null);
   const shownIndex = useRef(index);
@@ -74,9 +77,10 @@ export function PreviewPager({
         draw={at === index ? draw : null}
         onShown={onShown}
         leaving={leaving}
+        ring={ring}
       />
     ),
-    [cellSize, draw, height, index, leaving, live, motion, onShown, width],
+    [cellSize, draw, height, index, leaving, live, motion, onShown, ring, width],
   );
 
   const getItemLayout = useCallback(

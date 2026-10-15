@@ -1,0 +1,46 @@
+appId: com.openger.app
+name: Фото группы в «Изменить» — участник открывает шит аватарки ссылкой и тапом по фото, фото раскрывается в редактор
+tags:
+  - chats
+  - media
+env:
+  # Группа, где основной аккаунт — единственный участник (та же, что в chat-info).
+  CHAT_ID: 4a84d022-7365-4764-8030-56608feff9f9
+  TITLE: "Тест: взгляд посетителя"
+---
+# Фото не сохраняется: в галерее телефона — личные снимки, а фото группы публично.
+# Сохранение, смену и удаление проверяют тесты экрана и ручная проверка.
+- runFlow: subflows/open-app.yaml
+- openLink: openger://chats/${CHAT_ID}
+- assertVisible:
+    id: "messages-list"
+- tapOn: "О чате: ${TITLE}"
+- tapOn:
+    id: "info-edit"
+- assertVisible:
+    id: "chat-edit-save"
+- tapOn: "Установить новое фото"
+- assertVisible: "Выберите фото"
+- assertNotVisible: "Снять фото"
+- tapOn:
+    id: "media-grid-pick"
+    text: "Фото"
+- assertVisible:
+    id: "media-preview"
+- assertVisible: "Поставить фото"
+# «Назад» — в сетку, ещё раз — шит закрыт, фото в черновике прежнее.
+- back
+- assertVisible: "Выберите фото"
+- back
+- assertNotVisible: "Выберите фото"
+# Тап по самому фото — тот же шит, без меню.
+- tapOn:
+    id: "chat-edit-photo"
+- assertVisible: "Выберите фото"
+- back
+- assertNotVisible: "Выберите фото"
+# Ничего не изменилось — уход без вопроса, на страницу группы.
+- tapOn: "Navigate up"
+- assertVisible:
+    id: "info-title"
+    text: ${TITLE}

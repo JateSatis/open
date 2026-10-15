@@ -39,7 +39,10 @@ import {
   type MessageReactions,
   type MyReaction,
 } from '@/api/reactionCounts';
+import { FRAGMENT_QUOTE_COLUMNS, toFragmentQuote, type FragmentQuote } from '@/api/fragmentQuote';
 import { supabase } from '@/api/supabase';
+
+export type { FragmentQuote } from '@/api/fragmentQuote';
 
 export const COMMENT_PAGE_SIZE = 30;
 /** Первая порция треда и каждая следующая по «Показать ещё». */
@@ -75,6 +78,13 @@ export type Comment = {
   replies: QuotedMessage[];
   /** Корень треда; `null` — комментарий сам верхнеуровневый. */
   threadRootId: string | null;
+  /** Фрагмент текста сообщения, к которому комментарий (только у верхнеуровневого). */
+  fragmentId: string | null;
+  /**
+   * Цитата фрагмента и где он сейчас в тексте. `null` при `fragmentId` —
+   * фрагмент не читается: его сообщение удалено.
+   */
+  fragmentQuote: FragmentQuote | null;
   /** Сколько живых ответов в треде. У ответов — 0. */
   repliesCount: number;
   /** Ранг верха на момент выборки: по нему идёт следующая страница. */
@@ -117,7 +127,7 @@ export type CommentTarget =
   | { state: 'missing' };
 
 const COMMENT_COLUMNS =
-  `id, target_id, chat_id, author_id, kind, text, audience, created_at, edited_at, deleted_at, thread_root_id, replies_count, rank, author:profiles(display_name, avatar_url), comment_attachments(id, url, poster_url, mime_type, width, height, duration_ms, waveform), ${REACTION_COLUMNS}, replies:comment_replies!comment_replies_comment_fkey(position, quoted_id, quoted:comments!comment_replies_quoted_fkey(id, author_id, kind, text, created_at, edited_at, author:profiles(display_name), comment_attachments(url, poster_url, mime_type, duration_ms, position)))` as const;
+  `id, target_id, chat_id, author_id, kind, text, audience, created_at, edited_at, deleted_at, thread_root_id, fragment_id, replies_count, rank, author:profiles(display_name, avatar_url), ${FRAGMENT_QUOTE_COLUMNS}, comment_attachments(id, url, poster_url, mime_type, width, height, duration_ms, waveform), ${REACTION_COLUMNS}, replies:comment_replies!comment_replies_comment_fkey(position, quoted_id, quoted:comments!comment_replies_quoted_fkey(id, author_id, kind, text, created_at, edited_at, author:profiles(display_name), comment_attachments(url, poster_url, mime_type, duration_ms, position)))` as const;
 
 // Мозаика собирается в порядке выбора файлов, а PostgREST не гарантирует
 // порядок вложенной выборки без явного order.
@@ -138,13 +148,19 @@ const targetSelect = () =>
  * удалённых корней с живыми ответами. Строки — те же, что у выборки из
  * таблицы, поэтому и разбор один.
  */
-const rootsSelect = (targetId: string, cursor: RootCursor | undefined, limit: number) =>
+const rootsSelect = (
+  targetId: string,
+  cursor: RootCursor | undefined,
+  limit: number,
+  fragmentId: string | undefined,
+) =>
   supabase
     .rpc('list_comment_thread_roots', {
       target: targetId,
       after_rank: cursor?.rank,
       after_id: cursor?.id,
       page_size: limit,
+      fragment: fragmentId,
     })
     .select(COMMENT_COLUMNS)
     .order('rank', { ascending: false })
@@ -215,6 +231,8 @@ export function toComment(row: CommentRow): Comment {
     reactions: toReactions(row),
     replies: [...(row.replies ?? [])].sort((a, b) => a.position - b.position).map(toQuotedComment),
     threadRootId: row.thread_root_id,
+    fragmentId: row.fragment_id,
+    fragmentQuote: toFragmentQuote(row.fragment_id, row.fragment),
     repliesCount: row.replies_count,
     rank: row.rank ?? 0,
     deleted: row.deleted_at !== null,
@@ -225,14 +243,15 @@ export function toComment(row: CommentRow): Comment {
  * Страница верхнеуровневых комментариев по рангу — сверху популярные.
  * `cursor` — ранг и id последнего показанного; «загрузить все» не существует.
  * Ранг между страницами может вырасти — повторы отсекает клиент.
+ * `fragmentId` — только корни этого фрагмента (панель фрагмента).
  */
 export async function listThreadRoots(
   targetId: string,
-  params: { cursor?: RootCursor; limit?: number } = {},
+  params: { cursor?: RootCursor; limit?: number; fragmentId?: string } = {},
 ): Promise<{ items: Comment[]; nextCursor: RootCursor | null }> {
   const limit = params.limit ?? COMMENT_PAGE_SIZE;
   // Лишняя строка — признак, что дальше ещё есть (как у ответов треда).
-  const { data, error } = await rootsSelect(targetId, params.cursor, limit + 1);
+  const { data, error } = await rootsSelect(targetId, params.cursor, limit + 1, params.fragmentId);
 
   if (error) throw error;
 
@@ -371,6 +390,18 @@ function toVoiceJson(voice: SendVoiceInput) {
   };
 }
 
+/**
+ * Фрагмент, к которому верхнеуровневый комментарий: готовый (чужой или свой) —
+ * по id, свой новый — диапазоном (code points и кусок текста для сверки).
+ */
+export type CommentFragment = { id: string } | { start: number; end: number; text: string };
+
+function toFragmentJson(fragment: CommentFragment) {
+  return 'id' in fragment
+    ? { id: fragment.id }
+    : { start: fragment.start, end: fragment.end, text: fragment.text };
+}
+
 /** Текст или альбом с подписью — одной транзакцией, функцией `send_comment`. */
 export async function sendComment(
   messageId: string,
@@ -380,6 +411,8 @@ export async function sendComment(
     replyTo?: string[];
     /** Тред ответа; без него — тред по цитатам или верхнеуровневый. */
     threadRootId?: string | null;
+    /** Фрагмент текста: готовый (`id`) или свой диапазон — база найдёт или создаст. */
+    fragment?: CommentFragment;
   },
 ): Promise<Comment> {
   const { data: id, error } = await supabase.rpc('send_comment', {
@@ -388,6 +421,7 @@ export async function sendComment(
     media: (input.media ?? []).map(toMediaJson),
     reply_to: input.replyTo?.length ? input.replyTo : undefined,
     thread_root: input.threadRootId ?? undefined,
+    fragment: input.fragment ? toFragmentJson(input.fragment) : undefined,
   });
 
   if (error) throw error;
@@ -441,12 +475,14 @@ export async function sendVoiceComment(
   voice: SendVoiceInput,
   replyTo: string[] = [],
   threadRootId: string | null = null,
+  fragment?: CommentFragment,
 ): Promise<Comment> {
   const { data: id, error } = await supabase.rpc('send_voice_comment', {
     target_message: messageId,
     voice: toVoiceJson(voice),
     reply_to: replyTo.length ? replyTo : undefined,
     thread_root: threadRootId ?? undefined,
+    fragment: fragment ? toFragmentJson(fragment) : undefined,
   });
 
   if (error) throw error;

@@ -1,5 +1,5 @@
 import type { FlashListRef, ListRenderItem } from '@shopify/flash-list';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { View, useWindowDimensions, type TextInput } from 'react-native';
 import { GestureDetector } from 'react-native-gesture-handler';
 import { KeyboardEvents } from 'react-native-keyboard-controller';
@@ -17,8 +17,10 @@ import { ThreadGapRow } from './ThreadGapRow';
 import { usePanelActions } from './usePanelActions';
 import { usePanelComments } from './usePanelComments';
 import type { PanelSheet } from './usePanelSheet';
+import { useGoToFragment } from './useGoToFragment';
 import { useThreadPane } from './useThreadPane';
 
+import { FragmentQuote } from '@/features/chats/FragmentQuote';
 import { mosaicBounds } from '@/features/chats/lib/mosaicLayout';
 import { MessageBubble } from '@/features/chats/MessageBubble';
 import { canReactTo } from '@/features/chats/messageActions';
@@ -39,6 +41,7 @@ import { useJumpToComment } from '@/features/interactions/comments/useJumpToComm
 import { audienceOf } from '@/features/interactions/reactionState';
 import { showNotice } from '@/features/notifications/alertsStore';
 import { useTheme } from '@/hooks/use-theme';
+import { focusWithKeyboard } from '@/lib/windowFocus';
 import { Spacing } from '@/theme';
 
 /** Метка у имени автора-участника: у сообщения — участник чата, у попа — публикующий в канале. */
@@ -62,6 +65,15 @@ export type PanelContentProps = {
   hostChatId?: string;
   /** «Назад» сначала спрашивает содержимое: правка, выбор и окно треда выходят первыми. */
   backRef: { current: () => boolean };
+  /** Ширина окна панели; нет — во весь экран (шит). Боковая панель уже экрана. */
+  width?: number;
+  /**
+   * Своя шапка: заголовок и блок под ним (цитата и реакции фрагмента). В
+   * окне треда — обычная «Ответы».
+   */
+  header?: { title: string; extra: ReactNode };
+  /** Поле ввода получает фокус, как только станет `true` (панель доехала). */
+  focusInput?: boolean;
 };
 
 /**
@@ -78,10 +90,14 @@ export function PanelContent({
   onOpenPerson,
   hostChatId,
   backRef,
+  width: panelWidth,
+  header,
+  focusInput = false,
 }: PanelContentProps) {
   const theme = useTheme();
   const currentUserId = useCurrentUserId();
-  const { width } = useWindowDimensions();
+  const { width: windowWidth } = useWindowDimensions();
+  const width = panelWidth ?? windowWidth;
   const mediaBounds = useMemo(() => mosaicBounds(width - Spacing.three * 2), [width]);
   const openThread = useOpenThread();
   const threadPane = useThreadPane({ openThread, width, onExit: exitThread });
@@ -162,6 +178,10 @@ export function PanelContent({
     backRef.current = actions.back;
   }, [actions.back, backRef]);
 
+  useEffect(() => {
+    if (focusInput) focusWithKeyboard(inputRef, undefined, true);
+  }, [focusInput]);
+
   // Пришли к комментарию — он вспыхивает, когда встал в список: ответ — в
   // окне своего треда, верхнеуровневый — в основном. Виден и так — список не
   // двигается: над шитом в переписке стоит сообщение этого комментария.
@@ -225,17 +245,30 @@ export function PanelContent({
     };
   }, []);
 
+  const goToFragment = useGoToFragment(target, live?.message ?? null, close, hostChatId);
   const { retry, react } = comments;
   const myAudience = audienceOf(amMember);
   const renderBubble = useCallback(
     (item: CommentItem, interactive = true) => {
-      const { authorId } = item;
+      const { authorId, fragmentId, fragmentQuote } = item;
       const quotes = visibleQuotes(item);
+      const isOwn = authorId !== null && authorId === currentUserId;
 
       return (
         <MessageBubble
           message={quotes === item.replies ? item : { ...item, replies: quotes }}
-          isOwn={authorId !== null && authorId === currentUserId}
+          isOwn={isOwn}
+          lead={
+            // У заглушки удалённого корня содержимого нет — и цитаты тоже.
+            !item.deleted && (fragmentId || fragmentQuote) ? (
+              <FragmentQuote
+                text={fragmentQuote?.text ?? null}
+                isOwn={isOwn}
+                // Своё неотправленное ещё не знает фрагмента — переходить не к чему.
+                onPress={interactive && fragmentId ? () => void goToFragment(item) : undefined}
+              />
+            ) : undefined
+          }
           isRead={false}
           // Галочки у комментария ничего не значат: прочтений у него нет.
           receipts={false}
@@ -246,7 +279,9 @@ export function PanelContent({
           mediaBounds={mediaBounds}
           onRetry={interactive ? retry : undefined}
           onAuthorPress={interactive && authorId ? () => openPerson(authorId) : undefined}
-          onQuotePress={interactive ? (quote) => void actions.jumpToQuote(quote.messageId) : undefined}
+          onQuotePress={
+            interactive ? (quote) => void actions.jumpToQuote(quote.messageId) : undefined
+          }
           reactionAudience={myAudience}
           onReactionToggle={
             interactive && canReactTo(item) ? (emoji) => react(item, emoji) : undefined
@@ -256,7 +291,17 @@ export function PanelContent({
         />
       );
     },
-    [actions, currentUserId, mediaBounds, memberBadge, myAudience, openPerson, react, retry],
+    [
+      actions,
+      currentUserId,
+      goToFragment,
+      mediaBounds,
+      memberBadge,
+      myAudience,
+      openPerson,
+      react,
+      retry,
+    ],
   );
 
   const { selection } = actions;
@@ -290,7 +335,6 @@ export function PanelContent({
             editing={comment.id === editingId}
             highlightKey={highlight?.id === comment.id ? highlight.key : null}
             onOpenMenu={actions.openMenu}
-            onSelect={actions.selectOne}
             onToggle={actions.toggleSelected}
             onSwipeReply={closed ? undefined : actions.replyTo}
             onOpenThread={actions.openThread}
@@ -352,7 +396,11 @@ export function PanelContent({
           <GestureDetector gesture={threadPane.edgePan}>
             <Animated.View
               testID="comments-thread"
-              style={[styles.threadPane, { backgroundColor: theme.background }, threadPane.paneStyle]}
+              style={[
+                styles.threadPane,
+                { backgroundColor: theme.background },
+                threadPane.paneStyle,
+              ]}
               pointerEvents={inThread ? 'auto' : 'none'}
             >
               <PaneList
@@ -374,10 +422,17 @@ export function PanelContent({
 
           <SheetHeader onHeight={sheet.setHeaderHeight} pan={sheet.headerPan}>
             <PanelHeader
-              title={inThread ? 'Ответы' : count > 0 ? commentsCountLabel(count) : 'Комментарии'}
+              title={
+                inThread
+                  ? 'Ответы'
+                  : (header?.title ?? (count > 0 ? commentsCountLabel(count) : 'Комментарии'))
+              }
               onClose={closeNow}
               onBack={inThread ? exitThread : undefined}
+              // Своя шапка — у боковой панели: её не тянут вниз.
+              grabber={!header}
             />
+            {header && !inThread ? header.extra : null}
           </SheetHeader>
         </View>
       </Animated.View>

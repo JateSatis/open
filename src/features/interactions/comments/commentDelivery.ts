@@ -16,7 +16,9 @@ import {
   sendVoiceComment,
   sendVoicePopComment,
   type Comment,
+  type CommentFragment,
   type CommentSubject,
+  type FragmentQuote,
 } from '@/api/comments';
 import { NO_REACTIONS } from '@/api/reactionCounts';
 import {
@@ -44,8 +46,11 @@ import {
   addToThread,
   raiseRoot,
   updateRoots,
+  updateScopedRoots,
   updateThread,
 } from '@/features/interactions/comments/commentsCache';
+import { fragmentsKey } from '@/features/chats/fragments/useMessageFragments';
+
 import {
   removeUploadedMedia,
   storedPaths,
@@ -64,15 +69,34 @@ export type CommentSendContext = {
   currentUserId: string | null;
   /** Имя и аватар — для своего пузыря до ответа сервера. */
   me: { name: string | null; avatarUrl: string | null };
+  /** Панель фрагмента: верхнеуровневый комментарий уходит к этому фрагменту. */
+  fragment?: FragmentScope;
 };
+
+/**
+ * Фрагмент панели: ключ её верха, фрагмент в базе (у своего нового — `null`
+ * до первой отправки) и как назвать его базе — свой диапазоном, чужой по id.
+ */
+export type FragmentScope = { key: string; fragmentId: string | null; request: CommentFragment };
 
 /** Ключи отправок, которые сейчас идут: повтор не стартует поверх незавершённой. */
 const delivering = new Set<string>();
 /** Своё неотправленное удалили, пока оно ехало. */
 const discarded = new Set<string>();
 
+/**
+ * Плашка своего неотправленного — сразу, из выделенного куска: с ответом
+ * сервера приходит та же цитата, и плашка не мигает. Чужой фрагмент по id —
+ * без цитаты до ответа (панель так не отправляет).
+ */
+function optimisticQuote(request: CommentFragment): FragmentQuote | null {
+  return 'text' in request
+    ? { text: request.text, start: request.start, end: request.end, lost: false }
+    : null;
+}
+
 function draftOf(
-  { subject, chatId, currentUserId, me }: CommentSendContext,
+  { subject, chatId, currentUserId, me, fragment }: CommentSendContext,
   at: number,
   content: Pick<CommentItem, 'kind' | 'text' | 'attachments' | 'threadRootId'> &
     Partial<Pick<CommentItem, 'pendingMedia' | 'pendingVoice' | 'localPreviews' | 'replies'>>,
@@ -101,6 +125,14 @@ function draftOf(
     status: 'sending',
     repliesCount: 0,
     deleted: false,
+    // Ответ в треде к фрагменту не привязывается.
+    ...(fragment && !content.threadRootId
+      ? {
+          fragmentKey: fragment.key,
+          fragmentId: fragment.fragmentId,
+          fragmentQuote: optimisticQuote(fragment.request),
+        }
+      : null),
     ...content,
   };
 }
@@ -110,22 +142,21 @@ async function insert(
   outgoing: Outgoing,
   uploaded: UploadedMedia[],
   threadRootId: string | null,
+  fragment: CommentFragment | undefined,
 ): Promise<Comment> {
   if (outgoing.type === 'voice') {
     const [file] = uploaded;
+    const voice = {
+      url: file.url,
+      mimeType: file.mimeType,
+      durationMs: file.durationMs ?? 0,
+      sizeBytes: file.sizeBytes,
+      waveform: file.waveform,
+    };
 
-    return (subject.type === 'pop' ? sendVoicePopComment : sendVoiceComment)(
-      subject.id,
-      {
-        url: file.url,
-        mimeType: file.mimeType,
-        durationMs: file.durationMs ?? 0,
-        sizeBytes: file.sizeBytes,
-        waveform: file.waveform,
-      },
-      outgoing.replyTo,
-      threadRootId,
-    );
+    return subject.type === 'pop'
+      ? sendVoicePopComment(subject.id, voice, outgoing.replyTo, threadRootId)
+      : sendVoiceComment(subject.id, voice, outgoing.replyTo, threadRootId, fragment);
   }
 
   if (outgoing.type !== 'post') throw new Error('Комментарий не пересылается');
@@ -135,6 +166,7 @@ async function insert(
     media: uploaded.map(toSendMedia),
     replyTo: outgoing.replyTo,
     threadRootId,
+    fragment,
   });
 }
 
@@ -145,9 +177,20 @@ async function insert(
  * своё начало он дочитает, а ответ уже лежит за разрывом.
  */
 function settle(queryClient: QueryClient, targetId: string, localId: string, saved: Comment) {
-  const localPreviews = outboxComments(targetId).find((item) => item.localId === localId)
-    ?.localPreviews;
+  const draft = outboxComments(targetId).find((item) => item.localId === localId);
+  const { localPreviews, fragmentKey } = draft ?? {};
   const item: CommentItem = { ...toCommentItem(saved), localPreviews };
+
+  // Панель фрагмента: первый комментарий к своему новому фрагменту называет
+  // его id — дальше её верх ловит и чужие комментарии к нему.
+  if (saved.fragmentId) {
+    updateScopedRoots(queryClient, targetId, (page, scope) =>
+      scope.key === fragmentKey || scope.fragmentId === saved.fragmentId
+        ? raiseRoot({ ...page, scope: { ...scope, fragmentId: saved.fragmentId } }, item)
+        : page,
+    );
+    void queryClient.invalidateQueries({ queryKey: fragmentsKey(targetId) });
+  }
 
   if (saved.threadRootId) {
     updateThread(queryClient, targetId, saved.threadRootId, (page) => addToThread(page, item), {
@@ -187,6 +230,19 @@ function explainRejection(cause: unknown, subject: CommentSubject) {
   }
 }
 
+/**
+ * Куда уходит верхнеуровневый из панели фрагмента — только черновик этой же
+ * панели. Свой фрагмент база находит по диапазону и будит, если он спал.
+ */
+function fragmentRequest(context: CommentSendContext, localId: string): CommentFragment | undefined {
+  const { fragment, subject } = context;
+  const draft = outboxComments(subject.id).find((item) => item.localId === localId);
+
+  if (!fragment || !draft?.fragmentKey || draft.fragmentKey !== fragment.key) return undefined;
+
+  return fragment.request;
+}
+
 export async function deliverComment(
   context: CommentSendContext,
   localId: string,
@@ -218,7 +274,13 @@ export async function deliverComment(
 
     if (discarded.has(localId)) throw new Error('Отправка отменена');
 
-    saved = await insert(subject, outgoing, uploaded, threadRootId);
+    saved = await insert(
+      subject,
+      outgoing,
+      uploaded,
+      threadRootId,
+      threadRootId ? undefined : fragmentRequest(context, localId),
+    );
 
     // Уже в базе, но человек его удалил — удаляем и там, для всех.
     if (discarded.has(localId)) {

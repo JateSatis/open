@@ -11,11 +11,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button } from '@/components/Button';
 import { Input } from '@/components/Input';
 import { Text } from '@/components/Text';
+import { AvatarPicker } from '@/features/chats/AvatarPicker';
 import { PersonPickItem } from '@/features/chats/PersonPickItem';
 import { useCreateChat } from '@/features/chats/useCreateChat';
 import { usePeople } from '@/features/chats/usePeople';
 import { useTheme } from '@/hooks/use-theme';
 import { Spacing } from '@/theme';
+
+const GROUP_AVATAR_LABELS = { pick: 'Выбрать фото группы', change: 'Сменить фото группы' };
 
 /**
  * Выбор людей и создание чата. Один выбранный — личный диалог, несколько —
@@ -36,6 +39,9 @@ export default function NewChatScreen() {
   const { with: preselected } = useLocalSearchParams<{ with?: string }>();
   const [selected, setSelected] = useState<string[]>(() => (preselected ? [preselected] : []));
   const [title, setTitle] = useState('');
+  // Фото не сбрасывается, когда выбор сузился до одного: снова двое — оно на месте.
+  const [avatarUri, setAvatarUri] = useState<string | null>(null);
+  const isGroup = selected.length > 1;
 
   // replace, а не push: «назад» из нового чата ведёт к списку, а не обратно в выбор.
   const openChat = useCallback((chatId: string) => router.replace(`/chats/${chatId}`), [router]);
@@ -82,14 +88,27 @@ export default function NewChatScreen() {
       onLayout={measureBottomOffset}
       style={[styles.flex, { backgroundColor: theme.background }, keyboardInsetStyle]}
     >
-      <View style={styles.titleField}>
-        <Input
-          accessibilityLabel="Название чата"
-          placeholder="Название — необязательно"
-          value={title}
-          onChangeText={setTitle}
-          maxLength={80}
+      <View style={styles.titleRow}>
+        {/* Фото бывает только у группы: пока выбран один человек, круг притушен. */}
+        <AvatarPicker
+          owner="avatar:group-new"
+          testID="group-avatar-picker"
+          labels={GROUP_AVATAR_LABELS}
+          uri={avatarUri}
+          onChange={setAvatarUri}
+          idle={!isGroup}
+          disabled={isCreating}
+          compact
         />
+        <View style={styles.titleField}>
+          <Input
+            accessibilityLabel="Название чата"
+            placeholder="Название — необязательно"
+            value={title}
+            onChangeText={setTitle}
+            maxLength={80}
+          />
+        </View>
       </View>
 
       {isLoading ? (
@@ -146,7 +165,7 @@ export default function NewChatScreen() {
           label={createLabel}
           disabled={selected.length === 0}
           loading={isCreating}
-          onPress={() => create({ inviteeIds: selected, title })}
+          onPress={() => create({ inviteeIds: selected, title, avatarUri })}
         />
 
         <Text variant="caption" color="textSecondary">
@@ -161,10 +180,16 @@ const styles = StyleSheet.create({
   flex: {
     flex: 1,
   },
-  titleField: {
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
     paddingHorizontal: Spacing.three,
     paddingTop: Spacing.three,
     paddingBottom: Spacing.two,
+  },
+  titleField: {
+    flex: 1,
   },
   list: {
     paddingHorizontal: Spacing.three,

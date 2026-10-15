@@ -7,6 +7,7 @@ import { styles } from './styles';
 import type { CommentForward, QuotedMessage } from '@/api/chats';
 import { Avatar } from '@/components/Avatar';
 import { Text } from '@/components/Text';
+import { FragmentQuote } from '@/features/chats/FragmentQuote';
 import { DELETED_ACCOUNT } from '@/features/chats/messageQuote';
 import { ReplyQuote } from '@/features/chats/ReplyQuote';
 import { useTheme } from '@/hooks/use-theme';
@@ -26,7 +27,7 @@ export type CommentForwardLeadProps = {
 
 /**
  * Верх облачка пересланного комментария: пометка «комментарий» с чатом,
- * сниппет сообщения (или цитата попа), под которым он оставлен, и автор
+ * сниппет сообщения (цитата попа, цитата фрагмента), под которым он оставлен, и автор
  * комментария. Сам
  * комментарий — ниже, содержимым облачка. Так облачко читается в отрыве от
  * переписки и не путается с ответом: у ответа сверху цитата, а снизу
@@ -99,6 +100,13 @@ export function CommentForwardLead({
           channelName={chat?.name ?? null}
           isOwn={isOwn}
           onPress={onOpenPop}
+        />
+      ) : comment.fragmentId ? (
+        // Комментарий к куску текста — цитата куска, а не всего сообщения.
+        <FragmentQuote
+          text={comment.fragmentQuote?.text ?? null}
+          isOwn={isOwn}
+          onPress={onOpenSource}
         />
       ) : (
         <ReplyQuote

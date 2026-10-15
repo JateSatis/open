@@ -28,6 +28,7 @@ import { resetOutbox } from '@/features/chats/messages/outbox';
 import { reportRealtimeJoined, resetConnectionState } from '@/features/connection/connectionStore';
 import { DeadlineError } from '@/lib/deadline';
 import { renderWithQuery } from '@/test/renderWithQuery';
+import { longPressMessage } from '@/test/messageGestures';
 
 const mockRedirect = jest.fn();
 let mockParams: Record<string, string> = { chatId: 'posts-1' };
@@ -84,6 +85,7 @@ jest.mock('@/api/chats', () => ({
   markChatRead: jest.fn(() => Promise.resolve()),
   sendMessage: jest.fn(),
   subscribeToChat: jest.fn(),
+  subscribeToChatSignals: jest.fn(() => () => undefined),
   deleteMessages: jest.fn(),
   listDeletedMessageIds: jest.fn(),
   listMessageEdits: jest.fn(() => Promise.resolve([])),
@@ -149,6 +151,9 @@ const channel = {
 const postsChat: ChatSummary = {
   id: 'posts-1',
   kind: 'channel',
+  ownerId: null,
+  description: null,
+  avatarUrl: null,
   title: null,
   channel: { id: 'channel-1', title: 'Мой канал', username: 'my_channel', avatarUrl: null },
   participants: [{ id: OWNER, displayName: 'Максим', avatarUrl: null, lastReadAt: SENT_AT }],
@@ -247,9 +252,7 @@ describe('ChannelScreen', () => {
     });
     expect(readChatDraft('posts-1').mode).toBeNull();
 
-    await act(async () => {
-      fireEvent.press(screen.getByTestId('message-row-p1'));
-    });
+    await longPressMessage('p1');
     fireEvent.press(await screen.findByRole('menuitem', { name: 'Ответить' }));
     await waitFor(() => expect(readChatDraft('posts-1').mode?.type).toBe('reply'));
   });

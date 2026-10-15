@@ -1,42 +1,79 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { ActivityIndicator, View } from 'react-native';
-import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
+import { useRouter } from 'expo-router';
+import { useCallback } from 'react';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import Animated, { useAnimatedStyle } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { styles } from './styles';
 
-import { Avatar } from '@/components/Avatar';
+import { InfoBarButton, useSlideBack, type SlideBack } from '@/components/InfoPage';
 import { LoadFailed } from '@/components/LoadFailed';
 import { Text } from '@/components/Text';
-import { chatAvatarUrl, chatTitle, isChatMember } from '@/features/chats/chatDisplay';
-import { ChatUsernameForm } from '@/features/chats/ChatUsernameForm';
+import { ChatInfoPage } from '@/features/chats/ChatInfoPage';
 import { chatQueryKey, useChat } from '@/features/chats/useChat';
-import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
-import { formatUsername } from '@/features/profile/username';
 import { useTheme } from '@/hooks/use-theme';
-import { plural } from '@/lib/plural';
 import { reloadMissing } from '@/lib/loadState';
-import { Spacing } from '@/theme';
-
-const AVATAR_SIZE = Spacing.six * 1.5;
 
 export type ChatInfoScreenProps = {
   chatId: string;
 };
 
 /**
- * «О чате» группы: аватар, название, число участников и `@имя.di`. Участник
- * может задать, сменить и стереть имя; посторонний видит его только текстом.
+ * Страница информации о чате по адресу. Из переписки чат уже лежит в кеше, и
+ * страница стоит целиком в первом же кадре; без кеша — пустая страница со
+ * стрелкой, пока чат грузится.
  */
 export function ChatInfoScreen({ chatId }: ChatInfoScreenProps) {
-  const theme = useTheme();
-  const queryClient = useQueryClient();
-  const currentUserId = useCurrentUserId();
-  const { chat, failed } = useChat(chatId);
+  const router = useRouter();
+  const { chat, failed, gone } = useChat(chatId);
+  // Одна на маршрут: заглушка и страница въезжают и уходят одним движением.
+  // Под страницей ничего нет (открыли ссылкой) — уйти в саму переписку.
+  const toChat = useCallback(() => router.replace(`/chats/${chatId}`), [chatId, router]);
+  const slideBack = useSlideBack(toChat);
 
-  if (!chat) {
-    return (
-      <View style={[styles.centered, { backgroundColor: theme.background }]}>
-        {failed ? (
+  if (chat) return <ChatInfoPage chat={chat} slideBack={slideBack} />;
+
+  return (
+    <ChatInfoPlaceholder chatId={chatId} failed={failed} gone={gone} slideBack={slideBack} />
+  );
+}
+
+function ChatInfoPlaceholder({
+  chatId,
+  failed,
+  gone,
+  slideBack,
+}: {
+  chatId: string;
+  failed: boolean;
+  gone: boolean;
+  slideBack: SlideBack;
+}) {
+  const theme = useTheme();
+  const insets = useSafeAreaInsets();
+  const queryClient = useQueryClient();
+  const { offset, close } = slideBack;
+  const pageStyle = useAnimatedStyle(() => ({ transform: [{ translateX: offset.value }] }));
+
+  return (
+    <Animated.View
+      style={[StyleSheet.absoluteFill, { backgroundColor: theme.background }, pageStyle]}
+    >
+      <View style={[styles.bar, { marginTop: insets.top }]}>
+        <InfoBarButton
+          testID="info-back"
+          icon={{ ios: 'chevron.left', android: 'arrow_back', web: 'arrow_back' }}
+          accessibilityLabel="Назад"
+          onPress={close}
+        />
+      </View>
+      <View style={styles.centered}>
+        {gone ? (
+          <Text testID="chat-gone" color="textSecondary">
+            Чат удалён
+          </Text>
+        ) : failed ? (
           <LoadFailed
             message="Не удалось открыть чат"
             onRetry={() => reloadMissing(queryClient, [chatQueryKey(chatId)])}
@@ -45,42 +82,6 @@ export function ChatInfoScreen({ chatId }: ChatInfoScreenProps) {
           <ActivityIndicator accessibilityLabel="Загрузка чата" />
         )}
       </View>
-    );
-  }
-
-  const title = chatTitle(chat, currentUserId);
-  const count = chat.participants.length;
-  const username = formatUsername(chat.username, 'group');
-
-  return (
-    <KeyboardAwareScrollView
-      style={[styles.flex, { backgroundColor: theme.background }]}
-      contentContainerStyle={styles.content}
-      keyboardShouldPersistTaps="handled"
-      // Над клавиатурой — поле вместе с ответом под ним.
-      bottomOffset={Spacing.six}
-    >
-      <Avatar uri={chatAvatarUrl(chat, currentUserId)} name={title} size={AVATAR_SIZE} />
-
-      <View style={styles.identity}>
-        <Text variant="title" style={styles.centeredText}>
-          {title}
-        </Text>
-        {username ? (
-          <Text testID="chat-info-username" variant="body" color="textSecondary">
-            {username}
-          </Text>
-        ) : null}
-        <Text variant="small" color="textSecondary">
-          {`${count} ${plural(count, 'участник', 'участника', 'участников')}`}
-        </Text>
-      </View>
-
-      {chat.kind === 'group' && isChatMember(chat, currentUserId) ? (
-        // Ключ — текущее имя: переименовал другой участник — поле показывает его
-        // имя, а не старое, которое кнопка «Сохранить» молча вернула бы назад.
-        <ChatUsernameForm key={chat.username ?? ''} chatId={chat.id} current={chat.username} />
-      ) : null}
-    </KeyboardAwareScrollView>
+    </Animated.View>
   );
 }

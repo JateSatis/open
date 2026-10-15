@@ -1,0 +1,53 @@
+appId: com.openger.app
+name: Страница чужого диалога — «двое», подписка карточкой, «⋮» с уведомлениями, отписка после вопроса, назад в переписку
+tags:
+  - chats
+  - subscriptions
+env:
+  # Диалог Артёма (@rain) и Максима (@jatesatis): основной аккаунт в нём не участник.
+  CHAT_ID: 54522973-b2a0-4dff-8754-441f5dc6dd7c
+  TITLE: Артём Данилов и Максим Данилов
+---
+- runFlow: subflows/open-app.yaml
+- openLink: openger://chats/${CHAT_ID}
+- assertVisible:
+    id: "messages-list"
+- tapOn: "О чате: ${TITLE}"
+- assertVisible:
+    id: "info-title"
+# Действий участника нет: ни звонка, ни карандаша.
+- assertNotVisible:
+    id: "info-action-call"
+- assertNotVisible:
+    id: "info-edit"
+- assertVisible:
+    id: "info-person-.*"
+# Подписка от прошлого прогона — сначала отписаться.
+- runFlow:
+    when:
+      visible: "Вы подписаны"
+    commands:
+      - tapOn:
+          id: "info-subscribe"
+      - tapOn: "Отписаться"
+- assertVisible: "Подписаться на диалог"
+- tapOn:
+    id: "info-subscribe"
+- assertVisible: "Вы подписаны"
+- assertVisible: "1 подписчик"
+# Подписчику в «⋮» — уведомления и отписка.
+- tapOn:
+    id: "info-menu-button"
+- tapOn: "Выключить уведомления"
+- tapOn:
+    id: "info-menu-button"
+- assertVisible: "Включить уведомления"
+- tapOn: "Отписаться"
+- assertVisible: "Отписаться от диалога?"
+# Кнопка подтверждения — единственный «Отписаться» на экране: меню уже закрылось.
+- tapOn: "Отписаться"
+- assertVisible: "Подписаться на диалог"
+- tapOn:
+    id: "info-back"
+- assertVisible:
+    id: "messages-list"

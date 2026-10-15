@@ -4,9 +4,13 @@ import { MEDIA_BUCKET } from './constants';
 import {
   buildAvatarPath,
   buildChannelAvatarPath,
+  buildGroupAvatarPath,
+  CHANNEL_AVATAR_FOLDER,
+  GROUP_AVATAR_FOLDER,
   buildObjectPath,
   buildPopPaths,
   ownAvatarPathFromUrl,
+  ownPathFromUrl,
 } from './lib/objectPath';
 import type { LocalMedia, UploadedMedia } from './types';
 
@@ -149,7 +153,7 @@ export async function removeUploadedMedia(path: string | string[]): Promise<bool
   return !error;
 }
 
-/** Загружает подготовленный аватар (`pickAvatar`) и отдаёт его публичный URL. */
+/** Загружает подготовленный аватар (`prepareAvatar`) и отдаёт его публичный URL. */
 export async function uploadAvatar(uri: string, userId: string): Promise<string> {
   return (await uploadJpeg(uri, buildAvatarPath(userId))).url;
 }
@@ -163,6 +167,17 @@ export async function uploadChannelAvatar(
   userId: string,
 ): Promise<{ url: string; path: string }> {
   return uploadJpeg(uri, buildChannelAvatarPath(userId));
+}
+
+/**
+ * Аватарка группы. Путь нужен вызывающему: если база фото не приняла (группа
+ * не создалась, смена сорвалась), файл надо убрать (`removeUploadedMedia`).
+ */
+export async function uploadGroupAvatar(
+  uri: string,
+  userId: string,
+): Promise<{ url: string; path: string }> {
+  return uploadJpeg(uri, buildGroupAvatarPath(userId));
 }
 
 async function uploadJpeg(uri: string, path: string): Promise<{ url: string; path: string }> {
@@ -190,6 +205,27 @@ async function uploadJpeg(uri: string, path: string): Promise<{ url: string; pat
  */
 export async function removeOwnAvatar(url: string | null, userId: string): Promise<void> {
   const path = url ? ownAvatarPathFromUrl(url, MEDIA_BUCKET, userId) : null;
+
+  if (path) await removeUploadedMedia(path);
+}
+
+/**
+ * Убирает прежнее фото группы, если файл — мой: фото, поставленное другим
+ * участником, лежит в его префиксе, и удалить его нельзя (политика бакета).
+ * Сбой не ошибка — у группы уже новое фото.
+ */
+export async function removeOwnGroupAvatar(url: string | null, userId: string): Promise<void> {
+  await removeOwnFileIn(GROUP_AVATAR_FOLDER, url, userId);
+}
+
+/** Убирает прежнее фото канала, если файл — мой. Сбой не ошибка — у канала уже новое. */
+export async function removeOwnChannelAvatar(url: string | null, userId: string): Promise<void> {
+  await removeOwnFileIn(CHANNEL_AVATAR_FOLDER, url, userId);
+}
+
+/** Удалить файл по адресу, только если он лежит в папке `folder` моего префикса. */
+async function removeOwnFileIn(folder: string, url: string | null, userId: string): Promise<void> {
+  const path = url ? ownPathFromUrl(url, MEDIA_BUCKET, userId, folder) : null;
 
   if (path) await removeUploadedMedia(path);
 }

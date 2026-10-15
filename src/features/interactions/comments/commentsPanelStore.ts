@@ -1,12 +1,32 @@
 import { create } from 'zustand';
 
 import type { CommentSubject } from '@/api/comments';
+import type { FragmentRange } from '@/api/fragments';
 import { canCommentOn } from '@/features/chats/messageActions';
 import type { ChatMessage } from '@/features/chats/messages/types';
+
+/**
+ * Фрагмент текста, чья боковая панель открыта: цитата, реакции и только его
+ * комментарии. Этап 3 добавит сюда кластер — несколько фрагментов одного
+ * куска текста — отдельным видом цели.
+ */
+export type FragmentPanelSubject = {
+  kind: 'fragment';
+  /** Ключ верха панели: мой фрагмент на этом диапазоне. */
+  key: string;
+  /** Фрагмент в базе; у своего нового — `null`, пока не уйдёт первая реакция или комментарий. */
+  fragmentId: string | null;
+  /** Диапазон для базы (code points) и сам кусок — цитата в шапке. */
+  range: FragmentRange;
+  /** Открыли кнопкой комментария — сразу поле ввода с клавиатурой. */
+  focusInput: boolean;
+};
 
 /** Какие комментарии открыты: к какому сообщению или попу и, если известно, из какого чата. */
 export type CommentsPanelTarget = {
   subject: CommentSubject;
+  /** Только комментарии фрагмента — боковая панель, а не шит. */
+  fragment?: FragmentPanelSubject;
   /** Чат, из переписки которого открыли, — его кеш сразу даёт облачко сверху. */
   chatId?: string;
   /**
@@ -55,7 +75,32 @@ export function openComments(
   from?: CommentsLiftFrom,
 ) {
   usePanelStore.setState({
-    target: { subject: { type: 'message', id: messageId }, chatId, amMember, focusCommentId, ...from },
+    target: {
+      subject: { type: 'message', id: messageId },
+      chatId,
+      amMember,
+      focusCommentId,
+      ...from,
+    },
+    openThread: null,
+  });
+}
+
+/**
+ * Открывает боковую панель фрагмента текста сообщения. `chatId` и `amMember`
+ * — чата, где живёт сообщение (у облачка островка — чата оригинала).
+ * `rowKey` — облачко, где выделяли: туда ведёт цитата над комментарием.
+ * Сообщение над боковой панелью не поднимается.
+ */
+export function openFragmentComments(
+  messageId: string,
+  chatId: string,
+  amMember: boolean,
+  fragment: FragmentPanelSubject,
+  rowKey?: string,
+) {
+  usePanelStore.setState({
+    target: { subject: { type: 'message', id: messageId }, chatId, amMember, fragment, rowKey },
     openThread: null,
   });
 }

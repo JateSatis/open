@@ -36,6 +36,24 @@ export function clearEditedThumbs() {
   ids.forEach(notify);
 }
 
+/**
+ * Забрать все картинки правок и очистить таблицу — для отдельного сеанса
+ * правок (`isolatePhotoEdits`). Плитки узнают о смене сами.
+ */
+export function takeEditedThumbs(): Map<string, string> {
+  const taken = new Map(thumbs);
+
+  clearEditedThumbs();
+
+  return taken;
+}
+
+/** Вернуть картинки, забранные `takeEditedThumbs`, вместо нынешних. */
+export function restoreEditedThumbs(taken: Map<string, string>) {
+  clearEditedThumbs();
+  taken.forEach((uri, id) => setEditedThumb(id, uri));
+}
+
 function subscribe(id: string, listener: () => void): () => void {
   let set = listeners.get(id);
 

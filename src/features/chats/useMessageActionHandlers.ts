@@ -164,6 +164,9 @@ export function useMessageActionHandlers({
         case 'copy':
           void copyText(message ? (copyableText(message) ?? '') : '');
           return;
+        case 'select':
+          selection.start(row.key);
+          return;
         case 'open_original':
           if (message) openOriginal(message);
           return;
@@ -195,7 +198,18 @@ export function useMessageActionHandlers({
           return;
       }
     },
-    [comment, discard, edit, forward, openOriginal, pins, removeForEveryone, reply, retry],
+    [
+      comment,
+      discard,
+      edit,
+      forward,
+      openOriginal,
+      pins,
+      removeForEveryone,
+      reply,
+      retry,
+      selection,
+    ],
   );
 
   const runSelectionAction = useCallback(

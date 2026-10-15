@@ -19,7 +19,7 @@ import {
   recenteringFrame,
   type CropMotion,
 } from './cropMotion';
-import { hitEdges, movedFrame } from './cropHandles';
+import { hitEdges, movedFrame, squareFrame, squareGrowth } from './cropHandles';
 import { startCropTransition } from './useCropTool';
 
 import { rubberBand } from '@/features/media/MediaViewer/viewerMath';
@@ -178,6 +178,37 @@ export function useCropGestures(m: CropMotion, rotationBase: SharedValue<PhotoCr
         // Сильнее фото не увеличить: рамка не уже самой малой обрезки.
         const min = Math.max(Sizes.cropMinFrame, minCropSide(start) * scale);
         const area = m.area.value;
+
+        if (m.square) {
+          // Квадрат растёт одним числом — упор ищется по нему же.
+          const want = squareGrowth(edges.value, event.translationX, event.translationY);
+          const fitsSquare = (growth: number) =>
+            isCovered(
+              resizeCrop(start, frame, squareFrame(frame, edges.value, growth, area, min), scale),
+            );
+          let growth = want;
+
+          if (!fitsSquare(want)) {
+            let low = 0;
+            let high = 1;
+
+            for (let step = 0; step < FIT_STEPS; step += 1) {
+              const mid = (low + high) / 2;
+
+              if (fitsSquare(want * mid)) low = mid;
+              else high = mid;
+            }
+
+            growth = want * low;
+          }
+
+          const box = squareFrame(frame, edges.value, growth, area, min);
+
+          m.frame.value = box;
+          m.crop.value = resizeCrop(start, frame, box, scale);
+          return;
+        }
+
         const fits = (dx: number, dy: number) => {
           const box = movedFrame(frame, edges.value, dx, dy, area, min);
 

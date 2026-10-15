@@ -27,6 +27,7 @@ describe('createChat', () => {
     expect(mockedRpc).toHaveBeenCalledWith('create_chat', {
       invitee_ids: ['user-2'],
       chat_title: 'Поход',
+      chat_avatar_url: null,
     });
     expect(supabase.from).not.toHaveBeenCalled();
   });
@@ -39,7 +40,19 @@ describe('createChat', () => {
     expect(mockedRpc).toHaveBeenCalledWith('create_chat', {
       invitee_ids: ['user-2'],
       chat_title: null,
+      chat_avatar_url: null,
     });
+  });
+
+  it('passes the uploaded group photo to the database', async () => {
+    mockedRpc.mockResolvedValue({ data: { chat_id: 'chat-1', outcome: 'created' }, error: null });
+
+    await createChat({ inviteeIds: ['user-2', 'user-3'], avatarUrl: 'https://x/g.jpg' });
+
+    expect(mockedRpc).toHaveBeenCalledWith(
+      'create_chat',
+      expect.objectContaining({ chat_avatar_url: 'https://x/g.jpg' }),
+    );
   });
 
   it('passes on an incoming invite from the same people', async () => {

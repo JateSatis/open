@@ -13,6 +13,9 @@ import type { ChatSummary } from '@/api/chats';
 const direct: ChatSummary = {
   id: 'chat-1',
   kind: 'direct',
+  ownerId: null,
+  description: null,
+  avatarUrl: null,
   title: null,
   participants: [
     { id: 'user-1', displayName: 'Я', avatarUrl: null, lastReadAt: '2026-09-16T10:00:00Z' },
@@ -56,6 +59,18 @@ describe('chatDisplay', () => {
   it('names a posts chat and draws its avatar after the channel, not the people in it', () => {
     expect(chatTitle(channelPosts, 'user-1')).toBe('Новости');
     expect(chatAvatarUrl(channelPosts, 'user-1')).toBe('https://cdn/ch.jpg');
+  });
+
+  it('draws a group by its own photo, and a group without one by nobody', () => {
+    const group: ChatSummary = {
+      ...direct,
+      kind: 'group',
+      title: 'Друзья',
+      avatarUrl: 'https://cdn/g.jpg',
+    };
+
+    expect(chatAvatarUrl(group, 'user-1')).toBe('https://cdn/g.jpg');
+    expect(chatAvatarUrl({ ...group, avatarUrl: null }, 'user-1')).toBeNull();
   });
 
   it('names a direct chat after the other side', () => {

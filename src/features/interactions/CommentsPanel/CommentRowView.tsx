@@ -27,7 +27,6 @@ export type CommentRowViewProps = {
   editing: boolean;
   highlightKey: number | null;
   onOpenMenu: (comment: CommentItem, anchor: MenuAnchor) => void;
-  onSelect: (comment: CommentItem) => void;
   onToggle: (comment: CommentItem) => void;
   /** Свайп влево — ответить. Нет — у удалённого сообщения ответов не принимают. */
   onSwipeReply?: (comment: CommentItem) => void;
@@ -77,8 +76,8 @@ function PinnedLabel() {
 }
 
 /**
- * Строка комментария: облачко с жестами переписки — тап открывает меню,
- * долгое нажатие включает выбор, свайп влево отвечает. Под облачком корня с
+ * Строка комментария: облачко с жестами переписки — долгое нажатие открывает
+ * меню (в нём — «Выбрать»), свайп влево отвечает, тап ничего не делает. Под облачком корня с
  * ответами — «N ответов»; корень в окне треда — на фоне островка.
  */
 export const CommentRowView = memo(function CommentRowView({
@@ -92,7 +91,6 @@ export const CommentRowView = memo(function CommentRowView({
   editing,
   highlightKey,
   onOpenMenu,
-  onSelect,
   onToggle,
   onSwipeReply,
   onOpenThread,
@@ -134,7 +132,6 @@ export const CommentRowView = memo(function CommentRowView({
         highlightKey={highlightKey}
         messageId={comment.id}
         onOpenMenu={(anchor) => onOpenMenu(comment, anchor)}
-        onSelect={selectable ? () => onSelect(comment) : undefined}
         onToggle={() => onToggle(comment)}
         onSwipeReply={onSwipeReply && selectable ? () => onSwipeReply(comment) : undefined}
       >

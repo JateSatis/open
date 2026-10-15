@@ -17,6 +17,7 @@ import {
   type Comment,
   type CommentChannelHandlers,
 } from '@/api/comments';
+import { locateFragment } from '@/api/fragments';
 import { listPinnedMessages } from '@/api/pins';
 import { NO_REACTIONS } from '@/api/reactionCounts';
 import { useSession } from '@/features/auth/useSession';
@@ -24,9 +25,20 @@ import { resetComposerDrafts } from '@/features/chats/composerDraftStore';
 import { resetOutbox } from '@/features/chats/messages/outbox';
 import { reportRealtimeJoined, resetConnectionState } from '@/features/connection/connectionStore';
 import { resetCommentOutbox } from '@/features/interactions/comments/commentOutbox';
-import { closeComments } from '@/features/interactions/comments/commentsPanelStore';
+import {
+  clearQuoteHighlight,
+  exitFragmentMode,
+  getFragmentState,
+  toggleFragmentMode,
+} from '@/features/chats/fragments/fragmentStore';
+import {
+  closeComments,
+  openFragmentComments,
+} from '@/features/interactions/comments/commentsPanelStore';
+import { useInAppAlert } from '@/features/notifications/alertsStore';
 import { island, original } from '@/test/islands';
 import { renderWithQuery } from '@/test/renderWithQuery';
+import { longPressMessage, startSelecting } from '@/test/messageGestures';
 
 let mockFocused = true;
 const mockPush = jest.fn();
@@ -103,6 +115,36 @@ jest.mock('@/api/comments', () => ({
   subscribeToComments: jest.fn(),
 }));
 jest.mock('@/api/messageViews');
+jest.mock('@/api/fragments', () => ({
+  listMessageFragments: jest.fn(() => Promise.resolve([])),
+  setFragmentReaction: jest.fn(),
+  locateFragment: jest.fn(),
+}));
+// Геометрия текста облачка: одна строка, по 10 dp на символ.
+jest.mock('../../../../modules/text-geometry', () => ({
+  textGeometryAvailable: true,
+  measureText: jest.fn((view: { props?: { children?: unknown } } | null) => {
+    const text = String(view?.props?.children ?? '');
+
+    return Promise.resolve({
+      text,
+      width: text.length * 10,
+      height: 20,
+      lines: [
+        {
+          start: 0,
+          end: text.length,
+          top: 0,
+          bottom: 20,
+          baseline: 16,
+          left: 0,
+          right: text.length * 10,
+        },
+      ],
+      xs: Array.from({ length: text.length }, (_, i) => i * 10),
+    });
+  }),
+}));
 jest.mock('@/api/reactions', () => ({
   ...jest.requireActual('@/api/reactionCounts'),
   listMessageReactions: jest.fn(() => Promise.resolve([])),
@@ -163,6 +205,9 @@ const partner = { id: 'user-2', displayName: 'Олег', avatarUrl: null, lastRe
 const chat: ChatSummary = {
   id: 'chat-1',
   kind: 'direct',
+  ownerId: null,
+  description: null,
+  avatarUrl: null,
   title: 'Разговор',
   participants: [author, partner],
   waiting: [],
@@ -256,6 +301,8 @@ function comment(id: string, overrides: Partial<Comment> = {}): Comment {
     reactions: { members: {}, visitors: {}, mine: null },
     replies: [],
     threadRootId: null,
+    fragmentId: null,
+    fragmentQuote: null,
     repliesCount: 0,
     rank: 0,
     deleted: false,
@@ -383,15 +430,15 @@ describe('a member and the comments circle', () => {
 
     // o4, m3 и m2 с комментариями; у m1 их нет — и круга нет.
     expect(buttons()).toHaveLength(3);
-    expect(within(screen.getByTestId('message-row-m1')).queryByTestId('comments-circle')).toBeNull();
+    expect(
+      within(screen.getByTestId('message-row-m1')).queryByTestId('comments-circle'),
+    ).toBeNull();
   });
 
   it('writes the first comment from the message menu', async () => {
     await renderChat();
 
-    await act(async () => {
-      fireEvent.press(screen.getByTestId('message-row-m1'));
-    });
+    await longPressMessage('m1');
     fireEvent.press(await screen.findByRole('menuitem', { name: 'Комментировать' }));
 
     expect(await screen.findByTestId('comments-panel')).toBeTruthy();
@@ -577,12 +624,8 @@ describe('comments panel', () => {
 });
 
 describe('a visitor in the comments', () => {
-  /** Тап по облачку комментария — его меню. */
-  async function tapComment(id: string) {
-    await act(async () => {
-      fireEvent.press(screen.getByTestId(`message-row-${id}`));
-    });
-  }
+  /** Долгое нажатие на облачко комментария — его меню. */
+  const tapComment = longPressMessage;
 
   it('puts a reaction on a comment from its menu, and it lands in the one row of the comment at once', async () => {
     const mockedReact = setCommentReaction as jest.MockedFunction<typeof setCommentReaction>;
@@ -719,12 +762,8 @@ describe('threads', () => {
     await screen.findByText('второй ответ');
   }
 
-  /** Тап по облачку комментария — его меню. */
-  async function tapComment(id: string) {
-    await act(async () => {
-      fireEvent.press(screen.getAllByTestId(`message-row-${id}`).at(-1)!);
-    });
-  }
+  /** Долгое нажатие на облачко комментария — его меню. */
+  const tapComment = longPressMessage;
 
   it('puts the replies button only under a comment with replies and opens nothing in the list', async () => {
     await renderChat();
@@ -817,15 +856,9 @@ describe('threads', () => {
   });
 
   it('system back leaves selection first, then the thread, then closes the sheet', async () => {
-    const { fireGestureHandler, getByGestureTestId } = jest.requireActual(
-      'react-native-gesture-handler/jest-utils',
-    ) as typeof import('react-native-gesture-handler/jest-utils');
-
     await openThread();
 
-    await act(async () => {
-      fireGestureHandler(getByGestureTestId('message-long-press-r1'), [{ state: 4 }]);
-    });
+    await startSelecting('r1');
     await screen.findByRole('button', { name: 'Ответить' });
 
     await fireEvent(screen.getByTestId('comments-panel'), 'requestClose');
@@ -884,18 +917,12 @@ describe('threads', () => {
   });
 
   it('will not reply to two top-level comments at once — they are two threads', async () => {
-    const { fireGestureHandler, getByGestureTestId } = jest.requireActual(
-      'react-native-gesture-handler/jest-utils',
-    ) as typeof import('react-native-gesture-handler/jest-utils');
-
     await renderChat();
     await openCommentsOf(3);
     await screen.findByText('корень');
 
-    // Долгое нажатие — выбор, тап по другому — добавить к выбору.
-    await act(async () => {
-      fireGestureHandler(getByGestureTestId('message-long-press-root'), [{ state: 4 }]);
-    });
+    // «Выбрать» из меню, тап по другому — добавить к выбору.
+    await startSelecting('root');
     await act(async () => {
       fireEvent.press(screen.getAllByTestId('message-row-other')[0]);
     });
@@ -918,9 +945,7 @@ describe('two chat screens in the stack', () => {
 describe('pinning a comment under a message', () => {
   async function menuOfFirstComment() {
     await screen.findByText('комментарий c1');
-    await act(async () => {
-      fireEvent.press(screen.getByTestId('message-row-c1'));
-    });
+    await longPressMessage('c1');
     await screen.findByTestId('message-menu');
   }
 
@@ -983,5 +1008,153 @@ describe('pinning a comment under a message', () => {
     await menuOfFirstComment();
 
     expect(screen.getByRole('menuitem', { name: 'Закрепить' })).toBeTruthy();
+  });
+});
+
+describe('fragment quote over a comment', () => {
+  const mockedLocate = locateFragment as jest.MockedFunction<typeof locateFragment>;
+  const quoted = comment('cf', {
+    text: 'про кусок',
+    fragmentId: 'f1',
+    fragmentQuote: { text: 'm1', start: 6, end: 8, lost: false },
+  });
+
+  beforeEach(() => {
+    exitFragmentMode();
+    clearQuoteHighlight();
+    useInAppAlert.setState({ alert: null });
+    mockedListComments.mockResolvedValue({
+      items: [quoted, comment('plain', { text: 'обычный' })],
+      nextCursor: null,
+    });
+  });
+
+  async function openSheet() {
+    await renderChat();
+    await openCommentsOf(3);
+    await screen.findByText('про кусок');
+  }
+
+  it('stands over a comment to a fragment and nowhere else', async () => {
+    await openSheet();
+
+    const plates = screen.getAllByTestId('comment-fragment-quote');
+
+    expect(plates).toHaveLength(1);
+    expect(within(plates[0]).getByText('m1')).toBeTruthy();
+  });
+
+  it('closes the sheet and highlights the quoted piece in the message', async () => {
+    mockedLocate.mockResolvedValue({
+      state: 'live',
+      start: 6,
+      end: 8,
+      lost: false,
+      messageCreatedAt: '2026-09-30T10:01:00Z',
+    });
+
+    await openSheet();
+    // Облачко было в режиме фрагментов — переход его выключает.
+    await act(async () => toggleFragmentMode('m1'));
+    expect(getFragmentState().activeKey).toBe('m1');
+    await fireEvent.press(screen.getByTestId('comment-fragment-quote'));
+
+    await waitFor(() => expect(screen.queryByTestId('comments-panel')).toBeNull());
+    expect(getFragmentState().activeKey).toBeNull();
+    const highlight = await screen.findByTestId('quote-highlight');
+
+    // Ровно «m1»: с шестого символа по восьмой.
+    expect(highlight.children).toHaveLength(1);
+    expect((highlight.children[0] as unknown as { props: { style: unknown } }).props.style).toEqual(
+      expect.arrayContaining([expect.objectContaining({ left: 60, width: 20 })]),
+    );
+
+    // Первое же касание экрана снимает подсветку.
+    await fireEvent(screen.getByText('текст m1'), 'touchStart');
+    await waitFor(() => expect(screen.queryByTestId('quote-highlight')).toBeNull());
+  });
+
+  it('leads to the piece from the fragment side panel too, and the panel closes', async () => {
+    mockedLocate.mockResolvedValue({
+      state: 'live',
+      start: 6,
+      end: 8,
+      lost: false,
+      messageCreatedAt: '2026-09-30T10:01:00Z',
+    });
+
+    await renderChat();
+    await act(async () =>
+      openFragmentComments(
+        'm1',
+        'chat-1',
+        false,
+        {
+          kind: 'fragment',
+          key: 'm1:6-8',
+          fragmentId: 'f1',
+          range: { start: 6, end: 8, text: 'm1' },
+          focusInput: false,
+        },
+        'm1',
+      ),
+    );
+    await screen.findByText('про кусок');
+    await fireEvent.press(screen.getAllByTestId('comment-fragment-quote')[0]);
+
+    await waitFor(() => expect(screen.queryByTestId('fragment-panel')).toBeNull());
+    expect(await screen.findByTestId('quote-highlight')).toBeTruthy();
+  });
+
+  it('flashes the whole message and says so when an edit took the piece away', async () => {
+    mockedLocate.mockResolvedValue({
+      state: 'live',
+      start: 0,
+      end: 2,
+      lost: true,
+      messageCreatedAt: '2026-09-30T10:01:00Z',
+    });
+
+    await openSheet();
+    await fireEvent.press(screen.getByTestId('comment-fragment-quote'));
+
+    await waitFor(() => expect(screen.queryByTestId('comments-panel')).toBeNull());
+    await waitFor(() =>
+      expect(useInAppAlert.getState().alert).toMatchObject({ text: 'Этот кусок текста изменён' }),
+    );
+    expect(screen.queryByTestId('quote-highlight')).toBeNull();
+  });
+
+  it('stands over the root in the thread window, not over the replies', async () => {
+    mockedListComments.mockResolvedValue({
+      items: [{ ...quoted, repliesCount: 1 }],
+      nextCursor: null,
+    });
+    mockedReplies.mockResolvedValue({
+      items: [comment('r1', { threadRootId: 'cf', text: 'ответ в треде' })],
+      nextCursor: null,
+    });
+
+    await openSheet();
+    await fireEvent.press(screen.getByLabelText('Показать 1 ответ'));
+    await screen.findByText('ответ в треде');
+
+    expect(
+      within(screen.getByTestId('thread-root')).getByTestId('comment-fragment-quote'),
+    ).toBeTruthy();
+    // Корень дважды — в основном списке и в окне треда; у ответа плашки нет.
+    expect(screen.getAllByTestId('comment-fragment-quote')).toHaveLength(2);
+  });
+
+  it('keeps the sheet open when the message is deleted', async () => {
+    mockedLocate.mockResolvedValue({ state: 'deleted' });
+
+    await openSheet();
+    await fireEvent.press(screen.getByTestId('comment-fragment-quote'));
+
+    await waitFor(() =>
+      expect(useInAppAlert.getState().alert).toMatchObject({ text: 'Сообщение удалено' }),
+    );
+    expect(screen.getByTestId('comments-panel')).toBeTruthy();
   });
 });

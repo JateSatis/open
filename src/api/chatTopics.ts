@@ -21,6 +21,11 @@ export type ChatTopicListener = {
   onMessage?: () => void;
   onRead?: () => void;
   onMembersChanged?: () => void;
+  /**
+   * Чат изменился: название, фото, описание, состав, заявки — или его
+   * удалили. Что именно, подписчик перечитывает из базы.
+   */
+  onChatChanged?: () => void;
   onMessagesDeleted?: (messageIds: string[]) => void;
   onMessageEdited?: (messageId: string) => void;
   onPinsChanged?: () => void;
@@ -89,6 +94,7 @@ function open(chatId: string): Entry {
     .on('broadcast', { event: 'new_message' }, () => each((l) => l.onMessage?.()))
     .on('broadcast', { event: 'read' }, () => each((l) => l.onRead?.()))
     .on('broadcast', { event: 'member_joined' }, () => each((l) => l.onMembersChanged?.()))
+    .on('broadcast', { event: 'chat_changed' }, () => each((l) => l.onChatChanged?.()))
     .on('broadcast', { event: 'messages_deleted' }, ({ payload }) => {
       const list = messageIdsOf(payload);
 

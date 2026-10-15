@@ -138,6 +138,9 @@ function chatWith(participants: ChatSummary['participants']): ChatSummary {
   return {
     id: 'chat-1',
     kind: 'direct',
+    ownerId: null,
+    description: null,
+    avatarUrl: null,
     title: 'Разговор',
     participants,
     waiting: [],
@@ -214,7 +217,7 @@ beforeEach(() => {
 });
 
 describe('ChatScreen', () => {
-  it('shows the counterpart status in the header and opens their profile on tap', async () => {
+  it('shows the counterpart status in the header and opens the chat info page on tap', async () => {
     const user = userEvent.setup();
 
     await renderWithQuery(<ChatScreen />);
@@ -223,8 +226,9 @@ describe('ChatScreen', () => {
     expect(await screen.findByText('в отпуске до понедельника · 0 подписчиков')).toBeTruthy();
     expect(mockedGetProfile).toHaveBeenCalledWith('user-2');
 
-    await user.press(screen.getByLabelText('Профиль: Разговор'));
-    expect(mockPush).toHaveBeenCalledWith('/chats/people/user-2');
+    // Свой диалог, как и группа, ведёт на страницу информации, а не в профиль.
+    await user.press(screen.getByLabelText('О чате: Разговор'));
+    expect(mockPush).toHaveBeenCalledWith('/chats/chat-info/chat-1');
   });
 
   it('opens «О чате» from a tap on the header of a group', async () => {
@@ -236,6 +240,28 @@ describe('ChatScreen', () => {
 
     expect(mockPush).toHaveBeenCalledWith('/chats/chat-info/chat-1');
     expect(screen.queryByLabelText('Профиль: Разговор')).toBeNull();
+  });
+
+  it('draws the group photo in the header, or the first letter of its title', async () => {
+    mockedGetChat.mockResolvedValue({
+      ...chatWith([member, other]),
+      kind: 'group',
+      avatarUrl: 'https://x/g.jpg',
+    });
+
+    const { unmount } = await renderWithQuery(<ChatScreen />);
+    await screen.findByLabelText('О чате: Разговор');
+
+    // Фото подписано названием группы; буквы на его месте нет.
+    expect(screen.getByLabelText('Разговор')).toBeTruthy();
+    expect(screen.queryByText('Р')).toBeNull();
+    await unmount();
+
+    mockedGetChat.mockResolvedValue({ ...chatWith([member, other]), kind: 'group' });
+    await renderWithQuery(<ChatScreen />);
+    await screen.findByLabelText('О чате: Разговор');
+
+    expect(screen.getByText('Р')).toBeTruthy();
   });
 
   it('opens «О чате» for an outsider of a group too', async () => {

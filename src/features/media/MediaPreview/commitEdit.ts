@@ -5,7 +5,11 @@ import { workingCopyOf } from './workingCopy';
 
 import type { MediaLibraryItem } from '@/features/media/mediaLibrary';
 import { setEditedThumb } from '@/features/media/photoEdits/editedThumbs';
-import { photoEditOf, setPhotoEdit } from '@/features/media/photoEdits/editsStore';
+import {
+  arePhotoEditsIsolated,
+  photoEditOf,
+  setPhotoEdit,
+} from '@/features/media/photoEdits/editsStore';
 import { isEmptyEdit, normalizeEdit, type PhotoEdit } from '@/features/media/photoEdits/types';
 import { useMediaSelection } from '@/features/media/selectionStore';
 
@@ -13,7 +17,7 @@ import { useMediaSelection } from '@/features/media/selectionStore';
  * «Готово» любого инструмента: записать правку, сразу сделать картинку для
  * плитки (фото может улететь в неё уже через мгновение), запечь в фоне и
  * выбрать фото, если оно ещё не выбрано и лимит позволяет — правка это
- * намерение отправить.
+ * намерение отправить. В шите аватарки выбора нет: правка — только правка.
  */
 export function commitPhotoEdit(asset: MediaLibraryItem, input: PhotoEdit) {
   const edit = normalizeEdit(input);
@@ -48,6 +52,8 @@ export function commitPhotoEdit(asset: MediaLibraryItem, input: PhotoEdit) {
       });
     })
     .catch(() => undefined);
+
+  if (arePhotoEditsIsolated()) return;
 
   const selection = useMediaSelection.getState();
 

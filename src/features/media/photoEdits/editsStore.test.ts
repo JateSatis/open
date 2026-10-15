@@ -1,4 +1,10 @@
-import { photoEditOf, setPhotoEdit, usePhotoEdits } from './editsStore';
+import {
+  arePhotoEditsIsolated,
+  isolatePhotoEdits,
+  photoEditOf,
+  setPhotoEdit,
+  usePhotoEdits,
+} from './editsStore';
 import { defaultCrop, rotateQuarter } from './crop';
 import { editedThumbOf, setEditedThumb } from './editedThumbs';
 import type { BakedPhoto } from './types';
@@ -101,5 +107,35 @@ describe('обрезка в правке', () => {
     useMediaSelection.getState().clear();
 
     expect(editedThumbOf('a')).toBeUndefined();
+  });
+});
+
+describe('отдельный сеанс правок (шит аватарки)', () => {
+  it('правки чата на время сеанса не видны и возвращаются после него', () => {
+    setPhotoEdit('a', GREY, baked);
+    setEditedThumb('a', 'file:///chat-thumb.jpg');
+
+    const restore = isolatePhotoEdits();
+
+    expect(photoEditOf('a')).toBeUndefined();
+    expect(editedThumbOf('a')).toBeUndefined();
+    expect(arePhotoEditsIsolated()).toBe(true);
+
+    restore();
+
+    expect(photoEditOf('a')).toEqual(GREY);
+    expect(editedThumbOf('a')).toBe('file:///chat-thumb.jpg');
+    expect(arePhotoEditsIsolated()).toBe(false);
+  });
+
+  it('правка сеанса уходит вместе с ним — в чате фото без неё', () => {
+    const restore = isolatePhotoEdits();
+
+    setPhotoEdit('b', GREY, baked);
+    setEditedThumb('b', 'file:///avatar-thumb.jpg');
+    restore();
+
+    expect(photoEditOf('b')).toBeUndefined();
+    expect(editedThumbOf('b')).toBeUndefined();
   });
 });

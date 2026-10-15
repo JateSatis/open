@@ -1,5 +1,6 @@
 import { View } from 'react-native';
 
+import { SheetTop } from './SheetTop';
 import { styles } from './styles';
 
 import { GridSkeleton, useGridGeometry } from '@/features/media';
@@ -11,6 +12,8 @@ type SheetShellProps = {
   /** Высота свёрнутого шита — дальше рисовать незачем. */
   height: number;
   topBarHeight: number;
+  /** Заголовок под ручкой — тот же, что в шапке списка. */
+  title?: string;
 };
 
 /**
@@ -21,7 +24,7 @@ type SheetShellProps = {
  * Остаётся под списком и дальше: в свёрнутом положении список закрывает её
  * пиксель в пиксель, а в развёрнутом его непрозрачная подложка выше неё.
  */
-export function SheetShell({ top, height, topBarHeight }: SheetShellProps) {
+export function SheetShell({ top, height, topBarHeight, title }: SheetShellProps) {
   const theme = useTheme();
   const { pitch } = useGridGeometry();
 
@@ -31,9 +34,7 @@ export function SheetShell({ top, height, topBarHeight }: SheetShellProps) {
       style={[styles.shell, { top, height, backgroundColor: theme.background }]}
       pointerEvents="none"
     >
-      <View style={[styles.sheetTop, { height: topBarHeight }]}>
-        <View style={[styles.handleBar, { backgroundColor: theme.border }]} />
-      </View>
+      <SheetTop height={topBarHeight} title={title} />
       <GridSkeleton
         top={topBarHeight}
         square={theme.backgroundElement}

@@ -5,7 +5,7 @@
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
-import { createDeleteAccountHandler } from './handler.ts';
+import { createDeleteAccountHandler, createRemoveAvatarFiles } from './handler.ts';
 
 const MEDIA_BUCKET = 'media';
 
@@ -25,19 +25,7 @@ const handler = createDeleteAccountHandler({
 
     return data.user.id;
   },
-  removeAvatarFiles: async (userId) => {
-    const folder = `${userId}/avatar`;
-    const { data, error } = await admin.storage.from(MEDIA_BUCKET).list(folder, { limit: 100 });
-
-    if (error) throw error;
-    if (!data || data.length === 0) return;
-
-    const { error: removeError } = await admin.storage
-      .from(MEDIA_BUCKET)
-      .remove(data.map((file) => `${folder}/${file.name}`));
-
-    if (removeError) throw removeError;
-  },
+  removeAvatarFiles: createRemoveAvatarFiles(admin.storage.from(MEDIA_BUCKET)),
   deleteUser: async (userId) => {
     const { error } = await admin.auth.admin.deleteUser(userId);
 
