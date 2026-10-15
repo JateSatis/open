@@ -39,6 +39,7 @@ function comment(id: string, minute: number, overrides: Partial<Comment> = {}): 
     replies: [],
     threadRootId: null,
     fragmentId: null,
+    fragmentQuote: null,
     repliesCount: 0,
     rank: 0,
     deleted: false,

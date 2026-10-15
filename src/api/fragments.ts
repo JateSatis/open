@@ -3,6 +3,7 @@
 // только с первой реакцией или первым комментарием; диапазон — code points,
 // полуоткрытый `[start, end)`, переводит его клиент (`textOffsets`).
 
+import { listDeletedMessageIds } from '@/api/chats';
 import { toAudience, type MyReaction, type ReactionCounts } from '@/api/reactionCounts';
 import { supabase } from '@/api/supabase';
 
@@ -82,4 +83,52 @@ export async function setFragmentReaction(
     fragmentId: row?.fragment_id ?? null,
     mine: row?.emoji ? { emoji: row.emoji, audience: toAudience(row.audience) } : null,
   };
+}
+
+/** Где фрагмент сейчас — для перехода по цитате. */
+export type FragmentWhereabouts =
+  | {
+      state: 'live';
+      /** Code points текущего текста. */
+      start: number;
+      end: number;
+      lost: boolean;
+      /** Время сообщения — до него догружается история. */
+      messageCreatedAt: string;
+    }
+  | { state: 'deleted' }
+  | { state: 'missing' };
+
+/**
+ * Свежее положение фрагмента: пока шит был открыт, сообщение могли
+ * переписать или удалить. Фрагмент удалённого сообщения SELECT-политика не
+ * отдаёт — тогда спрашиваем, удалено ли оно.
+ */
+export async function locateFragment(
+  fragmentId: string,
+  messageId: string,
+): Promise<FragmentWhereabouts> {
+  const { data, error } = await supabase
+    .from('message_fragments')
+    .select(
+      'start_offset, end_offset, anchor_state, message:messages!message_fragments_message_fkey(created_at)',
+    )
+    .eq('id', fragmentId)
+    .maybeSingle();
+
+  if (error) throw error;
+
+  if (data?.message) {
+    return {
+      state: 'live',
+      start: data.start_offset,
+      end: data.end_offset,
+      lost: data.anchor_state === 'lost',
+      messageCreatedAt: data.message.created_at,
+    };
+  }
+
+  const deleted = await listDeletedMessageIds([messageId]);
+
+  return deleted.includes(messageId) ? { state: 'deleted' } : { state: 'missing' };
 }

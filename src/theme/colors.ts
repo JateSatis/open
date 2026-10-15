@@ -42,6 +42,17 @@ export const Colors = {
     textSelection: 'rgba(60, 135, 247, 0.34)',
     /** То же в своём облачке, на синем. */
     textSelectionOnPrimary: 'rgba(255, 255, 255, 0.38)',
+    /**
+     * Кусок текста, к которому пришли по цитате фрагмента, — в чужом облачке.
+     * Тёплый: не путается ни с синим выделением, ни со вспышкой всего
+     * сообщения (`messageHighlight`).
+     */
+    fragmentHighlight: 'rgba(255, 190, 0, 0.38)',
+    /**
+     * То же в своём облачке. Жёлтое на синем мутнеет в серо-зелёное, белое —
+     * это выделение: тёмная полоса, белый текст на ней читается.
+     */
+    fragmentHighlightOnPrimary: 'rgba(0, 28, 110, 0.42)',
     /** Ручки выделения в чужом облачке. */
     selectionHandle: '#3C87F7',
     /** Ручки в своём облачке — белые на синем. */
@@ -115,6 +126,8 @@ export const Colors = {
     fragmentBubbleOwn: '#255BB0',
     textSelection: 'rgba(60, 135, 247, 0.5)',
     textSelectionOnPrimary: 'rgba(255, 255, 255, 0.34)',
+    fragmentHighlight: 'rgba(255, 190, 0, 0.3)',
+    fragmentHighlightOnPrimary: 'rgba(0, 20, 80, 0.5)',
     selectionHandle: '#5A9BFF',
     selectionHandleOnPrimary: '#ffffff',
     quoteBackground: 'rgba(60, 135, 247, 0.18)',
@@ -169,4 +182,3 @@ export const DrawColors = {
   outlineOnLight: '#000000',
   outlineOnDark: '#ffffff',
 } as const;
-

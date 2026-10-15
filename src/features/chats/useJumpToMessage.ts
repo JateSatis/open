@@ -16,8 +16,9 @@ export type JumpToMessage = {
    * Прокручивает к строке и подсвечивает её. Если она ещё не загружена,
    * сначала догружает историю до `createdAt` — времени сообщения или
    * островка, где оно стоит, — по страницам. Отвечает, нашлось ли.
+   * `flash: false` — только прокрутка: строку подсветит тот, кто прыгал.
    */
-  jump: (rowKey: string, createdAt: string) => Promise<boolean>;
+  jump: (rowKey: string, createdAt: string, options?: { flash?: boolean }) => Promise<boolean>;
   highlight: JumpHighlight | null;
   /** Для `onScrollToIndexFailed` списка: строки разной высоты, и до далёкой списку не долистать с первого раза. */
   onScrollToIndexFailed: (info: ScrollFailure) => void;
@@ -42,6 +43,8 @@ export function useJumpToMessage(
   loadUntil: (createdAt: string) => Promise<boolean>,
 ): JumpToMessage {
   const [highlight, setHighlight] = useState<JumpHighlight | null>(null);
+  // Каждый прыжок — со вспышкой и без — ждёт своей строки в списке.
+  const [jumps, setJumps] = useState(0);
   // Цель — в ref, а не в состоянии: прокрутка — побочное действие, и
   // перерисовку ради неё запускает уже смена подсветки.
   const targetRef = useRef<string | null>(null);
@@ -60,7 +63,7 @@ export function useJumpToMessage(
 
     targetRef.current = null;
     listRef.current?.scrollToIndex(centerOf(index));
-  }, [highlight, listRef, rows]);
+  }, [jumps, listRef, rows]);
 
   useEffect(
     () => () => {
@@ -70,13 +73,15 @@ export function useJumpToMessage(
   );
 
   const jump = useCallback(
-    async (rowKey: string, createdAt: string) => {
+    async (rowKey: string, createdAt: string, { flash = true }: { flash?: boolean } = {}) => {
       const found = await loadUntil(createdAt);
 
       if (!found) return false;
 
       targetRef.current = rowKey;
-      setHighlight({ messageId: rowKey, key: Date.now() });
+      setJumps((count) => count + 1);
+
+      if (flash) setHighlight({ messageId: rowKey, key: Date.now() });
 
       return true;
     },

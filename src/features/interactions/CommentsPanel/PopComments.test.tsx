@@ -131,6 +131,7 @@ function comment(id: string, overrides: Partial<Comment> = {}): Comment {
     replies: [],
     threadRootId: null,
     fragmentId: null,
+    fragmentQuote: null,
     repliesCount: 0,
     rank: 0,
     deleted: false,

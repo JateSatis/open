@@ -39,7 +39,10 @@ import {
   type MessageReactions,
   type MyReaction,
 } from '@/api/reactionCounts';
+import { FRAGMENT_QUOTE_COLUMNS, toFragmentQuote, type FragmentQuote } from '@/api/fragmentQuote';
 import { supabase } from '@/api/supabase';
+
+export type { FragmentQuote } from '@/api/fragmentQuote';
 
 export const COMMENT_PAGE_SIZE = 30;
 /** Первая порция треда и каждая следующая по «Показать ещё». */
@@ -77,6 +80,11 @@ export type Comment = {
   threadRootId: string | null;
   /** Фрагмент текста сообщения, к которому комментарий (только у верхнеуровневого). */
   fragmentId: string | null;
+  /**
+   * Цитата фрагмента и где он сейчас в тексте. `null` при `fragmentId` —
+   * фрагмент не читается: его сообщение удалено.
+   */
+  fragmentQuote: FragmentQuote | null;
   /** Сколько живых ответов в треде. У ответов — 0. */
   repliesCount: number;
   /** Ранг верха на момент выборки: по нему идёт следующая страница. */
@@ -119,7 +127,7 @@ export type CommentTarget =
   | { state: 'missing' };
 
 const COMMENT_COLUMNS =
-  `id, target_id, chat_id, author_id, kind, text, audience, created_at, edited_at, deleted_at, thread_root_id, fragment_id, replies_count, rank, author:profiles(display_name, avatar_url), comment_attachments(id, url, poster_url, mime_type, width, height, duration_ms, waveform), ${REACTION_COLUMNS}, replies:comment_replies!comment_replies_comment_fkey(position, quoted_id, quoted:comments!comment_replies_quoted_fkey(id, author_id, kind, text, created_at, edited_at, author:profiles(display_name), comment_attachments(url, poster_url, mime_type, duration_ms, position)))` as const;
+  `id, target_id, chat_id, author_id, kind, text, audience, created_at, edited_at, deleted_at, thread_root_id, fragment_id, replies_count, rank, author:profiles(display_name, avatar_url), ${FRAGMENT_QUOTE_COLUMNS}, comment_attachments(id, url, poster_url, mime_type, width, height, duration_ms, waveform), ${REACTION_COLUMNS}, replies:comment_replies!comment_replies_comment_fkey(position, quoted_id, quoted:comments!comment_replies_quoted_fkey(id, author_id, kind, text, created_at, edited_at, author:profiles(display_name), comment_attachments(url, poster_url, mime_type, duration_ms, position)))` as const;
 
 // Мозаика собирается в порядке выбора файлов, а PostgREST не гарантирует
 // порядок вложенной выборки без явного order.
@@ -224,6 +232,7 @@ export function toComment(row: CommentRow): Comment {
     replies: [...(row.replies ?? [])].sort((a, b) => a.position - b.position).map(toQuotedComment),
     threadRootId: row.thread_root_id,
     fragmentId: row.fragment_id,
+    fragmentQuote: toFragmentQuote(row.fragment_id, row.fragment),
     repliesCount: row.replies_count,
     rank: row.rank ?? 0,
     deleted: row.deleted_at !== null,

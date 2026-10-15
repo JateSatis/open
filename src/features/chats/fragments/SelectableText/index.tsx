@@ -3,7 +3,13 @@ import { Text as RNText, StyleSheet, View } from 'react-native';
 
 import { styles } from './styles';
 
-import { useRowSelection, type TextSelection } from '@/features/chats/fragments/fragmentStore';
+import type { TextGeometry } from '../../../../../modules/text-geometry';
+
+import {
+  useRowQuoteHighlight,
+  useRowSelection,
+  type TextSelection,
+} from '@/features/chats/fragments/fragmentStore';
 import { registerSelectableText } from '@/features/chats/fragments/selectableTexts';
 import { caretAt, rangeRects } from '@/features/chats/fragments/textGeometry';
 import { useTheme } from '@/hooks/use-theme';
@@ -40,6 +46,9 @@ export function SelectableText({
   const theme = useTheme();
   const ref = useRef<RNText>(null);
   const selection = useRowSelection(rowKey);
+  const quote = useRowQuoteHighlight(rowKey);
+  // Текст сменился правкой — прежняя геометрия к нему не подходит.
+  const shownQuote = quote && quote.text === text ? quote : null;
 
   useEffect(() => {
     if (!rowKey) return;
@@ -49,12 +58,64 @@ export function SelectableText({
 
   return (
     <View>
+      {shownQuote ? (
+        <RangeFill
+          testID="quote-highlight"
+          geometry={shownQuote.geometry}
+          start={shownQuote.start}
+          end={shownQuote.end}
+          color={isOwn ? theme.fragmentHighlightOnPrimary : theme.fragmentHighlight}
+        />
+      ) : null}
       {selection ? <SelectionLayer selection={selection} isOwn={isOwn} part="fill" /> : null}
       {/* Свой `Text` ref не отдаёт — а мерить нужно сам нативный текст. */}
-      <RNText ref={ref} style={[Typography.body, { color: isOwn ? theme.primaryText : theme.text }]}>
+      <RNText
+        ref={ref}
+        style={[Typography.body, { color: isOwn ? theme.primaryText : theme.text }]}
+      >
         {text}
       </RNText>
       {selection ? <SelectionLayer selection={selection} isOwn={isOwn} part="handles" /> : null}
+    </View>
+  );
+}
+
+/**
+ * Заливка диапазона под текстом — по строке на строку, без хвостов строк и
+ * межстрочья: у выделения и у куска, к которому пришли по цитате.
+ */
+function RangeFill({
+  testID,
+  geometry,
+  start,
+  end,
+  color,
+}: {
+  testID: string;
+  geometry: TextGeometry;
+  start: number;
+  end: number;
+  color: string;
+}) {
+  const rects = useMemo(() => rangeRects(geometry, start, end), [end, geometry, start]);
+
+  return (
+    <View pointerEvents="none" testID={testID} style={StyleSheet.absoluteFill}>
+      {rects.map((rect) => (
+        <View
+          key={`${rect.x}:${rect.y}`}
+          style={[
+            styles.rect,
+            {
+              left: rect.x,
+              top: rect.y,
+              width: rect.width,
+              height: rect.height,
+              backgroundColor: color,
+            },
+          ]}
+        />
+      ))}
     </View>
   );
 }
@@ -70,23 +131,16 @@ function SelectionLayer({
 }) {
   const theme = useTheme();
   const { geometry, start, end } = selection;
-  const rects = useMemo(() => rangeRects(geometry, start, end), [end, geometry, start]);
 
   if (part === 'fill') {
-    const fill = isOwn ? theme.textSelectionOnPrimary : theme.textSelection;
-
     return (
-      <View pointerEvents="none" testID="text-selection" style={StyleSheet.absoluteFill}>
-        {rects.map((rect) => (
-          <View
-            key={`${rect.x}:${rect.y}`}
-            style={[
-              styles.rect,
-              { left: rect.x, top: rect.y, width: rect.width, height: rect.height, backgroundColor: fill },
-            ]}
-          />
-        ))}
-      </View>
+      <RangeFill
+        testID="text-selection"
+        geometry={geometry}
+        start={start}
+        end={end}
+        color={isOwn ? theme.textSelectionOnPrimary : theme.textSelection}
+      />
     );
   }
 
