@@ -1,4 +1,4 @@
-import { listThreadReplies, listThreadRoots } from './comments';
+import { getCommentTarget, listThreadReplies, listThreadRoots } from './comments';
 
 import { supabase } from '@/api/supabase';
 
@@ -178,5 +178,42 @@ describe('fragment quote', () => {
     const { items } = await listThreadRoots('m1');
 
     expect(items[0]).toMatchObject({ fragmentId: 'f1', fragmentQuote: null });
+  });
+});
+
+/** Имена связей верхнего уровня в `select` PostgREST — без вложенных. */
+function topLevelEmbeds(select: string): string[] {
+  const names: string[] = [];
+  let depth = 0;
+  let item = '';
+
+  for (const char of `${select},`) {
+    if (char === '(') depth += 1;
+    if (char === ')') depth -= 1;
+    if (char === ',' && depth === 0) {
+      const embed = /^\s*(\w+):/.exec(item);
+      if (embed) names.push(embed[1]);
+      item = '';
+    } else {
+      item += char;
+    }
+  }
+
+  return names;
+}
+
+describe('getCommentTarget', () => {
+  it('names every embed once: a repeated alias makes PostgREST reject the whole query', async () => {
+    const calls: { method: string; args: unknown[] }[] = [];
+    mockedFrom.mockReturnValue(chain({ data: null, error: null }, calls));
+    mockedRpc.mockReturnValue(chain({ data: [], error: null }, []));
+
+    await expect(getCommentTarget('m1')).resolves.toEqual({ state: 'missing' });
+
+    const select = calls.find((call) => call.method === 'select')?.args[0] as string;
+    const embeds = topLevelEmbeds(select);
+
+    expect(embeds).toContain('author');
+    expect(new Set(embeds).size).toBe(embeds.length);
   });
 });

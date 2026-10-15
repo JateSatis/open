@@ -137,10 +137,12 @@ const commentsSelect = () =>
     .select(COMMENT_COLUMNS)
     .order('position', { referencedTable: 'comment_attachments' });
 
+// Автор (имя и аватарка) — уже в `MESSAGE_COLUMNS`: вторая такая же связь
+// роняет запрос целиком (PostgREST 42712).
 const targetSelect = () =>
   supabase
     .from('messages')
-    .select(`${MESSAGE_COLUMNS}, author:profiles!messages_author_id_fkey(display_name, avatar_url)`)
+    .select(MESSAGE_COLUMNS)
     .order('position', { referencedTable: 'attachments' });
 
 /**
