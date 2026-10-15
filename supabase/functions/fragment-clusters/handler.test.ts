@@ -108,7 +108,7 @@ Deno.test('сбой одного сообщения не останавлива�
 
   const body = await (await handler(request())).json();
 
-  assertEquals(body.failed, 1);
+  assertEquals(body.failed, [{ message_id: M1, error: 'timeout' }]);
   assertEquals(applied.map((a) => a.id), [M2]);
 });
 

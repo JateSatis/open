@@ -72,6 +72,17 @@ function sameSecret(a: string, b: string): boolean {
   return diff === 0;
 }
 
+/** Ошибка — строкой для ответа: его видно в `net._http_response` базы. */
+function describe(error: unknown): string {
+  if (error instanceof Error) return error.message;
+
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
+}
+
 /** Результат модели — в форму, которую ждёт `fragment_clusters_apply`. */
 export function toApplyPayload(snapshot: ClusterSnapshot, model: ClusterModelResult | null) {
   return {
@@ -127,7 +138,7 @@ export function createClustersHandler(deps: ClustersDeps) {
 
     const started = now();
     const done: MessageOutcome[] = [];
-    let failed = 0;
+    const failed: { message_id: string; error: string }[] = [];
 
     while (now() - started < budget) {
       let snapshots: ClusterSnapshot[];
@@ -146,7 +157,7 @@ export function createClustersHandler(deps: ClustersDeps) {
           done.push(await processOne(snapshot));
         } catch (error) {
           // Заявка не снята — вернётся в очередь, когда истечёт аренда.
-          failed += 1;
+          failed.push({ message_id: snapshot.message_id, error: describe(error) });
           log(`recompute failed for ${snapshot.message_id}`, error);
         }
       }
