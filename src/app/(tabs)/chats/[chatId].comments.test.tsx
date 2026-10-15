@@ -31,7 +31,10 @@ import {
   getFragmentState,
   toggleFragmentMode,
 } from '@/features/chats/fragments/fragmentStore';
-import { closeComments } from '@/features/interactions/comments/commentsPanelStore';
+import {
+  closeComments,
+  openFragmentComments,
+} from '@/features/interactions/comments/commentsPanelStore';
 import { useInAppAlert } from '@/features/notifications/alertsStore';
 import { island, original } from '@/test/islands';
 import { renderWithQuery } from '@/test/renderWithQuery';
@@ -1069,6 +1072,38 @@ describe('fragment quote over a comment', () => {
     // Первое же касание экрана снимает подсветку.
     await fireEvent(screen.getByText('текст m1'), 'touchStart');
     await waitFor(() => expect(screen.queryByTestId('quote-highlight')).toBeNull());
+  });
+
+  it('leads to the piece from the fragment side panel too, and the panel closes', async () => {
+    mockedLocate.mockResolvedValue({
+      state: 'live',
+      start: 6,
+      end: 8,
+      lost: false,
+      messageCreatedAt: '2026-09-30T10:01:00Z',
+    });
+
+    await renderChat();
+    await act(async () =>
+      openFragmentComments(
+        'm1',
+        'chat-1',
+        false,
+        {
+          kind: 'fragment',
+          key: 'm1:6-8',
+          fragmentId: 'f1',
+          range: { start: 6, end: 8, text: 'm1' },
+          focusInput: false,
+        },
+        'm1',
+      ),
+    );
+    await screen.findByText('про кусок');
+    await fireEvent.press(screen.getAllByTestId('comment-fragment-quote')[0]);
+
+    await waitFor(() => expect(screen.queryByTestId('fragment-panel')).toBeNull());
+    expect(await screen.findByTestId('quote-highlight')).toBeTruthy();
   });
 
   it('flashes the whole message and says so when an edit took the piece away', async () => {

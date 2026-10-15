@@ -49,10 +49,6 @@ env:
     timeout: 20000
 - tapOn:
     id: "comment-fragment-quote"
-    below: ${output.msg}
-    optional: true
-- tapOn:
-    id: "comment-fragment-quote"
     above: ${output.msg}
 - assertNotVisible:
     id: "comments-panel"

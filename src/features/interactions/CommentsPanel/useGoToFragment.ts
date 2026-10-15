@@ -37,6 +37,19 @@ function fromCache(item: CommentItem, message: Message | null): FragmentWhereabo
 }
 
 /**
+ * Та же панель: боковая панель фрагмента получает копию цели, поэтому
+ * сравнение — по тому, что панель показывает, а не по ссылке.
+ */
+function isSamePanel(current: CommentsPanelTarget | null, target: CommentsPanelTarget): boolean {
+  return (
+    current !== null &&
+    current.subject.id === target.subject.id &&
+    current.rowKey === target.rowKey &&
+    current.fragment?.key === target.fragment?.key
+  );
+}
+
+/**
  * Тап по цитате фрагмента над комментарием: панель закрывается, сообщение
  * выходит из режима фрагментов, переписка под панелью едет к нему и
  * подсвечивает кусок (`useFragmentJump`). Где кусок сейчас, спрашиваем у базы:
@@ -75,7 +88,7 @@ export function useGoToFragment(
       busy.current = false;
 
       // Пока спрашивали, панель закрыли или открыли другую — переход уже не к месту.
-      if (getCommentsPanelTarget() !== target) return;
+      if (!isSamePanel(getCommentsPanelTarget(), target)) return;
 
       if (where?.state === 'deleted') {
         showNotice('Сообщение удалено');
