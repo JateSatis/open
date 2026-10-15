@@ -80,12 +80,24 @@ begin
   perform pg_temp.check('проверка занятости: занято', not public.is_username_available('channel', 'CHAN_a_zz'));
   perform pg_temp.check('проверка занятости: свободно', public.is_username_available('channel', 'free_name_zz'));
 
+  -- Прямого UPDATE чатов у клиента нет (названия — функциями `set_chat_*`);
+  -- инвариант «у чата постов нет своего названия» держит CHECK — он
+  -- проверяется в обход прав на таблицу.
+  begin
+    update public.chats set title = 'x' where id = chat;
+    perform pg_temp.check('прямой UPDATE чата клиентом — отказ', false);
+  exception when others then
+    perform pg_temp.check('прямой UPDATE чата клиентом — отказ', sqlstate = '42501', sqlerrm);
+  end;
+
+  perform set_config('role', 'postgres', true);
   begin
     update public.chats set title = 'x' where id = chat;
     perform pg_temp.check('у чата постов нет своего названия', false);
   exception when others then
     perform pg_temp.check('у чата постов нет своего названия', sqlstate = '23514', sqlerrm);
   end;
+  perform pg_temp.act_as(a);
 
   -- Прямого DELETE участников нет ни у кого: уходят функцией (`leave_chat`),
   -- а она чат постов не принимает.
@@ -594,6 +606,7 @@ declare
   r1 uuid;
   own uuid;
   own_chat uuid;
+  fwd uuid[];
   x uuid;
   n int;
   emojis text[];
@@ -710,12 +723,10 @@ begin
 
   perform pg_temp.act_as(a);
 
-  begin
-    perform public.forward_comments(own_chat, array[c1]);
-    perform pg_temp.check('пересылка комментария к попу — отказ (этап 3в)', false);
-  exception when others then
-    perform pg_temp.check('пересылка комментария к попу — отказ (этап 3в)', sqlstate = '22023', sqlerrm);
-  end;
+  select public.forward_comments(own_chat, array[c1]) into fwd;
+  perform pg_temp.check('пересылка комментария к попу — сообщение со ссылкой на комментарий',
+    cardinality(fwd) = 1
+      and (select forwarded_comment_id from public.messages where id = fwd[1]) = c1);
 
   perform pg_temp.check('пересылка комментария к сообщению — как раньше',
     cardinality(public.forward_comments(own_chat, array[msg_comment])) = 1);
