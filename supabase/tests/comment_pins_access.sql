@@ -100,7 +100,7 @@ begin
   r := public.create_channel('Канал закрепов', 'pins_chan_zz');
   chan := (r ->> 'channel_id')::uuid;
   posts := (r ->> 'chat_id')::uuid;
-  r := public.publish_pop(chan, pop, video, 'подпись', true, 'пост', null);
+  r := public.publish_pop(chan, pop, video, 'Поп', 'подпись', true, 'пост', null);
   post := (r ->> 'message_id')::uuid;
 
   perform pg_temp.act_as(d);

@@ -19,6 +19,8 @@ export type PopCaptionProps = {
   channelAvatarUrl: string | null;
   /** Нет — кнопки нет: я читатель или публикую в канале. */
   subscribe: PopSubscribeAction | null;
+  /** Жирной строкой над подписью; у старых попсов — нет. */
+  title: string | null;
   caption: string | null;
   expanded: boolean;
   onToggle: () => void;
@@ -27,7 +29,7 @@ export type PopCaptionProps = {
 
 /**
  * Внизу слева: аватарка и имя канала, справа от них — кнопка подписки, под
- * ними подпись в две строки. Не влезла —
+ * ними название попа и подпись в две строки. Не влезла —
  * «ещё», и тап раскрывает её целиком поверх затемнения (затемнение рисует
  * страница).
  */
@@ -35,6 +37,7 @@ export function PopCaption({
   channelTitle,
   channelAvatarUrl,
   subscribe,
+  title,
   caption,
   expanded,
   onToggle,
@@ -85,6 +88,18 @@ export function PopCaption({
           </Pressable>
         ) : null}
       </View>
+
+      {title ? (
+        <Text
+          testID="pop-title"
+          variant="bodyBold"
+          color="textOnMedia"
+          numberOfLines={expanded ? undefined : 1}
+          style={shadow}
+        >
+          {title}
+        </Text>
+      ) : null}
 
       {caption ? (
         <Pressable

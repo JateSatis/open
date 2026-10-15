@@ -1,6 +1,6 @@
 import { useLocalSearchParams } from 'expo-router';
 
-import { PopViewer } from '@/features/pops/PopViewer';
+import { ChannelPopViewer } from '@/features/pops/PopViewer/ChannelPopViewer';
 
 export default function PopViewerRoute() {
   const { channelId, start, comments, comment } = useLocalSearchParams<{
@@ -13,7 +13,7 @@ export default function PopViewerRoute() {
   }>();
 
   return (
-    <PopViewer
+    <ChannelPopViewer
       channelId={channelId}
       startId={start}
       openComments={comments === '1'}

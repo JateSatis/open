@@ -80,12 +80,24 @@ begin
   perform pg_temp.check('проверка занятости: занято', not public.is_username_available('channel', 'CHAN_a_zz'));
   perform pg_temp.check('проверка занятости: свободно', public.is_username_available('channel', 'free_name_zz'));
 
+  -- Прямого UPDATE чатов у клиента нет (названия — функциями `set_chat_*`);
+  -- инвариант «у чата постов нет своего названия» держит CHECK — он
+  -- проверяется в обход прав на таблицу.
+  begin
+    update public.chats set title = 'x' where id = chat;
+    perform pg_temp.check('прямой UPDATE чата клиентом — отказ', false);
+  exception when others then
+    perform pg_temp.check('прямой UPDATE чата клиентом — отказ', sqlstate = '42501', sqlerrm);
+  end;
+
+  perform set_config('role', 'postgres', true);
   begin
     update public.chats set title = 'x' where id = chat;
     perform pg_temp.check('у чата постов нет своего названия', false);
   exception when others then
     perform pg_temp.check('у чата постов нет своего названия', sqlstate = '23514', sqlerrm);
   end;
+  perform pg_temp.act_as(a);
 
   -- Прямого DELETE участников нет ни у кого: уходят функцией (`leave_chat`),
   -- а она чат постов не принимает.
@@ -230,7 +242,7 @@ begin
 
   perform pg_temp.check('владелец может публиковать', public.can_publish_in_channel(chan));
 
-  r := public.publish_pop(chan, pop, video, ' подпись ', true, 'подпись', null);
+  r := public.publish_pop(chan, pop, video, 'Поп', ' подпись ', true, 'подпись', null);
   post := (r ->> 'message_id')::uuid;
   perform pg_temp.check('поп с постом: поп и пост созданы',
     (r ->> 'pop_id')::uuid = pop
@@ -241,13 +253,13 @@ begin
   perform pg_temp.check('превью списка — Pop и текст',
     (select last_message_text from public.chats where id = chat) = '🎬 Pop: подпись');
 
-  r := public.publish_pop(chan, pop, video, 'подпись', true, 'подпись', null);
+  r := public.publish_pop(chan, pop, video, 'Поп', 'подпись', true, 'подпись', null);
   perform pg_temp.check('повтор публикации отдаёт созданное, без дублей',
     (r ->> 'message_id')::uuid = post
     and (select count(*) from public.pops where id = pop) = 1
     and (select count(*) from public.attachments where pop_id = pop) = 1);
 
-  r := public.publish_pop(chan, bare_pop, video, null, false, null, null);
+  r := public.publish_pop(chan, bare_pop, video, 'Поп', null, false, null, null);
   perform pg_temp.check('поп без поста', r -> 'message_id' = 'null'::jsonb
     and not exists (select 1 from public.attachments where pop_id = bare_pop));
 
@@ -256,7 +268,7 @@ begin
     (select text from public.messages where id = post2) is null
     and (select last_message_text from public.chats where id = chat) = '🎬 Pop');
 
-  perform public.publish_pop(other_chan, other_pop, video, null, false, null, null);
+  perform public.publish_pop(other_chan, other_pop, video, 'Поп', null, false, null, null);
 
   begin
     perform public.send_pop_post(chat, other_pop, 'чужой', null);
@@ -265,15 +277,33 @@ begin
     perform pg_temp.check('поп другого канала — отказ', sqlstate = '42501', sqlerrm);
   end;
 
+  perform pg_temp.check('название попа сохраняется, пост берёт текст подписи, а не название',
+    (select title from public.pops where id = pop) = 'Поп'
+    and (select text from public.messages where id = post) = 'подпись');
+
   begin
-    perform public.publish_pop(chan, gen_random_uuid(), video - 'poster_url', null, false, null, null);
+    perform public.publish_pop(chan, gen_random_uuid(), video, null, 'подпись', false, null, null);
+    perform pg_temp.check('поп без названия — отказ', false);
+  exception when others then
+    perform pg_temp.check('поп без названия — отказ', sqlstate = '23514', sqlerrm);
+  end;
+
+  begin
+    perform public.publish_pop(chan, gen_random_uuid(), video, '   ', null, false, null, null);
+    perform pg_temp.check('поп с пустым названием — отказ', false);
+  exception when others then
+    perform pg_temp.check('поп с пустым названием — отказ', sqlstate = '23514', sqlerrm);
+  end;
+
+  begin
+    perform public.publish_pop(chan, gen_random_uuid(), video - 'poster_url', 'Поп', null, false, null, null);
     perform pg_temp.check('поп без постера — отказ', false);
   exception when others then
     perform pg_temp.check('поп без постера — отказ', sqlstate = '23502', sqlerrm);
   end;
 
   begin
-    perform public.publish_pop(chan, gen_random_uuid(), video || '{"mime_type":"image/jpeg"}', null, false, null, null);
+    perform public.publish_pop(chan, gen_random_uuid(), video || '{"mime_type":"image/jpeg"}', 'Поп', null, false, null, null);
     perform pg_temp.check('поп не-видео — отказ', false);
   exception when others then
     perform pg_temp.check('поп не-видео — отказ', sqlstate = '23514', sqlerrm);
@@ -355,7 +385,7 @@ begin
     (select count(*) from public.pops where channel_id = chan) = 2);
 
   begin
-    perform public.publish_pop(chan, gen_random_uuid(), video, null, true, 'x', null);
+    perform public.publish_pop(chan, gen_random_uuid(), video, 'Поп', null, true, 'x', null);
     perform pg_temp.check('посторонний: publish_pop — отказ', false);
   exception when others then
     perform pg_temp.check('посторонний: publish_pop — отказ', sqlstate = '42501', sqlerrm);
@@ -576,6 +606,7 @@ declare
   r1 uuid;
   own uuid;
   own_chat uuid;
+  fwd uuid[];
   x uuid;
   n int;
   emojis text[];
@@ -587,8 +618,8 @@ begin
   select id, posts_chat_id into chan, posts_chat from public.channels where username = 'chan_a_zz';
 
   perform pg_temp.act_as(a);
-  perform public.publish_pop(chan, pop, video, null, false, null, null);
-  perform public.publish_pop(chan, other_pop, video, null, false, null, null);
+  perform public.publish_pop(chan, pop, video, 'Поп', null, false, null, null);
+  perform public.publish_pop(chan, other_pop, video, 'Поп', null, false, null, null);
   insert into public.messages (chat_id, author_id, kind, text)
   values (posts_chat, a, 'text', 'пост для сверки') returning id into msg;
 
@@ -692,12 +723,10 @@ begin
 
   perform pg_temp.act_as(a);
 
-  begin
-    perform public.forward_comments(own_chat, array[c1]);
-    perform pg_temp.check('пересылка комментария к попу — отказ (этап 3в)', false);
-  exception when others then
-    perform pg_temp.check('пересылка комментария к попу — отказ (этап 3в)', sqlstate = '22023', sqlerrm);
-  end;
+  select public.forward_comments(own_chat, array[c1]) into fwd;
+  perform pg_temp.check('пересылка комментария к попу — сообщение со ссылкой на комментарий',
+    cardinality(fwd) = 1
+      and (select forwarded_comment_id from public.messages where id = fwd[1]) = c1);
 
   perform pg_temp.check('пересылка комментария к сообщению — как раньше',
     cardinality(public.forward_comments(own_chat, array[msg_comment])) = 1);

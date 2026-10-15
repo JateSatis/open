@@ -25,12 +25,21 @@ export function useCanPublish(channelId: string): boolean {
   return useCanPublishState(channelId).canPublish;
 }
 
-/** То же, плюс `known` — ответ уже пришёл, а не «пока нет». */
-export function useCanPublishState(channelId: string): { canPublish: boolean; known: boolean } {
-  const { data } = useQuery({
-    queryKey: canPublishQueryKey(channelId),
-    queryFn: () => canPublishInChannel(channelId),
+/**
+ * То же, плюс `known` — ответ уже пришёл, а не «пока нет». Канал ещё не
+ * известен (`null`) — не спрашиваем.
+ */
+export function useCanPublishState(channelId: string | null): {
+  canPublish: boolean;
+  known: boolean;
+  /** Спросить не удалось — ответа не будет до следующей попытки. */
+  failed: boolean;
+} {
+  const { data, isError } = useQuery({
+    queryKey: canPublishQueryKey(channelId ?? ''),
+    queryFn: () => canPublishInChannel(channelId!),
+    enabled: channelId !== null,
   });
 
-  return { canPublish: data === true, known: data !== undefined };
+  return { canPublish: data === true, known: data !== undefined, failed: isError };
 }

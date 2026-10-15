@@ -1,6 +1,6 @@
 import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
 
-import { PopViewer } from '.';
+import { ChannelPopViewer } from './ChannelPopViewer';
 
 import {
   canPublishInChannel,
@@ -81,6 +81,7 @@ function pop(id: string, extra: Partial<Pop> = {}): Pop {
     id,
     channelId: 'channel-1',
     authorId: 'author',
+    title: null,
     caption: `Подпись ${id}`,
     url: `https://cdn/${id}.mp4`,
     posterUrl: `https://cdn/${id}.jpg`,
@@ -110,7 +111,7 @@ async function open(
   (canPublishInChannel as jest.Mock).mockReturnValue(Promise.resolve(canPublish));
 
   await renderWithQuery(
-    <PopViewer
+    <ChannelPopViewer
       channelId="channel-1"
       startId={start.id}
       openComments={focusCommentId !== undefined}
@@ -214,6 +215,15 @@ describe('PopViewer', () => {
     expect(screen.getByTestId('pop-comments')).toBeTruthy();
     expect(screen.getByLabelText('Просмотры: 0')).toBeTruthy();
     expect(screen.getByTestId('pop-more')).toBeTruthy();
+    // Старый поп без названия — без пустой строки над подписью.
+    expect(screen.queryByTestId('pop-title')).toBeNull();
+  });
+
+  it('shows the title above the caption', async () => {
+    await open(pop('p1', { title: 'Ёлка' }));
+
+    expect(await screen.findByTestId('pop-title')).toHaveTextContent('Ёлка');
+    expect(screen.getByText('Подпись p1')).toBeTruthy();
   });
 
   it('a stranger reacts from «+»: the reaction shows at once and goes to the server', async () => {
@@ -374,7 +384,7 @@ describe('PopViewer', () => {
     (getPop as jest.Mock).mockResolvedValue(null);
     (canPublishInChannel as jest.Mock).mockResolvedValue(false);
 
-    await renderWithQuery(<PopViewer channelId="channel-1" startId="gone" />);
+    await renderWithQuery(<ChannelPopViewer channelId="channel-1" startId="gone" />);
     await fireEvent(screen.getByTestId('pop-viewer'), 'layout', {
       nativeEvent: { layout: { width: 400, height: 800 } },
     });

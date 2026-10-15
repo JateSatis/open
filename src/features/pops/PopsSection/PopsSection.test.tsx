@@ -52,6 +52,7 @@ const pop: Pop = {
   id: 'pop-1',
   channelId: 'channel-1',
   authorId: 'me',
+  title: 'Поп',
   caption: null,
   url: 'https://cdn/1.mp4',
   posterUrl: 'https://cdn/1.jpg',
@@ -152,6 +153,7 @@ describe('PopsSection', () => {
           durationMs: 5000,
         },
         posterUri: 'file:///frame.jpg',
+        title: 'Поп',
         caption: 'тест',
         alsoPost: true,
       });

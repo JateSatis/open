@@ -98,6 +98,12 @@ export default function RootLayout() {
                   <Stack.Screen name="pop-editor/[channelId]" />
                   {/* Просмотр попсов — на весь экран, без вкладок, на чёрном фоне. */}
                   <Stack.Screen name="pops/[channelId]" options={{ statusBarStyle: 'light' }} />
+                  <Stack.Screen name="pops/search" options={{ statusBarStyle: 'light' }} />
+                  {/* Канал из «Ленты» — поверх вкладок, со своей шапкой. */}
+                  <Stack.Screen
+                    name="channel/[channelId]"
+                    options={{ headerShown: true, title: 'Канал' }}
+                  />
                 </Stack>
               </BelowReturnBar>
               <ReturnToCallBar />

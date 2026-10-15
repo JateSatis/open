@@ -1,9 +1,12 @@
-// Поиск в «Чатах». Вся логика сравнения — в базе (миграция
-// `20261016100000_search.sql`): нормализация ё/е и регистра, морфология,
-// опечатки, ранг, разбор `@` и суффикса `.ch` / `.di`. Здесь — только вызов
+// Поиск в «Чатах» и в «Ленте». Вся логика сравнения — в базе (миграции
+// `20261016100000_search.sql` и `20261017100000_search_feed.sql`):
+// нормализация ё/е и регистра, морфология, опечатки, ранг, разбор `@` и
+// суффикса `.ch` / `.di`. Здесь — только вызов
 // функций и перевод строк в типы выдачи. Срок на запрос стоит в `fetch`
 // клиента (`requestDeadline.ts`), `signal` отменяет устаревший запрос.
 
+import type { Pop } from '@/api/pops';
+import { toReactionCounts } from '@/api/reactionCounts';
 import { supabase } from '@/api/supabase';
 
 /** Чем сущность открывается: чат — перепиской, канал — экраном канала, человек — профилем. */
@@ -159,4 +162,130 @@ export async function searchMessages(
         ? { createdAt: last.createdAt, id: last.id }
         : null,
   };
+}
+
+// =============================================================================
+// Поиск в «Ленте»: каналы и попсы
+// =============================================================================
+
+/** Канал в выдаче «Ленты»: все каналы одним списком. */
+export type SearchChannel = {
+  id: string;
+  postsChatId: string;
+  title: string;
+  /** Без `@` и суффикса. */
+  username: string | null;
+  avatarUrl: string | null;
+  subscribersCount: number;
+  /** Я подписан. */
+  subscribed: boolean;
+  /** Я публикую в нём. */
+  mine: boolean;
+};
+
+/**
+ * Поп выдачи: всё, что нужно плитке и просмотру, без дозапросов, плюс место в
+ * выдаче — курсор следующей страницы.
+ */
+export type SearchPop = Pop & {
+  channelTitle: string;
+  channelAvatarUrl: string | null;
+  /**
+   * Ранг совпадения: уровень × 2, у своего текста попа +1 — свой текст 3, 5,
+   * 7, 9, только канал 2, 4, 6, 8.
+   */
+  rank: number;
+  /** Скор популярности и свежести на момент `scoredAt`. */
+  score: number;
+  /** Момент отсчёта скора — общий для всех страниц одного запроса. */
+  scoredAt: string;
+};
+
+/** Ключ следующей страницы попсов: последняя строка предыдущей и момент отсчёта. */
+export type SearchPopsCursor = { rank: number; score: number; id: string; scoredAt: string };
+
+export const SEARCH_CHANNELS_LIMIT = 50;
+export const SEARCH_POPS_PAGE_SIZE = 30;
+
+/** Каналы по названию и @имени, упорядочены базой. */
+export async function searchChannels(
+  query: string,
+  signal?: AbortSignal,
+): Promise<SearchChannel[]> {
+  let request = supabase.rpc('search_channels', { query, max_count: SEARCH_CHANNELS_LIMIT });
+
+  if (signal) request = request.abortSignal(signal);
+
+  const { data, error } = await request;
+
+  if (error) throw error;
+
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    postsChatId: row.posts_chat_id,
+    title: row.title ?? '',
+    username: row.username ?? null,
+    avatarUrl: row.avatar_url ?? null,
+    subscribersCount: row.subscribers_count ?? 0,
+    subscribed: row.subscribed === true,
+    mine: row.mine === true,
+  }));
+}
+
+/**
+ * Страница попсов по запросу: по рангу совпадения, внутри — по скору.
+ * Первая страница — без курсора; следующие несут курсор с моментом отсчёта
+ * первой, чтобы скор не уплыл между страницами.
+ */
+export async function searchPops(
+  query: string,
+  cursor: SearchPopsCursor | null,
+  signal?: AbortSignal,
+): Promise<SearchPop[]> {
+  let request = supabase.rpc('search_pops', {
+    query,
+    as_of: cursor?.scoredAt,
+    after_rank: cursor?.rank,
+    after_score: cursor?.score,
+    after_id: cursor?.id,
+    page_size: SEARCH_POPS_PAGE_SIZE,
+  });
+
+  if (signal) request = request.abortSignal(signal);
+
+  const { data, error } = await request;
+
+  if (error) throw error;
+
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    channelId: row.channel_id,
+    authorId: row.author_id ?? null,
+    title: row.title ?? null,
+    caption: row.caption ?? null,
+    url: row.url,
+    posterUrl: row.poster_url,
+    mimeType: row.mime_type,
+    width: row.width,
+    height: row.height,
+    durationMs: row.duration_ms,
+    createdAt: row.created_at,
+    reactions: { counts: toReactionCounts(row.reactions), mine: row.my_reaction ?? null },
+    viewsCount: row.views_count,
+    commentsCount: row.comments_count,
+    channelTitle: row.channel_title ?? '',
+    channelAvatarUrl: row.channel_avatar_url ?? null,
+    rank: row.rank,
+    score: row.score,
+    scoredAt: row.scored_at,
+  }));
+}
+
+/** Курсор после этой страницы; `null` — страница неполная, дальше пусто. */
+export function nextSearchPopsCursor(page: SearchPop[]): SearchPopsCursor | null {
+  const last = page[page.length - 1];
+
+  return page.length === SEARCH_POPS_PAGE_SIZE && last
+    ? { rank: last.rank, score: last.score, id: last.id, scoredAt: last.scoredAt }
+    : null;
 }

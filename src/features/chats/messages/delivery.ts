@@ -214,6 +214,7 @@ async function insert(
     return publishPopPost({
       channelId: outgoing.channelId,
       popId: pop.popId,
+      title: pop.title,
       media: toPopMedia(uploaded[0], newPopMedia(pop)),
       postText: outgoing.text || null,
       replyTo: outgoing.replyTo,

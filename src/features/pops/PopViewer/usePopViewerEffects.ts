@@ -4,7 +4,7 @@ import { useCallback, useEffect } from 'react';
 import { recordPopViews, type Pop } from '@/api/pops';
 import { channelSubscriptionQueryKey } from '@/features/channels/keys';
 import { chatsQueryKey } from '@/features/chats/chatsKey';
-import type { usePopFeed } from '@/features/pops/usePopFeed';
+import type { PopFeed } from '@/features/pops/PopViewer/popFeed';
 import { useViewBatcher } from '@/lib/useViewBatcher';
 
 /** Ближе этого к краю загруженного — подгружаем следующую страницу. */
@@ -17,50 +17,68 @@ const PREFETCH_PAGES = 3;
  *
  * Просмотренный поп подписчику прочитан — и в «Чатах», и на вкладке канала,
  * даже если в сам канал он не заходил.
+ *
+ * Канал — у каждого попа свой: лента выдачи поиска листает попсы многих
+ * каналов. `rights` — право в канале активного попа; пока ответа нет, показ
+ * ждёт его, а прежний поп уже не считается видимым. Спросить не удалось —
+ * показ уходит как от постороннего: публикующих база всё равно не засчитает.
  */
 export function usePopViewCounting(
-  channelId: string,
   pops: Pop[],
   activeIndex: number,
-  canPublish: boolean,
+  rights: { canPublish: boolean; known: boolean; failed: boolean },
   focused: boolean,
 ) {
+  const { canPublish, known, failed } = rights;
   const queryClient = useQueryClient();
   const send = useCallback(
-    (items: { id: string }[], sessionId: string) =>
+    (items: { id: string; channelId: string }[], sessionId: string) =>
       recordPopViews(
         items.map(({ id }) => id),
         sessionId,
       ).then(() => {
-        // Постороннему прочитывать нечего — и перечитывать «Чаты» на каждый
-        // свайп незачем.
-        if (!queryClient.getQueryData(channelSubscriptionQueryKey(channelId))) return;
+        const subscribed = [...new Set(items.map((item) => item.channelId))].filter(
+          // Постороннему прочитывать нечего — и перечитывать «Чаты» на каждый
+          // свайп незачем.
+          (channelId) => queryClient.getQueryData(channelSubscriptionQueryKey(channelId)),
+        );
 
-        void queryClient.invalidateQueries({ queryKey: channelSubscriptionQueryKey(channelId) });
+        if (subscribed.length === 0) return;
+
+        subscribed.forEach((channelId) => {
+          void queryClient.invalidateQueries({ queryKey: channelSubscriptionQueryKey(channelId) });
+        });
         void queryClient.invalidateQueries({ queryKey: chatsQueryKey });
       }),
-    [channelId, queryClient],
+    [queryClient],
   );
   const { setVisible } = useViewBatcher({ isFocused: focused, send, repeat: 'appearance' });
 
   useEffect(() => {
-    if (canPublish || pops.length === 0) return;
+    if ((!known && !failed) || canPublish || pops.length === 0) {
+      setVisible([]);
+      return;
+    }
 
-    setVisible([{ id: pops[activeIndex].id }]);
-  }, [activeIndex, canPublish, pops, setVisible]);
+    const { id, channelId } = pops[activeIndex];
+
+    setVisible([{ id, channelId }]);
+  }, [activeIndex, canPublish, failed, known, pops, setVisible]);
 }
 
 /** Подгрузка соседних страниц ленты, когда активная подошла к краю загруженного. */
-export function usePopFeedPaging(feed: ReturnType<typeof usePopFeed>, activeIndex: number) {
+export function usePopFeedPaging(feed: PopFeed, activeIndex: number) {
   const { pops, hasNextPage, hasPreviousPage, isFetchingNextPage, isFetchingPreviousPage } = feed;
   const { fetchNextPage, fetchPreviousPage } = feed;
 
   useEffect(() => {
-    if (activeIndex >= pops.length - PREFETCH_PAGES && hasNextPage && !isFetchingNextPage) {
-      void fetchNextPage();
-    }
+    // По одной стороне за раз: догрузка запроса отменяет идущую, и страницы
+    // в обе стороны сразу перебивали бы друг друга без конца.
+    if (isFetchingNextPage || isFetchingPreviousPage) return;
 
-    if (activeIndex < PREFETCH_PAGES && hasPreviousPage && !isFetchingPreviousPage) {
+    if (activeIndex >= pops.length - PREFETCH_PAGES && hasNextPage) {
+      void fetchNextPage();
+    } else if (activeIndex < PREFETCH_PAGES && hasPreviousPage) {
       void fetchPreviousPage();
     }
   }, [

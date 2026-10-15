@@ -159,6 +159,7 @@ export const PopPage = memo(function PopPage({
             channelTitle={channelTitle}
             channelAvatarUrl={channelAvatarUrl}
             subscribe={subscribe}
+            title={pop.title}
             caption={pop.caption}
             expanded={captionOpen}
             onToggle={() => setCaptionOpen((open) => !open)}

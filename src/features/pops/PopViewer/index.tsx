@@ -5,25 +5,21 @@ import { ActivityIndicator, Pressable, View, type LayoutChangeEvent } from 'reac
 import Animated from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { PopPage, type PopPageMode } from './PopPage';
+import { PopChannelPage } from './PopChannelPage';
+import type { PopFeed } from './popFeed';
 import { PopPager } from './PopPager';
 import { styles } from './styles';
 import { useAppActive } from './useAppActive';
 import { useCommentsChromeFade } from './useCommentsShrink';
-import { useOpenChannel } from './useOpenChannel';
+import type { OpenChannelMode } from './useOpenChannel';
 import { usePopComments } from './usePopComments';
-import { usePopReactionActions } from './usePopReactionActions';
 import { usePopFeedPaging, usePopViewCounting } from './usePopViewerEffects';
 
 import type { Pop } from '@/api/pops';
 import { Text } from '@/components/Text';
-import { useSubscriptionActions } from '@/features/channels/subscription';
-import { useChannel } from '@/features/channels/useChannel';
-import { useChannelSubscription } from '@/features/channels/useChannelSubscription';
 import { CommentsPanel } from '@/features/interactions/CommentsPanel';
 import { useCanPublishState } from '@/features/pops/queries';
 import { usePopCountersSync } from '@/features/pops/usePopCountersSync';
-import { usePopFeed } from '@/features/pops/usePopFeed';
 import { useTheme } from '@/hooks/use-theme';
 import { describeLoadError } from '@/lib/network';
 import { Sizes } from '@/theme';
@@ -31,33 +27,42 @@ import { Sizes } from '@/theme';
 const popKey = (pop: Pop) => pop.id;
 
 export type PopViewerProps = {
-  channelId: string;
+  /** Что листать: попсы канала или выдачу поиска. */
+  feed: PopFeed;
   startId: string;
+  /** Куда ведёт имя канала: под просмотр (лента канала) или поверх него (поиск). */
+  channelLink?: OpenChannelMode;
   /** Сразу с открытыми комментариями к стартовому попу. */
   openComments?: boolean;
   /** Комментарий, к которому пришли: наверху шита и подсвечен. */
   focusCommentId?: string;
+  /** Активной стала другая страница. */
+  onActivePop?: (pop: Pop) => void;
 };
 
 /**
- * Просмотр попсов канала, как в TikTok: на весь экран, страница за страницей
- * по вертикали, от выбранного — выше новее, ниже старше. Играет только
- * активная страница; следующая прогревает плеер, остальные — обложки.
+ * Просмотр попсов, как в TikTok: на весь экран, страница за страницей по
+ * вертикали, от выбранного в обе стороны. Играет только активная страница;
+ * следующая прогревает плеер, остальные — обложки.
+ *
+ * Лента приходит снаружи (`PopFeed`), а всё, что зависит от канала, берётся
+ * по каналу попа: шапка и подписка — у каждой страницы своя
+ * (`PopChannelPage`), право публиковать для комментариев и учёта просмотров —
+ * по активной, живые счётчики — по каналам активной и соседних.
  */
 export function PopViewer({
-  channelId,
+  feed,
   startId,
+  channelLink = 'under',
   openComments = false,
   focusCommentId,
+  onActivePop,
 }: PopViewerProps) {
   const theme = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const focused = useIsFocused();
   const appActive = useAppActive();
-  const { canPublish, known: rightsKnown } = useCanPublishState(channelId);
-  const channel = useChannel(channelId);
-  const feed = usePopFeed(channelId, startId);
   const { pops } = feed;
   const [size, setSize] = useState<{ width: number; height: number } | null>(null);
   // Активный поп и его последнее место в ленте. Пропал из ленты (удалён,
@@ -75,15 +80,26 @@ export function PopViewer({
   }
 
   const activeIndex = found >= 0 ? found : Math.min(active.at, Math.max(pops.length - 1, 0));
+  const activeChannelId = pops[activeIndex]?.channelId ?? null;
+  const {
+    canPublish,
+    known: rightsKnown,
+    failed: rightsFailed,
+  } = useCanPublishState(activeChannelId);
   const popsRef = useRef(pops);
+  const activePop = pops[activeIndex];
+
+  useEffect(() => {
+    if (activePop) onActivePop?.(activePop);
+    // Только смена страницы: обновление счётчиков того же попа — не повод.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activePop?.id, onActivePop]);
 
   useEffect(() => {
     popsRef.current = pops;
   }, [pops]);
 
   const live = focused && appActive;
-  const { onReaction, onDoubleTap } = usePopReactionActions(canPublish);
-  const onOpenChannel = useOpenChannel(channelId);
   const startReady = Boolean(size) && pops[activeIndex]?.id === startId;
   const start = useMemo(
     () => (openComments ? { startId, focusCommentId, ready: startReady, rightsKnown } : undefined),
@@ -92,9 +108,18 @@ export function PopViewer({
   const { openPopId, onOpenComments, onOpenPerson } = usePopComments(canPublish, start);
   const commentsOpen = openPopId !== null;
   const chromeStyle = useCommentsChromeFade(commentsOpen);
+  const nearbyChannels = useMemo(
+    () => pops.slice(Math.max(activeIndex - 1, 0), activeIndex + 2).map((pop) => pop.channelId),
+    [activeIndex, pops],
+  );
 
-  usePopCountersSync(channelId);
-  usePopViewCounting(channelId, pops, activeIndex, canPublish, focused);
+  usePopCountersSync(nearbyChannels);
+  usePopViewCounting(
+    pops,
+    activeIndex,
+    { canPublish, known: rightsKnown, failed: rightsFailed },
+    focused,
+  );
   usePopFeedPaging(feed, activeIndex);
 
   const onLayout = useCallback((event: LayoutChangeEvent) => {
@@ -105,42 +130,20 @@ export function PopViewer({
     );
   }, []);
 
-  const channelTitle = channel.data?.title ?? null;
-  const channelAvatarUrl = channel.data?.avatarUrl ?? null;
-
-  // Отсюда подписка — без чатов: смотрящий попсы ещё не решил, нужен ли ему
-  // канал в «Чатах». Следующим шагом кнопка предлагает именно это.
-  const { status } = useChannelSubscription(channelId);
-  const { subscribe: subscribeTo, setInChats } = useSubscriptionActions(channelId);
-  const subscribe = useMemo(() => {
-    if (status === 'none') return { label: 'Подписаться', onPress: () => void subscribeTo(false) };
-    if (status === 'subscriber') {
-      return { label: 'Добавить в чаты', onPress: () => void setInChats(true) };
-    }
-
-    return null;
-  }, [setInChats, status, subscribeTo]);
-
+  const { channelOf } = feed;
   const renderPage = useCallback(
     (pop: Pop, index: number) => {
       if (!size) return null;
 
-      const mode: PopPageMode =
-        index === activeIndex ? 'active' : index === activeIndex + 1 ? 'preload' : 'idle';
-
       return (
-        <PopPage
+        <PopChannelPage
           pop={pop}
-          channelTitle={channelTitle}
-          channelAvatarUrl={channelAvatarUrl}
-          subscribe={subscribe}
+          face={channelOf?.(pop) ?? null}
+          channelLink={channelLink}
           width={size.width}
           height={size.height}
-          mode={mode}
+          mode={index === activeIndex ? 'active' : index === activeIndex + 1 ? 'preload' : 'idle'}
           live={live}
-          onReaction={onReaction}
-          onDoubleTap={onDoubleTap}
-          onOpenChannel={onOpenChannel}
           onOpenComments={onOpenComments}
           // Только страница этого попа: остальные не перерисовываются, а
           // соседняя, ставшая активной, пока поп пропадал из ленты, не уменьшается.
@@ -148,19 +151,7 @@ export function PopViewer({
         />
       );
     },
-    [
-      activeIndex,
-      channelAvatarUrl,
-      channelTitle,
-      live,
-      onDoubleTap,
-      onOpenChannel,
-      onOpenComments,
-      onReaction,
-      openPopId,
-      size,
-      subscribe,
-    ],
+    [activeIndex, channelLink, channelOf, live, onOpenComments, openPopId, size],
   );
 
   // Стабильный: от него зависит жест листания, и обновления счётчиков не
@@ -179,17 +170,20 @@ export function PopViewer({
       style={[styles.root, { backgroundColor: theme.viewerBackground }]}
       onLayout={onLayout}
     >
-      {size && pops.length > 0 ? (
-        <PopPager
-          items={pops}
-          activeIndex={activeIndex}
-          width={size.width}
-          height={size.height}
-          onActiveIndex={onActiveIndex}
-          keyOf={popKey}
-          renderPage={renderPage}
-          locked={commentsOpen}
-        />
+      {pops.length > 0 ? (
+        // Попсы уже есть, а экран ещё не измерен — пусто, а не «Поп удалён».
+        size ? (
+          <PopPager
+            items={pops}
+            activeIndex={activeIndex}
+            width={size.width}
+            height={size.height}
+            onActiveIndex={onActiveIndex}
+            keyOf={popKey}
+            renderPage={renderPage}
+            locked={commentsOpen}
+          />
+        ) : null
       ) : (
         <View style={styles.message}>
           {feed.isPending ? (

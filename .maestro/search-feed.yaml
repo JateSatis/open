@@ -1,0 +1,50 @@
+appId: com.openger.app
+name: Поиск в «Ленте» — канал и назад, поп из выдачи, свайп к следующему, назад к выдаче
+tags:
+  - search
+  - pops
+  - channels
+  - video
+env:
+  # Чужой канал основного аккаунта с попсами: находится по @имени, попсы — каналом.
+  QUERY: subs_test
+---
+- runFlow: subflows/open-app.yaml
+- tapOn: "Лента"
+- tapOn:
+    id: "feed-search-open"
+- assertVisible:
+    id: "feed-search-cancel"
+- inputText: ${QUERY}
+- assertVisible: "Каналы"
+- assertVisible: "Попсы"
+# Канал — поверх вкладок; «назад» — та же выдача.
+- tapOn:
+    id: "feed-search-channel"
+- assertVisible:
+    id: "segment-0"
+- back
+- assertVisible:
+    id: "feed-search-channel"
+- assertVisible:
+    id: "search-pop"
+# Поп из выдачи — просмотр с него; свайп — следующий по выдаче.
+- tapOn:
+    id: "search-pop"
+    index: 0
+- assertVisible:
+    id: "pop-page-active"
+- swipe:
+    start: "50%,75%"
+    end: "50%,25%"
+    duration: 200
+# Дерево экрана после свайпа Maestro не отдаётся, пока играет видео (на паузе —
+# тоже): смену страницы проверяет покадровая запись, здесь — что путь цел.
+- tapOn:
+    id: "pop-viewer-back"
+- assertVisible:
+    id: "feed-search-results"
+- tapOn:
+    id: "feed-search-cancel"
+- assertVisible:
+    id: "feed-search-open"
