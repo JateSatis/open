@@ -78,6 +78,7 @@ function applyLocally(queryClient: QueryClient, intent: FragmentReactionIntent) 
             reactionsCount: 0,
             commentsCount: 0,
             mine: null,
+            clusterId: null,
           };
 
     if (base.mine === emoji) return fragments;
@@ -90,10 +91,35 @@ function applyLocally(queryClient: QueryClient, intent: FragmentReactionIntent) 
       mine: emoji,
     };
 
-    return index >= 0
-      ? fragments.map((fragment, at) => (at === index ? next : fragment))
-      : [...fragments, next];
+    const updated =
+      index >= 0
+        ? fragments.map((fragment, at) => (at === index ? next : fragment))
+        : [...fragments, next];
+
+    return emoji && base.clusterId ? withoutMyOtherInCluster(updated, next, row) : updated;
   });
+}
+
+/**
+ * В кластере у человека одна реакция: новая снимает прежнюю на другом его
+ * фрагменте. Так решает база; здесь — чтобы прежняя погасла сразу, а не
+ * после перечитывания.
+ */
+function withoutMyOtherInCluster(
+  fragments: Fragment[],
+  target: Fragment,
+  row: 'memberReactions' | 'visitorReactions',
+): Fragment[] {
+  return fragments.map((fragment) =>
+    fragment === target || fragment.clusterId !== target.clusterId || !fragment.mine
+      ? fragment
+      : {
+          ...fragment,
+          [row]: shift(fragment[row], fragment.mine, -1),
+          reactionsCount: Math.max(0, fragment.reactionsCount - 1),
+          mine: null,
+        },
+  );
 }
 
 function isReactionLimit(cause: unknown): boolean {
