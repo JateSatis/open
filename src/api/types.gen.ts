@@ -778,6 +778,187 @@ export type Database = {
           },
         ]
       }
+      fragment_cluster_config: {
+        Row: {
+          created_at: string
+          id: string
+          note: string | null
+          params: Json
+          version: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          note?: string | null
+          params: Json
+          version: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          note?: string | null
+          params?: Json
+          version?: number
+        }
+        Relationships: []
+      }
+      fragment_cluster_state: {
+        Row: {
+          created_at: string
+          id: string
+          interactions: number
+          lease_token: string | null
+          lease_until: string | null
+          message_id: string
+          model_version: number | null
+          queued_at: string | null
+          recomputed_at: string | null
+          recomputed_interactions: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          interactions?: number
+          lease_token?: string | null
+          lease_until?: string | null
+          message_id: string
+          model_version?: number | null
+          queued_at?: string | null
+          recomputed_at?: string | null
+          recomputed_interactions?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          interactions?: number
+          lease_token?: string | null
+          lease_until?: string | null
+          message_id?: string
+          model_version?: number | null
+          queued_at?: string | null
+          recomputed_at?: string | null
+          recomputed_interactions?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fragment_cluster_state_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: true
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      fragment_cluster_voters: {
+        Row: {
+          cluster_id: string
+          created_at: string
+          id: string
+          user_id: string
+          votes: number
+        }
+        Insert: {
+          cluster_id: string
+          created_at?: string
+          id?: string
+          user_id: string
+          votes?: number
+        }
+        Update: {
+          cluster_id?: string
+          created_at?: string
+          id?: string
+          user_id?: string
+          votes?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fragment_cluster_voters_cluster_id_fkey"
+            columns: ["cluster_id"]
+            isOneToOne: false
+            referencedRelation: "fragment_clusters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fragment_cluster_voters_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      fragment_clusters: {
+        Row: {
+          chat_id: string
+          comments_count: number
+          created_at: string
+          deleted_at: string | null
+          display_end: number | null
+          display_start: number | null
+          end_offset: number
+          id: string
+          member_reactions: Json
+          message_id: string
+          model_version: number
+          people_count: number
+          popularity: number
+          reactions_count: number
+          start_offset: number
+          updated_at: string
+          visitor_reactions: Json
+        }
+        Insert: {
+          chat_id: string
+          comments_count?: number
+          created_at?: string
+          deleted_at?: string | null
+          display_end?: number | null
+          display_start?: number | null
+          end_offset: number
+          id?: string
+          member_reactions?: Json
+          message_id: string
+          model_version: number
+          people_count?: number
+          popularity?: number
+          reactions_count?: number
+          start_offset: number
+          updated_at?: string
+          visitor_reactions?: Json
+        }
+        Update: {
+          chat_id?: string
+          comments_count?: number
+          created_at?: string
+          deleted_at?: string | null
+          display_end?: number | null
+          display_start?: number | null
+          end_offset?: number
+          id?: string
+          member_reactions?: Json
+          message_id?: string
+          model_version?: number
+          people_count?: number
+          popularity?: number
+          reactions_count?: number
+          start_offset?: number
+          updated_at?: string
+          visitor_reactions?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fragment_clusters_message_fkey"
+            columns: ["message_id", "chat_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id", "chat_id"]
+          },
+        ]
+      }
       legacy_comment_quotes: {
         Row: {
           comment_id: string
@@ -864,6 +1045,7 @@ export type Database = {
           anchor_state: string
           author_id: string | null
           chat_id: string
+          cluster_id: string | null
           comments_count: number
           created_at: string
           deleted_at: string | null
@@ -896,6 +1078,7 @@ export type Database = {
           anchor_state?: string
           author_id?: string | null
           chat_id: string
+          cluster_id?: string | null
           comments_count?: number
           created_at?: string
           deleted_at?: string | null
@@ -916,6 +1099,7 @@ export type Database = {
           anchor_state?: string
           author_id?: string | null
           chat_id?: string
+          cluster_id?: string | null
           comments_count?: number
           created_at?: string
           deleted_at?: string | null
@@ -939,6 +1123,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_fragments_cluster_fkey"
+            columns: ["cluster_id", "message_id"]
+            isOneToOne: false
+            referencedRelation: "fragment_clusters"
+            referencedColumns: ["id", "message_id"]
           },
           {
             foreignKeyName: "message_fragments_message_fkey"
@@ -1792,6 +1983,11 @@ export type Database = {
         Args: { new_message: string; reply_to: string[]; target_chat: string }
         Returns: undefined
       }
+      area_fragment_ids: {
+        Args: { area_end: number; area_start: number; target_message: string }
+        Returns: string[]
+      }
+      attach_fragment: { Args: { fragment: string }; Returns: string }
       call_duration_text: {
         Args: { ended: string; started: string }
         Returns: string
@@ -1951,10 +2147,83 @@ export type Database = {
         }
         Returns: string
       }
+      fragment_area_summary: {
+        Args: { area_end: number; area_start: number; target_message: string }
+        Returns: {
+          area_text: string
+          comments_count: number
+          fragment_ids: string[]
+          member_reactions: Json
+          people_count: number
+          reactions_count: number
+          visitor_reactions: Json
+        }[]
+      }
+      fragment_cluster_recompute_due: {
+        Args: { n: number; params: Json }
+        Returns: boolean
+      }
+      fragment_cluster_settings: {
+        Args: never
+        Returns: {
+          created_at: string
+          id: string
+          note: string | null
+          params: Json
+          version: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "fragment_cluster_config"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      fragment_cluster_vote: {
+        Args: { cluster: string; delta: number; voter: string }
+        Returns: undefined
+      }
+      fragment_clusters_apply: {
+        Args: { result: Json; target_message: string }
+        Returns: string
+      }
+      fragment_clusters_claim: { Args: { batch?: number }; Returns: Json }
+      fragment_clusters_dedup: {
+        Args: { target_message: string }
+        Returns: number
+      }
+      fragment_clusters_enqueue: {
+        Args: { target_message: string }
+        Returns: boolean
+      }
+      fragment_clusters_kick: { Args: never; Returns: boolean }
+      fragment_clusters_lock_key: {
+        Args: { target_message: string }
+        Returns: number
+      }
+      fragment_clusters_take: {
+        Args: { msg_ids: number[]; target_message: string }
+        Returns: Json
+      }
+      fragment_clusters_touch: {
+        Args: { force: boolean; interaction: boolean; target_message: string }
+        Returns: boolean
+      }
+      fragment_clusters_writing: { Args: never; Returns: boolean }
       fragment_context_length: { Args: never; Returns: number }
       fragment_from_request: {
         Args: { fragment: Json; target_message: string }
         Returns: string
+      }
+      fragment_set_ids: {
+        Args: {
+          area_end: number
+          area_start: number
+          cluster: string
+          fragment: string
+          target_message: string
+        }
+        Returns: string[]
       }
       insert_pop_post: {
         Args: {
@@ -2089,6 +2358,9 @@ export type Database = {
         Args: {
           after_id?: string
           after_rank?: number
+          area_end?: number
+          area_start?: number
+          cluster?: string
           fragment?: string
           page_size?: number
           target: string
@@ -2137,11 +2409,33 @@ export type Database = {
           username: string
         }[]
       }
+      list_message_clusters: {
+        Args: { target_message: string }
+        Returns: {
+          comments_count: number
+          display_end: number
+          display_start: number
+          display_text: string
+          end_offset: number
+          fragments_count: number
+          id: string
+          member_reactions: Json
+          message_id: string
+          my_emoji: string
+          my_fragment_id: string
+          people_count: number
+          popularity: number
+          reactions_count: number
+          start_offset: number
+          visitor_reactions: Json
+        }[]
+      }
       list_message_fragments: {
         Args: { target_message: string }
         Returns: {
           anchor_state: string
           author_id: string
+          cluster_id: string
           comments_count: number
           created_at: string
           end_offset: number
@@ -2189,6 +2483,10 @@ export type Database = {
           isOneToOne: false
           isSetofReturn: true
         }
+      }
+      lock_fragment_clusters_shared: {
+        Args: { target_message: string }
+        Returns: undefined
       }
       lock_managed_channel: {
         Args: { target_channel: string; what: string }
@@ -2387,7 +2685,13 @@ export type Database = {
         Returns: undefined
       }
       pinned_comment: {
-        Args: { target: string }
+        Args: {
+          area_end?: number
+          area_start?: number
+          cluster?: string
+          fragment?: string
+          target: string
+        }
         Returns: {
           audience: string
           author_id: string | null
@@ -2465,6 +2769,10 @@ export type Database = {
         Args: { counts: Json; delta: number; emoji: string }
         Returns: Json
       }
+      reaction_counts_combine: {
+        Args: { a: Json; b: Json; sign: number }
+        Returns: Json
+      }
       reaction_counts_merge: { Args: { a: Json; b: Json }; Returns: Json }
       reaction_kinds_limit: {
         Args: { audience: string; kind: string }
@@ -2535,6 +2843,10 @@ export type Database = {
         Args: { pop_ids: string[]; session_id: string }
         Returns: undefined
       }
+      refresh_message_clusters: {
+        Args: { target_message: string }
+        Returns: undefined
+      }
       register_device: {
         Args: {
           p_app_version: string
@@ -2551,6 +2863,10 @@ export type Database = {
       }
       remove_forward_items: {
         Args: { message_ids: string[]; target_forward: string }
+        Returns: undefined
+      }
+      replace_cluster_reaction: {
+        Args: { fragment: string; reactor: string }
         Returns: undefined
       }
       resolve_comment_thread: {
