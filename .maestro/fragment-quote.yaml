@@ -1,0 +1,54 @@
+appId: com.openger.app
+name: Цитата фрагмента — плашка над комментарием сразу после отправки, тап по ней закрывает панель и подсвечивает кусок
+tags:
+  - chats
+  - comments
+env:
+  # Публичная группа, основной аккаунт в ней посетитель — тап входит в режим фрагментов.
+  FRAGMENT_CHAT_LINK: "openger://chats/2d929436-099b-4cc9-89ba-e764c0ad8306"
+  FRAGMENT_TEXT: "Самойлова, ты дура!"
+---
+- runFlow: subflows/open-app.yaml
+- evalScript: ${output.msg = 'maestro-' + Date.now()}
+- openLink: ${FRAGMENT_CHAT_LINK}
+# Режим фрагментов, выделение слова, комментарий из боковой панели.
+- tapOn:
+    text: ${FRAGMENT_TEXT}
+    retryTapIfNoChange: false
+- longPressOn: ${FRAGMENT_TEXT}
+- tapOn:
+    id: "fragment-comment"
+- tapOn: "Комментарий"
+- inputText: ${output.msg}
+- tapOn: "Отправить"
+# Плашка с цитатой — над своим комментарием сразу, до ответа сервера.
+- assertVisible:
+    id: "comment-fragment-quote"
+- assertVisible: ${output.msg}
+# Тап по плашке: панель закрывается, режим выключен, кусок подсвечен.
+- tapOn:
+    id: "comment-fragment-quote"
+- assertNotVisible:
+    id: "fragment-panel"
+- assertVisible:
+    id: "quote-highlight"
+# Подсветку снимает первое же касание.
+- tapOn:
+    point: "50%,30%"
+- assertNotVisible:
+    id: "quote-highlight"
+# В шите сообщения у того же комментария — та же плашка; тап по ней тоже ведёт к куску.
+- tapOn:
+    id: "comments-circle"
+    index: 0
+- assertVisible:
+    id: "comments-panel"
+- scrollUntilVisible:
+    element: ${output.msg}
+    direction: DOWN
+    timeout: 20000
+# Убрать за собой.
+- longPressOn: ${output.msg}
+- tapOn: "Удалить"
+- tapOn: "Удалить"
+- assertNotVisible: ${output.msg}
