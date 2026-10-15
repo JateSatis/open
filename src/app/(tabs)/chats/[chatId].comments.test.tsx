@@ -25,6 +25,12 @@ import { resetComposerDrafts } from '@/features/chats/composerDraftStore';
 import { resetOutbox } from '@/features/chats/messages/outbox';
 import { reportRealtimeJoined, resetConnectionState } from '@/features/connection/connectionStore';
 import { resetCommentOutbox } from '@/features/interactions/comments/commentOutbox';
+import {
+  clearQuoteHighlight,
+  exitFragmentMode,
+  getFragmentState,
+  toggleFragmentMode,
+} from '@/features/chats/fragments/fragmentStore';
 import { closeComments } from '@/features/interactions/comments/commentsPanelStore';
 import { useInAppAlert } from '@/features/notifications/alertsStore';
 import { island, original } from '@/test/islands';
@@ -1011,6 +1017,8 @@ describe('fragment quote over a comment', () => {
   });
 
   beforeEach(() => {
+    exitFragmentMode();
+    clearQuoteHighlight();
     useInAppAlert.setState({ alert: null });
     mockedListComments.mockResolvedValue({
       items: [quoted, comment('plain', { text: 'обычный' })],
@@ -1043,9 +1051,13 @@ describe('fragment quote over a comment', () => {
     });
 
     await openSheet();
+    // Облачко было в режиме фрагментов — переход его выключает.
+    await act(async () => toggleFragmentMode('m1'));
+    expect(getFragmentState().activeKey).toBe('m1');
     await fireEvent.press(screen.getByTestId('comment-fragment-quote'));
 
     await waitFor(() => expect(screen.queryByTestId('comments-panel')).toBeNull());
+    expect(getFragmentState().activeKey).toBeNull();
     const highlight = await screen.findByTestId('quote-highlight');
 
     // Ровно «m1»: с шестого символа по восьмой.

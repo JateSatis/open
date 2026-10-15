@@ -12,7 +12,8 @@ export type FragmentQuote = { text: string; start: number; end: number; lost: bo
 
 // Фрагмент спит, только когда у него нет ни реакций, ни живых комментариев,
 // так что у живого комментария он читается всегда — кроме удалённого
-// сообщения: тогда SELECT-политика прячет его вместе с текстом.
+// сообщения: тогда SELECT-политика прячет его вместе с текстом. Спящий
+// бывает лишь под заглушкой удалённого корня, а у неё цитаты и нет.
 export const FRAGMENT_QUOTE_COLUMNS =
   'fragment:message_fragments!comments_fragment_fkey(start_offset, end_offset, exact_text, anchor_state)' as const;
 

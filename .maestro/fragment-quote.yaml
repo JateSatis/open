@@ -47,7 +47,27 @@ env:
     element: ${output.msg}
     direction: DOWN
     timeout: 20000
-# Убрать за собой.
+- tapOn:
+    id: "comment-fragment-quote"
+    below: ${output.msg}
+    optional: true
+- tapOn:
+    id: "comment-fragment-quote"
+    above: ${output.msg}
+- assertNotVisible:
+    id: "comments-panel"
+- assertVisible:
+    id: "quote-highlight"
+- tapOn:
+    point: "50%,30%"
+# Убрать за собой — из шита.
+- tapOn:
+    id: "comments-circle"
+    index: 0
+- scrollUntilVisible:
+    element: ${output.msg}
+    direction: DOWN
+    timeout: 20000
 - longPressOn: ${output.msg}
 - tapOn: "Удалить"
 - tapOn: "Удалить"

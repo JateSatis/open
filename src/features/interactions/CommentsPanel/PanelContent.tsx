@@ -245,7 +245,7 @@ export function PanelContent({
     };
   }, []);
 
-  const goToFragment = useGoToFragment(target, live?.message ?? null, close);
+  const goToFragment = useGoToFragment(target, live?.message ?? null, close, hostChatId);
   const { retry, react } = comments;
   const myAudience = audienceOf(amMember);
   const renderBubble = useCallback(
@@ -259,7 +259,8 @@ export function PanelContent({
           message={quotes === item.replies ? item : { ...item, replies: quotes }}
           isOwn={isOwn}
           lead={
-            fragmentId || fragmentQuote ? (
+            // У заглушки удалённого корня содержимого нет — и цитаты тоже.
+            !item.deleted && (fragmentId || fragmentQuote) ? (
               <FragmentQuote
                 text={fragmentQuote?.text ?? null}
                 isOwn={isOwn}

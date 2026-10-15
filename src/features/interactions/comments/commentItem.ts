@@ -89,6 +89,7 @@ export function asDeletedRoot(item: CommentItem): CommentItem {
     replies: [],
     reactions: NO_REACTIONS,
     localPreviews: undefined,
+    fragmentQuote: null,
   };
 }
 

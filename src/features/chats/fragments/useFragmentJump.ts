@@ -8,19 +8,23 @@ import {
   useFragmentJumpRequested,
   type FragmentJump,
 } from '@/features/chats/fragments/fragmentJump';
-import { clearQuoteHighlight, setQuoteHighlight } from '@/features/chats/fragments/fragmentStore';
+import {
+  clearQuoteHighlight,
+  quoteInteractionMark,
+  setQuoteHighlight,
+} from '@/features/chats/fragments/fragmentStore';
 import {
   selectableTextOf,
   type SelectableTextEntry,
 } from '@/features/chats/fragments/selectableTexts';
-import { fromServerRange } from '@/features/chats/fragments/textOffsets';
+import { fromServerRange, toUtf16Offset } from '@/features/chats/fragments/textOffsets';
 import type { ChatListRow } from '@/features/chats/islands/rows';
 import type { JumpToMessage } from '@/features/chats/useJumpToMessage';
 import { useCommentsPanelTarget } from '@/features/interactions/comments/commentsPanelStore';
 import { showNotice } from '@/features/notifications/alertsStore';
 
 /** Дольше этого не ждём, пока облачко после прокрутки отрисует текст. */
-const TEXT_WAIT_MS = 2000;
+const TEXT_WAIT_MS = 4000;
 
 const nextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 
@@ -59,6 +63,31 @@ async function settledText(
   return null;
 }
 
+/**
+ * Где кусок в тексте облачка (UTF-16). Обычно — там, куда его перепривязала
+ * база. Текст в переписке мог ещё не догнать правку, после которой база его
+ * сдвинула, — тогда та же цитата, ближайшая к месту из базы.
+ */
+export function quoteRange(
+  text: string,
+  quote: string,
+  start: number,
+  end: number,
+): { start: number; end: number } | null {
+  const exact = fromServerRange(text, start, end);
+
+  if (exact.end > exact.start && text.slice(exact.start, exact.end) === quote) return exact;
+
+  const near = toUtf16Offset(text, start);
+  let best: number | null = null;
+
+  for (let at = text.indexOf(quote); at !== -1 && quote; at = text.indexOf(quote, at + 1)) {
+    if (best === null || Math.abs(at - near) < Math.abs(best - near)) best = at;
+  }
+
+  return best === null ? null : { start: best, end: best + quote.length };
+}
+
 type Options = {
   chatId: string;
   rows: ChatListRow[];
@@ -90,9 +119,12 @@ export function useFragmentJump({ chatId, rows, jump, isFocused }: Options) {
 
     const request = takeFragmentJump();
 
-    if (request) void run(request);
+    // Запрос другого экрана (его панель закрылась, пока ушли сюда) — не наш.
+    if (request && request.hostChatId === chatId) void run(request);
 
     async function run(request: FragmentJump) {
+      // Человек тронул экран, пока шёл переход, — подсветка опоздала.
+      const mark = quoteInteractionMark();
       // Без строки панели — само сообщение, если оно из этого чата. Чужое без
       // строки (островок не найден) искать здесь негде.
       const key =
@@ -121,23 +153,25 @@ export function useFragmentJump({ chatId, rows, jump, isFocused }: Options) {
 
       const shown = await settledText(key, request.messageId);
 
+      if (quoteInteractionMark() !== mark) return;
+
+      // Сообщение на экране, но текст не измерить (сборка без модуля, облачко
+      // не отрисовалось) — хотя бы вспышка, а не «не найдено».
       if (!shown) {
-        notFound();
+        await jump(key, createdAt);
         return;
       }
 
       const { entry, geometry } = shown;
-      const { start, end } = fromServerRange(entry.text, request.start, request.end);
+      const range = quoteRange(entry.text, request.text, request.start, request.end);
 
-      // Текст в переписке ещё не догнал правку, с которой база перепривязала
-      // фрагмент, — подсветили бы не то.
-      if (end <= start || entry.text.slice(start, end) !== request.text) {
+      if (!range) {
         await jump(key, createdAt);
         changed();
         return;
       }
 
-      setQuoteHighlight({ rowKey: key, text: entry.text, start, end, geometry });
+      setQuoteHighlight({ rowKey: key, text: entry.text, ...range, geometry });
     }
   }, [chatId, isFocused, jump, panelOpen, requested]);
 

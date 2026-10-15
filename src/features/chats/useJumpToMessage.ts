@@ -43,8 +43,8 @@ export function useJumpToMessage(
   loadUntil: (createdAt: string) => Promise<boolean>,
 ): JumpToMessage {
   const [highlight, setHighlight] = useState<JumpHighlight | null>(null);
-  // Прыжок без вспышки тоже должен дождаться строки в списке.
-  const [quietJump, setQuietJump] = useState(0);
+  // Каждый прыжок — со вспышкой и без — ждёт своей строки в списке.
+  const [jumps, setJumps] = useState(0);
   // Цель — в ref, а не в состоянии: прокрутка — побочное действие, и
   // перерисовку ради неё запускает уже смена подсветки.
   const targetRef = useRef<string | null>(null);
@@ -63,7 +63,7 @@ export function useJumpToMessage(
 
     targetRef.current = null;
     listRef.current?.scrollToIndex(centerOf(index));
-  }, [highlight, listRef, quietJump, rows]);
+  }, [jumps, listRef, rows]);
 
   useEffect(
     () => () => {
@@ -79,9 +79,9 @@ export function useJumpToMessage(
       if (!found) return false;
 
       targetRef.current = rowKey;
+      setJumps((count) => count + 1);
 
       if (flash) setHighlight({ messageId: rowKey, key: Date.now() });
-      else setQuietJump((count) => count + 1);
 
       return true;
     },

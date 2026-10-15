@@ -5,8 +5,18 @@ import { locateFragment, type FragmentWhereabouts } from '@/api/fragments';
 import { requestFragmentJump } from '@/features/chats/fragments/fragmentJump';
 import { exitFragmentMode } from '@/features/chats/fragments/fragmentStore';
 import type { CommentItem } from '@/features/interactions/comments/commentItem';
-import type { CommentsPanelTarget } from '@/features/interactions/comments/commentsPanelStore';
+import {
+  getCommentsPanelTarget,
+  type CommentsPanelTarget,
+} from '@/features/interactions/comments/commentsPanelStore';
 import { showNotice } from '@/features/notifications/alertsStore';
+import { withDeadline } from '@/lib/deadline';
+
+/**
+ * Дольше не ждём ответа базы: человек тапнул и ждёт движения. Без ответа —
+ * по тому, что знает панель.
+ */
+const LOCATE_DEADLINE_MS = 3000;
 
 /**
  * Где фрагмент, если спросить базу не вышло (нет сети): по тому, что уже
@@ -37,6 +47,8 @@ export function useGoToFragment(
   target: CommentsPanelTarget,
   message: Message | null,
   close: () => void,
+  /** Экран переписки под панелью — только он выполнит переход. */
+  hostChatId: string | undefined,
 ) {
   const busy = useRef(false);
 
@@ -55,11 +67,15 @@ export function useGoToFragment(
       busy.current = true;
 
       const messageId = target.subject.id;
-      const where = await locateFragment(item.fragmentId, messageId).catch(() =>
-        fromCache(item, message),
-      );
+      const where = await withDeadline(
+        locateFragment(item.fragmentId, messageId),
+        LOCATE_DEADLINE_MS,
+      ).catch(() => fromCache(item, message));
 
       busy.current = false;
+
+      // Пока спрашивали, панель закрыли или открыли другую — переход уже не к месту.
+      if (getCommentsPanelTarget() !== target) return;
 
       if (where?.state === 'deleted') {
         showNotice('Сообщение удалено');
@@ -72,6 +88,7 @@ export function useGoToFragment(
       }
 
       requestFragmentJump({
+        hostChatId,
         messageId,
         chatId: target.chatId,
         rowKey: target.rowKey,
@@ -86,6 +103,6 @@ export function useGoToFragment(
       exitFragmentMode();
       close();
     },
-    [close, message, target.chatId, target.rowKey, target.subject.id],
+    [close, hostChatId, message, target],
   );
 }

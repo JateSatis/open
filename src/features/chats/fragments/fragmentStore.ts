@@ -124,8 +124,20 @@ export function setQuoteHighlight(quote: QuoteHighlight) {
   useFragmentStore.setState({ quote });
 }
 
+/**
+ * Счётчик действий человека на экране переписки. Переход по цитате долгий
+ * (догрузка истории, отрисовка): тронули экран, пока он шёл, — подсветка
+ * опоздала и уже не нужна.
+ */
+let interactions = 0;
+
+export function quoteInteractionMark(): number {
+  return interactions;
+}
+
 /** Любое действие на экране переписки снимает подсветку. Дёшево, когда её нет. */
 export function clearQuoteHighlight() {
+  interactions += 1;
   if (useFragmentStore.getState().quote) useFragmentStore.setState({ quote: null });
 }
 

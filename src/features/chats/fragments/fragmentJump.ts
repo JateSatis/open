@@ -6,6 +6,8 @@ import { create } from 'zustand';
 // экрана: его забирает первый, кто выполнит.
 
 export type FragmentJump = {
+  /** Чат экрана, где открыта панель: выполнить запрос может только он. */
+  hostChatId: string | undefined;
   messageId: string;
   /** Чат сообщения; у облачка островка — чат оригинала. */
   chatId: string | undefined;
