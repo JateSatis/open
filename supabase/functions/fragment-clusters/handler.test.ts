@@ -28,6 +28,7 @@ function snapshot(id: string, extra: Partial<ClusterSnapshot> = {}): ClusterSnap
 function setup(batches: ClusterSnapshot[][], overrides: Partial<ClustersDeps> = {}) {
   const applied: { id: string; result: Record<string, unknown> }[] = [];
   const deduped: string[] = [];
+  const requeued: string[] = [];
   const queue = [...batches];
 
   const handler = createClustersHandler({
@@ -35,10 +36,11 @@ function setup(batches: ClusterSnapshot[][], overrides: Partial<ClustersDeps> = 
     claim: () => Promise.resolve(queue.shift() ?? []),
     apply: (id, result) => (applied.push({ id, result }), Promise.resolve('applied')),
     dedup: (id) => (deduped.push(id), Promise.resolve(0)),
+    requeue: (id) => (requeued.push(id), Promise.resolve()),
     ...overrides,
   });
 
-  return { handler, applied, deduped };
+  return { handler, applied, deduped, requeued };
 }
 
 function request(token: string | null = 'worker-secret') {
@@ -131,4 +133,15 @@ Deno.test('бюджет времени кончился — новых паче�
   await handler(request());
 
   assertEquals(applied.map((a) => a.id), [M1]);
+});
+
+Deno.test('схлопывание реакций не прошло — заявка ставится заново', async () => {
+  const { handler, requeued } = setup([[snapshot(M1)]], {
+    dedup: () => Promise.reject(new Error('lock timeout')),
+  });
+
+  const body = await (await handler(request())).json();
+
+  assertEquals(requeued, [M1]);
+  assertEquals(body.failed, []);
 });

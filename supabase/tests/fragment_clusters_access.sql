@@ -488,6 +488,12 @@ begin
   perform pg_temp.check('К4.5 переехавший фрагмент остался в кластере',
     (select anchor_state = 'shifted' and cluster_id is not null from public.message_fragments
      where message_id = m3 and exact_text = 'начало'));
+  perform pg_temp.check('после правки диапазон кластера — по его фрагментам, а не по прежнему тексту',
+    (select k.start_offset = 3 and k.end_offset = 9 from public.fragment_clusters k
+     join public.message_fragments f on f.cluster_id = k.id
+     where f.message_id = m3 and f.exact_text = 'начало'));
+  perform pg_temp.check('кластер, потерявший все фрагменты, гаснет',
+    (select count(*) from public.fragment_clusters where message_id = m3 and deleted_at is null) = 2);
   perform pg_temp.check('К4.5 до пересчёта прежние диапазоны не показываются, заявка стоит',
     not exists (select 1 from public.fragment_clusters where message_id = m3 and display_start is not null)
       and pg_temp.queued(m3) = 1);

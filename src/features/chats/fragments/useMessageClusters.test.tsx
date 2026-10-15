@@ -63,13 +63,17 @@ describe('useMessageClusters', () => {
     expect(mockedList).toHaveBeenCalledWith('m1', 'Огонь и вода');
   });
 
-  it('does not ask when the message has no visible fragments', async () => {
+  it('does not ask while the message has no visible fragments, but asks on the first signal', async () => {
     await renderHook(() => useMessageClusters({ ...message, fragmentsCount: 0 }), {
       wrapper: wrapper(),
     });
 
     expect(mockedList).not.toHaveBeenCalled();
-    expect(mockedAcquire).not.toHaveBeenCalled();
+
+    // Первая реакция на облачко, загруженное без фрагментов: пересчёт сообщает
+    // о кластере — облачко его спрашивает.
+    listener?.onClustersChanged?.('m1');
+    await waitFor(() => expect(mockedList).toHaveBeenCalledWith('m1', 'Огонь и вода'));
   });
 
   it('reloads when the server says the clusters of this message changed', async () => {

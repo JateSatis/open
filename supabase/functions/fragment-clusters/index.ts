@@ -42,6 +42,11 @@ const handler = createClustersHandler({
 
     return Number(data ?? 0);
   },
+  requeue: async (messageId) => {
+    const { error } = await admin.rpc('fragment_clusters_enqueue', { target_message: messageId });
+
+    if (error) throw error;
+  },
   log: (message, error) => console.error(message, error),
 });
 

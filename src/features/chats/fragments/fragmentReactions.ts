@@ -11,6 +11,7 @@ import {
   type FragmentRange,
 } from '@/api/fragments';
 import type { ReactionAudience, ReactionCounts } from '@/api/reactionCounts';
+import { clustersKeyOf } from '@/features/chats/fragments/clusterKeys';
 import {
   fragmentsKey,
   setMessageFragments,
@@ -96,8 +97,31 @@ function applyLocally(queryClient: QueryClient, intent: FragmentReactionIntent) 
         ? fragments.map((fragment, at) => (at === index ? next : fragment))
         : [...fragments, next];
 
-    return emoji && base.clusterId ? withoutMyOtherInCluster(updated, next, row) : updated;
+    const cluster = base.clusterId ?? overlappedCluster(fragments, range);
+
+    return emoji && cluster ? withoutMyOtherInCluster(updated, next, cluster, row) : updated;
   });
+}
+
+/**
+ * Кластер, в который база положит новый фрагмент: тот, с чьими фрагментами
+ * диапазон пересекается больше. Догадка по кешу — точный ответ придёт с
+ * перечитыванием.
+ */
+function overlappedCluster(fragments: Fragment[], range: FragmentRange): string | null {
+  let best: string | null = null;
+  let bestOverlap = 0;
+
+  for (const fragment of fragments) {
+    const overlap = Math.min(fragment.end, range.end) - Math.max(fragment.start, range.start);
+
+    if (fragment.clusterId && !fragment.lost && overlap > bestOverlap) {
+      best = fragment.clusterId;
+      bestOverlap = overlap;
+    }
+  }
+
+  return best;
 }
 
 /**
@@ -108,10 +132,11 @@ function applyLocally(queryClient: QueryClient, intent: FragmentReactionIntent) 
 function withoutMyOtherInCluster(
   fragments: Fragment[],
   target: Fragment,
+  cluster: string,
   row: 'memberReactions' | 'visitorReactions',
 ): Fragment[] {
   return fragments.map((fragment) =>
-    fragment === target || fragment.clusterId !== target.clusterId || !fragment.mine
+    fragment === target || fragment.clusterId !== cluster || !fragment.mine
       ? fragment
       : {
           ...fragment,
@@ -158,8 +183,12 @@ async function drain(queryClient: QueryClient, key: string) {
     );
   } finally {
     inFlight.delete(key);
-    // Счётчики и id фрагмента — из базы: и после успеха, и как откат.
-    if (last) void queryClient.invalidateQueries({ queryKey: fragmentsKey(last.messageId) });
+    // Счётчики и id фрагмента — из базы: и после успеха, и как откат. Сводные
+    // счётчики кластера и моя реакция в нём меняются вместе с ними.
+    if (last) {
+      void queryClient.invalidateQueries({ queryKey: fragmentsKey(last.messageId) });
+      void queryClient.invalidateQueries({ queryKey: clustersKeyOf(last.messageId) });
+    }
   }
 }
 

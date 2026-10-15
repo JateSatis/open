@@ -129,6 +129,36 @@ describe('my reaction on a fragment', () => {
     expect(byId.get('far')).toMatchObject({ mine: '👍' });
   });
 
+  it('guesses the cluster of a new fragment by the cached fragments it overlaps', () => {
+    mockedSet.mockReturnValue(new Promise(() => undefined));
+    queryClient.setQueryData<Fragment[]>(fragmentsKey(messageId), [
+      {
+        id: 'old',
+        messageId,
+        authorId: 'me',
+        start: 0,
+        end: 20,
+        exactText: 'x'.repeat(20),
+        lost: false,
+        memberReactions: {},
+        visitorReactions: { '🔥': 1 },
+        reactionsCount: 1,
+        commentsCount: 0,
+        mine: '🔥',
+        clusterId: 'k1',
+      },
+    ]);
+
+    // Мой фрагмент 4–27 ещё не в кеше: база положит его в k1.
+    sendFragmentReaction(queryClient, { ...base, emoji: '🤣' });
+
+    const byId = new Map(
+      (readMessageFragments(queryClient, messageId) ?? []).map((f) => [f.id, f]),
+    );
+
+    expect(byId.get('old')).toMatchObject({ mine: null });
+  });
+
   it('keeps one request in flight and sends only the last choice after it', async () => {
     const first = deferred();
 

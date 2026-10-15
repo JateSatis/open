@@ -5,7 +5,7 @@
 // человека в кластере она одна). Изменения приходят сигналом
 // `clusters_changed` в топик чата.
 
-import type { ReactionCounts } from '@/api/reactionCounts';
+import { toReactionCounts, type ReactionCounts } from '@/api/reactionCounts';
 import { supabase } from '@/api/supabase';
 import { fromServerRange } from '@/features/chats/fragments/textOffsets';
 
@@ -29,10 +29,6 @@ export type FragmentCluster = {
   mine: string | null;
   myFragmentId: string | null;
 };
-
-function toCounts(value: unknown): ReactionCounts {
-  return value && typeof value === 'object' ? (value as ReactionCounts) : {};
-}
 
 /**
  * Отображаемые кластеры сообщения по порядку на тексте. `text` — текст
@@ -63,8 +59,8 @@ export async function listMessageClusters(
         end: range.end,
         quote: row.display_text,
         popularity: row.popularity,
-        memberReactions: toCounts(row.member_reactions),
-        visitorReactions: toCounts(row.visitor_reactions),
+        memberReactions: toReactionCounts(row.member_reactions),
+        visitorReactions: toReactionCounts(row.visitor_reactions),
         reactionsCount: row.reactions_count,
         commentsCount: row.comments_count,
         peopleCount: row.people_count,

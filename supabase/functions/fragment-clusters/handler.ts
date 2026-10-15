@@ -47,6 +47,8 @@ export type ClustersDeps = {
   claim: (batch: number) => Promise<ClusterSnapshot[]>;
   apply: (messageId: string, result: Record<string, unknown>) => Promise<string>;
   dedup: (messageId: string) => Promise<number>;
+  /** Поставить заявку на сообщение заново. */
+  requeue: (messageId: string) => Promise<void>;
   compute?: (input: ClusterModelInput) => ClusterModelResult;
   now?: () => number;
   /** Сколько работать за один вызов, мс. */
@@ -118,7 +120,16 @@ export function createClustersHandler(deps: ClustersDeps) {
     const computed = now();
     const outcome = await deps.apply(snapshot.message_id, toApplyPayload(snapshot, model));
 
-    if (outcome === 'applied') await deps.dedup(snapshot.message_id);
+    if (outcome === 'applied') {
+      try {
+        await deps.dedup(snapshot.message_id);
+      } catch (error) {
+        // Запись уже сняла заявку: без новой лишние реакции в слившемся
+        // кластере дожили бы до следующего взаимодействия.
+        log(`dedup failed for ${snapshot.message_id}, requeued`, error);
+        await deps.requeue(snapshot.message_id);
+      }
+    }
 
     return {
       message_id: snapshot.message_id,

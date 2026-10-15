@@ -857,21 +857,21 @@ export type Database = {
           cluster_id: string
           created_at: string
           id: string
-          user_id: string
+          user_id: string | null
           votes: number
         }
         Insert: {
           cluster_id: string
           created_at?: string
           id?: string
-          user_id: string
+          user_id?: string | null
           votes?: number
         }
         Update: {
           cluster_id?: string
           created_at?: string
           id?: string
-          user_id?: string
+          user_id?: string | null
           votes?: number
         }
         Relationships: [
@@ -890,6 +890,30 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      fragment_cluster_worker: {
+        Row: {
+          created_at: string
+          id: string
+          kicked_at: string
+          request_id: number
+          singleton: boolean
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          kicked_at: string
+          request_id: number
+          singleton?: boolean
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          kicked_at?: string
+          request_id?: number
+          singleton?: boolean
+        }
+        Relationships: []
       }
       fragment_clusters: {
         Row: {
