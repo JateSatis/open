@@ -1531,6 +1531,7 @@ export type Database = {
         Row: {
           author_id: string | null
           chat_id: string
+          clusters_count: number
           comments_count: number
           created_at: string
           deleted_at: string | null
@@ -1590,6 +1591,7 @@ export type Database = {
         Insert: {
           author_id?: string | null
           chat_id: string
+          clusters_count?: number
           comments_count?: number
           created_at?: string
           deleted_at?: string | null
@@ -1613,6 +1615,7 @@ export type Database = {
         Update: {
           author_id?: string | null
           chat_id?: string
+          clusters_count?: number
           comments_count?: number
           created_at?: string
           deleted_at?: string | null
@@ -2432,6 +2435,7 @@ export type Database = {
         Returns: {
           author_id: string | null
           chat_id: string
+          clusters_count: number
           comments_count: number
           created_at: string
           deleted_at: string | null
