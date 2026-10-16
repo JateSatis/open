@@ -28,6 +28,8 @@ export type FragmentCluster = {
   /** Моя реакция в кластере и фрагмент, на котором она стоит. */
   mine: string | null;
   myFragmentId: string | null;
+  /** Снимок решения модели, по которому кластер показан, — для событий людей. */
+  decisionId: string | null;
 };
 
 /**
@@ -67,6 +69,7 @@ export async function listMessageClusters(
         fragmentsCount: row.fragments_count,
         mine: row.my_emoji ?? null,
         myFragmentId: row.my_fragment_id ?? null,
+        decisionId: row.decision_id ?? null,
       },
     ];
   });

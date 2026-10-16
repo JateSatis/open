@@ -24,6 +24,7 @@ function row(overrides: Record<string, unknown> = {}) {
     fragments_count: 5,
     my_emoji: '🔥',
     my_fragment_id: 'f2',
+    decision_id: 'd1',
     ...overrides,
   };
 }
@@ -57,6 +58,7 @@ describe('listMessageClusters', () => {
       fragmentsCount: 5,
       mine: '🔥',
       myFragmentId: 'f2',
+      decisionId: 'd1',
     });
     expect(text.slice(cluster.start, cluster.end)).toBe('Огонь');
   });
