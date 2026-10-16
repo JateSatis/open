@@ -1,31 +1,31 @@
-import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 
 import { styles } from './styles';
 
+import type { ReactionCounts } from '@/api/reactionCounts';
 import { Text } from '@/components/Text';
-import { sendFragmentReaction } from '@/features/chats/fragments/fragmentReactions';
-import { myFragmentOn, useMessageFragments } from '@/features/chats/fragments/useMessageFragments';
-import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
-import type { FragmentPanelSubject } from '@/features/interactions/comments/commentsPanelStore';
-import { updateScopedRoots } from '@/features/interactions/comments/commentsCache';
 import { pickerGeometry, ReactionPicker } from '@/features/interactions/ReactionPicker';
 import { audienceOf, menuReactionSet } from '@/features/interactions/reactionState';
 import { useTheme } from '@/hooks/use-theme';
 import { Spacing } from '@/theme';
 
 export type FragmentHeaderProps = {
-  messageId: string;
-  fragment: FragmentPanelSubject;
+  /** Кусок текста — цитата в шапке. */
+  quote: string;
+  memberReactions: ReactionCounts;
+  visitorReactions: ReactionCounts;
+  /** Моя реакция здесь — отмечена; тап по ней снимает. */
+  mine: string | null;
   /** Я участник чата сообщения — догадка ряда моей реакции. */
   amMember: boolean;
   /** Ширина панели — под неё раскладывается полный набор реакций. */
   width: number;
+  onToggle: (emoji: string) => void;
 };
 
-/** Сколько каждой реакции на фрагменте — оба ряда вместе, по убыванию. */
-function merged(member: Readonly<Record<string, number>>, visitor: Readonly<Record<string, number>>) {
+/** Сколько каждой реакции — оба ряда вместе, по убыванию. */
+function merged(member: ReactionCounts, visitor: ReactionCounts) {
   const counts = new Map<string, number>();
 
   for (const row of [member, visitor]) {
@@ -36,40 +36,30 @@ function merged(member: Readonly<Record<string, number>>, visitor: Readonly<Reco
 }
 
 /**
- * Шапка панели фрагмента: цитата — выделенный кусок текста, под ней строка
- * реакций со счётчиками. Много реакций — строка листается вбок; тап — моя
- * реакция ставится или снимается; «+» — весь набор. Чужие реакции приходят
- * вживую сигналом в топик комментариев сообщения.
+ * Шапка боковой панели куска текста: цитата, под ней строка сводных реакций
+ * со счётчиками. Много реакций — строка листается вбок; тап — моя реакция
+ * ставится или снимается; «+» — весь набор. Чья это сводка и куда уходит
+ * реакция — решает панель кластера или области.
  */
-export function FragmentHeader({ messageId, fragment, amMember, width }: FragmentHeaderProps) {
+export function FragmentHeader({
+  quote,
+  memberReactions,
+  visitorReactions,
+  mine,
+  amMember,
+  width,
+  onToggle,
+}: FragmentHeaderProps) {
   const theme = useTheme();
-  const queryClient = useQueryClient();
-  const me = useCurrentUserId();
   const [picking, setPicking] = useState(false);
-  const { data: fragments } = useMessageFragments(messageId, true);
-  const shown = myFragmentOn(fragments, me, fragment.range);
   const counts = useMemo(
-    () => merged(shown?.memberReactions ?? {}, shown?.visitorReactions ?? {}),
-    [shown],
+    () => merged(memberReactions, visitorReactions),
+    [memberReactions, visitorReactions],
   );
-  const mine = shown?.mine ?? null;
-  const shownId = shown && !shown.id.startsWith('local:') ? shown.id : null;
-
-  // Фрагмент появился в базе (первой реакцией) — верх панели узнаёт его id и
-  // дальше ловит комментарии к нему от других.
-  useEffect(() => {
-    if (!shownId) return;
-
-    updateScopedRoots(queryClient, messageId, (page, scope) =>
-      scope.key === fragment.key && scope.fragmentId !== shownId
-        ? { ...page, scope: { ...scope, fragmentId: shownId } }
-        : page,
-    );
-  }, [fragment.key, messageId, queryClient, shownId]);
   const set = menuReactionSet(
     {
-      members: shown?.memberReactions ?? {},
-      visitors: shown?.visitorReactions ?? {},
+      members: memberReactions,
+      visitors: visitorReactions,
       mine: mine ? { emoji: mine, audience: audienceOf(amMember) } : null,
     },
     audienceOf(amMember),
@@ -77,16 +67,8 @@ export function FragmentHeader({ messageId, fragment, amMember, width }: Fragmen
   const geometry = pickerGeometry(width - Spacing.three * 2, { ...set, expandable: false });
 
   const toggle = (emoji: string) => {
-    if (!me) return;
-
     setPicking(false);
-    sendFragmentReaction(queryClient, {
-      messageId,
-      range: fragment.range,
-      emoji: mine === emoji ? null : emoji,
-      audience: audienceOf(amMember),
-      me,
-    });
+    onToggle(emoji);
   };
 
   return (
@@ -95,7 +77,7 @@ export function FragmentHeader({ messageId, fragment, amMember, width }: Fragmen
         testID="fragment-quote"
         style={[styles.fragmentQuote, { borderLeftColor: theme.primary, backgroundColor: theme.quoteBackground }]}
       >
-        <Text numberOfLines={4}>{fragment.range.text}</Text>
+        <Text numberOfLines={4}>{quote}</Text>
       </View>
 
       <ScrollView

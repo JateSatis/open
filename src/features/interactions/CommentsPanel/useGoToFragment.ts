@@ -1,6 +1,7 @@
 import { useCallback, useRef } from 'react';
 
 import type { Message } from '@/api/chats';
+import { trackClusterEvent } from '@/api/fragmentClusterEvents';
 import { locateFragment, type FragmentWhereabouts } from '@/api/fragments';
 import { requestFragmentJump } from '@/features/chats/fragments/fragmentJump';
 import { exitFragmentMode } from '@/features/chats/fragments/fragmentStore';
@@ -112,6 +113,18 @@ export function useGoToFragment(
         start: where.start,
         end: where.end,
         lost: where.lost,
+      });
+      // Из панели кластера — переход по кластеру, из шита и области — без него.
+      const cluster = target.fragment?.kind === 'cluster' ? target.fragment : null;
+
+      trackClusterEvent({
+        kind: 'quote_followed',
+        messageId,
+        decisionId: cluster?.decisionId ?? null,
+        clusterId: cluster?.clusterId ?? null,
+        fragmentId: item.fragmentId,
+        rangeStart: where.start,
+        rangeEnd: where.end,
       });
       exitFragmentMode();
       close();

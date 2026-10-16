@@ -3,7 +3,8 @@ import { Keyboard, Modal, Pressable, useWindowDimensions } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated from 'react-native-reanimated';
 
-import { FragmentHeader } from './FragmentHeader';
+import { AreaHeader } from './AreaHeader';
+import { ClusterHeader } from './ClusterHeader';
 import { PanelContent } from './PanelContent';
 import { styles } from './styles';
 import { useSidePanel } from './useSidePanel';
@@ -25,9 +26,10 @@ export type FragmentPanelWindowProps = {
 };
 
 /**
- * Боковая панель фрагмента текста: справа, на 90% ширины, слева видна
- * затемнённая переписка. Сверху — цитата и реакции фрагмента, ниже — только
- * его комментарии с тредами, медиа, голосовыми и закрепом, внизу — поле ввода.
+ * Боковая панель куска текста — кластера или выделенной области: справа, на
+ * 90% ширины, слева видна затемнённая переписка. Сверху — цитата и сводные
+ * реакции, ниже — комментарии фрагментов куска с тредами, медиа, голосовыми и
+ * закрепом, у каждого — плашка его цитаты; внизу — поле ввода.
  * Содержимое — то же, что у шита комментариев (`PanelContent`), меняется
  * только окно. Своё окно (`Modal`) — иначе шапку экрана не перекрыть.
  */
@@ -91,14 +93,23 @@ export function FragmentPanelWindow({ target, onOpenPerson, hostChatId }: Fragme
             focusInput={fragment.focusInput && panel.opened}
             header={{
               title: 'Фрагмент',
-              extra: (
-                <FragmentHeader
-                  messageId={target.subject.id}
-                  fragment={fragment}
-                  amMember={target.amMember ?? false}
-                  width={width}
-                />
-              ),
+              extra:
+                fragment.kind === 'cluster' ? (
+                  <ClusterHeader
+                    messageId={target.subject.id}
+                    chatId={target.chatId ?? ''}
+                    subject={fragment}
+                    amMember={target.amMember ?? false}
+                    width={width}
+                  />
+                ) : (
+                  <AreaHeader
+                    messageId={target.subject.id}
+                    subject={fragment}
+                    amMember={target.amMember ?? false}
+                    width={width}
+                  />
+                ),
             }}
           />
         </Animated.View>

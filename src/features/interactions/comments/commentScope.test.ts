@@ -1,6 +1,6 @@
 import { QueryClient } from '@tanstack/react-query';
 
-import { readRoots, rootsInOrder, rootsKey, rootsPageOf } from './commentsCache';
+import { readRoots, rootsInOrder, rootsKey, rootsPageOf, type RootsScope } from './commentsCache';
 import { loadRoots, syncAuthorPin, syncComments } from './commentSync';
 
 import {
@@ -9,6 +9,8 @@ import {
   listThreadRoots,
   type Comment,
 } from '@/api/comments';
+import { listMessageFragments, type Fragment } from '@/api/fragments';
+import { fragmentsKey } from '@/features/chats/fragments/useMessageFragments';
 
 jest.mock('@/api/comments', () => ({
   getPinnedComment: jest.fn(),
@@ -18,9 +20,14 @@ jest.mock('@/api/comments', () => ({
   listCommentReactions: jest.fn(),
 }));
 
+jest.mock('@/api/fragments', () => ({
+  listMessageFragments: jest.fn(),
+}));
+
 const mockedRoots = jest.mocked(listThreadRoots);
 const mockedPinned = jest.mocked(getPinnedComment);
 const mockedByIds = jest.mocked(listCommentsByIds);
+const mockedFragments = jest.mocked(listMessageFragments);
 
 function comment(id: string, overrides: Partial<Comment> = {}): Comment {
   return {
@@ -48,78 +55,108 @@ function comment(id: string, overrides: Partial<Comment> = {}): Comment {
   };
 }
 
+function fragment(id: string, start: number, end: number, clusterId: string | null): Fragment {
+  return {
+    id,
+    messageId: 'm1',
+    authorId: 'user-2',
+    start,
+    end,
+    exactText: 'x'.repeat(end - start),
+    lost: false,
+    memberReactions: {},
+    visitorReactions: {},
+    reactionsCount: 1,
+    commentsCount: 0,
+    mine: null,
+    clusterId,
+  };
+}
+
 const ids = (items: { id: string }[]) => items.map((item) => item.id);
-const scope = { key: 'm1:4-27', fragmentId: 'f1' };
+const cluster: RootsScope = { key: 'cluster:k1', set: { kind: 'cluster', clusterId: 'k1' } };
+const area: RootsScope = { key: 'area:0-10', set: { kind: 'area', start: 0, end: 10 } };
+
+function withPanels(scopes: RootsScope[]) {
+  const queryClient = new QueryClient();
+
+  for (const scope of scopes) {
+    queryClient.setQueryData(rootsKey('m1', scope.key), {
+      ...rootsPageOf({ items: [], nextCursor: null }),
+      scope,
+    });
+  }
+  queryClient.setQueryData(rootsKey('m1'), rootsPageOf({ items: [], nextCursor: null }));
+
+  return queryClient;
+}
 
 beforeEach(() => {
   jest.clearAllMocks();
   mockedRoots.mockResolvedValue({ items: [], nextCursor: null });
   mockedPinned.mockResolvedValue(null);
+  mockedFragments.mockResolvedValue([]);
 });
 
-describe('the top of a fragment panel', () => {
-  it('asks the server only for the fragment’s roots', async () => {
+describe('the top of a side panel', () => {
+  it('asks the server only for the roots of its set, and its pin', async () => {
     mockedRoots.mockResolvedValue({ items: [comment('a', { fragmentId: 'f1' })], nextCursor: null });
-
-    const page = await loadRoots('m1', scope);
-
-    expect(mockedRoots).toHaveBeenCalledWith('m1', { fragmentId: 'f1' });
-    expect(ids(rootsInOrder(page))).toEqual(['a']);
-    expect(page.scope).toEqual(scope);
-  });
-
-  it('is empty without a request while my new fragment is not in the base yet', async () => {
-    const page = await loadRoots('m1', { key: 'm1:4-27', fragmentId: null });
-
-    expect(mockedRoots).not.toHaveBeenCalled();
-    expect(rootsInOrder(page)).toEqual([]);
-  });
-
-  it('shows the pin only when the pinned comment is of this fragment', async () => {
-    mockedPinned.mockResolvedValue(comment('pinned', { fragmentId: 'f2' }));
-    expect((await loadRoots('m1', scope)).authorPin).toBeNull();
-
     mockedPinned.mockResolvedValue(comment('pinned', { fragmentId: 'f1' }));
-    expect((await loadRoots('m1', scope)).authorPin?.id).toBe('pinned');
+
+    const page = await loadRoots('m1', cluster);
+
+    expect(mockedRoots).toHaveBeenCalledWith('m1', { set: cluster.set });
+    expect(mockedPinned).toHaveBeenCalledWith('m1', cluster.set);
+    expect(ids(rootsInOrder(page))).toEqual(['pinned', 'a']);
+    expect(page.scope).toEqual(cluster);
   });
 
-  it('takes a new comment of its fragment live — someone else’s too — and leaves the rest', async () => {
-    const queryClient = new QueryClient();
+  it('takes a new comment live — someone else’s too — when its fragment is in the set', async () => {
+    const queryClient = withPanels([cluster, area]);
 
-    queryClient.setQueryData(rootsKey('m1', scope.key), {
-      ...rootsPageOf({ items: [], nextCursor: null }),
-      scope,
-    });
-    queryClient.setQueryData(rootsKey('m1'), rootsPageOf({ items: [], nextCursor: null }));
+    queryClient.setQueryData(fragmentsKey('m1'), [
+      fragment('f1', 2, 8, 'k1'),
+      fragment('f2', 8, 30, 'k2'),
+    ]);
     mockedByIds.mockResolvedValue([
-      comment('mine-fragment', { fragmentId: 'f1' }),
-      comment('other-fragment', { fragmentId: 'f2' }),
+      comment('in-cluster', { fragmentId: 'f1' }),
+      comment('elsewhere', { fragmentId: 'f2' }),
       comment('plain'),
     ]);
 
     await syncComments(queryClient, 'm1', 'me', {
-      added: ['mine-fragment', 'other-fragment', 'plain'],
+      added: ['in-cluster', 'elsewhere', 'plain'],
       changed: [],
     });
 
-    expect(ids(rootsInOrder(readRoots(queryClient, 'm1', scope.key)!))).toEqual(['mine-fragment']);
+    expect(ids(rootsInOrder(readRoots(queryClient, 'm1', cluster.key)!))).toEqual(['in-cluster']);
+    // f1 целиком в области, f2 — меньше чем наполовину.
+    expect(ids(rootsInOrder(readRoots(queryClient, 'm1', area.key)!))).toEqual(['in-cluster']);
     // В общем шите чужой новый, как и раньше, — при следующем открытии.
     expect(rootsInOrder(readRoots(queryClient, 'm1')!)).toEqual([]);
   });
 
-  it('follows a new pin: the panel shows it only for its fragment', async () => {
-    const queryClient = new QueryClient();
+  it('reads the fragments afresh when a comment comes on a fragment it does not know', async () => {
+    const queryClient = withPanels([cluster]);
 
-    queryClient.setQueryData(rootsKey('m1', scope.key), {
-      ...rootsPageOf({ items: [], nextCursor: null }),
-      scope,
-    });
-    queryClient.setQueryData(rootsKey('m1'), rootsPageOf({ items: [], nextCursor: null }));
-    mockedPinned.mockResolvedValue(comment('pinned', { fragmentId: 'f2' }));
+    mockedFragments.mockResolvedValue([fragment('new', 3, 6, 'k1')]);
+    mockedByIds.mockResolvedValue([comment('fresh', { fragmentId: 'new' })]);
+
+    await syncComments(queryClient, 'm1', 'me', { added: ['fresh'], changed: [] });
+
+    expect(ids(rootsInOrder(readRoots(queryClient, 'm1', cluster.key)!))).toEqual(['fresh']);
+  });
+
+  it('follows a new pin: each panel asks for the pin of its own set', async () => {
+    const queryClient = withPanels([cluster]);
+
+    mockedPinned.mockImplementation(async (_target, set) =>
+      set ? null : comment('pinned', { fragmentId: 'f2' }),
+    );
 
     await syncAuthorPin(queryClient, 'm1');
 
     expect(readRoots(queryClient, 'm1')?.authorPin?.id).toBe('pinned');
-    expect(readRoots(queryClient, 'm1', scope.key)?.authorPin).toBeNull();
+    expect(readRoots(queryClient, 'm1', cluster.key)?.authorPin).toBeNull();
   });
 });

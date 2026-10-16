@@ -74,9 +74,8 @@ import { measureInWindow, RowRegistryContext } from '@/features/chats/rowRegistr
 import { useChatBubbles } from '@/features/chats/useChatBubbles';
 import { useChatKeyboardInset } from '@/features/chats/useChatKeyboardInset';
 import { useChatRowRenderer } from '@/features/chats/useChatRowRenderer';
-import { listMessageFragments, type Fragment, type FragmentRange } from '@/api/fragments';
-import { fragmentsKey, myFragmentOn } from '@/features/chats/fragments/useMessageFragments';
 import { FragmentMenu } from '@/features/chats/fragments/FragmentMenu';
+import { commentOnSelection } from '@/features/chats/fragments/openFragmentPanel';
 import {
   clearQuoteHighlight,
   clearTextSelection,
@@ -112,7 +111,6 @@ import { WaitingBanner } from '@/features/chats/WaitingBanner';
 import {
   CommentsPanel,
   openComments,
-  openFragmentComments,
 } from '@/features/interactions/CommentsPanel';
 import { resetScrolledRows } from '@/features/interactions/MessageReactions';
 import { menuReactionSet } from '@/features/interactions/reactionState';
@@ -603,42 +601,10 @@ export function ChatConversation({
   const fragments = useFragmentMode({ isMember, isFocused, isSelecting });
   useFragmentJump({ chatId, rows, jump: jumpTo, isFocused });
 
-  // Кнопка комментария в меню фрагмента: боковая панель этого куска текста.
-  // Выделение снимается, облачко остаётся в режиме фрагментов.
+  // Кнопка комментария в меню фрагмента: боковая панель кластера или области.
   const commentOnFragment = useCallback(
-    async (selection: TextSelection, range: FragmentRange, known: Fragment | null) => {
-      clearTextSelection();
-
-      // Список фрагментов мог ещё не прийти — без него панель не узнала бы
-      // мой прежний фрагмент и его комментарии.
-      const mine =
-        known ??
-        myFragmentOn(
-          await queryClient
-            .ensureQueryData({
-              queryKey: fragmentsKey(selection.messageId),
-              queryFn: () => listMessageFragments(selection.messageId),
-            })
-            .catch(() => undefined),
-          currentUserId,
-          range,
-        );
-
-      openFragmentComments(
-        selection.messageId,
-        selection.chatId,
-        selection.amMember,
-        {
-          kind: 'fragment',
-          key: `${selection.messageId}:${range.start}-${range.end}`,
-          fragmentId: mine && !mine.id.startsWith('local:') ? mine.id : null,
-          range,
-          focusInput: true,
-        },
-        selection.rowKey,
-      );
-    },
-    [currentUserId, queryClient],
+    (selection: TextSelection) => commentOnSelection(queryClient, selection),
+    [queryClient],
   );
 
   const { renderItem, islandHeader, bubbleContent } = useChatRowRenderer({

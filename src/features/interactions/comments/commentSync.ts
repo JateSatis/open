@@ -9,6 +9,9 @@
 
 import type { QueryClient } from '@tanstack/react-query';
 
+import { listMessageFragments, type Fragment } from '@/api/fragments';
+import { fragmentInSet } from '@/features/chats/fragments/fragmentSets';
+import { fragmentsKey, readMessageFragments } from '@/features/chats/fragments/useMessageFragments';
 import {
   getPinnedComment,
   listCommentReactions,
@@ -35,6 +38,7 @@ import {
   setAuthorPin,
   replaceComments,
   rootsPageOf,
+  scopesOf,
   updateAllComments,
   updateRoots,
   updateScopedRoots,
@@ -48,42 +52,60 @@ import {
 const MAX_IDS = 500;
 
 /**
- * Первая страница верха — свежий ранг — и закреп автора над ней. В панели
- * фрагмента — только его корни, и закреп — только если закреплён его
- * комментарий. Своего нового фрагмента в базе ещё нет — и комментариев нет.
+ * Первая страница верха — свежий ранг — и закреп автора над ней. В боковой
+ * панели — только корни фрагментов её набора, и закреп — только если
+ * закреплён комментарий одного из них.
  */
 export async function loadRoots(targetId: string, scope?: RootsScope): Promise<RootsPage> {
-  if (scope && !scope.fragmentId) {
-    return { scope, authorPin: null, raised: [], items: [], nextCursor: null };
-  }
-
-  const fragmentId = scope?.fragmentId ?? undefined;
   const [page, pinned] = await Promise.all([
-    fragmentId ? listThreadRoots(targetId, { fragmentId }) : listThreadRoots(targetId),
-    getPinnedComment(targetId),
+    scope ? listThreadRoots(targetId, { set: scope.set }) : listThreadRoots(targetId),
+    scope ? getPinnedComment(targetId, scope.set) : getPinnedComment(targetId),
   ]);
 
-  if (!scope) return rootsPageOf(page, pinned);
-
-  return { ...rootsPageOf(page, pinned?.fragmentId === fragmentId ? pinned : null), scope };
+  return scope ? { ...rootsPageOf(page, pinned), scope } : rootsPageOf(page, pinned);
 }
 
-/** Закреп этой панели: в панели фрагмента — только комментарий фрагмента. */
-function pinOf(pinned: CommentItem | null, scope: RootsScope | undefined): CommentItem | null {
-  if (!scope) return pinned;
+/**
+ * Фрагмент сообщения по id — из кеша, а нет его там (чужой новый) — свежим
+ * списком. Зовётся, только когда открыта боковая панель: шиту он не нужен.
+ */
+async function fragmentOf(
+  queryClient: QueryClient,
+  messageId: string,
+  fragmentId: string,
+): Promise<Fragment | null> {
+  const cached = readMessageFragments(queryClient, messageId)?.find((f) => f.id === fragmentId);
 
-  return pinned && scope.fragmentId && pinned.fragmentId === scope.fragmentId ? pinned : null;
+  if (cached) return cached;
+
+  const fresh = await queryClient
+    .fetchQuery({
+      queryKey: fragmentsKey(messageId),
+      queryFn: () => listMessageFragments(messageId),
+      staleTime: 0,
+    })
+    .catch(() => undefined);
+
+  return fresh?.find((f) => f.id === fragmentId) ?? null;
 }
 
 /** Закреп сменился (сигнал канала или своё действие не прошло) — берём его из базы. */
 export async function syncAuthorPin(queryClient: QueryClient, targetId: string): Promise<void> {
-  const fresh = await getPinnedComment(targetId);
-  const pinned = fresh ? toCommentItem(fresh) : null;
+  const scopes = scopesOf(queryClient, targetId);
+  const [fresh, scoped] = await Promise.all([
+    getPinnedComment(targetId),
+    Promise.all(scopes.map((scope) => getPinnedComment(targetId, scope.set))),
+  ]);
+  const byKey = new Map(scopes.map((scope, index) => [scope.key, scoped[index]]));
 
-  updateRoots(queryClient, targetId, (page) => setAuthorPin(page, pinned));
-  updateScopedRoots(queryClient, targetId, (page, scope) =>
-    setAuthorPin(page, pinOf(pinned, scope)),
+  updateRoots(queryClient, targetId, (page) =>
+    setAuthorPin(page, fresh ? toCommentItem(fresh) : null),
   );
+  updateScopedRoots(queryClient, targetId, (page, scope) => {
+    const pinned = byKey.get(scope.key);
+
+    return pinned === undefined ? page : setAuthorPin(page, pinned ? toCommentItem(pinned) : null);
+  });
 }
 
 /**
@@ -102,7 +124,12 @@ export async function loadThread(
 }
 
 /** Ответ — в конец своего треда, если тред дочитан; свой верхнеуровневый — наверх. */
-function placeAdded(queryClient: QueryClient, targetId: string, me: string | null, comment: Comment) {
+async function placeAdded(
+  queryClient: QueryClient,
+  targetId: string,
+  me: string | null,
+  comment: Comment,
+) {
   const item = toCommentItem(comment);
 
   if (comment.threadRootId) {
@@ -123,11 +150,15 @@ function placeAdded(queryClient: QueryClient, targetId: string, me: string | nul
     );
   }
 
-  // В панели фрагмента — и чужой: разговор о куске текста короткий, и новое
-  // в нём видно сразу.
-  if (comment.fragmentId) {
+  // В боковой панели — и чужой: разговор о куске текста короткий, и новое
+  // в нём видно сразу. Входит ли его фрагмент в набор — как решила бы база.
+  if (comment.fragmentId && scopesOf(queryClient, targetId).length > 0) {
+    const fragment = await fragmentOf(queryClient, targetId, comment.fragmentId);
+
+    if (!fragment) return;
+
     updateScopedRoots(queryClient, targetId, (page, scope) =>
-      scope.fragmentId !== comment.fragmentId ||
+      !fragmentInSet(fragment, scope.set) ||
       rootsInOrder(page).some((other) => other.id === item.id)
         ? page
         : raiseRoot(page, item),
@@ -215,7 +246,7 @@ export async function syncComments(
       addedReplies.set(comment.threadRootId, (addedReplies.get(comment.threadRootId) ?? 0) + 1);
     }
 
-    placeAdded(queryClient, targetId, me, comment);
+    await placeAdded(queryClient, targetId, me, comment);
   }
 
   replaceComments(
@@ -263,7 +294,7 @@ export async function resyncComments(
       const last = page.head[page.head.length - 1];
       const newer = await listThreadReplies(rootId, { cursor: last?.createdAt });
 
-      for (const comment of newer.items) placeAdded(queryClient, targetId, me, comment);
+      for (const comment of newer.items) await placeAdded(queryClient, targetId, me, comment);
     }),
   ]);
 }

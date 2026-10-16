@@ -146,6 +146,22 @@ const targetSelect = () =>
     .order('position', { referencedTable: 'attachments' });
 
 /**
+ * Набор фрагментов текста сообщения, чьи комментарии показывает боковая
+ * панель: кластер или выделенная область (code points, «больше половины
+ * фрагмента внутри» решает база).
+ */
+export type FragmentSet =
+  | { kind: 'cluster'; clusterId: string }
+  | { kind: 'area'; start: number; end: number };
+
+function setArgs(set: FragmentSet | undefined) {
+  if (set?.kind === 'cluster') return { cluster: set.clusterId };
+  if (set?.kind === 'area') return { area_start: set.start, area_end: set.end };
+
+  return {};
+}
+
+/**
  * Верх по рангу — функцией `list_comment_thread_roots`: она же отдаёт заглушки
  * удалённых корней с живыми ответами. Строки — те же, что у выборки из
  * таблицы, поэтому и разбор один.
@@ -154,7 +170,7 @@ const rootsSelect = (
   targetId: string,
   cursor: RootCursor | undefined,
   limit: number,
-  fragmentId: string | undefined,
+  set: FragmentSet | undefined,
 ) =>
   supabase
     .rpc('list_comment_thread_roots', {
@@ -162,7 +178,7 @@ const rootsSelect = (
       after_rank: cursor?.rank,
       after_id: cursor?.id,
       page_size: limit,
-      fragment: fragmentId,
+      ...setArgs(set),
     })
     .select(COMMENT_COLUMNS)
     .order('rank', { ascending: false })
@@ -170,9 +186,9 @@ const rootsSelect = (
     .order('position', { referencedTable: 'comment_attachments' });
 
 /** Закреплённый комментарий цели — функцией `pinned_comment`, те же колонки. */
-const pinnedSelect = (targetId: string) =>
+const pinnedSelect = (targetId: string, set: FragmentSet | undefined) =>
   supabase
-    .rpc('pinned_comment', { target: targetId })
+    .rpc('pinned_comment', { target: targetId, ...setArgs(set) })
     .select(COMMENT_COLUMNS)
     .order('position', { referencedTable: 'comment_attachments' });
 
@@ -245,15 +261,15 @@ export function toComment(row: CommentRow): Comment {
  * Страница верхнеуровневых комментариев по рангу — сверху популярные.
  * `cursor` — ранг и id последнего показанного; «загрузить все» не существует.
  * Ранг между страницами может вырасти — повторы отсекает клиент.
- * `fragmentId` — только корни этого фрагмента (панель фрагмента).
+ * `set` — только корни фрагментов набора (боковая панель).
  */
 export async function listThreadRoots(
   targetId: string,
-  params: { cursor?: RootCursor; limit?: number; fragmentId?: string } = {},
+  params: { cursor?: RootCursor; limit?: number; set?: FragmentSet } = {},
 ): Promise<{ items: Comment[]; nextCursor: RootCursor | null }> {
   const limit = params.limit ?? COMMENT_PAGE_SIZE;
   // Лишняя строка — признак, что дальше ещё есть (как у ответов треда).
-  const { data, error } = await rootsSelect(targetId, params.cursor, limit + 1, params.fragmentId);
+  const { data, error } = await rootsSelect(targetId, params.cursor, limit + 1, params.set);
 
   if (error) throw error;
 
@@ -269,10 +285,14 @@ export async function listThreadRoots(
 
 /**
  * Закреплённый автором контента комментарий цели или `null`. Страницы ранга
- * его не содержат — он идёт первым отдельно.
+ * его не содержат — он идёт первым отдельно. С набором — только если он
+ * комментарий фрагмента набора.
  */
-export async function getPinnedComment(targetId: string): Promise<Comment | null> {
-  const { data, error } = await pinnedSelect(targetId);
+export async function getPinnedComment(
+  targetId: string,
+  set?: FragmentSet,
+): Promise<Comment | null> {
+  const { data, error } = await pinnedSelect(targetId, set);
 
   if (error) throw error;
 

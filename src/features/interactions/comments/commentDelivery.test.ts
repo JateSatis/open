@@ -35,7 +35,7 @@ describe('a comment to a fragment, sent from its panel', () => {
         me: { name: 'Пётр', avatarUrl: null },
         fragment: {
           key: 'm1:4-27',
-          fragmentId: null,
+          set: { kind: 'area', start: 4, end: 27 },
           request: { start: 4, end: 27, text: 'какой-то другой уровень' },
         },
       },

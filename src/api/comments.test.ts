@@ -154,7 +154,7 @@ describe('fragment quote', () => {
       },
     ]);
 
-    const { items } = await listThreadRoots('m1', { fragmentId: 'f1' });
+    const { items } = await listThreadRoots('m1', { set: { kind: 'cluster', clusterId: 'k1' } });
 
     expect(items[0]).toMatchObject({
       fragmentId: 'f1',

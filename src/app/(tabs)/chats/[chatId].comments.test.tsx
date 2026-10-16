@@ -1090,10 +1090,10 @@ describe('fragment quote over a comment', () => {
         'chat-1',
         false,
         {
-          kind: 'fragment',
-          key: 'm1:6-8',
-          fragmentId: 'f1',
+          kind: 'area',
+          key: 'area:6-8',
           range: { start: 6, end: 8, text: 'm1' },
+          messageText: 'текст m1',
           focusInput: false,
         },
         'm1',

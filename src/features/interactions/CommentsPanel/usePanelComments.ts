@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { buildCommentRows, buildThreadRows, type CommentRow } from './rows';
 
 import { fetchComment } from '@/api/comments';
+import { trackClusterEvent } from '@/api/fragmentClusterEvents';
 import {
   asDeletedRoot,
   toCommentItem,
@@ -17,6 +18,7 @@ import {
   updateThread,
 } from '@/features/interactions/comments/commentsCache';
 import {
+  fragmentSetOf,
   setOpenThread,
   useOpenThread,
   type CommentsPanelTarget,
@@ -109,15 +111,29 @@ export function usePanelComments(
   const pop = about?.state === 'pop' ? about.pop : null;
   const amMember = target.amMember ?? false;
   const { fragment } = target;
-  // Панель фрагмента: свой фрагмент база находит по диапазону — и новый
-  // создаёт первым комментарием. Объект один на открытие панели: от него
-  // зависят отправки.
+  // Боковая панель: мой комментарий уходит к моему фрагменту её куска —
+  // база находит его по диапазону и создаёт, если его нет. Объект один на
+  // открытие панели: от него зависят отправки.
   const fragmentScope = useMemo<FragmentScope | undefined>(
     () =>
       fragment
-        ? { key: fragment.key, fragmentId: fragment.fragmentId, request: fragment.range }
+        ? {
+            key: fragment.key,
+            set: fragmentSetOf(fragment),
+            request: fragment.range,
+            onSent: () =>
+              trackClusterEvent({
+                kind: 'cluster_commented',
+                messageId: targetId,
+                decisionId: fragment.kind === 'cluster' ? fragment.decisionId : null,
+                clusterId: fragment.kind === 'cluster' ? fragment.clusterId : null,
+                rangeStart: fragment.range.start,
+                rangeEnd: fragment.range.end,
+                detail: fragment.kind === 'area' ? { area: 1 } : {},
+              }),
+          }
         : undefined,
-    [fragment],
+    [fragment, targetId],
   );
   const comments = useComments(
     subject,
