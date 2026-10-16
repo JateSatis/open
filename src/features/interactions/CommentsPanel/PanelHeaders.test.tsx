@@ -1,5 +1,5 @@
 import type { Session as SupabaseSession } from '@supabase/supabase-js';
-import { act, fireEvent, screen } from '@testing-library/react-native';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
 
 import { AreaHeader } from './AreaHeader';
 import { ClusterHeader } from './ClusterHeader';
@@ -76,10 +76,10 @@ beforeEach(() => {
   mockedFragments.mockResolvedValue([fragment({})]);
 });
 
-async function renderCluster() {
+async function renderCluster(messageId = 'm1') {
   await renderWithQuery(
     <ClusterHeader
-      messageId="m1"
+      messageId={messageId}
       chatId="c1"
       subject={{
         kind: 'cluster',
@@ -116,6 +116,29 @@ describe('cluster panel header', () => {
     expect(mockedTrack).toHaveBeenCalledWith(
       expect.objectContaining({ kind: 'cluster_reacted', clusterId: 'k1', decisionId: 'd1' }),
     );
+  });
+
+  it('a reaction just put from the panel is taken off from the panel’s piece, not the old fragment', async () => {
+    mockedSet.mockResolvedValue({ fragmentId: 'f-new', mine: null });
+    // После ответа базы — перечитанные: моя 🤣 на новом фрагменте ровно куска панели.
+    mockedClusters
+      .mockResolvedValueOnce([cluster])
+      .mockResolvedValue([
+        { ...cluster, visitorReactions: { '🔥': 1, '🤣': 2 }, mine: '🤣', myFragmentId: 'f-new' },
+      ]);
+    mockedFragments
+      .mockResolvedValueOnce([fragment({})])
+      .mockResolvedValue([
+        fragment({ mine: null }),
+        fragment({ id: 'f-new', start: 0, end: 19, exactText: display.text, mine: '🤣' }),
+      ]);
+
+    // Своё сообщение: очередь реакций живёт вне компонентов, запросы прошлых тестов в ней висят.
+    await renderCluster('m2');
+    await act(async () => fireEvent.press(await screen.findByLabelText('Реакция 🤣, 1')));
+    await act(async () => fireEvent.press(await screen.findByLabelText('Снять реакцию 🤣')));
+
+    await waitFor(() => expect(mockedSet).toHaveBeenLastCalledWith('m2', display, null));
   });
 
   it('a tap on my reaction takes it off where it stands — on my other fragment of the cluster', async () => {

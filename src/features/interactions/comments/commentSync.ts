@@ -65,28 +65,40 @@ export async function loadRoots(targetId: string, scope?: RootsScope): Promise<R
   return scope ? { ...rootsPageOf(page, pinned), scope } : rootsPageOf(page, pinned);
 }
 
+type FragmentLookup = (fragmentId: string) => Fragment | null;
+
+const NO_FRAGMENTS: FragmentLookup = () => null;
+
 /**
- * Фрагмент сообщения по id — из кеша, а нет его там (чужой новый) — свежим
- * списком. Зовётся, только когда открыта боковая панель: шиту он не нужен.
+ * Фрагменты новых комментариев — чтобы решить, входят ли они в набор
+ * открытой боковой панели. Без панели не нужны вовсе; чего нет в кеше (чужой
+ * новый фрагмент) — одним свежим списком на пачку.
  */
-async function fragmentOf(
+async function fragmentLookup(
   queryClient: QueryClient,
   messageId: string,
-  fragmentId: string,
-): Promise<Fragment | null> {
-  const cached = readMessageFragments(queryClient, messageId)?.find((f) => f.id === fragmentId);
+  comments: readonly Comment[],
+): Promise<FragmentLookup> {
+  const wanted = comments.flatMap((c) => (!c.threadRootId && c.fragmentId ? [c.fragmentId] : []));
 
-  if (cached) return cached;
+  if (wanted.length === 0 || scopesOf(queryClient, messageId).length === 0) return NO_FRAGMENTS;
 
-  const fresh = await queryClient
-    .fetchQuery({
-      queryKey: fragmentsKey(messageId),
-      queryFn: () => listMessageFragments(messageId),
-      staleTime: 0,
-    })
-    .catch(() => undefined);
+  let fragments = readMessageFragments(queryClient, messageId) ?? [];
 
-  return fresh?.find((f) => f.id === fragmentId) ?? null;
+  if (wanted.some((id) => !fragments.some((f) => f.id === id))) {
+    fragments =
+      (await queryClient
+        .fetchQuery({
+          queryKey: fragmentsKey(messageId),
+          queryFn: () => listMessageFragments(messageId),
+          staleTime: 0,
+        })
+        .catch(() => undefined)) ?? fragments;
+  }
+
+  const byId = new Map(fragments.map((f) => [f.id, f]));
+
+  return (id) => byId.get(id) ?? null;
 }
 
 /** Закреп сменился (сигнал канала или своё действие не прошло) — берём его из базы. */
@@ -124,11 +136,12 @@ export async function loadThread(
 }
 
 /** Ответ — в конец своего треда, если тред дочитан; свой верхнеуровневый — наверх. */
-async function placeAdded(
+function placeAdded(
   queryClient: QueryClient,
   targetId: string,
   me: string | null,
   comment: Comment,
+  fragmentOf: FragmentLookup,
 ) {
   const item = toCommentItem(comment);
 
@@ -152,8 +165,8 @@ async function placeAdded(
 
   // В боковой панели — и чужой: разговор о куске текста короткий, и новое
   // в нём видно сразу. Входит ли его фрагмент в набор — как решила бы база.
-  if (comment.fragmentId && scopesOf(queryClient, targetId).length > 0) {
-    const fragment = await fragmentOf(queryClient, targetId, comment.fragmentId);
+  if (comment.fragmentId) {
+    const fragment = fragmentOf(comment.fragmentId);
 
     if (!fragment) return;
 
@@ -234,7 +247,14 @@ export async function syncComments(
   }
 
   const rootIds = [...roots].filter((id) => loaded.has(id));
-  const freshRoots = rootIds.length > 0 ? await listCommentsByIds(rootIds) : [];
+  const [freshRoots, fragmentOf] = await Promise.all([
+    rootIds.length > 0 ? listCommentsByIds(rootIds) : Promise.resolve([]),
+    fragmentLookup(
+      queryClient,
+      targetId,
+      fresh.filter((comment) => addedSet.has(comment.id)),
+    ),
+  ]);
   const now = loadedComments(queryClient, targetId);
   const gone = known.filter((id) => !alive.has(id)).flatMap((id) => now.get(id) ?? []);
   const addedReplies = new Map<string, number>();
@@ -246,7 +266,7 @@ export async function syncComments(
       addedReplies.set(comment.threadRootId, (addedReplies.get(comment.threadRootId) ?? 0) + 1);
     }
 
-    await placeAdded(queryClient, targetId, me, comment);
+    placeAdded(queryClient, targetId, me, comment, fragmentOf);
   }
 
   replaceComments(
@@ -294,7 +314,9 @@ export async function resyncComments(
       const last = page.head[page.head.length - 1];
       const newer = await listThreadReplies(rootId, { cursor: last?.createdAt });
 
-      for (const comment of newer.items) await placeAdded(queryClient, targetId, me, comment);
+      const fragmentOf = await fragmentLookup(queryClient, targetId, newer.items);
+
+      for (const comment of newer.items) placeAdded(queryClient, targetId, me, comment, fragmentOf);
     }),
   ]);
 }

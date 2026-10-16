@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { subscribeToChatSignals } from '@/api/chats';
 import { listMessageClusters } from '@/api/fragmentClusters';
 import { clustersKey, clustersKeyOf } from '@/features/chats/fragments/clusterKeys';
+import { fragmentsKey } from '@/features/chats/fragments/useMessageFragments';
 
 type ClusteredMessage = {
   id: string;
@@ -11,6 +12,8 @@ type ClusteredMessage = {
   text: string | null;
   /** Видимых фрагментов нет — кластеров тоже нет, спрашивать незачем. */
   fragmentsCount?: number;
+  /** Спрашивать и без фрагментов — панель кластера знает, что он есть. */
+  always?: boolean;
 };
 
 /**
@@ -30,7 +33,7 @@ export function useMessageClusters(message: ClusteredMessage | null) {
   const enabled =
     messageId !== null &&
     text !== '' &&
-    ((message?.fragmentsCount ?? 0) > 0 || signalled === messageId);
+    ((message?.fragmentsCount ?? 0) > 0 || message?.always === true || signalled === messageId);
 
   const query = useQuery({
     queryKey: clustersKey(messageId ?? '', text),
@@ -50,6 +53,8 @@ export function useMessageClusters(message: ClusteredMessage | null) {
 
         setSignalled(messageId);
         refresh();
+        // Пересчёт перекладывает фрагменты по кластерам — их кластер тоже свежий.
+        void queryClient.invalidateQueries({ queryKey: fragmentsKey(messageId) });
       },
       onReconnected: refresh,
     });

@@ -6,11 +6,18 @@
 import type { FragmentSet } from '@/api/comments';
 import type { Fragment } from '@/api/fragments';
 
+/** Больше половины длины диапазона — внутри области (ровно половина — нет). */
+export function coversMoreThanHalf(
+  range: { start: number; end: number },
+  area: { start: number; end: number },
+): boolean {
+  const inside = Math.min(range.end, area.end) - Math.max(range.start, area.start);
+
+  return inside > 0 && 2 * inside > range.end - range.start;
+}
+
 export function fragmentInSet(fragment: Fragment, set: FragmentSet): boolean {
   if (set.kind === 'cluster') return fragment.clusterId === set.clusterId;
-  if (fragment.lost) return false;
 
-  const inside = Math.min(fragment.end, set.end) - Math.max(fragment.start, set.start);
-
-  return inside > 0 && 2 * inside > fragment.end - fragment.start;
+  return !fragment.lost && coversMoreThanHalf(fragment, set);
 }

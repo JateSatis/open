@@ -29,17 +29,18 @@ export function AreaHeader({ messageId, subject, amMember, width }: AreaHeaderPr
   const queryClient = useQueryClient();
   const me = useCurrentUserId();
   const { range } = subject;
-  const { data: fragments } = useMessageFragments(messageId, true);
+  // Живые счётчики: сигналы реакций и комментариев перечитывают и сводку.
+  useMessageFragments(messageId, true);
   const { data: area } = useQuery({
     queryKey: areaKey(messageId, range.start, range.end),
     queryFn: () => getAreaSummary(messageId, range.start, range.end),
     staleTime: 30_000,
   });
 
-  const toggle = (emoji: string) => {
+  const toggle = async (emoji: string) => {
     if (!me) return;
 
-    const sent = reactInPanel(queryClient, emoji, {
+    const sent = await reactInPanel(queryClient, emoji, {
       messageId,
       me,
       amMember,
@@ -47,8 +48,9 @@ export function AreaHeader({ messageId, subject, amMember, width }: AreaHeaderPr
       clusterId: area ? area.myClusterId : undefined,
       mine: area?.mine ?? null,
       myFragmentId: area?.myFragmentId ?? null,
-      fragments,
     });
+
+    if (!sent) return;
 
     trackClusterEvent({
       kind: 'cluster_reacted',

@@ -31,12 +31,13 @@ const NONE = {};
 export function ClusterHeader({ messageId, chatId, subject, amMember, width }: ClusterHeaderProps) {
   const queryClient = useQueryClient();
   const me = useCurrentUserId();
-  const { data: fragments } = useMessageFragments(messageId, true);
+  // Живые счётчики: сигналы реакций и комментариев перечитывают и кластеры.
+  useMessageFragments(messageId, true);
   const { data: clusters } = useMessageClusters({
     id: messageId,
     chatId,
     text: subject.messageText,
-    fragmentsCount: 1,
+    always: true,
   });
   const found = clusters?.find((item) => item.id === subject.clusterId) ?? null;
   // Последнее известное — для кластера, который пересчёт убрал с показа.
@@ -45,10 +46,10 @@ export function ClusterHeader({ messageId, chatId, subject, amMember, width }: C
 
   if (found && found !== last) setLast(found);
 
-  const toggle = (emoji: string) => {
+  const toggle = async (emoji: string) => {
     if (!me) return;
 
-    const { range, removed } = reactInPanel(queryClient, emoji, {
+    const sent = await reactInPanel(queryClient, emoji, {
       messageId,
       me,
       amMember,
@@ -56,17 +57,18 @@ export function ClusterHeader({ messageId, chatId, subject, amMember, width }: C
       clusterId: subject.clusterId,
       mine: cluster?.mine ?? null,
       myFragmentId: cluster?.myFragmentId ?? null,
-      fragments,
     });
+
+    if (!sent) return;
 
     trackClusterEvent({
       kind: 'cluster_reacted',
       messageId,
       decisionId: subject.decisionId,
       clusterId: subject.clusterId,
-      rangeStart: range.start,
-      rangeEnd: range.end,
-      detail: { removed: removed ? 1 : 0 },
+      rangeStart: sent.range.start,
+      rangeEnd: sent.range.end,
+      detail: { removed: sent.removed ? 1 : 0 },
     });
   };
 

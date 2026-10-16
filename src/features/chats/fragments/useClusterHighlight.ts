@@ -36,7 +36,8 @@ export function useClusterHighlight({ rowKey, ref, text, messageId, chatId, frag
   const panelOpen = useCommentsPanelTarget() !== null;
   const { data } = useMessageClusters(active ? { id: messageId, chatId, text, fragmentsCount } : null);
   const [geometry, setGeometry] = useState<TextGeometry | null>(null);
-  const [shown, setShown] = useState<FragmentCluster[]>(NONE);
+  // Смонтировалось при открытой панели — показываем то, что уже есть в кеше.
+  const [shown, setShown] = useState<FragmentCluster[]>(data ?? NONE);
   const reportedRef = useRef(false);
 
   if (!selecting && !panelOpen && data && data !== shown) setShown(data);

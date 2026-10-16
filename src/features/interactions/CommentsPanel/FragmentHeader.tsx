@@ -21,7 +21,7 @@ export type FragmentHeaderProps = {
   amMember: boolean;
   /** Ширина панели — под неё раскладывается полный набор реакций. */
   width: number;
-  onToggle: (emoji: string) => void;
+  onToggle: (emoji: string) => unknown;
 };
 
 /** Сколько каждой реакции — оба ряда вместе, по убыванию. */

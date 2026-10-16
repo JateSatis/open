@@ -8,10 +8,21 @@ import type { QueryClient } from '@tanstack/react-query';
 import type { AreaSummary, FragmentCluster } from '@/api/fragmentClusters';
 import type { ReactionAudience, ReactionCounts } from '@/api/reactionCounts';
 import { clustersKeyOf } from '@/features/chats/fragments/clusterKeys';
+import { coversMoreThanHalf } from '@/features/chats/fragments/fragmentSets';
 
 type Row = 'memberReactions' | 'visitorReactions';
 
-function shift(counts: ReactionCounts, emoji: string | null | undefined, delta: number): ReactionCounts {
+/**
+ * Где теперь моя реакция, пока база не ответила: на моём фрагменте ровно
+ * этого диапазона, чей id ещё неизвестен. Снять её — по диапазону.
+ */
+export const PENDING_FRAGMENT = 'local:pending';
+
+export function shiftCount(
+  counts: ReactionCounts,
+  emoji: string | null | undefined,
+  delta: number,
+): ReactionCounts {
   if (!emoji) return counts;
 
   const next = { ...counts, [emoji]: (counts[emoji] ?? 0) + delta };
@@ -19,13 +30,6 @@ function shift(counts: ReactionCounts, emoji: string | null | undefined, delta: 
   if (next[emoji] <= 0) delete next[emoji];
 
   return next;
-}
-
-/** Больше половины фрагмента внутри области — как `area_fragment_ids`. */
-function counts(range: { start: number; end: number }, area: { start: number; end: number }) {
-  const inside = Math.min(range.end, area.end) - Math.max(range.start, area.start);
-
-  return inside > 0 && 2 * inside > range.end - range.start;
 }
 
 export type ClusterReactionPatch = {
@@ -45,6 +49,7 @@ export type ClusterReactionPatch = {
 export function patchClusterReaction(queryClient: QueryClient, patch: ClusterReactionPatch) {
   const { messageId, clusterId, emoji, range, audience } = patch;
   const row: Row = audience === 'member' ? 'memberReactions' : 'visitorReactions';
+  const holder = emoji ? PENDING_FRAGMENT : null;
 
   for (const [key, data] of queryClient.getQueriesData<FragmentCluster[] | AreaSummary>({
     queryKey: clustersKeyOf(messageId),
@@ -58,9 +63,10 @@ export function patchClusterReaction(queryClient: QueryClient, patch: ClusterRea
             ? cluster
             : {
                 ...cluster,
-                [row]: shift(shift(cluster[row], cluster.mine, -1), emoji, 1),
+                [row]: shiftCount(shiftCount(cluster[row], cluster.mine, -1), emoji, 1),
                 reactionsCount: cluster.reactionsCount - (cluster.mine ? 1 : 0) + (emoji ? 1 : 0),
                 mine: emoji,
+                myFragmentId: holder,
               },
         ),
       );
@@ -74,15 +80,17 @@ export function patchClusterReaction(queryClient: QueryClient, patch: ClusterRea
     if (typeof start !== 'number' || typeof end !== 'number') continue;
     if (!clusterId && (start !== range.start || end !== range.end)) continue;
 
-    const area = { start, end };
     const before = data.myFragmentId && data.fragmentIds.includes(data.myFragmentId) ? data.mine : null;
-    const after = emoji && counts(range, area) ? emoji : null;
+    const inside = Boolean(emoji) && coversMoreThanHalf(range, { start, end });
+    const fragmentIds = data.fragmentIds.filter((id) => id !== data.myFragmentId);
 
     queryClient.setQueryData<AreaSummary>(key, {
       ...data,
-      [row]: shift(shift(data[row], before, -1), after, 1),
-      reactionsCount: data.reactionsCount - (before ? 1 : 0) + (after ? 1 : 0),
+      [row]: shiftCount(shiftCount(data[row], before, -1), inside ? emoji : null, 1),
+      reactionsCount: data.reactionsCount - (before ? 1 : 0) + (inside ? 1 : 0),
+      fragmentIds: inside ? [...fragmentIds, PENDING_FRAGMENT] : fragmentIds,
       mine: emoji,
+      myFragmentId: holder,
     });
   }
 }
