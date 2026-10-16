@@ -1,0 +1,88 @@
+// Моя реакция в кластере — сразу в сводках, которые видны в панелях: у
+// человека в кластере одна живая реакция, и новая снимает прежнюю. Так
+// решает база; здесь — чтобы в панели прежняя погасла, а новая загорелась
+// сразу, а не после перечитывания. Сверка — перечитыванием после ответа базы.
+
+import type { QueryClient } from '@tanstack/react-query';
+
+import type { AreaSummary, FragmentCluster } from '@/api/fragmentClusters';
+import type { ReactionAudience, ReactionCounts } from '@/api/reactionCounts';
+import { clustersKeyOf } from '@/features/chats/fragments/clusterKeys';
+
+type Row = 'memberReactions' | 'visitorReactions';
+
+function shift(counts: ReactionCounts, emoji: string | null | undefined, delta: number): ReactionCounts {
+  if (!emoji) return counts;
+
+  const next = { ...counts, [emoji]: (counts[emoji] ?? 0) + delta };
+
+  if (next[emoji] <= 0) delete next[emoji];
+
+  return next;
+}
+
+/** Больше половины фрагмента внутри области — как `area_fragment_ids`. */
+function counts(range: { start: number; end: number }, area: { start: number; end: number }) {
+  const inside = Math.min(range.end, area.end) - Math.max(range.start, area.start);
+
+  return inside > 0 && 2 * inside > range.end - range.start;
+}
+
+export type ClusterReactionPatch = {
+  messageId: string;
+  /**
+   * Кластер, где моя реакция меняется; `null` — фрагмент вне кластеров (его
+   * видит только панель области ровно этого диапазона).
+   */
+  clusterId: string | null;
+  /** Новая моя реакция; `null` — снята. */
+  emoji: string | null;
+  /** Диапазон моего фрагмента, на который она ставится (code points). */
+  range: { start: number; end: number };
+  audience: ReactionAudience;
+};
+
+export function patchClusterReaction(queryClient: QueryClient, patch: ClusterReactionPatch) {
+  const { messageId, clusterId, emoji, range, audience } = patch;
+  const row: Row = audience === 'member' ? 'memberReactions' : 'visitorReactions';
+
+  for (const [key, data] of queryClient.getQueriesData<FragmentCluster[] | AreaSummary>({
+    queryKey: clustersKeyOf(messageId),
+  })) {
+    if (Array.isArray(data)) {
+      if (!clusterId) continue;
+
+      queryClient.setQueryData<FragmentCluster[]>(key, (clusters) =>
+        clusters?.map((cluster) =>
+          cluster.id !== clusterId || cluster.mine === emoji
+            ? cluster
+            : {
+                ...cluster,
+                [row]: shift(shift(cluster[row], cluster.mine, -1), emoji, 1),
+                reactionsCount: cluster.reactionsCount - (cluster.mine ? 1 : 0) + (emoji ? 1 : 0),
+                mine: emoji,
+              },
+        ),
+      );
+      continue;
+    }
+
+    // Сводка области: [..., 'area', start, end].
+    const [, , , start, end] = key as readonly unknown[];
+
+    if (!data || data.myClusterId !== clusterId || data.mine === emoji) continue;
+    if (typeof start !== 'number' || typeof end !== 'number') continue;
+    if (!clusterId && (start !== range.start || end !== range.end)) continue;
+
+    const area = { start, end };
+    const before = data.myFragmentId && data.fragmentIds.includes(data.myFragmentId) ? data.mine : null;
+    const after = emoji && counts(range, area) ? emoji : null;
+
+    queryClient.setQueryData<AreaSummary>(key, {
+      ...data,
+      [row]: shift(shift(data[row], before, -1), after, 1),
+      reactionsCount: data.reactionsCount - (before ? 1 : 0) + (after ? 1 : 0),
+      mine: emoji,
+    });
+  }
+}

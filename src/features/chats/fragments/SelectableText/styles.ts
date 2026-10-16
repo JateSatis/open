@@ -6,6 +6,14 @@ export const styles = StyleSheet.create({
   rect: {
     position: 'absolute',
   },
+  clusterStart: {
+    borderTopLeftRadius: Sizes.clusterRadius,
+    borderBottomLeftRadius: Sizes.clusterRadius,
+  },
+  clusterEnd: {
+    borderTopRightRadius: Sizes.clusterRadius,
+    borderBottomRightRadius: Sizes.clusterRadius,
+  },
   stem: {
     position: 'absolute',
     width: Sizes.selectionHandleStem,

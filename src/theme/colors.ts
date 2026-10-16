@@ -53,6 +53,16 @@ export const Colors = {
      * это выделение: тёмная полоса, белый текст на ней читается.
      */
     fragmentHighlightOnPrimary: 'rgba(0, 28, 110, 0.42)',
+    /**
+     * Кластер фрагментов на тексте в режиме фрагментов — в чужом облачке.
+     * Нейтральный серо-голубой: тише синего выделения и не тёплый, как кусок
+     * по цитате.
+     */
+    clusterHighlight: 'rgba(96, 118, 150, 0.24)',
+    /** То же в своём облачке — светлая дымка, тусклее белого выделения. */
+    clusterHighlightOnPrimary: 'rgba(214, 226, 245, 0.26)',
+    /** Ореол у облачка с кластерами — цвет приложения, гаснет наружу (картинка задаёт форму). */
+    bubbleGlow: 'rgba(60, 135, 247, 0.55)',
     /** Ручки выделения в чужом облачке. */
     selectionHandle: '#3C87F7',
     /** Ручки в своём облачке — белые на синем. */
@@ -128,6 +138,9 @@ export const Colors = {
     textSelectionOnPrimary: 'rgba(255, 255, 255, 0.34)',
     fragmentHighlight: 'rgba(255, 190, 0, 0.3)',
     fragmentHighlightOnPrimary: 'rgba(0, 20, 80, 0.5)',
+    clusterHighlight: 'rgba(150, 172, 205, 0.24)',
+    clusterHighlightOnPrimary: 'rgba(214, 226, 245, 0.24)',
+    bubbleGlow: 'rgba(90, 155, 255, 0.7)',
     selectionHandle: '#5A9BFF',
     selectionHandleOnPrimary: '#ffffff',
     quoteBackground: 'rgba(60, 135, 247, 0.18)',

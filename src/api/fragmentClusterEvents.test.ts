@@ -9,6 +9,7 @@ import { AppState, type AppStateStatus } from 'react-native';
 
 import { supabase } from '@/api/supabase';
 
+jest.unmock('@/api/fragmentClusterEvents');
 jest.mock('@/api/supabase', () => ({ supabase: { rpc: jest.fn() } }));
 
 const rpc = supabase.rpc as jest.Mock;

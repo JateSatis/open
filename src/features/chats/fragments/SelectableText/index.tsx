@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { Text as RNText, StyleSheet, View } from 'react-native';
 
+import { ClusterMode } from './ClusterMode';
 import { styles } from './styles';
 
 import type { TextGeometry } from '../../../../../modules/text-geometry';
 
 import {
+  useFragmentModeActive,
   useRowQuoteHighlight,
   useRowSelection,
   type TextSelection,
@@ -27,6 +29,8 @@ export type SelectableTextProps = {
   messageId: string;
   chatId: string;
   amMember: boolean;
+  /** Видимых фрагментов у сообщения: есть — в режиме подсвечиваются кластеры. */
+  fragmentsCount?: number;
 };
 
 /**
@@ -42,6 +46,7 @@ export function SelectableText({
   messageId,
   chatId,
   amMember,
+  fragmentsCount = 0,
 }: SelectableTextProps) {
   const theme = useTheme();
   const ref = useRef<RNText>(null);
@@ -49,6 +54,7 @@ export function SelectableText({
   const quote = useRowQuoteHighlight(rowKey);
   // Текст сменился правкой — прежняя геометрия к нему не подходит.
   const shownQuote = quote && quote.text === text ? quote : null;
+  const fragmentMode = useFragmentModeActive(rowKey);
 
   useEffect(() => {
     if (!rowKey) return;
@@ -56,8 +62,8 @@ export function SelectableText({
     return registerSelectableText(rowKey, { ref, text, messageId, chatId, amMember });
   }, [amMember, chatId, messageId, rowKey, text]);
 
-  return (
-    <View>
+  const content = (
+    <>
       {shownQuote ? (
         <RangeFill
           testID="quote-highlight"
@@ -76,8 +82,28 @@ export function SelectableText({
         {text}
       </RNText>
       {selection ? <SelectionLayer selection={selection} isOwn={isOwn} part="handles" /> : null}
-    </View>
+    </>
   );
+
+  // В режиме — с подсветкой кластеров; облачка списка без неё лишнего не держат.
+  if (fragmentMode && rowKey) {
+    return (
+      <ClusterMode
+        textRef={ref}
+        text={text}
+        isOwn={isOwn}
+        rowKey={rowKey}
+        messageId={messageId}
+        chatId={chatId}
+        amMember={amMember}
+        fragmentsCount={fragmentsCount}
+      >
+        {content}
+      </ClusterMode>
+    );
+  }
+
+  return <View>{content}</View>;
 }
 
 /**

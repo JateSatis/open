@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 
-import { acquireChatTopic } from '@/api/chatTopics';
+import { subscribeToChatSignals } from '@/api/chats';
 import { listMessageClusters } from '@/api/fragmentClusters';
 import { clustersKey, clustersKeyOf } from '@/features/chats/fragments/clusterKeys';
 
@@ -44,7 +44,7 @@ export function useMessageClusters(message: ClusteredMessage | null) {
 
     const refresh = () => void queryClient.invalidateQueries({ queryKey: clustersKeyOf(messageId) });
 
-    return acquireChatTopic(chatId, {
+    return subscribeToChatSignals(chatId, {
       onClustersChanged: (changed) => {
         if (changed !== messageId) return;
 
@@ -52,7 +52,7 @@ export function useMessageClusters(message: ClusteredMessage | null) {
         refresh();
       },
       onReconnected: refresh,
-    }).release;
+    });
   }, [messageId, chatId, text, queryClient]);
 
   return query;

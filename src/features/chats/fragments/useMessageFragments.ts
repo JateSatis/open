@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 
 import { listMessageFragments, type Fragment, type FragmentRange } from '@/api/fragments';
 import { acquireCommentTopic } from '@/api/commentTopics';
+import { clustersKeyOf } from '@/features/chats/fragments/clusterKeys';
 
 /** Фрагменты сообщения в кеше — по id сообщения. */
 export function fragmentsKey(messageId: string) {
@@ -64,8 +65,10 @@ export function useMessageFragments(messageId: string | null, live = false) {
   useEffect(() => {
     if (!live || !messageId) return;
 
-    const refresh = () =>
+    const refresh = () => {
       void queryClient.invalidateQueries({ queryKey: fragmentsKey(messageId) });
+      void queryClient.invalidateQueries({ queryKey: clustersKeyOf(messageId) });
+    };
 
     return acquireCommentTopic(messageId, {
       onFragmentReactionsChanged: refresh,

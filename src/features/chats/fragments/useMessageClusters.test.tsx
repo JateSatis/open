@@ -4,15 +4,16 @@ import type { ReactNode } from 'react';
 
 import { useMessageClusters } from './useMessageClusters';
 
-import { acquireChatTopic, type ChatTopicListener } from '@/api/chatTopics';
+import { subscribeToChatSignals } from '@/api/chats';
+import type { ChatTopicListener } from '@/api/chatTopics';
 import { listMessageClusters, type FragmentCluster } from '@/api/fragmentClusters';
 
 jest.mock('@/api/supabase', () => ({ supabase: {} }));
 jest.mock('@/api/fragmentClusters', () => ({ listMessageClusters: jest.fn() }));
-jest.mock('@/api/chatTopics', () => ({ acquireChatTopic: jest.fn() }));
+jest.mock('@/api/chats', () => ({ subscribeToChatSignals: jest.fn() }));
 
 const mockedList = jest.mocked(listMessageClusters);
-const mockedAcquire = jest.mocked(acquireChatTopic);
+const mockedAcquire = jest.mocked(subscribeToChatSignals);
 const release = jest.fn();
 let listener: ChatTopicListener | null = null;
 
@@ -52,7 +53,7 @@ beforeEach(() => {
   mockedList.mockResolvedValue([cluster]);
   mockedAcquire.mockImplementation((_chat, l) => {
     listener = l;
-    return { broadcastTyping: jest.fn(), release };
+    return release;
   });
 });
 

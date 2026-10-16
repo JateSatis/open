@@ -12,6 +12,7 @@ import {
 } from '@/api/fragments';
 import type { ReactionAudience, ReactionCounts } from '@/api/reactionCounts';
 import { clustersKeyOf } from '@/features/chats/fragments/clusterKeys';
+import { patchClusterReaction } from '@/features/chats/fragments/clusterOptimism';
 import {
   fragmentsKey,
   setMessageFragments,
@@ -32,6 +33,11 @@ export type FragmentReactionIntent = {
   /** Ряд — догадка по участию в чате сообщения; решит база. */
   audience: ReactionAudience;
   me: string;
+  /**
+   * Панель знает, в какой кластер ляжет реакция (`null` — вне кластеров):
+   * его сводка и моя реакция в нём меняются сразу. Не знает — дождётся базы.
+   */
+  clusterId?: string | null;
 };
 
 const wanted = new Map<string, FragmentReactionIntent>();
@@ -197,6 +203,10 @@ export function sendFragmentReaction(queryClient: QueryClient, intent: FragmentR
   const key = keyOf(intent);
 
   applyLocally(queryClient, intent);
+
+  if (intent.clusterId !== undefined) {
+    patchClusterReaction(queryClient, { ...intent, clusterId: intent.clusterId });
+  }
   wanted.set(key, intent);
 
   if (!inFlight.has(key)) void drain(queryClient, key);
