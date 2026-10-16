@@ -15,7 +15,7 @@ export type ClusterModeProps = {
   messageId: string;
   chatId: string;
   amMember: boolean;
-  fragmentsCount: number;
+  clustersCount: number;
 };
 
 /**
@@ -32,7 +32,7 @@ export function ClusterMode({
   messageId,
   chatId,
   amMember,
-  fragmentsCount,
+  clustersCount,
 }: ClusterModeProps) {
   const { geometry, clusters } = useClusterHighlight({
     rowKey,
@@ -40,7 +40,7 @@ export function ClusterMode({
     text,
     messageId,
     chatId,
-    fragmentsCount,
+    clustersCount,
   });
 
   return (

@@ -254,22 +254,22 @@ export function patchCommentCounts(
 }
 
 /**
- * Свежие числа видимых фрагментов — у сообщений и у оригиналов в островках:
+ * Свежие числа показываемых кластеров — у сообщений и у оригиналов в островках:
  * от них ореол облачка и вход участника в режим фрагментов.
  */
-export function patchFragmentCounts(
+export function patchClusterCounts(
   history: ChatHistory,
-  fresh: { id: string; fragmentsCount: number }[],
+  fresh: { id: string; clustersCount: number }[],
 ): ChatHistory {
   if (fresh.length === 0) return history;
 
-  const byId = new Map(fresh.map((row) => [row.id, row.fragmentsCount]));
+  const byId = new Map(fresh.map((row) => [row.id, row.clustersCount]));
   const apply = <T extends Message>(message: T): T => {
     const count = byId.get(message.id);
 
-    return count === undefined || count === (message.fragmentsCount ?? 0)
+    return count === undefined || count === (message.clustersCount ?? 0)
       ? message
-      : { ...message, fragmentsCount: count };
+      : { ...message, clustersCount: count };
   };
   let changed = false;
 

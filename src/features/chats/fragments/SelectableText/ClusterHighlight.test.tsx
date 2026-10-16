@@ -67,7 +67,7 @@ beforeEach(() => {
   mockedClusters.mockResolvedValue([cluster('k1', 0, 8), cluster('k2', 9, 15)]);
 });
 
-async function renderText(fragmentsCount = 2) {
+async function renderText(clustersCount = 2) {
   await renderWithQuery(
     <SelectableText
       text={text}
@@ -76,7 +76,7 @@ async function renderText(fragmentsCount = 2) {
       messageId="m1"
       chatId="chat-1"
       amMember={false}
-      fragmentsCount={fragmentsCount}
+      clustersCount={clustersCount}
     />,
   );
 }

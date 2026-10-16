@@ -8,7 +8,7 @@ import {
   pullNewMessages,
   refreshCommentCounts,
   refreshEditedMessages,
-  refreshFragmentCounts,
+  refreshClusterCounts,
   refreshIsland,
   refreshReactions,
   refreshViews,
@@ -57,7 +57,7 @@ export function useChatChannel(chatId: string, currentUserId: string | null): Ch
   const commentBatchRef = useRef<Batch>({ ids: new Set(), timer: null });
   // Просмотры — тоже: каждый зритель шлёт пачку раз в пару секунд.
   const viewBatchRef = useRef<Batch>({ ids: new Set(), timer: null });
-  const fragmentBatchRef = useRef<Batch>({ ids: new Set(), timer: null });
+  const clusterBatchRef = useRef<Batch>({ ids: new Set(), timer: null });
 
   const onNewMessage = useCallback(async () => {
     try {
@@ -98,7 +98,7 @@ export function useChatChannel(chatId: string, currentUserId: string | null): Ch
     const reactionBatch = reactionBatchRef.current;
     const commentBatch = commentBatchRef.current;
     const viewBatch = viewBatchRef.current;
-    const fragmentBatch = fragmentBatchRef.current;
+    const clusterBatch = clusterBatchRef.current;
 
     // Не вышло перечитать — дочитаем при следующем событии или переподключении.
     const collect = (
@@ -160,7 +160,7 @@ export function useChatChannel(chatId: string, currentUserId: string | null): Ch
       },
       onReactionsChanged: (messageId) => collect(reactionBatch, refreshReactions, messageId),
       onCommentsChanged: (messageId) => collect(commentBatch, refreshCommentCounts, messageId),
-      onFragmentsChanged: (messageId) => collect(fragmentBatch, refreshFragmentCounts, messageId),
+      onClustersChanged: (messageId) => collect(clusterBatch, refreshClusterCounts, messageId),
       onViewsChanged: (messageIds) =>
         messageIds.forEach((messageId) => collect(viewBatch, refreshViews, messageId)),
       onTyping: (userId, activity) => {
@@ -196,7 +196,7 @@ export function useChatChannel(chatId: string, currentUserId: string | null): Ch
       timers.forEach(clearTimeout);
       timers.clear();
 
-      for (const batch of [reactionBatch, commentBatch, viewBatch, fragmentBatch]) {
+      for (const batch of [reactionBatch, commentBatch, viewBatch, clusterBatch]) {
         if (batch.timer) clearTimeout(batch.timer);
 
         batch.timer = null;

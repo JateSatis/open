@@ -20,7 +20,7 @@ type Options = {
   text: string;
   messageId: string;
   chatId: string;
-  fragmentsCount: number;
+  clustersCount: number;
 };
 
 /**
@@ -30,11 +30,11 @@ type Options = {
  * пересчёт её не перестраивает — новое ляжет после. При входе в режим —
  * событие показа, одно на вход.
  */
-export function useClusterHighlight({ rowKey, ref, text, messageId, chatId, fragmentsCount }: Options) {
+export function useClusterHighlight({ rowKey, ref, text, messageId, chatId, clustersCount }: Options) {
   const active = useFragmentModeActive(rowKey);
   const selecting = useRowHasSelection(rowKey ?? '');
   const panelOpen = useCommentsPanelTarget() !== null;
-  const { data } = useMessageClusters(active ? { id: messageId, chatId, text, fragmentsCount } : null);
+  const { data } = useMessageClusters(active ? { id: messageId, chatId, text, clustersCount } : null);
   const [geometry, setGeometry] = useState<TextGeometry | null>(null);
   // Смонтировалось при открытой панели — показываем то, что уже есть в кеше.
   const [shown, setShown] = useState<FragmentCluster[]>(data ?? NONE);

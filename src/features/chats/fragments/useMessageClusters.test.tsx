@@ -35,7 +35,7 @@ const cluster: FragmentCluster = {
   decisionId: null,
 };
 
-const message = { id: 'm1', chatId: 'c1', text: 'Огонь и вода', fragmentsCount: 1 };
+const message = { id: 'm1', chatId: 'c1', text: 'Огонь и вода', clustersCount: 1 };
 
 function wrapper() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -66,7 +66,7 @@ describe('useMessageClusters', () => {
   });
 
   it('does not ask while the message has no visible fragments, but asks on the first signal', async () => {
-    await renderHook(() => useMessageClusters({ ...message, fragmentsCount: 0 }), {
+    await renderHook(() => useMessageClusters({ ...message, clustersCount: 0 }), {
       wrapper: wrapper(),
     });
 

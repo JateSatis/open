@@ -266,7 +266,7 @@ export function MessageBubble({
       messageId={selectableText?.messageId ?? message.id}
       chatId={selectableText?.chatId ?? message.chatId}
       amMember={selectableText?.amMember ?? false}
-      fragmentsCount={message.fragmentsCount}
+      clustersCount={message.clustersCount}
     />
   ) : null;
 

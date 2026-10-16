@@ -29,8 +29,8 @@ export type SelectableTextProps = {
   messageId: string;
   chatId: string;
   amMember: boolean;
-  /** Видимых фрагментов у сообщения: есть — в режиме подсвечиваются кластеры. */
-  fragmentsCount?: number;
+  /** Показываемых кластеров у сообщения: есть — в режиме они подсвечиваются. */
+  clustersCount?: number;
 };
 
 /**
@@ -46,7 +46,7 @@ export function SelectableText({
   messageId,
   chatId,
   amMember,
-  fragmentsCount = 0,
+  clustersCount = 0,
 }: SelectableTextProps) {
   const theme = useTheme();
   const ref = useRef<RNText>(null);
@@ -96,7 +96,7 @@ export function SelectableText({
         messageId={messageId}
         chatId={chatId}
         amMember={amMember}
-        fragmentsCount={fragmentsCount}
+        clustersCount={clustersCount}
       >
         {content}
       </ClusterMode>

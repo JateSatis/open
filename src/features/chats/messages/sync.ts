@@ -5,7 +5,7 @@ import type { QueryClient } from '@tanstack/react-query';
 
 import {
   listCommentCounts,
-  listFragmentCounts,
+  listClusterCounts,
   listDeletedMessageIds,
   listMessageEdits,
   listMessages,
@@ -21,7 +21,7 @@ import {
   knownEdits,
   mergeMessages,
   patchCommentCounts,
-  patchFragmentCounts,
+  patchClusterCounts,
   patchReactions,
   patchViews,
   quotedIds,
@@ -269,8 +269,8 @@ export async function refreshCommentCounts(
   updateAllHistories(queryClient, (current) => patchCommentCounts(current, fresh));
 }
 
-/** Фрагменты у этих сообщений появились или уснули — перечитать числа пачкой, только у загруженных. */
-export async function refreshFragmentCounts(
+/** Пересчёт поменял показываемые кластеры этих сообщений — перечитать числа пачкой, только у загруженных. */
+export async function refreshClusterCounts(
   queryClient: QueryClient,
   candidates: string[],
 ): Promise<void> {
@@ -279,9 +279,9 @@ export async function refreshFragmentCounts(
 
   if (ids.length === 0) return;
 
-  const fresh = await listFragmentCounts(ids);
+  const fresh = await listClusterCounts(ids);
 
-  updateAllHistories(queryClient, (current) => patchFragmentCounts(current, fresh));
+  updateAllHistories(queryClient, (current) => patchClusterCounts(current, fresh));
 }
 
 /** Просмотры и «прочитано» у этих сообщений изменились — перечитать пачкой, только у загруженных. */

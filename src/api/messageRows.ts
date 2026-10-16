@@ -224,10 +224,10 @@ export type Message = {
   /** Сколько живых комментариев. Денормализовано на сообщении, пишет база. */
   commentsCount: number;
   /**
-   * Видимых фрагментов текста (живых и не потерянных). Больше нуля — у
-   * сообщения есть хотя бы один отображаемый кластер. Нет — 0.
+   * Показываемых кластеров фрагментов текста — по ним ореол облачка. Пишет
+   * база (триггер на кластерах). Нет — 0.
    */
-  fragmentsCount?: number;
+  clustersCount?: number;
   /** Сколько раз сообщение показывалось на экранах — неуникальные просмотры. Пишет база. */
   viewsCount: number;
   /** Когда его впервые увидел другой участник чата. `null` — ещё никто. */
@@ -253,7 +253,7 @@ const MESSAGE_ATTACHMENT_COLUMNS =
 // `chats` и сама с собой через несколько таблиц сразу.
 const REPLY_COLUMNS =
   `replies:message_replies!message_replies_message_fkey(position, quoted_id, via:messages!message_replies_quoted_forward_fkey(id, created_at), quoted:messages!message_replies_quoted_fkey(id, author_id, kind, text, created_at, edited_at, author:profiles!messages_author_id_fkey(display_name), attachments(${PREVIEW_ATTACHMENT_COLUMNS})))` as const;
-const REACTION_AND_COMMENT_COLUMNS = `${REACTION_COLUMNS}, comments_count, fragments_count, views_count, read_at` as const;
+const REACTION_AND_COMMENT_COLUMNS = `${REACTION_COLUMNS}, comments_count, clusters_count, views_count, read_at` as const;
 const ORIGINAL_COLUMNS = `id, chat_id, author_id, kind, text, created_at, edited_at, attachments(${MESSAGE_ATTACHMENT_COLUMNS}), ${REPLY_COLUMNS}, ${REACTION_AND_COMMENT_COLUMNS}, author:profiles!messages_author_id_fkey(display_name, avatar_url), chat:chats!messages_chat_id_fkey(id, chat_display_name, chat_read_up_to, chat_am_member)` as const;
 
 const FORWARDED_COMMENT_COLUMNS = `forwarded_comment_id, forwarded:comments!messages_forwarded_comment_fkey(id, message_id, pop_id, chat_id, thread_root_id, fragment_id, ${FRAGMENT_QUOTE_COLUMNS}, author_id, kind, text, created_at, edited_at, ${REACTION_COLUMNS}, author:profiles(display_name, avatar_url), comment_attachments(${ATTACHMENT_COLUMNS}), chat:chats!comments_chat_id_fkey(id, chat_display_name, chat_am_member), target:messages!comments_message_fkey(id, author_id, kind, text, created_at, author:profiles!messages_author_id_fkey(display_name), attachments(${PREVIEW_ATTACHMENT_COLUMNS})), pop:pops!comments_pop_id_fkey(id, channel_id, poster_url, caption))` as const;
@@ -416,7 +416,7 @@ type ContentRow = Pick<
   | 'my_reaction'
   | 'reactors'
   | 'comments_count'
-  | 'fragments_count'
+  | 'clusters_count'
   | 'views_count'
   | 'read_at'
 >;
@@ -435,7 +435,7 @@ function toContent(row: ContentRow): Message {
     forward: null,
     reactions: toReactions(row),
     commentsCount: row.comments_count,
-    fragmentsCount: row.fragments_count,
+    clustersCount: row.clusters_count,
     viewsCount: row.views_count,
     readAt: row.read_at,
   };
