@@ -52,6 +52,54 @@ describe('a comment to a fragment, sent from its panel', () => {
     });
   });
 
+  it('tells the panel once the comment reached the base — for the cluster event', async () => {
+    const onSent = jest.fn();
+
+    mockedSend.mockImplementation(async () => ({
+        id: 'c1',
+        targetId: 'm1',
+        chatId: 'chat-1',
+        authorId: 'user-3',
+        authorName: 'Пётр',
+        authorAvatarUrl: null,
+        audience: 'visitor',
+        kind: 'text',
+        text: 'про кусок',
+        createdAt: '2026-10-16T10:00:00Z',
+        editedAt: null,
+        attachments: [],
+        reactions: { members: {}, visitors: {}, mine: null },
+        replies: [],
+        threadRootId: null,
+        fragmentId: 'f1',
+        fragmentQuote: null,
+        repliesCount: 0,
+        rank: 0,
+        deleted: false,
+    }));
+
+    sendCommentPost(
+      {
+        queryClient: new QueryClient(),
+        subject: { type: 'message', id: 'm1' },
+        chatId: 'chat-1',
+        currentUserId: 'user-3',
+        me: { name: 'Пётр', avatarUrl: null },
+        fragment: {
+          key: 'cluster:k1',
+          set: { kind: 'cluster', clusterId: 'k1' },
+          request: { start: 4, end: 27, text: 'какой-то другой уровень' },
+          onSent,
+        },
+      },
+      'про кусок',
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(onSent).toHaveBeenCalledTimes(1);
+  });
+
   it('a plain comment has no quote', () => {
     sendCommentPost(
       {
