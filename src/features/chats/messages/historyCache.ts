@@ -253,6 +253,37 @@ export function patchCommentCounts(
   return changed ? { ...history, items } : history;
 }
 
+/**
+ * Свежие числа видимых фрагментов — у сообщений и у оригиналов в островках:
+ * от них ореол облачка и вход участника в режим фрагментов.
+ */
+export function patchFragmentCounts(
+  history: ChatHistory,
+  fresh: { id: string; fragmentsCount: number }[],
+): ChatHistory {
+  if (fresh.length === 0) return history;
+
+  const byId = new Map(fresh.map((row) => [row.id, row.fragmentsCount]));
+  const apply = <T extends Message>(message: T): T => {
+    const count = byId.get(message.id);
+
+    return count === undefined || count === (message.fragmentsCount ?? 0)
+      ? message
+      : { ...message, fragmentsCount: count };
+  };
+  let changed = false;
+
+  const items = history.items.map((message) => {
+    const next = mapOriginals(apply(message), apply);
+
+    if (next !== message) changed = true;
+
+    return next;
+  });
+
+  return changed ? { ...history, items } : history;
+}
+
 /** Просмотры и «прочитано» из базы — у сообщений и у оригиналов в островках. */
 export function patchViews(history: ChatHistory, fresh: MessageViews[]): ChatHistory {
   if (fresh.length === 0) return history;

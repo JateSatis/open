@@ -2,7 +2,7 @@ import { useCallback, useEffect } from 'react';
 import { BackHandler } from 'react-native';
 
 import { contentOf, type BubbleRow } from '@/features/chats/islands/rows';
-import { canEnterFragmentMode } from '@/features/chats/fragments/fragmentRules';
+import { canEnterFragmentMode, hasClusters } from '@/features/chats/fragments/fragmentRules';
 import { beginTextSelection, type RowPoint } from '@/features/chats/fragments/fragmentSelection';
 import {
   clearTextSelection,
@@ -69,7 +69,10 @@ export function useFragmentMode({ isMember, isFocused, isSelecting }: Options) {
       const isViewer =
         row.type === 'island-item' ? !(row.item.original?.chat?.amMember ?? false) : !isMember;
 
-      if (current !== row.key && !canEnterFragmentMode({ message, isViewer, hasVisibleCluster: false })) {
+      if (
+        current !== row.key &&
+        !canEnterFragmentMode({ message, isViewer, hasVisibleCluster: hasClusters(message) })
+      ) {
         return;
       }
 

@@ -8,6 +8,7 @@ import {
   patchOriginChat,
   refreshCommentCounts,
   refreshEditedMessages,
+  refreshFragmentCounts,
   refreshReactions,
   refreshViews,
 } from '@/features/chats/messages/sync';
@@ -80,6 +81,7 @@ export function useIslandSources(chatId: string, messages: ChatMessage[]) {
     const reactions = batcher(queryClient, refreshReactions);
     const comments = batcher(queryClient, refreshCommentCounts);
     const views = batcher(queryClient, refreshViews);
+    const fragments = batcher(queryClient, refreshFragmentCounts);
 
     const releases = sources.split(',').map((sourceId) =>
       subscribeToChatSignals(sourceId, {
@@ -92,6 +94,7 @@ export function useIslandSources(chatId: string, messages: ChatMessage[]) {
         onReactionsChanged: (id) => reactions.add(id),
         onCommentsChanged: (id) => comments.add(id),
         onViewsChanged: (ids) => ids.forEach((id) => views.add(id)),
+        onFragmentsChanged: (id) => fragments.add(id),
         onRead: () => {
           getChatReadUpTo(sourceId)
             .then((readUpTo) => patchOriginChat(queryClient, sourceId, readUpTo))
@@ -110,6 +113,7 @@ export function useIslandSources(chatId: string, messages: ChatMessage[]) {
       reactions.stop();
       comments.stop();
       views.stop();
+      fragments.stop();
     };
   }, [chatId, queryClient, sources]);
 }

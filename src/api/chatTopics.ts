@@ -31,6 +31,8 @@ export type ChatTopicListener = {
   onPinsChanged?: () => void;
   onReactionsChanged?: (messageId: string) => void;
   onCommentsChanged?: (messageId: string) => void;
+  /** У сообщения появился первый видимый фрагмент или уснул последний — число в его строке. */
+  onFragmentsChanged?: (messageId: string) => void;
   /** Пересчёт поменял отображаемые кластеры фрагментов сообщения. */
   onClustersChanged?: (messageId: string) => void;
   /** У этих сообщений выросли просмотры или появилось «прочитано». */
@@ -117,6 +119,11 @@ function open(chatId: string): Entry {
       const id = messageIdOf(payload);
 
       if (id) each((l) => l.onCommentsChanged?.(id));
+    })
+    .on('broadcast', { event: 'fragments_changed' }, ({ payload }) => {
+      const id = messageIdOf(payload);
+
+      if (id) each((l) => l.onFragmentsChanged?.(id));
     })
     .on('broadcast', { event: 'clusters_changed' }, ({ payload }) => {
       const id = messageIdOf(payload);

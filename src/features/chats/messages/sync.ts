@@ -5,6 +5,7 @@ import type { QueryClient } from '@tanstack/react-query';
 
 import {
   listCommentCounts,
+  listFragmentCounts,
   listDeletedMessageIds,
   listMessageEdits,
   listMessages,
@@ -20,6 +21,7 @@ import {
   knownEdits,
   mergeMessages,
   patchCommentCounts,
+  patchFragmentCounts,
   patchReactions,
   patchViews,
   quotedIds,
@@ -265,6 +267,21 @@ export async function refreshCommentCounts(
   const fresh = await listCommentCounts(ids);
 
   updateAllHistories(queryClient, (current) => patchCommentCounts(current, fresh));
+}
+
+/** Фрагменты у этих сообщений появились или уснули — перечитать числа пачкой, только у загруженных. */
+export async function refreshFragmentCounts(
+  queryClient: QueryClient,
+  candidates: string[],
+): Promise<void> {
+  const loaded = loadedEverywhere(queryClient);
+  const ids = candidates.filter((id) => loaded.has(id)).slice(0, MAX_TOMBSTONE_IDS);
+
+  if (ids.length === 0) return;
+
+  const fresh = await listFragmentCounts(ids);
+
+  updateAllHistories(queryClient, (current) => patchFragmentCounts(current, fresh));
 }
 
 /** Просмотры и «прочитано» у этих сообщений изменились — перечитать пачкой, только у загруженных. */
