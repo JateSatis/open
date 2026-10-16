@@ -802,9 +802,133 @@ export type Database = {
         }
         Relationships: []
       }
+      fragment_cluster_decisions: {
+        Row: {
+          created_at: string
+          decision: Json
+          displayed: Json
+          id: string
+          interactions: number
+          message_id: string
+          model_version: number
+          scorer: string | null
+        }
+        Insert: {
+          created_at?: string
+          decision: Json
+          displayed?: Json
+          id?: string
+          interactions?: number
+          message_id: string
+          model_version: number
+          scorer?: string | null
+        }
+        Update: {
+          created_at?: string
+          decision?: Json
+          displayed?: Json
+          id?: string
+          interactions?: number
+          message_id?: string
+          model_version?: number
+          scorer?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fragment_cluster_decisions_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      fragment_cluster_events: {
+        Row: {
+          cluster_id: string | null
+          created_at: string
+          decision_id: string | null
+          detail: Json
+          fragment_id: string | null
+          id: string
+          kind: string
+          message_id: string
+          placement: string | null
+          range_end: number | null
+          range_start: number | null
+          user_id: string | null
+        }
+        Insert: {
+          cluster_id?: string | null
+          created_at?: string
+          decision_id?: string | null
+          detail?: Json
+          fragment_id?: string | null
+          id?: string
+          kind: string
+          message_id: string
+          placement?: string | null
+          range_end?: number | null
+          range_start?: number | null
+          user_id?: string | null
+        }
+        Update: {
+          cluster_id?: string | null
+          created_at?: string
+          decision_id?: string | null
+          detail?: Json
+          fragment_id?: string | null
+          id?: string
+          kind?: string
+          message_id?: string
+          placement?: string | null
+          range_end?: number | null
+          range_start?: number | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fragment_cluster_events_cluster_id_fkey"
+            columns: ["cluster_id"]
+            isOneToOne: false
+            referencedRelation: "fragment_clusters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fragment_cluster_events_decision_id_fkey"
+            columns: ["decision_id"]
+            isOneToOne: false
+            referencedRelation: "fragment_cluster_decisions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fragment_cluster_events_fragment_id_fkey"
+            columns: ["fragment_id"]
+            isOneToOne: false
+            referencedRelation: "message_fragments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fragment_cluster_events_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fragment_cluster_events_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       fragment_cluster_state: {
         Row: {
           created_at: string
+          decision_id: string | null
+          decisions_skipped: number
           id: string
           interactions: number
           lease_token: string | null
@@ -818,6 +942,8 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          decision_id?: string | null
+          decisions_skipped?: number
           id?: string
           interactions?: number
           lease_token?: string | null
@@ -831,6 +957,8 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          decision_id?: string | null
+          decisions_skipped?: number
           id?: string
           interactions?: number
           lease_token?: string | null
@@ -843,6 +971,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "fragment_cluster_state_decision_id_fkey"
+            columns: ["decision_id"]
+            isOneToOne: false
+            referencedRelation: "fragment_cluster_decisions"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "fragment_cluster_state_message_id_fkey"
             columns: ["message_id"]
@@ -920,6 +1055,7 @@ export type Database = {
           chat_id: string
           comments_count: number
           created_at: string
+          decision_id: string | null
           deleted_at: string | null
           display_end: number | null
           display_start: number | null
@@ -939,6 +1075,7 @@ export type Database = {
           chat_id: string
           comments_count?: number
           created_at?: string
+          decision_id?: string | null
           deleted_at?: string | null
           display_end?: number | null
           display_start?: number | null
@@ -958,6 +1095,7 @@ export type Database = {
           chat_id?: string
           comments_count?: number
           created_at?: string
+          decision_id?: string | null
           deleted_at?: string | null
           display_end?: number | null
           display_start?: number | null
@@ -974,6 +1112,13 @@ export type Database = {
           visitor_reactions?: Json
         }
         Relationships: [
+          {
+            foreignKeyName: "fragment_clusters_decision_id_fkey"
+            columns: ["decision_id"]
+            isOneToOne: false
+            referencedRelation: "fragment_cluster_decisions"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "fragment_clusters_message_fkey"
             columns: ["message_id", "chat_id"]
@@ -2183,6 +2328,7 @@ export type Database = {
           visitor_reactions: Json
         }[]
       }
+      fragment_cluster_history_cleanup: { Args: never; Returns: number }
       fragment_cluster_recompute_due: {
         Args: { n: number; params: Json }
         Returns: boolean
@@ -2437,6 +2583,7 @@ export type Database = {
         Args: { target_message: string }
         Returns: {
           comments_count: number
+          decision_id: string
           display_end: number
           display_start: number
           display_text: string
@@ -2514,6 +2661,10 @@ export type Database = {
       }
       lock_managed_channel: {
         Args: { target_channel: string; what: string }
+        Returns: undefined
+      }
+      log_fragment_created: {
+        Args: { actor: string; fragment: string }
         Returns: undefined
       }
       mark_channel_read: {
@@ -2858,6 +3009,10 @@ export type Database = {
       reconcile_stream: {
         Args: { connected: Json; room: string }
         Returns: string
+      }
+      record_fragment_cluster_events: {
+        Args: { events: Json }
+        Returns: number
       }
       record_message_views: {
         Args: { message_ids: string[]; session_id: string; target_chat: string }
