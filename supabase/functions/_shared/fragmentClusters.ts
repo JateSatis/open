@@ -293,15 +293,24 @@ function attach(frags: Frag[], groups: Group[]): Group[] {
 
   // Бассейн без фрагментов: его высоту дали фрагменты, которые больше
   // пересекаются с соседями. Забираем у соседа, где фрагментов больше одного,
-  // самый пересекающийся — иначе подсветку нечем было бы открыть.
+  // самый пересекающийся — иначе подсветку нечем было бы открыть. Не у кого
+  // забрать — бассейн сливается с владельцем самого пересекающегося фрагмента,
+  // и его подсветка переходит туда, если там своей нет.
   groups.forEach((g, gi) => {
     if (g.members.length > 0) return;
 
     let best = -1;
     let bestOverlap = 0;
+    let nearest = -1;
+    let nearestOverlap = 0;
 
     for (let i = 0; i < frags.length && frags[i].start < g.end; i += 1) {
       const overlap = overlapOf(frags[i], g);
+
+      if (overlap > nearestOverlap) {
+        nearest = i;
+        nearestOverlap = overlap;
+      }
 
       if (overlap > bestOverlap && groups[owner[i]].members.length > 1) {
         best = i;
@@ -309,13 +318,25 @@ function attach(frags: Frag[], groups: Group[]): Group[] {
       }
     }
 
-    if (best < 0) return;
+    if (best >= 0) {
+      const from = groups[owner[best]];
 
-    const from = groups[owner[best]];
+      from.members.splice(from.members.indexOf(best), 1);
+      owner[best] = gi;
+      g.members.push(best);
+      return;
+    }
 
-    from.members.splice(from.members.indexOf(best), 1);
-    owner[best] = gi;
-    g.members.push(best);
+    if (nearest < 0) return;
+
+    const into = groups[owner[nearest]];
+
+    into.start = Math.min(into.start, g.start);
+    into.end = Math.max(into.end, g.end);
+
+    if (g.basin?.display && !into.basin?.display) {
+      into.basin = into.basin ? { ...into.basin, display: g.basin.display } : g.basin;
+    }
   });
 
   for (const g of groups) g.members.sort((a, b) => a - b);
