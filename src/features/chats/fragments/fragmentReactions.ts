@@ -11,6 +11,7 @@ import {
   type FragmentRange,
 } from '@/api/fragments';
 import type { ReactionAudience, ReactionCounts } from '@/api/reactionCounts';
+import { clustersKeyOf } from '@/features/chats/fragments/clusterKeys';
 import {
   fragmentsKey,
   setMessageFragments,
@@ -78,6 +79,7 @@ function applyLocally(queryClient: QueryClient, intent: FragmentReactionIntent) 
             reactionsCount: 0,
             commentsCount: 0,
             mine: null,
+            clusterId: null,
           };
 
     if (base.mine === emoji) return fragments;
@@ -90,10 +92,59 @@ function applyLocally(queryClient: QueryClient, intent: FragmentReactionIntent) 
       mine: emoji,
     };
 
-    return index >= 0
-      ? fragments.map((fragment, at) => (at === index ? next : fragment))
-      : [...fragments, next];
+    const updated =
+      index >= 0
+        ? fragments.map((fragment, at) => (at === index ? next : fragment))
+        : [...fragments, next];
+
+    const cluster = base.clusterId ?? overlappedCluster(fragments, range);
+
+    return emoji && cluster ? withoutMyOtherInCluster(updated, next, cluster, row) : updated;
   });
+}
+
+/**
+ * Кластер, в который база положит новый фрагмент: тот, с чьими фрагментами
+ * диапазон пересекается больше. Догадка по кешу — точный ответ придёт с
+ * перечитыванием.
+ */
+function overlappedCluster(fragments: Fragment[], range: FragmentRange): string | null {
+  let best: string | null = null;
+  let bestOverlap = 0;
+
+  for (const fragment of fragments) {
+    const overlap = Math.min(fragment.end, range.end) - Math.max(fragment.start, range.start);
+
+    if (fragment.clusterId && !fragment.lost && overlap > bestOverlap) {
+      best = fragment.clusterId;
+      bestOverlap = overlap;
+    }
+  }
+
+  return best;
+}
+
+/**
+ * В кластере у человека одна реакция: новая снимает прежнюю на другом его
+ * фрагменте. Так решает база; здесь — чтобы прежняя погасла сразу, а не
+ * после перечитывания.
+ */
+function withoutMyOtherInCluster(
+  fragments: Fragment[],
+  target: Fragment,
+  cluster: string,
+  row: 'memberReactions' | 'visitorReactions',
+): Fragment[] {
+  return fragments.map((fragment) =>
+    fragment === target || fragment.clusterId !== cluster || !fragment.mine
+      ? fragment
+      : {
+          ...fragment,
+          [row]: shift(fragment[row], fragment.mine, -1),
+          reactionsCount: Math.max(0, fragment.reactionsCount - 1),
+          mine: null,
+        },
+  );
 }
 
 function isReactionLimit(cause: unknown): boolean {
@@ -132,8 +183,12 @@ async function drain(queryClient: QueryClient, key: string) {
     );
   } finally {
     inFlight.delete(key);
-    // Счётчики и id фрагмента — из базы: и после успеха, и как откат.
-    if (last) void queryClient.invalidateQueries({ queryKey: fragmentsKey(last.messageId) });
+    // Счётчики и id фрагмента — из базы: и после успеха, и как откат. Сводные
+    // счётчики кластера и моя реакция в нём меняются вместе с ними.
+    if (last) {
+      void queryClient.invalidateQueries({ queryKey: fragmentsKey(last.messageId) });
+      void queryClient.invalidateQueries({ queryKey: clustersKeyOf(last.messageId) });
+    }
   }
 }
 

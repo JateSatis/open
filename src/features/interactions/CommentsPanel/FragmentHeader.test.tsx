@@ -33,6 +33,7 @@ function fragment(overrides: Partial<Fragment> = {}): Fragment {
     visitorReactions: { '🔥': 2 },
     reactionsCount: 3,
     commentsCount: 0,
+    clusterId: null,
     mine: '🔥',
     ...overrides,
   };

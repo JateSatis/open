@@ -73,6 +73,7 @@ describe('my reaction on a fragment', () => {
         reactionsCount: 2,
         commentsCount: 0,
         mine: '👍',
+        clusterId: null,
       },
     ]);
 
@@ -83,6 +84,79 @@ describe('my reaction on a fragment', () => {
       reactionsCount: 2,
       mine: '🔥',
     });
+  });
+
+  it('takes my reaction off my other fragment of the same cluster at once', () => {
+    mockedSet.mockReturnValue(new Promise(() => undefined));
+
+    const fragment = (
+      id: string,
+      start: number,
+      end: number,
+      mine: string | null,
+      clusterId: string,
+    ): Fragment => ({
+      id,
+      messageId,
+      authorId: 'me',
+      start,
+      end,
+      exactText: 'x'.repeat(end - start),
+      lost: false,
+      memberReactions: {},
+      visitorReactions: mine ? { [mine]: 1 } : {},
+      reactionsCount: mine ? 1 : 0,
+      commentsCount: 1,
+      mine,
+      clusterId,
+    });
+
+    queryClient.setQueryData<Fragment[]>(fragmentsKey(messageId), [
+      fragment('old', 0, 27, '🔥', 'k1'),
+      fragment('mine', 4, 27, null, 'k1'),
+      fragment('far', 100, 110, '👍', 'k2'),
+    ]);
+
+    sendFragmentReaction(queryClient, { ...base, emoji: '🤣' });
+
+    const byId = new Map(
+      (readMessageFragments(queryClient, messageId) ?? []).map((f) => [f.id, f]),
+    );
+
+    expect(byId.get('mine')).toMatchObject({ mine: '🤣', visitorReactions: { '🤣': 1 } });
+    expect(byId.get('old')).toMatchObject({ mine: null, visitorReactions: {}, reactionsCount: 0 });
+    // Другой кластер — не трогается.
+    expect(byId.get('far')).toMatchObject({ mine: '👍' });
+  });
+
+  it('guesses the cluster of a new fragment by the cached fragments it overlaps', () => {
+    mockedSet.mockReturnValue(new Promise(() => undefined));
+    queryClient.setQueryData<Fragment[]>(fragmentsKey(messageId), [
+      {
+        id: 'old',
+        messageId,
+        authorId: 'me',
+        start: 0,
+        end: 20,
+        exactText: 'x'.repeat(20),
+        lost: false,
+        memberReactions: {},
+        visitorReactions: { '🔥': 1 },
+        reactionsCount: 1,
+        commentsCount: 0,
+        mine: '🔥',
+        clusterId: 'k1',
+      },
+    ]);
+
+    // Мой фрагмент 4–27 ещё не в кеше: база положит его в k1.
+    sendFragmentReaction(queryClient, { ...base, emoji: '🤣' });
+
+    const byId = new Map(
+      (readMessageFragments(queryClient, messageId) ?? []).map((f) => [f.id, f]),
+    );
+
+    expect(byId.get('old')).toMatchObject({ mine: null });
   });
 
   it('keeps one request in flight and sends only the last choice after it', async () => {

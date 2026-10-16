@@ -25,6 +25,8 @@ export type Fragment = {
   commentsCount: number;
   /** Моя реакция на фрагмент. */
   mine: string | null;
+  /** Кластер, в который фрагмент входит; `null` — пока без кластера. */
+  clusterId: string | null;
 };
 
 function toCounts(value: unknown): ReactionCounts {
@@ -52,6 +54,7 @@ export async function listMessageFragments(messageId: string): Promise<Fragment[
     reactionsCount: row.reactions_count,
     commentsCount: row.comments_count,
     mine: row.my_emoji ?? null,
+    clusterId: row.cluster_id ?? null,
   }));
 }
 
