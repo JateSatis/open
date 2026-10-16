@@ -16,7 +16,7 @@ function snapshot(id: string, extra: Partial<ClusterSnapshot> = {}): ClusterSnap
     text_version: '2026-10-16T10:00:00Z',
     text_hash: 'hash',
     text: 'какой-то другой уровень',
-    model_version: 1,
+    model_version: 2,
     params: {},
     fragments: [{ id: 'f1', start: 9, end: 15, clusterId: null }],
     votes: [{ fragmentId: 'f1', userId: 'u1', kind: 'reaction', at: 1 }],
@@ -79,6 +79,9 @@ Deno.test('снимок считается моделью и пишется с �
   assertEquals(result.clusters.length, 1);
   assertEquals(result.clusters[0].fragmentIds, ['f1']);
   assertEquals(result.clusters[0].display, { start: 9, end: 15 });
+  assertEquals(result.model_version, 2);
+  // Журнал решения едет в той же записи: что выбрано и из чего.
+  assertEquals((result.decision as { selected: unknown }).selected, [{ start: 9, end: 15 }]);
   assertEquals(deduped, [M1]);
 });
 

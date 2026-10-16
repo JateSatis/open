@@ -95,6 +95,8 @@ export function toApplyPayload(snapshot: ClusterSnapshot, model: ClusterModelRes
     text_hash: snapshot.text_hash ?? null,
     model_version: snapshot.model_version ?? null,
     clusters: model?.clusters ?? [],
+    // Журнал решения: признаки и кандидаты — данные для обучения модели.
+    decision: model?.decision ?? null,
   };
 }
 

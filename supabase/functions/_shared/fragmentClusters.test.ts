@@ -4,14 +4,17 @@ import { assert, assertEquals } from 'jsr:@std/assert@1';
 
 import {
   computeClusters,
+  heightMapOf,
   roundToWords,
   wordSpans,
   type ClusterModelInput,
   type FragmentInput,
   type ModelCluster,
+  type PreviousCluster,
   type Range,
   type VoteInput,
 } from './fragmentClusters.ts';
+import { computeRelief } from './reliefModel.ts';
 
 type Spec = [id: string, start: number, end: number, votes: [user: string | null, kind: 'r' | 'c', at: number][]];
 
@@ -24,11 +27,41 @@ function input(text: string, specs: Spec[], extra: Partial<ClusterModelInput> = 
   return { text, fragments, votes, ...extra };
 }
 
+/** `n` людей с префиксом `who`, каждый — свой фрагмент на `[start, end)`. */
+function crowd(who: string, n: number, start: number, end: number, kind: 'r' | 'c' = 'r'): Spec[] {
+  return Array.from({ length: n }, (_, i) => [`${who}${i}:${start}-${end}`, start, end, [[`${who}${i}`, kind, i]]]);
+}
+
+/** Диапазон слов `[a, b]` текста в code points. */
+function wordsRange(text: string, a: number, b: number): [number, number] {
+  const w = wordSpans(text);
+
+  return [w[a].start, w[b].end];
+}
+
 const shown = (clusters: ModelCluster[]) => clusters.filter((c) => c.display);
 
 const slice = (text: string, r: Range) => Array.from(text).slice(r.start, r.end).join('');
 
+const shownTexts = (text: string, clusters: ModelCluster[]) =>
+  shown(clusters)
+    .map((c) => c.display!)
+    .sort((a, b) => a.start - b.start)
+    .map((r) => slice(text, r));
+
 const words = (n: number, word = 'слово') => Array.from({ length: n }, (_, i) => `${word}${i}`).join(' ');
+
+/** Прежнее состояние из результата — как его отдал бы снимок базы. */
+function previousOf(clusters: ModelCluster[]): PreviousCluster[] {
+  return clusters.map((c, i) => ({
+    id: c.id ?? `K${i}`,
+    start: c.start,
+    end: c.end,
+    createdAt: i,
+    displayStart: c.display?.start ?? null,
+    displayEnd: c.display?.end ?? null,
+  }));
+}
 
 /** Инварианты отображаемых, которые держатся на любом входе. */
 function assertDisplayInvariants(text: string, clusters: ModelCluster[], hasFragments: boolean) {
@@ -112,6 +145,303 @@ Deno.test('округление: не длиннее лимита, слова о
 });
 
 // =============================================================================
+// 1. Карта популярности
+// =============================================================================
+
+const TRUMP = 'Вчера Трамп заявил, что пошлины вырастут вдвое';
+
+Deno.test('К1.1 пять букв «Трамп» по одной с комментариями — тот же слой, что слово целиком', () => {
+  const letters: Spec[] = Array.from({ length: 5 }, (_, i) => [`b${i}`, 6 + i, 7 + i, [['boris', 'c', i]]]);
+  const whole: Spec[] = [['g', 6, 11, [['gleb', 'c', 1]]]];
+  const boris = heightMapOf(input(TRUMP, letters)).map;
+  const gleb = heightMapOf(input(TRUMP, whole)).map;
+  const both = heightMapOf(input(TRUMP, [...letters, ...whole])).map;
+
+  assertEquals(boris.height, gleb.height);
+  assertEquals(boris.height[1], 1.5);
+  assertEquals(both.height[1], 3);
+  assertEquals(both.people[1], 2);
+});
+
+Deno.test('К1.2 тридцать одинаковых фрагментов внахлёст одного человека — слой как от одного', () => {
+  const text = 'начало ' + words(10, 'w') + ' конец';
+  const many: Spec[] = Array.from({ length: 30 }, (_, i) => [`f${i}`, 7 + (i % 3), 30 + (i % 4), [['u1', 'c', i]]]);
+  const one: Spec[] = [['one', 7, 33, [['u1', 'c', 1]]]];
+  const a = heightMapOf(input(text, many));
+  const b = heightMapOf(input(text, one));
+
+  assertEquals(a.map.height, b.map.height);
+  assertEquals(a.map.continuity, b.map.continuity);
+  assertEquals(a.context.people, 1);
+  assertEquals(a.context.pieces, 1);
+});
+
+Deno.test('К1.3 удалённый аккаунт — каждый его голос отдельный человек', () => {
+  const { map, context } = heightMapOf(
+    input(TRUMP, [
+      ['a', 6, 11, [[null, 'r', 1]]],
+      ['b', 6, 11, [[null, 'r', 2]]],
+    ]),
+  );
+
+  assertEquals(context.people, 2);
+  assertEquals(map.height[1], 2);
+  assertEquals(computeClusters(input(TRUMP, [['a', 6, 11, [[null, 'r', 1], [null, 'c', 2]]]])).clusters[0].people, 2);
+});
+
+Deno.test('карта: два человека по трём буквам с разных концов слова — у слова высота 2', () => {
+  const text = 'abcde xyz';
+  const { map } = heightMapOf(
+    input(text, [
+      ['l', 0, 3, [['u1', 'r', 1]]],
+      ['r', 2, 5, [['u2', 'r', 2]]],
+    ]),
+  );
+
+  assertEquals(map.height, [2, 0]);
+});
+
+Deno.test('карта: все выделили меньше половины слова — слово входит при любом пересечении', () => {
+  const { map } = heightMapOf(input('abcdefgh ijk', [['a', 0, 2, [['u1', 'r', 1]]]]));
+
+  assertEquals(map.height, [1, 0]);
+});
+
+// =============================================================================
+// 2. Эталонные сценарии модели
+// =============================================================================
+
+Deno.test('К2.1 «Трамп» — подсвечивается вершина, а не всё предложение', () => {
+  const [, phraseEnd] = wordsRange(TRUMP, 0, 2);
+  const { clusters } = computeClusters(
+    input(TRUMP, [
+      ...crowd('t', 6, 6, 11),
+      ...crowd('a', 2, 0, phraseEnd - 1),
+      ...crowd('b', 2, 6, 46),
+    ]),
+  );
+
+  assertEquals(clusters.length, 1);
+  assertEquals(shownTexts(TRUMP, clusters), ['Трамп']);
+  assertEquals(clusters[0].people, 10);
+});
+
+Deno.test('К2.2 десять человек выделили одну фразу из шести слов — она вся', () => {
+  const text = 'Начало сообщения. Это та самая фраза из шести слов, а дальше обычный текст без выделений.';
+  const [start, end] = wordsRange(text, 3, 8);
+  const { clusters } = computeClusters(input(text, crowd('p', 10, start, end)));
+
+  assertEquals(shownTexts(text, clusters), ['та самая фраза из шести слов,']);
+});
+
+Deno.test('К2.3 абзац 400 символов целиком и фраза в конце — подсвечена фраза, не начало', () => {
+  const text = words(60);
+  const length = Array.from(text).length;
+  const [phraseStart, phraseEnd] = wordsRange(text, 53, 58);
+
+  assert(length >= 400);
+
+  const { clusters } = computeClusters(
+    input(text, [
+      ...crowd('u', 20, 0, length, 'r'),
+      // 15 из тех же людей прокомментировали фразу в конце.
+      ...Array.from({ length: 15 }, (_, i) => [`c${i}`, phraseStart, phraseEnd, [[`u${i}`, 'c', 100 + i]]] as Spec),
+    ]),
+  );
+  const d = shown(clusters).map((c) => c.display!);
+
+  assertEquals(d.length, 1);
+  assertEquals(d[0], { start: phraseStart, end: phraseEnd });
+  assertDisplayInvariants(text, clusters, true);
+});
+
+Deno.test('К2.4 ровное плато 600 символов — первые ≤200 по словам', () => {
+  const text = words(110);
+  const { clusters } = computeClusters(input(text, crowd('u', 5, 0, 600)));
+
+  assertEquals(clusters.length, 1);
+
+  const d = clusters[0].display!;
+
+  assertEquals(d.start, 0);
+  assert(d.end - d.start <= 200 && d.end - d.start > 180, `длина ${d.end - d.start}`);
+  assertDisplayInvariants(text, clusters, true);
+});
+
+Deno.test('К2.5 две вершины: глубокая впадина — два кластера, мелкая — один', () => {
+  const text = words(30, 'w');
+  const [a0, a1] = wordsRange(text, 2, 5);
+  const [b0, b1] = wordsRange(text, 10, 13);
+  const peaks = [...crowd('a', 10, a0, a1), ...crowd('b', 10, b0, b1)];
+
+  const deep = computeClusters(input(text, [...peaks, ...crowd('s', 1, a0, b1)]));
+  const shallow = computeClusters(input(text, [...peaks, ...crowd('s', 15, a0, b1)]));
+
+  assertEquals(deep.clusters.length, 2);
+  assertEquals(shallow.clusters.length, 1);
+});
+
+Deno.test('К2.6 масштаб: провал в одного человека при 3 людях — шум, при 300 — разрез', () => {
+  const text = words(10, 'w');
+  const [all0, all1] = wordsRange(text, 1, 8);
+  const [l0, l1] = wordsRange(text, 1, 3);
+  const [r0, r1] = wordsRange(text, 6, 8);
+  const shape = (k: number): Spec[] => [
+    ...crowd('all', 2 * k, all0, all1),
+    // Каждый из этих k — два отдельных куска.
+    ...Array.from({ length: k }, (_, i) => [`l${i}`, l0, l1, [[`two${i}`, 'r', i]]] as Spec),
+    ...Array.from({ length: k }, (_, i) => [`r${i}`, r0, r1, [[`two${i}`, 'r', i]]] as Spec),
+  ];
+
+  assertEquals(computeClusters(input(text, shape(1))).clusters.length, 1);
+  assertEquals(computeClusters(input(text, shape(100))).clusters.length, 2);
+});
+
+Deno.test('К2.7 естественная длина: по слову — короткие кластеры, фразами — кластеры-фразы', () => {
+  const text = 'Сегодня мы наконец запустили новую версию приложения для всех пользователей сразу';
+  const w = wordSpans(text);
+  // А: каждый выделяет одно слово в «запустили новую версию приложения».
+  const a: Spec[] = [3, 4, 5, 6].flatMap((k, j) => crowd(`a${k}-`, [3, 4, 3, 2][j], w[k].start, w[k].end));
+  // Б: те же люди выделяют фразы.
+  const b: Spec[] = [
+    ...crowd('b', 8, w[3].start, w[6].end),
+    ...crowd('c', 2, w[2].start, w[5].end),
+    ...crowd('d', 2, w[4].start, w[7].end),
+  ];
+  const countWords = (r: Range) => wordSpans(slice(text, r)).length;
+
+  const byWords = shown(computeClusters(input(text, a)).clusters).map((c) => countWords(c.display!));
+  const byPhrases = shown(computeClusters(input(text, b)).clusters).map((c) => countWords(c.display!));
+
+  assert(byWords.length >= 1 && byWords.every((n) => n === 1), `А: ${byWords}`);
+  assert(byPhrases.length === 1 && byPhrases[0] >= 3, `Б: ${byPhrases}`);
+});
+
+Deno.test('К2.7 естественная длина решает спорный случай', () => {
+  // Слово «версию» (3 + 3 человека) внутри фразы (3 человека): толщина слоёв
+  // одинакова. Решает, какой длины кусками выделяют в остальном сообщении.
+  const head = 'Сегодня мы наконец запустили новую версию приложения для всех пользователей. ';
+  const text = head + words(40, 'фон');
+  const w = wordSpans(text);
+  const target: Spec[] = [...crowd('x', 3, w[5].start, w[5].end), ...crowd('p', 3, w[3].start, w[6].end)];
+  const singles: Spec[] = Array.from({ length: 8 }, (_, i) => crowd(`s${i}-`, 1, w[12 + 3 * i].start, w[12 + 3 * i].end)[0]);
+  const phrases: Spec[] = Array.from({ length: 8 }, (_, i) => crowd(`f${i}-`, 1, w[12 + 3 * i].start, w[14 + 3 * i].end)[0]);
+  const atTarget = (clusters: ModelCluster[]) =>
+    slice(text, clusters.find((c) => c.display && c.display.start < w[7].end)!.display!);
+
+  assertEquals(atTarget(computeClusters(input(text, [...target, ...singles])).clusters), 'версию');
+  assertEquals(atTarget(computeClusters(input(text, [...target, ...phrases])).clusters), 'запустили новую версию приложения');
+});
+
+Deno.test('К2.8 вложенность [0,30) [5,10) [7,9) — подсвечен кусок внутри, не [0,30)', () => {
+  const text = 'abcd efghi jk lmnop qrstu vwxyz хвост ещё';
+  const { clusters } = computeClusters(
+    input(text, [
+      ['a', 0, 30, [['u1', 'r', 1]]],
+      ['b', 5, 10, [['u2', 'r', 2]]],
+      ['c', 7, 9, [['u3', 'r', 3]]],
+    ]),
+  );
+
+  assertEquals(shownTexts(text, clusters), ['efghi']);
+  assertEquals(clusters.flatMap((c) => c.fragmentIds).sort(), ['a', 'b', 'c']);
+});
+
+Deno.test('К2.9 соседние [0,5) и [5,10) от разных людей с общей границей — два кластера', () => {
+  const text = 'abcd efghi klmno';
+  const { clusters } = computeClusters(input(text, [...crowd('l', 3, 0, 5), ...crowd('r', 3, 5, 10)]));
+
+  assertEquals(clusters.length, 2);
+  assertEquals(clusters.map((c) => slice(text, c)), ['abcd', 'efghi']);
+});
+
+Deno.test('К2.9 стык внахлёст: одни кончают на слове, другие с него начинают — тоже два', () => {
+  const text = words(12, 'w');
+  const [a0, a1] = wordsRange(text, 0, 5);
+  const [b0, b1] = wordsRange(text, 5, 10);
+  const { clusters } = computeClusters(input(text, [...crowd('l', 5, a0, a1), ...crowd('r', 5, b0, b1)]));
+
+  assertEquals(clusters.length, 2);
+});
+
+Deno.test('К2.10 один фрагмент на сообщении — он отображается', () => {
+  const text = 'Один фрагмент на всё сообщение';
+  const { clusters } = computeClusters(input(text, [['a', 5, 13, [['u1', 'r', 1]]]]));
+
+  assertEquals(clusters.length, 1);
+  assertEquals(slice(text, clusters[0].display!), 'фрагмент');
+});
+
+Deno.test('К2.11 в редком месте показывается менее популярный кластер, чем в густом', () => {
+  const text = words(130);
+  // Густое место: три популярных рядом; редкое — один послабее далеко.
+  const dense: Spec[] = [0, 20, 40].flatMap((start, k) => crowd(`d${k}-`, 6 - k, start, start + 7));
+  const sparse = crowd('s', 3, 700, 707);
+  const { clusters } = computeClusters(input(text, [...dense, ...sparse], { params: { maxDisplayed: 2 } }));
+  const visible = shown(clusters);
+
+  assertEquals(visible.length, 2);
+  assert(visible.some((c) => c.fragmentIds.includes(sparse[0][0])), 'редкое место не показано');
+});
+
+Deno.test('К2.12 устойчивость: голос в неотображаемом месте не перетряхивает набор', () => {
+  const rnd = rng(12);
+  const text = randomText(rnd, 2500);
+  const { input: data } = randomInput(rnd, text, 500, 120);
+  const first = computeClusters(data).clusters;
+  const displays = shown(first).map((c) => c.display!);
+  const spans = wordSpans(text);
+  const free = spans.find((s) => !displays.some((d) => d.start < s.end && s.start < d.end) && s.start > 1000)!;
+  const next: ClusterModelInput = {
+    ...data,
+    previous: previousOf(first),
+    fragments: [...data.fragments, { id: 'new', start: free.start, end: free.end }],
+    votes: [...data.votes, { fragmentId: 'new', userId: 'newcomer', kind: 'reaction', at: 9e6 }],
+  };
+  const again = computeClusters({ ...data, previous: previousOf(first) }).clusters;
+  const after = computeClusters(next).clusters;
+  const ranges = (cs: ModelCluster[]) =>
+    shown(cs)
+      .map((c) => `${c.display!.start}-${c.display!.end}`)
+      .sort();
+
+  assertEquals(ranges(again), ranges(first));
+  assertEquals(ranges(after), ranges(first));
+});
+
+Deno.test('К2.12 устойчивость на 50 случайных сообщениях', () => {
+  const rnd = rng(1212);
+  let unchanged = 0;
+
+  for (let n = 0; n < 50; n += 1) {
+    const text = randomText(rnd, 800 + Math.floor(rnd() * 2000));
+    const { input: data } = randomInput(rnd, text, 300 + Math.floor(rnd() * 400), 40 + Math.floor(rnd() * 100));
+    const first = computeClusters(data).clusters;
+    const displays = shown(first).map((c) => c.display!);
+    const free = wordSpans(text).filter((s) => !displays.some((d) => d.start < s.end && s.start < d.end));
+    const pick = free[Math.floor(rnd() * free.length)];
+
+    if (!pick) continue;
+
+    const after = computeClusters({
+      ...data,
+      previous: previousOf(first),
+      fragments: [...data.fragments, { id: 'new', start: pick.start, end: pick.end }],
+      votes: [...data.votes, { fragmentId: 'new', userId: 'newcomer', kind: 'reaction', at: 9e6 }],
+    }).clusters;
+    const key = (cs: ModelCluster[]) =>
+      shown(cs)
+        .map((c) => `${c.display!.start}-${c.display!.end}`)
+        .sort()
+        .join(',');
+
+    if (key(after) === key(first)) unchanged += 1;
+  }
+
+  assert(unchanged >= 48, `набор не изменился в ${unchanged} из 50`);
+});
+
+// =============================================================================
 // QA-матрица
 // =============================================================================
 
@@ -128,44 +458,6 @@ Deno.test('дубликаты: три человека на одном куск�
   assertEquals(clusters.length, 1);
   assertEquals(clusters[0].people, 3);
   assertEquals(slice(text, clusters[0].display!), 'другой');
-});
-
-Deno.test('вложенность [0,30) [5,10) [7,9) — один кластер [0,30)', () => {
-  const text = 'a'.repeat(5) + ' ' + 'b'.repeat(10) + ' ' + 'c'.repeat(13) + ' хвост';
-  const { clusters } = computeClusters(
-    input(text, [
-      ['a', 0, 30, [['u1', 'r', 1]]],
-      ['b', 5, 10, [['u2', 'r', 2]]],
-      ['c', 7, 9, [['u3', 'r', 3]]],
-    ]),
-  );
-
-  assertEquals(clusters.map((c) => [c.start, c.end]), [[0, 30]]);
-  assertEquals(clusters[0].fragmentIds, ['a', 'b', 'c']);
-});
-
-Deno.test('цепочка [0,10) [8,20) [18,30) — один кластер', () => {
-  const text = words(20, 'w');
-  const { clusters } = computeClusters(
-    input(text, [
-      ['a', 0, 10, [['u1', 'r', 1]]],
-      ['b', 8, 20, [['u2', 'r', 2]]],
-      ['c', 18, 30, [['u3', 'r', 3]]],
-    ]),
-  );
-
-  assertEquals(clusters.map((c) => [c.start, c.end]), [[0, 30]]);
-});
-
-Deno.test('смежность [0,5) [5,10) — склеиваются', () => {
-  const { clusters } = computeClusters(
-    input('abcdefghij klm', [
-      ['a', 0, 5, [['u1', 'r', 1]]],
-      ['b', 5, 10, [['u2', 'r', 2]]],
-    ]),
-  );
-
-  assertEquals(clusters.map((c) => [c.start, c.end]), [[0, 10]]);
 });
 
 Deno.test('далёкие куски — разные кластеры', () => {
@@ -196,7 +488,7 @@ Deno.test('покрытие 85%: длинный кусок плюс коротк
   assertEquals(shown(clusters).length >= 1, true);
 });
 
-Deno.test('20 диапазонов на 25 символах — один кластер, одно отображаемое', () => {
+Deno.test('20 разных диапазонов на 25 символах — инварианты держатся, все фрагменты разложены', () => {
   const text = 'abcde fghij klmno pqrst uvw';
   const specs: Spec[] = Array.from({ length: 20 }, (_, i) => [
     `f${i}`,
@@ -206,8 +498,7 @@ Deno.test('20 диапазонов на 25 символах — один кла�
   ]);
   const { clusters } = computeClusters(input(text, specs));
 
-  assertEquals(clusters.length, 1);
-  assertEquals(shown(clusters).length, 1);
+  assertEquals(clusters.flatMap((c) => c.fragmentIds).length, 20);
   assertDisplayInvariants(text, clusters, true);
 });
 
@@ -226,7 +517,7 @@ Deno.test('20 разбросанных на 1000 символах — 20 кла�
 
   assertEquals(clusters.length, 20);
   assertDisplayInvariants(text, clusters, true);
-  // 1000 символов — до 8 мест, но не больше половины текста.
+  // 1000 символов — до 8 мест.
   const visible = shown(clusters);
 
   assert(visible.length >= 3 && visible.length <= 8, `отображается ${visible.length}`);
@@ -240,12 +531,34 @@ Deno.test('Unicode: смещения в code points, эмодзи и кирил�
   assertEquals(slice(text, clusters[0].display!), 'Огонь');
 });
 
+Deno.test('фрагменты только в пробелах — кластер у ближайшего слова', () => {
+  const text = 'abc     def';
+  const { clusters } = computeClusters(input(text, [['a', 4, 6, [['u1', 'r', 1]]]]));
+
+  assertEquals(clusters.length, 1);
+  assertEquals(clusters[0].fragmentIds, ['a']);
+  assertDisplayInvariants(text, clusters, true);
+});
+
 Deno.test('500 диапазонов — инварианты держатся', () => {
   const rnd = rng(500);
   const text = randomText(rnd, 2000);
   const { input: data } = randomInput(rnd, text, 500, 40);
 
   assertDisplayInvariants(text, computeClusters(data).clusters, true);
+});
+
+Deno.test('журнал решения: контекст, кандидаты с признаками, выбранное — без текста', () => {
+  const { clusters, decision } = computeClusters(
+    input(TRUMP, [...crowd('t', 6, 6, 11), ...crowd('b', 2, 6, 46)]),
+  );
+
+  assert(decision);
+  assertEquals(decision.selected, shown(clusters).map((c) => c.display));
+  assertEquals(decision.context.people, 8);
+  assert(decision.basins[0].candidates.length >= 2);
+  assert('thickness' in decision.basins[0].candidates[0]);
+  assert(!JSON.stringify(decision).includes('Трамп'));
 });
 
 // =============================================================================
@@ -266,38 +579,61 @@ Deno.test('30 соседних букв одного человека с ком�
 Deno.test('30 комментариев одного человека слабее 5 разных людей', () => {
   const text = words(40);
   const spam: Spec = ['spam', 0, 6, Array.from({ length: 30 }, (_, i) => ['u1', 'c', i] as ['u1', 'c', number])];
-  const crowd: Spec[] = Array.from({ length: 5 }, (_, i) => [`p${i}`, 150, 156, [[`p${i}`, 'c', i]]]);
-  const { clusters } = computeClusters(input(text, [spam, ...crowd]));
+  const crowdSpecs: Spec[] = Array.from({ length: 5 }, (_, i) => [`p${i}`, 150, 156, [[`p${i}`, 'c', i]]]);
+  const { clusters } = computeClusters(input(text, [spam, ...crowdSpecs]));
   const spamCluster = clusters.find((c) => c.fragmentIds.includes('spam'))!;
   const crowdCluster = clusters.find((c) => c.fragmentIds.includes('p0'))!;
 
   assert(crowdCluster.popularity > spamCluster.popularity);
 });
 
-Deno.test('мост сливает два кластера — один, id старшего', () => {
+Deno.test('слияние: общее выделение сливает два кластера в один, id у старшего', () => {
   const text = words(20, 'w');
-  const specs: Spec[] = [
-    ['a', 0, 10, [['u1', 'r', 1]]],
-    ['b', 20, 30, [['u1', 'r', 2]]],
-    ['bridge', 8, 22, [['u2', 'r', 3]]],
-  ];
-  const data = input(text, specs, {
+  const [a0, a1] = wordsRange(text, 0, 3);
+  const [b0, b1] = wordsRange(text, 8, 11);
+  const left = crowd('a', 3, a0, a1);
+  const right = crowd('b', 3, b0, b1);
+  const data = input(text, [...left, ...right, ...crowd('all', 10, a0, b1)], {
     previous: [
-      { id: 'K2', start: 20, end: 30, createdAt: 2 },
-      { id: 'K1', start: 0, end: 10, createdAt: 1 },
+      { id: 'K2', start: b0, end: b1, createdAt: 2 },
+      { id: 'K1', start: a0, end: a1, createdAt: 1 },
     ],
   });
 
-  data.fragments[0].clusterId = 'K1';
-  data.fragments[1].clusterId = 'K2';
+  data.fragments.forEach((f) => {
+    if (f.id.startsWith('a')) f.clusterId = f.id.startsWith('all') ? null : 'K1';
+    if (f.id.startsWith('b')) f.clusterId = 'K2';
+  });
 
   const { clusters } = computeClusters(data);
 
-  // От u1 в ядре осталась одна (последняя) реакция — в K2, но фрагмент из K1
-  // прикреплён к тому же кластеру: общих фрагментов поровну, id у старшего.
   assertEquals(clusters.length, 1);
-  assertEquals(clusters[0].fragmentIds, ['a', 'bridge', 'b']);
+  assertEquals(clusters[0].fragmentIds.length, 16);
   assertEquals(clusters[0].id, 'K1');
+});
+
+Deno.test('накрутка: один человек мостом из 40 кусков не сливает два места', () => {
+  const text = words(60);
+  const left = crowd('l', 4, 0, 12);
+  const right = crowd('r', 4, 150, 162);
+  const bridge: Spec[] = Array.from({ length: 40 }, (_, i) => [`s${i}`, 10 + i * 4, 16 + i * 4, [['spammer', 'c', i]]]);
+  const { clusters } = computeClusters(input(text, [...left, ...right, ...bridge]));
+  const leftCluster = clusters.find((c) => c.fragmentIds.includes(left[0][0]))!;
+  const rightCluster = clusters.find((c) => c.fragmentIds.includes(right[0][0]))!;
+
+  assert(leftCluster !== rightCluster, 'мост одного человека склеил кластеры');
+  // Все фрагменты моста к кому-то прикреплены.
+  assertEquals(clusters.flatMap((c) => c.fragmentIds).length, 48);
+});
+
+Deno.test('цепочка разных фраз внахлёст не сливается в один кластер', () => {
+  const text = words(120);
+  // 12 людей, каждый — своя фраза в 60 символов, соседи заходят друг на друга на 5.
+  const specs: Spec[] = Array.from({ length: 12 }, (_, i) => [`f${i}`, i * 55, i * 55 + 60, [[`u${i}`, 'r', i]]]);
+  const { clusters } = computeClusters(input(text, specs));
+
+  assert(clusters.length >= 4, `кластеров ${clusters.length}`);
+  assertDisplayInvariants(text, clusters, true);
 });
 
 Deno.test('разрезанный кластер: id остаётся у части с большим пересечением', () => {
@@ -316,78 +652,37 @@ Deno.test('разрезанный кластер: id остаётся у час�
   );
 });
 
-Deno.test('один фрагмент на сообщении — он отображается', () => {
-  const text = 'Один фрагмент на всё сообщение';
-  const { clusters } = computeClusters(input(text, [['a', 5, 13, [['u1', 'r', 1]]]]));
+// =============================================================================
+// К2.13 Свойства на случайных данных, К2.14 бюджет
+// =============================================================================
 
-  assertEquals(clusters.length, 1);
-  assertEquals(slice(text, clusters[0].display!), 'фрагмент');
+Deno.test('К2.13 свойства: 1000 случайных входов — инварианты, разложение, порядок входа', () => {
+  const rnd = rng(42);
+
+  for (let n = 0; n < 1000; n += 1) {
+    const text = randomText(rnd, 1 + Math.floor(rnd() * 1200));
+    const length = Array.from(text).length;
+    const count = Math.floor(rnd() * 60);
+    const { input: data } = randomInput(rnd, text, count, 1 + Math.floor(rnd() * 15), length);
+    const result = computeClusters(data);
+    const valid = data.fragments.filter((f) => f.end > f.start).map((f) => f.id);
+
+    assertDisplayInvariants(text, result.clusters, valid.length > 0);
+    assertEquals(result.clusters.flatMap((c) => c.fragmentIds).sort(), valid.sort());
+
+    if (n % 10 === 0) {
+      const shuffled: ClusterModelInput = {
+        ...data,
+        fragments: shuffle([...data.fragments], rng(n + 1)),
+        votes: shuffle([...data.votes], rng(n + 2)),
+      };
+
+      assertEquals(computeClusters(shuffled), result);
+    }
+  }
 });
 
-Deno.test('кластер 600 символов, выделенный целиком, — отображаются первые ≤200 по словам', () => {
-  const text = words(110);
-  const specs: Spec[] = Array.from({ length: 5 }, (_, i) => [`f${i}`, 0, 600, [[`u${i}`, 'r', i]]]);
-  const { clusters } = computeClusters(input(text, specs));
-
-  assertEquals(clusters.length, 1);
-  assertEquals(clusters[0].end - clusters[0].start, 600);
-
-  const d = clusters[0].display!;
-
-  assertEquals(d.start, 0);
-  assert(d.end - d.start <= 200 && d.end - d.start > 180);
-  assertDisplayInvariants(text, clusters, true);
-});
-
-Deno.test('цепочка разных фраз длиннее 200 режется по слабым местам', () => {
-  const text = words(120);
-  // 12 людей, каждый — своя фраза в 60 символов, соседи заходят друг на друга на 5.
-  const specs: Spec[] = Array.from({ length: 12 }, (_, i) => [
-    `f${i}`,
-    i * 55,
-    i * 55 + 60,
-    [[`u${i}`, 'r', i]],
-  ]);
-  const { clusters } = computeClusters(input(text, specs));
-
-  assert(clusters.length >= 4, `кластеров ${clusters.length}`);
-  for (const c of clusters) assert(c.end - c.start <= 200);
-});
-
-Deno.test('накрутка: один человек мостом из 40 кусков не сливает два места', () => {
-  const text = words(60);
-  const left: Spec[] = Array.from({ length: 4 }, (_, i) => [`l${i}`, 0, 12, [[`a${i}`, 'r', i]]]);
-  const right: Spec[] = Array.from({ length: 4 }, (_, i) => [`r${i}`, 150, 162, [[`b${i}`, 'r', i]]]);
-  const bridge: Spec[] = Array.from({ length: 40 }, (_, i) => [
-    `s${i}`,
-    10 + i * 4,
-    16 + i * 4,
-    [['spammer', 'c', i]],
-  ]);
-  const { clusters } = computeClusters(input(text, [...left, ...right, ...bridge]));
-  const leftCluster = clusters.find((c) => c.fragmentIds.includes('l0'))!;
-  const rightCluster = clusters.find((c) => c.fragmentIds.includes('r0'))!;
-
-  assert(leftCluster !== rightCluster, 'мост одного человека склеил кластеры');
-  // Все фрагменты моста к кому-то прикреплены.
-  assertEquals(clusters.flatMap((c) => c.fragmentIds).length, 48);
-});
-
-Deno.test('в редком месте показывается менее популярный кластер, чем в густом', () => {
-  const text = words(130);
-  // Густое место: три популярных рядом; редкое — один послабее далеко.
-  const dense: Spec[] = [0, 20, 40].flatMap((start, k) =>
-    Array.from({ length: 6 - k }, (_, i) => [`d${k}-${i}`, start, start + 7, [[`d${k}-${i}`, 'r', i]]] as Spec),
-  );
-  const sparse: Spec[] = Array.from({ length: 3 }, (_, i) => [`s${i}`, 700, 707, [[`s${i}`, 'r', i]]]);
-  const { clusters } = computeClusters(input(text, [...dense, ...sparse], { params: { maxDisplayed: 2 } }));
-  const visible = shown(clusters);
-
-  assertEquals(visible.length, 2);
-  assert(visible.some((c) => c.fragmentIds.includes('s0')), 'редкое место не показано');
-});
-
-Deno.test('детерминизм: порядок входа не меняет результат', () => {
+Deno.test('К2.13 порядок входа на большом сообщении', () => {
   const rnd = rng(7);
   const text = randomText(rnd, 1500);
   const { input: data } = randomInput(rnd, text, 300, 30);
@@ -400,59 +695,46 @@ Deno.test('детерминизм: порядок входа не меняет �
   assertEquals(computeClusters(shuffled), computeClusters(data));
 });
 
-Deno.test('все фрагменты разложены по кластерам ровно один раз', () => {
-  const rnd = rng(11);
-  const text = randomText(rnd, 3000);
-  const { input: data } = randomInput(rnd, text, 800, 60);
-  const ids = computeClusters(data).clusters.flatMap((c) => c.fragmentIds).sort();
-
-  assertEquals(ids, data.fragments.map((f) => f.id).sort());
-});
-
-// =============================================================================
-// Свойства на случайных данных и бюджет
-// =============================================================================
-
-Deno.test('свойства: 1000 случайных входов — отображаемые не пересекаются, ≤200, по словам, ≥1', () => {
-  const rnd = rng(42);
-
-  for (let n = 0; n < 1000; n += 1) {
-    const text = randomText(rnd, 1 + Math.floor(rnd() * 1200));
-    const length = Array.from(text).length;
-    const count = Math.floor(rnd() * 60);
-    const { input: data } = randomInput(rnd, text, count, 1 + Math.floor(rnd() * 15), length);
-    const { clusters } = computeClusters(data);
-
-    assertDisplayInvariants(text, clusters, data.fragments.length > 0);
-  }
-});
-
-Deno.test('бюджет: 1 000 / 10 000 / 100 000 фрагментов на 4 000 символах', () => {
+Deno.test('К2.14 бюджет: 1 000 / 10 000 / 100 000 фрагментов на 4 000 символах', () => {
   const rnd = rng(3);
   const text = randomText(rnd, 4000);
-  const timings: Record<number, number> = {};
+  const total: Record<number, number> = {};
+  const relief: Record<number, number> = {};
+  const best = (f: () => void) => {
+    let min = Infinity;
+
+    for (let i = 0; i < 3; i += 1) {
+      const started = performance.now();
+
+      f();
+      min = Math.min(min, performance.now() - started);
+    }
+
+    return min;
+  };
 
   for (const count of [1_000, 10_000, 100_000]) {
     const { input: data } = randomInput(rnd, text, count, Math.ceil(count / 5));
+    const { map, context } = heightMapOf(data);
 
-    computeClusters(data);
-
-    const started = performance.now();
-    const { clusters } = computeClusters(data);
-
-    timings[count] = performance.now() - started;
-    assertDisplayInvariants(text, clusters, true);
+    total[count] = best(() => computeClusters(data));
+    relief[count] = best(() => computeRelief(map, context));
+    assertDisplayInvariants(text, computeClusters(data).clusters, true);
   }
 
-  console.log(
-    `модель: ${Object.entries(timings)
+  const line = (t: Record<number, number>) =>
+    Object.entries(t)
       .map(([n, ms]) => `${n} — ${ms.toFixed(1)} мс`)
-      .join(', ')}`,
-  );
+      .join(', ');
 
-  assert(timings[10_000] < 150, `10 000 фрагментов — ${timings[10_000].toFixed(1)} мс`);
-  // Рост ×10 по входу — не квадратичный (×100), с запасом на шум.
-  assert(timings[100_000] < timings[10_000] * 30, 'время растёт квадратично');
+  console.log(`модель целиком: ${line(total)}\nпосле карты: ${line(relief)}`);
+
+  // Прежняя модель на тех же данных: 5.9 / 34.7 / 773 мс.
+  assert(total[10_000] < 150, `10 000 фрагментов — ${total[10_000].toFixed(1)} мс`);
+  assert(total[100_000] < 773, `100 000 фрагментов — ${total[100_000].toFixed(1)} мс`);
+  // После карты время ограничено длиной текста (числом слов и бассейнов), а не
+  // числом фрагментов: на 4 000 символах — единицы миллисекунд при любом входе.
+  for (const ms of Object.values(relief)) assert(ms < 25, `после карты — ${ms.toFixed(1)} мс`);
 });
 
 // =============================================================================

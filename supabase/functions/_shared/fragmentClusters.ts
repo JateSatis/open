@@ -8,67 +8,51 @@
  *
  * Смещения — code points, полуоткрытые `[start, end)`, как в базе.
  *
- * Шаги:
- * 1. Склейка. Фрагменты, которые пересекаются или стоят ближе `mergeGap`
- *    символов, — один кластер (одиночная связь, проход по отсортированным).
- *    Длинный кластер режется в самом слабом месте — там, где его пересекает
- *    меньше всего фрагментов: цепочка разных кусков не сливается в одну
- *    заливку, а кусок, выделенный всеми целиком, остаётся целым.
- * 2. Два прохода. Первый кластеризует всё как есть. Во втором внутри каждого
- *    кластера первого прохода от человека остаётся один голос — его последний
- *    комментарий и его последняя реакция, — и по этим фрагментам кластеры
- *    строятся заново. Остальные фрагменты прикрепляются к кластеру второго
- *    прохода, с которым пересекаются больше (или к ближайшему).
- * 3. Популярность — по людям: каждый голосовавший даёт `weightPerson`, плюс
- *    `weightReaction` за реакцию и `weightComment · ln(1 + комментарии)`.
- * 4. Отображаемые — отдельный шаг: первые `maxDisplayLength` символов
- *    кластера, округлённые до слов, и жадный отбор без пересечений с
- *    динамическими весами (длина сообщения, покрытие, плотность соседей).
- * 5. Id кластера наследуется от прежнего с наибольшим пересечением по общим
+ * Слои:
+ * 1. Адаптер (`popularityMap.ts`): фрагменты и голоса → карта популярности
+ *    по словам + характеристики сообщения. Здесь кончаются фрагменты.
+ * 2. Модель рельефа (`reliefModel.ts`): карта → бассейны (кластеры) и что
+ *    в них отображать. О фрагментах не знает.
+ * 3. Привязка: фрагмент → бассейн с наибольшим пересечением (при равенстве —
+ *    левее), без пересечений — ближайший. Бассейн, которому не досталось ни
+ *    одного фрагмента, забирает фрагмент с наибольшим пересечением у соседа,
+ *    где их больше одного; не вышло — бассейн не становится кластером.
+ * 4. Id кластера наследуется от прежнего с наибольшим пересечением по общим
  *    фрагментам, при равенстве — от старшего.
  */
 
-export type ClusterParams = {
-  /** Столько символов между фрагментами ещё склеивают их в один кластер. */
-  mergeGap: number;
-  /** Кластер длиннее этого пробуют разрезать в слабом месте. */
-  splitLength: number;
-  /** Режем, если место разреза пересекает не больше этой доли фрагментов кластера. */
-  splitCrossShare: number;
-  weightPerson: number;
+import {
+  buildHeightMap,
+  type HeightMap,
+  type MessageContext,
+  type PersonPiece,
+} from './popularityMap.ts';
+import {
+  computeRelief,
+  DEFAULT_RELIEF_PARAMS,
+  type ModelBasin,
+  type ModelDecision,
+  type ReliefParams,
+  type ScoringModel,
+} from './reliefModel.ts';
+import { roundToWords, wordSpans, type Range } from './textWords.ts';
+
+export { roundToWords, wordSpans, type Range } from './textWords.ts';
+export type { HeightMap, MessageContext } from './popularityMap.ts';
+export type { ModelDecision, ScoringModel } from './reliefModel.ts';
+
+export type ClusterParams = ReliefParams & {
+  /** Вес слоя человека в точке, где у него только реакция. */
   weightReaction: number;
+  /** Вес слоя, где у него комментарий. Больше реакции. */
   weightComment: number;
-  maxDisplayLength: number;
-  /** Одно отображаемое место на столько символов сообщения. */
-  slotChars: number;
-  maxDisplayed: number;
-  /** Отображаемые вместе покрывают не больше этой доли текста (кроме первого). */
-  maxCoverageShare: number;
-  /** Менее популярные, чем эта доля от самого популярного, не показываются. */
-  minRelativePopularity: number;
-  /** Насколько выбранный кластер приглушает соседей вплотную (0..1). */
-  densityPenalty: number;
-  /** На каком расстоянии приглушение спадает в e раз, символов. */
-  densityRadius: number;
 };
 
 export const DEFAULT_CLUSTER_PARAMS: ClusterParams = {
-  mergeGap: 2,
-  splitLength: 200,
-  splitCrossShare: 0.34,
-  weightPerson: 1,
-  weightReaction: 0.5,
+  ...DEFAULT_RELIEF_PARAMS,
+  weightReaction: 1,
   weightComment: 1.5,
-  maxDisplayLength: 200,
-  slotChars: 100,
-  maxDisplayed: 8,
-  maxCoverageShare: 0.5,
-  minRelativePopularity: 0.15,
-  densityPenalty: 0.6,
-  densityRadius: 120,
 };
-
-export type Range = { start: number; end: number };
 
 export type FragmentInput = {
   id: string;
@@ -87,7 +71,15 @@ export type VoteInput = {
   at: number;
 };
 
-export type PreviousCluster = { id: string; start: number; end: number; createdAt: number };
+export type PreviousCluster = {
+  id: string;
+  start: number;
+  end: number;
+  createdAt: number;
+  /** Что было отображено; нет — не отображался. */
+  displayStart?: number | null;
+  displayEnd?: number | null;
+};
 
 export type ClusterModelInput = {
   text: string;
@@ -95,6 +87,8 @@ export type ClusterModelInput = {
   votes: VoteInput[];
   previous?: PreviousCluster[];
   params?: Partial<ClusterParams>;
+  /** Функция оценки вариантов; по умолчанию — линейная со стартовыми коэффициентами. */
+  scorer?: ScoringModel;
 };
 
 export type ModelCluster = {
@@ -109,254 +103,99 @@ export type ModelCluster = {
   display: Range | null;
 };
 
-export type ClusterModelResult = { clusters: ModelCluster[] };
+export type ClusterModelResult = { clusters: ModelCluster[]; decision?: ModelDecision | null };
 
-type Vote = { person: string; kind: 'reaction' | 'comment'; at: number; frag: number };
+/** `person` — номер в `Prepared.people`. */
+type Vote = { person: number; kind: 'reaction' | 'comment'; at: number; frag: number };
 
 type Frag = { id: string; start: number; end: number; clusterId: string | null; votes: Vote[] };
 
-type Group = { start: number; end: number; members: number[] };
+type Prepared = { frags: Frag[]; people: string[] };
+
+type Group = { start: number; end: number; members: number[]; basin: ModelBasin | null };
 
 const cmpStr = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 
-/** Доля фрагментов кластера, которая должна остаться целиком с каждой стороны разреза. */
-const MIN_SIDE_SHARE = 0.1;
-
 // =============================================================================
-// Слова
+// Вход
 // =============================================================================
 
-/** Слово — подряд идущие непробельные code points; пунктуация прилипает. */
-export function wordSpans(text: string): Range[] {
-  const spans: Range[] = [];
-  let start = -1;
-  let i = 0;
+function prepare(input: ClusterModelInput, length: number): Prepared {
+  const frags: Frag[] = input.fragments
+    .filter((f) => Number.isInteger(f.start) && Number.isInteger(f.end))
+    .map((f) => ({
+      id: f.id,
+      start: Math.max(0, f.start),
+      end: Math.min(length, f.end),
+      clusterId: f.clusterId ?? null,
+      votes: [] as Vote[],
+    }))
+    .filter((f) => f.end > f.start)
+    .sort((a, b) => a.start - b.start || a.end - b.end || cmpStr(a.id, b.id));
 
-  for (const ch of text) {
-    const space = /\s/u.test(ch);
+  const index = new Map<string, number>();
 
-    if (!space && start < 0) start = i;
+  frags.forEach((f, i) => index.set(f.id, i));
 
-    if (space && start >= 0) {
-      spans.push({ start, end: i });
-      start = -1;
+  // Удалённый аккаунт — отдельный человек на каждый голос. Ключ — из самого
+  // голоса, а не из порядка входа: одинаковые голоса неразличимы.
+  const seen = new Map<string, number>();
+  const personIndex = new Map<string, number>();
+  const people: string[] = [];
+
+  for (const v of input.votes) {
+    const frag = index.get(v.fragmentId);
+
+    if (frag === undefined) continue;
+
+    let person = v.userId;
+
+    if (person === null) {
+      const key = `\u0000${frag}:${v.kind}:${v.at}`;
+      const k = seen.get(key) ?? 0;
+
+      seen.set(key, k + 1);
+      person = `${key}:${k}`;
     }
 
-    i += 1;
+    let n = personIndex.get(person);
+
+    if (n === undefined) {
+      n = people.length;
+      personIndex.set(person, n);
+      people.push(person);
+    }
+
+    frags[frag].votes.push({ person: n, kind: v.kind, at: v.at, frag });
   }
 
-  if (start >= 0) spans.push({ start, end: i });
-
-  return spans;
+  return { frags, people };
 }
 
-/** Первое слово, которое кончается правее `pos`. */
-function firstWordEndingAfter(words: Range[], pos: number): number {
-  let lo = 0;
-  let hi = words.length;
+/** Куски людей для карты: каждый голос — кусок с весом своего вида; максимум возьмёт карта. */
+function personPieces(frags: Frag[], people: string[], p: ClusterParams): PersonPiece[][] {
+  const byPerson: PersonPiece[][] = people.map(() => []);
 
-  while (lo < hi) {
-    const mid = (lo + hi) >> 1;
-
-    if (words[mid].end > pos) hi = mid;
-    else lo = mid + 1;
-  }
-
-  return lo;
-}
-
-/**
- * Диапазон по целым словам: берутся первые `maxLength` символов, слово
- * входит, если внутри не меньше его половины. Ни одно не вошло — слово с
- * наибольшим перекрытием или ближайшее. Не влезло в `maxLength` — слова
- * отпадают с конца; одно слово длиннее лимита режется по лимиту.
- */
-export function roundToWords(range: Range, words: Range[], maxLength: number): Range | null {
-  if (words.length === 0) return null;
-
-  const s = range.start;
-  const e = Math.min(range.end, s + maxLength);
-  const a = firstWordEndingAfter(words, s);
-  let first = -1;
-  let last = -1;
-  let bestOverlap = 0;
-  let bestWord = -1;
-
-  for (let w = a; w < words.length && words[w].start < e; w += 1) {
-    const overlap = Math.min(e, words[w].end) - Math.max(s, words[w].start);
-
-    if (overlap > bestOverlap) {
-      bestOverlap = overlap;
-      bestWord = w;
-    }
-
-    if (2 * overlap >= words[w].end - words[w].start) {
-      if (first < 0) first = w;
-      last = w;
+  for (const f of frags) {
+    for (const v of f.votes) {
+      const piece = {
+        start: f.start,
+        end: f.end,
+        weight: v.kind === 'comment' ? p.weightComment : p.weightReaction,
+      };
+      byPerson[v.person].push(piece);
     }
   }
 
-  if (first < 0) {
-    if (bestWord < 0) {
-      // Диапазон весь в пробелах — ближайшее слово, при равенстве левое.
-      const left = a - 1;
-      const right = a < words.length ? a : -1;
-
-      if (left < 0) bestWord = right;
-      else if (right < 0) bestWord = left;
-      else bestWord = s - words[left].end <= words[right].start - e ? left : right;
-    }
-
-    first = bestWord;
-    last = bestWord;
-  }
-
-  while (last > first && words[last].end - words[first].start > maxLength) last -= 1;
-
-  const start = words[first].start;
-
-  return { start, end: Math.min(words[last].end, start + maxLength) };
+  // Порядок людей — по ключу: сумма слоёв не зависит от порядка входа.
+  return people
+    .map((key, i) => ({ key, i }))
+    .sort((a, b) => cmpStr(a.key, b.key))
+    .map(({ i }) => byPerson[i]);
 }
 
 // =============================================================================
-// Склейка и разрез
-// =============================================================================
-
-function clip(f: Frag, lo: number, hi: number): Range {
-  return { start: Math.max(f.start, lo), end: Math.min(f.end, hi) };
-}
-
-/** Одиночная связь: `members` отсортированы по началу. */
-function link(members: number[], frags: Frag[], lo: number, hi: number, gap: number): Group[] {
-  const groups: Group[] = [];
-  let current: Group | null = null;
-
-  for (const i of members) {
-    const r = clip(frags[i], lo, hi);
-
-    if (r.end <= r.start) continue;
-
-    if (current && r.start - current.end <= gap) {
-      if (r.end > current.end) current.end = r.end;
-      current.members.push(i);
-    } else {
-      current = { start: r.start, end: r.end, members: [i] };
-      groups.push(current);
-    }
-  }
-
-  return groups;
-}
-
-/**
- * Место разреза длинного кластера: точка, которую пересекает меньше всего
- * фрагментов, при равенстве — ближе к середине. С каждой стороны должна
- * остаться заметная доля фрагментов целиком (`MIN_SIDE_SHARE`, хотя бы один):
- * иначе разрез откусывает по краю, а не делит, и резать пришлось бы столько
- * раз, сколько фрагментов. Слабого места нет — null.
- */
-function findCut(piece: Group, frags: Frag[], p: ClusterParams): number | null {
-  const lo = piece.start;
-  const hi = piece.end;
-  const span = hi - lo;
-
-  if (span <= p.splitLength || piece.members.length < 2) return null;
-
-  const diff = new Int32Array(span + 1);
-  const endsAt = new Int32Array(span + 1);
-  const startsAt = new Int32Array(span + 1);
-
-  for (const i of piece.members) {
-    const r = clip(frags[i], lo, hi);
-
-    endsAt[r.end - lo] += 1;
-    startsAt[r.start - lo] += 1;
-
-    if (r.end - r.start >= 2) {
-      diff[r.start + 1 - lo] += 1;
-      diff[r.end - lo] -= 1;
-    }
-  }
-
-  const minSide = Math.max(1, Math.floor(MIN_SIDE_SHARE * piece.members.length));
-  // Справа целиком — те, что начинаются не левее x: идём с конца.
-  const rightWhole = new Int32Array(span + 2);
-
-  for (let x = span; x >= 0; x -= 1) rightWhole[x] = rightWhole[x + 1] + startsAt[x];
-
-  let run = 0;
-  let leftWhole = 0;
-  let best = -1;
-  let bestCross = Infinity;
-  let bestDistance = Infinity;
-
-  for (let x = lo; x < hi; x += 1) {
-    run += diff[x - lo];
-    leftWhole += endsAt[x - lo];
-
-    if (leftWhole < minSide) continue;
-    if (rightWhole[x - lo] < minSide) break;
-
-    const distance = Math.abs(2 * x - lo - hi);
-
-    if (run < bestCross || (run === bestCross && distance < bestDistance)) {
-      best = x;
-      bestCross = run;
-      bestDistance = distance;
-    }
-  }
-
-  return best >= 0 && bestCross <= p.splitCrossShare * piece.members.length ? best : null;
-}
-
-function divide(piece: Group, x: number, frags: Frag[]): [Group, Group] {
-  const left: Group = { start: Infinity, end: -Infinity, members: [] };
-  const right: Group = { start: Infinity, end: -Infinity, members: [] };
-
-  for (const i of piece.members) {
-    const r = clip(frags[i], piece.start, piece.end);
-    const leftPart = Math.min(r.end, x) - r.start;
-    const rightPart = r.end - Math.max(r.start, x);
-    const side = leftPart >= rightPart ? left : right;
-
-    side.members.push(i);
-    if (r.start < side.start) side.start = r.start;
-    if (r.end > side.end) side.end = r.end;
-  }
-
-  left.end = Math.min(left.end, x);
-  right.start = Math.max(right.start, x);
-
-  return [left, right];
-}
-
-function split(group: Group, frags: Frag[], p: ClusterParams): Group[] {
-  const out: Group[] = [];
-  const stack = [group];
-
-  while (stack.length > 0) {
-    const piece = stack.pop()!;
-    const x = findCut(piece, frags, p);
-
-    if (x === null) {
-      out.push(piece);
-      continue;
-    }
-
-    const [left, right] = divide(piece, x, frags);
-
-    stack.push(right, left);
-  }
-
-  return out.sort((a, b) => a.start - b.start);
-}
-
-function clusterize(members: number[], frags: Frag[], lo: number, hi: number, p: ClusterParams) {
-  return link(members, frags, lo, hi, p.mergeGap).flatMap((g) => split(g, frags, p));
-}
-
-// =============================================================================
-// Прикрепление отброшенных вторым проходом фрагментов
+// Привязка фрагментов к бассейнам
 // =============================================================================
 
 /** Индекс самого длинного кластера на отрезке [i, j] за O(1), при равенстве — левого. */
@@ -371,7 +210,8 @@ class LongestQuery {
       const prev = this.table[k - 1];
       const row = new Int32Array(n - (1 << k) + 1);
 
-      for (let i = 0; i < row.length; i += 1) row[i] = this.better(prev[i], prev[i + (1 << (k - 1))]);
+      for (let i = 0; i < row.length; i += 1)
+        row[i] = this.better(prev[i], prev[i + (1 << (k - 1))]);
 
       this.table.push(row);
     }
@@ -388,7 +228,9 @@ class LongestQuery {
   }
 }
 
-/** Кластер для фрагмента: наибольшее пересечение, при равенстве левый; без пересечений — ближайший. */
+const overlapOf = (r: Range, g: Range) => Math.min(r.end, g.end) - Math.max(r.start, g.start);
+
+/** Бассейн для фрагмента: наибольшее пересечение, при равенстве левый; без пересечений — ближайший. */
 function attachTarget(r: Range, groups: Group[], query: LongestQuery): number {
   let lo = 0;
   let hi = groups.length;
@@ -414,13 +256,13 @@ function attachTarget(r: Range, groups: Group[], query: LongestQuery): number {
   const j = lo - 1;
 
   if (i <= j) {
-    const overlap = (g: Group) => Math.min(r.end, g.end) - Math.max(r.start, g.start);
     let best = i;
-    let bestOverlap = overlap(groups[i]);
+    let bestOverlap = overlapOf(r, groups[i]);
 
+    // Бассейны не пересекаются: внутренние покрыты фрагментом целиком.
     if (j - i >= 2) {
       const inner = query.longest(i + 1, j - 1);
-      const innerOverlap = overlap(groups[inner]);
+      const innerOverlap = overlapOf(r, groups[inner]);
 
       if (innerOverlap > bestOverlap) {
         best = inner;
@@ -428,7 +270,7 @@ function attachTarget(r: Range, groups: Group[], query: LongestQuery): number {
       }
     }
 
-    if (j > i && overlap(groups[j]) > bestOverlap) best = j;
+    if (j > i && overlapOf(r, groups[j]) > bestOverlap) best = j;
 
     return best;
   }
@@ -440,193 +282,50 @@ function attachTarget(r: Range, groups: Group[], query: LongestQuery): number {
   return r.start - groups[i - 1].end <= groups[i].start - r.end ? i - 1 : i;
 }
 
-// =============================================================================
-// Модель
-// =============================================================================
+function attach(frags: Frag[], groups: Group[]): Group[] {
+  const query = new LongestQuery(groups.map((g) => g.end - g.start));
+  const owner = new Int32Array(frags.length);
 
-function prepare(input: ClusterModelInput, length: number) {
-  const frags: Frag[] = input.fragments
-    .filter((f) => Number.isInteger(f.start) && Number.isInteger(f.end))
-    .map((f) => ({
-      id: f.id,
-      start: Math.max(0, f.start),
-      end: Math.min(length, f.end),
-      clusterId: f.clusterId ?? null,
-      votes: [] as Vote[],
-    }))
-    .filter((f) => f.end > f.start)
-    .sort((a, b) => a.start - b.start || a.end - b.end || cmpStr(a.id, b.id));
-
-  const index = new Map<string, number>();
-
-  frags.forEach((f, i) => index.set(f.id, i));
-
-  const raw = input.votes
-    .filter((v) => index.has(v.fragmentId))
-    .map((v) => ({ ...v, frag: index.get(v.fragmentId)! }))
-    .sort(
-      (a, b) =>
-        a.frag - b.frag ||
-        cmpStr(a.kind, b.kind) ||
-        cmpStr(a.userId ?? '', b.userId ?? '') ||
-        a.at - b.at,
-    );
-
-  raw.forEach((v, n) => {
-    frags[v.frag].votes.push({
-      // Удалённый аккаунт — отдельный человек на каждый голос.
-      person: v.userId ?? `\u0000${n}`,
-      kind: v.kind,
-      at: v.at,
-      frag: v.frag,
-    });
+  frags.forEach((f, i) => {
+    owner[i] = attachTarget(f, groups, query);
+    groups[owner[i]].members.push(i);
   });
 
-  return frags;
-}
+  // Бассейн без фрагментов: его высоту дали фрагменты, которые больше
+  // пересекаются с соседями. Забираем у соседа, где фрагментов больше одного,
+  // самый пересекающийся — иначе подсветку нечем было бы открыть.
+  groups.forEach((g, gi) => {
+    if (g.members.length > 0) return;
 
-/** От каждого человека — его последняя реакция и его последний комментарий. */
-function oneVoicePerPerson(group: Group, frags: Frag[]): number[] {
-  const latest = new Map<string, Vote>();
+    let best = -1;
+    let bestOverlap = 0;
 
-  for (const i of group.members) {
-    for (const v of frags[i].votes) {
-      const key = `${v.kind}\u0000${v.person}`;
-      const seen = latest.get(key);
+    for (let i = 0; i < frags.length && frags[i].start < g.end; i += 1) {
+      const overlap = overlapOf(frags[i], g);
 
-      if (!seen || v.at > seen.at || (v.at === seen.at && v.frag > seen.frag)) latest.set(key, v);
+      if (overlap > bestOverlap && groups[owner[i]].members.length > 1) {
+        best = i;
+        bestOverlap = overlap;
+      }
     }
-  }
 
-  return [...new Set([...latest.values()].map((v) => v.frag))].sort((a, b) => a - b);
-}
+    if (best < 0) return;
 
-function secondPass(group: Group, frags: Frag[], p: ClusterParams): Group[] {
-  const kept = oneVoicePerPerson(group, frags);
+    const from = groups[owner[best]];
 
-  if (kept.length === 0) return [group];
-
-  const groups = clusterize(kept, frags, group.start, group.end, p);
-  const inCore = new Set<number>();
-
-  for (const g of groups) for (const i of g.members) inCore.add(i);
-
-  const query = new LongestQuery(groups.map((g) => g.end - g.start));
-
-  for (const i of group.members) {
-    if (inCore.has(i)) continue;
-
-    const r = clip(frags[i], group.start, group.end);
-
-    groups[attachTarget(r, groups, query)].members.push(i);
-  }
+    from.members.splice(from.members.indexOf(best), 1);
+    owner[best] = gi;
+    g.members.push(best);
+  });
 
   for (const g of groups) g.members.sort((a, b) => a - b);
 
-  return groups;
+  return groups.filter((g) => g.members.length > 0);
 }
 
-function popularity(group: Group, frags: Frag[], p: ClusterParams) {
-  const people = new Map<string, { reaction: boolean; comments: number }>();
-
-  for (const i of group.members) {
-    for (const v of frags[i].votes) {
-      const person = people.get(v.person) ?? { reaction: false, comments: 0 };
-
-      if (v.kind === 'reaction') person.reaction = true;
-      else person.comments += 1;
-
-      people.set(v.person, person);
-    }
-  }
-
-  let score = 0;
-
-  for (const person of people.values()) {
-    score +=
-      p.weightPerson +
-      (person.reaction ? p.weightReaction : 0) +
-      p.weightComment * Math.log1p(person.comments);
-  }
-
-  return { score, people: people.size };
-}
-
-function gapBetween(a: Range, b: Range): number {
-  return Math.max(0, Math.max(a.start, b.start) - Math.min(a.end, b.end));
-}
-
-/**
- * Отображаемые: жадно по убыванию веса. Вес — популярность; каждый выбранный
- * приглушает соседей тем сильнее, чем ближе они к нему, — в редком месте
- * пройдёт менее популярный кластер, чем в густом. Сколько показывать —
- * от длины сообщения, сколько текста закрыть — от доли покрытия.
- */
-function selectDisplayed(
-  candidates: { display: Range; popularity: number; index: number }[],
-  length: number,
-  p: ClusterParams,
-): Set<number> {
-  const chosen: Range[] = [];
-  const picked = new Set<number>();
-
-  if (candidates.length === 0) return picked;
-
-  const weight = candidates.map((c) => c.popularity);
-  const alive = candidates.map(() => true);
-  const top = Math.max(...weight);
-  const floor = top > 0 ? p.minRelativePopularity * top : -Infinity;
-  const maxCount = Math.min(Math.max(1, Math.ceil(length / p.slotChars)), Math.max(1, p.maxDisplayed));
-  const budget = p.maxCoverageShare * length;
-  let covered = 0;
-
-  while (chosen.length < maxCount) {
-    let best = -1;
-
-    for (let i = 0; i < candidates.length; i += 1) {
-      if (!alive[i]) continue;
-
-      const c = candidates[i];
-      const size = c.display.end - c.display.start;
-
-      if (chosen.length > 0 && (weight[i] < floor || covered + size > budget)) continue;
-
-      if (
-        best < 0 ||
-        weight[i] > weight[best] ||
-        (weight[i] === weight[best] &&
-          (c.popularity > candidates[best].popularity ||
-            (c.popularity === candidates[best].popularity && c.display.start < candidates[best].display.start)))
-      ) {
-        best = i;
-      }
-    }
-
-    if (best < 0) break;
-
-    const range = candidates[best].display;
-
-    chosen.push(range);
-    picked.add(candidates[best].index);
-    alive[best] = false;
-    covered += range.end - range.start;
-
-    for (let i = 0; i < candidates.length; i += 1) {
-      if (!alive[i]) continue;
-
-      const other = candidates[i].display;
-
-      if (other.start < range.end && range.start < other.end) {
-        alive[i] = false;
-        continue;
-      }
-
-      weight[i] *= 1 - p.densityPenalty * Math.exp(-gapBetween(range, other) / p.densityRadius);
-    }
-  }
-
-  return picked;
-}
+// =============================================================================
+// Id
+// =============================================================================
 
 /**
  * Id наследуется от прежнего кластера с наибольшим пересечением по общим
@@ -634,8 +333,14 @@ function selectDisplayed(
  * — от старшего, потом по пересечению символов (прежний кластер, чьи
  * фрагменты все уснули). Один прежний id — одному новому.
  */
-function inheritIds(groups: Group[], frags: Frag[], previous: PreviousCluster[]): (string | null)[] {
-  const old = [...previous].sort((a, b) => a.start - b.start || a.end - b.end || cmpStr(a.id, b.id));
+function inheritIds(
+  groups: Group[],
+  frags: Frag[],
+  previous: PreviousCluster[],
+): (string | null)[] {
+  const old = [...previous].sort(
+    (a, b) => a.start - b.start || a.end - b.end || cmpStr(a.id, b.id),
+  );
   const oldIndex = new Map(old.map((o, i) => [o.id, i]));
   const pairs = new Map<number, { g: number; o: number; shared: number; overlap: number }>();
   const pair = (g: number, o: number) => {
@@ -692,34 +397,106 @@ function inheritIds(groups: Group[], frags: Frag[], previous: PreviousCluster[])
   return ids;
 }
 
+// =============================================================================
+// Модель
+// =============================================================================
+
+function peopleOf(group: Group, frags: Frag[]): number {
+  const people = new Set<number>();
+
+  for (const i of group.members) for (const v of frags[i].votes) people.add(v.person);
+
+  return people.size;
+}
+
+function mapOf(
+  input: ClusterModelInput,
+  p: ClusterParams,
+  length: number,
+  words: Range[],
+  prepared: Prepared,
+) {
+  const previousDisplays = (input.previous ?? [])
+    .filter((c) => Number.isInteger(c.displayStart) && Number.isInteger(c.displayEnd))
+    .map((c) => ({ start: c.displayStart!, end: c.displayEnd! }));
+
+  return buildHeightMap(
+    length,
+    words,
+    personPieces(prepared.frags, prepared.people, p),
+    previousDisplays,
+  );
+}
+
+/** Вход модели рельефа — карта и характеристики сообщения — без самой модели. */
+export function heightMapOf(input: ClusterModelInput): { map: HeightMap; context: MessageContext } {
+  const p: ClusterParams = { ...DEFAULT_CLUSTER_PARAMS, ...input.params };
+  const length = Array.from(input.text).length;
+  const words = wordSpans(input.text);
+
+  return mapOf(input, p, length, words, prepare(input, length));
+}
+
 export function computeClusters(input: ClusterModelInput): ClusterModelResult {
   const p: ClusterParams = { ...DEFAULT_CLUSTER_PARAMS, ...input.params };
   const length = Array.from(input.text).length;
   const words = wordSpans(input.text);
-  const frags = prepare(input, length);
-  const all = frags.map((_, i) => i);
+  const prepared = prepare(input, length);
+  const { frags } = prepared;
 
-  const firstPass = clusterize(all, frags, 0, length, p);
-  const groups = firstPass.flatMap((g) => secondPass(g, frags, p));
+  if (frags.length === 0) return { clusters: [], decision: null };
+
+  const { map, context } = mapOf(input, p, length, words, prepared);
+  const relief = computeRelief(map, context, p, input.scorer);
+
+  let groups: Group[] = relief.basins.map((b) => ({
+    start: b.start,
+    end: b.end,
+    members: [],
+    basin: b,
+  }));
+
+  if (groups.length === 0) {
+    // Фрагменты только в пробелах: горы нет — кластер вокруг ближайшего слова.
+    const display = roundToWords(frags[0], words, p.maxDisplayLength);
+    const range = display ?? { start: frags[0].start, end: frags[0].end };
+
+    groups = [
+      {
+        ...range,
+        members: [],
+        basin: display ? { ...range, peakHeight: 0, popularity: 0, display, best: display } : null,
+      },
+    ];
+  }
+
+  groups = attach(frags, groups);
+
+  // Отображаемый бассейн остался без фрагментов — показать лучший из оставшихся.
+  if (!groups.some((g) => g.basin?.display) && groups.length > 0) {
+    const top = groups.reduce((x, y) =>
+      (y.basin?.popularity ?? 0) > (x.basin?.popularity ?? 0) ? y : x,
+    );
+
+    if (top.basin) top.basin = { ...top.basin, display: top.basin.best };
+  }
+
   const ids = inheritIds(groups, frags, input.previous ?? []);
-
-  const scored = groups.map((g) => ({ ...popularity(g, frags, p), display: roundToWords(g, words, p.maxDisplayLength) }));
-
-  const shown = selectDisplayed(
-    scored.flatMap((s, index) => (s.display ? [{ display: s.display, popularity: s.score, index }] : [])),
-    length,
-    p,
-  );
+  const clusters = groups.map((g, i) => ({
+    id: ids[i],
+    start: g.start,
+    end: g.end,
+    fragmentIds: g.members.map((m) => frags[m].id),
+    popularity: g.basin?.popularity ?? 0,
+    people: peopleOf(g, frags),
+    display: g.basin?.display ?? null,
+  }));
 
   return {
-    clusters: groups.map((g, i) => ({
-      id: ids[i],
-      start: g.start,
-      end: g.end,
-      fragmentIds: g.members.map((m) => frags[m].id),
-      popularity: Math.round(scored[i].score * 1e6) / 1e6,
-      people: scored[i].people,
-      display: shown.has(i) ? scored[i].display : null,
-    })),
+    clusters,
+    decision: {
+      ...relief.decision,
+      selected: clusters.flatMap((c) => (c.display ? [c.display] : [])),
+    },
   };
 }
