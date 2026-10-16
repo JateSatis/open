@@ -2,7 +2,10 @@
 // `20261024120000_fragment_cluster_events.sql`) — данные для обучения модели
 // кластеров. Копятся и уходят пачкой в фоне: вызывающий не ждёт сети, а сбой
 // отправки до него не доходит — потерянная пачка не стоит ни повторов, ни
-// ошибки на экране. Диапазоны — code points, как в базе.
+// ошибки на экране. Уход приложения в фон отправляет накопленное сразу:
+// таймер в фоне не сработает. Диапазоны — code points, как в базе.
+
+import { AppState } from 'react-native';
 
 import { supabase } from '@/api/supabase';
 
@@ -34,6 +37,7 @@ export type ClusterEvent = {
 
 let queue: ClusterEvent[] = [];
 let timer: ReturnType<typeof setTimeout> | null = null;
+let watchingAppState = false;
 
 function toRow(event: ClusterEvent) {
   return {
@@ -61,7 +65,10 @@ export async function flushClusterEvents(): Promise<void> {
     queue = queue.slice(MAX_EVENTS_BATCH);
 
     try {
-      await supabase.rpc('record_fragment_cluster_events', { events: batch.map(toRow) });
+      const { error } = await supabase.rpc('record_fragment_cluster_events', { events: batch.map(toRow) });
+
+      // Отказ базы (лимит, неизвестный вид) — сигнал разработчику, не человеку.
+      if (error && __DEV__) console.warn('record_fragment_cluster_events:', error);
     } catch {
       // Сеть недоступна — пачка теряется: это данные для обучения, не действие человека.
     }
@@ -70,6 +77,13 @@ export async function flushClusterEvents(): Promise<void> {
 
 /** Записать событие: уйдёт с ближайшей пачкой. */
 export function trackClusterEvent(event: ClusterEvent): void {
+  if (!watchingAppState) {
+    watchingAppState = true;
+    AppState.addEventListener('change', (state) => {
+      if (state !== 'active') void flushClusterEvents();
+    });
+  }
+
   queue.push(event);
 
   if (queue.length >= MAX_EVENTS_BATCH) {

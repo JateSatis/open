@@ -5,11 +5,19 @@ import {
   trackClusterEvent,
 } from './fragmentClusterEvents';
 
+import { AppState, type AppStateStatus } from 'react-native';
+
 import { supabase } from '@/api/supabase';
 
 jest.mock('@/api/supabase', () => ({ supabase: { rpc: jest.fn() } }));
 
 const rpc = supabase.rpc as jest.Mock;
+const appStateListeners: ((state: AppStateStatus) => void)[] = [];
+
+jest.spyOn(AppState, 'addEventListener').mockImplementation((_, listener) => {
+  appStateListeners.push(listener);
+  return { remove: jest.fn() };
+});
 
 beforeEach(async () => {
   jest.useFakeTimers();
@@ -86,7 +94,18 @@ describe('trackClusterEvent', () => {
     expect(rpc).toHaveBeenCalledTimes(1);
   });
 
+  it('уход приложения в фон отправляет накопленное, не дожидаясь таймера', async () => {
+    trackClusterEvent({ kind: 'cluster_opened', messageId: 'm1', clusterId: 'k1' });
+
+    for (const listener of appStateListeners) listener('background');
+    await Promise.resolve();
+
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc.mock.calls[0][1].events).toHaveLength(1);
+  });
+
   it('отказ базы тоже не бросает, а следующие события уходят своей пачкой', async () => {
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
     rpc.mockResolvedValueOnce({ data: null, error: { message: 'too many events' } });
 
     trackClusterEvent({ kind: 'cluster_opened', messageId: 'm1' });
