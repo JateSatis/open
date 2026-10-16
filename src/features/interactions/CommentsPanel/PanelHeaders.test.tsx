@@ -168,6 +168,23 @@ describe('area panel header', () => {
     expect(await screen.findByLabelText('Снять реакцию 👍')).toBeTruthy();
   });
 
+  it('marks my reaction in the cluster even when its fragment is not inside the area', async () => {
+    mockedArea.mockResolvedValue({
+      fragmentIds: [],
+      memberReactions: {},
+      visitorReactions: {},
+      reactionsCount: 0,
+      commentsCount: 0,
+      myClusterId: 'k1',
+      mine: '🤣',
+      myFragmentId: 'f-mine',
+    });
+
+    await renderArea();
+
+    expect(await screen.findByLabelText('Снять реакцию 🤣')).toBeTruthy();
+  });
+
   it('an empty area is a quote and the whole set', async () => {
     mockedArea.mockResolvedValue({
       fragmentIds: [],

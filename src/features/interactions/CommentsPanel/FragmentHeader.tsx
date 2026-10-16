@@ -52,10 +52,14 @@ export function FragmentHeader({
 }: FragmentHeaderProps) {
   const theme = useTheme();
   const [picking, setPicking] = useState(false);
-  const counts = useMemo(
-    () => merged(memberReactions, visitorReactions),
-    [memberReactions, visitorReactions],
-  );
+  const counts = useMemo(() => {
+    const all = merged(memberReactions, visitorReactions);
+
+    // Моя реакция в кластере может стоять вне сводки (в панели области — на
+    // фрагменте, который в область не вошёл): она всё равно видна отмеченной —
+    // именно её заменит тап по другой.
+    return mine && !all.some(([emoji]) => emoji === mine) ? [[mine, 0] as const, ...all] : all;
+  }, [memberReactions, mine, visitorReactions]);
   const set = menuReactionSet(
     {
       members: memberReactions,
@@ -100,9 +104,11 @@ export function FragmentHeader({
             ]}
           >
             <Text variant="small">{emoji}</Text>
-            <Text variant="small" color={mine === emoji ? 'primary' : 'textSecondary'}>
-              {count}
-            </Text>
+            {count > 0 ? (
+              <Text variant="small" color={mine === emoji ? 'primary' : 'textSecondary'}>
+                {count}
+              </Text>
+            ) : null}
           </Pressable>
         ))}
         <Pressable
