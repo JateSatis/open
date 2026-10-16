@@ -2316,6 +2316,14 @@ export type Database = {
         }
         Returns: string
       }
+      fragment_area_mine: {
+        Args: { area_end: number; area_start: number; target_message: string }
+        Returns: {
+          cluster_id: string
+          my_emoji: string
+          my_fragment_id: string
+        }[]
+      }
       fragment_area_summary: {
         Args: { area_end: number; area_start: number; target_message: string }
         Returns: {
@@ -2323,6 +2331,9 @@ export type Database = {
           comments_count: number
           fragment_ids: string[]
           member_reactions: Json
+          my_cluster_id: string
+          my_emoji: string
+          my_fragment_id: string
           people_count: number
           reactions_count: number
           visitor_reactions: Json
