@@ -11,6 +11,9 @@ import { useCommentsPanelTarget } from '@/features/interactions/comments/comment
 
 const NONE: FragmentCluster[] = [];
 
+/** Сколько кадров ждать раскладки текста, прежде чем остаться без подсветки. */
+const MEASURE_ATTEMPTS = 20;
+
 type Options = {
   rowKey: string | undefined;
   ref: { current: Text | null };
@@ -42,13 +45,26 @@ export function useClusterHighlight({ rowKey, ref, text, messageId, chatId, frag
     if (!active) return;
 
     let cancelled = false;
+    let frame: number | null = null;
+    let attempts = 0;
 
-    void measureText(ref.current).then((measured) => {
-      if (!cancelled && measured?.text === text) setGeometry(measured);
-    });
+    // Текст в режиме монтируется заново, и первый замер может прийти раньше
+    // его раскладки — тогда пробуем на следующих кадрах.
+    const measure = () => {
+      frame = null;
+      attempts += 1;
+      void measureText(ref.current).then((measured) => {
+        if (cancelled) return;
+        if (measured?.text === text && measured.lines.length > 0) setGeometry(measured);
+        else if (attempts < MEASURE_ATTEMPTS) frame = requestAnimationFrame(measure);
+      });
+    };
+
+    measure();
 
     return () => {
       cancelled = true;
+      if (frame !== null) cancelAnimationFrame(frame);
     };
   }, [active, ref, text]);
 
