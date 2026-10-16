@@ -154,6 +154,7 @@ declare
   k uuid;
   d1 uuid;
   d2 uuid;
+  dp uuid;
   dother uuid;
   s text;
   n int;
@@ -218,6 +219,16 @@ begin
     (select count(*) from public.fragment_cluster_decisions where message_id = m) = 2
       and d2 is distinct from d1 and d2 is not null
       and (select decisions_skipped from public.fragment_cluster_state where message_id = m) = 0,
+    s);
+
+  -- Периодический снимок при том же наборе: журнал пополнился, но кластеры
+  -- остаются на снимке, по которому набор показан, — клиент о новом не узнал бы.
+  update public.fragment_cluster_state set decisions_skipped = 19 where message_id = m;
+  s := pg_temp.recompute(m, jsonb_build_array(pg_temp.cl(m, k, 'другой уровень', 'уровень', array[fd])));
+  select decision_id into dp from public.fragment_cluster_state where message_id = m;
+  perform pg_temp.check('К4.2 раз в decisionEvery пересчётов — новый снимок, кластеры остаются на снимке показа',
+    (select count(*) from public.fragment_cluster_decisions where message_id = m) = 3
+      and dp is distinct from d2 and (select decision_id from public.fragment_clusters where id = k) = d2,
     s);
 
   s := pg_temp.recompute(other, '[]'::jsonb);
@@ -300,12 +311,19 @@ begin
     format('insert into public.fragment_cluster_events (user_id, message_id, kind) values (%L, %L, %L)', e, m, 'cluster_opened'),
     '42501');
 
-  -- Частота: не больше eventsPerMinute (300) событий человека в минуту.
+  n := public.record_fragment_cluster_events(pg_temp.batch(1, 'area_opened', m,
+    jsonb_build_object('range_start', 1e12, 'range_end', 2e12)));
+  perform pg_temp.check('К5.1 диапазон вне int обнуляется, пачка не падает', n = 1, n::text);
+
+  -- Частота: не больше eventsPerMinute (300) событий клиента в минуту. Сейчас
+  -- у E их 5 и ещё 3 серверных fragment_created — те в лимит не идут.
   for i in 1..5 loop
     perform public.record_fragment_cluster_events(pg_temp.batch(50, 'cluster_opened', m));
   end loop;
+  n := public.record_fragment_cluster_events(pg_temp.batch(45, 'cluster_opened', m));
+  perform pg_temp.check('К5.1 серверные события в лимит частоты не идут', n = 45, n::text);
   perform pg_temp.refused('К5.1 частота сверх лимита отклоняется',
-    format('select public.record_fragment_cluster_events(%L)', pg_temp.batch(50, 'cluster_opened', m)), '22023');
+    format('select public.record_fragment_cluster_events(%L)', pg_temp.batch(1, 'cluster_opened', m)), '22023');
 
   -- ===================================== Ретенция
   perform pg_temp.as_service();
@@ -315,7 +333,15 @@ begin
   perform pg_temp.check('ретенция: старые события удалены, показываемый снимок оставлен, прежний удалён',
     not exists (select 1 from public.fragment_cluster_events where message_id = m)
       and exists (select 1 from public.fragment_cluster_decisions where id = d2)
+      and exists (select 1 from public.fragment_cluster_decisions where id = dp)
       and not exists (select 1 from public.fragment_cluster_decisions where id = d1));
+
+  -- Погасший кластер снимок не держит.
+  update public.fragment_clusters set deleted_at = now() where id = k;
+  update public.fragment_cluster_state set decision_id = null where message_id = m;
+  perform public.fragment_cluster_history_cleanup();
+  perform pg_temp.check('ретенция: снимок погасшего кластера удаляется',
+    not exists (select 1 from public.fragment_cluster_decisions where id in (d2, dp)));
 end;
 $$;
 
