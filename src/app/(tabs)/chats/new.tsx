@@ -60,10 +60,11 @@ export default function NewChatScreen() {
   );
 
   /**
-   * Что лежит под экраном до низа окна — таб-бар. Клавиатура его перекрывает,
-   * поэтому низ поднимается на её высоту за вычетом таб-бара. Тот же приём,
-   * что в переписке: KeyboardAvoidingView на Android с edge-to-edge под
-   * нативным таб-баром кнопку не поднимает.
+   * Что лежит под экраном до низа окна (обычно ничего: панели вкладок на
+   * вложенных экранах нет). Клавиатура это перекрывает, поэтому низ
+   * поднимается на её высоту за вычетом этого. Тот же приём, что в
+   * переписке: KeyboardAvoidingView на Android с edge-to-edge кнопку не
+   * поднимает.
    */
   const measureBottomOffset = useCallback(() => {
     containerRef.current?.measureInWindow((_x, y, _width, height) =>

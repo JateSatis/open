@@ -25,6 +25,15 @@ export const Colors = {
     mediaControl: 'rgba(255, 255, 255, 0.14)',
     /** Затемнение фона под модальными окнами — одинаковое в обеих темах. */
     overlay: 'rgba(0, 0, 0, 0.5)',
+    /**
+     * Дымка под панелью вкладок, снизу вверх: у края — фон экрана
+     * (`tabBarScrim`), у значков — полупрозрачная (`tabBarScrimSoft`), над
+     * ними сходит на нет (`tabBarScrimClear` — тот же цвет, прозрачный).
+     * Содержимое видно под вкладками, а значки и подписи читаются.
+     */
+    tabBarScrim: 'rgba(255, 255, 255, 1)',
+    tabBarScrimSoft: 'rgba(255, 255, 255, 0.85)',
+    tabBarScrimClear: 'rgba(255, 255, 255, 0)',
     /** Непроигранные столбики волны голосового в чужом облачке. */
     waveformRest: 'rgba(96, 100, 108, 0.35)',
     /** То же в своём облачке, на `primary`. */
@@ -129,6 +138,9 @@ export const Colors = {
     textOnMediaSecondary: 'rgba(255, 255, 255, 0.6)',
     mediaControl: 'rgba(255, 255, 255, 0.14)',
     overlay: 'rgba(0, 0, 0, 0.5)',
+    tabBarScrim: 'rgba(0, 0, 0, 1)',
+    tabBarScrimSoft: 'rgba(0, 0, 0, 0.85)',
+    tabBarScrimClear: 'rgba(0, 0, 0, 0)',
     waveformRest: 'rgba(176, 180, 186, 0.35)',
     waveformRestOnPrimary: 'rgba(255, 255, 255, 0.45)',
     messageHighlight: 'rgba(60, 135, 247, 0.28)',

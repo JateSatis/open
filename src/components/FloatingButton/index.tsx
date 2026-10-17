@@ -14,6 +14,8 @@ export type FloatingButtonProps = {
   onPress: () => void;
   testID?: string;
   ref?: Ref<View>;
+  /** Что лежит у нижнего края под кнопкой — панель вкладок: кнопка встаёт над ней. */
+  bottomInset?: number;
 };
 
 /**
@@ -26,6 +28,7 @@ export function FloatingButton({
   onPress,
   testID,
   ref,
+  bottomInset = 0,
 }: FloatingButtonProps) {
   const theme = useTheme();
 
@@ -38,6 +41,7 @@ export function FloatingButton({
       onPress={onPress}
       style={({ pressed }) => [
         styles.button,
+        { bottom: bottomInset + Sizes.floatingButtonMargin },
         { backgroundColor: theme.backgroundElement, shadowColor: theme.shadow },
         pressed && { opacity: Opacity.pressed },
       ]}

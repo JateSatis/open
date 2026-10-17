@@ -1,6 +1,6 @@
 import type { Session as SupabaseSession } from '@supabase/supabase-js';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react-native';
-import { BackHandler, ScrollView, View } from 'react-native';
+import { BackHandler } from 'react-native';
 
 import ChatScreen from './[chatId]';
 
@@ -484,14 +484,12 @@ describe('comments panel', () => {
     expect(screen.getAllByText(/участник чата/)).toHaveLength(1);
   });
 
-  it('closes with the cross, the backdrop and the system back', async () => {
+  it('has no cross and closes with the backdrop and the system back', async () => {
     await renderChat();
 
     await openCommentsOf(3);
-    await fireEvent.press(screen.getAllByLabelText('Закрыть комментарии')[1]);
-    await waitFor(() => expect(screen.queryByTestId('comments-panel')).toBeNull());
-
-    await openCommentsOf(3);
+    // Закрыть можно только тапом над шитом: в шапке кнопки нет.
+    expect(screen.getAllByLabelText('Закрыть комментарии')).toHaveLength(1);
     await fireEvent.press(screen.getByTestId('comments-backdrop'));
     await waitFor(() => expect(screen.queryByTestId('comments-panel')).toBeNull());
 
@@ -583,32 +581,13 @@ describe('comments panel', () => {
     await waitFor(() => expect(rowKeys()).toEqual(['mine', 'c1']));
   });
 
-  it('lifts a copy of the message above the sheet and hides nothing else of the chat', async () => {
-    // Строка и окно переписки на экране — с настоящей рамкой, а не нулевой.
-    const measure = (callback: (...rect: number[]) => void) => callback(0, 300, 320, 60);
-    const spies = [View, ScrollView].map((type) =>
-      jest
-        .spyOn(type.prototype as { measureInWindow: typeof measure }, 'measureInWindow')
-        .mockImplementation(measure),
-    );
+  it('leaves the message where it is under the sheet, without a copy above it', async () => {
+    await renderChat();
+    await openCommentsOf(3);
+    await fireEvent(screen.getByTestId('comments-panel'), 'show');
 
-    try {
-      await renderChat();
-      await openCommentsOf(3);
-      await fireEvent(screen.getByTestId('comments-panel'), 'show');
-
-      const copy = await screen.findByTestId('comments-lifted-message');
-
-      expect(within(copy).getByText('текст m1')).toBeTruthy();
-      // Копия неинтерактивна: круг комментариев в ней только показывает число.
-      expect(within(copy).getByTestId('comments-circle').props.accessibilityState).toEqual(
-        expect.objectContaining({ disabled: true }),
-      );
-      // Строка в переписке на месте — только прозрачная.
-      expect(screen.getByTestId('message-row-m1')).toBeTruthy();
-    } finally {
-      spies.forEach((spy) => spy.mockRestore());
-    }
+    expect(screen.getByTestId('message-row-m1')).toBeTruthy();
+    expect(screen.getAllByText('текст m1')).toHaveLength(1);
   });
 
   it('says the message is deleted and stops taking new comments', async () => {
@@ -908,8 +887,8 @@ describe('threads', () => {
     await fireEvent.press(await screen.findByRole('menuitem', { name: 'Ответить' }));
     expect(await screen.findByText('В ответ Олег')).toBeTruthy();
 
-    // Крестиком, прямо из треда: «назад» сначала вышел бы из треда.
-    await fireEvent.press(screen.getAllByLabelText('Закрыть комментарии')[1]);
+    // Тапом над шитом, прямо из треда: «назад» сначала вышел бы из треда.
+    await fireEvent.press(screen.getByTestId('comments-backdrop'));
     await waitFor(() => expect(screen.queryByTestId('comments-panel')).toBeNull());
     await openCommentsOf(3);
     await screen.findByText('корень');

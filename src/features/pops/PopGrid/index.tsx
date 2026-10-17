@@ -2,6 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { FlashList, type FlashListProps, type ListRenderItem } from '@shopify/flash-list';
 import { useCallback, useMemo, type ComponentType, type ReactElement } from 'react';
 import { ActivityIndicator, PixelRatio, useWindowDimensions, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { popGridGeometry, toPopRows, type PopCell, type PopRow } from './geometry';
 import { PopGridRow, type PopGridActions } from './PopGridRow';
@@ -81,6 +82,7 @@ export function PopGrid({
   const queryClient = useQueryClient();
   const userId = useCurrentUserId();
   const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const geometry = useMemo(() => popGridGeometry(width, PixelRatio.get()), [width]);
   const pops = usePops(channelId);
   const pending = usePendingPops(channelId);
@@ -152,9 +154,10 @@ export function PopGrid({
   const onEndReached = useCallback(() => {
     if (hasNextPage && !isFetchingNextPage) void fetchNextPage();
   }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
+  // Сетка доходит до края окна: последний ряд докручивается над полосой навигации.
   const contentContainerStyle = useMemo(
-    () => ({ minHeight: minContentHeight }),
-    [minContentHeight],
+    () => ({ minHeight: minContentHeight, paddingBottom: insets.bottom }),
+    [insets.bottom, minContentHeight],
   );
 
   const loadError = describeLoadError(pops.error, 'Не удалось загрузить попсы');

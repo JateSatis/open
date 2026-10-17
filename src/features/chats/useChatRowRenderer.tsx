@@ -84,7 +84,7 @@ export function useChatRowRenderer({
     [retry],
   );
 
-  /** Содержимое строки облачка — и в переписке, и копией над шитом комментариев. */
+  /** Содержимое строки облачка; у последнего в островке — отступ снизу. */
   const bubbleContent = useCallback(
     (row: BubbleRow, interactive: boolean) =>
       row.type === 'island-item' ? (
@@ -182,7 +182,7 @@ export function useChatRowRenderer({
     ],
   );
 
-  return { renderItem, islandHeader, bubbleContent };
+  return { renderItem, islandHeader };
 }
 
 const styles = StyleSheet.create({

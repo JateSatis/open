@@ -54,16 +54,12 @@ export type CommentsPanelTarget = {
    */
   focusCommentId?: string;
   /**
-   * Строка переписки, у которой открыли: её сообщение поднимается над шитом.
-   * Ключ строки, а не id сообщения: в островке одно сообщение бывает дважды.
+   * Облачко переписки, где выделяли кусок текста (боковая панель): туда ведёт
+   * цитата над комментарием. Ключ строки, а не id сообщения: в островке одно
+   * сообщение бывает дважды.
    */
   rowKey?: string;
-  /** Строка ещё едет (прокрутка к ней) — поднимать, когда встанет. */
-  settle?: boolean;
 };
-
-/** Откуда поднимать сообщение над шитом — см. `CommentsPanelTarget`. */
-export type CommentsLiftFrom = { rowKey: string; settle?: boolean };
 
 /** Окно треда: корень и как оно появилось — въехало справа или сразу на месте. */
 export type OpenThreadState = { rootId: string; instant: boolean };
@@ -86,7 +82,6 @@ export function openComments(
   chatId?: string,
   amMember = false,
   focusCommentId?: string,
-  from?: CommentsLiftFrom,
 ) {
   usePanelStore.setState({
     target: {
@@ -94,7 +89,6 @@ export function openComments(
       chatId,
       amMember,
       focusCommentId,
-      ...from,
     },
     openThread: null,
   });
@@ -173,9 +167,8 @@ export function setOpenThread(rootId: string | null, instant = false) {
 
 /**
  * Круг комментариев сбоку от облачка переписки: число и открытие панели.
- * `rowKey` — строка облачка: её сообщение поднимется над шитом. Нет — нет и
- * круга (неотправленное, системное). У копии облачка круг только показывает
- * число.
+ * У неотправленного и системного круга нет. У копии облачка круг только
+ * показывает число.
  *
  * `amMember` — я участник чата, где живёт сообщение (у облачка островка — чата
  * оригинала). Участнику круга нет, пока нет комментариев: главное — сама
@@ -187,15 +180,12 @@ export function commentsEntry(
   chatId: string,
   interactive: boolean,
   amMember: boolean,
-  rowKey?: string,
 ): { count: number; onPress?: () => void } | undefined {
   if (!canCommentOn(message)) return undefined;
   if (amMember && message.commentsCount === 0) return undefined;
 
   return {
     count: message.commentsCount,
-    onPress: interactive
-      ? () => openComments(message.id, chatId, amMember, undefined, rowKey ? { rowKey } : undefined)
-      : undefined,
+    onPress: interactive ? () => openComments(message.id, chatId, amMember) : undefined,
   };
 }

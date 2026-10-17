@@ -3,6 +3,7 @@ import { StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/Button';
 import { Screen } from '@/components/Screen';
+import { TabBar, useTabBarHeight } from '@/components/TabBar';
 import { Text } from '@/components/Text';
 import { ProfileLoader } from '@/features/profile/ProfileLoader';
 import { ProfileView } from '@/features/profile/ProfileView';
@@ -24,9 +25,16 @@ const styles = StyleSheet.create({
 export default function MyProfileScreen() {
   const { data: profile, isPending, error, refetch } = useMyProfile();
   const theme = useTheme();
+  const tabBarHeight = useTabBarHeight();
 
   return (
-    <Screen scrollable contentContainerStyle={styles.content}>
+    // Профиль листается под панелью вкладок до самого низа экрана.
+    <Screen
+      scrollable
+      edges={['top']}
+      contentContainerStyle={[styles.content, { paddingBottom: tabBarHeight + Spacing.three }]}
+      overlay={<TabBar active="profile" />}
+    >
       <ProfileLoader isPending={isPending} error={error} onRetry={() => refetch()}>
         {profile ? (
           <>

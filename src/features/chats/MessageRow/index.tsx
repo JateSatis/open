@@ -20,7 +20,6 @@ import type { RowPoint } from '@/features/chats/fragments/fragmentSelection';
 import { useSelectionHandles } from '@/features/chats/fragments/useSelectionHandles';
 import type { MenuAnchor } from '@/features/chats/MessageContextMenu';
 import { RowRegistryContext } from '@/features/chats/rowRegistry';
-import { liftedRowKey } from '@/features/interactions/comments/commentsLift';
 import { useScreenReaderEnabled } from '@/hooks/use-screen-reader-enabled';
 import { useTheme } from '@/hooks/use-theme';
 
@@ -107,14 +106,6 @@ export function MessageRow({
 
   // Шит комментариев меряет строку снаружи списка — по ключу.
   useEffect(() => registry?.register(messageId, contentRef), [messageId, registry]);
-
-  // Копия строки над шитом комментариев: сама строка пуста, пока копия на
-  // экране. Не удаляется — иначе переписка сдвинулась бы. Под меню строка
-  // не прячется: копия меню полупрозрачна и лежит прямо поверх неё.
-  const hiddenStyle = useAnimatedStyle(
-    () => ({ opacity: liftedRowKey.value === messageId ? 0 : 1 }),
-    [messageId],
-  );
 
   useEffect(() => {
     if (highlightKey === null) return;
@@ -286,7 +277,7 @@ export function MessageRow({
                   просмотрщик, не запускает голосовое и не ведёт в профиль. */}
               <Animated.View
                 pointerEvents={selectionMode ? 'none' : 'auto'}
-                style={[hiddenStyle, swipe.contentStyle]}
+                style={swipe.contentStyle}
               >
                 {/* Полоса реакций, прокручиваемая вбок, забирает касание у свайпа. */}
                 <HorizontalGestureScope gesture={swipe.gesture}>{children}</HorizontalGestureScope>

@@ -57,8 +57,8 @@ export function NewChannelForm({ onCreated }: NewChannelFormProps) {
   const availability = useUsernameAvailability(username, { kind: 'channel' });
   const create = useCreateChannel(userId, onCreated);
 
-  // Что лежит под формой до низа окна — таб-бар: клавиатура поднимает низ на
-  // свою высоту за его вычетом, как на экране нового чата.
+  // Что лежит под формой до низа окна: клавиатура поднимает низ на свою
+  // высоту за его вычетом, как на экране нового чата.
   const measureBottomOffset = useCallback(() => {
     containerRef.current?.measureInWindow((_x, y, _width, height) =>
       setBottomOffset(Math.max(0, windowHeight - (y + height))),

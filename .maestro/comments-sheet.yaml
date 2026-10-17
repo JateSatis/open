@@ -1,5 +1,5 @@
 appId: com.openger.app
-name: Шит комментариев из меню «Комментировать» — сообщение над шитом, закрытие свайпом и тапом по сообщению
+name: Шит комментариев из меню «Комментировать» — сообщение остаётся в переписке, закрытие свайпом и тапом над шитом
 tags:
   - smoke
   - comments
@@ -16,8 +16,8 @@ env:
 - tapOn: "Комментировать"
 - assertVisible:
     id: "comments-panel"
-# Сообщение не внутри шита, а поднято над ним из переписки.
-- assertVisible:
+# Сообщение не поднимается над шитом: копии нет.
+- assertNotVisible:
     id: "comments-lifted-message"
 - swipe:
     from:
@@ -25,17 +25,15 @@ env:
     direction: DOWN
 - assertNotVisible:
     id: "comments-panel"
-# Участник: у сообщения без комментариев круга нет — первый пишут из меню.
 - longPressOn:
     id: "message-time"
     index: 0
 - tapOn: "Комментировать"
 - assertVisible:
-    id: "comments-lifted-message"
-# Тап по поднятому сообщению (оно над шитом, верх шита — на четверти
-# экрана) закрывает шит, как «назад». Не по центру элемента: у высокого
-# сообщения центр под шитом.
+    id: "comments-panel"
+# Тап по затемнению над шитом (верх шита — на четверти экрана) закрывает
+# его, как «назад».
 - tapOn:
-    point: "50%,20%"
+    point: "50%,15%"
 - assertNotVisible:
     id: "comments-panel"

@@ -12,7 +12,7 @@ import {
   type NativeSyntheticEvent,
   type TextInput,
 } from 'react-native';
-import Animated, { useAnimatedStyle } from 'react-native-reanimated';
+import Animated from 'react-native-reanimated';
 
 import { styles } from './styles';
 
@@ -70,7 +70,7 @@ import {
 } from '@/features/chats/chatDisplay';
 import { mosaicBounds } from '@/features/chats/lib/mosaicLayout';
 import { bubbleAsideWidth } from '@/features/chats/MessageBubble/layout';
-import { measureInWindow, RowRegistryContext } from '@/features/chats/rowRegistry';
+import { createRowRegistry, measureInWindow, RowRegistryContext } from '@/features/chats/rowRegistry';
 import { useChatBubbles } from '@/features/chats/useChatBubbles';
 import { useChatKeyboardInset } from '@/features/chats/useChatKeyboardInset';
 import { useChatRowRenderer } from '@/features/chats/useChatRowRenderer';
@@ -85,7 +85,6 @@ import { useFragmentJump } from '@/features/chats/fragments/useFragmentJump';
 import { useFragmentMode } from '@/features/chats/fragments/useFragmentMode';
 import { useComposerDraft } from '@/features/chats/useComposerDraft';
 import { chatQueryKey, useChat } from '@/features/chats/useChat';
-import { useCommentsLiftHost } from '@/features/chats/useCommentsLiftHost';
 import { useChatMessages } from '@/features/chats/useChatMessages';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
 import { useJumpToMessage } from '@/features/chats/useJumpToMessage';
@@ -114,7 +113,6 @@ import {
 } from '@/features/interactions/CommentsPanel';
 import { resetScrolledRows } from '@/features/interactions/MessageReactions';
 import { menuReactionSet } from '@/features/interactions/reactionState';
-import { chatFade } from '@/features/interactions/comments/commentsLift';
 import { useReactToMessage } from '@/features/interactions/useReactToMessage';
 import { CallButton } from '@/features/streams/CallButton';
 import { ChatCallBar } from '@/features/streams/ChatCallBar';
@@ -258,18 +256,11 @@ export function ChatConversation({
   }, [isFocused]);
 
   // Пришли к комментарию (тап по пересланному): переписка прокручивается к
-  // сообщению, под которым он оставлен, и оно поднимается над шитом с этого
-  // места. Удалённого или не найденного нет — только шит, и это не ошибка.
+  // сообщению, под которым он оставлен, и над ней открывается шит. Удалённого
+  // или не найденного нет — только шит, и это не ошибка.
   const focusComment = useCallback(
     (focus: CommentFocus) => {
-      const open = (rowKey?: string) =>
-        openComments(
-          focus.messageId,
-          chatId,
-          isMember,
-          focus.commentId,
-          rowKey ? { rowKey, settle: true } : undefined,
-        );
+      const open = () => openComments(focus.messageId, chatId, isMember, focus.commentId);
       const { target } = focus;
 
       if (!target) {
@@ -277,8 +268,8 @@ export function ChatConversation({
         return;
       }
 
-      void jumpTo(target.key, target.createdAt).then((found) => {
-        if (focusedRef.current) open(found ? target.key : undefined);
+      void jumpTo(target.key, target.createdAt).then(() => {
+        if (focusedRef.current) open();
       });
     },
     [chatId, isMember, jumpTo],
@@ -492,7 +483,7 @@ export function ChatConversation({
 
       const home = commentsHomeOf(row, chatId, isMember);
 
-      openComments(message.id, home.chatId, home.amMember, undefined, { rowKey: row.key });
+      openComments(message.id, home.chatId, home.amMember);
     },
     [chatId, isMember],
   );
@@ -583,6 +574,7 @@ export function ChatConversation({
     [openComment],
   );
 
+  const ownDirect = chat?.kind === 'direct' && isMember;
   const { bubbleFor, audienceFor, reactToComment } = useChatBubbles({
     chatId,
     currentUserId,
@@ -593,7 +585,10 @@ export function ChatConversation({
     openPerson,
     navigation,
     reactions,
-    showAvatars: chat?.kind !== 'direct' && !isPosts,
+    // Участнику личного диалога собеседник известен — ни аватаров, ни имён.
+    // Посторонний видит диалог как группу: у каждого облачка — кто это.
+    showAvatars: !isPosts && !ownDirect,
+    showAuthors: !ownDirect,
     openForwardedComment,
     postAuthor: channel?.title ?? null,
   });
@@ -607,7 +602,7 @@ export function ChatConversation({
     [queryClient],
   );
 
-  const { renderItem, islandHeader, bubbleContent } = useChatRowRenderer({
+  const { renderItem, islandHeader } = useChatRowRenderer({
     currentUserId,
     isMember,
     isSelecting,
@@ -626,14 +621,15 @@ export function ChatConversation({
     hostName: authorName,
   });
 
-  const commentsLift = useCommentsLiftHost(listRef, rows, bubbleContent);
+  // Строки на экране — для засчитанных показов: меряются снаружи списка по ключу.
+  const [rowRegistry] = useState(createRowRegistry);
   const views = useMessageViews({
     chatId,
     currentUserId,
     isFocused,
     rows,
     autoscrollThreshold: KEEP_READING_POSITION.autoscrollToTopThreshold,
-    measureRow: commentsLift.registry.measure,
+    measureRow: rowRegistry.measure,
     measureViewport: measureListFrame,
   });
 
@@ -662,9 +658,6 @@ export function ChatConversation({
     },
     [viewsOnScroll],
   );
-
-  // Пока открыт шит комментариев, переписка под ним растворена.
-  const fadeStyle = useAnimatedStyle(() => ({ opacity: chatFade.value }));
 
   const { toggle: toggleReaction } = reactions;
   const menuRow = menu.target?.item ?? null;
@@ -897,8 +890,8 @@ export function ChatConversation({
             <ActivityIndicator accessibilityLabel="Загрузка переписки" />
           </View>
         ) : (
-          <Animated.View ref={listFrameRef} style={[styles.flex, fadeStyle]}>
-            <RowRegistryContext.Provider value={commentsLift.registry}>
+          <Animated.View ref={listFrameRef} style={styles.flex}>
+            <RowRegistryContext.Provider value={rowRegistry}>
               <FlatList
                 ref={listRef}
                 testID="messages-list"
@@ -1054,7 +1047,7 @@ export function ChatConversation({
         onClose={menu.close}
       />
 
-      <CommentsPanel onOpenPerson={openPerson} hostChatId={chatId} lift={commentsLift.host} />
+      <CommentsPanel onOpenPerson={openPerson} hostChatId={chatId} />
     </View>
   );
 }

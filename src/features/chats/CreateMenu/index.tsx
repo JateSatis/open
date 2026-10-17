@@ -21,6 +21,8 @@ type ButtonRect = { x: number; y: number; width: number; height: number };
 export type CreateMenuProps = {
   /** Пункт выбран; зовётся, когда меню уже закрылось. */
   onSelect: (item: CreateMenuItem) => void;
+  /** Высота панели вкладок под кнопкой. */
+  bottomInset?: number;
 };
 
 /**
@@ -28,7 +30,7 @@ export type CreateMenuProps = {
  * экрана — с тем же отступом, что у кнопки справа. Затемнение и анимации —
  * как у меню сообщения.
  */
-export function CreateMenu({ onSelect }: CreateMenuProps) {
+export function CreateMenu({ onSelect, bottomInset }: CreateMenuProps) {
   const buttonRef = useRef<View>(null);
   const [anchor, setAnchor] = useState<ButtonRect | null>(null);
   const { width: windowWidth } = useWindowDimensions();
@@ -61,6 +63,7 @@ export function CreateMenu({ onSelect }: CreateMenuProps) {
         icon={{ ios: 'plus', android: 'add' }}
         accessibilityLabel="Создать"
         onPress={open}
+        bottomInset={bottomInset}
       />
 
       <MenuModal

@@ -8,3 +8,4 @@ export * from './shadows';
 export * from './drawPalette';
 export * from './motion';
 export * from './infoPage';
+export * from './tabBar';

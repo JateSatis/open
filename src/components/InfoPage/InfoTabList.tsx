@@ -27,6 +27,7 @@ import Animated, {
   runOnJS,
   type AnimatedRef,
 } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useInfoScroll } from './scroll';
 
@@ -88,6 +89,7 @@ export type InfoTabListProps<T> = Omit<
 export function InfoTabList<T>({ tab, footer, ...props }: InfoTabListProps<T>) {
   const scroll = useInfoScroll();
   const { geometry, listTop, stickY, viewportHeight } = scroll;
+  const insets = useSafeAreaInsets();
   const listRef = useRef<FlashListRef<T>>(null);
   const animatedRef = useAnimatedRef<Animated.ScrollView>();
   const offset = useScrollOffset(animatedRef);
@@ -208,10 +210,11 @@ export function InfoTabList<T>({ tab, footer, ...props }: InfoTabListProps<T>) {
     () => (
       <View>
         {footer}
-        <View style={{ height: filler }} />
+        {/* Список доходит до края окна: низ — над полосой навигации. */}
+        <View style={{ height: insets.bottom + filler }} />
       </View>
     ),
-    [filler, footer],
+    [filler, footer, insets.bottom],
   );
   const onContentSizeChange = useCallback(
     (_width: number, height: number) => {

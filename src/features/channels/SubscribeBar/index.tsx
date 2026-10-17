@@ -1,5 +1,6 @@
 import { useRef } from 'react';
 import { View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { styles } from './styles';
 
@@ -9,6 +10,7 @@ import { useSubscriptionActions } from '@/features/channels/subscription';
 import { useChannelSubscription } from '@/features/channels/useChannelSubscription';
 import type { ChannelSection } from '@/features/channels/useMarkChannelSectionRead';
 import { useTheme } from '@/hooks/use-theme';
+import { Spacing } from '@/theme';
 
 export type SubscribeBarProps = {
   channelId: string;
@@ -23,6 +25,8 @@ export type SubscribeBarProps = {
  */
 export function SubscribeBar({ channelId, section }: SubscribeBarProps) {
   const theme = useTheme();
+  // Низ экрана канала — край окна: панели вкладок под ним нет.
+  const insets = useSafeAreaInsets();
   const { status } = useChannelSubscription(channelId);
   const { subscribe, setInChats } = useSubscriptionActions(channelId);
   // Второй быстрый тап, пока первый ещё идёт, — не второе действие и не второй вопрос.
@@ -69,7 +73,14 @@ export function SubscribeBar({ channelId, section }: SubscribeBarProps) {
   return (
     <View
       testID="channel-subscribe-bar"
-      style={[styles.container, { borderTopColor: theme.border, backgroundColor: theme.background }]}
+      style={[
+        styles.container,
+        {
+          borderTopColor: theme.border,
+          backgroundColor: theme.background,
+          paddingBottom: Math.max(insets.bottom, Spacing.two),
+        },
+      ]}
     >
       <Button
         testID="channel-subscribe-button"

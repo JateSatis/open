@@ -89,8 +89,8 @@ export function ChatInviteScreen({ chatId }: ChatInviteScreenProps) {
     }
   }, [chatId, queryClient, router, selected]);
 
-  // Клавиатура перекрывает таб-бар: низ поднимается на её высоту без него
-  // (тот же приём, что в «Новом чате»).
+  // Клавиатура перекрывает то, что под экраном: низ поднимается на её высоту
+  // без него (тот же приём, что в «Новом чате»).
   const measureBottomOffset = useCallback(() => {
     containerRef.current?.measureInWindow((_x, y, _width, height) =>
       setBottomOffset(Math.max(0, windowHeight - (y + height))),

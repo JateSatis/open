@@ -92,10 +92,15 @@ export type MessageBubbleProps = {
   /** Счётчик просмотров в правом нижнем углу. У комментариев его нет: их просмотры не считаются. */
   showViews?: boolean;
   /**
-   * Аватар слева от чужого облачка. В личном диалоге его нет — и места под
-   * него тоже: собеседник один, автора видно по имени над облачком.
+   * Аватар слева от чужого облачка. У участника личного диалога его нет — и
+   * места под него тоже: собеседник один.
    */
   showAvatar?: boolean;
+  /**
+   * Имя над чужим облачком. Участнику личного диалога оно ни к чему: кроме
+   * него, в переписке один человек. «Из <чат>» от этого не пропадает.
+   */
+  showAuthor?: boolean;
   /** Пост канала: облачко шире обычного (`Sizes.postBubbleShare`). */
   wide?: boolean;
   /**
@@ -133,6 +138,7 @@ export function MessageBubble({
   authorBadge,
   showViews = true,
   showAvatar = true,
+  showAuthor = true,
   wide = false,
   lead,
   selectableText,
@@ -203,12 +209,13 @@ export function MessageBubble({
   ) : null;
 
   // Своё облачко имени не показывает, но «из <чат>» у него остаётся.
-  const showAuthorLine = !isOwn || Boolean(sourceChat);
+  const namesAuthor = !isOwn && showAuthor;
+  const showAuthorLine = namesAuthor || Boolean(sourceChat);
 
-  // Без подписи, имени, цитаты и реакций у своего альбома облачка нет —
-  // только мозаика, и в её зазорах виден фон чата, как в Telegram. С первой
-  // реакцией облачко появляется: реакции стоят в нём, под мозаикой.
-  const bareMedia = !message.text && isOwn && !hasAnnotations && !sourceChat && !anyReactions;
+  // Без подписи, имени, цитаты и реакций у альбома облачка нет — только
+  // мозаика, и в её зазорах виден фон чата, как в Telegram. С первой реакцией
+  // облачко появляется: реакции стоят в нём, под мозаикой.
+  const bareMedia = !message.text && !showAuthorLine && !hasAnnotations && !anyReactions;
   const tone: ReactionsTone = isOwn ? 'own' : 'other';
 
   const reactionProps = {
@@ -272,14 +279,14 @@ export function MessageBubble({
 
   const authorLine = (style?: StyleProp<TextStyle>) => (
     <Text variant="smallBold" color={textColor} style={style}>
-      {isOwn ? null : (
+      {namesAuthor ? (
         <Text variant="smallBold" color={textColor} onPress={onAuthorPress} suppressHighlighting>
           {authorName}
         </Text>
-      )}
+      ) : null}
       {sourceChat ? (
         <Text variant="small" color={textColor}>
-          {isOwn ? 'из ' : ' из '}
+          {namesAuthor ? ' из ' : 'из '}
           <Text
             testID="message-source-chat"
             accessibilityRole={sourceChat.onPress ? 'link' : undefined}

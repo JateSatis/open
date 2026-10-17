@@ -113,7 +113,7 @@ export function PanelContent({
   const [composerHeight, setComposerHeight] = useState(0);
   const [keyboardInset, setKeyboardInset] = useState(0);
   const closed = about?.state === 'deleted' || about?.state === 'missing';
-  const { geometry, headerHeight, close, closeNow } = sheet;
+  const { geometry, headerHeight, close } = sheet;
   const sheetLayout = useRef({ headerHeight: 0, visibleHeight: 0 });
   const listWindowRef = useRef<View>(null);
   // Видимая часть списка: под заголовком шита и над полем ввода. Копия
@@ -183,8 +183,8 @@ export function PanelContent({
   }, [focusInput]);
 
   // Пришли к комментарию — он вспыхивает, когда встал в список: ответ — в
-  // окне своего треда, верхнеуровневый — в основном. Виден и так — список не
-  // двигается: над шитом в переписке стоит сообщение этого комментария.
+  // окне своего треда, верхнеуровневый — в основном. Список к нему не
+  // двигается: он и так наверху.
   const { focusReady } = data;
 
   useEffect(() => {
@@ -427,7 +427,6 @@ export function PanelContent({
                   ? 'Ответы'
                   : (header?.title ?? (count > 0 ? commentsCountLabel(count) : 'Комментарии'))
               }
-              onClose={closeNow}
               onBack={inThread ? exitThread : undefined}
               // Своя шапка — у боковой панели: её не тянут вниз.
               grabber={!header}

@@ -9,22 +9,11 @@ export const styles = StyleSheet.create({
   fill: {
     ...StyleSheet.absoluteFill,
   },
-  /** Окно переписки под шитом: копия сообщения не вылезает на шапку чата и поле ввода. */
-  liftClip: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    overflow: 'hidden',
-  },
-  liftedCopy: {
-    position: 'absolute',
-    top: 0,
-  },
   /**
    * Окно списка — сам шит, от его верха до низа окна. Верх скруглён и
    * обрезает содержимое: комментарии, ушедшие под шапку, не выглядывают из-за
-   * её скруглённых углов. Затемнения под шитом нет, и на фоне чата того же
-   * цвета край шита виден по тонкой рамке.
+   * её скруглённых углов. Край шита виден по тонкой рамке и на фоне того же
+   * цвета (под попсом затемнения нет).
    */
   listWindow: {
     position: 'absolute',
@@ -60,10 +49,11 @@ export const styles = StyleSheet.create({
     height: Sizes.panelHandleHeight,
     borderRadius: Radii.full,
   },
+  /** Высота — со стрелку треда: шапка не прыгает при входе в тред и выходе. */
   titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    minHeight: Spacing.four,
   },
   /** Строки списка — с полями по бокам, как переписка. */
   row: {

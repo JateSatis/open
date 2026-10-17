@@ -1,5 +1,5 @@
 import type { Session as SupabaseSession } from '@supabase/supabase-js';
-import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react-native';
 import { BackHandler } from 'react-native';
 
 import ChatsScreen from './index';
@@ -179,7 +179,10 @@ it('finds my own chat at once from the cache, before the server answers', async 
 
   await type('елкина');
 
-  expect(await screen.findByText('Чаты')).toBeTruthy();
+  // Заголовок блока выдачи, а не подпись вкладки.
+  expect(
+    await within(await screen.findByTestId('chats-search-results')).findByText('Чаты'),
+  ).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Анна Ёлкина' })).toBeTruthy();
 });
 
@@ -388,7 +391,7 @@ it('still shows my own chats offline when the query was already answered before'
   ]);
   await openSearch();
   await type('анна');
-  await screen.findByText('Чаты');
+  await within(await screen.findByTestId('chats-search-results')).findByText('Чаты');
 
   await act(async () => reportDeviceNetwork(false));
 

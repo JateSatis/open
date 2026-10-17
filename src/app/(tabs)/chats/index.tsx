@@ -4,6 +4,7 @@ import { ActivityIndicator, FlatList, RefreshControl, View } from 'react-native'
 
 import { Button } from '@/components/Button';
 import { Screen } from '@/components/Screen';
+import { TabBar, useTabBarHeight } from '@/components/TabBar';
 import { Text } from '@/components/Text';
 import { sectionToOpen } from '@/features/channels/sectionToOpen';
 import {
@@ -24,9 +25,6 @@ import { SearchPanel } from '@/features/search/SearchPanel';
 import { useSearchMode } from '@/features/search/useSearchMode';
 import { Sizes, Spacing } from '@/theme';
 
-/** Последняя строка списка встаёт над кнопкой «+», а не под неё. */
-const LIST_BOTTOM_INSET = Sizes.floatingButton + Sizes.floatingButtonMargin * 2;
-
 export default function ChatsScreen() {
   const router = useRouter();
   const currentUserId = useCurrentUserId();
@@ -36,6 +34,9 @@ export default function ChatsScreen() {
 
   const [rowMenu, setRowMenu] = useState<SubscriptionRowTarget | null>(null);
   const search = useSearchMode();
+  const tabBarHeight = useTabBarHeight();
+  // Последняя строка списка докручивается над кнопкой «+», а та стоит над вкладками.
+  const listBottomInset = tabBarHeight + Sizes.floatingButton + Sizes.floatingButtonMargin * 2;
 
   const openChat = useCallback(
     (chatId: string) => {
@@ -79,19 +80,24 @@ export default function ChatsScreen() {
 
   if (isLoading) {
     return (
-      <Screen>
+      <Screen edges={[]} overlay={<TabBar active="chats" />}>
         <ActivityIndicator accessibilityLabel="Загрузка чатов" />
       </Screen>
     );
   }
 
   return (
-    // Низ экрана — верх нативной панели вкладок: она сама отступает от
-    // системной навигации, и второй отступ поднял бы кнопку «+» выше, чем она
-    // отстоит от правого края.
+    // Экран доходит до низа: панель вкладок лежит поверх списка и сама
+    // отступает от системной навигации.
     <Screen
       edges={search.active ? ['top'] : []}
       contentContainerStyle={{ paddingHorizontal: Spacing.three, paddingVertical: 0 }}
+      // «+» — поверх панели: дымка над значками не заходит на кнопку.
+      overlay={
+        <>
+          <TabBar active="chats" />
+            </>
+      }
     >
       <SearchBar
         value={search.query}
@@ -111,9 +117,13 @@ export default function ChatsScreen() {
         <SearchPanel query={search.query} />
       ) : (
         <FlatList
+          // Список — в оставшееся под поиском место, не во весь экран: иначе
+          // он вытягивал экран за нижний край, и кнопка «+» уезжала туда же.
+          style={{ flex: 1 }}
           data={chats}
-          contentContainerStyle={{ paddingBottom: LIST_BOTTOM_INSET }}
+          contentContainerStyle={{ paddingBottom: listBottomInset }}
           keyExtractor={(chat) => chat.id}
+          showsVerticalScrollIndicator={false}
           refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={refreshAll} />}
           ListHeaderComponent={
             hasInvites ? (
@@ -146,7 +156,7 @@ export default function ChatsScreen() {
         />
       )}
 
-      {search.active ? null : <CreateMenu onSelect={onCreate} />}
+      {search.active ? null : <CreateMenu onSelect={onCreate} bottomInset={tabBarHeight} />}
 
       <SubscriptionRowMenu target={rowMenu} onClosed={closeRowMenu} />
     </Screen>

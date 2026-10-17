@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { styles } from './styles';
 
@@ -22,6 +23,8 @@ export type ForwardChatPickerProps = {
  * здесь нет — писать туда я не могу, и список их не отдаёт.
  */
 export function ForwardChatPicker({ onPick }: ForwardChatPickerProps) {
+  // Список доходит до края окна: панели вкладок под экраном нет.
+  const insets = useSafeAreaInsets();
   const currentUserId = useCurrentUserId();
   const { chats, isLoading, error } = useChats();
   const [query, setQuery] = useState('');
@@ -62,7 +65,7 @@ export function ForwardChatPicker({ onPick }: ForwardChatPickerProps) {
           data={found}
           keyExtractor={(chat) => chat.id}
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={styles.list}
+          contentContainerStyle={[styles.list, { paddingBottom: insets.bottom }]}
           renderItem={({ item }) => (
             <ChatListItem
               chat={item}

@@ -7,7 +7,9 @@ export const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.two,
-    paddingVertical: Spacing.three,
+    // Как у строки чата: под поиском «Заявки» встают на том же расстоянии,
+    // что без них первый чат.
+    paddingVertical: Spacing.two,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   title: {

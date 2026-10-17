@@ -34,11 +34,16 @@ type Options = {
   navigation: QuoteNavigation;
   reactions: ReactToMessage;
   /**
-   * Аватары у чужих облачков. В личном диалоге их нет вовсе — и у облачков
-   * островка тоже, даже если автор оригинала третий человек: его видно по
-   * строке имени, а ряд облачков не пляшет по ширине.
+   * Аватары у чужих облачков. У участника личного диалога их нет вовсе — и у
+   * облачков островка тоже, даже если автор оригинала третий человек: его
+   * видно по строке имени, а ряд облачков не пляшет по ширине.
    */
   showAvatars: boolean;
+  /**
+   * Имена над облачками собеседника. Нет у участника личного диалога; у
+   * облачков островка имя автора оригинала остаётся всегда.
+   */
+  showAuthors?: boolean;
   /** Тап по сниппету пересланного комментария — к нему в его ветке. */
   openForwardedComment: (comment: ForwardedComment) => void;
   /**
@@ -75,6 +80,7 @@ export function useChatBubbles({
   navigation,
   reactions,
   showAvatars,
+  showAuthors = true,
   openForwardedComment,
   postAuthor = null,
 }: Options): ChatBubbles {
@@ -171,6 +177,7 @@ export function useChatBubbles({
           reactionsLayout="merged"
           resolvePerson={resolvePerson}
           showAvatar={showAvatars}
+          showAuthor={showAuthors}
           lead={
             <CommentForwardLead
               forward={forward}
@@ -198,6 +205,7 @@ export function useChatBubbles({
       reactToComment,
       resolvePerson,
       retry,
+      showAuthors,
       showAvatars,
     ],
   );
@@ -231,10 +239,11 @@ export function useChatBubbles({
             interactive && canReactTo(item) ? (emoji) => toggle(item, emoji) : undefined
           }
           resolvePerson={resolvePerson}
-          comments={commentsEntry(item, chatId, interactive, isMember, rowKey)}
+          comments={commentsEntry(item, chatId, interactive, isMember)}
           commentsSlot
           showAvatar={showAvatars}
-          // Выделять можно только в самой строке, не в её копиях (меню, шит).
+          showAuthor={showAuthors}
+          // Выделять можно только в самой строке, не в её копии под меню.
           selectableText={
             interactive
               ? { rowKey, messageId: item.id, chatId: item.chatId, amMember: isMember }
@@ -256,6 +265,7 @@ export function useChatBubbles({
       postAuthor,
       resolvePerson,
       retry,
+      showAuthors,
       showAvatars,
       toggle,
     ],
@@ -301,7 +311,7 @@ export function useChatBubbles({
           }
           resolvePerson={resolvePerson}
           // Комментарии — к оригиналу: панель открывается на него, из его чата.
-          comments={commentsEntry(message, home.chatId, interactive, home.amMember, row.key)}
+          comments={commentsEntry(message, home.chatId, interactive, home.amMember)}
           commentsSlot
           showAvatar={showAvatars}
           // Фрагмент облачка островка — фрагмент оригинала, как и его реакции.
