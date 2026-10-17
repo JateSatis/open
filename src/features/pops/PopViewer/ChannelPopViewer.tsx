@@ -7,6 +7,8 @@ export type ChannelPopViewerProps = {
   startId: string;
   openComments?: boolean;
   focusCommentId?: string;
+  /** Откуда открыли — точка входа показа в журнале. */
+  entry?: string;
 };
 
 /**
@@ -17,5 +19,5 @@ export type ChannelPopViewerProps = {
 export function ChannelPopViewer({ channelId, startId, ...rest }: ChannelPopViewerProps) {
   const feed = usePopFeed(channelId, startId);
 
-  return <PopViewer feed={feed} startId={startId} channelLink="under" {...rest} />;
+  return <PopViewer feed={feed} startId={startId} channelLink="under" surface="channel" {...rest} />;
 }

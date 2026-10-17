@@ -10,6 +10,13 @@ export default function SearchPopViewerRoute() {
   const feed = useSearchPopFeed(q);
 
   return (
-    <PopViewer feed={feed} startId={start} channelLink="over" onActivePop={setLastSearchPop} />
+    <PopViewer
+      feed={feed}
+      startId={start}
+      channelLink="over"
+      surface="search"
+      entry="search_result"
+      onActivePop={setLastSearchPop}
+    />
   );
 }

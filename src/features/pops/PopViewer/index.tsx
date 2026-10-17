@@ -13,6 +13,7 @@ import { useAppActive } from './useAppActive';
 import { useCommentsChromeFade } from './useCommentsShrink';
 import type { OpenChannelMode } from './useOpenChannel';
 import { usePopComments } from './usePopComments';
+import { usePopJournal } from './usePopJournal';
 import { usePopFeedPaging, usePopViewCounting } from './usePopViewerEffects';
 
 import type { Pop } from '@/api/pops';
@@ -20,6 +21,7 @@ import { Text } from '@/components/Text';
 import { CommentsPanel } from '@/features/interactions/CommentsPanel';
 import { useCanPublishState } from '@/features/pops/queries';
 import { usePopCountersSync } from '@/features/pops/usePopCountersSync';
+import type { JournalSurface } from '@/features/recs/journal/journal';
 import { useTheme } from '@/hooks/use-theme';
 import { describeLoadError } from '@/lib/network';
 import { Sizes } from '@/theme';
@@ -38,6 +40,10 @@ export type PopViewerProps = {
   focusCommentId?: string;
   /** Активной стала другая страница. */
   onActivePop?: (pop: Pop) => void;
+  /** Где идёт показ — для журнала рекомендаций. */
+  surface?: JournalSurface;
+  /** Откуда открыли просмотр. */
+  entry?: string;
 };
 
 /**
@@ -57,6 +63,8 @@ export function PopViewer({
   openComments = false,
   focusCommentId,
   onActivePop,
+  surface = 'channel',
+  entry = 'other',
 }: PopViewerProps) {
   const theme = useTheme();
   const router = useRouter();
@@ -121,6 +129,7 @@ export function PopViewer({
     focused,
   );
   usePopFeedPaging(feed, activeIndex);
+  usePopJournal({ pops, activeIndex, focused, appActive, surface, entry });
 
   const onLayout = useCallback((event: LayoutChangeEvent) => {
     const { width, height } = event.nativeEvent.layout;
