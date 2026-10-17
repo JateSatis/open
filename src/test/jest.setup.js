@@ -158,3 +158,15 @@ jest.mock('@/api/fragmentClusterEvents', () => ({
   trackClusterEvent: jest.fn(),
   flushClusterEvents: jest.fn(() => Promise.resolve()),
 }));
+
+// Skia в jest не грузится (ESM и нативный модуль), а подсветка кластеров —
+// в дереве любого облачка. Холст в тестах пустой; файлы, которым нужно
+// больше, мокают Skia сами.
+jest.mock('@shopify/react-native-skia', () => ({
+  Canvas: () => null,
+  Path: () => null,
+  ImageShader: () => null,
+  BlendColor: () => null,
+  TextAlign: { Center: 2 },
+  Skia: { Path: { Make: () => ({}) }, Surface: { Make: () => null } },
+}));
