@@ -10,6 +10,11 @@ export function normalizeQuery(query: string): string {
   return query.trim().replace(/\s+/g, ' ').toLowerCase();
 }
 
+/** Не длиннее 200 символов — по code points: суррогатная пара не рвётся (база её не примет). */
+function clip(text: string): string {
+  return Array.from(text).slice(0, 200).join('');
+}
+
 /** Выдача по запросу пришла. Тот же запрос подряд — одно событие. */
 const lastQuery: Record<SearchScope, string> = { chats: '', feed: '' };
 
@@ -25,7 +30,7 @@ export function logSearchQuery(
   lastQuery[scope] = text;
   journal.log('search_query', {
     surface: 'search',
-    data: { scope, query: text.slice(0, 200), ...counts },
+    data: { scope, query: clip(text), ...counts },
   });
 }
 
@@ -42,7 +47,7 @@ export function logSearchResultOpened(
       kind: result.kind,
       section: result.section,
       position: result.position,
-      query: normalizeQuery(result.query).slice(0, 200),
+      query: clip(normalizeQuery(result.query)),
     },
   });
 }

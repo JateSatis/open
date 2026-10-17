@@ -65,7 +65,11 @@ afterEach(() => {
 describe('журнал рекомендаций', () => {
   it('копит события и отправляет пачкой через несколько секунд', async () => {
     const server = fakeServer();
-    const journal = createJournal({ storage: memoryStorage().storage, send: server.send, watchAppState: false });
+    const journal = createJournal({
+      storage: memoryStorage().storage,
+      send: server.send,
+      watchAppState: false,
+    });
 
     journal.setUser('u1');
     journal.setAppSession('s1');
@@ -78,12 +82,21 @@ describe('журнал рекомендаций', () => {
 
     expect(server.calls).toHaveLength(1);
     expect(server.calls[0].map((event) => event.kind)).toEqual(['search_query', 'screen_time']);
-    expect(server.calls[0][0]).toMatchObject({ user_id: 'u1', app_session_id: 's1', surface: 'search', v: 1 });
+    expect(server.calls[0][0]).toMatchObject({
+      user_id: 'u1',
+      app_session_id: 's1',
+      surface: 'search',
+      v: 1,
+    });
     expect(journal.queue.size()).toBe(0);
   });
 
   it('без человека ничего не пишет', () => {
-    const journal = createJournal({ storage: memoryStorage().storage, send: fakeServer().send, watchAppState: false });
+    const journal = createJournal({
+      storage: memoryStorage().storage,
+      send: fakeServer().send,
+      watchAppState: false,
+    });
 
     expect(journal.log('search_query', { data: { query: 'x' } })).toBeNull();
     expect(journal.queue.size()).toBe(0);
@@ -91,14 +104,25 @@ describe('журнал рекомендаций', () => {
 
   it('без сети копит, повторяет с паузой и отправляет всё без дублей, когда сеть вернулась', async () => {
     const server = fakeServer();
-    const journal = createJournal({ storage: memoryStorage().storage, send: server.send, watchAppState: false });
+    const journal = createJournal({
+      storage: memoryStorage().storage,
+      send: server.send,
+      watchAppState: false,
+    });
 
     journal.setUser('u1');
     server.setOffline(true);
 
     for (let i = 0; i < 3; i += 1) {
-      journal.log('impression_start', { impressionId: `i${i}`, subject: { type: 'pop', id: `p${i}` }, surface: 'channel' });
-      journal.log('impression_end', { impressionId: `i${i}`, data: { watch_ms: 1000, visible_ms: 1200, exit: 'swipe_next' } });
+      journal.log('impression_start', {
+        impressionId: `i${i}`,
+        subject: { type: 'pop', id: `p${i}` },
+        surface: 'channel',
+      });
+      journal.log('impression_end', {
+        impressionId: `i${i}`,
+        data: { watch_ms: 1000, visible_ms: 1200, exit: 'swipe_next' },
+      });
     }
 
     await jest.advanceTimersByTimeAsync(5000);
@@ -123,15 +147,70 @@ describe('журнал рекомендаций', () => {
   it('отклонённое сервером снимается из очереди и не шлётся вечно', async () => {
     jest.spyOn(console, 'warn').mockImplementation(() => undefined);
     const server = fakeServer();
-    const journal = createJournal({ storage: memoryStorage().storage, send: server.send, watchAppState: false });
+    const journal = createJournal({
+      storage: memoryStorage().storage,
+      send: server.send,
+      watchAppState: false,
+    });
 
     journal.setUser('u1');
-    journal.log('impression_end', { impressionId: 'i1', data: { watch_ms: -1, visible_ms: 0, exit: 'close' } });
+    journal.log('impression_end', {
+      impressionId: 'i1',
+      data: { watch_ms: -1, visible_ms: 0, exit: 'close' },
+    });
     await jest.advanceTimersByTimeAsync(5000);
 
     expect(journal.queue.size()).toBe(0);
     await jest.advanceTimersByTimeAsync(60_000);
     expect(server.calls).toHaveLength(1);
+  });
+
+  it('событие, которое база не может принять, не держит очередь: пачка делится, оно выбрасывается', async () => {
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    const delivered: string[] = [];
+    const send = jest.fn(async (events: JournalWireEvent[]): Promise<JournalSendResult> => {
+      if (events.some((event) => event.data.query === 'poison')) {
+        throw Object.assign(new Error('invalid input syntax for type json'), { code: '22P02' });
+      }
+
+      delivered.push(...events.map((event) => String(event.data.query)));
+
+      return { accepted: events.map((event) => event.id), rejected: [] };
+    });
+    const journal = createJournal({ storage: memoryStorage().storage, send, watchAppState: false });
+
+    journal.setUser('u1');
+    ['a', 'b', 'poison', 'c', 'd'].forEach((query) =>
+      journal.log('search_query', { data: { query } }),
+    );
+    await jest.advanceTimersByTimeAsync(5000);
+
+    expect(delivered.sort()).toEqual(['a', 'b', 'c', 'd']);
+    expect(journal.queue.size()).toBe(0);
+  });
+
+  it('сеть вернулась — накопленное уходит сразу, не дожидаясь паузы повтора', async () => {
+    const server = fakeServer();
+    const journal = createJournal({
+      storage: memoryStorage().storage,
+      send: server.send,
+      watchAppState: false,
+    });
+
+    journal.setUser('u1');
+    server.setOffline(true);
+    journal.log('search_query', { data: { query: 'x' } });
+    await jest.advanceTimersByTimeAsync(5000);
+    await jest.advanceTimersByTimeAsync(10_000);
+    await jest.advanceTimersByTimeAsync(20_000);
+    expect(server.calls).toHaveLength(3);
+
+    server.setOffline(false);
+    journal.kick();
+    await jest.advanceTimersByTimeAsync(0);
+
+    expect(server.stored.size).toBe(1);
   });
 
   it('переживает перезапуск: что не ушло, уходит после него', async () => {
@@ -141,8 +220,15 @@ describe('журнал рекомендаций', () => {
 
     offline.setOffline(true);
     first.setUser('u1');
-    first.log('impression_start', { impressionId: 'i1', subject: { type: 'pop', id: 'p1' }, surface: 'channel' });
-    first.log('impression_progress', { impressionId: 'i1', data: { watch_ms: 5000, visible_ms: 5000 } });
+    first.log('impression_start', {
+      impressionId: 'i1',
+      subject: { type: 'pop', id: 'p1' },
+      surface: 'channel',
+    });
+    first.log('impression_progress', {
+      impressionId: 'i1',
+      data: { watch_ms: 5000, visible_ms: 5000 },
+    });
     await first.persist();
 
     expect(JSON.parse(data['rec-journal-queue-v1'])).toHaveLength(2);
@@ -164,21 +250,34 @@ describe('журнал рекомендаций', () => {
 
   it('снимки одного показа схлопываются в очереди — уходит последний', async () => {
     const server = fakeServer();
-    const journal = createJournal({ storage: memoryStorage().storage, send: server.send, watchAppState: false });
+    const journal = createJournal({
+      storage: memoryStorage().storage,
+      send: server.send,
+      watchAppState: false,
+    });
 
     journal.setUser('u1');
     server.setOffline(true);
-    journal.log('impression_start', { impressionId: 'i1', subject: { type: 'pop', id: 'p1' }, surface: 'channel' });
+    journal.log('impression_start', {
+      impressionId: 'i1',
+      subject: { type: 'pop', id: 'p1' },
+      surface: 'channel',
+    });
 
     for (let watch = 1000; watch <= 5000; watch += 1000) {
-      journal.log('impression_progress', { impressionId: 'i1', data: { watch_ms: watch, visible_ms: watch } });
+      journal.log('impression_progress', {
+        impressionId: 'i1',
+        data: { watch_ms: watch, visible_ms: watch },
+      });
     }
 
     expect(journal.queue.size()).toBe(2);
     server.setOffline(false);
     await jest.advanceTimersByTimeAsync(5000);
 
-    const progress = [...server.stored.values()].filter((event) => event.kind === 'impression_progress');
+    const progress = [...server.stored.values()].filter(
+      (event) => event.kind === 'impression_progress',
+    );
 
     expect(progress).toHaveLength(1);
     expect(progress[0].data.watch_ms).toBe(5000);
@@ -186,7 +285,11 @@ describe('журнал рекомендаций', () => {
 
   it('события другого аккаунта не уходят от имени вошедшего', async () => {
     const server = fakeServer();
-    const journal = createJournal({ storage: memoryStorage().storage, send: server.send, watchAppState: false });
+    const journal = createJournal({
+      storage: memoryStorage().storage,
+      send: server.send,
+      watchAppState: false,
+    });
 
     journal.setUser('u1');
     server.setOffline(true);

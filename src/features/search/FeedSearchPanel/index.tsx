@@ -73,13 +73,19 @@ export function FeedSearchPanel({ query, onPickRecent }: FeedSearchPanelProps) {
 
   // Журнал: выдача по запросу пришла.
   useEffect(() => {
-    if (!results.isSearching) {
+    if (!results.isSearching && !results.notice) {
       logSearchQuery('feed', results.shownQuery, {
         channels: results.channels.length,
         pops: results.pops.length,
       });
     }
-  }, [results.channels.length, results.isSearching, results.pops.length, results.shownQuery]);
+  }, [
+    results.channels.length,
+    results.isSearching,
+    results.notice,
+    results.pops.length,
+    results.shownQuery,
+  ]);
 
   const remember = useCallback(() => {
     const text = query.trim();
@@ -97,12 +103,12 @@ export function FeedSearchPanel({ query, onPickRecent }: FeedSearchPanelProps) {
           kind: 'channel',
           section: 'channels',
           position: results.channels.findIndex((channel) => channel.id === entity.id),
-          query,
+          query: results.shownQuery,
         },
       );
       router.push({ pathname: '/channel/[channelId]', params: { channelId: entity.id } });
     },
-    [query, remember, results.channels, router],
+    [remember, results.channels, results.shownQuery, router],
   );
 
   const { shownQuery } = results;

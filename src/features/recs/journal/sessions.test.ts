@@ -1,4 +1,5 @@
 import {
+  announce,
   appCameForeground,
   appWentBackground,
   enterScreen,
@@ -113,7 +114,7 @@ describe('сессия чата', () => {
     startChatSession('chat-1', 'search', 'visitor', 0);
     chatVisibleMessages('chat-1', ['a', 'b'], 0);
     chatVisibleMessages('chat-1', ['b', 'c'], 2000);
-    endChatSession(5000);
+    endChatSession(undefined, 5000);
 
     const [session] = logged('chat_session');
 
@@ -204,6 +205,7 @@ describe('сессия приложения', () => {
 
   it('время на экранах, уход в фон и возврат: недолгий фон — та же сессия, долгий — новая', () => {
     startAppSession('cold', 0);
+    announce('u1', 0);
     enterScreen('chats', 'chats', 0);
     enterScreen('pops/[channelId]', null, 4000);
     appWentBackground(10_000);
@@ -222,6 +224,18 @@ describe('сессия приложения', () => {
     ]);
     expect(logged('app_background').map((e) => e.fields.data?.fg_ms)).toEqual([10_000, 10_000]);
     expect(logged('app_foreground').map((e) => e.fields.data?.bg_ms)).toEqual([10_000]);
+  });
+
+  it('вошёл другой человек — для него новая сессия', () => {
+    startAppSession('cold', 0);
+    announce('u1', 0);
+    announce('u1', 10);
+    announce('u2', 20);
+
+    expect(logged('app_session_start').map((e) => e.fields.data?.entry)).toEqual([
+      'cold',
+      'account',
+    ]);
   });
 
   it('имя экрана — по шаблону маршрута, без групп', () => {

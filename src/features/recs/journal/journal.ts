@@ -13,7 +13,21 @@ import { AppState } from 'react-native';
 import { createJournalQueue, type JournalQueue, type QueueStorage } from './queue';
 
 import type { JournalData, JournalSendResult, JournalWireEvent } from '@/api/recJournal';
+import { isNetworkError } from '@/lib/network';
 import { randomUuid } from '@/lib/uuid';
+
+/** Отказ, который пройдёт сам: нет сети, лимит частоты, сессия обновляется. */
+function isRetryable(error: unknown): boolean {
+  if (isNetworkError(error)) return true;
+
+  const { code, message } = (error ?? {}) as { code?: unknown; message?: unknown };
+
+  return (
+    code === '42501' ||
+    code === 'PGRST301' ||
+    (typeof message === 'string' && /too many events/.test(message))
+  );
+}
 
 /** Виды событий клиента — те же, что принимает `rec_record_events`. */
 export type JournalKind =
@@ -35,23 +49,10 @@ export type JournalKind =
   | 'screen_time';
 
 export type JournalSubjectType =
-  | 'pop'
-  | 'message'
-  | 'comment'
-  | 'fragment'
-  | 'channel'
-  | 'chat'
-  | 'profile';
+  'pop' | 'message' | 'comment' | 'fragment' | 'channel' | 'chat' | 'profile';
 
 export type JournalSurface =
-  | 'channel'
-  | 'search'
-  | 'feed'
-  | 'chat'
-  | 'comments'
-  | 'profile'
-  | 'app'
-  | 'other';
+  'channel' | 'search' | 'feed' | 'chat' | 'comments' | 'profile' | 'app' | 'other';
 
 export type JournalFields = {
   impressionId?: string;
@@ -82,6 +83,8 @@ export type Journal = {
   appSessionId: () => string | null;
   /** Ушли в фон — отправить и сохранить сейчас. */
   persist: () => Promise<void>;
+  /** Сеть вернулась или приложение снова на экране — не ждать паузы повтора. */
+  kick: () => void;
   queue: JournalQueue;
 };
 
@@ -125,6 +128,54 @@ export function createJournal({
     }, delay);
   };
 
+  /** Принятое и отклонённое сервером — из очереди; неназванное — повторим позже. */
+  const settle = (batch: JournalWireEvent[], result: JournalSendResult) => {
+    if (__DEV__ && result.rejected.length > 0) {
+      console.warn('rec_record_events rejected:', result.rejected);
+    }
+
+    const done = [...result.accepted, ...result.rejected.map((item) => item.id)];
+    const doneSet = new Set(done);
+
+    queue.ack(done);
+    queue.release(batch.map((event) => event.id).filter((id) => !doneSet.has(id)));
+
+    return done.length;
+  };
+
+  /**
+   * Отправить пачку. Сеть, лимит частоты, сессия — повторить позже. Иной отказ
+   * всей пачки значит, что её ломает одно событие (база не приняла его как
+   * json): пачка делится пополам, пока виноватое не останется одно — оно
+   * выбрасывается, остальное уходит. Иначе одно событие держало бы очередь.
+   */
+  async function deliver(batch: JournalWireEvent[]): Promise<'sent' | 'retry'> {
+    try {
+      settle(batch, await send(batch));
+      return 'sent';
+    } catch (error) {
+      if (isRetryable(error)) {
+        queue.release(batch.map((event) => event.id));
+        return 'retry';
+      }
+
+      if (batch.length === 1) {
+        if (__DEV__) console.warn('rec_record_events dropped an event:', batch[0].kind, error);
+        queue.ack([batch[0].id]);
+        return 'sent';
+      }
+
+      const half = Math.ceil(batch.length / 2);
+
+      if ((await deliver(batch.slice(0, half))) === 'retry') {
+        queue.release(batch.slice(half).map((event) => event.id));
+        return 'retry';
+      }
+
+      return deliver(batch.slice(half));
+    }
+  }
+
   async function flush(): Promise<void> {
     if (timer) {
       clearTimeout(timer);
@@ -143,12 +194,9 @@ export function createJournal({
 
         if (batch.length === 0) break;
 
-        let result: JournalSendResult;
+        const before = queue.size(userId);
 
-        try {
-          result = await send(batch);
-        } catch {
-          queue.release(batch.map((event) => event.id));
+        if ((await deliver(batch)) === 'retry') {
           failures += 1;
           schedule(Math.min(JOURNAL_FLUSH_MS * 2 ** failures, BACKOFF_MAX_MS));
           return;
@@ -156,18 +204,8 @@ export function createJournal({
 
         failures = 0;
 
-        if (__DEV__ && result.rejected.length > 0) {
-          console.warn('rec_record_events rejected:', result.rejected);
-        }
-
-        const done = [...result.accepted, ...result.rejected.map((item) => item.id)];
-        const doneSet = new Set(done);
-
-        queue.ack(done);
-        // Чего сервер не назвал ни принятым, ни отклонённым — повторим позже.
-        queue.release(batch.map((event) => event.id).filter((id) => !doneSet.has(id)));
-
-        if (done.length === 0) break;
+        // Сервер ничего не назвал — не крутиться на месте.
+        if (queue.size(userId) >= before) break;
       }
     } finally {
       sending = false;
@@ -228,6 +266,11 @@ export function createJournal({
     },
 
     appSessionId: () => appSession,
+
+    kick() {
+      failures = 0;
+      void flush();
+    },
 
     async persist() {
       await queue.save();

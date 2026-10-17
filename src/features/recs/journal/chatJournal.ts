@@ -6,6 +6,7 @@
 // чего он не знает.
 
 import { journal } from './journal';
+import { flushVoicePlayback } from './voiceJournal';
 
 import { randomUuid } from '@/lib/uuid';
 
@@ -25,6 +26,12 @@ type ChatSession = {
 const DWELL_MAX = 100;
 
 let chat: ChatSession | null = null;
+/**
+ * Что было на экране чата в последний раз. Вернулись на экран без прокрутки
+ * — список не скажет о видимом заново, новая сессия начинается с этого.
+ */
+const lastVisible = new Map<string, string[]>();
+const LAST_VISIBLE_CHATS = 20;
 
 export function chatSessionId(): string | null {
   return chat?.id ?? null;
@@ -38,14 +45,14 @@ export function startChatSession(
 ): void {
   if (chat?.chatId === chatId) return;
 
-  endChatSession(now);
+  endChatSession(undefined, now);
   chat = {
     id: randomUuid(),
     chatId,
     entry,
     role,
     startedAt: now,
-    visible: new Map(),
+    visible: new Map((lastVisible.get(chatId) ?? []).map((id) => [id, now])),
     dwell: new Map(),
   };
 }
@@ -66,6 +73,12 @@ function settle(session: ChatSession, id: string, now: number) {
 
 /** Что из сообщений сейчас на экране — целиком. */
 export function chatVisibleMessages(chatId: string, ids: string[], now = Date.now()): void {
+  lastVisible.delete(chatId);
+  lastVisible.set(chatId, ids);
+
+  if (lastVisible.size > LAST_VISIBLE_CHATS)
+    lastVisible.delete(lastVisible.keys().next().value as string);
+
   if (chat?.chatId !== chatId) return;
 
   const next = new Set(ids);
@@ -79,8 +92,11 @@ export function chatVisibleMessages(chatId: string, ids: string[], now = Date.no
   }
 }
 
-export function endChatSession(now = Date.now()): void {
-  if (!chat) return;
+/** Конец сессии чата. С `chatId` — только если идёт сессия этого чата: экран не закрывает чужую. */
+export function endChatSession(chatId?: string, now = Date.now()): void {
+  if (!chat || (chatId !== undefined && chat.chatId !== chatId)) return;
+
+  flushVoicePlayback(now);
 
   const session = chat;
 

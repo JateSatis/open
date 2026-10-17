@@ -19,7 +19,7 @@ import type { Pop } from '@/api/pops';
 import { usePendingReactions } from '@/features/interactions/pendingReactions';
 import { PopCover } from '@/features/pops/PopCover';
 import { withPendingPopReaction } from '@/features/pops/popReactions';
-import { currentPopImpression } from '@/features/recs/journal/popJournal';
+import { currentPopImpression, registerControlProbe } from '@/features/recs/journal/popJournal';
 import { useTheme } from '@/hooks/use-theme';
 import { Sizes } from '@/theme';
 
@@ -97,6 +97,15 @@ export const PopPage = memo(function PopPage({
   const openComments = useCallback(() => onOpenComments(pop), [onOpenComments, pop]);
 
   // Журнал показа: пауза тапом и 2× — воля человека, а не состояние плеера.
+  // Показ, начавшийся на уже стоящем на паузе видео, спросит их сам.
+  const controlsRef = useRef({ paused, fast });
+
+  useEffect(() => {
+    controlsRef.current = { paused, fast };
+  }, [fast, paused]);
+
+  useEffect(() => registerControlProbe(pop.id, () => controlsRef.current), [pop.id]);
+
   useEffect(() => {
     if (active) currentPopImpression(pop.id)?.setPaused(paused, 'tap');
   }, [active, paused, pop.id]);

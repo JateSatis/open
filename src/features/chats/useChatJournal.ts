@@ -22,12 +22,12 @@ export function useChatJournal(chatId: string, live: boolean, role: ChatRole) {
 
   useEffect(() => {
     if (running) startChatSession(chatId, entry, role);
-    else endChatSession();
+    else endChatSession(chatId);
     // Роль догоняет отдельно: смена роли — не новая сессия.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatId, running]);
 
   useEffect(() => updateChatRole(chatId, role), [chatId, role]);
 
-  useEffect(() => () => endChatSession(), []);
+  useEffect(() => () => endChatSession(chatId), [chatId]);
 }

@@ -90,17 +90,25 @@ export function SearchPanel({ query }: { query: string }) {
   );
 
   // Журнал: выдача по запросу пришла.
-  const { isSearching } = results;
+  const { isSearching, notice } = results;
 
   useEffect(() => {
-    if (!isSearching) {
+    // Выдачи нет (нет сети, сбой) — и запроса в журнале нет: нули были бы неправдой.
+    if (!isSearching && !notice) {
       logSearchQuery('chats', query, {
         mine: results.mine.length,
         global: results.global.length,
         messages: results.messages.length,
       });
     }
-  }, [isSearching, query, results.global.length, results.messages.length, results.mine.length]);
+  }, [
+    isSearching,
+    notice,
+    query,
+    results.global.length,
+    results.messages.length,
+    results.mine.length,
+  ]);
 
   const openEntity = useCallback(
     (entity: SearchEntity) => open({ type: 'entity', entity }),

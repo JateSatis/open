@@ -160,7 +160,8 @@ export function createPopImpression({
     pauseMs += ms;
     pauseReasons[pauseReason] = (pauseReasons[pauseReason] ?? 0) + ms;
 
-    if (pauseList.length < LIST_MAX) pauseList.push({ at: Math.round(pauseAt), ms, reason: pauseReason });
+    if (pauseList.length < LIST_MAX)
+      pauseList.push({ at: Math.round(pauseAt), ms, reason: pauseReason });
 
     pauseSince = null;
   };
@@ -182,9 +183,10 @@ export function createPopImpression({
       loops,
       pauses: pausesCount,
       pause_ms: pauseMs + openPause,
-      pause_reasons: pauseSince !== null
-        ? { ...pauseReasons, [pauseReason]: (pauseReasons[pauseReason] ?? 0) + openPause }
-        : { ...pauseReasons },
+      pause_reasons:
+        pauseSince !== null
+          ? { ...pauseReasons, [pauseReason]: (pauseReasons[pauseReason] ?? 0) + openPause }
+          : { ...pauseReasons },
       pause_list: pauseList,
       seeks,
       seeks_back: seeksBack,
@@ -205,7 +207,6 @@ export function createPopImpression({
       route_changes: routeChanges,
     };
   };
-
 
   return {
     id,
@@ -352,7 +353,8 @@ export function createPopImpression({
         volumeStart = next.volume;
       } else {
         if (next.volume !== audio.volume || next.muted !== audio.muted) {
-          if (volumeChanges.length < LIST_MAX) volumeChanges.push({ t, v: next.volume, m: next.muted });
+          if (volumeChanges.length < LIST_MAX)
+            volumeChanges.push({ t, v: next.volume, m: next.muted });
         }
 
         if (next.route !== audio.route && routeChanges.length < LIST_MAX) {

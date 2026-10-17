@@ -30,6 +30,19 @@ type Current = {
 
 let current: Current | null = null;
 const probes = new Map<string, PlayerProbe>();
+/** Пауза и 2× страницы попа — показ, начавшийся на уже стоящем видео, узнаёт о них. */
+const controlProbes = new Map<string, () => { paused: boolean; fast: boolean }>();
+
+export function registerControlProbe(
+  popId: string,
+  probe: () => { paused: boolean; fast: boolean },
+): () => void {
+  controlProbes.set(popId, probe);
+
+  return () => {
+    if (controlProbes.get(popId) === probe) controlProbes.delete(popId);
+  };
+}
 /** Куда уходит человек — узнаём раньше, чем экран потеряет фокус. */
 let pendingExit: PopExit | null = null;
 
@@ -132,12 +145,20 @@ export function beginPopImpression(start: PopImpressionStart): PopImpression {
 
   if (probe) applyProbe(impression, probe);
 
+  const controls = controlProbes.get(start.popId)?.();
+
+  if (controls?.paused) impression.setPaused(true, 'tap');
+  if (controls?.fast) impression.setRate(2);
+
   return impression;
 }
 
-/** Конец текущего показа. Уже кончился — ничего. */
-export function endPopImpression(exit: PopExit): void {
-  if (!current) return;
+/**
+ * Конец показа. С `impressionId` — только если идёт этот показ: просмотр,
+ * ушедший в фон под другим просмотром, не закрывает чужой.
+ */
+export function endPopImpression(exit: PopExit, impressionId?: string): void {
+  if (!current || (impressionId !== undefined && current.impression.id !== impressionId)) return;
 
   const { impression, progressTimer, stopAudio } = current;
 

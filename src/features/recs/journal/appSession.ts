@@ -7,19 +7,22 @@
 
 import { deviceContext } from './device';
 import { journal } from './journal';
+import { flushVoicePlayback } from './voiceJournal';
 
 import { randomUuid } from '@/lib/uuid';
 
 /** Дольше в фоне — по возвращении новая сессия. */
 export const SESSION_GAP_MS = 5 * 60_000;
 
-export type SessionEntry = 'cold' | 'resume' | 'link' | 'push';
+export type SessionEntry = 'cold' | 'resume' | 'link' | 'push' | 'account';
 
 type Screen = { screen: string; tab: string | null; since: number };
 
 let sessionId: string | null = null;
 let entry: SessionEntry = 'cold';
 let announced = false;
+/** От чьего имени объявлена сессия. Другой человек — другая сессия. */
+let announcedFor: string | null = null;
 let foregroundSince = Date.now();
 let backgroundSince: number | null = null;
 let screen: Screen | null = null;
@@ -30,15 +33,28 @@ function begin(next: SessionEntry, now: number) {
   announced = false;
   foregroundSince = now;
   journal.setAppSession(sessionId);
-  announce();
+
+  if (announcedFor) announce(announcedFor, now);
 }
 
-/** Начало сессии уходит, когда известен человек: до входа писать не от кого. */
-export function announce(): void {
-  if (!sessionId || announced) return;
+/**
+ * Начало сессии уходит, когда известен человек: до входа писать не от кого.
+ * Вошёл другой человек — для него новая сессия.
+ */
+export function announce(userId: string, now = Date.now()): void {
+  if (!sessionId) return;
+
+  if (announced && announcedFor !== userId) {
+    announcedFor = userId;
+    begin('account', now);
+    return;
+  }
+
+  if (announced) return;
 
   if (journal.log('app_session_start', { surface: 'app', data: { entry, ...deviceContext() } })) {
     announced = true;
+    announcedFor = userId;
   }
 }
 
@@ -79,6 +95,7 @@ export function appWentBackground(now = Date.now()): void {
   if (backgroundSince !== null) return;
 
   closeScreen(now);
+  flushVoicePlayback(now);
 
   if (screen) screen = { ...screen, since: now };
 
@@ -119,6 +136,7 @@ export function screenOf(segments: readonly string[]): { screen: string; tab: st
 export function resetAppSessionForTests(): void {
   sessionId = null;
   announced = false;
+  announcedFor = null;
   backgroundSince = null;
   screen = null;
   journal.setAppSession(null);

@@ -1,4 +1,5 @@
 import * as Linking from 'expo-linking';
+import * as Network from 'expo-network';
 import { useSegments } from 'expo-router';
 import { useEffect } from 'react';
 import { AppState } from 'react-native';
@@ -42,16 +43,28 @@ export function JournalSession() {
 
     const subscription = AppState.addEventListener('change', (state) => {
       if (state === 'background') appWentBackground();
-      else if (state === 'active') appCameForeground();
+      else if (state === 'active') {
+        appCameForeground();
+        journal.kick();
+      }
+    });
+    // Сеть вернулась — накопленное без неё уходит сразу, а не по паузе повтора.
+    let connected = true;
+    const network = Network.addNetworkStateListener(({ isConnected }) => {
+      if (isConnected && !connected) journal.kick();
+      connected = isConnected !== false;
     });
 
-    return () => subscription.remove();
+    return () => {
+      subscription.remove();
+      network.remove();
+    };
   }, []);
 
   useEffect(() => {
     journal.setUser(userId);
 
-    if (userId) announce();
+    if (userId) announce(userId);
   }, [userId]);
 
   useEffect(() => {
