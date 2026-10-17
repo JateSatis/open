@@ -1,8 +1,9 @@
 import { Image } from 'expo-image';
-import { memo, useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, View } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 
-import { styles } from './styles';
+import { CIRCLE_HIT_SLOP, CIRCLE_TOUCH_ZONE, styles } from './styles';
 
 import { Text } from '@/components/Text';
 import { formatDuration } from '@/features/media/lib/formatDuration';
@@ -17,7 +18,7 @@ import { useEditedThumb } from '@/features/media/photoEdits/editedThumbs';
 import { countMount, countRender, perfLog } from '@/features/media/perf';
 import { SLOT_BLOCKED, SLOT_FREE, useSelectionSlot } from '@/features/media/selectionStore';
 import { useTheme } from '@/hooks/use-theme';
-import { Opacity, Spacing } from '@/theme';
+import { Opacity } from '@/theme';
 
 /**
  * Выбор одного файла вместо отбора в альбом: кружка нет. Общий выбор
@@ -106,6 +107,36 @@ export const MediaGridItem = memo(function MediaGridItem({
     rootRef.current?.measureInWindow((x, y, width, height) =>
       openMediaPreview(asset, width > 0 ? { x, y, width, height } : null),
     );
+  const press = pick ? () => (pick.onPick ? pick.onPick(asset) : openPreview()) : openPreview;
+  const canOpen = pick !== undefined || !locked;
+  const canToggle = pick === undefined && !disabled;
+
+  // Тап по клетке — жест-обработчиком, чтобы срабатывать и на хвосте
+  // прокрутки сетки (см. `useTileTap`). Кружок выбора лежит над клеткой, но
+  // его запас касания шире самого кружка: касание в этом углу — выбор файла,
+  // как у кнопки кружка, а не открытие.
+  const latest = useRef({ press, toggle: () => onToggle(asset), canOpen, canToggle });
+
+  useEffect(() => {
+    latest.current = { press, toggle: () => onToggle(asset), canOpen, canToggle };
+  });
+
+  const tap = useMemo(
+    () =>
+      Gesture.Tap()
+        .maxDistance(CIRCLE_HIT_SLOP)
+        .runOnJS(true)
+        .onEnd((event, success) => {
+          if (!success) return;
+
+          const now = latest.current;
+          const inCorner = event.x < CIRCLE_TOUCH_ZONE && event.y < CIRCLE_TOUCH_ZONE;
+
+          if (inCorner && now.canToggle) now.toggle();
+          else if (now.canOpen) now.press();
+        }),
+    [],
+  );
 
   return (
     <View ref={rootRef} style={{ width: size, height: size }}>
@@ -157,13 +188,15 @@ export const MediaGridItem = memo(function MediaGridItem({
       ) : null}
 
       {pick ? (
-        <Pressable
-          testID="media-grid-pick"
-          accessibilityRole="button"
-          accessibilityLabel={asset.kind === 'video' ? 'Видео' : 'Фото'}
-          onPress={() => (pick.onPick ? pick.onPick(asset) : openPreview())}
-          style={styles.thumbnail}
-        />
+        <GestureDetector gesture={tap}>
+          <Pressable
+            testID="media-grid-pick"
+            accessibilityRole="button"
+            accessibilityLabel={asset.kind === 'video' ? 'Видео' : 'Фото'}
+            onPress={press}
+            style={styles.thumbnail}
+          />
+        </GestureDetector>
       ) : null}
 
       {pick ? durationBadge : null}
@@ -171,20 +204,22 @@ export const MediaGridItem = memo(function MediaGridItem({
       {pick ? null : (
         <>
           {locked ? null : (
-            <Pressable
-              testID="media-grid-open"
-              accessibilityRole="imagebutton"
-              accessibilityLabel={asset.kind === 'video' ? 'Открыть видео' : 'Открыть фото'}
-              onPress={openPreview}
-              style={styles.thumbnail}
-            />
+            <GestureDetector gesture={tap}>
+              <Pressable
+                testID="media-grid-open"
+                accessibilityRole="imagebutton"
+                accessibilityLabel={asset.kind === 'video' ? 'Открыть видео' : 'Открыть фото'}
+                onPress={openPreview}
+                style={styles.thumbnail}
+              />
+            </GestureDetector>
           )}
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={isSelected ? 'Убрать из выбранного' : 'Выбрать файл'}
             accessibilityState={{ selected: isSelected, disabled }}
             disabled={disabled}
-            hitSlop={Spacing.two}
+            hitSlop={CIRCLE_HIT_SLOP}
             onPress={() => onToggle(asset)}
             style={[
               styles.circle,

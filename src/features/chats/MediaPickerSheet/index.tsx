@@ -19,6 +19,7 @@ import {
   Modal,
   PixelRatio,
   Pressable,
+  StyleSheet,
   useWindowDimensions,
   View,
   type LayoutChangeEvent,
@@ -38,6 +39,8 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { ScrollTap } from '../../../../modules/scroll-tap';
 
 import { sheetGeometry } from './geometry';
 import { GALLERY_ONLY, type SheetSection, type SheetSectionSlot } from './sections';
@@ -531,17 +534,20 @@ function SheetWindow({ phase, composer, pick: pickProp, avatar, sections }: Shee
         <Animated.View style={[styles.root, shiftStyle]}>
           <GestureDetector gesture={dismissPan}>
             <View style={[styles.listWindow, { top: listTop }]}>
-              <SheetShell
-                top={travel}
-                height={collapsedHeight}
-                topBarHeight={topBarHeight}
-                title={title}
-              />
-              {listMounted && active ? (
-                <SheetListContext.Provider value={listContext}>
-                  <Fragment key={active.key}>{active.render(slot)}</Fragment>
-                </SheetListContext.Provider>
-              ) : null}
+              {/* Тап по клетке на хвосте прокрутки сетки — с первого касания. */}
+              <ScrollTap style={StyleSheet.absoluteFill}>
+                <SheetShell
+                  top={travel}
+                  height={collapsedHeight}
+                  topBarHeight={topBarHeight}
+                  title={title}
+                />
+                {listMounted && active ? (
+                  <SheetListContext.Provider value={listContext}>
+                    <Fragment key={active.key}>{active.render(slot)}</Fragment>
+                  </SheetListContext.Provider>
+                ) : null}
+              </ScrollTap>
             </View>
           </GestureDetector>
         </Animated.View>

@@ -3,6 +3,8 @@ import { Keyboard, Modal, Pressable, useWindowDimensions } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated from 'react-native-reanimated';
 
+import { ScrollTap } from '../../../../modules/scroll-tap';
+
 import { PanelContent } from './PanelContent';
 import { styles } from './styles';
 import { usePanelSheet } from './usePanelSheet';
@@ -67,32 +69,35 @@ export function PanelWindow({ target, onOpenPerson, hostChatId }: PanelWindowPro
         style={styles.root}
         onLayout={(event) => setWindowHeight(event.nativeEvent.layout.height)}
       >
-        <Animated.View
-          pointerEvents="box-none"
-          style={[
-            styles.fill,
-            dimmed ? [{ backgroundColor: theme.overlay }, sheet.backdropStyle] : null,
-          ]}
-        >
-          <Pressable
-            testID="comments-backdrop"
-            accessibilityLabel="Закрыть комментарии"
-            style={styles.fill}
-            onPress={sheet.closeNow}
+        {/* Тап по медиа в облачке на хвосте прокрутки — с первого касания. */}
+        <ScrollTap style={styles.fill}>
+          <Animated.View
+            pointerEvents="box-none"
+            style={[
+              styles.fill,
+              dimmed ? [{ backgroundColor: theme.overlay }, sheet.backdropStyle] : null,
+            ]}
+          >
+            <Pressable
+              testID="comments-backdrop"
+              accessibilityLabel="Закрыть комментарии"
+              style={styles.fill}
+              onPress={sheet.closeNow}
+            />
+          </Animated.View>
+
+          <PanelContent
+            target={target}
+            sheet={sheet}
+            onOpenPerson={onOpenPerson}
+            hostChatId={hostChatId}
+            backRef={backRef}
           />
-        </Animated.View>
 
-        <PanelContent
-          target={target}
-          sheet={sheet}
-          onOpenPerson={onOpenPerson}
-          hostChatId={hostChatId}
-          backRef={backRef}
-        />
-
-        {/* Вопросы и короткие ответы — внутри окна панели, иначе их не видно. */}
-        <ConfirmDialogSurface />
-        <InAppNoticeToast />
+          {/* Вопросы и короткие ответы — внутри окна панели, иначе их не видно. */}
+          <ConfirmDialogSurface />
+          <InAppNoticeToast />
+        </ScrollTap>
       </GestureHandlerRootView>
     </Modal>
   );
