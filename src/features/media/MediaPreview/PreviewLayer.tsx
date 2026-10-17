@@ -5,9 +5,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
+  runOnJS,
   useAnimatedStyle,
   useDerivedValue,
   useSharedValue,
+  withSpring,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -28,6 +30,7 @@ import { useDrawTool } from './useDrawTool';
 import { usePreviewFlight } from './usePreviewFlight';
 
 import { useOwnKeyboardHeight } from '@/features/chats/composerKeyboard';
+import { dismissOpacity, resolveDismiss } from '@/features/media/MediaViewer/viewerMath';
 import { useGridGeometry } from '@/features/media/MediaGrid/useGridGeometry';
 import type { MediaLibraryItem } from '@/features/media/mediaLibrary';
 import { useMediaSelection } from '@/features/media/selectionStore';
@@ -36,6 +39,10 @@ import { Sizes, Spacing } from '@/theme';
 
 /** Удержание пальца на фото в инструменте — показать оригинал. */
 const HOLD_ORIGINAL_MS = 120;
+/** Сдвиг пальца, после которого жест узнаёт направление: по вертикали — уход. */
+const DISMISS_ACTIVATION = 10;
+/** Отпустили до порога — файл пружиной возвращается на место. */
+const LIFT_SPRING = { damping: 28, stiffness: 260, mass: 0.9 };
 
 type Viewport = {
   /** Где в окне видна сетка: файл улетает в плитку, только если она видна. */
@@ -112,9 +119,10 @@ export function PreviewLayer(props: PreviewLayerProps) {
   const draw = useDrawTool();
   const toast = usePreviewToast();
   const keyboardHeight = useOwnKeyboardHeight('sheet');
-  const { flight, origin, fade, leaving, launch, leave, dissolve } = usePreviewFlight(
+  const { flight, origin, fade, lift, leaving, launch, leave, dissolve } = usePreviewFlight(
     target?.origin ?? null,
     gridViewport,
+    size.height,
   );
   const toolArea = useSharedValue<Rect>({ x: 0, y: 0, width: size.width, height: size.height });
   const screen = useSharedValue<Rect>({ x: 0, y: 0, width: size.width, height: size.height });
@@ -123,8 +131,8 @@ export function PreviewLayer(props: PreviewLayerProps) {
   const toolProgress = useDerivedValue(() => Math.max(colorProgress.value, drawProgress.value));
 
   const motion = useMemo<PreviewMotion>(
-    () => ({ flight, origin, tool: toolProgress, toolArea, fade, cropCover: crop.cover }),
-    [crop.cover, fade, flight, origin, toolProgress, toolArea],
+    () => ({ flight, origin, tool: toolProgress, toolArea, fade, cropCover: crop.cover, lift }),
+    [crop.cover, fade, flight, lift, origin, toolProgress, toolArea],
   );
 
   // Рабочая область фото под панелью инструмента: фото не залезает под неё.
@@ -224,6 +232,43 @@ export function PreviewLayer(props: PreviewLayerProps) {
     [origin],
   );
 
+  const anyTool = tool.open || crop.open || draw.open;
+
+  // Свайп вверх или вниз уводит файл в его плитку — как в просмотрщике.
+  // Жест узнаёт себя по вертикали и отказывается по горизонтали: листание
+  // ведёт нативный пейджер, и начатое листание уходом не становится, а
+  // узнавший себя уход отменяет касание пейджера. Шапка и подвал лежат
+  // поверх со своим фоном — с них жест не начинается.
+  const leaveSwiped = useCallback(
+    (direction: -1 | 1) => {
+      if (currentAssetId) leave(currentAssetId, direction);
+    },
+    [currentAssetId, leave],
+  );
+  const screenHeight = size.height;
+  const dismiss = useMemo(
+    () =>
+      Gesture.Pan()
+        .maxPointers(1)
+        .enabled(!anyTool && !leaving)
+        .activeOffsetY([-DISMISS_ACTIVATION, DISMISS_ACTIVATION])
+        .failOffsetX([-DISMISS_ACTIVATION, DISMISS_ACTIVATION])
+        .onUpdate((event) => {
+          lift.value = event.translationY;
+        })
+        .onEnd((event) => {
+          const direction = resolveDismiss(event.translationY, event.velocityY, screenHeight);
+
+          if (direction === 0) {
+            lift.value = withSpring(0, LIFT_SPRING);
+            return;
+          }
+
+          runOnJS(leaveSwiped)(direction);
+        }),
+    [anyTool, leaveSwiped, leaving, lift, screenHeight],
+  );
+
   const holdOriginal = useMemo(
     () =>
       Gesture.LongPress()
@@ -238,18 +283,32 @@ export function PreviewLayer(props: PreviewLayerProps) {
         }),
     [tool.live.original, tool.open],
   );
+  // В инструменте жест ухода выключен, а удержание показывает оригинал.
+  const pageGesture = useMemo(
+    () => Gesture.Simultaneous(holdOriginal, dismiss),
+    [dismiss, holdOriginal],
+  );
 
   // Гаснут части слоя, а не слой целиком: прозрачность всего слоя Android
   // рисует через отдельный буфер, и с видео внутри шит под ним пропадал.
+  // Утянутый пальцем файл открывает шит под собой: фон и шапка светлеют.
   const backgroundStyle = useAnimatedStyle(() => ({
-    opacity: flight.value * fade.value,
+    opacity: flight.value * fade.value * dismissOpacity(lift.value, screenHeight),
   }));
   const cropEnter = crop.motion.enter;
   const chromeStyle = useAnimatedStyle(() => ({
-    opacity: flight.value * fade.value * (1 - Math.max(toolProgress.value, cropEnter.value)),
+    opacity:
+      flight.value *
+      fade.value *
+      dismissOpacity(lift.value, screenHeight) *
+      (1 - Math.max(toolProgress.value, cropEnter.value)),
   }));
   const footerStyle = useAnimatedStyle(() => ({
-    opacity: flight.value * fade.value * (1 - Math.max(toolProgress.value, cropEnter.value)),
+    opacity:
+      flight.value *
+      fade.value *
+      dismissOpacity(lift.value, screenHeight) *
+      (1 - Math.max(toolProgress.value, cropEnter.value)),
     transform: [{ translateY: -Math.max(keyboardHeight.value - insets.bottom, 0) }],
   }));
   const toolStyle = useAnimatedStyle(() => ({
@@ -260,7 +319,6 @@ export function PreviewLayer(props: PreviewLayerProps) {
     opacity: cropEnter.value,
     transform: [{ translateY: (1 - cropEnter.value) * Spacing.five }],
   }));
-  const anyTool = tool.open || crop.open || draw.open;
 
   if (!current) return null;
 
@@ -286,7 +344,7 @@ export function PreviewLayer(props: PreviewLayerProps) {
         ]}
       />
 
-      <GestureDetector gesture={holdOriginal}>
+      <GestureDetector gesture={pageGesture}>
         <View style={StyleSheet.absoluteFill}>
           <PreviewPager
             gallery={pages}

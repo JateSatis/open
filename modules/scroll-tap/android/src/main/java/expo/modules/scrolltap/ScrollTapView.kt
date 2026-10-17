@@ -34,6 +34,10 @@ class ScrollTapView(context: Context, appContext: AppContext) : ExpoView(context
   private val rect = Rect()
   private val location = IntArray(2)
 
+  // Детей раскладывает Yoga. `ExpoView` — это `LinearLayout`, и его собственный
+  // проход раскладки поставил бы их столбиком поверх того, что задал React.
+  override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) = Unit
+
   override fun dispatchTouchEvent(event: MotionEvent): Boolean {
     if (event.actionMasked == MotionEvent.ACTION_DOWN) {
       // Точка касания — в координатах окна, как и видимые прямоугольники ниже.
