@@ -82,6 +82,7 @@ declare
   e2 uuid := gen_random_uuid();
   e3 uuid := gen_random_uuid();
   x uuid;
+  y uuid;
   batch jsonb;
   res1 jsonb;
   res2 jsonb;
@@ -239,6 +240,15 @@ begin
     '{"visible_ms":10000,"watch_ms":14000,"loops":5}')));
   perform pg_temp.check('К2.2 watch больше реального времени показа — implausible', pg_temp.reason(res1, x) = 'implausible', res1::text);
 
+  -- Две перемотки назад — 14 с просмотра пятисекундного попа без кругов честны.
+  x := gen_random_uuid();
+  y := gen_random_uuid();
+  res1 := pg_temp.send(jsonb_build_array(
+    pg_temp.ev('impression_start', gen_random_uuid(), now() - interval '20 seconds', y, 'pop', pop, 'channel'),
+    pg_temp.ev('impression_progress', x, now(), y, null, null, null,
+      '{"visible_ms":20000,"watch_ms":14000,"loops":0,"seeks_back":2,"max_pos_ms":5000}')));
+  perform pg_temp.check('К2.2 перемотки назад расширяют допуск просмотра', res1 -> 'accepted' ? x::text, res1::text);
+
   x := gen_random_uuid();
   res1 := pg_temp.send(jsonb_build_array(pg_temp.ev('impression_end', x, now(), imp, null, null, null,
     '{"visible_ms":9000,"watch_ms":4000,"max_pos_ms":4000,"exit":"swipe_next","seeks":[{"from":1000,"to":90000}]}')));
@@ -273,7 +283,7 @@ begin
 
   perform pg_temp.as_service();
   perform pg_temp.check('К2.2 отклонённое не записано и учтено по причинам',
-    (select count(*) from public.rec_events where user_id = b and origin = 'client') = 3
+    (select count(*) from public.rec_events where user_id = b and origin = 'client') = 5
       and (select coalesce(sum(count), 0) from public.rec_reject_counts
            where day = (now() at time zone 'UTC')::date and reason = 'implausible') >= 3);
 
@@ -289,9 +299,9 @@ begin
     perform pg_temp.send(big);
   end loop;
   select jsonb_agg(pg_temp.ev('search_query', gen_random_uuid(), now(), null, null, null, 'search', '{"query":"q"}'))
-  into big from generate_series(1, 97);
+  into big from generate_series(1, 95);
   res1 := pg_temp.send(big);
-  perform pg_temp.check('К2.2 в лимит частоты — принято', jsonb_array_length(res1 -> 'accepted') = 97, res1::text);
+  perform pg_temp.check('К2.2 в лимит частоты — принято', jsonb_array_length(res1 -> 'accepted') = 95, res1::text);
   select jsonb_agg(pg_temp.ev('search_query', gen_random_uuid(), now(), null, null, null, 'search', '{"query":"q"}'))
   into big from generate_series(1, 1);
   perform pg_temp.refused('К2.2 сверх лимита частоты — отказ', format('select pg_temp.send(%L)', big), '22023');
