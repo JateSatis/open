@@ -17,6 +17,7 @@ import {
   CHANNEL_DESCRIPTION_MAX_LENGTH,
   CHANNEL_TITLE_MAX_LENGTH,
 } from '@/features/channels/limits';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useChannel } from '@/features/channels/useChannel';
 import { DescriptionField } from '@/features/chats/ChatEditScreen/DescriptionField';
 import { openMediaSheet } from '@/features/chats/MediaPickerSheet';
@@ -62,6 +63,8 @@ export function ChannelEditScreen({ channelId }: ChannelEditScreenProps) {
 }
 
 function ChannelEditForm({ channel }: { channel: Channel }) {
+  // Форма доходит до края окна: панели вкладок под экраном нет.
+  const insets = useSafeAreaInsets();
   const theme = useTheme();
   const router = useRouter();
   const currentUserId = useCurrentUserId();
@@ -155,7 +158,7 @@ function ChannelEditForm({ channel }: { channel: Channel }) {
       />
       <KeyboardAwareScrollView
         style={[styles.flex, { backgroundColor: theme.background }]}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, { paddingBottom: Spacing.four + insets.bottom }]}
         keyboardShouldPersistTaps="handled"
         bottomOffset={Spacing.six}
       >

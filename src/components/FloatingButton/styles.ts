@@ -5,6 +5,7 @@ import { Radii, Shadows, Sizes } from '@/theme';
 export const styles = StyleSheet.create({
   button: {
     position: 'absolute',
+    zIndex: 1,
     right: Sizes.floatingButtonMargin,
     width: Sizes.floatingButton,
     height: Sizes.floatingButton,

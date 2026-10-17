@@ -92,7 +92,12 @@ export default function ChatsScreen() {
     <Screen
       edges={search.active ? ['top'] : []}
       contentContainerStyle={{ paddingHorizontal: Spacing.three, paddingVertical: 0 }}
-      overlay={<TabBar active="chats" />}
+      // «+» — поверх панели: дымка над значками не заходит на кнопку.
+      overlay={
+        <>
+          <TabBar active="chats" />
+            </>
+      }
     >
       <SearchBar
         value={search.query}

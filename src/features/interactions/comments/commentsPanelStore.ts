@@ -186,8 +186,6 @@ export function commentsEntry(
 
   return {
     count: message.commentsCount,
-    onPress: interactive
-      ? () => openComments(message.id, chatId, amMember)
-      : undefined,
+    onPress: interactive ? () => openComments(message.id, chatId, amMember) : undefined,
   };
 }

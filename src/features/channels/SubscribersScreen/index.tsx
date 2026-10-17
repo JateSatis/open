@@ -11,11 +11,13 @@ import {
   SUBSCRIBERS_PAGE_SIZE,
   type Subscriber,
 } from '@/api/subscriptions';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Avatar } from '@/components/Avatar';
 import { Text } from '@/components/Text';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
 import { formatUsername } from '@/features/profile/username';
 import { useTheme } from '@/hooks/use-theme';
+import { Spacing } from '@/theme';
 import { describeLoadError } from '@/lib/network';
 
 export const channelSubscribersQueryKey = (channelId: string) =>
@@ -38,6 +40,8 @@ const subscriberKey = (subscriber: Subscriber) => subscriber.id;
  */
 export function SubscribersScreen({ target }: SubscribersScreenProps) {
   const theme = useTheme();
+  // Список доходит до края окна: панели вкладок под экраном нет.
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const currentUserId = useCurrentUserId();
   const query = useInfiniteQuery({
@@ -80,7 +84,7 @@ export function SubscribersScreen({ target }: SubscribersScreenProps) {
     <FlatList
       testID="subscribers-list"
       style={{ backgroundColor: theme.background }}
-      contentContainerStyle={styles.list}
+      contentContainerStyle={[styles.list, { paddingBottom: Spacing.two + insets.bottom }]}
       data={subscribers}
       keyExtractor={subscriberKey}
       onEndReached={loadMore}

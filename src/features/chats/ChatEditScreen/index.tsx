@@ -29,6 +29,7 @@ import {
   describeSetChatUsernameError,
   useSetChatUsername,
 } from '@/features/chats/useSetChatUsername';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { validateUsername } from '@/features/profile/username';
 import { UsernameField } from '@/features/profile/UsernameField';
 import { useUsernameAvailability } from '@/features/profile/useUsernameAvailability';
@@ -75,6 +76,8 @@ export function ChatEditScreen({ chatId }: ChatEditScreenProps) {
 }
 
 function ChatEditForm({ chat }: { chat: ChatSummary }) {
+  // Форма доходит до края окна: панели вкладок под экраном нет.
+  const insets = useSafeAreaInsets();
   const theme = useTheme();
   const router = useRouter();
   const navigation = useNavigation();
@@ -234,7 +237,7 @@ function ChatEditForm({ chat }: { chat: ChatSummary }) {
       />
       <KeyboardAwareScrollView
         style={[styles.flex, { backgroundColor: theme.background }]}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, { paddingBottom: Spacing.four + insets.bottom }]}
         keyboardShouldPersistTaps="handled"
         bottomOffset={Spacing.six}
       >

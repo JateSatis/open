@@ -45,7 +45,6 @@ export function PanelHeader({ title, onBack, grabber = true }: PanelHeaderProps)
           ) : null}
           <Text variant="smallBold">{title}</Text>
         </View>
-
       </View>
     </View>
   );

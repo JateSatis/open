@@ -1,6 +1,6 @@
 import type { Session as SupabaseSession } from '@supabase/supabase-js';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react-native';
-import { BackHandler, ScrollView, View } from 'react-native';
+import { BackHandler } from 'react-native';
 
 import ChatScreen from './[chatId]';
 

@@ -7,7 +7,7 @@ import { styles } from './styles';
 
 import { Text } from '@/components/Text';
 import { useTheme } from '@/hooks/use-theme';
-import { Spacing, TabBarSizes } from '@/theme';
+import { Opacity, Spacing, TabBarSizes } from '@/theme';
 
 import { useTabBarHeight } from './useTabBarHeight';
 
@@ -73,7 +73,7 @@ export function TabBar({ active }: TabBarProps) {
               accessibilityLabel={tab.label}
               hitSlop={{ top: Spacing.three, bottom: TabBarSizes.bottom }}
               onPress={selected ? undefined : () => navigation.navigate(tab.name)}
-              style={styles.tab}
+              style={({ pressed }) => [styles.tab, pressed && { opacity: Opacity.pressed }]}
             >
               <SymbolView
                 name={{ ...tab.icon, web: tab.icon.android }}

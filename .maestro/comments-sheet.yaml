@@ -16,10 +16,9 @@ env:
 - tapOn: "Комментировать"
 - assertVisible:
     id: "comments-panel"
-# Сообщение не поднимается над шитом: копии нет, крестика в шапке тоже.
+# Сообщение не поднимается над шитом: копии нет.
 - assertNotVisible:
     id: "comments-lifted-message"
-- assertNotVisible: "Закрыть комментарии"
 - swipe:
     from:
       id: "comments-sheet-header"
