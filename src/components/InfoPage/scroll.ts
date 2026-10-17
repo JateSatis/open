@@ -1,4 +1,5 @@
-import { createContext, useContext } from 'react';
+import { createContext, useCallback, useContext } from 'react';
+import { useWindowDimensions } from 'react-native';
 import type { SharedValue } from 'react-native-reanimated';
 
 import type { InfoGeometry } from './geometry';
@@ -39,6 +40,21 @@ export type InfoScroll = {
 };
 
 export const InfoScrollContext = createContext<InfoScroll | null>(null);
+
+/**
+ * Где на экране видно содержимое вкладок: ниже полосы вкладок, до низа
+ * окна. Полоса едет вместе со списком, пока не прилипнет под панелью.
+ */
+export function useInfoTabsViewport(): () => { x: number; y: number; width: number; height: number } {
+  const { listTop, stickY, scrollY } = useInfoScroll();
+  const { width, height } = useWindowDimensions();
+
+  return useCallback(() => {
+    const top = listTop - Math.min(scrollY.value, stickY);
+
+    return { x: 0, y: top, width, height: height - top };
+  }, [height, listTop, scrollY, stickY, width]);
+}
 
 export function useInfoScroll(): InfoScroll {
   const value = useContext(InfoScrollContext);

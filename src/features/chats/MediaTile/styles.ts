@@ -13,6 +13,9 @@ export const styles = StyleSheet.create({
   image: {
     flex: 1,
   },
+  hidden: {
+    opacity: 0,
+  },
   center: {
     ...StyleSheet.absoluteFill,
     alignItems: 'center',

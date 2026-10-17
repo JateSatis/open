@@ -19,6 +19,7 @@ import {
   Modal,
   PixelRatio,
   Pressable,
+  StyleSheet,
   useWindowDimensions,
   View,
   type LayoutChangeEvent,
@@ -38,6 +39,8 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { ScrollTap } from '../../../../modules/scroll-tap';
 
 import { sheetGeometry } from './geometry';
 import { GALLERY_ONLY, type SheetSection, type SheetSectionSlot } from './sections';
@@ -125,9 +128,8 @@ export type AvatarPickSheetProps = {
   onPick: (asset: MediaLibraryItem) => void;
 };
 
-/** Аватарка пока только из фото; видео притушены — по `accepts` позже включатся видео-аватарки. */
-const acceptsPhoto = (asset: MediaLibraryItem) => asset.kind === 'photo';
-const AVATAR_PICK: GridPick = { accepts: acceptsPhoto };
+/** Аватарка пока только из фото: видео в её сетке нет. */
+const AVATAR_PICK: GridPick = { filter: { kind: 'photo' } };
 const AVATAR_TITLE = 'Выберите фото';
 
 /**
@@ -155,19 +157,19 @@ export function MediaPickerSheet({
  * клетке отдаёт файл в `onPick` и закрывает шит. Открывается
  * `openMediaSheet('pick')`. Общий выбор файлов чата он не трогает.
  *
- * `accepts` решает, какие клетки можно взять: остальные видны притушенными.
+ * `filter` решает, какие файлы сетка показывает: остальных в ней нет.
  */
-export function MediaPickSheet({ accepts, onPick }: MediaPickSheetProps) {
+export function MediaPickSheet({ filter, onPick }: MediaPickSheetProps) {
   const phase = useSheetPhase('pick');
   const pick = useMemo<GridPick>(
     () => ({
-      accepts,
+      filter,
       onPick: (asset) => {
         onPick(asset);
         closeMediaSheet();
       },
     }),
-    [accepts, onPick],
+    [filter, onPick],
   );
 
   if (phase === 'closed') return null;
@@ -532,17 +534,20 @@ function SheetWindow({ phase, composer, pick: pickProp, avatar, sections }: Shee
         <Animated.View style={[styles.root, shiftStyle]}>
           <GestureDetector gesture={dismissPan}>
             <View style={[styles.listWindow, { top: listTop }]}>
-              <SheetShell
-                top={travel}
-                height={collapsedHeight}
-                topBarHeight={topBarHeight}
-                title={title}
-              />
-              {listMounted && active ? (
-                <SheetListContext.Provider value={listContext}>
-                  <Fragment key={active.key}>{active.render(slot)}</Fragment>
-                </SheetListContext.Provider>
-              ) : null}
+              {/* Тап по клетке на хвосте прокрутки сетки — с первого касания. */}
+              <ScrollTap style={StyleSheet.absoluteFill}>
+                <SheetShell
+                  top={travel}
+                  height={collapsedHeight}
+                  topBarHeight={topBarHeight}
+                  title={title}
+                />
+                {listMounted && active ? (
+                  <SheetListContext.Provider value={listContext}>
+                    <Fragment key={active.key}>{active.render(slot)}</Fragment>
+                  </SheetListContext.Provider>
+                ) : null}
+              </ScrollTap>
             </View>
           </GestureDetector>
         </Animated.View>

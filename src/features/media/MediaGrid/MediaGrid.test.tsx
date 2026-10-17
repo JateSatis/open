@@ -68,7 +68,7 @@ describe('MediaGrid', () => {
 
     await render(<MediaGrid enabled={false} />);
 
-    expect(mockedUseGalleryAssets).toHaveBeenCalledWith(false);
+    expect(mockedUseGalleryAssets).toHaveBeenCalledWith(false, undefined);
   });
 
   it('shows a skeleton and stays silent about an empty gallery while it is still being read', async () => {

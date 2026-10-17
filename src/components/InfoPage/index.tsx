@@ -50,6 +50,7 @@ export { InfoCard, InfoTextRow } from './InfoCard';
 export { InfoLinkRow } from './InfoLinkRow';
 export { InfoPersonRow } from './InfoPersonRow';
 export { InfoTabList } from './InfoTabList';
+export { useInfoTabsViewport } from './scroll';
 export { useSlideBack, type SlideBack } from './useSlideBack';
 export type {
   InfoAction,

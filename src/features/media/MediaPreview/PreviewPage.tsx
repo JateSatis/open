@@ -41,6 +41,8 @@ export type PreviewMotion = {
   fade: SharedValue<number>;
   /** Открыта обрезка: фото рисует она, страница прячется. 1 — спрятана. */
   cropCover: SharedValue<number>;
+  /** Файл утянут пальцем вверх или вниз — к уходу. */
+  lift: SharedValue<number>;
 };
 
 export type PreviewPageProps = {
@@ -126,7 +128,7 @@ export const PreviewPage = memo(function PreviewPage({
   const layers = useDrawingLayers(asset.id, skia?.image ?? null, edit?.drawing);
 
   const frameStyle = useAnimatedStyle(() => {
-    const target = isActive ? toolTarget(aspect, base, motion) : base;
+    const target = isActive ? liftedTarget(aspect, base, motion) : base;
     const { frame } = flightTransform(
       base,
       target,
@@ -146,7 +148,7 @@ export const PreviewPage = memo(function PreviewPage({
   });
 
   const imageStyle = useAnimatedStyle(() => {
-    const target = isActive ? toolTarget(aspect, base, motion) : base;
+    const target = isActive ? liftedTarget(aspect, base, motion) : base;
     const { image } = flightTransform(
       base,
       target,
@@ -301,6 +303,15 @@ function toolTarget(aspect: number, base: Rect, motion: PreviewMotion): Rect {
     width: base.width + (area.width - base.width) * progress,
     height: base.height + (area.height - base.height) * progress,
   };
+}
+
+/** Активное фото, утянутое пальцем: уходит в плитку с этого места. */
+function liftedTarget(aspect: number, base: Rect, motion: PreviewMotion): Rect {
+  'worklet';
+  const target = toolTarget(aspect, base, motion);
+  const lift = motion.lift.value;
+
+  return lift === 0 ? target : { ...target, y: target.y + lift };
 }
 
 /**

@@ -1,16 +1,27 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { Image } from 'expo-image';
-import { memo, useCallback, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { GestureDetector } from 'react-native-gesture-handler';
 
 import { TabStatus, tabStatusOf } from './TabStatus';
 import { chatInfoKeys, useChatMedia } from './queries';
 
 import type { ChatMediaItem } from '@/api/chatInfo';
 import { AnchoredMenu, type MenuAnchor } from '@/components/AnchoredMenu';
-import { InfoTabList } from '@/components/InfoPage';
+import { InfoTabList, useInfoTabsViewport } from '@/components/InfoPage';
 import { Text } from '@/components/Text';
 import { formatDuration, MediaViewer, type MediaViewerItem } from '@/features/media';
+import {
+  createTileRegistry,
+  measureView,
+  TileViewportContext,
+  useTileHidden,
+  type TileRect,
+  type TileRegistry,
+} from '@/features/media/tileRegistry';
+import { useArmedViewer } from '@/features/media/MediaViewer/useArmedViewer';
+import { useTileTap } from '@/features/media/useTileTap';
 import { useTheme } from '@/hooks/use-theme';
 import { InfoPageSizes, Radii, Spacing } from '@/theme';
 
@@ -33,6 +44,11 @@ function isVideo(item: ChatMediaItem): boolean {
   return item.mimeType.startsWith('video/');
 }
 
+/** Картинка клетки: у видео — постер. С неё же начинается перелёт в просмотр. */
+function cellImageUri(item: ChatMediaItem): string {
+  return isVideo(item) ? (item.posterUrl ?? item.url) : item.url;
+}
+
 /**
  * Вкладка «Медиа»: фото и видео чата сеткой в четыре колонки, свежие сверху,
  * альбом — по клетке на вложение. Тап — просмотр с листанием по всем медиа
@@ -44,7 +60,12 @@ export function MediaTab({ tab, chatId, onShowInChat }: MediaTabProps) {
   const query = useChatMedia(chatId);
   const { hasNextPage, isFetchingNextPage, fetchNextPage } = query;
   const items = useMemo(() => query.data?.pages.flatMap((page) => page.items) ?? [], [query.data]);
-  const [viewerIndex, setViewerIndex] = useState<number | null>(null);
+  const { viewer, open: openAt, arm: armAt, disarm, close } = useArmedViewer();
+  // Клетки сетки по id медиа: просмотр уходит в клетку файла, на котором
+  // закрыли. Клетки переиспользуются — снимаются сверкой вью.
+  const [tiles] = useState(createTileRegistry);
+  const tabsViewport = useInfoTabsViewport();
+  const measureViewport = useCallback(async () => tabsViewport(), [tabsViewport]);
   const [menu, setMenu] = useState<{ anchor: MenuAnchor; item: ChatMediaItem } | null>(null);
   const size = (width - GAP * (COLUMNS - 1)) / COLUMNS;
 
@@ -78,6 +99,7 @@ export function MediaTab({ tab, chatId, onShowInChat }: MediaTabProps) {
         id: item.id,
         kind: isVideo(item) ? 'video' : 'photo',
         url: item.url,
+        thumbUrl: cellImageUri(item),
         width: item.width,
         height: item.height,
       })),
@@ -91,9 +113,25 @@ export function MediaTab({ tab, chatId, onShowInChat }: MediaTabProps) {
     [items.length, loadMore],
   );
 
-  const open = useCallback(
-    (item: ChatMediaItem) => setViewerIndex(items.findIndex((entry) => entry.id === item.id)),
+  const indexOf = useCallback(
+    (item: ChatMediaItem) => items.findIndex((entry) => entry.id === item.id),
     [items],
+  );
+  const open = useCallback(
+    (item: ChatMediaItem, origin: TileRect | null) => {
+      const index = indexOf(item);
+
+      if (index >= 0) openAt(index, origin);
+    },
+    [indexOf, openAt],
+  );
+  const arm = useCallback(
+    (item: ChatMediaItem, origin: TileRect | null) => {
+      const index = indexOf(item);
+
+      if (index >= 0) armAt(index, origin);
+    },
+    [armAt, indexOf],
   );
   const openMenu = useCallback(
     (item: ChatMediaItem, anchor: MenuAnchor) => setMenu({ item, anchor }),
@@ -113,7 +151,10 @@ export function MediaTab({ tab, chatId, onShowInChat }: MediaTabProps) {
             cell={cell}
             size={size}
             column={index % COLUMNS}
+            tiles={tiles}
             onPress={open}
+            onArm={arm}
+            onDisarm={disarm}
             onLongPress={openMenu}
           />
         )}
@@ -122,13 +163,20 @@ export function MediaTab({ tab, chatId, onShowInChat }: MediaTabProps) {
         footer={<TabStatus state={tabStatusOf(query)} what="медиа" onRetry={retry} />}
       />
 
-      <MediaViewer
-        visible={viewerIndex !== null && viewerIndex >= 0}
-        items={viewerItems}
-        initialIndex={viewerIndex ?? 0}
-        onClose={() => setViewerIndex(null)}
-        onIndexChange={onViewerIndex}
-      />
+      <TileViewportContext.Provider value={measureViewport}>
+        <MediaViewer
+          // Другая клетка, чем под пальцем, — другой просмотр с нуля.
+          key={viewer?.index}
+          visible={viewer !== null}
+          armed={viewer?.armed}
+          items={viewerItems}
+          initialIndex={viewer?.index ?? 0}
+          origin={viewer?.origin}
+          tiles={tiles}
+          onClose={close}
+          onIndexChange={onViewerIndex}
+        />
+      </TileViewportContext.Provider>
 
       <AnchoredMenu
         testID="info-media-menu"
@@ -155,7 +203,11 @@ type MediaCellProps = {
   cell: Cell;
   size: number;
   column: number;
-  onPress: (item: ChatMediaItem) => void;
+  tiles: TileRegistry;
+  onPress: (item: ChatMediaItem, origin: TileRect | null) => void;
+  /** Палец задержался на клетке — просмотр готовится; ушёл без тапа — не нужен. */
+  onArm: (item: ChatMediaItem, origin: TileRect | null) => void;
+  onDisarm: () => void;
   onLongPress: (item: ChatMediaItem, anchor: MenuAnchor) => void;
 };
 
@@ -164,11 +216,13 @@ const MediaCell = memo(function MediaCell({
   cell,
   size,
   column,
+  tiles,
   onPress,
+  onArm,
+  onDisarm,
   onLongPress,
 }: MediaCellProps) {
   const theme = useTheme();
-  const ref = useRef<View>(null);
   // Колонка списка — четверть ширины, а клетка уже на зазоры: сдвиг внутри
   // колонки ставит её так, что зазоры между клетками ровные.
   const box = { width: size, height: size, marginLeft: (column * GAP) / 4, marginBottom: GAP };
@@ -177,40 +231,94 @@ const MediaCell = memo(function MediaCell({
     return <View style={[box, { backgroundColor: theme.backgroundElement }]} />;
   }
 
-  const { item } = cell;
-  const video = isVideo(item);
-
   return (
-    <Pressable
-      ref={ref}
-      testID="info-media-cell"
-      accessibilityRole="imagebutton"
-      accessibilityLabel={video ? 'Видео' : 'Фото'}
-      onPress={() => onPress(item)}
-      onLongPress={() =>
-        ref.current?.measureInWindow((x, y, width, height) =>
-          onLongPress(item, { x, y, width, height }),
-        )
-      }
-      style={[box, { backgroundColor: theme.backgroundElement }]}
-    >
-      <Image
-        source={{ uri: video ? (item.posterUrl ?? item.url) : item.url }}
-        style={styles.fill}
-        contentFit="cover"
-        transition={CELL_FADE_MS}
-        recyclingKey={item.id}
-      />
-      {video ? (
-        <View style={[styles.badge, { backgroundColor: theme.mediaScrim }]}>
-          <Text variant="meta" color="textOnMedia">
-            {`▶ ${formatDuration(item.durationMs ?? 0)}`}
-          </Text>
-        </View>
-      ) : null}
-    </Pressable>
+    <MediaCellContent
+      item={cell.item}
+      box={box}
+      tiles={tiles}
+      onPress={onPress}
+      onArm={onArm}
+      onDisarm={onDisarm}
+      onLongPress={onLongPress}
+    />
   );
 });
+
+type MediaCellContentProps = Omit<MediaCellProps, 'cell' | 'size' | 'column'> & {
+  item: ChatMediaItem;
+  box: { width: number; height: number; marginLeft: number; marginBottom: number };
+};
+
+/**
+ * Клетка с медиа. Тап — жест-обработчиком, чтобы срабатывать и на хвосте
+ * прокрутки (см. `useTileTap`); пока медиа открыто в просмотре, клетка пуста.
+ */
+function MediaCellContent({
+  item,
+  box,
+  tiles,
+  onPress,
+  onArm,
+  onDisarm,
+  onLongPress,
+}: MediaCellContentProps) {
+  const theme = useTheme();
+  const ref = useRef<View>(null);
+  const video = isVideo(item);
+  const hidden = useTileHidden(tiles, item.id);
+
+  // Клетку переиспользуют под другие медиа — запись в таблице меняется вместе с ним.
+  useEffect(() => {
+    const view = ref.current;
+
+    tiles.register(item.id, view);
+
+    return () => tiles.unregister(item.id, view);
+  }, [item.id, tiles]);
+
+  const measure = useCallback(() => measureView(ref.current), []);
+  const tapped = useCallback((origin: TileRect | null) => onPress(item, origin), [item, onPress]);
+  const armed = useCallback((origin: TileRect | null) => onArm(item, origin), [item, onArm]);
+  const { gesture: tap, open } = useTileTap({
+    measure,
+    onTap: tapped,
+    onArm: armed,
+    onDisarm,
+  });
+
+  return (
+    <GestureDetector gesture={tap}>
+      <Pressable
+        ref={ref}
+        testID="info-media-cell"
+        accessibilityRole="imagebutton"
+        accessibilityLabel={video ? 'Видео' : 'Фото'}
+        onPress={open}
+        onLongPress={() =>
+          ref.current?.measureInWindow((x, y, width, height) =>
+            onLongPress(item, { x, y, width, height }),
+          )
+        }
+        style={[box, { backgroundColor: theme.backgroundElement }]}
+      >
+        <Image
+          source={{ uri: cellImageUri(item) }}
+          style={[styles.fill, hidden && styles.hidden]}
+          contentFit="cover"
+          transition={CELL_FADE_MS}
+          recyclingKey={item.id}
+        />
+        {video && !hidden ? (
+          <View style={[styles.badge, { backgroundColor: theme.mediaScrim }]}>
+            <Text variant="meta" color="textOnMedia">
+              {`▶ ${formatDuration(item.durationMs ?? 0)}`}
+            </Text>
+          </View>
+        ) : null}
+      </Pressable>
+    </GestureDetector>
+  );
+}
 
 /** Превью проявляется, а не выскакивает. */
 const CELL_FADE_MS = 150;
@@ -219,6 +327,9 @@ const styles = StyleSheet.create({
   fill: {
     width: '100%',
     height: '100%',
+  },
+  hidden: {
+    opacity: 0,
   },
   badge: {
     position: 'absolute',

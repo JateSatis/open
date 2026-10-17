@@ -1,8 +1,9 @@
 import { Image } from 'expo-image';
-import { memo, useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, View } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 
-import { styles } from './styles';
+import { CIRCLE_HIT_SLOP, CIRCLE_TOUCH_ZONE, styles } from './styles';
 
 import { Text } from '@/components/Text';
 import { formatDuration } from '@/features/media/lib/formatDuration';
@@ -12,20 +13,20 @@ import {
   unregisterGridCell,
 } from '@/features/media/MediaPreview/previewStore';
 import { assetPreviewUri } from '@/features/media/lib/previewUri';
-import type { MediaLibraryItem } from '@/features/media/mediaLibrary';
+import type { GalleryFilter, MediaLibraryItem } from '@/features/media/mediaLibrary';
 import { useEditedThumb } from '@/features/media/photoEdits/editedThumbs';
 import { countMount, countRender, perfLog } from '@/features/media/perf';
 import { SLOT_BLOCKED, SLOT_FREE, useSelectionSlot } from '@/features/media/selectionStore';
 import { useTheme } from '@/hooks/use-theme';
-import { Opacity, Spacing } from '@/theme';
+import { Opacity } from '@/theme';
 
 /**
- * Выбор одного файла вместо отбора в альбом: кружка нет. Неподходящие файлы
- * видны, но притушены и не нажимаются. Общий выбор (`selectionStore`) в этом
- * режиме не трогается.
+ * Выбор одного файла вместо отбора в альбом: кружка нет. Общий выбор
+ * (`selectionStore`) в этом режиме не трогается.
  */
 export type GridPick = {
-  accepts: (asset: MediaLibraryItem) => boolean;
+  /** Какие файлы сетка показывает: неподходящих в ней нет вовсе. */
+  filter: GalleryFilter;
   /**
    * Тап сразу отдаёт файл. Нет — тап раскрывает файл в предпросмотр, и
    * решение принимается там (шит аватарки: сначала правка, потом «Готово»).
@@ -92,9 +93,8 @@ export const MediaGridItem = memo(function MediaGridItem({
 
   const isSelected = slot > SLOT_FREE;
   const disabled = locked || slot === SLOT_BLOCKED;
-  // В выборе одного файла — над притушиванием: длительность читается и у
-  // видео, которое взять нельзя. В шите чата — под притушиванием лимита, как
-  // вся клетка. Касания пропускает к клетке.
+  // В выборе одного файла — над кнопкой клетки. В шите чата — под
+  // притушиванием лимита, как вся клетка. Касания пропускает к клетке.
   const durationBadge =
     asset.kind === 'video' ? (
       <View pointerEvents="none" style={[styles.videoBadge, { backgroundColor: theme.mediaScrim }]}>
@@ -107,6 +107,38 @@ export const MediaGridItem = memo(function MediaGridItem({
     rootRef.current?.measureInWindow((x, y, width, height) =>
       openMediaPreview(asset, width > 0 ? { x, y, width, height } : null),
     );
+  const press = pick ? () => (pick.onPick ? pick.onPick(asset) : openPreview()) : openPreview;
+  const canOpen = pick !== undefined || !locked;
+
+  // Тап по клетке — жест-обработчиком, чтобы срабатывать и на хвосте
+  // прокрутки сетки (см. `useTileTap`). Кружок выбора лежит над клеткой, но
+  // запас касания его кнопки шире самого кружка: касание в этом углу — её.
+  const inCircleMode = pick === undefined;
+  const latest = useRef({ press, canOpen, inCircleMode });
+
+  useEffect(() => {
+    latest.current = { press, canOpen, inCircleMode };
+  });
+
+  const tap = useMemo(
+    () =>
+      Gesture.Tap()
+        .maxDistance(CIRCLE_HIT_SLOP)
+        .runOnJS(true)
+        .onEnd((event, success) => {
+          if (!success) return;
+
+          const now = latest.current;
+          const inCorner = event.x < CIRCLE_TOUCH_ZONE && event.y < CIRCLE_TOUCH_ZONE;
+
+          // Угол кружка — его кнопка: запас её касания шире самого кружка, и
+          // касание там она обрабатывает сама. Клетка его не открывает.
+          if (inCorner && now.inCircleMode) return;
+
+          if (now.canOpen) now.press();
+        }),
+    [],
+  );
 
   return (
     <View ref={rootRef} style={{ width: size, height: size }}>
@@ -157,27 +189,39 @@ export const MediaGridItem = memo(function MediaGridItem({
         />
       ) : null}
 
-      {pick ? <PickCover asset={asset} pick={pick} onOpen={openPreview} /> : null}
+      {pick ? (
+        <GestureDetector gesture={tap}>
+          <Pressable
+            testID="media-grid-pick"
+            accessibilityRole="button"
+            accessibilityLabel={asset.kind === 'video' ? 'Видео' : 'Фото'}
+            onPress={press}
+            style={styles.thumbnail}
+          />
+        </GestureDetector>
+      ) : null}
 
       {pick ? durationBadge : null}
 
       {pick ? null : (
         <>
           {locked ? null : (
-            <Pressable
-              testID="media-grid-open"
-              accessibilityRole="imagebutton"
-              accessibilityLabel={asset.kind === 'video' ? 'Открыть видео' : 'Открыть фото'}
-              onPress={openPreview}
-              style={styles.thumbnail}
-            />
+            <GestureDetector gesture={tap}>
+              <Pressable
+                testID="media-grid-open"
+                accessibilityRole="imagebutton"
+                accessibilityLabel={asset.kind === 'video' ? 'Открыть видео' : 'Открыть фото'}
+                onPress={openPreview}
+                style={styles.thumbnail}
+              />
+            </GestureDetector>
           )}
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={isSelected ? 'Убрать из выбранного' : 'Выбрать файл'}
             accessibilityState={{ selected: isSelected, disabled }}
             disabled={disabled}
-            hitSlop={Spacing.two}
+            hitSlop={CIRCLE_HIT_SLOP}
             onPress={() => onToggle(asset)}
             style={[
               styles.circle,
@@ -199,31 +243,3 @@ export const MediaGridItem = memo(function MediaGridItem({
     </View>
   );
 });
-
-type PickCoverProps = {
-  asset: MediaLibraryItem;
-  pick: GridPick;
-  /** Раскрыть файл в предпросмотр из этой плитки. */
-  onOpen: () => void;
-};
-
-/** Вся клетка — кнопка выбора; неподходящий файл притушен и не нажимается. */
-function PickCover({ asset, pick, onOpen }: PickCoverProps) {
-  const theme = useTheme();
-  const accepted = pick.accepts(asset);
-
-  return (
-    <Pressable
-      testID="media-grid-pick"
-      accessibilityRole="button"
-      accessibilityLabel={asset.kind === 'video' ? 'Видео' : 'Фото'}
-      accessibilityState={{ disabled: !accepted }}
-      disabled={!accepted}
-      onPress={() => (pick.onPick ? pick.onPick(asset) : onOpen())}
-      style={[
-        styles.thumbnail,
-        !accepted && { backgroundColor: theme.background, opacity: Opacity.unavailable },
-      ]}
-    />
-  );
-}

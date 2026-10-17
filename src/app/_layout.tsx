@@ -11,6 +11,8 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { ScrollTap } from '../../modules/scroll-tap';
+
 import { ConfirmDialogHost } from '@/components/ConfirmDialog';
 import { AccountLifecycle } from '@/features/auth/AccountLifecycle';
 import { ConnectionWatcher } from '@/features/connection/ConnectionWatcher';
@@ -89,22 +91,26 @@ export default function RootLayout() {
               <AccountLifecycle />
               {/* Свёрнутый звонок сдвигает навигатор вниз, а не перекрывает шапки. */}
               <BelowReturnBar>
-                <Stack screenOptions={{ headerShown: false }}>
-                  <Stack.Screen
-                    name="call"
-                    options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }}
-                  />
-                  {/* Редактор попа — во весь экран, поверх вкладок, как камера в TikTok. */}
-                  <Stack.Screen name="pop-editor/[channelId]" />
-                  {/* Просмотр попсов — на весь экран, без вкладок, на чёрном фоне. */}
-                  <Stack.Screen name="pops/[channelId]" options={{ statusBarStyle: 'light' }} />
-                  <Stack.Screen name="pops/search" options={{ statusBarStyle: 'light' }} />
-                  {/* Канал из «Ленты» — поверх вкладок, со своей шапкой. */}
-                  <Stack.Screen
-                    name="channel/[channelId]"
-                    options={{ headerShown: true, title: 'Канал' }}
-                  />
-                </Stack>
+                {/* Тап по медиа в списке на хвосте прокрутки — с первого
+                    касания, см. modules/scroll-tap. Окна Modal — со своей. */}
+                <ScrollTap style={styles.flex}>
+                  <Stack screenOptions={{ headerShown: false }}>
+                    <Stack.Screen
+                      name="call"
+                      options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }}
+                    />
+                    {/* Редактор попа — во весь экран, поверх вкладок, как камера в TikTok. */}
+                    <Stack.Screen name="pop-editor/[channelId]" />
+                    {/* Просмотр попсов — на весь экран, без вкладок, на чёрном фоне. */}
+                    <Stack.Screen name="pops/[channelId]" options={{ statusBarStyle: 'light' }} />
+                    <Stack.Screen name="pops/search" options={{ statusBarStyle: 'light' }} />
+                    {/* Канал из «Ленты» — поверх вкладок, со своей шапкой. */}
+                    <Stack.Screen
+                      name="channel/[channelId]"
+                      options={{ headerShown: true, title: 'Канал' }}
+                    />
+                  </Stack>
+                </ScrollTap>
               </BelowReturnBar>
               <ReturnToCallBar />
               {/* Входящий звонок — своим окном поверх всего, включая нативные вкладки. */}

@@ -16,6 +16,7 @@ import {
   type MosaicBounds,
 } from '@/features/chats/lib/mosaicLayout';
 import { MediaAttachmentGrid } from '@/features/chats/MediaAttachmentGrid';
+import { tileImageUri } from '@/features/chats/MediaTile';
 import { MessageMeta } from '@/features/chats/MessageMeta';
 import { ReplyQuote } from '@/features/chats/ReplyQuote';
 import type { ChatMessage } from '@/features/chats/useChatMessages';
@@ -34,6 +35,8 @@ import {
 } from '@/features/interactions/MessageReactions';
 import { hasReactions } from '@/features/interactions/reactionState';
 import { MediaViewer, type MediaViewerItem } from '@/features/media';
+import { useArmedViewer } from '@/features/media/MediaViewer/useArmedViewer';
+import { createTileRegistry } from '@/features/media/tileRegistry';
 import { openPopViewer } from '@/features/pops/openPopViewer';
 import { useTheme } from '@/hooks/use-theme';
 import { Spacing } from '@/theme';
@@ -158,7 +161,16 @@ export function MessageBubble({
   // Кружки пока не подключены к облачку — это отдельная задача; здесь только
   // заглушка, чтобы сообщение не было пустым.
   const hasUnhandledAttachment = !isMediaMessage && !voice && message.kind !== 'text';
-  const [viewerIndex, setViewerIndex] = useState<number | null>(null);
+  const {
+    viewer,
+    open: openViewer,
+    arm: armViewer,
+    disarm: disarmViewer,
+    close: closeViewer,
+  } = useArmedViewer();
+  // Плитки этого облачка: просмотр листает только его вложения и уходит в
+  // плитку того, на котором закрыли.
+  const [tiles] = useState(createTileRegistry);
   const anyReactions = hasReactions(message.reactions);
   const hasLargeRow =
     reactionsLayout === 'merged' ? anyReactions : Object.keys(message.reactions.members).length > 0;
@@ -191,6 +203,7 @@ export function MessageBubble({
     id: attachment.id,
     kind: attachment.mimeType?.startsWith('video/') ? 'video' : 'photo',
     url: attachment.url,
+    thumbUrl: tileImageUri(attachment),
     width: attachment.width,
     height: attachment.height,
   }));
@@ -216,6 +229,13 @@ export function MessageBubble({
   // мозаика, и в её зазорах виден фон чата, как в Telegram. С первой реакцией
   // облачко появляется: реакции стоят в нём, под мозаикой.
   const bareMedia = !message.text && !showAuthorLine && !hasAnnotations && !anyReactions;
+  // Какими краями мозаика касается краёв облачка: там её углы скруглены.
+  const mosaicTop = !showAuthorLine && !hasAnnotations;
+  const mosaicBottom = !message.text && !anyReactions;
+  const mosaicEdges = useMemo(
+    () => ({ top: mosaicTop, bottom: mosaicBottom }),
+    [mosaicBottom, mosaicTop],
+  );
   const tone: ReactionsTone = isOwn ? 'own' : 'other';
 
   const reactionProps = {
@@ -347,7 +367,11 @@ export function MessageBubble({
               attachments={message.attachments}
               layout={layout}
               localPreviews={message.localPreviews}
-              onPress={isPopPost ? openPop : setViewerIndex}
+              onPress={isPopPost ? openPop : openViewer}
+              tiles={tiles}
+              edges={mosaicEdges}
+              onArm={isPopPost ? undefined : armViewer}
+              onDisarm={isPopPost ? undefined : disarmViewer}
             >
               {message.text ? null : (
                 // Без подписи время со статусом — плашкой в левом нижнем углу
@@ -414,10 +438,15 @@ export function MessageBubble({
 
       {isMediaMessage && !isPopPost ? (
         <MediaViewer
-          visible={viewerIndex !== null}
+          // Другая плитка, чем под пальцем, — другой просмотр с нуля.
+          key={viewer?.index}
+          visible={viewer !== null}
+          armed={viewer?.armed}
           items={viewerItems}
-          initialIndex={viewerIndex ?? 0}
-          onClose={() => setViewerIndex(null)}
+          initialIndex={viewer?.index ?? 0}
+          origin={viewer?.origin}
+          tiles={tiles}
+          onClose={closeViewer}
         />
       ) : null}
     </View>

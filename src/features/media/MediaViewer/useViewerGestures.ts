@@ -14,7 +14,6 @@ import {
 import {
   clampWithRubber,
   DOUBLE_TAP_SCALE,
-  dismissOpacity,
   MAX_SCALE,
   panBound,
   resolveDismiss,
@@ -24,7 +23,6 @@ import {
 } from './viewerMath';
 
 const PAGE_MS = 240;
-const DISMISS_MS = 200;
 const SPRING = { damping: 28, stiffness: 260, mass: 0.9 };
 /** Сдвиг пальца, после которого жест узнаёт направление. */
 const PAN_ACTIVATION = 10;
@@ -46,7 +44,11 @@ type Params = {
   contentHeight: number;
   onPageChange: (index: number) => void;
   onTap: () => void;
-  onClose: () => void;
+  /**
+   * Вертикальный жест за порогом или броском: уход в ту сторону, `-1` —
+   * вверх, `1` — вниз. Куда именно — в плитку или за край — решает просмотр.
+   */
+  onDismiss: (direction: -1 | 1) => void;
 };
 
 /**
@@ -54,7 +56,7 @@ type Params = {
  *
  * - без увеличения направление решают первые dp движения: по горизонтали —
  *   листание альбома, по вертикали — медиа едет за пальцем, фон светлеет, и
- *   за порогом или броском просмотр закрывается в ту же сторону;
+ *   за порогом или броском просмотр закрывается (`onDismiss`);
  * - щипок увеличивает с центром между пальцами, двойной тап — в точку тапа
  *   или обратно;
  * - увеличенное медиа панорамируется с упором в края и резиной; упёрлось в
@@ -70,7 +72,7 @@ export function useViewerGestures({
   contentHeight,
   onPageChange,
   onTap,
-  onClose,
+  onDismiss,
 }: Params) {
   const index = useSharedValue(initialIndex);
   const pageX = useSharedValue(-initialIndex * width);
@@ -184,10 +186,10 @@ export function useViewerGestures({
             return;
           }
 
+          // Медиа стоит там, где его отпустили, пока просмотр решает, куда
+          // ему уходить.
           closing.value = true;
-          dismissY.value = withTiming(direction * height, { duration: DISMISS_MS }, (finished) => {
-            if (finished) runOnJS(onClose)();
-          });
+          runOnJS(onDismiss)(direction);
           return;
         }
 
@@ -285,7 +287,7 @@ export function useViewerGestures({
     height,
     index,
     mode,
-    onClose,
+    onDismiss,
     onPageChange,
     onTap,
     pageStart,
@@ -309,9 +311,10 @@ export function useViewerGestures({
     ],
   }));
 
-  const backgroundStyle = useAnimatedStyle(() => ({
-    opacity: dismissOpacity(dismissY.value, height),
-  }));
-
-  return { gesture, pagerStyle, activeStyle, backgroundStyle };
+  return {
+    gesture,
+    pagerStyle,
+    activeStyle,
+    zoom: { scale, tx, ty, dismissY, closing },
+  };
 }

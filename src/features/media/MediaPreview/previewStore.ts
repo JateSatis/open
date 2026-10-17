@@ -1,10 +1,9 @@
-import type { View } from 'react-native';
 import { create } from 'zustand';
 
 import type { MediaLibraryItem } from '@/features/media/mediaLibrary';
+import { createTileRegistry, type Rect } from '@/features/media/tileRegistry';
 
-/** Прямоугольник в координатах окна шита. */
-export type Rect = { x: number; y: number; width: number; height: number };
+export type { Rect };
 
 type PreviewState = {
   /** Открытый предпросмотр: с какого файла и из какой плитки он вылетел. */
@@ -39,34 +38,18 @@ export function publishPreviewGallery(gallery: MediaLibraryItem[]) {
 }
 
 /**
- * Клетки сетки по id файла: при выходе файл улетает в свою плитку, и её
- * место нужно знать. Это обычная таблица, не подписка: клетка пишет в неё
- * ссылку на свою вью, и только.
+ * Клетки сетки по id файла: при выходе файл улетает в свою плитку. Клетка
+ * пишет в таблицу ссылку на свою вью — ни пропов, ни подписок.
  */
-const cells = new Map<string, View>();
+const cells = createTileRegistry();
 
-export function registerGridCell(id: string, view: View | null) {
-  if (view) cells.set(id, view);
-  else cells.delete(id);
-}
+export const registerGridCell = cells.register;
 
 /** Клетка разобрана или переиспользована под другой файл — её запись больше не её. */
-export function unregisterGridCell(id: string, view: View | null) {
-  if (cells.get(id) === view) cells.delete(id);
-}
+export const unregisterGridCell = cells.unregister;
 
 /** Где сейчас клетка файла; `null` — её нет среди смонтированных. */
-export function measureGridCell(id: string): Promise<Rect | null> {
-  const view = cells.get(id);
-
-  if (!view) return Promise.resolve(null);
-
-  return new Promise((resolve) => {
-    view.measureInWindow((x, y, width, height) =>
-      resolve(width > 0 ? { x, y, width, height } : null),
-    );
-  });
-}
+export const measureGridCell = cells.measure;
 
 /**
  * «Назад» окна шита: открытый предпросмотр отвечает на него сам (закрывает

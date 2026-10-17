@@ -5,6 +5,7 @@ import {
   MediaLimits,
   readVideoFrame,
   resolveLibraryAsset,
+  type GalleryFilter,
   type LocalMedia,
   type MediaLibraryItem,
   type VideoFrame,
@@ -22,17 +23,14 @@ const NO_DURATION = 'Не удалось узнать длительность �
 const UNREADABLE = 'Не удалось открыть видео. Выберите другое.';
 
 /**
- * Что можно взять в шите: только видео до 90 секунд. Видео без длительности
- * в медиатеке не притушено: выбор его не примет и скажет почему. Ориентацию
- * по плитке не узнать: размеры в медиатеке бывают пустыми и не учитывают
- * поворот.
+ * Что шит показывает: только видео до 90 секунд. Видео без длительности
+ * остаются: выбор его не примет и скажет почему. Ориентацию по плитке не
+ * узнать: размеры в медиатеке бывают пустыми и не учитывают поворот.
  */
-export function acceptsPopVideo(asset: MediaLibraryItem): boolean {
-  return (
-    asset.kind === 'video' &&
-    (asset.durationMs === null || asset.durationMs <= MediaLimits.pop.maxDurationMs)
-  );
-}
+export const POP_VIDEO_FILTER: GalleryFilter = {
+  kind: 'video',
+  maxDurationMs: MediaLimits.pop.maxDurationMs,
+};
 
 /**
  * Выбор видео для попа. Ориентацию честно говорит только кадр: горизонтальное
