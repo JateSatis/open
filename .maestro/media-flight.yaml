@@ -1,0 +1,51 @@
+appId: com.openger.app
+name: Медиа из плитки — просмотр из вкладки «Медиа» открывается и закрывается крестиком, редактор шита закрывается свайпом вниз
+tags:
+  - media
+  - chats
+env:
+  # Диалог с собой основного аккаунта: в нём десятки фото и видео.
+  CHAT_ID: 44faaf56-5665-485f-8e65-036be890f2e5
+  TITLE: "Максим Данилов"
+---
+- runFlow: subflows/open-app.yaml
+- openLink: openger://chats/${CHAT_ID}
+- assertVisible:
+    id: "messages-list"
+# Вкладка «Медиа»: тап по клетке — просмотр, крестик — назад к сетке.
+- tapOn: "О чате: ${TITLE}"
+- tapOn:
+    id: "info-tab-media"
+- tapOn:
+    id: "info-media-cell"
+    index: 2
+- assertVisible:
+    id: "media-viewer"
+- tapOn: "Закрыть просмотр"
+- assertNotVisible:
+    id: "media-viewer"
+- assertVisible:
+    id: "info-media-cell"
+- back
+- assertVisible:
+    id: "messages-list"
+# Редактор шита медиа: свайп вниз по фото — назад в сетку, шит открыт.
+- tapOn: "Фото и видео"
+- assertVisible:
+    id: "media-grid"
+- tapOn:
+    id: "media-grid-open"
+    index: 3
+- assertVisible:
+    id: "media-preview"
+- swipe:
+    start: 50%, 45%
+    end: 50%, 80%
+    duration: 300
+- assertNotVisible:
+    id: "media-preview"
+- assertVisible:
+    id: "media-grid"
+- back
+- assertNotVisible:
+    id: "media-grid"
