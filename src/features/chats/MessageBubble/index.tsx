@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { PixelRatio, Pressable, View, type StyleProp, type TextStyle } from 'react-native';
 
 import { BubbleFooter } from './BubbleFooter';
@@ -35,7 +35,8 @@ import {
 } from '@/features/interactions/MessageReactions';
 import { hasReactions } from '@/features/interactions/reactionState';
 import { MediaViewer, type MediaViewerItem } from '@/features/media';
-import { createTileRegistry, type TileRect } from '@/features/media/tileRegistry';
+import { useArmedViewer } from '@/features/media/MediaViewer/useArmedViewer';
+import { createTileRegistry } from '@/features/media/tileRegistry';
 import { openPopViewer } from '@/features/pops/openPopViewer';
 import { useTheme } from '@/hooks/use-theme';
 import { Spacing } from '@/theme';
@@ -160,31 +161,16 @@ export function MessageBubble({
   // Кружки пока не подключены к облачку — это отдельная задача; здесь только
   // заглушка, чтобы сообщение не было пустым.
   const hasUnhandledAttachment = !isMediaMessage && !voice && message.kind !== 'text';
-  // `armed` — палец ещё на плитке: просмотр готовится, но стоит в ней.
-  const [viewer, setViewer] = useState<{
-    index: number;
-    origin: TileRect | null;
-    armed: boolean;
-  } | null>(null);
+  const {
+    viewer,
+    open: openViewer,
+    arm: armViewer,
+    disarm: disarmViewer,
+    close: closeViewer,
+  } = useArmedViewer();
   // Плитки этого облачка: просмотр листает только его вложения и уходит в
   // плитку того, на котором закрыли.
   const [tiles] = useState(createTileRegistry);
-  const openViewer = useCallback(
-    (index: number, origin: TileRect | null) =>
-      setViewer((current) =>
-        current === null || current.armed ? { index, origin, armed: false } : current,
-      ),
-    [],
-  );
-  const armViewer = useCallback(
-    (index: number, origin: TileRect | null) =>
-      setViewer((current) => current ?? { index, origin, armed: true }),
-    [],
-  );
-  const disarmViewer = useCallback(
-    () => setViewer((current) => (current?.armed ? null : current)),
-    [],
-  );
   const anyReactions = hasReactions(message.reactions);
   const hasLargeRow =
     reactionsLayout === 'merged' ? anyReactions : Object.keys(message.reactions.members).length > 0;
@@ -460,7 +446,7 @@ export function MessageBubble({
           initialIndex={viewer?.index ?? 0}
           origin={viewer?.origin}
           tiles={tiles}
-          onClose={() => setViewer(null)}
+          onClose={closeViewer}
         />
       ) : null}
     </View>

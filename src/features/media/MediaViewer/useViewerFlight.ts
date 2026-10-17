@@ -2,7 +2,6 @@
 /* eslint-disable react-hooks/immutability */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Easing,
   runOnJS,
   runOnUI,
   useAnimatedStyle,
@@ -13,6 +12,7 @@ import {
 
 import { dismissOpacity } from './viewerMath';
 
+import { AWAY_MS, FLIGHT_EASING, FLIGHT_MS } from '@/features/media/flightTiming';
 import {
   setHiddenTile,
   tileVisible,
@@ -21,11 +21,6 @@ import {
   type TileRegistry,
 } from '@/features/media/tileRegistry';
 
-/** Перелёт из плитки и обратно — как у предпросмотра шита медиа. */
-export const FLIGHT_MS = 280;
-const FLIGHT_EASING = Easing.out(Easing.cubic);
-/** Уход за край экрана, когда плитки не видно. */
-const AWAY_MS = 200;
 /** Столько ждём картинку плитки перед перелётом, дальше летим без неё. */
 const LAUNCH_FALLBACK_MS = 250;
 
@@ -83,7 +78,9 @@ export function useViewerFlight({
   const flight = useSharedValue(0);
   const origin = useSharedValue<TileRect | null>(initialOrigin);
   const from = useSharedValue<Rect | null>(null);
-  const fade = useSharedValue(1);
+  // Без плитки (аватарка на странице информации) медиа проявляется на месте,
+  // как раньше проявлялось всё окно.
+  const fade = useSharedValue(initialOrigin ? 1 : 0);
   /** Затемнение фона в момент ухода: оно гаснет оттуда, а не от полного. */
   const dimAtLeave = useSharedValue(-1);
   const [leaving, setLeaving] = useState(false);
@@ -95,11 +92,11 @@ export function useViewerFlight({
   const finish = useCallback(() => {
     // Плитка проявляется раньше, чем окно уходит: кадр, где нет ни той, ни
     // другой картинки, мигнул бы пустотой.
-    setHiddenTile(null);
+    setHiddenTile(null, null);
     requestAnimationFrame(() => requestAnimationFrame(onClosed));
   }, [onClosed]);
 
-  useEffect(() => () => setHiddenTile(null), []);
+  useEffect(() => () => setHiddenTile(null, null), []);
 
   /**
    * Перелёт стартует, когда окно уже на экране и картинка плитки в нём
@@ -112,12 +109,13 @@ export function useViewerFlight({
       if (launched.current || leavingRef.current) return;
 
       launched.current = true;
-      if (sourceId) setHiddenTile(sourceId);
+      if (sourceId) setHiddenTile(tiles, sourceId);
+      if (!initialOrigin) fade.value = withTiming(1, { duration: FLIGHT_MS });
       flight.value = withTiming(1, { duration: FLIGHT_MS, easing: FLIGHT_EASING }, (done) => {
         if (done) runOnJS(setSettled)(true);
       });
     },
-    [flight],
+    [fade, flight, initialOrigin, tiles],
   );
 
   const flyBack = useCallback(
@@ -187,7 +185,7 @@ export function useViewerFlight({
           return;
         }
 
-        setHiddenTile(null);
+        setHiddenTile(null, null);
         if (direction !== 0) flyAway(direction);
         else fadeOut();
       });

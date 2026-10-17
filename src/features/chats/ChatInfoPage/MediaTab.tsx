@@ -20,6 +20,7 @@ import {
   type TileRect,
   type TileRegistry,
 } from '@/features/media/tileRegistry';
+import { useArmedViewer } from '@/features/media/MediaViewer/useArmedViewer';
 import { useTileTap } from '@/features/media/useTileTap';
 import { useTheme } from '@/hooks/use-theme';
 import { InfoPageSizes, Radii, Spacing } from '@/theme';
@@ -48,8 +49,6 @@ function cellImageUri(item: ChatMediaItem): string {
   return isVideo(item) ? (item.posterUrl ?? item.url) : item.url;
 }
 
-type ViewerState = { index: number; origin: TileRect | null; armed: boolean };
-
 /**
  * Вкладка «Медиа»: фото и видео чата сеткой в четыре колонки, свежие сверху,
  * альбом — по клетке на вложение. Тап — просмотр с листанием по всем медиа
@@ -61,8 +60,7 @@ export function MediaTab({ tab, chatId, onShowInChat }: MediaTabProps) {
   const query = useChatMedia(chatId);
   const { hasNextPage, isFetchingNextPage, fetchNextPage } = query;
   const items = useMemo(() => query.data?.pages.flatMap((page) => page.items) ?? [], [query.data]);
-  // `armed` — палец ещё на клетке: просмотр готовится, но стоит в ней.
-  const [viewer, setViewer] = useState<ViewerState | null>(null);
+  const { viewer, open: openAt, arm: armAt, disarm, close } = useArmedViewer();
   // Клетки сетки по id медиа: просмотр уходит в клетку файла, на котором
   // закрыли. Клетки переиспользуются — снимаются сверкой вью.
   const [tiles] = useState(createTileRegistry);
@@ -123,23 +121,18 @@ export function MediaTab({ tab, chatId, onShowInChat }: MediaTabProps) {
     (item: ChatMediaItem, origin: TileRect | null) => {
       const index = indexOf(item);
 
-      if (index < 0) return;
-
-      setViewer((current) =>
-        current === null || current.armed ? { index, origin, armed: false } : current,
-      );
+      if (index >= 0) openAt(index, origin);
     },
-    [indexOf],
+    [indexOf, openAt],
   );
   const arm = useCallback(
     (item: ChatMediaItem, origin: TileRect | null) => {
       const index = indexOf(item);
 
-      if (index >= 0) setViewer((current) => current ?? { index, origin, armed: true });
+      if (index >= 0) armAt(index, origin);
     },
-    [indexOf],
+    [armAt, indexOf],
   );
-  const disarm = useCallback(() => setViewer((current) => (current?.armed ? null : current)), []);
   const openMenu = useCallback(
     (item: ChatMediaItem, anchor: MenuAnchor) => setMenu({ item, anchor }),
     [],
@@ -180,7 +173,7 @@ export function MediaTab({ tab, chatId, onShowInChat }: MediaTabProps) {
           initialIndex={viewer?.index ?? 0}
           origin={viewer?.origin}
           tiles={tiles}
-          onClose={() => setViewer(null)}
+          onClose={close}
           onIndexChange={onViewerIndex}
         />
       </TileViewportContext.Provider>
@@ -272,7 +265,7 @@ function MediaCellContent({
   const theme = useTheme();
   const ref = useRef<View>(null);
   const video = isVideo(item);
-  const hidden = useTileHidden(item.id);
+  const hidden = useTileHidden(tiles, item.id);
 
   // Клетку переиспользуют под другие медиа — запись в таблице меняется вместе с ним.
   useEffect(() => {
@@ -283,24 +276,15 @@ function MediaCellContent({
     return () => tiles.unregister(item.id, view);
   }, [item.id, tiles]);
 
-  // Замер асинхронный: палец мог уйти раньше, чем клетка измерилась.
-  const armToken = useRef(0);
-  const open = useCallback(() => {
-    armToken.current += 1;
-    void measureView(ref.current).then((origin) => onPress(item, origin));
-  }, [item, onPress]);
-  const arm = useCallback(() => {
-    const token = ++armToken.current;
-
-    void measureView(ref.current).then((origin) => {
-      if (armToken.current === token) onArm(item, origin);
-    });
-  }, [item, onArm]);
-  const disarm = useCallback(() => {
-    armToken.current += 1;
-    onDisarm();
-  }, [onDisarm]);
-  const tap = useTileTap({ onTap: open, onArm: arm, onDisarm: disarm });
+  const measure = useCallback(() => measureView(ref.current), []);
+  const tapped = useCallback((origin: TileRect | null) => onPress(item, origin), [item, onPress]);
+  const armed = useCallback((origin: TileRect | null) => onArm(item, origin), [item, onArm]);
+  const { gesture: tap, open } = useTileTap({
+    measure,
+    onTap: tapped,
+    onArm: armed,
+    onDisarm,
+  });
 
   return (
     <GestureDetector gesture={tap}>

@@ -202,7 +202,7 @@ function ViewerContent({
   // Пролистали — пустой стоит плитка того файла, что сейчас открыт: в неё
   // он и улетит.
   useEffect(() => {
-    if (settled && tiles && activeId && !leaving) setHiddenTile(activeId);
+    if (settled && tiles && activeId && !leaving) setHiddenTile(tiles, activeId);
   }, [activeId, leaving, settled, tiles]);
 
   useEffect(() => {
@@ -275,6 +275,7 @@ function ViewerContent({
                   <Animated.View style={[styles.container, index === activeIndex && activeStyle]}>
                     <MediaViewerPage
                       item={item}
+                      index={index}
                       width={width}
                       height={height}
                       isActive={index === activeIndex}
@@ -283,7 +284,7 @@ function ViewerContent({
                       settled={settled}
                       leaving={leaving}
                       onSourceShown={index === initialIndex ? onSourceShown : undefined}
-                      onToggleReady={(toggle) => registerToggle(index, toggle)}
+                      onToggleReady={registerToggle}
                     />
                   </Animated.View>
                 ) : null}

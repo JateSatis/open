@@ -154,7 +154,9 @@ describe('MediaViewer', () => {
   });
 
   it('renders nothing while hidden', async () => {
-    await render(<MediaViewer visible={false} items={items} initialIndex={0} onClose={jest.fn()} />);
+    await render(
+      <MediaViewer visible={false} items={items} initialIndex={0} onClose={jest.fn()} />,
+    );
 
     expect(screen.queryByTestId('media-viewer')).toBeNull();
   });

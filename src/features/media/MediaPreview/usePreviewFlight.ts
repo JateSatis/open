@@ -2,23 +2,17 @@
 /* eslint-disable react-hooks/immutability */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { KeyboardController } from 'react-native-keyboard-controller';
-import {
-  Easing,
-  runOnJS,
-  useSharedValue,
-  withTiming,
-  type SharedValue,
-} from 'react-native-reanimated';
+import { runOnJS, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
 
 import { closeMediaPreview, measureGridCell, type Rect } from './previewStore';
 
-/** Перелёт из плитки и обратно. */
-const FLIGHT_MS = 280;
-const FLIGHT_EASING = Easing.out(Easing.cubic);
+import { AWAY_MS, FLIGHT_EASING, FLIGHT_MS } from '@/features/media/flightTiming';
+import { tileVisible } from '@/features/media/tileRegistry';
+
+/** Ширина «без края» для области сетки. */
+const WIDE = 1e6;
 /** Столько ждём превью перед перелётом, дальше летим без него. */
 const LAUNCH_FALLBACK_MS = 400;
-/** Уход за край экрана, когда плитки не видно, — как у просмотрщика. */
-const AWAY_MS = 200;
 
 export type PreviewFlight = {
   flight: SharedValue<number>;
@@ -86,10 +80,15 @@ export function usePreviewFlight(
       void KeyboardController.dismiss();
 
       void measureGridCell(assetId).then((rect) => {
-        const center = rect ? rect.y + rect.height / 2 : -1;
-        const visible = rect !== null && center > gridViewport.top && center < gridViewport.bottom;
+        // Сетка во всю ширину окна: видимость решает только высота.
+        const viewport = {
+          x: -WIDE,
+          y: gridViewport.top,
+          width: 2 * WIDE,
+          height: gridViewport.bottom - gridViewport.top,
+        };
 
-        if (visible) {
+        if (tileVisible(rect, viewport)) {
           origin.value = rect;
           flight.value = withTiming(0, { duration: FLIGHT_MS, easing: FLIGHT_EASING }, (done) => {
             if (done) runOnJS(closeMediaPreview)();

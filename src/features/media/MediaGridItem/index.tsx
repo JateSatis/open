@@ -109,16 +109,15 @@ export const MediaGridItem = memo(function MediaGridItem({
     );
   const press = pick ? () => (pick.onPick ? pick.onPick(asset) : openPreview()) : openPreview;
   const canOpen = pick !== undefined || !locked;
-  const canToggle = pick === undefined && !disabled;
 
   // Тап по клетке — жест-обработчиком, чтобы срабатывать и на хвосте
   // прокрутки сетки (см. `useTileTap`). Кружок выбора лежит над клеткой, но
-  // его запас касания шире самого кружка: касание в этом углу — выбор файла,
-  // как у кнопки кружка, а не открытие.
-  const latest = useRef({ press, toggle: () => onToggle(asset), canOpen, canToggle });
+  // запас касания его кнопки шире самого кружка: касание в этом углу — её.
+  const inCircleMode = pick === undefined;
+  const latest = useRef({ press, canOpen, inCircleMode });
 
   useEffect(() => {
-    latest.current = { press, toggle: () => onToggle(asset), canOpen, canToggle };
+    latest.current = { press, canOpen, inCircleMode };
   });
 
   const tap = useMemo(
@@ -132,8 +131,11 @@ export const MediaGridItem = memo(function MediaGridItem({
           const now = latest.current;
           const inCorner = event.x < CIRCLE_TOUCH_ZONE && event.y < CIRCLE_TOUCH_ZONE;
 
-          if (inCorner && now.canToggle) now.toggle();
-          else if (now.canOpen) now.press();
+          // Угол кружка — его кнопка: запас её касания шире самого кружка, и
+          // касание там она обрабатывает сама. Клетка его не открывает.
+          if (inCorner && now.inCircleMode) return;
+
+          if (now.canOpen) now.press();
         }),
     [],
   );

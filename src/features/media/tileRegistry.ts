@@ -2,11 +2,18 @@ import { createContext, useContext } from 'react';
 import type { View } from 'react-native';
 import { create } from 'zustand';
 
+import { measureInWindow } from '@/lib/measureInWindow';
+
 /** Прямоугольник в координатах окна: у всех окон приложения они от верха экрана. */
 export type Rect = { x: number; y: number; width: number; height: number };
 
 /** Скругление углов плитки — у тех, что совпадают с углами облачка. */
-export type Corners = { topLeft: number; topRight: number; bottomLeft: number; bottomRight: number };
+export type Corners = {
+  topLeft: number;
+  topRight: number;
+  bottomLeft: number;
+  bottomRight: number;
+};
 
 /** Плитка на экране: место и скругление, в которое уходит и из которого растёт медиа. */
 export type TileRect = Rect & { corners?: Corners };
@@ -44,21 +51,8 @@ export function createTileRegistry(): TileRegistry {
   };
 }
 
-/** Отсоединённая вью на замер не отвечает вовсе — дольше не ждём. */
-const MEASURE_WAIT_MS = 300;
-
-export function measureView(view: View | null): Promise<Rect | null> {
-  if (!view?.measureInWindow) return Promise.resolve(null);
-
-  return new Promise((resolve) => {
-    const timer = setTimeout(() => resolve(null), MEASURE_WAIT_MS);
-
-    view.measureInWindow((x, y, width, height) => {
-      clearTimeout(timer);
-      resolve(width > 0 && height > 0 ? { x, y, width, height } : null);
-    });
-  });
-}
+/** Где сейчас вью в окне; `null` — её нет на экране. */
+export const measureView: (view: View | null) => Promise<Rect | null> = measureInWindow;
 
 /**
  * Где на экране видна прокручиваемая область с плитками: медиа улетает в
@@ -89,15 +83,24 @@ export function tileVisible<T extends Rect>(tile: T | null, viewport: Rect | nul
 
 /**
  * Плитка, медиа которой сейчас открыто поверх неё: она прячется, чтобы не
- * двоиться с летящей копией. Одна на приложение — просмотр открыт один.
+ * двоиться с летящей копией. Одна на приложение — просмотр открыт один, — но
+ * своя у каждой таблицы плиток: то же вложение в чате позади панели
+ * комментариев или во вкладке «Медиа» не прячется.
  */
-const useHiddenTileStore = create<{ id: string | null }>(() => ({ id: null }));
+const useHiddenTileStore = create<{ owner: TileRegistry | null; id: string | null }>(() => ({
+  owner: null,
+  id: null,
+}));
 
-export function setHiddenTile(id: string | null) {
-  if (useHiddenTileStore.getState().id !== id) useHiddenTileStore.setState({ id });
+export function setHiddenTile(owner: TileRegistry | null, id: string | null) {
+  const current = useHiddenTileStore.getState();
+
+  if (current.owner !== owner || current.id !== id) useHiddenTileStore.setState({ owner, id });
 }
 
-/** Спрятана ли плитка `id`: подписка одним булевым, перерисуется только своя плитка. */
-export function useTileHidden(id: string): boolean {
-  return useHiddenTileStore((state) => state.id === id);
+/** Спрятана ли плитка `id` из таблицы `owner`: подписка одним булевым. */
+export function useTileHidden(owner: TileRegistry | undefined, id: string): boolean {
+  return useHiddenTileStore(
+    (state) => owner !== undefined && state.owner === owner && state.id === id,
+  );
 }

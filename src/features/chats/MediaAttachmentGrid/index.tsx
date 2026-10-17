@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import { Pressable, View } from 'react-native';
 
 import { styles } from './styles';
@@ -51,6 +51,12 @@ export function MediaAttachmentGrid({
 }: MediaAttachmentGridProps) {
   const theme = useTheme();
   const hasPop = attachments.some((attachment) => attachment.popId);
+  // Новые объекты углов на каждую перерисовку облачка перерегистрировали бы
+  // плитки и пересобирали их жест.
+  const corners = useMemo(
+    () => layout.tiles.map((tile) => tileCorners(tile, layout, edges)),
+    [edges, layout],
+  );
 
   return (
     <View
@@ -117,10 +123,11 @@ export function MediaAttachmentGrid({
             attachment={attachment}
             tile={tile}
             localPreview={localPreviews?.[index]}
-            onPress={(origin) => onPress(index, origin)}
+            index={index}
+            onPress={onPress}
             tiles={tiles}
-            corners={tileCorners(tile, layout, edges)}
-            onArm={onArm ? (origin) => onArm(index, origin) : undefined}
+            corners={corners[index]}
+            onArm={onArm}
             onDisarm={onDisarm}
           />
         );

@@ -242,8 +242,9 @@ export function PreviewLayer(props: PreviewLayerProps) {
   const leaveSwiped = useCallback(
     (direction: -1 | 1) => {
       if (currentAssetId) leave(currentAssetId, direction);
+      else lift.value = withSpring(0, LIFT_SPRING);
     },
-    [currentAssetId, leave],
+    [currentAssetId, leave, lift],
   );
   const screenHeight = size.height;
   const dismiss = useMemo(

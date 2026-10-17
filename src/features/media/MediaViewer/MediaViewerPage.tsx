@@ -15,6 +15,8 @@ import type { Rect } from '@/features/media/tileRegistry';
 
 export type MediaViewerPageProps = {
   item: MediaViewerItem;
+  /** Номер страницы — с ним страница отдаёт свой переключатель паузы. */
+  index: number;
   width: number;
   height: number;
   /** Только активная страница играет и летает — соседи по свайпу молчат. */
@@ -36,7 +38,7 @@ export type MediaViewerPageProps = {
    * Пауза по тапу. Тап ловит общий жест просмотрщика (он отличает его от
    * двойного), а страница отдаёт ему свой переключатель. `null` — снят.
    */
-  onToggleReady: (toggle: (() => void) | null) => void;
+  onToggleReady: (index: number, toggle: (() => void) | null) => void;
 };
 
 /** Медиа, вписанное в экран целиком, по центру. */
@@ -63,6 +65,7 @@ export function viewerBase(item: MediaViewerItem, width: number, height: number)
  */
 export const MediaViewerPage = memo(function MediaViewerPage({
   item,
+  index,
   width,
   height,
   isActive,
@@ -178,7 +181,7 @@ export const MediaViewerPage = memo(function MediaViewerPage({
               {/* Плеер — только на месте: поверхность видео в перелёте
                   трансформам не верна, а первые кадры бывают чёрными. */}
               {isActive && settled && !leaving ? (
-                <ViewerVideo item={item} onToggleReady={onToggleReady} />
+                <ViewerVideo item={item} index={index} onToggleReady={onToggleReady} />
               ) : null}
             </>
           ) : (
@@ -198,7 +201,8 @@ export const MediaViewerPage = memo(function MediaViewerPage({
 
 type ViewerVideoProps = {
   item: MediaViewerItem;
-  onToggleReady: (toggle: (() => void) | null) => void;
+  index: number;
+  onToggleReady: (index: number, toggle: (() => void) | null) => void;
 };
 
 /**
@@ -206,7 +210,7 @@ type ViewerVideoProps = {
  * (перемотка, громкость) сюда сознательно не входит. Показывается с первого
  * настоящего кадра: до него виден постер.
  */
-function ViewerVideo({ item, onToggleReady }: ViewerVideoProps) {
+function ViewerVideo({ item, index, onToggleReady }: ViewerVideoProps) {
   const [isPlaying, setIsPlaying] = useState(true);
   const [rendered, setRendered] = useState(false);
   const player = useVideoPlayer(item.url, (instance) => {
@@ -225,10 +229,10 @@ function ViewerVideo({ item, onToggleReady }: ViewerVideoProps) {
   }, [player]);
 
   useEffect(() => {
-    onToggleReady(toggle);
+    onToggleReady(index, toggle);
 
-    return () => onToggleReady(null);
-  }, [onToggleReady, toggle]);
+    return () => onToggleReady(index, null);
+  }, [index, onToggleReady, toggle]);
 
   return (
     <View

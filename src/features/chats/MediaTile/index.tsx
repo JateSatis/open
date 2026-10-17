@@ -21,6 +21,8 @@ import { useTheme } from '@/hooks/use-theme';
 
 export type MediaTileProps = {
   attachment: MessageAttachment;
+  /** Номер плитки в мозаике — его получают обработчики. */
+  index: number;
   tile: MosaicTile;
   /**
    * Локальная картинка того же файла — у своего только что отправленного
@@ -29,7 +31,7 @@ export type MediaTileProps = {
    */
   localPreview?: string;
   /** Тап: где плитка на экране — просмотр вырастает из неё. */
-  onPress: (origin: TileRect | null) => void;
+  onPress: (index: number, origin: TileRect | null) => void;
   /** Таблица плиток облачка: просмотр уходит в плитку файла, на котором закрыли. */
   tiles?: TileRegistry;
   /** Скругление углов плитки облачком. */
@@ -38,7 +40,7 @@ export type MediaTileProps = {
    * Палец задержался на плитке — просмотр можно готовить из неё; ушёл без
    * тапа — не нужно. См. `useTileTap`.
    */
-  onArm?: (origin: TileRect | null) => void;
+  onArm?: (index: number, origin: TileRect | null) => void;
   onDisarm?: () => void;
 };
 
@@ -66,6 +68,7 @@ export function tileImageUri(attachment: MessageAttachment): string | null {
  */
 export function MediaTile({
   attachment,
+  index,
   tile,
   localPreview,
   onPress,
@@ -77,7 +80,7 @@ export function MediaTile({
   const theme = useTheme();
   const video = isVideo(attachment);
   const uri = tileImageUri(attachment);
-  const hidden = useTileHidden(attachment.id);
+  const hidden = useTileHidden(tiles, attachment.id);
   const ref = useRef<View>(null);
 
   useEffect(() => {
@@ -92,28 +95,14 @@ export function MediaTile({
     () => measureView(ref.current).then((rect) => (rect && corners ? { ...rect, corners } : rect)),
     [corners],
   );
-  // Замер асинхронный: палец мог уйти раньше, чем плитка измерилась, —
-  // запоздалый взвод оставил бы над экраном невидимое окно.
-  const armToken = useRef(0);
-  const open = useCallback(() => {
-    armToken.current += 1;
-    void measure().then(onPress);
-  }, [measure, onPress]);
-  const arm = useCallback(() => {
-    const token = ++armToken.current;
-
-    void measure().then((rect) => {
-      if (armToken.current === token) onArm?.(rect);
-    });
-  }, [measure, onArm]);
-  const disarm = useCallback(() => {
-    armToken.current += 1;
-    onDisarm?.();
-  }, [onDisarm]);
-  const tap = useTileTap({
-    onTap: open,
-    onArm: onArm ? arm : undefined,
-    onDisarm: onDisarm ? disarm : undefined,
+  const tapped = useCallback((origin: TileRect | null) => onPress(index, origin), [index, onPress]);
+  const armed = useCallback((origin: TileRect | null) => onArm?.(index, origin), [index, onArm]);
+  const { gesture: tap, open } = useTileTap({
+    measure,
+    onTap: tapped,
+    onArm: onArm ? armed : undefined,
+    onDisarm,
+    testID: `media-tile-tap-${index}`,
   });
 
   return (
@@ -136,6 +125,7 @@ export function MediaTile({
       >
         {uri ? (
           <Image
+            testID="media-tile-image"
             source={{ uri }}
             placeholder={localPreview && localPreview !== uri ? { uri: localPreview } : undefined}
             placeholderContentFit="cover"
