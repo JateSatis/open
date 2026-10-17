@@ -125,6 +125,7 @@ export function FeedSearchPanel({ query, onPickRecent }: FeedSearchPanelProps) {
       data={rows}
       keyExtractor={(row) => row.key}
       getItemType={(row) => row.type}
+      showsVerticalScrollIndicator={false}
       renderItem={renderItem}
       keyboardDismissMode="on-drag"
       keyboardShouldPersistTaps="handled"

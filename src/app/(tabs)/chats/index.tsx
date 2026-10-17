@@ -114,6 +114,7 @@ export default function ChatsScreen() {
           data={chats}
           contentContainerStyle={{ paddingBottom: LIST_BOTTOM_INSET }}
           keyExtractor={(chat) => chat.id}
+          showsVerticalScrollIndicator={false}
           refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={refreshAll} />}
           ListHeaderComponent={
             hasInvites ? (

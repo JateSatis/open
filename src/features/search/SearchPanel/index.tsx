@@ -128,6 +128,7 @@ export function SearchPanel({ query }: { query: string }) {
       renderItem={renderItem}
       renderSectionHeader={renderSectionHeader}
       stickySectionHeadersEnabled={false}
+      showsVerticalScrollIndicator={false}
       keyboardDismissMode="on-drag"
       keyboardShouldPersistTaps="handled"
       contentContainerStyle={styles.content}
