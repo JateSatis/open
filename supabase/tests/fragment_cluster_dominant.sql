@@ -17,7 +17,8 @@ grant all on results_n_seq to authenticated, anon;
 insert into auth.users (id, email, raw_user_meta_data, aud, role) values
   ('00000000-0000-4000-8000-0000000000aa', 'la@test.local', '{"full_name":"Участник A"}', 'authenticated', 'authenticated'),
   ('00000000-0000-4000-8000-0000000000ba', 'lb@test.local', '{"full_name":"Участник B"}', 'authenticated', 'authenticated'),
-  ('00000000-0000-4000-8000-0000000000da', 'ld@test.local', '{"full_name":"Посетитель D"}', 'authenticated', 'authenticated');
+  ('00000000-0000-4000-8000-0000000000da', 'ld@test.local', '{"full_name":"Посетитель D"}', 'authenticated', 'authenticated'),
+  ('00000000-0000-4000-8000-0000000000ea', 'le@test.local', '{"full_name":"Посетитель E"}', 'authenticated', 'authenticated');
 
 create function pg_temp.act_as(uid uuid) returns void language plpgsql as $$
 begin
@@ -111,7 +112,13 @@ declare
   a uuid := '00000000-0000-4000-8000-0000000000aa';
   b uuid := '00000000-0000-4000-8000-0000000000ba';
   d uuid := '00000000-0000-4000-8000-0000000000da';
+  e uuid := '00000000-0000-4000-8000-0000000000ea';
   chat uuid;
+  m2 uuid;
+  f1 uuid;
+  f2 uuid;
+  f3 uuid;
+  f4 uuid;
   m uuid;
   k uuid;
   fa uuid;
@@ -205,6 +212,32 @@ begin
   perform public.refresh_message_clusters(m);
   select dominant_emoji into got from public.fragment_clusters where id = k;
   perform pg_temp.check('К1.4 все реакции сняты — лидер null', got is null, coalesce(got, 'null'));
+
+  -- Замена моей реакции внутри кластера (снять прежнюю + поставить новую) —
+  -- одно действие: ничья сравнивается с лидером до замены, а не с промежуточным.
+  perform pg_temp.act_as(a);
+  m2 := pg_temp.say_text(chat, 'Здесь первый кусок и второй кусок рядом');
+  f1 := pg_temp.react(m2, 'первый кусок', '👍');
+  perform pg_temp.act_as(b);
+  f2 := pg_temp.react(m2, 'кусок и', '👍');
+  perform pg_temp.act_as(d);
+  f3 := pg_temp.react(m2, 'и второй', '❤️');
+  perform pg_temp.act_as(e);
+  f4 := pg_temp.react(m2, 'второй кусок', '❤️');
+  perform pg_temp.as_service();
+  s := pg_temp.recompute(m2, jsonb_build_array(pg_temp.cl(m2, null, 'первый кусок и второй кусок', array[f1, f2, f3, f4])));
+  select id, dominant_emoji into k, got from public.fragment_clusters where message_id = m2 and deleted_at is null;
+  perform pg_temp.check('ничья 👍2 ❤️2 без прежнего — 👍 по справочнику', s = 'applied' and got = '👍', s || ' ' || coalesce(got, 'null'));
+
+  perform pg_temp.act_as(a);
+  perform pg_temp.react(m2, 'первый', '👍');
+  perform pg_temp.as_service();
+  select dominant_emoji into got from public.fragment_clusters where id = k;
+  perform pg_temp.check('перенос моей 👍 на другой кусок кластера не отдаёт лидера ❤️',
+    got = '👍'
+      and (select (member_reactions ->> '👍')::int = 2 and (visitor_reactions ->> '❤️')::int = 2
+           from public.fragment_clusters where id = k),
+    coalesce(got, 'null') || ' ' || (select member_reactions::text || visitor_reactions::text from public.fragment_clusters where id = k));
 end;
 $$;
 
