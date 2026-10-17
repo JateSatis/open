@@ -8,7 +8,7 @@ const TAP_SLOP = 10;
  * готовиться. Прокрутка, начатая с плитки, узнаёт себя раньше — и окно
  * не рождается и не умирает на каждом движении списка.
  */
-const ARM_DELAY_MS = 30;
+const ARM_DELAY_MS = 40;
 
 export type TileTapHandlers = {
   onTap: () => void;

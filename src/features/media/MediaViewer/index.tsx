@@ -71,6 +71,9 @@ function ViewerWindow({ onClose, ...props }: ViewerProps) {
   const backRef = useRef<() => void>(onClose);
   // Не состояние: показ окна сразу трогает перелёт, без лишней перерисовки.
   const [shown] = useState(createWindowSignal);
+  // Взведённое окно рождается пустым — так оно появляется быстрее всего, — а
+  // медиа в нём монтируется, как только окно на экране, ещё под пальцем.
+  const [windowUp, setWindowUp] = useState(false);
 
   return (
     <Modal
@@ -79,13 +82,18 @@ function ViewerWindow({ onClose, ...props }: ViewerProps) {
       transparent
       animationType="none"
       onRequestClose={() => backRef.current()}
-      onShow={shown.fire}
+      onShow={() => {
+        shown.fire();
+        setWindowUp(true);
+      }}
       statusBarTranslucent
       navigationBarTranslucent
     >
       {/* Своё окно на Android — свой корень жестов, как у шитов. */}
       <GestureHandlerRootView style={styles.container}>
-        <ViewerContent {...props} onClose={onClose} windowShown={shown} backRef={backRef} />
+        {props.armed && !windowUp ? null : (
+          <ViewerContent {...props} onClose={onClose} windowShown={shown} backRef={backRef} />
+        )}
       </GestureHandlerRootView>
     </Modal>
   );
@@ -261,7 +269,9 @@ function ViewerContent({
           <Animated.View style={[styles.pager, { width: width * items.length }, pagerStyle]}>
             {items.map((item, index) => (
               <View key={item.id} style={[styles.page, { left: index * width, width, height }]}>
-                {Math.abs(index - activeIndex) <= PAGE_WINDOW ? (
+                {/* До конца перелёта — только открытая страница: соседи
+                    утяжелили бы первый кадр окна. */}
+                {Math.abs(index - activeIndex) <= (settled ? PAGE_WINDOW : 0) ? (
                   <Animated.View style={[styles.container, index === activeIndex && activeStyle]}>
                     <MediaViewerPage
                       item={item}
