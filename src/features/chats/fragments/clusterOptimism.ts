@@ -9,6 +9,7 @@ import type { AreaSummary, FragmentCluster } from '@/api/fragmentClusters';
 import type { ReactionAudience, ReactionCounts } from '@/api/reactionCounts';
 import { clustersKeyOf } from '@/features/chats/fragments/clusterKeys';
 import { coversMoreThanHalf } from '@/features/chats/fragments/fragmentSets';
+import { dominantReaction } from '@/features/chats/fragments/reactionStyle';
 
 type Row = 'memberReactions' | 'visitorReactions';
 
@@ -58,17 +59,23 @@ export function patchClusterReaction(queryClient: QueryClient, patch: ClusterRea
       if (!clusterId) continue;
 
       queryClient.setQueryData<FragmentCluster[]>(key, (clusters) =>
-        clusters?.map((cluster) =>
-          cluster.id !== clusterId || cluster.mine === emoji
-            ? cluster
-            : {
-                ...cluster,
-                [row]: shiftCount(shiftCount(cluster[row], cluster.mine, -1), emoji, 1),
-                reactionsCount: cluster.reactionsCount - (cluster.mine ? 1 : 0) + (emoji ? 1 : 0),
-                mine: emoji,
-                myFragmentId: holder,
-              },
-        ),
+        clusters?.map((cluster) => {
+          if (cluster.id !== clusterId || cluster.mine === emoji) return cluster;
+
+          const next = {
+            ...cluster,
+            [row]: shiftCount(shiftCount(cluster[row], cluster.mine, -1), emoji, 1),
+            reactionsCount: cluster.reactionsCount - (cluster.mine ? 1 : 0) + (emoji ? 1 : 0),
+            mine: emoji,
+            myFragmentId: holder,
+          };
+
+          // Цвет подсветки — сразу по тапу, тем же правилом, что в базе.
+          return {
+            ...next,
+            dominant: dominantReaction([next.memberReactions, next.visitorReactions], cluster.dominant),
+          };
+        }),
       );
       continue;
     }

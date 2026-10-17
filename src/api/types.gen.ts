@@ -1059,6 +1059,7 @@ export type Database = {
           deleted_at: string | null
           display_end: number | null
           display_start: number | null
+          dominant_emoji: string | null
           end_offset: number
           id: string
           member_reactions: Json
@@ -1079,6 +1080,7 @@ export type Database = {
           deleted_at?: string | null
           display_end?: number | null
           display_start?: number | null
+          dominant_emoji?: string | null
           end_offset: number
           id?: string
           member_reactions?: Json
@@ -1099,6 +1101,7 @@ export type Database = {
           deleted_at?: string | null
           display_end?: number | null
           display_start?: number | null
+          dominant_emoji?: string | null
           end_offset?: number
           id?: string
           member_reactions?: Json
@@ -1118,6 +1121,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "fragment_cluster_decisions"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fragment_clusters_dominant_emoji_fkey"
+            columns: ["dominant_emoji"]
+            isOneToOne: false
+            referencedRelation: "reaction_emojis"
+            referencedColumns: ["emoji"]
           },
           {
             foreignKeyName: "fragment_clusters_message_fkey"
@@ -3011,6 +3021,10 @@ export type Database = {
         Args: { folder: string; url: string }
         Returns: string
       }
+      cluster_dominant_reaction: {
+        Args: { member: Json; previous: string; visitor: Json }
+        Returns: string
+      }
       comment_pin_right: {
         Args: { target: string; who: string }
         Returns: boolean
@@ -3385,6 +3399,7 @@ export type Database = {
           display_end: number
           display_start: number
           display_text: string
+          dominant_emoji: string
           end_offset: number
           fragments_count: number
           id: string

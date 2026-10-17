@@ -53,6 +53,7 @@ function cluster(id: string, start: number, end: number): FragmentCluster {
     mine: null,
     myFragmentId: null,
     decisionId: 'd1',
+    dominant: '🔥',
   };
 }
 

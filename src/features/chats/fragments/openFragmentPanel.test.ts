@@ -53,6 +53,7 @@ const cluster: FragmentCluster = {
   mine: null,
   myFragmentId: null,
   decisionId: 'd1',
+  dominant: null,
 };
 
 function client() {
