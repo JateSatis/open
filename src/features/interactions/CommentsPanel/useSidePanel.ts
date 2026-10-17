@@ -71,11 +71,10 @@ function useStillPane(): SheetPane {
 /**
  * Механика боковой панели фрагмента — тот же набор, что у шита
  * (`usePanelSheet`), чтобы внутри жило то же содержимое комментариев. Панель
- * въезжает справа и уходит вправо: крестиком, тапом по затемнению,
- * «назад» и свайпом вправо по списку — медленным до порога или броском.
+ * въезжает справа и уходит вправо: тапом по затемнению, «назад» и свайпом
+ * вправо по списку — медленным до порога или броском.
  */
 export function useSidePanel({ width, windowHeight }: Options): PanelSheet & {
-  backdropStyle: PanelSheet['shiftStyle'];
   /** Панель доехала — можно отдавать фокус полю ввода. */
   opened: boolean;
 } {
@@ -174,7 +173,6 @@ export function useSidePanel({ width, windowHeight }: Options): PanelSheet & {
   const backdropStyle = useAnimatedStyle((): ViewStyle => ({ opacity: 1 - offset.value / width }));
 
   const markShown = useCallback(() => setShown(true), []);
-  const markReady = useCallback(() => undefined, []);
 
   return {
     geometry,
@@ -190,7 +188,6 @@ export function useSidePanel({ width, windowHeight }: Options): PanelSheet & {
     close,
     closeNow: close,
     markShown,
-    markReady,
     backdropStyle,
     opened,
   };

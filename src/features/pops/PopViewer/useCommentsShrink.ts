@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   commentsSheetOpen,
   commentsSheetTop,
-} from '@/features/interactions/comments/commentsLift';
+} from '@/features/interactions/comments/commentsSheetMotion';
 
 /**
  * Видео страницы, пока открыты комментарии к её попу: уменьшается целиком в

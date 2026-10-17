@@ -30,11 +30,9 @@ import {
 } from '@/components/ScrollSheet';
 import { useOwnKeyboardHeight } from '@/features/chats/composerKeyboard';
 import {
-  chatFade,
   commentsSheetOpen,
   commentsSheetTop,
-  liftedRowKey,
-} from '@/features/interactions/comments/commentsLift';
+} from '@/features/interactions/comments/commentsSheetMotion';
 import { closeComments } from '@/features/interactions/comments/commentsPanelStore';
 
 /** Жест закрытия панели на основном списке — снаружи нужен только тестам. */
@@ -44,13 +42,11 @@ export const THREAD_PAN_TEST_ID = 'comments-thread-pan';
 /** Жест шапки панели — для тестов. */
 export const HEADER_PAN_TEST_ID = 'comments-header-pan';
 
-/** Жест шапки считается вертикальным после этого сдвига — тап по крестику доживает до кнопки. */
+/** Жест шапки считается вертикальным после этого сдвига — тап по стрелке треда доживает до кнопки. */
 const HEADER_ACTIVATION_PX = 8;
 
 /** Быстрее этого уход вниз не бывает, как бы быстро ни бросили. */
 const MIN_CLOSE_MS = 120;
-/** Дольше этого закрытие не ждёт замера переписки: шит уезжает со старым. */
-const PREPARE_WAIT_MS = 120;
 
 /**
  * Сколько ехать вниз после броска: со скоростью пальца, чтобы уход был одним
@@ -64,17 +60,8 @@ function closeDuration(distance: number, velocityY: number): number {
   return Math.max(MIN_CLOSE_MS, Math.min(CLOSE_DURATION_MS, (distance / velocityY) * 1000));
 }
 
-function withTimeout(task: Promise<void>, ms: number): Promise<void> {
-  return Promise.race([task, new Promise<void>((resolve) => setTimeout(resolve, ms))]);
-}
-
 type Options = {
   windowHeight: number;
-  /**
-   * Перед тем как шит поедет вниз — перемерить место сообщения в переписке:
-   * пока шит был открыт, могли прийти новые сообщения.
-   */
-  prepareClose: () => Promise<void>;
 };
 
 export type PanelSheet = ReturnType<typeof usePanelSheet>;
@@ -152,12 +139,11 @@ function useSheetPane({
  * медиа: список сначала докручивается до верха, и дальше палец без паузы
  * ведёт шит. За шапку шит тянется вниз сразу.
  */
-export function usePanelSheet({ windowHeight, prepareClose }: Options) {
+export function usePanelSheet({ windowHeight }: Options) {
   const insets = useSafeAreaInsets();
   const keyboardHeight = useOwnKeyboardHeight('comments');
   const [headerHeight, setHeaderHeight] = useState(0);
   const [shown, setShown] = useState(false);
-  const [ready, setReady] = useState(false);
 
   const geometry: PanelGeometry = useMemo(
     () => panelGeometry(windowHeight, insets.top, PixelRatio.get()),
@@ -189,14 +175,13 @@ export function usePanelSheet({ windowHeight, prepareClose }: Options) {
     [],
   );
 
-  // Выезжает, когда окно на экране и сообщение над шитом готово — копия
-  // стоит ровно на месте строки.
+  // Выезжает, когда окно на экране: раньше пружина отыграла бы впустую.
   useEffect(() => {
-    if (!shown || !ready || started.current) return;
+    if (!shown || started.current) return;
 
     started.current = true;
     dismissY.value = withSpring(0, OPEN_SPRING);
-  }, [dismissY, ready, shown]);
+  }, [dismissY, shown]);
 
   const leave = useCallback(
     (velocityY: number) => {
@@ -206,9 +191,6 @@ export function usePanelSheet({ windowHeight, prepareClose }: Options) {
         (finished) => {
           if (!finished) return;
 
-          // Строка возвращается, копия исчезает, переписка видна — в одном кадре.
-          liftedRowKey.value = null;
-          chatFade.value = 1;
           runOnJS(closeComments)();
         },
       );
@@ -216,16 +198,16 @@ export function usePanelSheet({ windowHeight, prepareClose }: Options) {
     [dismissY, windowHeight],
   );
 
-  /** Закрыть: крестик, «назад», тап по фону или по сообщению над шитом. */
+  /** Закрыть: «назад» или тап по затемнению над шитом. */
   const close = useCallback(() => {
     if (closing.value) return;
 
     closing.value = true;
     void KeyboardController.dismiss();
-    void withTimeout(prepareClose(), PREPARE_WAIT_MS).then(() => leave(0));
-  }, [closing, leave, prepareClose]);
+    leave(0);
+  }, [closing, leave]);
 
-  /** Отпустили, утащив вниз: место сообщения перемерено, когда палец взялся за шит. */
+  /** Отпустили, утащив вниз. */
   const release = useCallback(
     (velocityY = 0) => {
       if (closing.value) return;
@@ -239,7 +221,6 @@ export function usePanelSheet({ windowHeight, prepareClose }: Options) {
 
   const releaseNow = useCallback(() => release(), [release]);
   const closeNow = useCallback(() => close(), [close]);
-  const prepare = useCallback(() => void prepareClose(), [prepareClose]);
 
   const main = useSheetPane({
     dismissY,
@@ -256,14 +237,6 @@ export function usePanelSheet({ windowHeight, prepareClose }: Options) {
     testId: THREAD_PAN_TEST_ID,
   });
 
-  // Палец взялся за шит — переписку перемерить, пока он не уехал далеко.
-  useAnimatedReaction(
-    () => dismissing.value,
-    (now, before) => {
-      if (now && !before) runOnJS(prepare)();
-    },
-  );
-
   /**
    * Шапка лежит слоем над списком, и касание по ней до скролла не доходит.
    * Её жест тянет шит вниз сразу, где бы ни был список, а вверх — никуда:
@@ -278,7 +251,6 @@ export function usePanelSheet({ windowHeight, prepareClose }: Options) {
         .blocksExternalGesture(main.dismissPan, thread.dismissPan)
         .onStart((event) => {
           headerAnchor.value = event.translationY - dismissY.value;
-          runOnJS(prepare)();
         })
         .onUpdate((event) => {
           if (closing.value) return;
@@ -301,7 +273,6 @@ export function usePanelSheet({ windowHeight, prepareClose }: Options) {
       geometry.dismissDistance,
       headerAnchor,
       main.dismissPan,
-      prepare,
       release,
       thread.dismissPan,
     ],
@@ -327,8 +298,12 @@ export function usePanelSheet({ windowHeight, prepareClose }: Options) {
     }),
   );
 
+  /** Затемнение под шитом — по его ходу: тянут вниз — светлеет за пальцем. */
+  const backdropStyle = useAnimatedStyle(
+    (): ViewStyle => ({ opacity: Math.min(Math.max(1 - dismissY.value / geometry.height, 0), 1) }),
+  );
+
   const markShown = useCallback(() => setShown(true), []);
-  const markReady = useCallback(() => setReady(true), []);
 
   return {
     geometry,
@@ -341,9 +316,9 @@ export function usePanelSheet({ windowHeight, prepareClose }: Options) {
     headerPan,
     shiftStyle,
     footerStyle,
+    backdropStyle,
     close,
     closeNow,
     markShown,
-    markReady,
   };
 }

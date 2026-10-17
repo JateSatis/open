@@ -9,15 +9,17 @@ import { Spacing } from '@/theme';
 
 export type PanelHeaderProps = {
   title: string;
-  onClose: () => void;
   /** Окно треда: стрелка назад к основному списку. */
   onBack?: () => void;
   /** Ручка сверху — у шита, который тянут вниз; у боковой панели её нет. */
   grabber?: boolean;
 };
 
-/** Верх панели: ручка, заголовок и крестик, в треде — и стрелка назад. За него шит тянут вниз. */
-export function PanelHeader({ title, onClose, onBack, grabber = true }: PanelHeaderProps) {
+/**
+ * Верх панели: ручка и заголовок, в треде — и стрелка назад. За него шит тянут
+ * вниз. Крестика нет: шит закрывают жестом, тапом по фону и «назад».
+ */
+export function PanelHeader({ title, onBack, grabber = true }: PanelHeaderProps) {
   const theme = useTheme();
 
   return (
@@ -44,18 +46,6 @@ export function PanelHeader({ title, onClose, onBack, grabber = true }: PanelHea
           <Text variant="smallBold">{title}</Text>
         </View>
 
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Закрыть комментарии"
-          hitSlop={Spacing.two}
-          onPress={onClose}
-        >
-          <SymbolView
-            name={{ ios: 'xmark', android: 'close', web: 'close' }}
-            size={Spacing.four}
-            tintColor={theme.textSecondary}
-          />
-        </Pressable>
       </View>
     </View>
   );
