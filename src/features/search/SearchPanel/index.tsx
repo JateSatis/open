@@ -22,9 +22,19 @@ import {
   type SearchRow,
   type SearchSection,
 } from '@/features/search/searchSections';
+import { logSearchQuery, logSearchResultOpened } from '@/features/recs/journal/searchJournal';
 import { useOpenSearchResult } from '@/features/search/useOpenSearchResult';
 import { useSearch } from '@/features/search/useSearch';
 import { Spacing } from '@/theme';
+
+/** Что открыто из выдачи — для журнала: человек, канал или чат. */
+function entitySubject(entity: SearchEntity): { type: 'chat' | 'channel' | 'profile'; id: string } {
+  if (entity.kind === 'person') return { type: 'profile', id: entity.id };
+  if (entity.kind === 'channel' && entity.channelId)
+    return { type: 'channel', id: entity.channelId };
+
+  return { type: 'chat', id: entity.chatId ?? entity.id };
+}
 
 /** «Недавние» подсвечивать нечем: запроса нет. */
 const NO_QUERY = parseSearchQuery('');
@@ -79,6 +89,19 @@ export function SearchPanel({ query }: { query: string }) {
     [expanded, query],
   );
 
+  // Журнал: выдача по запросу пришла.
+  const { isSearching } = results;
+
+  useEffect(() => {
+    if (!isSearching) {
+      logSearchQuery('chats', query, {
+        mine: results.mine.length,
+        global: results.global.length,
+        messages: results.messages.length,
+      });
+    }
+  }, [isSearching, query, results.global.length, results.messages.length, results.mine.length]);
+
   const openEntity = useCallback(
     (entity: SearchEntity) => open({ type: 'entity', entity }),
     [open],
@@ -88,24 +111,52 @@ export function SearchPanel({ query }: { query: string }) {
     [open],
   );
 
-  const renderItem = ({ item }: { item: SearchRow }) => {
+  const renderItem = ({
+    item,
+    index,
+    section,
+  }: {
+    item: SearchRow;
+    index: number;
+    section: SearchSection;
+  }) => {
+    // Журнал: что открыли из выдачи и с какого места блока.
+    const opened = (
+      kind: string,
+      subject: { type: 'chat' | 'channel' | 'profile' | 'message'; id: string },
+    ) =>
+      logSearchResultOpened('chats', subject, {
+        kind,
+        section: section.key,
+        position: index,
+        query,
+      });
+    const pressEntity = (entity: SearchEntity) => {
+      opened(entity.kind, entitySubject(entity));
+      openEntity(entity);
+    };
+    const pressMessage = (message: SearchMessage) => {
+      opened('message', { type: 'message', id: message.id });
+      openMessage(message);
+    };
+
     if (item.type === 'entity') {
-      return <SearchEntityRow entity={item.entity} query={results.parsed} onPress={openEntity} />;
+      return <SearchEntityRow entity={item.entity} query={results.parsed} onPress={pressEntity} />;
     }
     if (item.type === 'message') {
       return (
         <SearchMessageRow
           message={item.message}
           needle={results.parsed.text}
-          onPress={openMessage}
+          onPress={pressMessage}
         />
       );
     }
 
     return item.item.type === 'entity' ? (
-      <SearchEntityRow entity={item.item.entity} query={NO_QUERY} onPress={openEntity} />
+      <SearchEntityRow entity={item.item.entity} query={NO_QUERY} onPress={pressEntity} />
     ) : (
-      <SearchMessageRow message={item.item.message} needle="" onPress={openMessage} />
+      <SearchMessageRow message={item.item.message} needle="" onPress={pressMessage} />
     );
   };
 

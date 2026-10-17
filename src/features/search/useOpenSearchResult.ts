@@ -31,7 +31,10 @@ export function useOpenSearchResult(): (item: RecentSearch) => void {
             params: { channelId: message.channelId, ...jump },
           });
         } else {
-          router.push({ pathname: '/chats/[chatId]', params: { chatId: message.chatId, ...jump } });
+          router.push({
+            pathname: '/chats/[chatId]',
+            params: { chatId: message.chatId, ...jump, from: 'search' },
+          });
         }
         return;
       }
@@ -46,7 +49,10 @@ export function useOpenSearchResult(): (item: RecentSearch) => void {
           params: { channelId: entity.channelId },
         });
       } else if (entity.chatId) {
-        router.push({ pathname: '/chats/[chatId]', params: { chatId: entity.chatId } });
+        router.push({
+          pathname: '/chats/[chatId]',
+          params: { chatId: entity.chatId, from: 'search' },
+        });
       }
     },
     [router],
