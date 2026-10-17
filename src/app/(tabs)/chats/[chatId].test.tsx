@@ -292,9 +292,24 @@ describe('ChatScreen', () => {
     expect(mockPush).toHaveBeenCalledWith('/chats/people/user-2');
   });
 
-  it('в личном диалоге аватаров нет, профиль автора открывается по имени', async () => {
+  it('участник личного диалога не видит у собеседника ни имени, ни аватара', async () => {
     mockedListMessages.mockResolvedValue({
       items: [message('m1', 'привет', 'user-2')],
+      nextCursor: null,
+    });
+
+    await renderWithQuery(<ChatScreen />);
+    await screen.findByText('привет');
+
+    expect(screen.queryByLabelText('Профиль: Марина')).toBeNull();
+    expect(within(screen.getByTestId('message-bubble')).queryByText('Марина')).toBeNull();
+  });
+
+  it('посторонний видит чужой личный диалог как группу: у обоих имя и аватар', async () => {
+    const petr = { id: 'user-3', displayName: 'Пётр', avatarUrl: null, lastReadAt: READ_AT };
+    mockedGetChat.mockResolvedValue(chatWith([other, petr]));
+    mockedListMessages.mockResolvedValue({
+      items: [message('m1', 'привет', 'user-2'), message('m2', 'здравствуй', 'user-3')],
       nextCursor: null,
     });
     const user = userEvent.setup();
@@ -302,9 +317,14 @@ describe('ChatScreen', () => {
     await renderWithQuery(<ChatScreen />);
     await screen.findByText('привет');
 
-    expect(screen.queryByLabelText('Профиль: Марина')).toBeNull();
+    const bubbles = screen.getAllByTestId('message-bubble');
+    expect(bubbles.map((bubble) => within(bubble).queryByText(/Марина|Пётр/) !== null)).toEqual([
+      true,
+      true,
+    ]);
+    expect(screen.getByLabelText('Профиль: Пётр')).toBeTruthy();
 
-    await user.press(within(screen.getByTestId('message-bubble')).getByText('Марина'));
+    await user.press(screen.getByLabelText('Профиль: Марина'));
 
     expect(mockPush).toHaveBeenCalledWith('/chats/people/user-2');
   });

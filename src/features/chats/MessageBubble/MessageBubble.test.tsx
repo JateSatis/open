@@ -70,11 +70,36 @@ const baseProps = {
 };
 
 describe('MessageBubble', () => {
-  it('в личном диалоге у чужого облачка нет аватара, но имя автора видно', async () => {
+  it('без аватара у чужого облачка имя автора видно', async () => {
     await render(<MessageBubble {...baseProps} message={textMessage()} showAvatar={false} />);
 
     expect(screen.queryByLabelText('Профиль: Марина')).toBeNull();
     expect(screen.getByText('Марина')).toBeTruthy();
+  });
+
+  it('без имени автора у чужого облачка — ни имени, ни аватара; «из <чат>» остаётся', async () => {
+    await render(
+      <MessageBubble
+        {...baseProps}
+        message={textMessage()}
+        showAvatar={false}
+        showAuthor={false}
+        sourceChat={{ name: 'Планы' }}
+      />,
+    );
+
+    expect(screen.queryByText('Марина')).toBeNull();
+    expect(screen.queryByLabelText('Профиль: Марина')).toBeNull();
+    expect(screen.getByText('Планы')).toBeTruthy();
+  });
+
+  it('чужой альбом без имени и подписи — без облачка, как свой', async () => {
+    await render(<MessageBubble {...baseProps} message={mediaMessage()} showAuthor={false} />);
+
+    const bubble = screen.getByTestId('message-bubble');
+
+    expect(StyleSheet.flatten(bubble.props.style).backgroundColor).toBe('transparent');
+    expect(screen.queryByText('Марина')).toBeNull();
   });
 
   it('у своего отправленного — одна галочка, у прочитанного — две; время на месте', async () => {
