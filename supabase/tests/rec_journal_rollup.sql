@@ -152,6 +152,7 @@ declare
   imps uuid[] := '{}';
   pub_imp uuid;
   later_imp uuid;
+  late_imp uuid;
   session uuid := gen_random_uuid();
   s1 text;
   s2 text;
@@ -215,6 +216,17 @@ begin
 
   perform pg_temp.check('события сессии приняты', jsonb_array_length(res -> 'accepted') = 4, res::text);
 
+  -- Чужой id сессии не сливает события в сессию C.
+  perform pg_temp.act_as(b);
+  res := public.rec_record_events(jsonb_build_object('sent_at', pg_temp.ms(now()), 'events', jsonb_build_array(
+    jsonb_build_object('id', gen_random_uuid(), 'kind', 'screen_time', 'ts', pg_temp.ms(now() - interval '20 seconds'),
+      'app_session_id', session, 'data', '{"screen":"spoof","tab":"spoof","ms":99999}'::jsonb))));
+
+  -- Офлайн-показ C, пришедший позже, но начатый за два часа до первых: отстоит
+  -- от засчитанного дальше окна — тоже засчитан.
+  late_imp := pg_temp.impression(c, pop2, t1 - interval '2 hours',
+    '{"visible_ms":10000,"watch_ms":4000,"max_pos_ms":4000,"coverage":15,"first_frame_ms":400}', session);
+
   r := pg_temp.rollup(t0 - interval '1 minute');
 
   perform pg_temp.check('К5.1 реакция через 10 мин — в показе, с валентностью',
@@ -229,11 +241,11 @@ begin
     (select labels_closed_at is not null from public.rec_impressions where id = imp));
 
   perform pg_temp.check('К5.2 20 показов подряд — один уникальный зритель и один показ в окне уникальности',
-    (select impressions_raw = 22 and impressions = 3 and viewers = 2 from public.rec_pop_stats where pop_id = pop2),
+    (select impressions_raw = 23 and impressions = 4 and viewers = 2 from public.rec_pop_stats where pop_id = pop2),
     (select row_to_json(s)::text from public.rec_pop_stats s where pop_id = pop2));
   perform pg_temp.check('К5.2 показы публикующего не считаются',
     (select is_publisher and applied = '{}'::jsonb from public.rec_impressions where id = pub_imp)
-      and (select watch_ms from public.rec_pop_stats where pop_id = pop2) = 20 * 4000 + 9000 + 7000);
+      and (select watch_ms from public.rec_pop_stats where pop_id = pop2) = 21 * 4000 + 9000 + 7000);
   perform pg_temp.check('К5.2 молодой аккаунт — с весом доверия',
     (select viewers_weighted = 0.5 from public.rec_pop_stats where pop_id = pop2),
     (select viewers_weighted::text from public.rec_pop_stats where pop_id = pop2));
@@ -246,16 +258,17 @@ begin
 
   perform pg_temp.check('К4.3 тепловая карта: перемотка назад в 1-й сегмент, вперёд из 2-го, пауза в 4-м',
     (select seeks_back_into[1] = 1 and seeks_fwd_from[2] = 1 and pauses[4] = 1 and cardinality(views) = 8
-       and views[1] = 22 from public.rec_pop_heat where pop_id = pop2),
+       and views[1] = 23 from public.rec_pop_heat where pop_id = pop2),
     (select row_to_json(h)::text from public.rec_pop_heat h where pop_id = pop2));
   perform pg_temp.check('почасовые корзины',
-    (select sum(impressions) = 3 and sum(viewers) = 2 from public.rec_pop_hourly where pop_id = pop2));
+    (select sum(impressions) = 4 and sum(viewers) = 2 from public.rec_pop_hourly where pop_id = pop2));
 
   select * into st from public.rec_app_sessions where id = session;
   perform pg_temp.check('сессия приложения: вход, время по вкладкам, конец в фоне',
     st.entry = 'push' and st.end_reason = 'background' and st.foreground_ms = 55000
       and (st.tabs ->> 'chats')::int = 30000 and (st.tabs ->> 'feed')::int = 20000 and st.last_screen = 'feed'
-      and st.impressions = 21,
+      and st.impressions = 22 and not st.tabs ? 'spoof'
+      and (select count(*) from public.rec_app_sessions where id = session) = 1,
     row_to_json(st)::text);
 
   -- =============================== К5.3 — повторный запуск ничего не меняет

@@ -306,6 +306,20 @@ begin
   into big from generate_series(1, 1);
   perform pg_temp.refused('К2.2 сверх лимита частоты — отказ', format('select pg_temp.send(%L)', big), '22023');
 
+  -- Начало ушло по холодной сети (сдвиг пачки +3 с), снимок — по тёплой:
+  -- время показа считается по часам телефона, честный снимок принимается.
+  perform pg_temp.act_as(c);
+  x := gen_random_uuid();
+  y := gen_random_uuid();
+  res1 := public.rec_record_events(jsonb_build_object(
+    'sent_at', pg_temp.ms(now() - interval '3 seconds'),
+    'events', jsonb_build_array(pg_temp.ev('impression_start', gen_random_uuid(), now() - interval '8 seconds', y, 'pop', pop, 'channel'))));
+  res1 := public.rec_record_events(jsonb_build_object(
+    'sent_at', pg_temp.ms(now()),
+    'events', jsonb_build_array(pg_temp.ev('impression_progress', x, now() - interval '3 seconds', y, null, null, null,
+      '{"visible_ms":5000,"watch_ms":4900,"max_pos_ms":4900}'))));
+  perform pg_temp.check('К2.2 разный сдвиг часов у пачек не отклоняет честный снимок', res1 -> 'accepted' ? x::text, res1::text);
+
   -- ====================================== К2.3 — показ без конца → lost
   perform pg_temp.act_as(c);
   x := gen_random_uuid();
