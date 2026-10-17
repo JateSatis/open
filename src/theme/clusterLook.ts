@@ -46,7 +46,7 @@ export const ClusterPalette: Record<'light' | 'dark', { foreign: Surface; own: S
         '💩': '#5E3514',
         '😮': '#7A2FE6',
         '😢': '#0A3596',
-        other: '#E6ECF5',
+        other: '#2E3A50',
       },
       fill: [0.22, 0.5],
       pattern: [0.18, 0.34],
@@ -78,7 +78,7 @@ export const ClusterPalette: Record<'light' | 'dark', { foreign: Surface; own: S
         '💩': '#5E3514',
         '😮': '#7A2FE6',
         '😢': '#0A3596',
-        other: '#E6ECF5',
+        other: '#2E3A50',
       },
       fill: [0.22, 0.5],
       pattern: [0.18, 0.34],
@@ -93,8 +93,8 @@ export const ClusterLook = {
    * после `saturateAt` заметнее не становится.
    */
   saturateAt: 50,
-  /** Сторона силуэта — доля высоты строки текста. */
-  patternIcon: 0.7,
+  /** Кегль силуэта — доля высоты строки: глиф эмодзи чуть больше кегля, на глаз ~70 % строки. */
+  patternIcon: 0.6,
   /** Шаг силуэтов по строке — в сторонах силуэта. */
   patternStep: 1.5,
   /** Сдвиг соседних строк силуэтов — доля шага: ряды в шахматку. */
