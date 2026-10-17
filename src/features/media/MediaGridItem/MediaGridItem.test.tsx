@@ -3,7 +3,7 @@ import { act, fireEvent, render, screen, userEvent } from '@testing-library/reac
 import { MediaGridItem } from '.';
 
 import { MediaLimits } from '@/features/media/constants';
-import type { MediaLibraryItem } from '@/features/media/mediaLibrary';
+import type { GalleryFilter, MediaLibraryItem } from '@/features/media/mediaLibrary';
 import { clearEditedThumbs, setEditedThumb } from '@/features/media/photoEdits/editedThumbs';
 import { resetMediaPreview, useMediaPreview } from '@/features/media/MediaPreview/previewStore';
 import { useMediaSelection } from '@/features/media/selectionStore';
@@ -23,6 +23,8 @@ const video: MediaLibraryItem = {
   height: 100,
   durationMs: 12_000,
 };
+
+const PHOTOS: GalleryFilter = { kind: 'photo' };
 
 function select(...assets: MediaLibraryItem[]) {
   for (const asset of assets) useMediaSelection.getState().toggle(asset);
@@ -143,7 +145,7 @@ describe('MediaGridItem: тап по самой плитке', () => {
         asset={photo}
         size={100}
         onToggle={jest.fn()}
-        pick={{ accepts: () => true, onPick }}
+        pick={{ filter: { kind: 'photo' }, onPick }}
       />,
     );
     await user.press(screen.getByTestId('media-grid-pick'));
@@ -155,8 +157,6 @@ describe('MediaGridItem: тап по самой плитке', () => {
 });
 
 describe('MediaGridItem in pick mode', () => {
-  const photosOnly = (asset: MediaLibraryItem) => asset.kind === 'photo';
-
   it('hands the file over on a tap without touching the shared selection', async () => {
     const onPick = jest.fn();
     const user = userEvent.setup();
@@ -166,7 +166,7 @@ describe('MediaGridItem in pick mode', () => {
         asset={photo}
         size={100}
         onToggle={jest.fn()}
-        pick={{ accepts: photosOnly, onPick }}
+        pick={{ filter: PHOTOS, onPick }}
       />,
     );
     await user.press(screen.getByTestId('media-grid-pick'));
@@ -175,29 +175,9 @@ describe('MediaGridItem in pick mode', () => {
     expect(useMediaSelection.getState().order).toEqual([]);
     expect(screen.queryByLabelText('Выбрать файл')).toBeNull();
   });
-
-  it('keeps a file it does not accept visible but untappable', async () => {
-    const onPick = jest.fn();
-    const user = userEvent.setup();
-
-    await render(
-      <MediaGridItem
-        asset={video}
-        size={100}
-        onToggle={jest.fn()}
-        pick={{ accepts: photosOnly, onPick }}
-      />,
-    );
-    await user.press(screen.getByTestId('media-grid-pick'));
-
-    expect(screen.getByTestId('media-grid-pick')).toBeDisabled();
-    expect(onPick).not.toHaveBeenCalled();
-  });
 });
 
 describe('MediaGridItem в шите аватарки', () => {
-  const photosOnly = (asset: MediaLibraryItem) => asset.kind === 'photo';
-
   it('тап по фото раскрывает его в редактор, а не отдаёт сразу', async () => {
     const user = userEvent.setup();
 
@@ -206,7 +186,7 @@ describe('MediaGridItem в шите аватарки', () => {
         asset={photo}
         size={100}
         onToggle={jest.fn()}
-        pick={{ accepts: photosOnly }}
+        pick={{ filter: PHOTOS }}
       />,
     );
     await user.press(screen.getByTestId('media-grid-pick'));
@@ -214,23 +194,5 @@ describe('MediaGridItem в шите аватарки', () => {
     expect(useMediaPreview.getState().target?.assetId).toBe(photo.id);
     expect(useMediaSelection.getState().order).toEqual([]);
     expect(screen.queryByLabelText('Выбрать файл')).toBeNull();
-  });
-
-  it('видео видно с длительностью, но не нажимается', async () => {
-    const user = userEvent.setup();
-
-    await render(
-      <MediaGridItem
-        asset={video}
-        size={100}
-        onToggle={jest.fn()}
-        pick={{ accepts: photosOnly }}
-      />,
-    );
-    await user.press(screen.getByTestId('media-grid-pick'));
-
-    expect(screen.getByText('0:12')).toBeTruthy();
-    expect(screen.getByTestId('media-grid-pick')).toBeDisabled();
-    expect(useMediaPreview.getState().target).toBeNull();
   });
 });

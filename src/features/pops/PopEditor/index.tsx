@@ -9,7 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PopPublishForm } from './PopPublishForm';
 import { PopVideoPreview } from './PopVideoPreview';
 import { styles } from './styles';
-import { acceptsPopVideo, usePopVideoPick, type PickedPopVideo } from './usePopVideoPick';
+import { POP_VIDEO_FILTER, usePopVideoPick, type PickedPopVideo } from './usePopVideoPick';
 
 import { Button } from '@/components/Button';
 import { Text } from '@/components/Text';
@@ -194,7 +194,7 @@ export function PopEditor({ channelId, from }: PopEditorProps) {
         </View>
       </KeyboardAvoidingView>
 
-      <MediaPickSheet accepts={acceptsPopVideo} onPick={onPick} />
+      <MediaPickSheet filter={POP_VIDEO_FILTER} onPick={onPick} />
     </View>
   );
 }

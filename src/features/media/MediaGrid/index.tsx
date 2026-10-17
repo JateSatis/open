@@ -98,7 +98,7 @@ export function MediaGrid({
 
   const { height } = useWindowDimensions();
   const geometry = useGridGeometry();
-  const { status, items, total, requestAccess } = useGalleryAssets(enabled);
+  const { status, items, total, requestAccess } = useGalleryAssets(enabled, pick?.filter);
   const toggle = useMediaSelection((state) => state.toggle);
 
   // Предпросмотр листает тот же список, что показывает сетка, и тот же

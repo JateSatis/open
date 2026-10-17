@@ -3,13 +3,13 @@ import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { PopEditor } from '.';
 
 import { readChatDraft, resetComposerDrafts } from '@/features/chats/composerDraftStore';
-import type { MediaLibraryItem } from '@/features/media';
+import type { GalleryFilter, MediaLibraryItem } from '@/features/media';
 import { readVideoFrame } from '@/features/media';
 import { publishNewPop } from '@/features/pops/publishing';
 
 const mockBack = jest.fn();
 let mockOnPick: ((asset: MediaLibraryItem) => void) | null = null;
-let mockAccepts: ((asset: MediaLibraryItem) => boolean) | null = null;
+let mockFilter: GalleryFilter | null = null;
 
 jest.mock('expo-router', () => ({ useRouter: () => ({ back: mockBack }) }));
 jest.mock('@tanstack/react-query', () => ({ useQueryClient: () => ({}) }));
@@ -26,13 +26,13 @@ jest.mock('@/features/chats/MediaPickerSheet', () => ({
   openMediaSheet: jest.fn(),
   releaseMediaSheetArm: jest.fn(),
   MediaPickSheet: ({
-    accepts,
+    filter,
     onPick,
   }: {
-    accepts: (asset: MediaLibraryItem) => boolean;
+    filter: GalleryFilter;
     onPick: (asset: MediaLibraryItem) => void;
   }) => {
-    mockAccepts = accepts;
+    mockFilter = filter;
     mockOnPick = onPick;
     return null;
   },
@@ -76,9 +76,7 @@ describe('PopEditor', () => {
   it('offers only videos up to 90 seconds', async () => {
     await render(<PopEditor channelId="channel-1" from="pops" />);
 
-    expect(mockAccepts!(video)).toBe(true);
-    expect(mockAccepts!({ ...video, kind: 'photo' })).toBe(false);
-    expect(mockAccepts!({ ...video, durationMs: 91_000 })).toBe(false);
+    expect(mockFilter).toEqual({ kind: 'video', maxDurationMs: 90_000 });
   });
 
   it('keeps «Опубликовать» disabled until a video is picked', async () => {

@@ -48,6 +48,44 @@ export type ResolvedLibraryAsset = LibraryAsset & { uri: string };
 export type LibraryAccess = 'granted' | 'denied';
 
 /**
+ * Что шит показывает, когда ждёт файл конкретного вида: остального в сетке
+ * нет вовсе, а не притушено. Вид отбирает сама медиатека, длительность —
+ * клиент по прочитанному: условие `duration <= ?` в запросе отбросило бы и
+ * видео без длительности, а их выбор принимает и объясняет, почему не
+ * подошло.
+ */
+/** Виды файлов, которые бывают в галерее телефона. */
+export type GalleryKind = 'photo' | 'video';
+
+export type GalleryFilter = {
+  kind: GalleryKind;
+  /** Видео длиннее не показываются; без длительности — остаются. */
+  maxDurationMs?: number;
+};
+
+/** Подходит ли файл под фильтр; без фильтра подходит всё. */
+export function matchesGalleryFilter(
+  item: MediaLibraryItem,
+  filter: GalleryFilter | undefined,
+): boolean {
+  if (!filter) return true;
+  if (item.kind !== filter.kind) return false;
+
+  return (
+    filter.maxDurationMs === undefined ||
+    item.durationMs === null ||
+    item.durationMs <= filter.maxDurationMs
+  );
+}
+
+function libraryMediaTypes(kind: GalleryKind | undefined): MediaType[] {
+  if (kind === 'photo') return [MediaType.IMAGE];
+  if (kind === 'video') return [MediaType.VIDEO];
+
+  return [MediaType.IMAGE, MediaType.VIDEO];
+}
+
+/**
  * Только фото и видео: голосовые и кружки в галерею телефона не попадают, а
  * аудиофайлы устройства (музыка) для чата не нужны.
  */
@@ -110,12 +148,14 @@ function byRecent(
 export async function queryRecentMedia(params: {
   offset: number;
   limit?: number;
+  /** Только фото или только видео; по умолчанию — и то и другое. */
+  kind?: GalleryKind;
 }): Promise<MediaLibraryItem[]> {
   const limit = params.limit ?? MediaLimits.gallery.firstChunk;
 
   const startedAt = performance.now();
   const queried = await new Query()
-    .within(AssetField.MEDIA_TYPE, [MediaType.IMAGE, MediaType.VIDEO])
+    .within(AssetField.MEDIA_TYPE, libraryMediaTypes(params.kind))
     .orderBy({ key: RECENT_ORDER, ascending: false })
     .offset(params.offset)
     .limit(limit)
@@ -125,6 +165,7 @@ export async function queryRecentMedia(params: {
   perfLog('queryRecentMedia', {
     offset: params.offset,
     limit,
+    kind: params.kind ?? 'all',
     got: assets.length,
     ms: Math.round(performance.now() - startedAt),
   });
@@ -191,11 +232,12 @@ export function libraryAssetToLocalMedia(asset: ResolvedLibraryAsset): LocalMedi
  * Цена измерена на устройстве, см. отчёт по задаче; если бы она оказалась
  * сравнимой с чтением первого куска, смысла в отдельном запросе не было бы.
  */
-export async function countRecentMedia(): Promise<number | null> {
+export async function countRecentMedia(kind?: GalleryKind): Promise<number | null> {
   const startedAt = performance.now();
+  const mediaType: GalleryKind[] = kind ? [kind] : ['photo', 'video'];
 
   try {
-    const page = await getAssetsAsync({ first: 1, mediaType: ['photo', 'video'] });
+    const page = await getAssetsAsync({ first: 1, mediaType });
 
     perfLog('countRecentMedia', {
       total: page.totalCount,

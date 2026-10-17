@@ -62,6 +62,8 @@ export {
   requestMediaLibraryAccess,
   resolveAssetUri,
   resolveLibraryAsset,
+  matchesGalleryFilter,
+  type GalleryFilter,
   type LibraryAccess,
   type LibraryAsset,
   type MediaLibraryItem,

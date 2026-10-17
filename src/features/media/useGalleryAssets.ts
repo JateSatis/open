@@ -7,7 +7,9 @@ import {
   countRecentMedia,
   queryRecentMedia,
   checkMediaLibraryAccess,
+  matchesGalleryFilter,
   requestMediaLibraryAccess,
+  type GalleryFilter,
   type MediaLibraryItem,
 } from './mediaLibrary';
 import { perfLog } from './perf';
@@ -52,11 +54,12 @@ export type GalleryAssets = {
  * превью грузит сам `expo-image` по мере появления клеток на экране — никакого
  * своего прогрева и кэша путей больше нет.
  */
-export function useGalleryAssets(enabled: boolean): GalleryAssets {
+export function useGalleryAssets(enabled: boolean, filter?: GalleryFilter): GalleryAssets {
   // Начало галереи могли прочитать заранее — см. `prefetchGallery`. Тогда
   // грид с первого кадра показывает настоящие клетки, а полное чтение ниже
-  // только освежает их.
-  const [initial] = useState(getGallerySnapshot);
+  // только освежает их. Прогрев — вся галерея: шиту с фильтром он не годится,
+  // его длина и порядок клеток были бы чужими.
+  const [initial] = useState(() => (filter ? null : getGallerySnapshot()));
   const [status, setStatus] = useState<GalleryStatus>(
     initial ? (initial.items.length > 0 ? 'ready' : 'empty') : 'checking',
   );
@@ -64,6 +67,10 @@ export function useGalleryAssets(enabled: boolean): GalleryAssets {
   const [total, setTotal] = useState<number | null>(initial?.total ?? null);
   const [isFilling, setIsFilling] = useState(false);
   const cancelledRef = useRef(false);
+  // Зависимости — сами условия, а не объект: новый объект с теми же
+  // условиями не должен перечитывать галерею.
+  const kind = filter?.kind;
+  const maxDurationMs = filter?.maxDurationMs;
 
   const fill = useCallback(async () => {
     // Прогретые клетки уже на экране — «читаю» им не нужно.
@@ -73,46 +80,68 @@ export function useGalleryAssets(enabled: boolean): GalleryAssets {
     // Счётчик идёт параллельно первому куску, а не перед ним: он нужен
     // скелету, а не файлам, и задерживать из-за него появление настоящих
     // клеток незачем.
-    void countRecentMedia().then((count) => {
-      if (!cancelledRef.current && count !== null) setTotal(count);
-    });
+    //
+    // Длительность медиатека не считает (см. `GalleryFilter`): счётчик видео
+    // соврал бы на длинные, и скелет обещал бы клетки, которых не будет. Такой
+    // шит до полного чтения рисует скелет на экран, как без счётчика.
+    if (maxDurationMs === undefined) {
+      void countRecentMedia(kind).then((count) => {
+        if (!cancelledRef.current && count !== null) setTotal(count);
+      });
+    }
+
+    const current = kind ? { kind, maxDurationMs } : undefined;
+    const keep = (read: MediaLibraryItem[]) =>
+      current ? read.filter((item) => matchesGalleryFilter(item, current)) : read;
 
     try {
       // Первый кусок маленький: он нужен прямо сейчас, чтобы на экране
       // появились настоящие клетки, а не пустая сетка.
-      const head = await queryRecentMedia({ offset: 0, limit: MediaLimits.gallery.firstChunk });
+      const headRead = await queryRecentMedia({
+        offset: 0,
+        limit: MediaLimits.gallery.firstChunk,
+        kind,
+      });
+      const head = keep(headRead);
 
       if (cancelledRef.current) return;
 
       perfLog('галерея: первый кусок', { got: head.length });
       setItems(head);
-      setStatus(head.length === 0 ? 'empty' : 'ready');
 
-      if (head.length < MediaLimits.gallery.firstChunk) {
+      if (headRead.length < MediaLimits.gallery.firstChunk) {
         // Галерея кончилась на первом же куске — вот теперь её длина
         // известна точно, и счётчику верить больше незачем.
+        setStatus(head.length === 0 ? 'empty' : 'ready');
         setTotal(head.length);
-        setGallerySnapshot({ items: head, total: head.length });
+        if (!current) setGallerySnapshot({ items: head, total: head.length });
         return;
       }
+
+      // Отфильтрованный кусок может оказаться пустым, а галерея — нет:
+      // «пусто» скажет только полное чтение.
+      if (head.length > 0) setStatus('ready');
 
       // Остальное — одним запросом, а не кусками. Куски выглядели мягче, но
       // каждый из них пересоздавал массив и перерисовывал весь список, и эти
       // перерисовки приходились ровно на то время, когда человек уже
       // скроллит. Один запрос и одна перерисовка: по замеру вся галерея
       // (3345 файлов) читается за ~1.1 с против ~2.3 с кусками по 600.
-      const all = await queryRecentMedia({ offset: 0, limit: MediaLimits.gallery.maxAssets });
+      const all = keep(
+        await queryRecentMedia({ offset: 0, limit: MediaLimits.gallery.maxAssets, kind }),
+      );
 
       if (cancelledRef.current) return;
 
       perfLog('галерея: дочитана', { total: all.length });
       setItems(all);
       setTotal(all.length);
-      setGallerySnapshot({ items: all, total: all.length });
+      setStatus(all.length === 0 ? 'empty' : 'ready');
+      if (!current) setGallerySnapshot({ items: all, total: all.length });
     } finally {
       if (!cancelledRef.current) setIsFilling(false);
     }
-  }, []);
+  }, [kind, maxDurationMs]);
 
   // Статус здесь не сбрасывается в `checking` намеренно: до ответа системы
   // менять нечего, а синхронный setState в эффекте — это лишний каскад

@@ -125,9 +125,8 @@ export type AvatarPickSheetProps = {
   onPick: (asset: MediaLibraryItem) => void;
 };
 
-/** Аватарка пока только из фото; видео притушены — по `accepts` позже включатся видео-аватарки. */
-const acceptsPhoto = (asset: MediaLibraryItem) => asset.kind === 'photo';
-const AVATAR_PICK: GridPick = { accepts: acceptsPhoto };
+/** Аватарка пока только из фото: видео в её сетке нет. */
+const AVATAR_PICK: GridPick = { filter: { kind: 'photo' } };
 const AVATAR_TITLE = 'Выберите фото';
 
 /**
@@ -155,19 +154,19 @@ export function MediaPickerSheet({
  * клетке отдаёт файл в `onPick` и закрывает шит. Открывается
  * `openMediaSheet('pick')`. Общий выбор файлов чата он не трогает.
  *
- * `accepts` решает, какие клетки можно взять: остальные видны притушенными.
+ * `filter` решает, какие файлы сетка показывает: остальных в ней нет.
  */
-export function MediaPickSheet({ accepts, onPick }: MediaPickSheetProps) {
+export function MediaPickSheet({ filter, onPick }: MediaPickSheetProps) {
   const phase = useSheetPhase('pick');
   const pick = useMemo<GridPick>(
     () => ({
-      accepts,
+      filter,
       onPick: (asset) => {
         onPick(asset);
         closeMediaSheet();
       },
     }),
-    [accepts, onPick],
+    [filter, onPick],
   );
 
   if (phase === 'closed') return null;

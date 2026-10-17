@@ -12,7 +12,7 @@ import {
   unregisterGridCell,
 } from '@/features/media/MediaPreview/previewStore';
 import { assetPreviewUri } from '@/features/media/lib/previewUri';
-import type { MediaLibraryItem } from '@/features/media/mediaLibrary';
+import type { GalleryFilter, MediaLibraryItem } from '@/features/media/mediaLibrary';
 import { useEditedThumb } from '@/features/media/photoEdits/editedThumbs';
 import { countMount, countRender, perfLog } from '@/features/media/perf';
 import { SLOT_BLOCKED, SLOT_FREE, useSelectionSlot } from '@/features/media/selectionStore';
@@ -20,12 +20,12 @@ import { useTheme } from '@/hooks/use-theme';
 import { Opacity, Spacing } from '@/theme';
 
 /**
- * Выбор одного файла вместо отбора в альбом: кружка нет. Неподходящие файлы
- * видны, но притушены и не нажимаются. Общий выбор (`selectionStore`) в этом
- * режиме не трогается.
+ * Выбор одного файла вместо отбора в альбом: кружка нет. Общий выбор
+ * (`selectionStore`) в этом режиме не трогается.
  */
 export type GridPick = {
-  accepts: (asset: MediaLibraryItem) => boolean;
+  /** Какие файлы сетка показывает: неподходящих в ней нет вовсе. */
+  filter: GalleryFilter;
   /**
    * Тап сразу отдаёт файл. Нет — тап раскрывает файл в предпросмотр, и
    * решение принимается там (шит аватарки: сначала правка, потом «Готово»).
@@ -92,9 +92,8 @@ export const MediaGridItem = memo(function MediaGridItem({
 
   const isSelected = slot > SLOT_FREE;
   const disabled = locked || slot === SLOT_BLOCKED;
-  // В выборе одного файла — над притушиванием: длительность читается и у
-  // видео, которое взять нельзя. В шите чата — под притушиванием лимита, как
-  // вся клетка. Касания пропускает к клетке.
+  // В выборе одного файла — над кнопкой клетки. В шите чата — под
+  // притушиванием лимита, как вся клетка. Касания пропускает к клетке.
   const durationBadge =
     asset.kind === 'video' ? (
       <View pointerEvents="none" style={[styles.videoBadge, { backgroundColor: theme.mediaScrim }]}>
@@ -157,7 +156,15 @@ export const MediaGridItem = memo(function MediaGridItem({
         />
       ) : null}
 
-      {pick ? <PickCover asset={asset} pick={pick} onOpen={openPreview} /> : null}
+      {pick ? (
+        <Pressable
+          testID="media-grid-pick"
+          accessibilityRole="button"
+          accessibilityLabel={asset.kind === 'video' ? 'Видео' : 'Фото'}
+          onPress={() => (pick.onPick ? pick.onPick(asset) : openPreview())}
+          style={styles.thumbnail}
+        />
+      ) : null}
 
       {pick ? durationBadge : null}
 
@@ -199,31 +206,3 @@ export const MediaGridItem = memo(function MediaGridItem({
     </View>
   );
 });
-
-type PickCoverProps = {
-  asset: MediaLibraryItem;
-  pick: GridPick;
-  /** Раскрыть файл в предпросмотр из этой плитки. */
-  onOpen: () => void;
-};
-
-/** Вся клетка — кнопка выбора; неподходящий файл притушен и не нажимается. */
-function PickCover({ asset, pick, onOpen }: PickCoverProps) {
-  const theme = useTheme();
-  const accepted = pick.accepts(asset);
-
-  return (
-    <Pressable
-      testID="media-grid-pick"
-      accessibilityRole="button"
-      accessibilityLabel={asset.kind === 'video' ? 'Видео' : 'Фото'}
-      accessibilityState={{ disabled: !accepted }}
-      disabled={!accepted}
-      onPress={() => (pick.onPick ? pick.onPick(asset) : onOpen())}
-      style={[
-        styles.thumbnail,
-        !accepted && { backgroundColor: theme.background, opacity: Opacity.unavailable },
-      ]}
-    />
-  );
-}
