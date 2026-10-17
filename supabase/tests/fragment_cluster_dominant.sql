@@ -115,6 +115,8 @@ declare
   e uuid := '00000000-0000-4000-8000-0000000000ea';
   chat uuid;
   m2 uuid;
+  m3 uuid;
+  f5 uuid;
   f1 uuid;
   f2 uuid;
   f3 uuid;
@@ -237,6 +239,29 @@ begin
     got = '👍'
       and (select (member_reactions ->> '👍')::int = 2 and (visitor_reactions ->> '❤️')::int = 2
            from public.fragment_clusters where id = k),
+    coalesce(got, 'null') || ' ' || (select member_reactions::text || visitor_reactions::text from public.fragment_clusters where id = k));
+
+  -- Снятие дублей после слияния кластеров (dedup) пересчитывает лидера:
+  -- у A и B по ❤️ (раньше) и 👍 (позже) в одном кластере, у D — ❤️.
+  perform pg_temp.act_as(a);
+  m3 := pg_temp.say_text(chat, 'альфа бета гамма дельта');
+  f1 := pg_temp.react(m3, 'альфа', '❤️');
+  f3 := pg_temp.react(m3, 'гамма', '👍');
+  perform pg_temp.act_as(b);
+  f2 := pg_temp.react(m3, 'бета', '❤️');
+  f4 := pg_temp.react(m3, 'дельта', '👍');
+  perform pg_temp.act_as(d);
+  f5 := pg_temp.react(m3, 'альфа бета', '❤️');
+  perform pg_temp.as_service();
+  update public.reactions set updated_at = updated_at - interval '1 hour'
+  where target_type = 'fragment' and target_id in (f1, f2) and deleted_at is null;
+  s := pg_temp.recompute(m3, jsonb_build_array(pg_temp.cl(m3, null, 'альфа бета гамма дельта', array[f1, f2, f3, f4, f5])));
+  select id, dominant_emoji into k, got from public.fragment_clusters where message_id = m3 and deleted_at is null;
+  perform pg_temp.check('слияние с дублями: ❤️3 👍2 — ❤️', s = 'applied' and got = '❤️', s || ' ' || coalesce(got, 'null'));
+  perform public.fragment_clusters_dedup(m3);
+  select dominant_emoji into got from public.fragment_clusters where id = k;
+  perform pg_temp.check('dedup снял старые ❤️ (❤️1 👍2) — лидер 👍',
+    got = '👍',
     coalesce(got, 'null') || ' ' || (select member_reactions::text || visitor_reactions::text from public.fragment_clusters where id = k));
 end;
 $$;
