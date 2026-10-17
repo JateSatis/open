@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useWindowDimensions, View } from 'react-native';
 import Animated, {
   LayoutAnimationConfig,
@@ -14,6 +14,7 @@ import { styles } from './styles';
 import { MenuList, menuListHeight, type MenuAction } from '@/components/MenuList';
 import { MENU_OPEN_MS, MenuModal, useMenuTransition } from '@/components/MenuModal';
 import { pickerGeometry, ReactionPicker } from '@/features/interactions/ReactionPicker';
+import { logReactionPicker } from '@/features/recs/journal/chatJournal';
 import { Opacity, Sizes, Spacing } from '@/theme';
 
 /** Прямоугольник облачка в координатах окна — где оно стоит в переписке. */
@@ -62,6 +63,8 @@ export type MessageContextMenuProps<Id extends string = string> = {
   /** Действие выполняется после того, как меню закрылось: диалог подтверждения не ложится поверх меню. */
   onAction: (id: Id) => void;
   onClose: () => void;
+  /** Чьё меню — для журнала: выбрали реакцию или закрыли, не выбрав. */
+  journalSubject?: { type: 'message' | 'comment'; id: string } | null;
 };
 
 /**
@@ -80,6 +83,7 @@ export function MessageContextMenu<Id extends string>({
   reactions,
   onAction,
   onClose,
+  journalSubject = null,
 }: MessageContextMenuProps<Id>) {
   const insets = useSafeAreaInsets();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
@@ -88,6 +92,32 @@ export function MessageContextMenu<Id extends string>({
   const [expandedFor, setExpandedFor] = useState<MenuAnchor | null>(null);
   const expanded = anchor !== null && expandedFor === anchor;
   const menuHidden = useSharedValue(0);
+
+  // Журнал: меню с реакциями открыли — выбрали реакцию или закрыли без неё.
+  const pickerSession = useRef<{
+    subject: { type: 'message' | 'comment'; id: string };
+    at: number;
+    emoji: string | null;
+  } | null>(null);
+  const hasReactions = reactions !== null;
+
+  useEffect(() => {
+    if (anchor && hasReactions && journalSubject && !pickerSession.current) {
+      pickerSession.current = { subject: journalSubject, at: Date.now(), emoji: null };
+    }
+
+    if (!anchor && pickerSession.current) {
+      const { subject, at, emoji } = pickerSession.current;
+
+      pickerSession.current = null;
+      logReactionPicker(
+        subject,
+        emoji ? 'picked' : 'cancelled',
+        Date.now() - at,
+        emoji ?? undefined,
+      );
+    }
+  }, [anchor, hasReactions, journalSubject]);
 
   // Левый край реакций — посередине между краем экрана и левым краем меню.
   const menuLeft = Math.round(windowWidth * Sizes.menuLeftShare);
@@ -201,7 +231,10 @@ export function MessageContextMenu<Id extends string>({
               expanded={expanded}
               maxHeight={pickerMaxHeight}
               onToggleExpanded={() => setExpandedFor(expanded ? null : anchor)}
-              onSelect={(emoji) => close(() => reactions.onSelect(emoji))}
+              onSelect={(emoji) => {
+                if (pickerSession.current) pickerSession.current.emoji = emoji;
+                close(() => reactions.onSelect(emoji));
+              }}
               style={[
                 styles.pickerOrigin,
                 { top: layout.accessoryTop, left: pickerLeft },

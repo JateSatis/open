@@ -70,7 +70,11 @@ import {
 } from '@/features/chats/chatDisplay';
 import { mosaicBounds } from '@/features/chats/lib/mosaicLayout';
 import { bubbleAsideWidth } from '@/features/chats/MessageBubble/layout';
-import { createRowRegistry, measureInWindow, RowRegistryContext } from '@/features/chats/rowRegistry';
+import {
+  createRowRegistry,
+  measureInWindow,
+  RowRegistryContext,
+} from '@/features/chats/rowRegistry';
 import { useChatBubbles } from '@/features/chats/useChatBubbles';
 import { useChatKeyboardInset } from '@/features/chats/useChatKeyboardInset';
 import { useChatRowRenderer } from '@/features/chats/useChatRowRenderer';
@@ -93,6 +97,7 @@ import {
   useChatSubscription,
   useMarkChatSubscriptionRead,
 } from '@/features/chats/chatSubscription';
+import { useChatJournal } from '@/features/chats/useChatJournal';
 import { useMessageViews } from '@/features/chats/useMessageViews';
 import { messagesQueryKey } from '@/features/chats/messages/historyCache';
 import { readChatDraft } from '@/features/chats/composerDraftStore';
@@ -107,10 +112,7 @@ import { useQuoteNavigation, type CommentFocus } from '@/features/chats/useQuote
 import { useReplyForward } from '@/features/chats/useReplyForward';
 import { useRespondToInvite } from '@/features/chats/useRespondToInvite';
 import { WaitingBanner } from '@/features/chats/WaitingBanner';
-import {
-  CommentsPanel,
-  openComments,
-} from '@/features/interactions/CommentsPanel';
+import { CommentsPanel, openComments } from '@/features/interactions/CommentsPanel';
 import { resetScrolledRows } from '@/features/interactions/MessageReactions';
 import { menuReactionSet } from '@/features/interactions/reactionState';
 import { useReactToMessage } from '@/features/interactions/useReactToMessage';
@@ -624,6 +626,11 @@ export function ChatConversation({
 
   // Строки на экране — для засчитанных показов: меряются снаружи списка по ключу.
   const [rowRegistry] = useState(createRowRegistry);
+  useChatJournal(
+    chatId,
+    isFocused && active,
+    isMember ? 'member' : subscription ? 'subscriber' : 'visitor',
+  );
   const views = useMessageViews({
     chatId,
     currentUserId,
@@ -894,37 +901,37 @@ export function ChatConversation({
           <Animated.View ref={listFrameRef} style={styles.flex}>
             <RowRegistryContext.Provider value={rowRegistry}>
               <TileViewportContext.Provider value={measureListFrame}>
-                  <FlatList
-                    ref={listRef}
-                    testID="messages-list"
-                    inverted
-                    data={rows}
-                    onScrollToIndexFailed={jump.onScrollToIndexFailed}
-                    keyExtractor={rowKey}
-                    renderItem={renderItem}
-                    viewabilityConfig={views.viewabilityConfig}
-                    onViewableItemsChanged={views.onViewableItemsChanged}
-                    onScroll={onListScroll}
-                    onScrollBeginDrag={onListDragStart}
-                    scrollEventThrottle={VIEWS_SCROLL_THROTTLE_MS}
-                    contentContainerStyle={styles.list}
-                    // The list is inverted, so its "end" is the top of the screen:
-                    // scrolling up pages further back through the history.
-                    // Облачко ниже экрана выросло или сжалось (правка, подгрузка
-                    // картинки) — то, что человек читает выше, остаётся на месте.
-                    // У самого низа переписки список по-прежнему едет за новым.
-                    maintainVisibleContentPosition={KEEP_READING_POSITION}
-                    onEndReached={hasMore ? loadMore : undefined}
-                    onEndReachedThreshold={HISTORY_EDGE}
-                    // Тап по облачку при открытой клавиатуре сразу открывает меню, а
-                    // не только прячет клавиатуру; тап по пустому месту — прячет.
-                    keyboardShouldPersistTaps="handled"
-                    ListFooterComponent={
-                      isLoadingMore ? (
-                        <ActivityIndicator accessibilityLabel="Загрузка истории" />
-                      ) : null
-                    }
-                  />
+                <FlatList
+                  ref={listRef}
+                  testID="messages-list"
+                  inverted
+                  data={rows}
+                  onScrollToIndexFailed={jump.onScrollToIndexFailed}
+                  keyExtractor={rowKey}
+                  renderItem={renderItem}
+                  viewabilityConfig={views.viewabilityConfig}
+                  onViewableItemsChanged={views.onViewableItemsChanged}
+                  onScroll={onListScroll}
+                  onScrollBeginDrag={onListDragStart}
+                  scrollEventThrottle={VIEWS_SCROLL_THROTTLE_MS}
+                  contentContainerStyle={styles.list}
+                  // The list is inverted, so its "end" is the top of the screen:
+                  // scrolling up pages further back through the history.
+                  // Облачко ниже экрана выросло или сжалось (правка, подгрузка
+                  // картинки) — то, что человек читает выше, остаётся на месте.
+                  // У самого низа переписки список по-прежнему едет за новым.
+                  maintainVisibleContentPosition={KEEP_READING_POSITION}
+                  onEndReached={hasMore ? loadMore : undefined}
+                  onEndReachedThreshold={HISTORY_EDGE}
+                  // Тап по облачку при открытой клавиатуре сразу открывает меню, а
+                  // не только прячет клавиатуру; тап по пустому месту — прячет.
+                  keyboardShouldPersistTaps="handled"
+                  ListFooterComponent={
+                    isLoadingMore ? (
+                      <ActivityIndicator accessibilityLabel="Загрузка истории" />
+                    ) : null
+                  }
+                />
               </TileViewportContext.Provider>
             </RowRegistryContext.Provider>
           </Animated.View>
@@ -1050,6 +1057,7 @@ export function ChatConversation({
         reactions={menuReactions}
         onAction={runMenuAction}
         onClose={menu.close}
+        journalSubject={menuContent ? { type: 'message', id: menuContent.id } : null}
       />
 
       <CommentsPanel onOpenPerson={openPerson} hostChatId={chatId} />

@@ -9,6 +9,7 @@ import {
 import { recordMessageViews } from '@/api/messageViews';
 import type { ChatListRow } from '@/features/chats/islands/rows';
 import type { AnchorRect } from '@/features/chats/MessageContextMenu';
+import { chatVisibleMessages } from '@/features/recs/journal/chatJournal';
 import { useViewBatcher } from '@/lib/useViewBatcher';
 
 /**
@@ -115,14 +116,25 @@ export function useMessageViews({
     setVisibleRef.current = setVisible;
   }, [setVisible]);
 
+  const chatIdRef = useRef(chatId);
+
+  useEffect(() => {
+    chatIdRef.current = chatId;
+  }, [chatId]);
+
   const onViewableItemsChanged = useCallback(
     ({ viewableItems }: { viewableItems: ViewToken<ChatListRow>[] }) => {
-      setVisibleRef.current(
-        viewableItems.flatMap((token) => {
-          const viewed = token.item ? viewedMessageOf(token.item, userRef.current) : null;
+      const viewed = viewableItems.flatMap((token) => {
+        const item = token.item ? viewedMessageOf(token.item, userRef.current) : null;
 
-          return viewed ? [viewed] : [];
-        }),
+        return item ? [item] : [];
+      });
+
+      setVisibleRef.current(viewed);
+      // Журнал: сколько каждое сообщение пробыло на экране.
+      chatVisibleMessages(
+        chatIdRef.current,
+        viewed.map(({ id }) => id),
       );
     },
     [],

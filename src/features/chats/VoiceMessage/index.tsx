@@ -1,4 +1,7 @@
+import { useEffect } from 'react';
+
 import type { MessageAttachment } from '@/api/chats';
+import { noteVoiceOwner } from '@/features/recs/journal/voiceJournal';
 import { VoicePlayer } from '@/features/media';
 import { useTheme } from '@/hooks/use-theme';
 
@@ -10,12 +13,18 @@ export type VoiceMessageProps = {
    */
   localUri?: string;
   isOwn: boolean;
+  /** Сообщение голосового — для журнала; у комментария не передаётся. */
+  messageId?: string;
 };
 
 /** Голосовое внутри облачка: плеер в цветах своего или чужого сообщения. */
-export function VoiceMessage({ attachment, localUri, isOwn }: VoiceMessageProps) {
+export function VoiceMessage({ attachment, localUri, isOwn, messageId }: VoiceMessageProps) {
   const theme = useTheme();
   const uri = localUri ?? attachment.url;
+
+  useEffect(() => {
+    if (messageId) noteVoiceOwner(uri, messageId);
+  }, [messageId, uri]);
 
   return (
     <VoicePlayer

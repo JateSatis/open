@@ -9,6 +9,8 @@ import { useShallow } from 'zustand/react/shallow';
 
 import { resolveVoiceUri } from './voiceCache';
 
+import { voicePlaybackChanged } from '@/features/recs/journal/voiceJournal';
+
 /**
  * Один плеер голосовых на всё приложение, а не по плееру на облачко.
  *
@@ -45,6 +47,9 @@ const INITIAL: VoicePlaybackState = {
 };
 
 export const useVoicePlaybackStore = create<VoicePlaybackState>(() => INITIAL);
+
+// Журнал рекомендаций: сколько и до какого места послушали.
+useVoicePlaybackStore.subscribe((state, prev) => voicePlaybackChanged(state, prev));
 
 const setState = useVoicePlaybackStore.setState;
 const getState = useVoicePlaybackStore.getState;

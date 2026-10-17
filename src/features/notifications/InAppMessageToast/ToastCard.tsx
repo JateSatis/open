@@ -124,7 +124,10 @@ export function ToastCard({ alert, dismiss, group = null }: ToastCardProps) {
     }
 
     // Заявка открывает сам чат: его можно прочитать и там же принять.
-    router.push(`/chats/${alert.chatId}`);
+    router.push({
+      pathname: '/chats/[chatId]',
+      params: { chatId: alert.chatId, from: 'notification' },
+    });
   };
 
   // Группа и чужая переписка, на которую я подписан, — их названием, автор — в тексте.
