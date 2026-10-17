@@ -816,6 +816,23 @@ export async function listCommentCounts(
   return (data ?? []).map((row) => ({ id: row.id, commentsCount: row.comments_count }));
 }
 
+/** Сколько показываемых кластеров фрагментов у этих сообщений — свежие числа, пачкой. */
+export async function listClusterCounts(
+  messageIds: string[],
+): Promise<{ id: string; clustersCount: number }[]> {
+  if (messageIds.length === 0) return [];
+
+  const { data, error } = await supabase
+    .from('messages')
+    .select('id, clusters_count')
+    .in('id', messageIds)
+    .is('deleted_at', null);
+
+  if (error) throw error;
+
+  return (data ?? []).map((row) => ({ id: row.id, clustersCount: row.clusters_count }));
+}
+
 /** Сообщения по id — живые; удалённые база не отдаёт. */
 export async function listMessagesByIds(messageIds: string[]): Promise<Message[]> {
   if (messageIds.length === 0) return [];
@@ -968,6 +985,8 @@ export type ChatChannelHandlers = {
   onReactionsChanged: (messageId: string) => void;
   /** Число комментариев к сообщению изменилось. Payload — подсказка, какое; число — из базы. */
   onCommentsChanged: (messageId: string) => void;
+  /** Пересчёт поменял показываемые кластеры фрагментов сообщения. Payload — подсказка, какое; число — из базы. */
+  onClustersChanged?: (messageId: string) => void;
   /**
    * У сообщений выросли просмотры или появилось «прочитано». Payload —
    * подсказка, у каких; числа — из базы.

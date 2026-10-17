@@ -169,7 +169,7 @@ export function useComments(
   const { data: me } = useMyProfile();
   const targetId = subject.id;
   const scopeKey = fragment?.key;
-  const startFragmentId = fragment?.fragmentId ?? null;
+  const scopeSet = fragment?.set;
   const allOutbox = useOutboxComments(targetId);
   // В панели фрагмента — свои неотправленные из неё же; ответы в тредах — все:
   // треды открываются только у корней этой панели.
@@ -193,7 +193,7 @@ export function useComments(
   const { data, isPending, error } = useQuery({
     queryKey: rootsKey(targetId, scopeKey),
     queryFn: () =>
-      loadRoots(targetId, scopeKey ? { key: scopeKey, fragmentId: startFragmentId } : undefined),
+      loadRoots(targetId, scopeKey && scopeSet ? { key: scopeKey, set: scopeSet } : undefined),
     // Порядок верха меняется только новым открытием: сами по себе страницы не перечитываются.
     staleTime: Infinity,
     refetchOnReconnect: false,
@@ -386,7 +386,7 @@ export function useComments(
     loadingMoreRef.current = true;
     setIsLoadingMore(true);
 
-    return listThreadRoots(targetId, { cursor, fragmentId: loaded.scope?.fragmentId ?? undefined })
+    return listThreadRoots(targetId, { cursor, set: loaded.scope?.set })
       .then((page) =>
         updateRoots(
           queryClient,

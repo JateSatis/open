@@ -7,7 +7,7 @@ import Animated, { FadeIn } from 'react-native-reanimated';
 import { fragmentMenuLayout } from './fragmentMenuLayout';
 import { styles } from './styles';
 
-import type { Fragment, FragmentRange } from '@/api/fragments';
+import type { Fragment } from '@/api/fragments';
 import type { MessageReactions } from '@/api/reactionCounts';
 import { sendFragmentReaction } from '@/features/chats/fragments/fragmentReactions';
 import {
@@ -31,8 +31,8 @@ const PICKER_COLUMNS = 6;
 export type FragmentMenuProps = {
   /** Окно списка в координатах окна: меню не залезает на шапку и поле ввода. */
   measureViewport: () => Promise<AnchorRect | null>;
-  /** Кнопка комментария: панель этого фрагмента. */
-  onComment: (selection: TextSelection, range: FragmentRange, mine: Fragment | null) => unknown;
+  /** Кнопка комментария: панель кластера или области этого куска. */
+  onComment: (selection: TextSelection) => unknown;
 };
 
 function reactionsOf(fragment: Fragment | null, amMember: boolean): MessageReactions {
@@ -208,7 +208,7 @@ function MenuBody({
             testID="fragment-comment"
             accessibilityRole="button"
             accessibilityLabel="Добавить комментарий"
-            onPress={() => onComment(selection, range, mine)}
+            onPress={() => onComment(selection)}
             style={({ pressed }) => [
               styles.comment,
               { backgroundColor: pressed ? theme.backgroundSelected : theme.backgroundElement },

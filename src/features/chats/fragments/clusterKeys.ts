@@ -10,3 +10,11 @@ export function clustersKeyOf(messageId: string) {
 export function clustersKey(messageId: string, text: string) {
   return [...clustersKeyOf(messageId), text] as const;
 }
+
+/**
+ * Сводка выделенной области в кеше — под ключом кластеров сообщения: что
+ * перечитывает кластеры (своя реакция, пересчёт), перечитывает и её.
+ */
+export function areaKey(messageId: string, start: number, end: number) {
+  return [...clustersKeyOf(messageId), 'area', start, end] as const;
+}

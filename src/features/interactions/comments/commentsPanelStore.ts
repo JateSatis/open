@@ -1,31 +1,45 @@
 import { create } from 'zustand';
 
-import type { CommentSubject } from '@/api/comments';
+import type { CommentSubject, FragmentSet } from '@/api/comments';
 import type { FragmentRange } from '@/api/fragments';
 import { canCommentOn } from '@/features/chats/messageActions';
 import type { ChatMessage } from '@/features/chats/messages/types';
 
-/**
- * Фрагмент текста, чья боковая панель открыта: цитата, реакции и только его
- * комментарии. Этап 3 добавит сюда кластер — несколько фрагментов одного
- * куска текста — отдельным видом цели.
- */
-export type FragmentPanelSubject = {
-  kind: 'fragment';
-  /** Ключ верха панели: мой фрагмент на этом диапазоне. */
+type FragmentPanelBase = {
+  /** Ключ верха панели. */
   key: string;
-  /** Фрагмент в базе; у своего нового — `null`, пока не уйдёт первая реакция или комментарий. */
-  fragmentId: string | null;
-  /** Диапазон для базы (code points) и сам кусок — цитата в шапке. */
+  /**
+   * Кусок в шапке и куда уходят мои реакция и комментарий из панели — мой
+   * фрагмент на этом диапазоне (code points).
+   */
   range: FragmentRange;
+  /** Текст сообщения, по которому сняты диапазоны, — ключ кеша кластеров. */
+  messageText: string;
   /** Открыли кнопкой комментария — сразу поле ввода с клавиатурой. */
   focusInput: boolean;
 };
 
+/**
+ * Чья боковая панель открыта. Кластер — подсвеченный кусок: его сводные
+ * реакции и комментарии всех его фрагментов; держится за id кластера, и
+ * пересчёт его не подменяет. Область — выделенный кусок: фрагменты, больше
+ * половины которых внутри; пустая область — просто цитата и поле ввода.
+ */
+export type FragmentPanelSubject =
+  | (FragmentPanelBase & { kind: 'cluster'; clusterId: string; decisionId: string | null })
+  | (FragmentPanelBase & { kind: 'area' });
+
+/** Набор фрагментов, чьи комментарии показывает панель. */
+export function fragmentSetOf(subject: FragmentPanelSubject): FragmentSet {
+  return subject.kind === 'cluster'
+    ? { kind: 'cluster', clusterId: subject.clusterId }
+    : { kind: 'area', start: subject.range.start, end: subject.range.end };
+}
+
 /** Какие комментарии открыты: к какому сообщению или попу и, если известно, из какого чата. */
 export type CommentsPanelTarget = {
   subject: CommentSubject;
-  /** Только комментарии фрагмента — боковая панель, а не шит. */
+  /** Кусок текста — боковая панель кластера или области, а не шит. */
   fragment?: FragmentPanelSubject;
   /** Чат, из переписки которого открыли, — его кеш сразу даёт облачко сверху. */
   chatId?: string;
@@ -87,7 +101,7 @@ export function openComments(
 }
 
 /**
- * Открывает боковую панель фрагмента текста сообщения. `chatId` и `amMember`
+ * Открывает боковую панель куска текста сообщения — кластера или области. `chatId` и `amMember`
  * — чата, где живёт сообщение (у облачка островка — чата оригинала).
  * `rowKey` — облачко, где выделяли: туда ведёт цитата над комментарием.
  * Сообщение над боковой панелью не поднимается.

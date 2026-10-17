@@ -16,18 +16,17 @@
 
 import type { QueryClient } from '@tanstack/react-query';
 
-import type { Comment, RootCursor } from '@/api/comments';
+import type { Comment, FragmentSet, RootCursor } from '@/api/comments';
 import { toCommentItem, type CommentItem } from '@/features/interactions/comments/commentItem';
 
 /**
- * Верх панели фрагмента — только корни этого фрагмента. `key` — свой для
- * панели (диапазон или кластер), `fragmentId` — фрагмент в базе; у своего
- * нового его нет, пока не уйдёт первый комментарий.
+ * Верх боковой панели — только корни фрагментов её набора (кластер или
+ * область). `key` — свой для панели.
  */
-export type RootsScope = { key: string; fragmentId: string | null };
+export type RootsScope = { key: string; set: FragmentSet };
 
 export type RootsPage = {
-  /** Только корни фрагмента; нет — весь верх сообщения. */
+  /** Только корни фрагментов набора; нет — весь верх сообщения. */
   scope?: RootsScope;
   /** Закреплённый автором контента — первым; в `raised` и `items` его нет. */
   authorPin: CommentItem | null;
@@ -304,7 +303,17 @@ export function updateRoots(
   );
 }
 
-/** Меняет верх всех открытых панелей фрагментов цели. */
+/** Наборы открытых боковых панелей цели. */
+export function scopesOf(queryClient: QueryClient, targetId: string): RootsScope[] {
+  return queryClient
+    .getQueriesData<RootsPage>({
+      queryKey: rootsKey(targetId),
+      predicate: (query) => query.queryKey.length === 4,
+    })
+    .flatMap(([, page]) => (page?.scope ? [page.scope] : []));
+}
+
+/** Меняет верх всех открытых боковых панелей цели. */
 export function updateScopedRoots(
   queryClient: QueryClient,
   targetId: string,

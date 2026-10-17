@@ -2,6 +2,7 @@ import { listMessageClusters } from './fragmentClusters';
 
 import { supabase } from '@/api/supabase';
 
+jest.unmock('./fragmentClusters');
 jest.mock('@/api/supabase', () => ({ supabase: { rpc: jest.fn() } }));
 
 const mockedRpc = jest.mocked(supabase.rpc);

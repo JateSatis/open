@@ -1,4 +1,4 @@
-import { canEnterFragmentMode, hasSelectableText } from './fragmentRules';
+import { canEnterFragmentMode, hasClusters, hasSelectableText } from './fragmentRules';
 
 import type { ChatMessage } from '@/features/chats/messages/types';
 
@@ -68,5 +68,17 @@ describe('who enters the fragment mode by a tap', () => {
         hasVisibleCluster: true,
       }),
     ).toBe(false);
+  });
+});
+
+describe('the glow of a bubble', () => {
+  it('is there only when the text has a shown cluster', () => {
+    expect(hasClusters(message({ clustersCount: 1 }))).toBe(true);
+    expect(hasClusters(message({ clustersCount: 0 }))).toBe(false);
+    expect(hasClusters(message())).toBe(false);
+  });
+
+  it('is not on a message without selectable text', () => {
+    expect(hasClusters(message({ clustersCount: 2, kind: 'forward' }))).toBe(false);
   });
 });

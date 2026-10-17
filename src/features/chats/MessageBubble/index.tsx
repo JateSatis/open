@@ -2,6 +2,7 @@ import { useMemo, useState, type ReactNode } from 'react';
 import { PixelRatio, Pressable, View, type StyleProp, type TextStyle } from 'react-native';
 
 import { BubbleFooter } from './BubbleFooter';
+import { BubbleGlow } from './BubbleGlow';
 import { BUBBLE_AVATAR } from './layout';
 import { styles } from './styles';
 
@@ -20,6 +21,7 @@ import { ReplyQuote } from '@/features/chats/ReplyQuote';
 import type { ChatMessage } from '@/features/chats/useChatMessages';
 import { ViewsCount, type ViewsCountTone } from '@/features/chats/ViewsCount';
 import { VoiceMessage } from '@/features/chats/VoiceMessage';
+import { hasClusters } from '@/features/chats/fragments/fragmentRules';
 import { useFragmentModeActive } from '@/features/chats/fragments/fragmentStore';
 import { SelectableText } from '@/features/chats/fragments/SelectableText';
 import { CommentsCircle } from '@/features/interactions/CommentsCircle';
@@ -34,6 +36,7 @@ import { hasReactions } from '@/features/interactions/reactionState';
 import { MediaViewer, type MediaViewerItem } from '@/features/media';
 import { openPopViewer } from '@/features/pops/openPopViewer';
 import { useTheme } from '@/hooks/use-theme';
+import { Spacing } from '@/theme';
 
 export type MessageBubbleProps = {
   message: ChatMessage;
@@ -156,6 +159,8 @@ export function MessageBubble({
   const hasVisitorLine =
     reactionsLayout === 'split' && Object.keys(message.reactions.visitors).length > 0;
   const textColor = isOwn ? 'primaryText' : 'text';
+  // Ореол — у всех, в режиме и вне его: кусками этого текста уже интересовались.
+  const glowing = hasClusters(message);
   const bubbleColor = fragmentMode
     ? isOwn
       ? theme.fragmentBubbleOwn
@@ -261,6 +266,7 @@ export function MessageBubble({
       messageId={selectableText?.messageId ?? message.id}
       chatId={selectableText?.chatId ?? message.chatId}
       amMember={selectableText?.amMember ?? false}
+      clustersCount={message.clustersCount}
     />
   ) : null;
 
@@ -314,6 +320,7 @@ export function MessageBubble({
         // облачка на ней. Подпись и имя автора — в полосах того же облачка.
         // Без подписи реакции — тоже полосой облачка, под мозаикой.
         <View style={[styles.mediaColumn, { width: layout.width }]}>
+          {glowing ? <BubbleGlow isOwn={isOwn} /> : null}
           <View
             testID="message-bubble"
             style={[
@@ -365,6 +372,7 @@ export function MessageBubble({
           testID="message-bubble"
           style={[styles.bubble, wide && styles.wide, { backgroundColor: bubbleColor }]}
         >
+          {glowing ? <BubbleGlow isOwn={isOwn} inset={Spacing.two} /> : null}
           <View style={styles.content}>
             {showAuthorLine ? authorLine() : null}
 

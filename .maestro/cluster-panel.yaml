@@ -1,0 +1,61 @@
+appId: com.openger.app
+name: Кластер фрагментов — подсветка в режиме, тап открывает панель кластера, комментарий с плашкой, закрытие оставляет режим
+tags:
+  - chats
+  - comments
+env:
+  # Публичная группа, основной аккаунт в ней посетитель. У сообщения есть
+  # кластеры — ореол и подсветка в режиме.
+  FRAGMENT_CHAT_LINK: "openger://chats/2d929436-099b-4cc9-89ba-e764c0ad8306"
+  FRAGMENT_TEXT: "Самойлова, ты дура!"
+---
+- runFlow: subflows/open-app.yaml
+- evalScript: ${output.msg = 'maestro-' + Date.now()}
+- openLink: ${FRAGMENT_CHAT_LINK}
+- assertVisible:
+    id: "bubble-glow"
+# Тап — режим фрагментов, подсвечены кластеры.
+- tapOn:
+    text: ${FRAGMENT_TEXT}
+    retryTapIfNoChange: false
+- assertVisible:
+    id: "cluster-highlight"
+# Тап по подсветке — панель кластера: цитата, сводные реакции.
+- tapOn:
+    id: "cluster-hit-.*"
+    index: 0
+- assertVisible:
+    id: "fragment-panel"
+- assertVisible:
+    id: "fragment-quote"
+- assertVisible:
+    id: "fragment-reactions"
+# Комментарий — сразу с плашкой цитаты.
+- tapOn: "Комментарий"
+- inputText: ${output.msg}
+- tapOn: "Отправить"
+- assertVisible: ${output.msg}
+- assertVisible:
+    id: "comment-fragment-quote"
+    above: ${output.msg}
+# «Назад» закрывает панель (сначала клавиатуру), облачко остаётся в режиме.
+- hideKeyboard
+- back
+- assertNotVisible:
+    id: "fragment-panel"
+- assertVisible:
+    id: "cluster-highlight"
+# Тот же комментарий — в шите сообщения. Оттуда и убрать.
+- tapOn:
+    id: "comments-circle"
+    index: 0
+- assertVisible:
+    id: "comments-panel"
+- scrollUntilVisible:
+    element: ${output.msg}
+    direction: DOWN
+    timeout: 20000
+- longPressOn: ${output.msg}
+- tapOn: "Удалить"
+- tapOn: "Удалить"
+- assertNotVisible: ${output.msg}

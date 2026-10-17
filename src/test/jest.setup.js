@@ -134,3 +134,27 @@ jest.mock('@/api/fragments', () => ({
   listMessageFragments: jest.fn(() => Promise.resolve([])),
   setFragmentReaction: jest.fn(() => Promise.resolve({ fragmentId: null, mine: null })),
 }));
+
+// Кластеры фрагментов и события для их модели — сеть. Облачко в режиме
+// фрагментов их подгружает и пишет; тесты кластеров подменяют функции сами,
+// а тесты самих модулей снимают подмену (`jest.unmock`).
+jest.mock('@/api/fragmentClusters', () => ({
+  listMessageClusters: jest.fn(() => Promise.resolve([])),
+  getAreaSummary: jest.fn(() =>
+    Promise.resolve({
+      fragmentIds: [],
+      memberReactions: {},
+      visitorReactions: {},
+      reactionsCount: 0,
+      commentsCount: 0,
+      myClusterId: null,
+      mine: null,
+      myFragmentId: null,
+    }),
+  ),
+}));
+
+jest.mock('@/api/fragmentClusterEvents', () => ({
+  trackClusterEvent: jest.fn(),
+  flushClusterEvents: jest.fn(() => Promise.resolve()),
+}));

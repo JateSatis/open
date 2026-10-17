@@ -10,8 +10,9 @@ import {
   type Fragment,
   type FragmentRange,
 } from '@/api/fragments';
-import type { ReactionAudience, ReactionCounts } from '@/api/reactionCounts';
+import type { ReactionAudience } from '@/api/reactionCounts';
 import { clustersKeyOf } from '@/features/chats/fragments/clusterKeys';
+import { patchClusterReaction, shiftCount } from '@/features/chats/fragments/clusterOptimism';
 import {
   fragmentsKey,
   setMessageFragments,
@@ -32,6 +33,11 @@ export type FragmentReactionIntent = {
   /** Ряд — догадка по участию в чате сообщения; решит база. */
   audience: ReactionAudience;
   me: string;
+  /**
+   * Панель знает, в какой кластер ляжет реакция (`null` — вне кластеров):
+   * его сводка и моя реакция в нём меняются сразу. Не знает — дождётся базы.
+   */
+  clusterId?: string | null;
 };
 
 const wanted = new Map<string, FragmentReactionIntent>();
@@ -39,16 +45,6 @@ const inFlight = new Set<string>();
 
 function keyOf({ messageId, range }: Pick<FragmentReactionIntent, 'messageId' | 'range'>) {
   return `${messageId}:${range.start}-${range.end}`;
-}
-
-function shift(counts: ReactionCounts, emoji: string | null | undefined, delta: number): ReactionCounts {
-  if (!emoji) return counts;
-
-  const next = { ...counts, [emoji]: (counts[emoji] ?? 0) + delta };
-
-  if (next[emoji] <= 0) delete next[emoji];
-
-  return next;
 }
 
 /** Моя реакция на моём фрагменте диапазона — сразу в кеше; фрагмента нет — появляется. */
@@ -87,7 +83,7 @@ function applyLocally(queryClient: QueryClient, intent: FragmentReactionIntent) 
     const row = audience === 'member' ? 'memberReactions' : 'visitorReactions';
     const next: Fragment = {
       ...base,
-      [row]: shift(shift(base[row], base.mine, -1), emoji, 1),
+      [row]: shiftCount(shiftCount(base[row], base.mine, -1), emoji, 1),
       reactionsCount: base.reactionsCount - (base.mine ? 1 : 0) + (emoji ? 1 : 0),
       mine: emoji,
     };
@@ -140,7 +136,7 @@ function withoutMyOtherInCluster(
       ? fragment
       : {
           ...fragment,
-          [row]: shift(fragment[row], fragment.mine, -1),
+          [row]: shiftCount(fragment[row], fragment.mine, -1),
           reactionsCount: Math.max(0, fragment.reactionsCount - 1),
           mine: null,
         },
@@ -197,6 +193,10 @@ export function sendFragmentReaction(queryClient: QueryClient, intent: FragmentR
   const key = keyOf(intent);
 
   applyLocally(queryClient, intent);
+
+  if (intent.clusterId !== undefined) {
+    patchClusterReaction(queryClient, { ...intent, clusterId: intent.clusterId });
+  }
   wanted.set(key, intent);
 
   if (!inFlight.has(key)) void drain(queryClient, key);

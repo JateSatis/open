@@ -17,6 +17,7 @@ import {
   sendVoicePopComment,
   type Comment,
   type CommentFragment,
+  type FragmentSet,
   type CommentSubject,
   type FragmentQuote,
 } from '@/api/comments';
@@ -49,6 +50,7 @@ import {
   updateScopedRoots,
   updateThread,
 } from '@/features/interactions/comments/commentsCache';
+import { clustersKeyOf } from '@/features/chats/fragments/clusterKeys';
 import { fragmentsKey } from '@/features/chats/fragments/useMessageFragments';
 
 import {
@@ -69,15 +71,21 @@ export type CommentSendContext = {
   currentUserId: string | null;
   /** Имя и аватар — для своего пузыря до ответа сервера. */
   me: { name: string | null; avatarUrl: string | null };
-  /** Панель фрагмента: верхнеуровневый комментарий уходит к этому фрагменту. */
+  /** Боковая панель: верхнеуровневый комментарий уходит к моему фрагменту её куска. */
   fragment?: FragmentScope;
 };
 
 /**
- * Фрагмент панели: ключ её верха, фрагмент в базе (у своего нового — `null`
- * до первой отправки) и как назвать его базе — свой диапазоном, чужой по id.
+ * Боковая панель: ключ её верха, набор фрагментов, чьи комментарии она
+ * показывает, и куда уходит мой — мой фрагмент на диапазоне. `onSent` —
+ * мой верхнеуровневый из неё дошёл до базы.
  */
-export type FragmentScope = { key: string; fragmentId: string | null; request: CommentFragment };
+export type FragmentScope = {
+  key: string;
+  set: FragmentSet;
+  request: CommentFragment;
+  onSent?: () => void;
+};
 
 /** Ключи отправок, которые сейчас идут: повтор не стартует поверх незавершённой. */
 const delivering = new Set<string>();
@@ -129,7 +137,7 @@ function draftOf(
     ...(fragment && !content.threadRootId
       ? {
           fragmentKey: fragment.key,
-          fragmentId: fragment.fragmentId,
+          fragmentId: null,
           fragmentQuote: optimisticQuote(fragment.request),
         }
       : null),
@@ -181,15 +189,14 @@ function settle(queryClient: QueryClient, targetId: string, localId: string, sav
   const { localPreviews, fragmentKey } = draft ?? {};
   const item: CommentItem = { ...toCommentItem(saved), localPreviews };
 
-  // Панель фрагмента: первый комментарий к своему новому фрагменту называет
-  // его id — дальше её верх ловит и чужие комментарии к нему.
+  // Боковая панель: свой — наверх её верха. Фрагмент мог родиться этим
+  // комментарием — список фрагментов и кластеры перечитываются.
   if (saved.fragmentId) {
     updateScopedRoots(queryClient, targetId, (page, scope) =>
-      scope.key === fragmentKey || scope.fragmentId === saved.fragmentId
-        ? raiseRoot({ ...page, scope: { ...scope, fragmentId: saved.fragmentId } }, item)
-        : page,
+      scope.key === fragmentKey ? raiseRoot(page, item) : page,
     );
     void queryClient.invalidateQueries({ queryKey: fragmentsKey(targetId) });
+    void queryClient.invalidateQueries({ queryKey: clustersKeyOf(targetId) });
   }
 
   if (saved.threadRootId) {
@@ -274,13 +281,9 @@ export async function deliverComment(
 
     if (discarded.has(localId)) throw new Error('Отправка отменена');
 
-    saved = await insert(
-      subject,
-      outgoing,
-      uploaded,
-      threadRootId,
-      threadRootId ? undefined : fragmentRequest(context, localId),
-    );
+    const fragment = threadRootId ? undefined : fragmentRequest(context, localId);
+
+    saved = await insert(subject, outgoing, uploaded, threadRootId, fragment);
 
     // Уже в базе, но человек его удалил — удаляем и там, для всех.
     if (discarded.has(localId)) {
@@ -290,6 +293,8 @@ export async function deliverComment(
     }
 
     settle(queryClient, targetId, localId, saved);
+
+    if (fragment) context.fragment?.onSent?.();
   } catch (cause) {
     // Комментарий в базу не попал — загруженные файлы ничьи.
     if (!saved && uploaded.length > 0) {

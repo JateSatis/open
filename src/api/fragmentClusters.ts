@@ -74,3 +74,46 @@ export async function listMessageClusters(
     ];
   });
 }
+
+/** Выделенная область для её панели: фрагменты внутри, их сводные реакции и моё. */
+export type AreaSummary = {
+  /** Фрагменты, больше половины длины которых внутри области. */
+  fragmentIds: string[];
+  memberReactions: ReactionCounts;
+  visitorReactions: ReactionCounts;
+  reactionsCount: number;
+  commentsCount: number;
+  /** Кластер, куда попадёт мой фрагмент области, — тап по реакции заменит мою в нём. */
+  myClusterId: string | null;
+  /** Моя реакция в этом кластере (без кластера — на моём фрагменте ровно области). */
+  mine: string | null;
+  myFragmentId: string | null;
+};
+
+/** Сводка области — диапазон в code points, как в базе. */
+export async function getAreaSummary(
+  messageId: string,
+  start: number,
+  end: number,
+): Promise<AreaSummary> {
+  const { data, error } = await supabase.rpc('fragment_area_summary', {
+    target_message: messageId,
+    area_start: start,
+    area_end: end,
+  });
+
+  if (error) throw error;
+
+  const row = data?.[0];
+
+  return {
+    fragmentIds: row?.fragment_ids ?? [],
+    memberReactions: toReactionCounts(row?.member_reactions),
+    visitorReactions: toReactionCounts(row?.visitor_reactions),
+    reactionsCount: row?.reactions_count ?? 0,
+    commentsCount: row?.comments_count ?? 0,
+    myClusterId: row?.my_cluster_id ?? null,
+    mine: row?.my_emoji ?? null,
+    myFragmentId: row?.my_fragment_id ?? null,
+  };
+}

@@ -5,6 +5,7 @@ import { BackHandler, ScrollView, View } from 'react-native';
 import ChatScreen from './[chatId]';
 
 import type { ChatSummary, Message } from '@/api/chats';
+import { trackClusterEvent } from '@/api/fragmentClusterEvents';
 import { getChat, listDeletedMessageIds, listMessages, subscribeToChat } from '@/api/chats';
 import {
   getCommentTarget,
@@ -1090,10 +1091,10 @@ describe('fragment quote over a comment', () => {
         'chat-1',
         false,
         {
-          kind: 'fragment',
-          key: 'm1:6-8',
-          fragmentId: 'f1',
+          kind: 'area',
+          key: 'area:6-8',
           range: { start: 6, end: 8, text: 'm1' },
+          messageText: 'текст m1',
           focusInput: false,
         },
         'm1',
@@ -1104,6 +1105,9 @@ describe('fragment quote over a comment', () => {
 
     await waitFor(() => expect(screen.queryByTestId('fragment-panel')).toBeNull());
     expect(await screen.findByTestId('quote-highlight')).toBeTruthy();
+    expect(jest.mocked(trackClusterEvent)).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'quote_followed', messageId: 'm1', rangeStart: 6, rangeEnd: 8 }),
+    );
   });
 
   it('flashes the whole message and says so when an edit took the piece away', async () => {

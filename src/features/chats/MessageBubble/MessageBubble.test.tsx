@@ -6,6 +6,8 @@ import { MessageBubble } from '.';
 import { mosaicBounds } from '@/features/chats/lib/mosaicLayout';
 import type { ChatMessage } from '@/features/chats/useChatMessages';
 
+jest.mock('@/api/supabase', () => ({ supabase: {} }));
+
 jest.mock('@/features/media', () => ({
   MediaViewer: ({ visible }: { visible: boolean }) => {
     const { Text } = require('react-native');

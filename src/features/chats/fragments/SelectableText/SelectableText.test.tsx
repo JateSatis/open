@@ -1,9 +1,12 @@
-import { act, render, screen } from '@testing-library/react-native';
+import { act, screen } from '@testing-library/react-native';
 
 import { SelectableText } from '.';
 
 import { exitFragmentMode, setTextSelection } from '@/features/chats/fragments/fragmentStore';
 import { selectableTextOf } from '@/features/chats/fragments/selectableTexts';
+import { renderWithQuery } from '@/test/renderWithQuery';
+
+jest.mock('@/api/supabase', () => ({ supabase: {} }));
 
 const geometry = {
   text: 'какой-то другой уровень',
@@ -33,7 +36,7 @@ beforeEach(() => exitFragmentMode());
 
 describe('selectable text of a bubble', () => {
   it('is plain text with no selection', async () => {
-    await render(
+    await renderWithQuery(
       <SelectableText
         text={geometry.text}
         isOwn={false}
@@ -49,7 +52,7 @@ describe('selectable text of a bubble', () => {
   });
 
   it('paints the selection and both handles only in its own bubble', async () => {
-    await render(
+    await renderWithQuery(
       <>
         <SelectableText
           text={geometry.text}
@@ -78,7 +81,7 @@ describe('selectable text of a bubble', () => {
   });
 
   it('registers its text for the long press only when it can be selected', async () => {
-    const { unmount } = await render(
+    const { unmount } = await renderWithQuery(
       <SelectableText
         text={geometry.text}
         isOwn={false}

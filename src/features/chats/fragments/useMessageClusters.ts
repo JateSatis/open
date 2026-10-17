@@ -1,25 +1,28 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 
-import { acquireChatTopic } from '@/api/chatTopics';
+import { subscribeToChatSignals } from '@/api/chats';
 import { listMessageClusters } from '@/api/fragmentClusters';
 import { clustersKey, clustersKeyOf } from '@/features/chats/fragments/clusterKeys';
+import { fragmentsKey } from '@/features/chats/fragments/useMessageFragments';
 
 type ClusteredMessage = {
   id: string;
   chatId: string;
   text: string | null;
-  /** Видимых фрагментов нет — кластеров тоже нет, спрашивать незачем. */
-  fragmentsCount?: number;
+  /** Показываемых кластеров нет — спрашивать незачем. */
+  clustersCount?: number;
+  /** Спрашивать и без числа — панель кластера знает, что он есть. */
+  always?: boolean;
 };
 
 /**
  * Отображаемые кластеры фрагментов сообщения — диапазоны в UTF-16 его
  * текста, счётчики и моя реакция в кластере. Пересчёт на сервере сообщает о
  * новых кластерах сигналом `clusters_changed` в топик чата — тогда
- * перечитываются. Сообщение без фрагментов кластеры не спрашивает, пока
- * такой сигнал не придёт: первый кластер появляется и у облачка, загруженного
- * до первой реакции.
+ * перечитываются. Сообщение без показываемых кластеров их не спрашивает,
+ * пока такой сигнал не придёт: первый кластер появляется и у облачка,
+ * загруженного до него.
  */
 export function useMessageClusters(message: ClusteredMessage | null) {
   const queryClient = useQueryClient();
@@ -30,7 +33,7 @@ export function useMessageClusters(message: ClusteredMessage | null) {
   const enabled =
     messageId !== null &&
     text !== '' &&
-    ((message?.fragmentsCount ?? 0) > 0 || signalled === messageId);
+    ((message?.clustersCount ?? 0) > 0 || message?.always === true || signalled === messageId);
 
   const query = useQuery({
     queryKey: clustersKey(messageId ?? '', text),
@@ -44,15 +47,17 @@ export function useMessageClusters(message: ClusteredMessage | null) {
 
     const refresh = () => void queryClient.invalidateQueries({ queryKey: clustersKeyOf(messageId) });
 
-    return acquireChatTopic(chatId, {
+    return subscribeToChatSignals(chatId, {
       onClustersChanged: (changed) => {
         if (changed !== messageId) return;
 
         setSignalled(messageId);
         refresh();
+        // Пересчёт перекладывает фрагменты по кластерам — их кластер тоже свежий.
+        void queryClient.invalidateQueries({ queryKey: fragmentsKey(messageId) });
       },
       onReconnected: refresh,
-    }).release;
+    });
   }, [messageId, chatId, text, queryClient]);
 
   return query;
