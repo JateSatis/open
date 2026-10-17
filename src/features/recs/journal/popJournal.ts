@@ -35,6 +35,15 @@ let pendingExit: PopExit | null = null;
 
 /** Снимок показа уходит раз в столько: убитое приложение теряет не больше. */
 export const POP_PROGRESS_MS = JOURNAL_FLUSH_MS;
+/** Ничего не поменялось (пауза) — снимок всё равно уходит, но реже. */
+const POP_IDLE_PROGRESS_MS = 30_000;
+
+/** Что в снимке значимо меняется — без времени на экране, которое растёт всегда. */
+function progressKey(snapshot: ReturnType<PopImpression['snapshot']>): string {
+  const { visible_ms: _visible, pause_ms: _pause, pause_reasons: _reasons, ...rest } = snapshot;
+
+  return JSON.stringify(rest);
+}
 
 export function currentPopImpression(popId: string): PopImpression | null {
   return current && current.impression.popId === popId ? current.impression : null;
@@ -97,12 +106,23 @@ export function beginPopImpression(start: PopImpressionStart): PopImpression {
     },
   });
 
+  let lastKey = '';
+  let lastSentAt = 0;
+
   current = {
     impression,
     progressTimer: setInterval(() => {
-      if (current?.impression === impression) {
-        journal.log('impression_progress', { impressionId: impression.id, data: impression.snapshot() });
-      }
+      if (current?.impression !== impression) return;
+
+      const snapshot = impression.snapshot();
+      const key = progressKey(snapshot);
+      const now = Date.now();
+
+      if (key === lastKey && now - lastSentAt < POP_IDLE_PROGRESS_MS) return;
+
+      lastKey = key;
+      lastSentAt = now;
+      journal.log('impression_progress', { impressionId: impression.id, data: snapshot });
     }, POP_PROGRESS_MS),
     stopAudio: onAudioChange((state) => impression.onAudio(state)),
   };
@@ -159,7 +179,9 @@ export function notePopChannelOpened(popId: string, channelId: string): void {
 }
 
 /** Позиция и состояние видео текущего показа — для сессии комментариев. */
-export function currentPopPlayback(popId: string): { impressionId: string; posMs: number; playing: boolean } | null {
+export function currentPopPlayback(
+  popId: string,
+): { impressionId: string; posMs: number; playing: boolean } | null {
   const impression = currentPopImpression(popId);
   const probe = probes.get(popId);
 

@@ -118,7 +118,11 @@ export function createJournalQueue({
 
       events.push(event);
       trim();
-      scheduleSave();
+
+      // Показ — самое ценное и самое хрупкое: приложение убивают посреди
+      // просмотра, и отложенная запись не успела бы.
+      if (event.kind.startsWith('impression_')) void save();
+      else scheduleSave();
     },
 
     take(userId, max) {
