@@ -13,6 +13,8 @@ export type ScreenProps = {
   edges?: Edge[];
   contentContainerStyle?: StyleProp<ViewStyle>;
   style?: StyleProp<ViewStyle>;
+  /** Слой поверх содержимого, вне его полей, — панель вкладок у нижнего края. */
+  overlay?: ReactNode;
 };
 
 export function Screen({
@@ -21,6 +23,7 @@ export function Screen({
   edges = ['top', 'bottom'],
   contentContainerStyle,
   style,
+  overlay,
 }: ScreenProps) {
   const theme = useTheme();
 
@@ -37,6 +40,7 @@ export function Screen({
       ) : (
         <View style={[styles.content, contentContainerStyle]}>{children}</View>
       )}
+      {overlay}
     </SafeAreaView>
   );
 }

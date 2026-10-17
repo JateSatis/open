@@ -1,12 +1,18 @@
-import { Redirect } from 'expo-router';
-import { NativeTabs } from 'expo-router/unstable-native-tabs';
+import { Redirect, Tabs } from 'expo-router';
 
 import { useSession } from '@/features/auth/useSession';
-import { useTheme } from '@/hooks/use-theme';
 
+// Вкладки слева направо — Лента, Чаты, Профиль, а открываются «Чаты»:
+// и при запуске, и «назад» с другой вкладки ведёт к ним.
+export const unstable_settings = { initialRouteName: 'chats' };
+
+/**
+ * Вкладки — JS-навигатор без своей панели: панель (`TabBar`) рисуют корневые
+ * экраны вкладок поверх содержимого. Нативная панель так не умеет — у неё
+ * сплошной фон, и экран кончается над ней.
+ */
 export default function TabsLayout() {
   const { isAuthenticated, isLoading } = useSession();
-  const theme = useTheme();
 
   if (isLoading) {
     return null;
@@ -17,24 +23,14 @@ export default function TabsLayout() {
   }
 
   return (
-    <NativeTabs
-      backgroundColor={theme.background}
-      indicatorColor={theme.backgroundElement}
-      labelStyle={{ selected: { color: theme.text } }}>
-      <NativeTabs.Trigger name="chats">
-        <NativeTabs.Trigger.Label>Чаты</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon sf="message" md="chat" />
-      </NativeTabs.Trigger>
-
-      <NativeTabs.Trigger name="feed">
-        <NativeTabs.Trigger.Label>Лента</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon sf="sparkles" md="dynamic_feed" />
-      </NativeTabs.Trigger>
-
-      <NativeTabs.Trigger name="profile">
-        <NativeTabs.Trigger.Label>Профиль</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon sf="person.crop.circle" md="person" />
-      </NativeTabs.Trigger>
-    </NativeTabs>
+    <Tabs
+      backBehavior="initialRoute"
+      tabBar={() => null}
+      screenOptions={{ headerShown: false }}
+    >
+      <Tabs.Screen name="feed" />
+      <Tabs.Screen name="chats" />
+      <Tabs.Screen name="profile" />
+    </Tabs>
   );
 }

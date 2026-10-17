@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 
 import { Screen } from '@/components/Screen';
+import { TabBar } from '@/components/TabBar';
 import { Text } from '@/components/Text';
 import { FeedSearchPanel } from '@/features/search/FeedSearchPanel';
 import { SearchBar } from '@/features/search/SearchBar';
@@ -23,6 +24,7 @@ export default function FeedScreen() {
     <Screen
       edges={search.active ? ['top'] : []}
       contentContainerStyle={{ paddingHorizontal: Spacing.three, paddingVertical: 0 }}
+      overlay={<TabBar active="feed" />}
     >
       <SearchBar
         value={query}

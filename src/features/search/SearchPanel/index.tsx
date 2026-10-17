@@ -4,6 +4,7 @@ import { ActivityIndicator, SectionList, View } from 'react-native';
 import { styles } from './styles';
 
 import type { SearchEntity, SearchMessage } from '@/api/search';
+import { useTabBarHeight } from '@/components/TabBar';
 import { Text } from '@/components/Text';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
 import { SearchEntityRow } from '@/features/search/SearchEntityRow';
@@ -23,6 +24,7 @@ import {
 } from '@/features/search/searchSections';
 import { useOpenSearchResult } from '@/features/search/useOpenSearchResult';
 import { useSearch } from '@/features/search/useSearch';
+import { Spacing } from '@/theme';
 
 /** «Недавние» подсвечивать нечем: запроса нет. */
 const NO_QUERY = parseSearchQuery('');
@@ -47,6 +49,7 @@ export function SearchPanel({ query }: { query: string }) {
   );
 
   const currentUserId = useCurrentUserId();
+  const tabBarHeight = useTabBarHeight();
 
   useEffect(() => {
     if (currentUserId) loadRecentSearches(currentUserId);
@@ -131,7 +134,8 @@ export function SearchPanel({ query }: { query: string }) {
       showsVerticalScrollIndicator={false}
       keyboardDismissMode="on-drag"
       keyboardShouldPersistTaps="handled"
-      contentContainerStyle={styles.content}
+      // Выдача уходит под панель вкладок, последняя строка докручивается над ней.
+      contentContainerStyle={{ paddingBottom: tabBarHeight + Spacing.three }}
       onEndReached={results.loadMoreMessages}
       onEndReachedThreshold={0.5}
       ListHeaderComponent={

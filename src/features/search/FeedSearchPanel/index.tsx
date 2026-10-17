@@ -8,6 +8,7 @@ import { POP_GAP, styles } from './styles';
 import { useRestoreLastSearchPop } from './useRestoreLastSearchPop';
 
 import type { SearchEntity, SearchPop } from '@/api/search';
+import { useTabBarHeight } from '@/components/TabBar';
 import { Text } from '@/components/Text';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
 import {
@@ -39,6 +40,7 @@ export function FeedSearchPanel({ query, onPickRecent }: FeedSearchPanelProps) {
   const results = useFeedSearch(query);
   const recent = feedRecentQueries.useStore((state) => state.items);
   const currentUserId = useCurrentUserId();
+  const tabBarHeight = useTabBarHeight();
   const { width } = useWindowDimensions();
   const tileWidth =
     (width - Spacing.three * 2 - POP_GAP * (FEED_POP_COLUMNS - 1)) / FEED_POP_COLUMNS;
@@ -133,7 +135,8 @@ export function FeedSearchPanel({ query, onPickRecent }: FeedSearchPanelProps) {
       // новые: каналы, ответившие позже попсов, встали бы над экраном. Попсы
       // догружаются снизу — удерживать нечего.
       maintainVisibleContentPosition={NO_POSITION_HOLD}
-      contentContainerStyle={styles.content}
+      // Выдача уходит под панель вкладок, последняя строка докручивается над ней.
+      contentContainerStyle={{ paddingBottom: tabBarHeight + Spacing.three }}
       onEndReached={results.loadMorePops}
       onEndReachedThreshold={0.5}
       onViewableItemsChanged={onViewableItemsChanged}

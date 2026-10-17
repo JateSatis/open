@@ -36,6 +36,8 @@ export const Typography = {
   captionBold: { fontSize: 12, lineHeight: 16, fontWeight: '600' },
   /** Время, «изменено» и просмотры в низу облачка — мельче подписи, чтобы не спорить с текстом. */
   meta: { fontSize: 10, lineHeight: 13, fontWeight: '400' },
+  /** Подпись вкладки внизу экрана. */
+  tabLabel: { fontSize: 11, lineHeight: 13, fontWeight: '500' },
   code: { fontSize: 13, lineHeight: 18, fontWeight: '400' },
   /** Эмодзи реакции участников в облачке. */
   reaction: { fontSize: 18, lineHeight: 22, fontWeight: '400' },
