@@ -4,6 +4,7 @@ import { StyleSheet, View } from 'react-native';
 import type { SharedValue } from 'react-native-reanimated';
 
 import type { Pop } from '@/api/pops';
+import { currentPopImpression, registerPlayerProbe } from '@/features/recs/journal/popJournal';
 
 /** Как часто плеер сообщает время — полоса прогресса двигается плавно. */
 const TIME_UPDATE_S = 0.1;
@@ -87,6 +88,29 @@ export function PopVideo({
 
     return () => subscription.remove();
   }, [player, pop.durationMs, progress, scrubbing]);
+
+  // Журнал показа: время, игра и загрузка плеера — текущему показу этого попа.
+  // У прогреваемой страницы показа нет, события никуда не идут.
+  useEffect(() => {
+    const impression = () => currentPopImpression(pop.id);
+    const subscriptions = [
+      player.addListener('timeUpdate', ({ currentTime }) => impression()?.onTime(currentTime)),
+      player.addListener('playingChange', ({ isPlaying }) => impression()?.onPlaying(isPlaying)),
+      player.addListener('statusChange', ({ status, error }) =>
+        impression()?.onStatus(status, error?.message),
+      ),
+    ];
+    const unprobe = registerPlayerProbe(pop.id, () => ({
+      status: player.status,
+      playing: player.playing,
+      seconds: player.currentTime,
+    }));
+
+    return () => {
+      subscriptions.forEach((subscription) => subscription.remove());
+      unprobe();
+    };
+  }, [player, pop.id]);
 
   useEffect(() => {
     seekRef.current = (share) => {

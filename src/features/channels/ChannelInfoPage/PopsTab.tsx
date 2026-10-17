@@ -52,7 +52,7 @@ export function PopsTab({ tab, channelId }: PopsTabProps) {
     return toPopRows(cells);
   }, [pops.data]);
 
-  const open = useCallback((pop: Pop) => openPopViewer(channelId, pop.id), [channelId]);
+  const open = useCallback((pop: Pop) => openPopViewer(channelId, pop.id, { entry: 'channel_grid' }), [channelId]);
 
   const actions = useMemo<PopGridActions>(
     () => ({

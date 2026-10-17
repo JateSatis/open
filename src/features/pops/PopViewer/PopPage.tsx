@@ -1,4 +1,4 @@
-import { memo, useCallback, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, View } from 'react-native';
 import Animated, { useSharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -19,6 +19,7 @@ import type { Pop } from '@/api/pops';
 import { usePendingReactions } from '@/features/interactions/pendingReactions';
 import { PopCover } from '@/features/pops/PopCover';
 import { withPendingPopReaction } from '@/features/pops/popReactions';
+import { currentPopImpression, registerControlProbe } from '@/features/recs/journal/popJournal';
 import { useTheme } from '@/hooks/use-theme';
 import { Sizes } from '@/theme';
 
@@ -94,7 +95,50 @@ export const PopPage = memo(function PopPage({
   });
 
   const openComments = useCallback(() => onOpenComments(pop), [onOpenComments, pop]);
-  const seek = useCallback((share: number) => seekRef.current?.(share), []);
+
+  // Журнал показа: пауза тапом и 2× — воля человека, а не состояние плеера.
+  // Показ, начавшийся на уже стоящем на паузе видео, спросит их сам.
+  const controlsRef = useRef({ paused, fast });
+
+  useEffect(() => {
+    controlsRef.current = { paused, fast };
+  }, [fast, paused]);
+
+  useEffect(() => registerControlProbe(pop.id, () => controlsRef.current), [pop.id]);
+
+  useEffect(() => {
+    if (active) currentPopImpression(pop.id)?.setPaused(paused, 'tap');
+  }, [active, paused, pop.id]);
+
+  useEffect(() => {
+    if (active) currentPopImpression(pop.id)?.setRate(fast ? 2 : 1);
+  }, [active, fast, pop.id]);
+
+  // Перемотка ползунком: откуда, куда, сколько пальцем прошло.
+  const scrubShare = useRef<number | null>(null);
+  const seek = useCallback(
+    (share: number) => {
+      const impression = currentPopImpression(pop.id);
+
+      if (impression && scrubShare.current === null) impression.scrubStart();
+
+      scrubShare.current = share;
+      impression?.scrubMove(share * pop.durationMs);
+      seekRef.current?.(share);
+    },
+    [pop.durationMs, pop.id],
+  );
+  const scrubChange = useCallback(
+    (scrubbingOn: boolean) => {
+      if (!scrubbingOn && scrubShare.current !== null) {
+        currentPopImpression(pop.id)?.scrubEnd(scrubShare.current * pop.durationMs);
+        scrubShare.current = null;
+      }
+
+      setScrubbingNow(scrubbingOn);
+    },
+    [pop.durationMs, pop.id],
+  );
   const react = useCallback((emoji: string | null) => onReaction(pop, emoji), [onReaction, pop]);
   const tapReaction = useCallback(
     (emoji: string) => react(reactions.mine === emoji ? null : emoji),
@@ -186,7 +230,7 @@ export const PopPage = memo(function PopPage({
           progress={progress}
           scrubbing={scrubbing}
           onSeek={seek}
-          onScrubChange={setScrubbingNow}
+          onScrubChange={scrubChange}
         />
       </Animated.View>
 

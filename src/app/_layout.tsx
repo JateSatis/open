@@ -18,6 +18,7 @@ import { AccountLifecycle } from '@/features/auth/AccountLifecycle';
 import { ConnectionWatcher } from '@/features/connection/ConnectionWatcher';
 import { reportRequestFailed, reportRequestSucceeded } from '@/features/connection/connectionStore';
 import { InAppMessageToast } from '@/features/notifications/InAppMessageToast';
+import { JournalSession } from '@/features/recs/journal/JournalSession';
 import { IncomingCallOverlay } from '@/features/streams/IncomingCallOverlay';
 import { BelowReturnBar, ReturnToCallBar } from '@/features/streams/ReturnToCallBar';
 import { isNetworkError } from '@/lib/network';
@@ -89,6 +90,7 @@ export default function RootLayout() {
             <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
               <ConnectionWatcher />
               <AccountLifecycle />
+              <JournalSession />
               {/* Свёрнутый звонок сдвигает навигатор вниз, а не перекрывает шапки. */}
               <BelowReturnBar>
                 {/* Тап по медиа в списке на хвосте прокрутки — с первого

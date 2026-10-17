@@ -5,6 +5,7 @@ import { BubbleFooter } from './BubbleFooter';
 import { BubbleGlow } from './BubbleGlow';
 import { BUBBLE_AVATAR } from './layout';
 import { styles } from './styles';
+import { useMediaViewJournal } from './useMediaViewJournal';
 
 import type { QuotedMessage } from '@/api/chats';
 import type { ReactionAudience } from '@/api/reactionCounts';
@@ -158,6 +159,8 @@ export function MessageBubble({
       ? () => openPopViewer(popLink.popChannelId!, popLink.popId!)
       : noop;
   const voice = message.kind === 'voice' ? message.attachments[0] : undefined;
+  // Облачко комментария — тот же компонент; журнал пишет только сообщения.
+  const isComment = 'targetId' in message;
   // Кружки пока не подключены к облачку — это отдельная задача; здесь только
   // заглушка, чтобы сообщение не было пустым.
   const hasUnhandledAttachment = !isMediaMessage && !voice && message.kind !== 'text';
@@ -207,6 +210,12 @@ export function MessageBubble({
     width: attachment.width,
     height: attachment.height,
   }));
+
+  useMediaViewJournal(
+    isMediaMessage && !isPopPost ? viewer : null,
+    isComment ? undefined : message.id,
+    viewerItems.map((item) => item.kind),
+  );
 
   const hasAnnotations = message.replies.length > 0 || Boolean(lead);
 
@@ -414,6 +423,7 @@ export function MessageBubble({
                 attachment={voice}
                 localUri={message.localPreviews?.[0]}
                 isOwn={isOwn}
+                messageId={isComment ? undefined : message.id}
               />
             ) : null}
 

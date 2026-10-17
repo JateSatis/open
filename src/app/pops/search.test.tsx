@@ -19,6 +19,7 @@ jest.mock('expo-router', () => ({
   useIsFocused: () => true,
   useNavigation: () => ({
     getState: () => ({ index: 1, routes: [{ name: '(tabs)' }, { name: 'pops/search' }] }),
+    addListener: () => () => undefined,
   }),
 }));
 jest.mock('expo-video', () => {

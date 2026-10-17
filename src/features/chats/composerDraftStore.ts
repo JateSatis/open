@@ -8,6 +8,7 @@ import { create } from 'zustand';
 
 import type { ChatRef, ForwardedComment, MessageAttachment } from '@/api/chats';
 import type { Pop } from '@/api/pops';
+import { forwardPickerClosed, forwardPickerOpened } from '@/features/recs/journal/chatJournal';
 import type {
   ChatMessage,
   EditVoice,
@@ -71,8 +72,7 @@ export type ChatDraft = {
  * порядку на экране, — или комментарии из панели.
  */
 export type ForwardPick =
-  | { sourceChat: ChatRef; items: ForwardItem[] }
-  | { comments: ForwardedComment[] };
+  { sourceChat: ChatRef; items: ForwardItem[] } | { comments: ForwardedComment[] };
 
 type DraftsState = {
   byChat: Record<string, ChatDraft>;
@@ -152,7 +152,9 @@ export function updateEditDraft(
   change: (mode: EditMode) => Pick<EditMode, 'kept' | 'voice'>,
 ) {
   update(chatId, (draft) =>
-    draft.mode?.type === 'edit' ? { ...draft, mode: { ...draft.mode, ...change(draft.mode) } } : draft,
+    draft.mode?.type === 'edit'
+      ? { ...draft, mode: { ...draft.mode, ...change(draft.mode) } }
+      : draft,
   );
 }
 
@@ -168,6 +170,15 @@ export function clearDraft(chatId: string) {
 
 /** Запоминает, что пересылать, пока человек выбирает чат. */
 export function startForwardPick(pick: ForwardPick) {
+  const first = 'comments' in pick ? pick.comments[0] : pick.items[0]?.original;
+
+  if (first) {
+    forwardPickerOpened(
+      { type: 'comments' in pick ? 'comment' : 'message', id: first.id },
+      'comments' in pick ? pick.comments.length : pick.items.length,
+    );
+  }
+
   useComposerDrafts.setState({ forwardPick: pick });
 }
 
@@ -178,6 +189,7 @@ export function finishForwardPick(chatId: string): boolean {
   if (!pick || ('comments' in pick ? pick.comments : pick.items).length === 0) return false;
 
   useComposerDrafts.setState({ forwardPick: null });
+  forwardPickerClosed('picked');
   // Пересылка в чат, где шла правка, правку прерывает: плашка одна.
   finishEditDraft(chatId);
   setDraftMode(
@@ -191,6 +203,7 @@ export function finishForwardPick(chatId: string): boolean {
 }
 
 export function cancelForwardPick() {
+  forwardPickerClosed('cancelled');
   useComposerDrafts.setState({ forwardPick: null });
 }
 

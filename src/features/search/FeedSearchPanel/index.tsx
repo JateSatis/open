@@ -20,6 +20,7 @@ import { useLastSearchPop } from '@/features/search/lastSearchPop';
 import { feedRecentQueries } from '@/features/search/recentSearches';
 import { COLLAPSED_ROWS } from '@/features/search/searchSections';
 import { useFeedSearch } from '@/features/search/useFeedSearch';
+import { logSearchQuery, logSearchResultOpened } from '@/features/recs/journal/searchJournal';
 import { Spacing } from '@/theme';
 
 const NO_POSITION_HOLD = { disabled: true } as const;
@@ -70,6 +71,22 @@ export function FeedSearchPanel({ query, onPickRecent }: FeedSearchPanelProps) {
     listRef.current?.scrollToOffset({ offset: 0, animated: false });
   }, [query]);
 
+  // Журнал: выдача по запросу пришла.
+  useEffect(() => {
+    if (!results.isSearching && !results.notice) {
+      logSearchQuery('feed', results.shownQuery, {
+        channels: results.channels.length,
+        pops: results.pops.length,
+      });
+    }
+  }, [
+    results.channels.length,
+    results.isSearching,
+    results.notice,
+    results.pops.length,
+    results.shownQuery,
+  ]);
+
   const remember = useCallback(() => {
     const text = query.trim();
 
@@ -79,19 +96,39 @@ export function FeedSearchPanel({ query, onPickRecent }: FeedSearchPanelProps) {
   const openChannel = useCallback(
     (entity: SearchEntity) => {
       remember();
+      logSearchResultOpened(
+        'feed',
+        { type: 'channel', id: entity.id },
+        {
+          kind: 'channel',
+          section: 'channels',
+          position: results.channels.findIndex((channel) => channel.id === entity.id),
+          query: results.shownQuery,
+        },
+      );
       router.push({ pathname: '/channel/[channelId]', params: { channelId: entity.id } });
     },
-    [remember, router],
+    [remember, results.channels, results.shownQuery, router],
   );
 
   const { shownQuery } = results;
   const openPop = useCallback(
     (pop: SearchPop) => {
       remember();
+      logSearchResultOpened(
+        'feed',
+        { type: 'pop', id: pop.id },
+        {
+          kind: 'pop',
+          section: 'pops',
+          position: results.pops.findIndex((item) => item.id === pop.id),
+          query: shownQuery,
+        },
+      );
       useLastSearchPop.setState({ id: pop.id });
       router.push({ pathname: '/pops/search', params: { q: shownQuery, start: pop.id } });
     },
-    [remember, router, shownQuery],
+    [remember, results.pops, router, shownQuery],
   );
 
   const toggleChannels = useCallback(
@@ -107,9 +144,7 @@ export function FeedSearchPanel({ query, onPickRecent }: FeedSearchPanelProps) {
       parsed={results.parsed}
       tileWidth={tileWidth}
       channelsToggle={
-        results.channels.length > COLLAPSED_ROWS
-          ? { expanded, onPress: toggleChannels }
-          : null
+        results.channels.length > COLLAPSED_ROWS ? { expanded, onPress: toggleChannels } : null
       }
       onClearRecent={feedRecentQueries.clear}
       onPickRecent={onPickRecent}

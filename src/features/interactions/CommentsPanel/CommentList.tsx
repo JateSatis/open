@@ -1,4 +1,4 @@
-import type { FlashListRef, ListRenderItem } from '@shopify/flash-list';
+import type { FlashListRef, ListRenderItem, ViewToken } from '@shopify/flash-list';
 import { useCallback, useMemo, type RefObject } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 
@@ -7,6 +7,7 @@ import { CommentsSheetList } from './SheetList';
 import { styles } from './styles';
 
 import { Text } from '@/components/Text';
+import { commentsShown } from '@/features/recs/journal/commentsJournal';
 
 /** Прыжок к комментарию: он и ключ вспышки — новый на каждый прыжок. */
 export type CommentHighlight = { id: string; key: number };
@@ -34,6 +35,9 @@ export type CommentListProps = {
 };
 
 const keyOf = (row: CommentRow) => row.key;
+
+/** Комментарий засчитан показанным, когда на экране хотя бы половина строки. */
+const VIEWABILITY = { itemVisiblePercentThreshold: 50 };
 const typeOf = (row: CommentRow) =>
   row.type === 'comment' ? (row.threadRoot ? 'thread-root' : 'comment') : row.type;
 
@@ -96,6 +100,28 @@ export function CommentList({
     [closed, error, isLoading],
   );
 
+  // Журнал: что из комментариев действительно показалось на экране.
+  const pane = testID === 'comments-thread-list' ? 'thread' : 'main';
+  const onViewableItemsChanged = useCallback(
+    ({ changed }: { changed: ViewToken<CommentRow>[] }) => {
+      const shown = changed.flatMap(({ item, index, isViewable }) =>
+        isViewable && item.type === 'comment'
+          ? [
+              {
+                id: item.comment.id,
+                index: index ?? 0,
+                pinned: item.pinned,
+                threadRoot: item.threadRoot,
+              },
+            ]
+          : [],
+      );
+
+      if (shown.length > 0) commentsShown(shown, pane);
+    },
+    [pane],
+  );
+
   const onEndReached = useCallback(() => {
     if (hasMore) loadMore();
   }, [hasMore, loadMore]);
@@ -114,6 +140,8 @@ export function CommentList({
       ListEmptyComponent={silentWhenEmpty ? null : empty}
       onEndReached={onEndReached}
       onEndReachedThreshold={0.5}
+      viewabilityConfig={VIEWABILITY}
+      onViewableItemsChanged={onViewableItemsChanged}
     />
   );
 }

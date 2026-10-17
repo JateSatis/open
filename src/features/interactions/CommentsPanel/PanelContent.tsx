@@ -43,6 +43,7 @@ import {
 import { useJumpToComment } from '@/features/interactions/comments/useJumpToComment';
 import { audienceOf } from '@/features/interactions/reactionState';
 import { showNotice } from '@/features/notifications/alertsStore';
+import { commentsQuoteFollowed } from '@/features/recs/journal/commentsJournal';
 import { useTheme } from '@/hooks/use-theme';
 import { focusWithKeyboard } from '@/lib/windowFocus';
 import { Spacing } from '@/theme';
@@ -268,7 +269,14 @@ export function PanelContent({
                 text={fragmentQuote?.text ?? null}
                 isOwn={isOwn}
                 // Своё неотправленное ещё не знает фрагмента — переходить не к чему.
-                onPress={interactive && fragmentId ? () => void goToFragment(item) : undefined}
+                onPress={
+                  interactive && fragmentId
+                    ? () => {
+                        commentsQuoteFollowed();
+                        void goToFragment(item);
+                      }
+                    : undefined
+                }
               />
             ) : undefined
           }
@@ -283,7 +291,12 @@ export function PanelContent({
           onRetry={interactive ? retry : undefined}
           onAuthorPress={interactive && authorId ? () => openPerson(authorId) : undefined}
           onQuotePress={
-            interactive ? (quote) => void actions.jumpToQuote(quote.messageId) : undefined
+            interactive
+              ? (quote) => {
+                  commentsQuoteFollowed();
+                  void actions.jumpToQuote(quote.messageId);
+                }
+              : undefined
           }
           reactionAudience={myAudience}
           onReactionToggle={
@@ -461,6 +474,9 @@ export function PanelContent({
         reactions={actions.menuReactions}
         onAction={actions.runMenuAction}
         onClose={actions.closeMenu}
+        journalSubject={
+          actions.menuComment ? { type: 'comment', id: actions.menuComment.id } : null
+        }
       />
     </TileViewportContext.Provider>
   );

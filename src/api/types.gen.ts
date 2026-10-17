@@ -1859,6 +1859,7 @@ export type Database = {
           id: string
           is_primary: boolean
           position: number
+          valence: number
         }
         Insert: {
           created_at?: string
@@ -1866,6 +1867,7 @@ export type Database = {
           id?: string
           is_primary?: boolean
           position: number
+          valence: number
         }
         Update: {
           created_at?: string
@@ -1873,6 +1875,7 @@ export type Database = {
           id?: string
           is_primary?: boolean
           position?: number
+          valence?: number
         }
         Relationships: []
       }
@@ -1936,6 +1939,786 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      rec_app_sessions: {
+        Row: {
+          app_version: string | null
+          created_at: string
+          end_reason: string | null
+          ended_at: string | null
+          entry: string | null
+          events: number
+          foreground_ms: number
+          id: string
+          impressions: number
+          last_screen: string | null
+          last_seen_at: string
+          platform: string | null
+          rebuilt_at: string
+          screens: Json
+          started_at: string
+          tabs: Json
+          user_id: string
+        }
+        Insert: {
+          app_version?: string | null
+          created_at?: string
+          end_reason?: string | null
+          ended_at?: string | null
+          entry?: string | null
+          events?: number
+          foreground_ms?: number
+          id: string
+          impressions?: number
+          last_screen?: string | null
+          last_seen_at: string
+          platform?: string | null
+          rebuilt_at?: string
+          screens?: Json
+          started_at: string
+          tabs?: Json
+          user_id: string
+        }
+        Update: {
+          app_version?: string | null
+          created_at?: string
+          end_reason?: string | null
+          ended_at?: string | null
+          entry?: string | null
+          events?: number
+          foreground_ms?: number
+          id?: string
+          impressions?: number
+          last_screen?: string | null
+          last_seen_at?: string
+          platform?: string | null
+          rebuilt_at?: string
+          screens?: Json
+          started_at?: string
+          tabs?: Json
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rec_app_sessions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rec_config: {
+        Row: {
+          created_at: string
+          id: string
+          note: string | null
+          params: Json
+          version: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          note?: string | null
+          params: Json
+          version: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          note?: string | null
+          params?: Json
+          version?: number
+        }
+        Relationships: []
+      }
+      rec_event_keys: {
+        Row: {
+          client_event_id: string
+          created_at: string
+          user_id: string
+        }
+        Insert: {
+          client_event_id: string
+          created_at?: string
+          user_id: string
+        }
+        Update: {
+          client_event_id?: string
+          created_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rec_event_keys_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rec_events: {
+        Row: {
+          app_session_id: string | null
+          client_event_id: string | null
+          client_ts: string | null
+          data: Json
+          event_ts: string
+          id: string
+          impression_id: string | null
+          kind: string
+          origin: string
+          schema_version: number
+          screen_session_id: string | null
+          server_ts: string
+          subject_id: string | null
+          subject_type: string | null
+          surface: string | null
+          user_id: string
+        }
+        Insert: {
+          app_session_id?: string | null
+          client_event_id?: string | null
+          client_ts?: string | null
+          data?: Json
+          event_ts?: string
+          id?: string
+          impression_id?: string | null
+          kind: string
+          origin: string
+          schema_version?: number
+          screen_session_id?: string | null
+          server_ts?: string
+          subject_id?: string | null
+          subject_type?: string | null
+          surface?: string | null
+          user_id: string
+        }
+        Update: {
+          app_session_id?: string | null
+          client_event_id?: string | null
+          client_ts?: string | null
+          data?: Json
+          event_ts?: string
+          id?: string
+          impression_id?: string | null
+          kind?: string
+          origin?: string
+          schema_version?: number
+          screen_session_id?: string | null
+          server_ts?: string
+          subject_id?: string | null
+          subject_type?: string | null
+          surface?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rec_events_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rec_hidden_channels: {
+        Row: {
+          channel_id: string
+          created_at: string
+          from_pop_id: string | null
+          id: string
+          user_id: string
+        }
+        Insert: {
+          channel_id: string
+          created_at?: string
+          from_pop_id?: string | null
+          id?: string
+          user_id: string
+        }
+        Update: {
+          channel_id?: string
+          created_at?: string
+          from_pop_id?: string | null
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rec_hidden_channels_channel_id_fkey"
+            columns: ["channel_id"]
+            isOneToOne: false
+            referencedRelation: "channels"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rec_hidden_channels_from_pop_id_fkey"
+            columns: ["from_pop_id"]
+            isOneToOne: false
+            referencedRelation: "pops"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rec_hidden_channels_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rec_hidden_pops: {
+        Row: {
+          created_at: string
+          id: string
+          pop_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          pop_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          pop_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rec_hidden_pops_pop_id_fkey"
+            columns: ["pop_id"]
+            isOneToOne: false
+            referencedRelation: "pops"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rec_hidden_pops_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rec_impressions: {
+        Row: {
+          algo_version: string | null
+          app_session_id: string | null
+          applied: Json | null
+          applied_at: string | null
+          audio_route: string | null
+          buffering_count: number
+          buffering_ms: number
+          channel_hidden: boolean
+          channel_id: string | null
+          channel_opened: boolean
+          comment_chars: number
+          comment_reactions: number
+          comment_reply: boolean
+          comment_voice: boolean
+          comments: Json
+          comments_sent: number
+          completed: boolean
+          coverage: number
+          coverage_share: number
+          created_at: string
+          delivery_ok: boolean | null
+          duration_ms: number | null
+          ended_at: string | null
+          entry: string | null
+          error: string | null
+          exit: string | null
+          first_frame_ms: number | null
+          forward_chat_kinds: string[]
+          forward_recipients: number
+          forwards: number
+          id: string
+          is_publisher: boolean
+          labels_closed_at: string | null
+          last_seen_at: string
+          loops: number
+          max_pos_ms: number
+          muted: boolean | null
+          network: string | null
+          not_interested: boolean
+          orientation: string | null
+          pause_list: Json
+          pause_ms: number
+          pause_reasons: Json
+          pauses: number
+          position: number | null
+          quick_skip: boolean
+          reaction_at: string | null
+          reaction_emoji: string | null
+          reaction_quick_undo: boolean
+          reaction_valence: number | null
+          rebuilt_at: string
+          request_id: string | null
+          returned_later: boolean
+          route_changes: Json
+          seek_back_ms: number
+          seek_fwd_ms: number
+          seek_list: Json
+          seeks_back: number
+          seeks_fwd: number
+          segment_ms: number | null
+          segments: number | null
+          source: string | null
+          started_at: string
+          subject_id: string
+          subject_type: string
+          subscribed: boolean
+          surface: string
+          unsubscribed: boolean
+          user_id: string | null
+          visible_ms: number
+          volume_changes: Json
+          volume_max: number | null
+          volume_min: number | null
+          volume_start: number | null
+          watch_ms: number
+        }
+        Insert: {
+          algo_version?: string | null
+          app_session_id?: string | null
+          applied?: Json | null
+          applied_at?: string | null
+          audio_route?: string | null
+          buffering_count?: number
+          buffering_ms?: number
+          channel_hidden?: boolean
+          channel_id?: string | null
+          channel_opened?: boolean
+          comment_chars?: number
+          comment_reactions?: number
+          comment_reply?: boolean
+          comment_voice?: boolean
+          comments?: Json
+          comments_sent?: number
+          completed?: boolean
+          coverage?: number
+          coverage_share?: number
+          created_at?: string
+          delivery_ok?: boolean | null
+          duration_ms?: number | null
+          ended_at?: string | null
+          entry?: string | null
+          error?: string | null
+          exit?: string | null
+          first_frame_ms?: number | null
+          forward_chat_kinds?: string[]
+          forward_recipients?: number
+          forwards?: number
+          id: string
+          is_publisher?: boolean
+          labels_closed_at?: string | null
+          last_seen_at: string
+          loops?: number
+          max_pos_ms?: number
+          muted?: boolean | null
+          network?: string | null
+          not_interested?: boolean
+          orientation?: string | null
+          pause_list?: Json
+          pause_ms?: number
+          pause_reasons?: Json
+          pauses?: number
+          position?: number | null
+          quick_skip?: boolean
+          reaction_at?: string | null
+          reaction_emoji?: string | null
+          reaction_quick_undo?: boolean
+          reaction_valence?: number | null
+          rebuilt_at?: string
+          request_id?: string | null
+          returned_later?: boolean
+          route_changes?: Json
+          seek_back_ms?: number
+          seek_fwd_ms?: number
+          seek_list?: Json
+          seeks_back?: number
+          seeks_fwd?: number
+          segment_ms?: number | null
+          segments?: number | null
+          source?: string | null
+          started_at: string
+          subject_id: string
+          subject_type: string
+          subscribed?: boolean
+          surface: string
+          unsubscribed?: boolean
+          user_id?: string | null
+          visible_ms?: number
+          volume_changes?: Json
+          volume_max?: number | null
+          volume_min?: number | null
+          volume_start?: number | null
+          watch_ms?: number
+        }
+        Update: {
+          algo_version?: string | null
+          app_session_id?: string | null
+          applied?: Json | null
+          applied_at?: string | null
+          audio_route?: string | null
+          buffering_count?: number
+          buffering_ms?: number
+          channel_hidden?: boolean
+          channel_id?: string | null
+          channel_opened?: boolean
+          comment_chars?: number
+          comment_reactions?: number
+          comment_reply?: boolean
+          comment_voice?: boolean
+          comments?: Json
+          comments_sent?: number
+          completed?: boolean
+          coverage?: number
+          coverage_share?: number
+          created_at?: string
+          delivery_ok?: boolean | null
+          duration_ms?: number | null
+          ended_at?: string | null
+          entry?: string | null
+          error?: string | null
+          exit?: string | null
+          first_frame_ms?: number | null
+          forward_chat_kinds?: string[]
+          forward_recipients?: number
+          forwards?: number
+          id?: string
+          is_publisher?: boolean
+          labels_closed_at?: string | null
+          last_seen_at?: string
+          loops?: number
+          max_pos_ms?: number
+          muted?: boolean | null
+          network?: string | null
+          not_interested?: boolean
+          orientation?: string | null
+          pause_list?: Json
+          pause_ms?: number
+          pause_reasons?: Json
+          pauses?: number
+          position?: number | null
+          quick_skip?: boolean
+          reaction_at?: string | null
+          reaction_emoji?: string | null
+          reaction_quick_undo?: boolean
+          reaction_valence?: number | null
+          rebuilt_at?: string
+          request_id?: string | null
+          returned_later?: boolean
+          route_changes?: Json
+          seek_back_ms?: number
+          seek_fwd_ms?: number
+          seek_list?: Json
+          seeks_back?: number
+          seeks_fwd?: number
+          segment_ms?: number | null
+          segments?: number | null
+          source?: string | null
+          started_at?: string
+          subject_id?: string
+          subject_type?: string
+          subscribed?: boolean
+          surface?: string
+          unsubscribed?: boolean
+          user_id?: string | null
+          visible_ms?: number
+          volume_changes?: Json
+          volume_max?: number | null
+          volume_min?: number | null
+          volume_start?: number | null
+          watch_ms?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rec_impressions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rec_pop_heat: {
+        Row: {
+          created_at: string
+          pauses: number[]
+          pop_id: string
+          seeks_back_into: number[]
+          seeks_fwd_from: number[]
+          segment_ms: number
+          updated_at: string
+          views: number[]
+        }
+        Insert: {
+          created_at?: string
+          pauses?: number[]
+          pop_id: string
+          seeks_back_into?: number[]
+          seeks_fwd_from?: number[]
+          segment_ms: number
+          updated_at?: string
+          views?: number[]
+        }
+        Update: {
+          created_at?: string
+          pauses?: number[]
+          pop_id?: string
+          seeks_back_into?: number[]
+          seeks_fwd_from?: number[]
+          segment_ms?: number
+          updated_at?: string
+          views?: number[]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rec_pop_heat_pop_id_fkey"
+            columns: ["pop_id"]
+            isOneToOne: true
+            referencedRelation: "pops"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rec_pop_hourly: {
+        Row: {
+          comments: number
+          completions: number
+          created_at: string
+          forwards: number
+          hour: string
+          id: string
+          impressions: number
+          not_interested: number
+          pop_id: string
+          quick_skips: number
+          reactions: number
+          viewers: number
+          watch_ms: number
+        }
+        Insert: {
+          comments?: number
+          completions?: number
+          created_at?: string
+          forwards?: number
+          hour: string
+          id?: string
+          impressions?: number
+          not_interested?: number
+          pop_id: string
+          quick_skips?: number
+          reactions?: number
+          viewers?: number
+          watch_ms?: number
+        }
+        Update: {
+          comments?: number
+          completions?: number
+          created_at?: string
+          forwards?: number
+          hour?: string
+          id?: string
+          impressions?: number
+          not_interested?: number
+          pop_id?: string
+          quick_skips?: number
+          reactions?: number
+          viewers?: number
+          watch_ms?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rec_pop_hourly_pop_id_fkey"
+            columns: ["pop_id"]
+            isOneToOne: false
+            referencedRelation: "pops"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rec_pop_stats: {
+        Row: {
+          channel_hidden: number
+          channel_opens: number
+          comment_reactions: number
+          comments: number
+          completions: number
+          created_at: string
+          delivery_bad: number
+          forwards: number
+          impressions: number
+          impressions_raw: number
+          loops: number
+          not_interested: number
+          pop_id: string
+          quick_skips: number
+          reaction_valence_sum: number
+          reactions: number
+          reactions_quick_undo: number
+          reactions_removed: number
+          updated_at: string
+          viewers: number
+          viewers_weighted: number
+          watch_ms: number
+        }
+        Insert: {
+          channel_hidden?: number
+          channel_opens?: number
+          comment_reactions?: number
+          comments?: number
+          completions?: number
+          created_at?: string
+          delivery_bad?: number
+          forwards?: number
+          impressions?: number
+          impressions_raw?: number
+          loops?: number
+          not_interested?: number
+          pop_id: string
+          quick_skips?: number
+          reaction_valence_sum?: number
+          reactions?: number
+          reactions_quick_undo?: number
+          reactions_removed?: number
+          updated_at?: string
+          viewers?: number
+          viewers_weighted?: number
+          watch_ms?: number
+        }
+        Update: {
+          channel_hidden?: number
+          channel_opens?: number
+          comment_reactions?: number
+          comments?: number
+          completions?: number
+          created_at?: string
+          delivery_bad?: number
+          forwards?: number
+          impressions?: number
+          impressions_raw?: number
+          loops?: number
+          not_interested?: number
+          pop_id?: string
+          quick_skips?: number
+          reaction_valence_sum?: number
+          reactions?: number
+          reactions_quick_undo?: number
+          reactions_removed?: number
+          updated_at?: string
+          viewers?: number
+          viewers_weighted?: number
+          watch_ms?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rec_pop_stats_pop_id_fkey"
+            columns: ["pop_id"]
+            isOneToOne: true
+            referencedRelation: "pops"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rec_pop_viewers: {
+        Row: {
+          created_at: string
+          first_at: string
+          id: string
+          last_counted_at: string
+          pop_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          first_at: string
+          id?: string
+          last_counted_at: string
+          pop_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          first_at?: string
+          id?: string
+          last_counted_at?: string
+          pop_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rec_pop_viewers_pop_id_fkey"
+            columns: ["pop_id"]
+            isOneToOne: false
+            referencedRelation: "pops"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rec_pop_viewers_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rec_reject_counts: {
+        Row: {
+          count: number
+          created_at: string
+          day: string
+          id: string
+          kind: string
+          reason: string
+        }
+        Insert: {
+          count?: number
+          created_at?: string
+          day: string
+          id?: string
+          kind?: string
+          reason: string
+        }
+        Update: {
+          count?: number
+          created_at?: string
+          day?: string
+          id?: string
+          kind?: string
+          reason?: string
+        }
+        Relationships: []
+      }
+      rec_rollup_state: {
+        Row: {
+          created_at: string
+          id: boolean
+          last_run_at: string | null
+          last_summary: Json | null
+          watermark: string
+        }
+        Insert: {
+          created_at?: string
+          id?: boolean
+          last_run_at?: string | null
+          last_summary?: Json | null
+          watermark?: string
+        }
+        Update: {
+          created_at?: string
+          id?: boolean
+          last_run_at?: string | null
+          last_summary?: Json | null
+          watermark?: string
+        }
+        Relationships: []
       }
       stream_participants: {
         Row: {
@@ -3021,6 +3804,66 @@ export type Database = {
               isSetofReturn: true
             }
           }
+      rec_apply_impressions: { Args: { max_rows: number }; Returns: number }
+      rec_count_reject: {
+        Args: { event_kind: string; n?: number; why: string }
+        Returns: undefined
+      }
+      rec_impression_heat: {
+        Args: { i: Database["public"]["Tables"]["rec_impressions"]["Row"] }
+        Returns: Json
+      }
+      rec_int_array_add: {
+        Args: { a: number[]; b: number[]; n: number; sign: number }
+        Returns: number[]
+      }
+      rec_json_ints: { Args: { j: Json }; Returns: number[] }
+      rec_label_events: {
+        Args: { late: string; person: string; since: string; until: string }
+        Returns: {
+          data: Json
+          event_id: string
+          event_ts: string
+          impression_id: string
+          kind: string
+          subject_type: string
+        }[]
+      }
+      rec_log: {
+        Args: {
+          actor: string
+          event_kind: string
+          info: Json
+          target_id: string
+          target_type: string
+        }
+        Returns: undefined
+      }
+      rec_num: { Args: { j: Json; key: string }; Returns: number }
+      rec_partitions_maintain: { Args: { at?: string }; Returns: Json }
+      rec_rebuild_app_sessions: {
+        Args: { ids: string[]; since: string }
+        Returns: number
+      }
+      rec_rebuild_impressions: {
+        Args: { ids: string[]; since: string }
+        Returns: number
+      }
+      rec_record_events: { Args: { batch: Json }; Returns: Json }
+      rec_relabel: { Args: { target: string }; Returns: undefined }
+      rec_rollup: { Args: { upto?: string }; Returns: Json }
+      rec_segment_ms: { Args: { duration_ms: number }; Returns: number }
+      rec_segment_of: {
+        Args: { pos_ms: number; segment_ms: number; segments: number }
+        Returns: number
+      }
+      rec_segments: { Args: { duration_ms: number }; Returns: number }
+      rec_settings: { Args: never; Returns: Json }
+      rec_snapshot_plausible: {
+        Args: { cfg: Json; duration_ms: number; elapsed_ms: number; snap: Json }
+        Returns: boolean
+      }
+      rec_text: { Args: { j: Json; key: string }; Returns: string }
       reconcile_stream: {
         Args: { connected: Json; room: string }
         Returns: string
@@ -3289,6 +4132,10 @@ export type Database = {
         Args: { new_description: string; target_channel: string }
         Returns: undefined
       }
+      set_channel_hidden: {
+        Args: { from_pop?: string; target_channel: string; value: boolean }
+        Returns: undefined
+      }
       set_channel_in_chats: {
         Args: { target_channel: string; value: boolean }
         Returns: undefined
@@ -3338,6 +4185,10 @@ export type Database = {
           emoji: string
           fragment_id: string
         }[]
+      }
+      set_pop_not_interested: {
+        Args: { target_pop: string; value: boolean }
+        Returns: undefined
       }
       set_reaction: {
         Args: { reaction: string; target_id: string; target_type: string }

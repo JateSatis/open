@@ -119,7 +119,10 @@ describe('InAppMessageToast', () => {
     deliver(incoming);
     await user.press(await screen.findByText('ты где'));
 
-    expect(mockPush).toHaveBeenCalledWith('/chats/chat-1');
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/chats/[chatId]',
+      params: { chatId: 'chat-1', from: 'notification' },
+    });
     await waitFor(() => expect(screen.queryByText('ты где')).toBeNull());
   });
 
@@ -171,7 +174,10 @@ describe('InAppMessageToast', () => {
 
     await user.press(screen.getByText('Пётр: Аня, привет'));
 
-    expect(mockPush).toHaveBeenCalledWith('/chats/their-chat');
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/chats/[chatId]',
+      params: { chatId: 'their-chat', from: 'notification' },
+    });
   });
 
   it('stays silent about a subscribed dialogue with notifications off', async () => {
@@ -216,7 +222,10 @@ describe('InAppMessageToast', () => {
     expect(await screen.findByText('Марина')).toBeTruthy();
     await user.press(screen.getByText('Зовёт вас в чат «Поход»'));
 
-    expect(mockPush).toHaveBeenCalledWith('/chats/chat-7');
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/chats/[chatId]',
+      params: { chatId: 'chat-7', from: 'notification' },
+    });
   });
 
   it('signs a channel post with the channel and opens its «Посты»', async () => {

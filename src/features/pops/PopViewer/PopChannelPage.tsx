@@ -1,4 +1,4 @@
-import { memo, useMemo } from 'react';
+import { memo, useCallback, useMemo } from 'react';
 
 import type { PopChannelFace } from './popFeed';
 import { PopPage, type PopPageMode } from './PopPage';
@@ -10,6 +10,7 @@ import { useSubscriptionActions } from '@/features/channels/subscription';
 import { useChannel } from '@/features/channels/useChannel';
 import { useChannelSubscription } from '@/features/channels/useChannelSubscription';
 import { useCanPublishState } from '@/features/pops/queries';
+import { notePopChannelOpened } from '@/features/recs/journal/popJournal';
 
 export type PopChannelPageProps = {
   pop: Pop;
@@ -41,7 +42,11 @@ export const PopChannelPage = memo(function PopChannelPage({
   const { canPublish } = useCanPublishState(channelId);
   const channel = useChannel(channelId);
   const { onReaction, onDoubleTap } = usePopReactionActions(canPublish);
-  const onOpenChannel = useOpenChannel(channelId, channelLink);
+  const openChannel = useOpenChannel(channelId, channelLink);
+  const onOpenChannel = useCallback(() => {
+    notePopChannelOpened(pop.id, channelId);
+    openChannel();
+  }, [channelId, openChannel, pop.id]);
 
   // Отсюда подписка — без чатов: смотрящий попсы ещё не решил, нужен ли ему
   // канал в «Чатах». Следующим шагом кнопка предлагает именно это.

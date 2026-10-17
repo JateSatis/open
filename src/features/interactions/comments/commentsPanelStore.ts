@@ -4,6 +4,10 @@ import type { CommentSubject, FragmentSet } from '@/api/comments';
 import type { FragmentRange } from '@/api/fragments';
 import { canCommentOn } from '@/features/chats/messageActions';
 import type { ChatMessage } from '@/features/chats/messages/types';
+import {
+  commentsTargetChanged,
+  commentsThreadOpened,
+} from '@/features/recs/journal/commentsJournal';
 
 type FragmentPanelBase = {
   /** Ключ верха панели. */
@@ -71,6 +75,12 @@ type PanelState = {
 };
 
 const usePanelStore = create<PanelState>(() => ({ target: null, openThread: null }));
+
+// Сессия панели в журнале рекомендаций: открытие, смена цели, треды.
+usePanelStore.subscribe((state, prev) => {
+  if (state.target !== prev.target) commentsTargetChanged(state.target);
+  if (state.openThread !== prev.openThread) commentsThreadOpened(state.openThread?.rootId ?? null);
+});
 
 /**
  * Открывает панель комментариев к сообщению. Одна функция на всё

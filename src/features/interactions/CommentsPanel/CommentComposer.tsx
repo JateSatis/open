@@ -16,6 +16,13 @@ import { MessageComposer } from '@/features/chats/MessageComposer';
 import type { ComposerDraft } from '@/features/chats/useComposerDraft';
 import type { MessageEdit } from '@/features/chats/useMessageEdit';
 import type { LocalMedia } from '@/features/media';
+import {
+  commentsComposerFocused,
+  commentsComposerSent,
+  commentsComposerTyping,
+  commentsVoiceActivity,
+  commentsVoiceSent,
+} from '@/features/recs/journal/commentsJournal';
 import { useTheme } from '@/hooks/use-theme';
 
 export type CommentComposerProps = {
@@ -32,7 +39,12 @@ export type CommentComposerProps = {
   onSendVoice: (voice: LocalMedia) => void;
 };
 
-const noop = () => undefined;
+const typing = () => commentsComposerTyping();
+const recording = () => commentsVoiceActivity();
+const activateField = () => {
+  commentsComposerFocused();
+  claimKeyboardForComments();
+};
 const armSheet = () => armMediaSheet('comments');
 const openSheet = () => openMediaSheet('comments');
 
@@ -76,6 +88,15 @@ export function CommentComposer({
   // Крестик плашки: правка выходит из правки, ответ просто снимается.
   const closeMode = () => (isEditing ? void edit.leave() : draft.setMode(null));
   const plate = modePlate(draft.mode, closeMode, editPlate);
+  // Журнал: отправлено и сколько символов; правка — не новый комментарий.
+  const send = () => {
+    if (!isEditing) commentsComposerSent([...draft.text.trim()].length);
+    onSend();
+  };
+  const sendVoice = (voice: LocalMedia) => {
+    commentsVoiceSent();
+    onSendVoice(voice);
+  };
 
   return (
     <>
@@ -87,13 +108,14 @@ export function CommentComposer({
         plate={plate}
         edit={editPlate?.state}
         inputRef={inputRef}
-        onSend={onSend}
-        onTyping={noop}
-        onFieldActivate={claimKeyboardForComments}
+        onSend={send}
+        onTyping={typing}
+        onFieldActivate={activateField}
         onAttachPressIn={armSheet}
         onAttachPressOut={releaseMediaSheetArm}
         onAttachPress={openSheet}
-        onSendVoice={isEditing ? edit.recorded : onSendVoice}
+        onSendVoice={isEditing ? edit.recorded : sendVoice}
+        onRecordingVoice={isEditing ? undefined : recording}
       />
 
       <MediaPickerSheet
@@ -103,8 +125,8 @@ export function CommentComposer({
         editing={isEditing}
         placeholder={placeholder}
         title={title}
-        onTyping={noop}
-        onSend={onSend}
+        onTyping={typing}
+        onSend={send}
       />
     </>
   );
