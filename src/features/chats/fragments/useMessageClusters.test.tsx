@@ -33,6 +33,7 @@ const cluster: FragmentCluster = {
   mine: null,
   myFragmentId: null,
   decisionId: null,
+  dominant: '🔥',
 };
 
 const message = { id: 'm1', chatId: 'c1', text: 'Огонь и вода', clustersCount: 1 };

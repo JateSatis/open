@@ -30,6 +30,8 @@ export type FragmentCluster = {
   myFragmentId: string | null;
   /** Снимок решения модели, по которому кластер показан, — для событий людей. */
   decisionId: string | null;
+  /** Лидер реакций — цвет подсветки; держится в ничьей. `null` — реакций нет. */
+  dominant: string | null;
 };
 
 /**
@@ -70,6 +72,7 @@ export async function listMessageClusters(
         mine: row.my_emoji ?? null,
         myFragmentId: row.my_fragment_id ?? null,
         decisionId: row.decision_id ?? null,
+        dominant: row.dominant_emoji ?? null,
       },
     ];
   });

@@ -43,6 +43,7 @@ const cluster: FragmentCluster = {
   mine: '🔥',
   myFragmentId: 'f-mine',
   decisionId: 'd1',
+  dominant: '🔥',
 };
 
 function fragment(overrides: Partial<Fragment>): Fragment {
