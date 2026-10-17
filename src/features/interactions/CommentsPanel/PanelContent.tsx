@@ -5,6 +5,8 @@ import { GestureDetector } from 'react-native-gesture-handler';
 import { KeyboardEvents } from 'react-native-keyboard-controller';
 import Animated, { type SharedValue } from 'react-native-reanimated';
 
+import { ScrollTap } from '../../../../modules/scroll-tap';
+
 import type { CommentHighlight } from './CommentList';
 import { CommentRowView } from './CommentRowView';
 import { PaneList } from './PaneList';
@@ -377,51 +379,54 @@ export function PanelContent({
             { top: geometry.top, backgroundColor: theme.background, borderColor: theme.border },
           ]}
         >
-          <Animated.View
-            style={[styles.fill, threadPane.underlayStyle]}
-            pointerEvents={inThread ? 'none' : 'auto'}
-          >
-            <PaneList
-              {...listProps}
-              testID="comments-list"
-              pane={sheet.main}
-              listRef={listRef}
-              rows={rows}
-              isLoading={comments.isLoading}
-              isLoadingMore={comments.isLoadingMore}
-              hasMore={comments.hasMore}
-              error={comments.error}
-              loadMore={comments.loadMore}
-              renderRow={renderMainRow}
-            />
-          </Animated.View>
-
-          <GestureDetector gesture={threadPane.edgePan}>
+          {/* Тап по медиа в облачке на хвосте прокрутки — с первого касания. */}
+          <ScrollTap style={styles.fill}>
             <Animated.View
-              testID="comments-thread"
-              style={[
-                styles.threadPane,
-                { backgroundColor: theme.background },
-                threadPane.paneStyle,
-              ]}
-              pointerEvents={inThread ? 'auto' : 'none'}
+              style={[styles.fill, threadPane.underlayStyle]}
+              pointerEvents={inThread ? 'none' : 'auto'}
             >
               <PaneList
                 {...listProps}
-                testID="comments-thread-list"
-                pane={sheet.thread}
-                listRef={threadListRef}
-                rows={threadRows}
-                silentWhenEmpty
-                isLoading={false}
-                isLoadingMore={false}
-                hasMore={false}
-                error={null}
-                loadMore={noop}
-                renderRow={renderThreadRow}
+                testID="comments-list"
+                pane={sheet.main}
+                listRef={listRef}
+                rows={rows}
+                isLoading={comments.isLoading}
+                isLoadingMore={comments.isLoadingMore}
+                hasMore={comments.hasMore}
+                error={comments.error}
+                loadMore={comments.loadMore}
+                renderRow={renderMainRow}
               />
             </Animated.View>
-          </GestureDetector>
+
+            <GestureDetector gesture={threadPane.edgePan}>
+              <Animated.View
+                testID="comments-thread"
+                style={[
+                  styles.threadPane,
+                  { backgroundColor: theme.background },
+                  threadPane.paneStyle,
+                ]}
+                pointerEvents={inThread ? 'auto' : 'none'}
+              >
+                <PaneList
+                  {...listProps}
+                  testID="comments-thread-list"
+                  pane={sheet.thread}
+                  listRef={threadListRef}
+                  rows={threadRows}
+                  silentWhenEmpty
+                  isLoading={false}
+                  isLoadingMore={false}
+                  hasMore={false}
+                  error={null}
+                  loadMore={noop}
+                  renderRow={renderThreadRow}
+                />
+              </Animated.View>
+            </GestureDetector>
+          </ScrollTap>
 
           <SheetHeader onHeight={sheet.setHeaderHeight} pan={sheet.headerPan}>
             <PanelHeader

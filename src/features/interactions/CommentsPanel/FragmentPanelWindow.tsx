@@ -3,8 +3,6 @@ import { Keyboard, Modal, Pressable, useWindowDimensions } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated from 'react-native-reanimated';
 
-import { ScrollTap } from '../../../../modules/scroll-tap';
-
 import { AreaHeader } from './AreaHeader';
 import { ClusterHeader } from './ClusterHeader';
 import { PanelContent } from './PanelContent';
@@ -35,11 +33,7 @@ export type FragmentPanelWindowProps = {
  * Содержимое — то же, что у шита комментариев (`PanelContent`), меняется
  * только окно. Своё окно (`Modal`) — иначе шапку экрана не перекрыть.
  */
-export function FragmentPanelWindow({
-  target,
-  onOpenPerson,
-  hostChatId,
-}: FragmentPanelWindowProps) {
+export function FragmentPanelWindow({ target, onOpenPerson, hostChatId }: FragmentPanelWindowProps) {
   const theme = useTheme();
   const { width: screenWidth, height: appWindowHeight } = useWindowDimensions();
   const [windowHeight, setWindowHeight] = useState(appWindowHeight);
@@ -76,55 +70,52 @@ export function FragmentPanelWindow({
         style={styles.root}
         onLayout={(event) => setWindowHeight(event.nativeEvent.layout.height)}
       >
-        {/* Тап по медиа в облачке на хвосте прокрутки — с первого касания. */}
-        <ScrollTap style={styles.fill}>
-          <Animated.View
-            pointerEvents="box-none"
-            style={[styles.fill, { backgroundColor: theme.overlay }, panel.backdropStyle]}
-          >
-            <Pressable
-              testID="fragment-panel-backdrop"
-              accessibilityLabel="Закрыть панель фрагмента"
-              style={styles.fill}
-              onPress={close}
-            />
-          </Animated.View>
+        <Animated.View
+          pointerEvents="box-none"
+          style={[styles.fill, { backgroundColor: theme.overlay }, panel.backdropStyle]}
+        >
+          <Pressable
+            testID="fragment-panel-backdrop"
+            accessibilityLabel="Закрыть панель фрагмента"
+            style={styles.fill}
+            onPress={close}
+          />
+        </Animated.View>
 
-          <Animated.View style={[styles.sidePanel, { width }]} pointerEvents="box-none">
-            <PanelContent
-              target={target}
-              sheet={panel}
-              onOpenPerson={onOpenPerson}
-              hostChatId={hostChatId}
-              backRef={backRef}
-              width={width}
-              focusInput={fragment.focusInput && panel.opened}
-              header={{
-                title: 'Фрагмент',
-                extra:
-                  fragment.kind === 'cluster' ? (
-                    <ClusterHeader
-                      messageId={target.subject.id}
-                      chatId={target.chatId ?? ''}
-                      subject={fragment}
-                      amMember={target.amMember ?? false}
-                      width={width}
-                    />
-                  ) : (
-                    <AreaHeader
-                      messageId={target.subject.id}
-                      subject={fragment}
-                      amMember={target.amMember ?? false}
-                      width={width}
-                    />
-                  ),
-              }}
-            />
-          </Animated.View>
+        <Animated.View style={[styles.sidePanel, { width }]} pointerEvents="box-none">
+          <PanelContent
+            target={target}
+            sheet={panel}
+            onOpenPerson={onOpenPerson}
+            hostChatId={hostChatId}
+            backRef={backRef}
+            width={width}
+            focusInput={fragment.focusInput && panel.opened}
+            header={{
+              title: 'Фрагмент',
+              extra:
+                fragment.kind === 'cluster' ? (
+                  <ClusterHeader
+                    messageId={target.subject.id}
+                    chatId={target.chatId ?? ''}
+                    subject={fragment}
+                    amMember={target.amMember ?? false}
+                    width={width}
+                  />
+                ) : (
+                  <AreaHeader
+                    messageId={target.subject.id}
+                    subject={fragment}
+                    amMember={target.amMember ?? false}
+                    width={width}
+                  />
+                ),
+            }}
+          />
+        </Animated.View>
 
-          <ConfirmDialogSurface />
-          <InAppNoticeToast />
-        </ScrollTap>
+        <ConfirmDialogSurface />
+        <InAppNoticeToast />
       </GestureHandlerRootView>
     </Modal>
   );
