@@ -40,7 +40,7 @@ describe('MediaAttachmentGrid', () => {
     const user = userEvent.setup();
     await user.press(screen.getByLabelText('Открыть видео'));
 
-    expect(onPress).toHaveBeenCalledWith(1);
+    expect(onPress).toHaveBeenCalledWith(1, null);
   });
 
   it('marks a video tile with its duration and a play mark', async () => {
@@ -81,7 +81,7 @@ describe('MediaAttachmentGrid', () => {
     );
 
     await user.press(screen.getByTestId('pop-post-cover'));
-    expect(onPress).toHaveBeenCalledWith(0);
+    expect(onPress).toHaveBeenCalledWith(0, null);
 
     onPress.mockClear();
     await view.rerender(

@@ -28,6 +28,17 @@ export const styles = StyleSheet.create({
   video: {
     flex: 1,
   },
+  /** Рамка медиа: края обрезают картинку, пока она летит из плитки «покрыть». */
+  frame: {
+    position: 'absolute',
+    overflow: 'hidden',
+  },
+  thumb: {
+    position: 'absolute',
+  },
+  hidden: {
+    opacity: 0,
+  },
   closeButton: {
     width: CLOSE_BUTTON_SIZE,
     height: CLOSE_BUTTON_SIZE,

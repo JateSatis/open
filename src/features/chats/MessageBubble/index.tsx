@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import { PixelRatio, Pressable, View, type StyleProp, type TextStyle } from 'react-native';
 
 import { BubbleFooter } from './BubbleFooter';
@@ -16,6 +16,7 @@ import {
   type MosaicBounds,
 } from '@/features/chats/lib/mosaicLayout';
 import { MediaAttachmentGrid } from '@/features/chats/MediaAttachmentGrid';
+import { tileImageUri } from '@/features/chats/MediaTile';
 import { MessageMeta } from '@/features/chats/MessageMeta';
 import { ReplyQuote } from '@/features/chats/ReplyQuote';
 import type { ChatMessage } from '@/features/chats/useChatMessages';
@@ -34,6 +35,7 @@ import {
 } from '@/features/interactions/MessageReactions';
 import { hasReactions } from '@/features/interactions/reactionState';
 import { MediaViewer, type MediaViewerItem } from '@/features/media';
+import { createTileRegistry, type TileRect } from '@/features/media/tileRegistry';
 import { openPopViewer } from '@/features/pops/openPopViewer';
 import { useTheme } from '@/hooks/use-theme';
 import { Spacing } from '@/theme';
@@ -158,7 +160,31 @@ export function MessageBubble({
   // Кружки пока не подключены к облачку — это отдельная задача; здесь только
   // заглушка, чтобы сообщение не было пустым.
   const hasUnhandledAttachment = !isMediaMessage && !voice && message.kind !== 'text';
-  const [viewerIndex, setViewerIndex] = useState<number | null>(null);
+  // `armed` — палец ещё на плитке: просмотр готовится, но стоит в ней.
+  const [viewer, setViewer] = useState<{
+    index: number;
+    origin: TileRect | null;
+    armed: boolean;
+  } | null>(null);
+  // Плитки этого облачка: просмотр листает только его вложения и уходит в
+  // плитку того, на котором закрыли.
+  const [tiles] = useState(createTileRegistry);
+  const openViewer = useCallback(
+    (index: number, origin: TileRect | null) =>
+      setViewer((current) =>
+        current === null || current.armed ? { index, origin, armed: false } : current,
+      ),
+    [],
+  );
+  const armViewer = useCallback(
+    (index: number, origin: TileRect | null) =>
+      setViewer((current) => current ?? { index, origin, armed: true }),
+    [],
+  );
+  const disarmViewer = useCallback(
+    () => setViewer((current) => (current?.armed ? null : current)),
+    [],
+  );
   const anyReactions = hasReactions(message.reactions);
   const hasLargeRow =
     reactionsLayout === 'merged' ? anyReactions : Object.keys(message.reactions.members).length > 0;
@@ -191,6 +217,7 @@ export function MessageBubble({
     id: attachment.id,
     kind: attachment.mimeType?.startsWith('video/') ? 'video' : 'photo',
     url: attachment.url,
+    thumbUrl: tileImageUri(attachment),
     width: attachment.width,
     height: attachment.height,
   }));
@@ -216,6 +243,13 @@ export function MessageBubble({
   // мозаика, и в её зазорах виден фон чата, как в Telegram. С первой реакцией
   // облачко появляется: реакции стоят в нём, под мозаикой.
   const bareMedia = !message.text && !showAuthorLine && !hasAnnotations && !anyReactions;
+  // Какими краями мозаика касается краёв облачка: там её углы скруглены.
+  const mosaicTop = !showAuthorLine && !hasAnnotations;
+  const mosaicBottom = !message.text && !anyReactions;
+  const mosaicEdges = useMemo(
+    () => ({ top: mosaicTop, bottom: mosaicBottom }),
+    [mosaicBottom, mosaicTop],
+  );
   const tone: ReactionsTone = isOwn ? 'own' : 'other';
 
   const reactionProps = {
@@ -347,7 +381,11 @@ export function MessageBubble({
               attachments={message.attachments}
               layout={layout}
               localPreviews={message.localPreviews}
-              onPress={isPopPost ? openPop : setViewerIndex}
+              onPress={isPopPost ? openPop : openViewer}
+              tiles={tiles}
+              edges={mosaicEdges}
+              onArm={isPopPost ? undefined : armViewer}
+              onDisarm={isPopPost ? undefined : disarmViewer}
             >
               {message.text ? null : (
                 // Без подписи время со статусом — плашкой в левом нижнем углу
@@ -414,10 +452,15 @@ export function MessageBubble({
 
       {isMediaMessage && !isPopPost ? (
         <MediaViewer
-          visible={viewerIndex !== null}
+          // Другая плитка, чем под пальцем, — другой просмотр с нуля.
+          key={viewer?.index}
+          visible={viewer !== null}
+          armed={viewer?.armed}
           items={viewerItems}
-          initialIndex={viewerIndex ?? 0}
-          onClose={() => setViewerIndex(null)}
+          initialIndex={viewer?.index ?? 0}
+          origin={viewer?.origin}
+          tiles={tiles}
+          onClose={() => setViewer(null)}
         />
       ) : null}
     </View>

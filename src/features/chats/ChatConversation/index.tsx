@@ -114,6 +114,7 @@ import {
 import { resetScrolledRows } from '@/features/interactions/MessageReactions';
 import { menuReactionSet } from '@/features/interactions/reactionState';
 import { useReactToMessage } from '@/features/interactions/useReactToMessage';
+import { TileViewportContext } from '@/features/media/tileRegistry';
 import { CallButton } from '@/features/streams/CallButton';
 import { ChatCallBar } from '@/features/streams/ChatCallBar';
 import { useChatCall } from '@/features/streams/useChatCall';
@@ -892,35 +893,39 @@ export function ChatConversation({
         ) : (
           <Animated.View ref={listFrameRef} style={styles.flex}>
             <RowRegistryContext.Provider value={rowRegistry}>
-              <FlatList
-                ref={listRef}
-                testID="messages-list"
-                inverted
-                data={rows}
-                onScrollToIndexFailed={jump.onScrollToIndexFailed}
-                keyExtractor={rowKey}
-                renderItem={renderItem}
-                viewabilityConfig={views.viewabilityConfig}
-                onViewableItemsChanged={views.onViewableItemsChanged}
-                onScroll={onListScroll}
-                onScrollBeginDrag={onListDragStart}
-                scrollEventThrottle={VIEWS_SCROLL_THROTTLE_MS}
-                contentContainerStyle={styles.list}
-                // The list is inverted, so its "end" is the top of the screen:
-                // scrolling up pages further back through the history.
-                // Облачко ниже экрана выросло или сжалось (правка, подгрузка
-                // картинки) — то, что человек читает выше, остаётся на месте.
-                // У самого низа переписки список по-прежнему едет за новым.
-                maintainVisibleContentPosition={KEEP_READING_POSITION}
-                onEndReached={hasMore ? loadMore : undefined}
-                onEndReachedThreshold={HISTORY_EDGE}
-                // Тап по облачку при открытой клавиатуре сразу открывает меню, а
-                // не только прячет клавиатуру; тап по пустому месту — прячет.
-                keyboardShouldPersistTaps="handled"
-                ListFooterComponent={
-                  isLoadingMore ? <ActivityIndicator accessibilityLabel="Загрузка истории" /> : null
-                }
-              />
+              <TileViewportContext.Provider value={measureListFrame}>
+                  <FlatList
+                    ref={listRef}
+                    testID="messages-list"
+                    inverted
+                    data={rows}
+                    onScrollToIndexFailed={jump.onScrollToIndexFailed}
+                    keyExtractor={rowKey}
+                    renderItem={renderItem}
+                    viewabilityConfig={views.viewabilityConfig}
+                    onViewableItemsChanged={views.onViewableItemsChanged}
+                    onScroll={onListScroll}
+                    onScrollBeginDrag={onListDragStart}
+                    scrollEventThrottle={VIEWS_SCROLL_THROTTLE_MS}
+                    contentContainerStyle={styles.list}
+                    // The list is inverted, so its "end" is the top of the screen:
+                    // scrolling up pages further back through the history.
+                    // Облачко ниже экрана выросло или сжалось (правка, подгрузка
+                    // картинки) — то, что человек читает выше, остаётся на месте.
+                    // У самого низа переписки список по-прежнему едет за новым.
+                    maintainVisibleContentPosition={KEEP_READING_POSITION}
+                    onEndReached={hasMore ? loadMore : undefined}
+                    onEndReachedThreshold={HISTORY_EDGE}
+                    // Тап по облачку при открытой клавиатуре сразу открывает меню, а
+                    // не только прячет клавиатуру; тап по пустому месту — прячет.
+                    keyboardShouldPersistTaps="handled"
+                    ListFooterComponent={
+                      isLoadingMore ? (
+                        <ActivityIndicator accessibilityLabel="Загрузка истории" />
+                      ) : null
+                    }
+                  />
+              </TileViewportContext.Provider>
             </RowRegistryContext.Provider>
           </Animated.View>
         )}

@@ -23,6 +23,7 @@ import { useThreadPane } from './useThreadPane';
 import { FragmentQuote } from '@/features/chats/FragmentQuote';
 import { mosaicBounds } from '@/features/chats/lib/mosaicLayout';
 import { MessageBubble } from '@/features/chats/MessageBubble';
+import { TileViewportContext } from '@/features/media/tileRegistry';
 import { canReactTo } from '@/features/chats/messageActions';
 import { MessageContextMenu } from '@/features/chats/MessageContextMenu';
 import { measureInWindow } from '@/features/chats/rowRegistry';
@@ -365,7 +366,9 @@ export function PanelContent({
   };
 
   return (
-    <>
+    // Медиа в облачках панели улетает в свою плитку, только если та видна в
+    // этой же части списка.
+    <TileViewportContext.Provider value={measureViewport}>
       <Animated.View style={[styles.fill, sheet.shiftStyle]} pointerEvents="box-none">
         <View
           ref={listWindowRef}
@@ -454,6 +457,6 @@ export function PanelContent({
         onAction={actions.runMenuAction}
         onClose={actions.closeMenu}
       />
-    </>
+    </TileViewportContext.Provider>
   );
 }
