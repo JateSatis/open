@@ -2,51 +2,52 @@ import { Skia, TextAlign, type SkImage } from '@shopify/react-native-skia';
 
 import { ClusterLook } from '@/theme';
 
-/** Плитка силуэтов: картинка в пикселях и её размер в точках. */
-export type PatternTile = { image: SkImage; width: number; height: number };
+const tiles = new Map<string, SkImage | null>();
 
-const tiles = new Map<string, PatternTile | null>();
+/** Высота строки в пикселях плитки: целая, чтобы повтор шёл ровно по строкам. */
+export function tileLine(lineHeight: number, scale: number): number {
+  return Math.max(1, Math.round(lineHeight * scale));
+}
 
 /**
  * Плитка силуэтов эмодзи на две строки текста: в строке — один силуэт по
  * центру шага, вторая строка сдвинута на долю шага (шахматка). Цвета в
  * плитке нет — его ставит заливка (`srcIn`), поэтому плитка одна на эмодзи и
- * размер строки, а не на цвет. Кешируется: облачко в режиме одно, а
- * эмодзи-лидеров на нём немного.
+ * высоту строки, а не на цвет. Размеры — целые пиксели: на них же идёт
+ * повтор, и сшитые на краю половинки силуэта совпадают.
  */
-export function patternTile(emoji: string, lineHeight: number, scale: number): PatternTile | null {
-  const icon = lineHeight * ClusterLook.patternIcon;
-  const width = icon * ClusterLook.patternStep;
-  const height = lineHeight * 2;
-  const key = `${emoji}|${Math.round(lineHeight * scale)}|${scale}`;
+export function patternTile(emoji: string, lineHeight: number, scale: number): SkImage | null {
+  const line = tileLine(lineHeight, scale);
+  const key = `${emoji}|${line}|${scale}`;
 
   if (tiles.has(key)) return tiles.get(key) ?? null;
 
-  const surface = Skia.Surface.Make(Math.ceil(width * scale), Math.ceil(height * scale));
+  const icon = line * ClusterLook.patternIcon;
+  const width = Math.max(1, Math.round(icon * ClusterLook.patternStep));
+  const surface = Skia.Surface.Make(width, line * 2);
 
   if (!surface) return null;
 
   const canvas = surface.getCanvas();
   const paragraph = Skia.ParagraphBuilder.Make({ textAlign: TextAlign.Center })
-    .pushStyle({ fontSize: icon * scale, color: Skia.Color('black') })
+    .pushStyle({ fontSize: icon, color: Skia.Color('black') })
     .addText(emoji)
     .build();
-  const box = icon * 2 * scale;
+  const box = icon * 2;
 
   paragraph.layout(box);
 
   const glyphHeight = paragraph.getHeight();
   const draw = (centerX: number, centerY: number) =>
-    paragraph.paint(canvas, centerX * scale - box / 2, centerY * scale - glyphHeight / 2);
+    paragraph.paint(canvas, centerX - box / 2, centerY - glyphHeight / 2);
+  const shifted = (width / 2 + width * ClusterLook.patternRowShift) % width;
 
-  const shifted = width * ClusterLook.patternRowShift;
-
-  draw(width / 2, lineHeight / 2);
+  draw(width / 2, line / 2);
   // Сдвинутый силуэт попадает на край плитки — рисуется с обеих сторон,
   // повтор плитки сшивает половинки.
-  draw((width / 2 + shifted) % width, lineHeight * 1.5);
-  draw(((width / 2 + shifted) % width) + width, lineHeight * 1.5);
-  draw(((width / 2 + shifted) % width) - width, lineHeight * 1.5);
+  draw(shifted - width, line * 1.5);
+  draw(shifted, line * 1.5);
+  draw(shifted + width, line * 1.5);
 
   surface.flush();
   const snapshot = surface.makeImageSnapshot();
@@ -55,7 +56,7 @@ export function patternTile(emoji: string, lineHeight: number, scale: number): P
   surface.dispose();
   if (raster && raster !== snapshot) snapshot.dispose();
 
-  const tile = { image: raster ?? snapshot, width, height };
+  const tile = raster ?? snapshot;
 
   tiles.set(key, tile);
 

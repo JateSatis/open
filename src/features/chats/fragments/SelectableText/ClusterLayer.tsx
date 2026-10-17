@@ -38,20 +38,26 @@ export function ClusterLayer({ geometry, clusters, isOwn, part, onOpen }: Cluste
   );
   const byId = useMemo(() => new Map(clusters.map((cluster) => [cluster.id, cluster])), [clusters]);
   const neutral = isOwn ? theme.clusterHighlightOnPrimary : theme.clusterHighlight;
+  // Слою тапов цвет ни к чему.
   const tones = useMemo(
     () =>
       new Map<string, ClusterTone>(
-        clusters.map((cluster) => [cluster.id, clusterTone(cluster, scheme, isOwn, neutral)]),
+        part === 'fill'
+          ? clusters.map((cluster) => [cluster.id, clusterTone(cluster, scheme, isOwn, neutral)])
+          : [],
       ),
-    [clusters, isOwn, neutral, scheme],
+    [clusters, isOwn, neutral, part, scheme],
   );
   const groups = useMemo(
     () =>
       clusters.flatMap((cluster): PatternGroup[] => {
         const pattern = tones.get(cluster.id)?.pattern;
+
+        if (!pattern) return [];
+
         const own = pieces.filter((piece) => piece.clusterId === cluster.id);
 
-        return pattern && own.length > 0
+        return own.length > 0
           ? [{ clusterId: cluster.id, emoji: pattern.emoji, color: pattern.color, pieces: own }]
           : [];
       }),

@@ -13,6 +13,23 @@ type Surface = {
   pattern: readonly [number, number];
 };
 
+/** Своё облачко синее в обеих темах — и палитра у него одна. */
+const OWN: Surface = {
+  tones: {
+    '❤️': '#FF3D8E',
+    '😡': '#D9141E',
+    '👍': '#0F9A45',
+    '🔥': '#FF6A00',
+    '😂': '#E0A500',
+    '💩': '#5E3514',
+    '😮': '#7A2FE6',
+    '😢': '#0A3596',
+    other: '#2E3A50',
+  },
+  fill: [0.22, 0.5],
+  pattern: [0.18, 0.34],
+};
+
 /**
  * Палитра — чужое облачко (`foreign`, тёмный текст на светлом / светлый на
  * тёмном) и своё (`own`, белый текст на синем). На синем пастельные тона
@@ -36,21 +53,7 @@ export const ClusterPalette: Record<'light' | 'dark', { foreign: Surface; own: S
       fill: [0.16, 0.4],
       pattern: [0.16, 0.34],
     },
-    own: {
-      tones: {
-        '❤️': '#FF3D8E',
-        '😡': '#D9141E',
-        '👍': '#0F9A45',
-        '🔥': '#FF6A00',
-        '😂': '#E0A500',
-        '💩': '#5E3514',
-        '😮': '#7A2FE6',
-        '😢': '#0A3596',
-        other: '#2E3A50',
-      },
-      fill: [0.22, 0.5],
-      pattern: [0.18, 0.34],
-    },
+    own: OWN,
   },
   dark: {
     foreign: {
@@ -68,21 +71,7 @@ export const ClusterPalette: Record<'light' | 'dark', { foreign: Surface; own: S
       fill: [0.18, 0.42],
       pattern: [0.18, 0.36],
     },
-    own: {
-      tones: {
-        '❤️': '#FF3D8E',
-        '😡': '#D9141E',
-        '👍': '#0F9A45',
-        '🔥': '#FF6A00',
-        '😂': '#E0A500',
-        '💩': '#5E3514',
-        '😮': '#7A2FE6',
-        '😢': '#0A3596',
-        other: '#2E3A50',
-      },
-      fill: [0.22, 0.5],
-      pattern: [0.18, 0.34],
-    },
+    own: OWN,
   },
 };
 

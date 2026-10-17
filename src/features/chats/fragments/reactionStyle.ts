@@ -12,12 +12,24 @@ import { ClusterLook, ClusterPalette } from '@/theme';
 /**
  * Порядок ничьих без прежнего лидера — порядок справочника реакций
  * (`reaction_emojis.position`): клиентский набор идёт в нём же, его сверяет
- * тест набора. Эмодзи вне набора — после всех, по строке, как в базе.
+ * тест набора. Эмодзи вне набора — после всех, по code points, как в базе.
  */
 function tieRank(emoji: string): number {
   const index = ALL_REACTIONS.indexOf(emoji);
 
   return index === -1 ? ALL_REACTIONS.length : index;
+}
+
+/** По code points — как `collate "C"` в базе, а не по UTF-16. */
+function byCodePoints(a: string, b: string): number {
+  const left = Array.from(a, (char) => char.codePointAt(0) ?? 0);
+  const right = Array.from(b, (char) => char.codePointAt(0) ?? 0);
+
+  for (let i = 0; i < Math.min(left.length, right.length); i++) {
+    if (left[i] !== right[i]) return left[i] - right[i];
+  }
+
+  return left.length - right.length;
 }
 
 /**
@@ -47,7 +59,7 @@ export function dominantReaction(
 
   if (previous !== null && leaders.includes(previous)) return previous;
 
-  return leaders.sort((a, b) => tieRank(a) - tieRank(b) || (a < b ? -1 : a > b ? 1 : 0))[0];
+  return leaders.sort((a, b) => tieRank(a) - tieRank(b) || byCodePoints(a, b))[0];
 }
 
 /** Заметность подсветки, 0…1: логарифм числа реакций с насыщением. */

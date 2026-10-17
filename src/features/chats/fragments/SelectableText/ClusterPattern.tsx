@@ -3,7 +3,7 @@ import { useEffect, useMemo } from 'react';
 import { PixelRatio, StyleSheet } from 'react-native';
 import { useSharedValue, withTiming } from 'react-native-reanimated';
 
-import { patternTile } from './patternTile';
+import { patternTile, tileLine } from './patternTile';
 
 import type { TextGeometry } from '../../../../../modules/text-geometry';
 
@@ -59,8 +59,10 @@ function PatternFill({
   lineHeight: number;
   top: number;
 }) {
-  const scale = PixelRatio.get();
-  const tile = patternTile(group.emoji, lineHeight, scale);
+  const ratio = PixelRatio.get();
+  const tile = patternTile(group.emoji, lineHeight, ratio);
+  // Плитка — в целых пикселях строки: точка в ней — чуть не `ratio`.
+  const scale = tileLine(lineHeight, ratio) / lineHeight;
   const path = useMemo(() => piecesPath(group.pieces), [group.pieces]);
   const color = useSharedValue(group.color);
 
@@ -75,7 +77,7 @@ function PatternFill({
       {/* Сетка привязана к тексту облачка, а не к куску: строки кластера
           продолжают один узор, пересчёт его не сдвигает. */}
       <ImageShader
-        image={tile.image}
+        image={tile}
         tx="repeat"
         ty="repeat"
         fit="none"
