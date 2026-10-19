@@ -131,11 +131,18 @@ export function useChatRowRenderer({
       const highlightKey = highlight?.messageId === row.key ? highlight.key : null;
 
       if (row.type === 'island-header') {
+        const headerItems = isSelecting ? selectableItems(row.island, currentUserId) : [];
+
         return (
           <MessageRow
             selectionMode={isSelecting}
-            selectable={isSelecting && selectableItems(row.island, currentUserId).length > 0}
-            selected={false}
+            selectable={isSelecting && headerItems.length > 0}
+            // Кружок плашки — «островок отмечен целиком».
+            selected={
+              isSelecting &&
+              headerItems.length > 0 &&
+              headerItems.every((item) => isSelected(item.key))
+            }
             highlightKey={highlightKey}
             messageId={row.key}
             onOpenMenu={(anchor) => openMenu(row, anchor)}

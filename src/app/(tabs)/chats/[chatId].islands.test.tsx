@@ -315,6 +315,10 @@ describe('forward island', () => {
     expect(markOf('Ну Джиган и конченый придурок!').props.accessibilityState).toMatchObject({
       checked: true,
     });
+    // Кружок плашки — тоже отмечен: островок выбран целиком.
+    expect(screen.getByTestId('message-row-isl/header').props.accessibilityState).toMatchObject({
+      checked: true,
+    });
 
     // Весь островок уже отмечен — второй тап снимает отметку.
     await fireEvent.press(screen.getByTestId('message-row-isl/header'));
