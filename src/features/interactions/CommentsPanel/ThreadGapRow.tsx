@@ -46,7 +46,7 @@ export function ThreadGapRow({ hidden, isLoading, failed = false, onPress }: Thr
           onPress={onPress}
           style={styles.threadAction}
         >
-          <Text variant="smallBold" color="primary">
+          <Text variant="smallBold" color="primary" numberOfLines={1} style={styles.repliesLabel}>
             {`Показать ещё ${repliesLabel(hidden)}`}
           </Text>
         </Pressable>

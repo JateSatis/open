@@ -43,7 +43,9 @@ export function RepliesButton({ count, isOwn, onPress }: RepliesButtonProps) {
       onPress={onPress}
       style={[styles.repliesButton, isOwn ? styles.repliesButtonOwn : styles.repliesButtonOther]}
     >
-      <Text variant="smallBold" color="primary">
+      {/* Одна строка и без сжатия: Android, мерявший подпись впритык, переносил
+          слово на вторую строку, и та срезалась высотой кнопки — «3 ›». */}
+      <Text variant="smallBold" color="primary" numberOfLines={1} style={styles.repliesLabel}>
         {repliesLabel(count)}
       </Text>
       <SymbolView
