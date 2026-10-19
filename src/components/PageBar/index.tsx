@@ -1,8 +1,11 @@
 import { SymbolView } from 'expo-symbols';
 import type { ReactNode } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { styles } from './styles';
+
+import { ConnectionTitle } from '@/features/connection/ConnectionTitle';
 import { useTheme } from '@/hooks/use-theme';
 import { InfoPageSizes, Shadows, Sizes, Spacing } from '@/theme';
 
@@ -61,31 +64,14 @@ export function PageBar({ onBack, children, right, testID }: PageBarProps) {
   );
 }
 
-const styles = StyleSheet.create({
-  bar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingRight: Spacing.three,
-    zIndex: 1,
-  },
-  back: {
-    width: Sizes.headerButton,
-    height: Sizes.headerButton,
-    marginLeft: Spacing.one,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  // Название — с той же линии, что у нативной шапки: стрелка и поле до него.
-  title: {
-    flex: 1,
-    minWidth: 0,
-    marginLeft: Sizes.headerTitleLeft - Sizes.headerButton - Spacing.one,
-  },
-  titleAlone: {
-    marginLeft: Spacing.three,
-  },
-  right: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-});
+/**
+ * Шапка страницы, пока её содержимого ещё нет (грузится, не загрузилось):
+ * название, а без связи — её состояние, и стрелка, чтобы было куда уйти.
+ */
+export function PlainPageBar({ title, onBack }: { title: string; onBack: () => void }) {
+  return (
+    <PageBar onBack={onBack}>
+      <ConnectionTitle title={title} />
+    </PageBar>
+  );
+}

@@ -152,10 +152,35 @@ export async function beginTextSelection(rowKey: string, point: RowPoint): Promi
   return true;
 }
 
-/** Ручку схватили: дальше её ведёт `moveSelectionDrag`. */
+/**
+ * Ручку схватили: дальше её ведёт `moveSelectionDrag`. Угол текста в окне
+ * перемеряется: с выделения строка могла сдвинуться не пальцем (клавиатура,
+ * новое сообщение внизу), и ручка прыгнула бы на этот сдвиг.
+ */
 export function beginHandleDrag(rowKey: string, edge: 'start' | 'end', lift: number) {
-  startDrag({ kind: edge, rowKey, point: null, lift, anchor: null, released: false, frame: null });
+  const session: Drag = {
+    kind: edge,
+    rowKey,
+    point: null,
+    lift,
+    anchor: null,
+    released: false,
+    frame: null,
+  };
+
+  startDrag(session);
   updateTextSelection({ dragging: edge });
+
+  const view = selectableTextOf(rowKey)?.ref.current;
+
+  if (!view) return;
+
+  void windowOrigin(view).then((origin) => {
+    if (drag !== session || getFragmentState().selection?.rowKey !== rowKey) return;
+
+    updateTextSelection({ textInWindow: origin });
+    applyDrag(false);
+  });
 }
 
 /** Палец протяжки сдвинулся — координаты окна. Без протяжки ничего не делает. */

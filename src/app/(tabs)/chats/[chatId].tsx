@@ -5,9 +5,8 @@ import { ActivityIndicator, View } from 'react-native';
 
 import type { ChatSummary } from '@/api/chats';
 import { LoadFailed } from '@/components/LoadFailed';
-import { PageBar } from '@/components/PageBar';
+import { PlainPageBar } from '@/components/PageBar';
 import { SlidePage, useSlideBack } from '@/components/SlidePage';
-import { Text } from '@/components/Text';
 import { ChatConversation } from '@/features/chats/ChatConversation';
 import { messagesQueryKey } from '@/features/chats/messages/historyCache';
 import { chatQueryKey, useChat } from '@/features/chats/useChat';
@@ -62,7 +61,7 @@ export default function ChatScreen() {
   if (!known && failed) {
     return (
       <SlidePage slide={slide}>
-        <PlainBar onBack={slide.close} />
+        <PlainPageBar title="Чат" onBack={slide.close} />
         <View style={{ flex: 1, backgroundColor: theme.background }}>
           <LoadFailed
             message="Не удалось загрузить переписку"
@@ -78,7 +77,7 @@ export default function ChatScreen() {
   if (!known && isLoading) {
     return (
       <SlidePage slide={slide}>
-        <PlainBar onBack={slide.close} />
+        <PlainPageBar title="Чат" onBack={slide.close} />
         <View style={{ flex: 1, justifyContent: 'center', backgroundColor: theme.background }}>
           <ActivityIndicator accessibilityLabel="Загрузка переписки" />
         </View>
@@ -90,14 +89,5 @@ export default function ChatScreen() {
     <SlidePage slide={slide}>
       <ChatConversation chatId={chatId} />
     </SlidePage>
-  );
-}
-
-/** Шапка, пока переписки ещё нет: уйти назад можно и отсюда. */
-function PlainBar({ onBack }: { onBack: () => void }) {
-  return (
-    <PageBar onBack={onBack}>
-      <Text variant="bodyBold">Чат</Text>
-    </PageBar>
   );
 }

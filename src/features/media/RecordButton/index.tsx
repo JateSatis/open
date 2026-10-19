@@ -13,6 +13,7 @@ import Animated, {
 import { LOCK_DISTANCE, styles } from './styles';
 import { useRecordGesture, type RecordGestureAction } from './useRecordGesture';
 
+import { useSlidePageSwipeHold } from '@/components/SlidePage/context';
 import type { HoldToRecord } from '@/features/media/useHoldToRecord';
 import { useTheme } from '@/hooks/use-theme';
 import { ComposerSizes } from '@/theme';
@@ -71,6 +72,9 @@ export function RecordButton({ hold, drag, disabled = false }: RecordButtonProps
   const dispatch = useCallback((action: RecordGestureAction) => holdRef.current[action](), []);
 
   const gesture = useRecordGesture({ drag, locked: lockedShared, onAction: dispatch });
+
+  // Идёт запись — страница не уезжает, и с замком, когда палец уже отпущен.
+  useSlidePageSwipeHold(active);
 
   const circleStyle = useAnimatedStyle(() => ({
     opacity: grow.value,

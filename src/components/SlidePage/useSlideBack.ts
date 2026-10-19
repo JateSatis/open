@@ -51,6 +51,11 @@ export type SlideBack = {
   guardLeave: (guard: LeaveGuard) => () => void;
   /** Свайп страницы узнал себя: убрать клавиатуру и панели под пальцем. Отдаёт снятие. */
   onSwipeStart: (listener: () => void) => () => void;
+  /**
+   * Пока держат, свайп страницы не начинается (идёт запись голосового с
+   * замком: палец уже отпущен, а уводить страницу нельзя). Отдаёт снятие.
+   */
+  holdSwipe: () => () => void;
 };
 
 /**
@@ -104,20 +109,33 @@ export function useSlideBack(fallback?: () => void): SlideBack {
     );
   }, [finish, leavingNow, offset, width]);
 
+  /** Идёт вопрос перед уходом: второй не задаётся. */
+  const asking = useRef(false);
+
   const close = useCallback(() => {
-    if (leaving.current) return;
+    if (leaving.current || asking.current) return;
 
     for (let i = guards.length - 1; i >= 0; i--) {
       const answer = guards[i]();
 
-      if (answer) {
-        // Пока спрашивают, страница стоит на месте, а не висит на полпути.
-        settle();
-        void answer.then((yes) => {
-          if (yes) leave();
-        });
-        return;
-      }
+      if (!answer) continue;
+
+      asking.current = true;
+      let answered = false;
+
+      // Ответ без вопроса (ничего не изменено) приходит сразу — страница
+      // уходит дальше, не дёрнувшись. Пока спрашивают — стоит на месте, а не
+      // висит на полпути.
+      requestAnimationFrame(() => {
+        if (!answered) settle();
+      });
+      void answer.then((yes) => {
+        answered = true;
+        asking.current = false;
+        if (yes) leave();
+        else settle();
+      });
+      return;
     }
 
     leave();
@@ -181,6 +199,19 @@ export function useSlideBack(fallback?: () => void): SlideBack {
 
   const startX = useSharedValue(0);
   const startY = useSharedValue(0);
+  const holds = useSharedValue(0);
+
+  const holdSwipe = useCallback(() => {
+    holds.set(holds.get() + 1);
+    let released = false;
+
+    return () => {
+      if (released) return;
+
+      released = true;
+      holds.set(Math.max(0, holds.get() - 1));
+    };
+  }, [holds]);
 
   const makeSwipe = useCallback(
     (canStart: SharedValue<boolean>) =>
@@ -190,7 +221,7 @@ export function useSlideBack(fallback?: () => void): SlideBack {
         // прокрутке.
         .manualActivation(true)
         .onTouchesDown((event, manager) => {
-          if (!canStart.value || leavingNow.value) {
+          if (!canStart.value || leavingNow.value || holds.value > 0) {
             manager.fail();
             return;
           }
@@ -223,7 +254,7 @@ export function useSlideBack(fallback?: () => void): SlideBack {
             offset.set(withSpring(0, Motion.pageSpring));
           }
         }),
-    [close, leavingNow, offset, startX, startY, swipeStarted, width],
+    [close, holds, leavingNow, offset, startX, startY, swipeStarted, width],
   );
 
   const interceptBack = useCallback(
@@ -237,8 +268,8 @@ export function useSlideBack(fallback?: () => void): SlideBack {
   );
 
   return useMemo(
-    () => ({ offset, close, makeSwipe, interceptBack, guardLeave, onSwipeStart }),
-    [close, guardLeave, interceptBack, makeSwipe, offset, onSwipeStart],
+    () => ({ offset, close, makeSwipe, interceptBack, guardLeave, onSwipeStart, holdSwipe }),
+    [close, guardLeave, holdSwipe, interceptBack, makeSwipe, offset, onSwipeStart],
   );
 }
 

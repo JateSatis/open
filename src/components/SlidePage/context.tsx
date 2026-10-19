@@ -72,6 +72,13 @@ export function useSlidePageLeaveGuard(guard: LeaveGuard) {
   useEffect(() => page?.guardLeave(guard), [guard, page]);
 }
 
+/** Пока `held`, свайп страницы не начинается. */
+export function useSlidePageSwipeHold(held: boolean) {
+  const page = useSlidePage();
+
+  useEffect(() => (held ? page?.holdSwipe() : undefined), [held, page]);
+}
+
 /** Свайп страницы начался — убрать то, что не должно ехать вместе с ней. */
 export function useSlidePageSwipeStart(listener: () => void) {
   const page = useSlidePage();

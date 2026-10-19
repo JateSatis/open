@@ -78,6 +78,7 @@ describe('ProfilePage', () => {
       interceptBack: () => () => undefined,
       guardLeave: () => () => undefined,
       onSwipeStart: () => () => undefined,
+      holdSwipe: () => () => undefined,
     };
 
     await render(<ProfilePage profile={profile} slideBack={slideBack} />);

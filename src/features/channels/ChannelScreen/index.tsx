@@ -9,7 +9,7 @@ import { styles } from './styles';
 import type { Channel } from '@/api/channels';
 import type { ChannelRef } from '@/api/chats';
 import { LoadFailed } from '@/components/LoadFailed';
-import { PageBar } from '@/components/PageBar';
+import { PlainPageBar } from '@/components/PageBar';
 import { SlidePage, useSlideBack, type SlideBack } from '@/components/SlidePage';
 import { SegmentedControl } from '@/components/SegmentedControl';
 import { Text } from '@/components/Text';
@@ -75,9 +75,7 @@ export function ChannelScreen({
   if (!channel) {
     return (
       <SlidePage slide={slide}>
-        <PageBar onBack={slide.close}>
-          <Text variant="bodyBold">Канал</Text>
-        </PageBar>
+        <PlainPageBar title="Канал" onBack={slide.close} />
         <View style={[styles.centered, { backgroundColor: theme.background }]}>
           {state === 'paused' ? (
             // Без сети запрос стоит на паузе: крутилка обещала бы данные, которых не будет.

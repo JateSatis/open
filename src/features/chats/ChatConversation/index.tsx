@@ -142,6 +142,8 @@ const rowKey = (row: ChatListRow) => row.key;
 const KEEP_READING_POSITION = { minIndexForVisible: 0, autoscrollToTopThreshold: Spacing.six };
 /** Положение прокрутки нужно учёту просмотров лишь примерно: у низа или нет. */
 const VIEWS_SCROLL_THROTTLE_MS = 100;
+/** Столько после шага автопрокрутки выделения события прокрутки не двигают её смещение. */
+const AUTO_SCROLL_QUIET_MS = VIEWS_SCROLL_THROTTLE_MS * 3;
 /** Ближе этой доли экрана к старейшему сообщению — пора догружать историю. */
 const HISTORY_EDGE = 0.4;
 
@@ -665,18 +667,22 @@ export function ChatConversation({
 
   // Где сейчас прокрутка и сколько её всего — автопрокрутке выделения: она
   // двигает список сама, кадр за кадром, не дожидаясь событий прокрутки.
-  const scrollState = useRef({ offset: 0, content: 0, viewport: 0 });
+  // Пока список двигает автопрокрутка, события прокрутки (раз в 100 мс)
+  // везут смещение на несколько кадров старше — их смещение не берётся.
+  const scrollState = useRef({ offset: 0, content: 0, viewport: 0, drivenAt: 0 });
   const trackOffset = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    scrollState.current.offset = event.nativeEvent.contentOffset.y;
+    if (Date.now() - scrollState.current.drivenAt > AUTO_SCROLL_QUIET_MS) {
+      scrollState.current.offset = event.nativeEvent.contentOffset.y;
+    }
   }, []);
 
   const onListScroll = useCallback(
     (event: Parameters<typeof viewsOnScroll>[0]) => {
-      scrollState.current.offset = event.nativeEvent.contentOffset.y;
+      trackOffset(event);
       viewsOnScroll(event);
       resetScrolledRows();
     },
-    [viewsOnScroll],
+    [trackOffset, viewsOnScroll],
   );
 
   useEffect(() => {
@@ -698,6 +704,7 @@ export function ChatConversation({
 
         if (moved !== 0) {
           state.offset = next;
+          state.drivenAt = Date.now();
           listRef.current?.scrollToOffset({ offset: next, animated: false });
         }
 

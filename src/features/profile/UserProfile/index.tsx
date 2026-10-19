@@ -2,10 +2,9 @@ import { useRouter } from 'expo-router';
 import { useCallback } from 'react';
 
 import { Button } from '@/components/Button';
-import { PageBar } from '@/components/PageBar';
+import { PlainPageBar } from '@/components/PageBar';
 import { Screen } from '@/components/Screen';
 import { SlidePage, useSlideBack } from '@/components/SlidePage';
-import { Text } from '@/components/Text';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
 import { ProfileLoader } from '@/features/profile/ProfileLoader';
 import { ProfilePage } from '@/features/profile/ProfilePage';
@@ -36,9 +35,7 @@ export function UserProfile({ userId, stack }: { userId: string; stack: 'chats' 
   if (!profile) {
     return (
       <SlidePage slide={slide}>
-        <PageBar onBack={slide.close}>
-          <Text variant="bodyBold">Профиль</Text>
-        </PageBar>
+        <PlainPageBar title="Профиль" onBack={slide.close} />
         <Screen edges={['bottom']}>
           <ProfileLoader isPending={isPending} error={error} onRetry={() => refetch()}>
             {null}
