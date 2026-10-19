@@ -622,6 +622,7 @@ export function ChatConversation({
     longPressAt: fragments.longPressAt,
     retry,
     hostName: authorName,
+    openChat: navigation.openChat,
   });
 
   // Строки на экране — для засчитанных показов: меряются снаружи списка по ключу.

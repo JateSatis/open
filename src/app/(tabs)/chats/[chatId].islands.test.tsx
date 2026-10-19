@@ -291,6 +291,39 @@ describe('forward island', () => {
     );
   });
 
+  it('opens the chat it was forwarded from on a tap on the plate', async () => {
+    await renderChat();
+
+    await fireEvent.press(screen.getByLabelText('Переслано из чата «Хейтеры Джигана»'));
+
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/chats/[chatId]',
+      params: { chatId: 'chat-hate' },
+    });
+    // Тап — не меню.
+    expect(screen.queryByTestId('message-menu')).toBeNull();
+  });
+
+  it('selects the whole island on a tap on the plate while selecting, without leaving', async () => {
+    await renderChat();
+    await longPress('m1');
+
+    await fireEvent.press(screen.getByTestId('message-row-isl/header'));
+
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(markOf('Самойлова, ты дура!').props.accessibilityState).toMatchObject({ checked: true });
+    expect(markOf('Ну Джиган и конченый придурок!').props.accessibilityState).toMatchObject({
+      checked: true,
+    });
+
+    // Весь островок уже отмечен — второй тап снимает отметку.
+    await fireEvent.press(screen.getByTestId('message-row-isl/header'));
+
+    expect(markOf('Самойлова, ты дура!').props.accessibilityState).toMatchObject({
+      checked: false,
+    });
+  });
+
   it('adds «<author> из <chat>» only to bubbles from another chat than the plate', async () => {
     await renderChat();
 
