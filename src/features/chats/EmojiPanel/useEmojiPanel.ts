@@ -9,7 +9,9 @@ import {
   detachEmojiPanel,
   emojiPanelHeight,
   getEmojiPanelOwner,
+  getKeyboardOwner,
   getLastKeyboardHeight,
+  onEmojiPanelTaken,
   type KeyboardOwner,
 } from '@/features/chats/composerKeyboard';
 import { ComposerMotion, ComposerSizes } from '@/theme';
@@ -22,17 +24,21 @@ import { ComposerMotion, ComposerSizes } from '@/theme';
  */
 export type EmojiPanelMode = 'off' | 'emoji' | 'toKeyboard';
 
+/** Чем закрыть открытую панель — у каждого поля своё. */
+const closers = new Map<KeyboardOwner, () => void>();
+
 /**
- * Закрыть открытую панель эмодзи — для «назад» внутри `Modal`: там
- * системная кнопка приходит в `onRequestClose` окна, а не в `BackHandler`.
- * Отвечает, была ли панель: тогда окну закрываться не нужно.
+ * Закрыть открытую панель эмодзи поля `owner` — для «назад» внутри `Modal`:
+ * там системная кнопка приходит в `onRequestClose` окна, а не в
+ * `BackHandler`. Отвечает, была ли панель: тогда окну закрываться не нужно.
+ * Чужую панель (поля под окном) окно не трогает.
  */
-let closeOpen: (() => void) | null = null;
+export function closeEmojiPanel(owner: KeyboardOwner): boolean {
+  const close = closers.get(owner);
 
-export function closeEmojiPanel(): boolean {
-  if (!closeOpen) return false;
+  if (!close) return false;
 
-  closeOpen();
+  close();
 
   return true;
 }
@@ -62,6 +68,8 @@ export type EmojiPanelControl = {
 export function useEmojiPanel(
   owner: KeyboardOwner,
   inputRef: RefObject<TextInput | null> | undefined,
+  /** Экран поля на виду; ушёл под другой — панель закрывается. */
+  screenFocused = true,
 ): EmojiPanelControl {
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
@@ -190,7 +198,15 @@ export function useEmojiPanel(
     {
       onStart: (event) => {
         'worklet';
-        if (panelShown.value && !waitingKeyboard.value && event.height > 0) {
+        // Только своя клавиатура: поле в шите или комментариях над этим
+        // полем открывает свою, и её трогать нельзя.
+        if (
+          panelShown.value &&
+          !waitingKeyboard.value &&
+          event.height > 0 &&
+          getKeyboardOwner() === owner &&
+          getEmojiPanelOwner() === owner
+        ) {
           runOnJS(hideStrayKeyboard)();
         }
       },
@@ -210,7 +226,7 @@ export function useEmojiPanel(
   useEffect(() => {
     if (mode !== 'emoji') return;
 
-    closeOpen = close;
+    closers.set(owner, close);
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
       close();
       return true;
@@ -218,9 +234,32 @@ export function useEmojiPanel(
 
     return () => {
       subscription.remove();
-      if (closeOpen === close) closeOpen = null;
+      if (closers.get(owner) === close) closers.delete(owner);
     };
-  }, [close, mode]);
+  }, [close, mode, owner]);
+
+  // Экран ушёл под другой — панель закрывается, «назад» достаётся верхнему экрану.
+  // Закрывается следующим кадром — уже под новым экраном, не мешая его въезду.
+  useEffect(() => {
+    if (screenFocused || mode !== 'emoji') return;
+
+    const frame = requestAnimationFrame(close);
+
+    return () => cancelAnimationFrame(frame);
+  }, [close, mode, screenFocused]);
+
+  // Панель забрало другое поле (шит, комментарии): у этого её больше нет.
+  useEffect(() => {
+    if (mode === 'off') return;
+
+    return onEmojiPanelTaken((who) => {
+      if (who === owner) return;
+
+      swapWhenReady.current = null;
+      waitingKeyboard.set(false);
+      setMode('off');
+    });
+  }, [mode, owner, waitingKeyboard]);
 
   // Поле ушло с экрана вместе с панелью — место под ним больше не держится.
   useEffect(

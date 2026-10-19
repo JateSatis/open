@@ -20,7 +20,7 @@ import { perfMark, perfMarkStart } from '@/features/media/perf';
 import { useSelectionCount } from '@/features/media/selectionStore';
 import type { LocalMedia } from '@/features/media/types';
 import { useTheme } from '@/hooks/use-theme';
-import { ComposerSizes } from '@/theme';
+import { ComposerSizes, Spacing } from '@/theme';
 
 export type MessageComposerProps = {
   text: string;
@@ -64,6 +64,11 @@ export type MessageComposerProps = {
   onRecordingVoice?: () => void;
   /** Плашка режима над полем: ответ, пересылка. */
   plate?: ReactNode;
+  /**
+   * Экран поля на виду. Ушёл под другой экран — панель эмодзи закрывается:
+   * её «назад» не должно перехватывать «назад» верхнего экрана.
+   */
+  screenFocused?: boolean;
   /** Поле — чтобы отдать ему фокус, когда человек выбрал «Ответить». */
   inputRef?: RefObject<TextInput | null>;
   /** Отправить можно и с пустым полем: например, пересылку без подписи. */
@@ -107,6 +112,7 @@ export function MessageComposer({
   onRecordingVoice,
   plate,
   inputRef,
+  screenFocused = true,
   canSendEmpty = false,
   placeholder = 'Сообщение',
   edit,
@@ -117,14 +123,21 @@ export function MessageComposer({
   const mediaCount = useSelectionCount();
   const ownRef = useRef<TextInput | null>(null);
   const fieldRef = inputRef ?? ownRef;
-  const panel = useEmojiPanel(keyboardOwner, fieldRef);
+  const panel = useEmojiPanel(keyboardOwner, fieldRef, screenFocused);
   const selection = useRef<Selection>({ start: text.length, end: text.length });
   const pendingSelection = useRef<Selection | null>(null);
+  /** Текст, который поле уже видело: сменили сверху — курсор в конец. */
+  const seenText = useRef(text);
 
   // Текст из панели эмодзи пришёл сверху — курсор туда, где вставили, а не в конец.
+  // Сменили текст снаружи (правка, черновик) — курсор в конце нового текста,
+  // пока поле само не скажет другое.
   useEffect(() => {
     const next = pendingSelection.current;
+    const external = text !== seenText.current && !next;
 
+    seenText.current = text;
+    if (external) selection.current = { start: text.length, end: text.length };
     if (!next) return;
 
     pendingSelection.current = null;
@@ -158,6 +171,7 @@ export function MessageComposer({
 
     selection.current = next.selection;
     pendingSelection.current = next.selection;
+    seenText.current = next.text;
     onChangeText(next.text);
     onTyping();
   };
@@ -207,7 +221,7 @@ export function MessageComposer({
           accessibilityLabel={panel.mode === 'emoji' ? 'Клавиатура' : 'Эмодзи'}
           disabled={textLocked}
           onPress={panel.toggle}
-          hitSlop={ComposerSizes.button - ComposerSizes.fieldMinHeight}
+          hitSlop={Spacing.one}
           style={[styles.fieldButton, textLocked && styles.locked]}
         >
           <SymbolView
@@ -240,6 +254,7 @@ export function MessageComposer({
             selection.current = event.nativeEvent.selection;
           }}
           onChangeText={(value) => {
+            seenText.current = value;
             onChangeText(value);
             onTyping();
           }}
@@ -276,6 +291,7 @@ export function MessageComposer({
           onPick={pickEmoji}
           onDelete={() => applyEdit(deleteBefore(text, selection.current))}
           onReady={panel.onPanelReady}
+          owner={keyboardOwner}
         />
       ) : null}
     </View>

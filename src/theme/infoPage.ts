@@ -27,6 +27,7 @@ export const InfoPageSizes = {
   photoScrimBottom: 200,
   /** Буква на месте фото, когда фото нет. */
   photoLetter: 128,
+  photoLetterLine: 154,
   /** Зазор между половинами пары — цветом фона. */
   pairGap: 2,
   /** Имя на фото крупнее, в компактном заголовке — мельче. */

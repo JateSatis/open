@@ -8,7 +8,11 @@ import { buildEmojiGrid, EMOJI_SECTIONS, type EmojiRow, type EmojiSectionKey } f
 import { useRecentEmoji } from './recentEmoji';
 
 import { Text } from '@/components/Text';
-import { emojiPanelHeight } from '@/features/chats/composerKeyboard';
+import {
+  emojiPanelHeight,
+  getEmojiPanelOwner,
+  type KeyboardOwner,
+} from '@/features/chats/composerKeyboard';
 import { useTheme } from '@/hooks/use-theme';
 import { ComposerSizes, Opacity, Radii, Spacing } from '@/theme';
 
@@ -19,6 +23,8 @@ export { rememberEmoji } from './recentEmoji';
 const S = ComposerSizes;
 
 export type EmojiPanelProps = {
+  /** Чьё это поле: панель одна, и рисуется только у того, кто её открыл. */
+  owner: KeyboardOwner;
   /** Высота содержимого: по ней раскладка, пока сама панель выезжает. */
   size: number;
   /** Панель открыта (а не просто смонтирована с прошлого раза). */
@@ -35,7 +41,7 @@ export type EmojiPanelProps = {
  * `emojiPanelHeight` — кадр в кадр с тем, что `composerKeyboard` отдаёт
  * хозяину поля.
  */
-export function EmojiPanel({ size, open, onPick, onDelete, onReady }: EmojiPanelProps) {
+export function EmojiPanel({ owner, size, open, onPick, onDelete, onReady }: EmojiPanelProps) {
   const theme = useTheme();
   const { width } = useWindowDimensions();
   const recent = useRecentEmoji();
@@ -56,7 +62,13 @@ export function EmojiPanel({ size, open, onPick, onDelete, onReady }: EmojiPanel
   const grid = useMemo(() => buildEmojiGrid(shownRecent, columns), [columns, shownRecent]);
   const [active, setActive] = useState<EmojiSectionKey>(grid.rows[0]?.section ?? 'recent');
 
-  const style = useAnimatedStyle(() => ({ height: emojiPanelHeight.value }));
+  // Высота читается всегда: по ней реакция стиля и пересчитывается, когда
+  // панель переходит к другому полю.
+  const style = useAnimatedStyle(() => {
+    const height = emojiPanelHeight.value;
+
+    return { height: getEmojiPanelOwner() === owner ? height : 0 };
+  });
 
   const onViewable = useCallback(({ viewableItems }: { viewableItems: ViewToken<EmojiRow>[] }) => {
     const first = viewableItems.find((token) => token.item);
@@ -85,10 +97,10 @@ export function EmojiPanel({ size, open, onPick, onDelete, onReady }: EmojiPanel
   return (
     <Animated.View
       testID="emoji-panel"
-      onLayout={onReady}
       style={[styles.panel, { backgroundColor: theme.backgroundElement }, style]}
     >
-      <View style={{ height: size }}>
+      {/* Своей высоты, не анимируется: раскладка — один раз, а не на каждый кадр выезда. */}
+      <View style={{ height: size }} onLayout={onReady}>
         <View style={styles.grid}>
           <FlashList
             ref={listRef}

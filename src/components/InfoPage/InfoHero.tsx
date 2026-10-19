@@ -8,6 +8,7 @@ import type { InfoAction, InfoAvatar } from './types';
 
 import type { AvatarPairPerson } from '@/components/AvatarPair';
 import { Text } from '@/components/Text';
+import { initialOf } from '@/lib/initialOf';
 import { useTheme } from '@/hooks/use-theme';
 import { InfoPageOpacity, InfoPageSizes, Opacity, Radii, Spacing } from '@/theme';
 
@@ -157,7 +158,7 @@ function PersonFace({
 function LetterOf({ name }: { name: string }) {
   return (
     <Text variant="title" color="textSecondary" accessibilityLabel={name} style={styles.letter}>
-      {name.trim().charAt(0).toUpperCase() || '?'}
+      {initialOf(name)}
     </Text>
   );
 }
@@ -232,7 +233,7 @@ const styles = StyleSheet.create({
   },
   letter: {
     fontSize: S.photoLetter,
-    lineHeight: S.photoLetter * 1.2,
+    lineHeight: S.photoLetterLine,
     textAlign: 'center',
   },
   scrimTop: {

@@ -50,7 +50,7 @@ export function FragmentPanelWindow({ target, onOpenPerson, hostChatId }: Fragme
   const handleBack = useCallback(() => {
     if (dismissTopConfirmDialog()) return;
     // «Назад» в окне приходит сюда, а не в BackHandler: панель эмодзи — первой.
-    if (closeEmojiPanel()) return;
+    if (closeEmojiPanel('comments')) return;
     if (backRef.current()) return;
 
     close();

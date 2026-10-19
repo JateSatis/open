@@ -19,13 +19,13 @@ export const styles = StyleSheet.create({
     minHeight: ComposerSizes.fieldMinHeight,
     flexDirection: 'row',
     alignItems: 'flex-end',
-    borderWidth: 1,
+    borderWidth: ComposerSizes.fieldBorder,
     borderRadius: Radii.lg,
   },
   /** Квадрат в одну строку поля: кнопка эмодзи стоит у нижнего края, когда поле растёт. */
   fieldButton: {
     width: ComposerSizes.fieldMinHeight,
-    height: ComposerSizes.fieldMinHeight - 2,
+    height: ComposerSizes.fieldMinHeight - ComposerSizes.fieldBorder * 2,
     alignItems: 'center',
     justifyContent: 'center',
   },

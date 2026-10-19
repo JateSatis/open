@@ -1,8 +1,10 @@
-import { fireEvent, render, screen, userEvent } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, userEvent, within } from '@testing-library/react-native';
 import { createRef } from 'react';
-import type { TextInput } from 'react-native';
+import { View, type TextInput } from 'react-native';
 
 import { MessageComposer } from '.';
+
+import { closeEmojiPanel } from '@/features/chats/EmojiPanel';
 
 import { useMediaSelection } from '@/features/media/selectionStore';
 
@@ -415,6 +417,47 @@ describe('MessageComposer', () => {
       await userEvent.setup().press(screen.getByLabelText('Стереть'));
 
       expect(onChangeText).toHaveBeenLastCalledWith('привет мир');
+    });
+  });
+
+  describe('one emoji panel for several fields', () => {
+    const field = (owner: 'chat' | 'sheet', testID: string) => (
+      <View testID={testID}>
+        <MessageComposer
+          text=""
+          onChangeText={jest.fn()}
+          onSend={jest.fn()}
+          onTyping={jest.fn()}
+          canSend
+          keyboardOwner={owner}
+        />
+      </View>
+    );
+
+    it('closes only its own panel from a window «back», and gives it up to the field that takes it', async () => {
+      await render(
+        <>
+          {field('chat', 'chat')}
+          {field('sheet', 'sheet')}
+        </>,
+      );
+      const user = userEvent.setup();
+
+      await user.press(within(screen.getByTestId('chat')).getByLabelText('Эмодзи'));
+
+      // «Назад» окна шита чужую панель не трогает.
+      expect(closeEmojiPanel('sheet')).toBe(false);
+      expect(within(screen.getByTestId('chat')).getByLabelText('Клавиатура')).toBeTruthy();
+
+      // Шит открыл свою — у чата панели больше нет.
+      await user.press(within(screen.getByTestId('sheet')).getByLabelText('Эмодзи'));
+
+      expect(within(screen.getByTestId('chat')).getByLabelText('Эмодзи')).toBeTruthy();
+      expect(within(screen.getByTestId('sheet')).getByLabelText('Клавиатура')).toBeTruthy();
+      await act(() => {
+        expect(closeEmojiPanel('sheet')).toBe(true);
+      });
+      expect(within(screen.getByTestId('sheet')).getByLabelText('Эмодзи')).toBeTruthy();
     });
   });
 });

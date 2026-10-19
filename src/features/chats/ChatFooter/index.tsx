@@ -86,6 +86,8 @@ export type ChatFooterProps = {
     onSendVoice: (voice: LocalMedia) => void;
     onRecordingVoice: () => void;
     inputRef: RefObject<TextInput | null>;
+    /** Экран чата на виду: под открытым поверх экраном панель эмодзи не держится. */
+    screenFocused?: boolean;
     /** Поп, прикреплённый к посту канала. С ним пост уходит и без текста. */
     pop?: Pick<PopAttachmentChipProps, 'posterUri' | 'onRemove'> | null;
   } | null;
@@ -136,6 +138,7 @@ export function ChatFooter({ selection, invite, subscribe, composer }: ChatFoote
             }
             edit={composer.edit?.state}
             inputRef={composer.inputRef}
+            screenFocused={composer.screenFocused}
             onSend={composer.onSend}
             onTyping={composer.onTyping}
             onFieldActivate={claimKeyboardForChat}

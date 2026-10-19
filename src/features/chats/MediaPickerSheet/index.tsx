@@ -382,7 +382,7 @@ function SheetWindow({ phase, composer, pick: pickProp, avatar, sections }: Shee
   const handleBack = useCallback(() => {
     if (dismissTopConfirmDialog()) return;
     // «Назад» в окне приходит сюда, а не в BackHandler: панель эмодзи — первой.
-    if (closeEmojiPanel()) return;
+    if (closeEmojiPanel('sheet')) return;
 
     if (handlePreviewBack()) return;
 

@@ -78,8 +78,9 @@ export function setCommentsKeyboardWindowOpen(open: boolean) {
   releaseIfHidden();
 }
 
-/** Только для тестов. */
+/** Чьё поле сейчас владеет клавиатурой — и для ворклетов панели эмодзи. */
 export function getKeyboardOwner(): KeyboardOwner {
+  'worklet';
   return owner.value;
 }
 
@@ -101,10 +102,27 @@ const panelInset = makeMutable(0);
 /** Полная высота клавиатуры в последний раз, когда она была на экране. */
 const lastKeyboardHeight = makeMutable(0);
 
-/** Панель эмодзи поля `who` встала (высоту ведёт `emojiPanelHeight`). */
+const panelListeners = new Set<(who: KeyboardOwner) => void>();
+
+/**
+ * Панель эмодзи поля `who` встала (высоту ведёт `emojiPanelHeight`). Панель
+ * одна на все поля: если она была открыта у другого поля, то поле узнаёт об
+ * этом (`onEmojiPanelTaken`) и считает свою закрытой.
+ */
 export function attachEmojiPanel(who: KeyboardOwner, bottomInset: number) {
   panelOwner.value = who;
   panelInset.value = bottomInset;
+
+  for (const listener of [...panelListeners]) listener(who);
+}
+
+/** Чьё-то поле забрало панель эмодзи. Отписка — возвратом. */
+export function onEmojiPanelTaken(listener: (who: KeyboardOwner) => void): () => void {
+  panelListeners.add(listener);
+
+  return () => {
+    panelListeners.delete(listener);
+  };
 }
 
 /** Панели больше нет: клавиатура снова отдаётся как есть. */
@@ -141,7 +159,13 @@ export function useOwnKeyboardHeight(who: KeyboardOwner): SharedValue<number> {
   const settle = (value: number) => {
     'worklet';
     keyboard.value = value;
-    height.value = withEmojiPanel(who, value);
+    height.value = minusEmojiPanel(
+      who,
+      value,
+      panelOwner.value,
+      emojiPanelHeight.value,
+      panelInset.value,
+    );
   };
 
   useKeyboardHandler(
@@ -176,14 +200,14 @@ export function useOwnKeyboardHeight(who: KeyboardOwner): SharedValue<number> {
   // Значения панели читаются здесь, а не во вложенной функции: зависимости
   // реакции Reanimated берёт из её собственного замыкания.
   useAnimatedReaction(
-    () => {
-      const panel = emojiPanelHeight.value;
-      const inset = panelInset.value;
-
-      if (panelOwner.value !== who) return keyboard.value;
-
-      return Math.max(keyboard.value, panel + inset) - panel;
-    },
+    () =>
+      minusEmojiPanel(
+        who,
+        keyboard.value,
+        panelOwner.value,
+        emojiPanelHeight.value,
+        panelInset.value,
+      ),
     (value) => {
       height.value = value;
     },
@@ -193,12 +217,19 @@ export function useOwnKeyboardHeight(who: KeyboardOwner): SharedValue<number> {
   return height;
 }
 
-/** Клавиатура поля `who` с учётом его панели эмодзи (см. `useOwnKeyboardHeight`). */
-function withEmojiPanel(who: KeyboardOwner, keyboard: number): number {
+/**
+ * Клавиатура поля `who` с учётом его панели эмодзи (см. `useOwnKeyboardHeight`).
+ * Значения панели — параметрами: вызывающий читает их сам.
+ */
+function minusEmojiPanel(
+  who: KeyboardOwner,
+  keyboard: number,
+  panelOwnerNow: KeyboardOwner | null,
+  panel: number,
+  inset: number,
+): number {
   'worklet';
-  if (panelOwner.value !== who) return keyboard;
+  if (panelOwnerNow !== who) return keyboard;
 
-  const panel = emojiPanelHeight.value;
-
-  return Math.max(keyboard, panel + panelInset.value) - panel;
+  return Math.max(keyboard, panel + inset) - panel;
 }
