@@ -111,18 +111,16 @@ beforeEach(() => {
   reportRealtimeJoined();
 });
 
-it('shows the search bar on top and hides the header while searching', async () => {
+it('shows the search bar on top; opening and closing the search brings no header back', async () => {
   await renderWithQuery(<FeedScreen />);
 
   expect(screen.getByTestId('feed-search-open')).toBeTruthy();
 
   await fireEvent.press(screen.getByTestId('feed-search-open'));
-
-  expect(mockSetOptions).toHaveBeenLastCalledWith({ headerShown: false });
-
   await fireEvent.press(screen.getByTestId('feed-search-cancel'));
 
-  expect(mockSetOptions).toHaveBeenLastCalledWith({ headerShown: true });
+  expect(screen.getByTestId('feed-search-open')).toBeTruthy();
+  expect(mockSetOptions).not.toHaveBeenCalledWith({ headerShown: true });
 });
 
 it('shows channels and pops, asking the server for the last query only', async () => {

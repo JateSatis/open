@@ -4,6 +4,7 @@ import { Screen } from '@/components/Screen';
 import { TabBar } from '@/components/TabBar';
 import { Text } from '@/components/Text';
 import { FeedSearchPanel } from '@/features/search/FeedSearchPanel';
+import { ConnectionBanner } from '@/features/connection/ConnectionBanner';
 import { SearchBar } from '@/features/search/SearchBar';
 import { feedRecentQueries } from '@/features/search/recentSearches';
 import { useSearchMode } from '@/features/search/useSearchMode';
@@ -22,10 +23,12 @@ export default function FeedScreen() {
 
   return (
     <Screen
-      edges={search.active ? ['top'] : []}
+      edges={['top']}
       contentContainerStyle={{ paddingHorizontal: Spacing.three, paddingVertical: 0 }}
       overlay={<TabBar active="feed" />}
     >
+      <ConnectionBanner style={{ marginHorizontal: -Spacing.three }} />
+
       <SearchBar
         value={query}
         onChangeText={setQuery}
