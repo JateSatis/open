@@ -64,8 +64,8 @@ export default function ChatsScreen() {
   const closeRowMenu = useCallback(() => setRowMenu(null), []);
   const onCreate = useCallback(
     (item: CreateMenuItem) => {
-      // «Групповой чат» пока только закрывает меню: создание группы — отдельная задача.
-      if (item === 'channel') router.push('/chats/new-channel');
+      // «Чат» — выбор людей: один человек — диалог, несколько — группа.
+      router.push(item === 'chat' ? '/chats/new' : '/chats/new-channel');
     },
     [router],
   );
@@ -93,11 +93,7 @@ export default function ChatsScreen() {
       edges={search.active ? ['top'] : []}
       contentContainerStyle={{ paddingHorizontal: Spacing.three, paddingVertical: 0 }}
       // «+» — поверх панели: дымка над значками не заходит на кнопку.
-      overlay={
-        <>
-          <TabBar active="chats" />
-            </>
-      }
+      overlay={<TabBar active="chats" />}
     >
       <SearchBar
         value={search.query}

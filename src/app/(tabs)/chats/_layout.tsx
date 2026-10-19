@@ -1,6 +1,5 @@
 import { Stack } from 'expo-router';
 
-import { NewChatButton } from '@/features/chats/NewChatButton';
 import { ConnectionTitle } from '@/features/connection/ConnectionTitle';
 
 // Открыли канал ссылкой при холодном старте — под ним всё равно «Чаты»:
@@ -14,7 +13,6 @@ export default function ChatsLayout() {
         name="index"
         options={{
           headerTitle: () => <ConnectionTitle title="Чаты" />,
-          headerRight: () => <NewChatButton />,
         }}
       />
       <Stack.Screen name="new" options={{ title: 'Новый чат' }} />

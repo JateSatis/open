@@ -1,5 +1,5 @@
 appId: com.openger.app
-name: Кнопка «+» открывает меню; «Групповой чат» только закрывает его, «Канал» ведёт к созданию канала
+name: Кнопка «+» открывает меню; «Чат» ведёт к выбору людей, «Канал» — к созданию канала
 tags:
   - chats
   - channels
@@ -9,7 +9,9 @@ tags:
     id: "create-button"
 - assertVisible:
     id: "create-menu"
-- assertVisible: "Групповой чат"
+- assertVisible: "Чат"
+# Кнопки «Новый чат» в шапке нет: создание — только через «+».
+- assertNotVisible: "Новый чат"
 - assertVisible: "Канал"
 # Тап мимо закрывает меню, ничего не открывая.
 - tapOn:
@@ -26,12 +28,13 @@ tags:
 - pressKey: back
 - assertNotVisible:
     id: "create-menu"
-# «Групповой чат» пока только закрывает меню.
+# «Чат» — экран выбора людей.
 - tapOn:
     id: "create-button"
-- tapOn: "Групповой чат"
-- assertNotVisible:
-    id: "create-menu"
+- tapOn: "Чат"
+- assertVisible:
+    id: "group-avatar-picker"
+- pressKey: back
 - assertVisible:
     id: "chat-list-item"
 # «Канал» — экран создания: три поля, «Создать» неактивна.

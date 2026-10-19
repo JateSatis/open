@@ -7,7 +7,9 @@ tags:
 # Группу сценарий не создаёт: «Готово» лишь кладёт фото в круг на устройстве,
 # загрузка — только по «Позвать в группу».
 - runFlow: subflows/open-app.yaml
-- tapOn: "Новый чат"
+- tapOn:
+    id: "create-button"
+- tapOn: "Чат"
 - assertVisible:
     id: "group-avatar-picker"
 # Никого не выбрано — круг не открывает шит.

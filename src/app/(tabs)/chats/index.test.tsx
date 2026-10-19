@@ -1,5 +1,6 @@
 import type { Session as SupabaseSession } from '@supabase/supabase-js';
 import { fireEvent, screen, userEvent, waitFor } from '@testing-library/react-native';
+import { View } from 'react-native';
 
 import ChatsScreen from './index';
 
@@ -388,6 +389,29 @@ describe('ChatsScreen', () => {
 
     expect(await screen.findByRole('button', { name: 'Новый чат' })).toBeTruthy();
     expect(screen.getByTestId('create-button')).toBeTruthy();
+  });
+
+  it('opens the people picker from «+» → «Чат»', async () => {
+    mockedListChats.mockResolvedValue([chat]);
+    const measure = jest
+      .spyOn(
+        View.prototype as unknown as {
+          measureInWindow: (cb: (x: number, y: number, w: number, h: number) => void) => void;
+        },
+        'measureInWindow',
+      )
+      .mockImplementation((callback) => callback(300, 600, 56, 56));
+
+    await renderWithQuery(<ChatsScreen />);
+    await screen.findByText('Марина');
+
+    expect(screen.queryByRole('button', { name: 'Новый чат' })).toBeNull();
+
+    fireEvent.press(screen.getByTestId('create-button'));
+    fireEvent.press(await screen.findByRole('menuitem', { name: 'Чат' }));
+
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/chats/new'));
+    measure.mockRestore();
   });
 
   it('marks a chat with an unread message', async () => {
