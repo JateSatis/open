@@ -2854,6 +2854,7 @@ export type Database = {
           created_at: string
           id: string
           in_chats: boolean
+          in_chats_at: string | null
           messages_read_at: string
           notify: boolean
           pops_read_at: string
@@ -2865,6 +2866,7 @@ export type Database = {
           created_at?: string
           id?: string
           in_chats?: boolean
+          in_chats_at?: string | null
           messages_read_at?: string
           notify?: boolean
           pops_read_at?: string
@@ -2876,6 +2878,7 @@ export type Database = {
           created_at?: string
           id?: string
           in_chats?: boolean
+          in_chats_at?: string | null
           messages_read_at?: string
           notify?: boolean
           pops_read_at?: string
@@ -3649,6 +3652,7 @@ export type Database = {
           channel_id: string
           chat_id: string
           in_chats: boolean
+          in_chats_at: string
           notify: boolean
           unread_pops: number
           unread_posts: number
