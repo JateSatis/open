@@ -1,5 +1,4 @@
 import { useCallback, useEffect } from 'react';
-import { BackHandler } from 'react-native';
 
 import { contentOf, type BubbleRow } from '@/features/chats/islands/rows';
 import { canEnterFragmentMode, hasClusters } from '@/features/chats/fragments/fragmentRules';
@@ -25,7 +24,8 @@ type Options = {
  * Режим фрагментов на экране переписки: тап по облачку входит в режим или
  * выходит из него, долгое нажатие в режиме начинает выделение. В режиме не
  * больше одного облачка; прокрутка его не снимает, уход с экрана и выбор
- * сообщений — снимают.
+ * сообщений — снимают. Системное «назад» режим не перехватывает: оно сразу
+ * уводит с экрана, а режим гаснет вместе с фокусом.
  */
 export function useFragmentMode({ isMember, isFocused, isSelecting }: Options) {
   const activeKey = useFragmentActiveKey();
@@ -35,21 +35,6 @@ export function useFragmentMode({ isMember, isFocused, isSelecting }: Options) {
   }, [isFocused, isSelecting]);
 
   useEffect(() => () => exitFragmentMode(), []);
-
-  // «Назад» сначала снимает выделение, потом выходит из режима, и только
-  // потом — из чата.
-  useEffect(() => {
-    if (!activeKey) return;
-
-    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (getFragmentState().selection) clearTextSelection();
-      else exitFragmentMode();
-
-      return true;
-    });
-
-    return () => subscription.remove();
-  }, [activeKey]);
 
   const pressRow = useCallback(
     (row: BubbleRow) => {

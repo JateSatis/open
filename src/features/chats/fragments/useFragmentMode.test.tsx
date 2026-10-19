@@ -136,17 +136,14 @@ describe('fragment mode', () => {
     expect(getFragmentState()).toEqual({ activeKey: 'm1', selection: null, quote: null });
   });
 
-  it('system back drops the selection first, then leaves the mode', async () => {
+  it('leaves system back to the screen, with or without a text selection', async () => {
     const { result } = await render();
 
     await act(async () => result.current.pressRow(row('m1')));
     await act(async () => setTextSelection(selectionIn('m1')));
 
-    await act(async () => void backHandler?.({} as never));
-    expect(getFragmentState()).toEqual({ activeKey: 'm1', selection: null, quote: null });
-
-    await act(async () => void backHandler?.({} as never));
-    expect(getFragmentState().activeKey).toBeNull();
+    // «Назад» уводит с экрана сразу: режим его не забирает.
+    expect(backHandler).toBeNull();
   });
 
   it('turns off when selection of messages starts and when the screen loses focus', async () => {
