@@ -401,6 +401,7 @@ export function InfoPage({
                   <View
                     testID="info-cards"
                     pointerEvents="box-none"
+                    style={styles.cards}
                     onLayout={(event) => setCardsHeight(event.nativeEvent.layout.height)}
                   >
                     {cards}
@@ -438,6 +439,7 @@ export function InfoPage({
                   title={title}
                   status={status}
                   summary={summary}
+                  hasBack={Boolean(goBack)}
                 />
               </View>
 
@@ -498,6 +500,10 @@ const styles = StyleSheet.create({
   },
   fill: {
     flex: 1,
+  },
+  /** Карточки не прилипают к краю фото. */
+  cards: {
+    paddingTop: Spacing.three,
   },
   overlay: {
     position: 'absolute',

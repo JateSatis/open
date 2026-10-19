@@ -24,6 +24,8 @@ export type InfoTitleProps = {
   title: string;
   status: InfoStatus | null;
   summary: string;
+  /** Слева в панели стрелка «назад»: имя в плашке стоит правее неё. */
+  hasBack: boolean;
 };
 
 /**
@@ -39,6 +41,7 @@ export function InfoTitle({
   title,
   status,
   summary,
+  hasBack,
 }: InfoTitleProps) {
   const theme = useTheme();
   const { width, nameTop } = geometry;
@@ -46,10 +49,12 @@ export function InfoTitle({
   // Имя на фото увеличено: в увеличенном виде оно тоже не шире строки.
   const nameMaxWidth = maxWidth / S.nameScaleExpanded;
 
+  const barLeft = hasBack ? S.barTitleLeft : Spacing.three;
   const statusColor = status?.accent ? theme.primary : theme.textSecondary;
-  const compactTop =
-    insetTop +
-    (S.barHeight - (S.nameLine * S.nameScaleCompact + S.statusLine * S.statusScaleCompact)) / 2;
+  // В плашке имя со строкой под ним — по центру панели; без статуса и
+  // сводки вкладок строки под именем нет, и по центру — одно имя.
+  const secondLine = status || summary ? S.statusLine * S.statusScaleCompact : 0;
+  const compactTop = insetTop + (S.barHeight - (S.nameLine * S.nameScaleCompact + secondLine)) / 2;
 
   const position = (y: number) => {
     'worklet';
@@ -59,7 +64,7 @@ export function InfoTitle({
 
     return {
       t,
-      x: lerp(Spacing.three, S.barTitleLeft, t),
+      x: lerp(Spacing.three, barLeft, t),
       nameY,
       nameScale,
       statusY: nameY + S.nameLine * nameScale,
@@ -94,7 +99,7 @@ export function InfoTitle({
     return {
       opacity: stuck.value,
       transform: [
-        { translateX: S.barTitleLeft },
+        { translateX: barLeft },
         { translateY: at.statusY },
         { scale: at.statusScale },
       ],
@@ -125,7 +130,7 @@ export function InfoTitle({
         style={[
           styles.line,
           styles.status,
-          { maxWidth: maxWidth - S.barTitleLeft, color: theme.textSecondary },
+          { maxWidth: maxWidth - barLeft, color: theme.textSecondary },
           summaryStyle,
         ]}
       >

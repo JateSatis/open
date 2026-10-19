@@ -14,6 +14,15 @@ jest.mock('expo-router', () => ({
 
 jest.mock('@/api/profile', () => ({ getMyProfile: jest.fn() }));
 
+// Верх профиля — страница информации: цвет плашки из фото (Skia) и просмотр фото.
+jest.mock('@shopify/react-native-skia', () => ({
+  Skia: { Data: { fromURI: () => Promise.reject(new Error('нет в тестах')) } },
+  AlphaType: {},
+  ColorType: {},
+}));
+
+jest.mock('@/features/media', () => ({ MediaViewer: () => null }));
+
 const getMyProfileMock = getMyProfile as jest.Mock;
 const pushMock = router.push as jest.Mock;
 
@@ -72,6 +81,15 @@ describe('MyProfileScreen', () => {
     await fireEvent.press(await findByText('Редактировать профиль'));
 
     expect(pushMock).toHaveBeenCalledWith('/(tabs)/profile/edit');
+  });
+
+  it('opens «Аккаунт» from the gear on the photo — there is no header', async () => {
+    getMyProfileMock.mockResolvedValue(profile);
+
+    const { findByLabelText } = await renderWithQuery(<MyProfileScreen />);
+    await fireEvent.press(await findByLabelText('Аккаунт'));
+
+    expect(pushMock).toHaveBeenCalledWith('/profile/account');
   });
 
   it('offers a retry when loading fails and recovers on the second try', async () => {

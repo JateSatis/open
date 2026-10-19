@@ -8,16 +8,26 @@ import { useSession } from '@/features/auth/useSession';
 import { renderWithQuery } from '@/features/profile/renderWithQuery';
 
 const mockPush = jest.fn();
+const mockBack = jest.fn();
 
 jest.mock('expo-router', () => ({
   useIsFocused: () => true,
   Stack: { Screen: () => null },
   useLocalSearchParams: jest.fn(),
-  useRouter: () => ({ push: mockPush }),
+  useRouter: () => ({ push: mockPush, back: mockBack }),
 }));
 
 jest.mock('@/api/profile', () => ({ getProfile: jest.fn() }));
 jest.mock('@/features/auth/useSession', () => ({ useSession: jest.fn() }));
+
+// Верх профиля — страница информации: цвет плашки из фото (Skia) и просмотр фото.
+jest.mock('@shopify/react-native-skia', () => ({
+  Skia: { Data: { fromURI: () => Promise.reject(new Error('нет в тестах')) } },
+  AlphaType: {},
+  ColorType: {},
+}));
+
+jest.mock('@/features/media', () => ({ MediaViewer: () => null }));
 
 const getProfileMock = getProfile as jest.Mock;
 const useLocalSearchParamsMock = useLocalSearchParams as jest.Mock;
@@ -78,6 +88,15 @@ describe('UserProfileScreen', () => {
       pathname: '/profile/dialogs/[userId]',
       params: { userId: 'user-2' },
     });
+  });
+
+  it('goes back from the arrow on the photo', async () => {
+    getProfileMock.mockResolvedValue(profile);
+
+    const { findByTestId } = await renderWithQuery(<UserProfileScreen />);
+    await fireEvent.press(await findByTestId('info-back'));
+
+    expect(mockBack).toHaveBeenCalled();
   });
 
   it('offers no follow button — there are no subscriptions', async () => {
