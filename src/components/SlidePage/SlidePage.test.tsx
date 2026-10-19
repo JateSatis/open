@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { useEffect } from 'react';
 import { BackHandler, Text } from 'react-native';
 
 import {
@@ -17,7 +18,7 @@ jest.mock('expo-router', () => ({
   useRouter: () => ({ back: mockBack, canGoBack: () => true }),
 }));
 
-let hardwareBack: (() => boolean | null | undefined) | null = null;
+let hardwareBack: ((event: never) => boolean | null | undefined) | null = null;
 
 beforeEach(() => {
   mockBack.mockClear();
@@ -32,7 +33,8 @@ afterEach(() => {
   jest.restoreAllMocks();
 });
 
-let slide: SlideBack | null = null;
+/** Страница последнего рендера — тест зовёт её `close`. */
+const current: { slide: SlideBack | null } = { slide: null };
 
 function Content({
   selecting,
@@ -61,7 +63,11 @@ function Page(props: {
   onClear: () => void;
   ask?: () => Promise<boolean> | null;
 }) {
-  slide = useSlideBack();
+  const slide = useSlideBack();
+
+  useEffect(() => {
+    current.slide = slide;
+  });
 
   return (
     <SlidePage slide={slide}>
@@ -84,7 +90,7 @@ describe('SlidePage', () => {
     await render(<Page selecting={false} onClear={jest.fn()} />);
 
     await act(async () => {
-      hardwareBack?.();
+      hardwareBack?.(undefined as never);
     });
     await finishAnimations();
 
@@ -97,7 +103,7 @@ describe('SlidePage', () => {
     await render(<Page selecting onClear={onClear} />);
 
     await act(async () => {
-      hardwareBack?.();
+      hardwareBack?.(undefined as never);
     });
     await finishAnimations();
 
@@ -111,14 +117,14 @@ describe('SlidePage', () => {
 
     await render(<Page selecting={false} onClear={jest.fn()} ask={ask} />);
 
-    await act(async () => slide?.close());
+    await act(async () => current.slide?.close());
     await act(async () => answer(false));
     await finishAnimations();
 
     expect(ask).toHaveBeenCalled();
     expect(mockBack).not.toHaveBeenCalled();
 
-    await act(async () => slide?.close());
+    await act(async () => current.slide?.close());
     await act(async () => answer(true));
     await finishAnimations();
 
