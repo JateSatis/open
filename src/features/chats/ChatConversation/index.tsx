@@ -87,6 +87,7 @@ import {
 } from '@/features/chats/fragments/fragmentStore';
 import { useFragmentJump } from '@/features/chats/fragments/useFragmentJump';
 import { useFragmentMode } from '@/features/chats/fragments/useFragmentMode';
+import { registerSelectionScroller } from '@/features/chats/fragments/selectionAutoScroll';
 import { useComposerDraft } from '@/features/chats/useComposerDraft';
 import { chatQueryKey, useChat } from '@/features/chats/useChat';
 import { useChatMessages } from '@/features/chats/useChatMessages';
@@ -660,13 +661,48 @@ export function ChatConversation({
     [resumeLoadMore],
   );
 
+  // Где сейчас прокрутка и сколько её всего — автопрокрутке выделения: она
+  // двигает список сама, кадр за кадром, не дожидаясь событий прокрутки.
+  const scrollState = useRef({ offset: 0, content: 0, viewport: 0 });
+  const trackOffset = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    scrollState.current.offset = event.nativeEvent.contentOffset.y;
+  }, []);
+
   const onListScroll = useCallback(
     (event: Parameters<typeof viewsOnScroll>[0]) => {
+      scrollState.current.offset = event.nativeEvent.contentOffset.y;
       viewsOnScroll(event);
       resetScrolledRows();
     },
     [viewsOnScroll],
   );
+
+  useEffect(() => {
+    if (!isFocused) return;
+
+    return registerSelectionScroller({
+      measure: async () => {
+        const frame = await measureListFrame();
+
+        return frame ? { top: frame.y, bottom: frame.y + frame.height } : null;
+      },
+      // Список перевёрнут: смещение растёт к старым сообщениям, то есть
+      // содержимое на экране едет вниз.
+      scrollBy: (delta) => {
+        const state = scrollState.current;
+        const max = Math.max(0, state.content - state.viewport);
+        const next = Math.min(max, Math.max(0, state.offset + delta));
+        const moved = next - state.offset;
+
+        if (moved !== 0) {
+          state.offset = next;
+          listRef.current?.scrollToOffset({ offset: next, animated: false });
+        }
+
+        return moved;
+      },
+    });
+  }, [isFocused, measureListFrame]);
 
   const { toggle: toggleReaction } = reactions;
   const menuRow = menu.target?.item ?? null;
@@ -916,6 +952,14 @@ export function ChatConversation({
                   onViewableItemsChanged={views.onViewableItemsChanged}
                   onScroll={onListScroll}
                   onScrollBeginDrag={onListDragStart}
+                  onScrollEndDrag={trackOffset}
+                  onMomentumScrollEnd={trackOffset}
+                  onContentSizeChange={(_width, height) => {
+                    scrollState.current.content = height;
+                  }}
+                  onLayout={(event) => {
+                    scrollState.current.viewport = event.nativeEvent.layout.height;
+                  }}
                   scrollEventThrottle={VIEWS_SCROLL_THROTTLE_MS}
                   contentContainerStyle={styles.list}
                   // The list is inverted, so its "end" is the top of the screen:

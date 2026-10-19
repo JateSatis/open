@@ -24,8 +24,11 @@ export type TextSelection = {
   textInRow: { x: number; y: number };
   /** Угол вью текста в окне на момент выделения — для меню. */
   textInWindow: { x: number; y: number };
-  /** Какую ручку тянут прямо сейчас: меню на это время прячется. */
-  dragging: 'start' | 'end' | null;
+  /**
+   * Что тянут прямо сейчас: ручку или выделение по словам вслед за долгим
+   * нажатием. Меню на это время прячется, при протяжке словами — и ручки.
+   */
+  dragging: 'start' | 'end' | 'words' | null;
 };
 
 /**
@@ -74,9 +77,12 @@ export function setTextSelection(selection: TextSelection | null) {
   useFragmentStore.setState({ selection });
 }
 
-/** Сдвиг выделения ручкой — без нового снимка геометрии. */
+/**
+ * Сдвиг выделения ручкой или протяжкой — без нового снимка геометрии. Угол
+ * текста в окне меняется, когда переписку прокручивает сама протяжка.
+ */
 export function updateTextSelection(
-  patch: Partial<Pick<TextSelection, 'start' | 'end' | 'dragging'>>,
+  patch: Partial<Pick<TextSelection, 'start' | 'end' | 'dragging' | 'textInWindow'>>,
 ) {
   const { selection } = useFragmentStore.getState();
 

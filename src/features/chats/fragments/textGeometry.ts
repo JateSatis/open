@@ -80,16 +80,30 @@ export function offsetAt(
   return best;
 }
 
-/** Символ под точкой — сам палец на глифе, а не граница. `null` — мимо текста. */
-export function charAt(geometry: TextGeometry, x: number, y: number): number | null {
+/**
+ * Символ под точкой — сам палец на глифе, а не граница. `null` — мимо текста.
+ * `clamp` — для протяжки по словам: палец выше текста — первый символ, ниже —
+ * последний, сбоку — крайний символ строки.
+ */
+export function charAt(
+  geometry: TextGeometry,
+  x: number,
+  y: number,
+  clamp = false,
+): number | null {
   const { lines } = geometry;
-  const index = lineAtY(lines, y, false);
+  const index = lineAtY(lines, y, clamp);
 
   if (index < 0) return null;
 
+  if (clamp && y < lines[0].top) return lines[0].start;
+  if (clamp && y >= lines[lines.length - 1].bottom) {
+    return Math.max(0, lines[lines.length - 1].end - 1);
+  }
+
   const line = lines[index];
 
-  if (x < line.left - SIDE_SLOP || x > line.right + SIDE_SLOP) return null;
+  if (!clamp && (x < line.left - SIDE_SLOP || x > line.right + SIDE_SLOP)) return null;
 
   let found = line.start;
 

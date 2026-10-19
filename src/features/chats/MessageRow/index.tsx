@@ -14,9 +14,16 @@ import Animated, {
 import { styles } from './styles';
 import { useSwipeReply } from './useSwipeReply';
 
-import { HorizontalGestureScope } from '@/components/HorizontalGestureScope';
+import {
+  HorizontalGestureScope,
+  useEnclosingHorizontalGestures,
+} from '@/components/HorizontalGestureScope';
 import { Text } from '@/components/Text';
-import type { RowPoint } from '@/features/chats/fragments/fragmentSelection';
+import {
+  endSelectionDrag,
+  moveSelectionDrag,
+  type RowPoint,
+} from '@/features/chats/fragments/fragmentSelection';
 import { useSelectionHandles } from '@/features/chats/fragments/useSelectionHandles';
 import type { MenuAnchor } from '@/features/chats/MessageContextMenu';
 import { RowRegistryContext } from '@/features/chats/rowRegistry';
@@ -98,9 +105,12 @@ export function MessageRow({
   const theme = useTheme();
   const highlight = useSharedValue(0);
   const swipe = useSwipeReply(messageId, !selectionMode, onSwipeReply);
+  // Горизонтальные жесты вокруг строки (свайп страницы) ждут, пока строка
+  // ведёт выделение: долгое нажатие с протяжкой или ручку.
+  const enclosing = useEnclosingHorizontalGestures();
   // Ручки выделения текста — первыми в гонке: узнав себя, отменяют свайп,
   // долгое нажатие и прокрутку.
-  const handles = useSelectionHandles(messageId);
+  const handles = useSelectionHandles(messageId, enclosing);
   const contentRef = useRef<View>(null);
   const registry = useContext(RowRegistryContext);
 
@@ -167,16 +177,26 @@ export function MessageRow({
   // `longPressed` меряет строку через ref, но зовётся по жесту, а не в
   // рендере: линтер видит передачу в ворклет внутри useMemo как чтение.
   /* eslint-disable react-hooks/refs */
+  // Долгое нажатие — это протяжка, которая узнаёт себя после удержания: в
+  // режиме фрагментов то же касание дальше тянет выделение по словам. Сдвиг
+  // пальца раньше срока — отказ, касание достаётся свайпу и прокрутке.
   const longPress = useMemo(
     () =>
-      Gesture.LongPress()
-        .minDuration(LONG_PRESS_MS)
+      Gesture.Pan()
+        .activateAfterLongPress(LONG_PRESS_MS)
         .enabled(hasLongPress)
         .withTestId(`message-long-press-${messageId}`)
         .onStart((event) => {
           runOnJS(longPressed)(event.absoluteX, event.absoluteY, event.x, event.y);
-        }),
-    [hasLongPress, longPressed, messageId],
+        })
+        .onUpdate((event) => {
+          runOnJS(moveSelectionDrag)(event.absoluteX, event.absoluteY);
+        })
+        .onFinalize(() => {
+          runOnJS(endSelectionDrag)('words');
+        })
+        .blocksExternalGesture(...enclosing),
+    [enclosing, hasLongPress, longPressed, messageId],
   );
   /* eslint-enable react-hooks/refs */
 
@@ -184,10 +204,7 @@ export function MessageRow({
   // нажатие, а удержание на месте не даёт начаться свайпу. Ручка выделения
   // узнаёт себя сразу при касании.
   const gesture = useMemo(
-    () =>
-      handles
-        ? Gesture.Race(handles, swipe.gesture, longPress)
-        : Gesture.Race(swipe.gesture, longPress),
+    () => Gesture.Race(handles, swipe.gesture, longPress),
     [handles, longPress, swipe.gesture],
   );
 

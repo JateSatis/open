@@ -43,6 +43,13 @@ describe('point to offset', () => {
     expect(charAt(geometry, 5, 30)).toBe(12);
     expect(charAt(geometry, 180, 10)).toBeNull();
   });
+
+  it('clamps the character to the text for dragging by words', () => {
+    expect(charAt(geometry, 50, -30, true)).toBe(0);
+    expect(charAt(geometry, 5, 90, true)).toBe(14);
+    expect(charAt(geometry, 180, 10, true)).toBe(11);
+    expect(charAt(geometry, -40, 30, true)).toBe(12);
+  });
 });
 
 describe('range to rects', () => {
