@@ -238,6 +238,8 @@ export function useChatBubbles({
           onReactionToggle={
             interactive && canReactTo(item) ? (emoji) => toggle(item, emoji) : undefined
           }
+          // Пост канала: все реакции одним рядом, без аватаров, нажимает любой.
+          reactionsLayout={isPost ? 'mergedCounts' : 'split'}
           resolvePerson={resolvePerson}
           comments={commentsEntry(item, chatId, interactive, isMember)}
           commentsSlot
@@ -309,6 +311,8 @@ export function useChatBubbles({
               ? (emoji) => toggle(message, emoji, audience)
               : undefined
           }
+          // Пересланный пост канала — как в самом канале.
+          reactionsLayout={original.chat?.isChannelPosts ? 'mergedCounts' : 'split'}
           resolvePerson={resolvePerson}
           // Комментарии — к оригиналу: панель открывается на него, из его чата.
           comments={commentsEntry(message, home.chatId, interactive, home.amMember)}

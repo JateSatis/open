@@ -1,5 +1,5 @@
-import { useFocusEffect, useNavigation } from 'expo-router';
-import { useCallback, useLayoutEffect, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useState } from 'react';
 import { BackHandler, Keyboard } from 'react-native';
 
 export type SearchMode = {
@@ -12,13 +12,12 @@ export type SearchMode = {
 };
 
 /**
- * Режим поиска над списком «Чатов»: пока он включён, шапка экрана спрятана —
- * строка поиска встаёт на её место, под статус-бар, — а системное «назад»
- * выходит из поиска, а не из приложения. Состояние — локальное: оно живёт,
- * пока жив экран, и «назад» из открытого чата возвращает в тот же поиск.
+ * Режим поиска над списком «Чатов» и «Ленты»: системное «назад» выходит из
+ * поиска, а не из приложения. Шапки у этих экранов нет — строка поиска и так
+ * под статус-баром. Состояние — локальное: оно живёт, пока жив экран, и
+ * «назад» из открытого чата возвращает в тот же поиск.
  */
 export function useSearchMode(): SearchMode {
-  const navigation = useNavigation();
   const [active, setActive] = useState(false);
   const [query, setQuery] = useState('');
 
@@ -29,10 +28,6 @@ export function useSearchMode(): SearchMode {
     // Снимает и фокус с поля: «Отмена» не должна оставлять курсор в нём.
     Keyboard.dismiss();
   }, []);
-
-  useLayoutEffect(() => {
-    navigation.setOptions({ headerShown: !active });
-  }, [active, navigation]);
 
   useFocusEffect(
     useCallback(() => {

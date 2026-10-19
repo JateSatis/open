@@ -64,6 +64,7 @@ export function InfoTabsBar({ tabs, index, position, onSelect }: InfoTabsBarProp
       onLayout={(event) => setBarWidth(event.nativeEvent.layout.width)}
     >
       <ScrollView
+        showsVerticalScrollIndicator={false}
         ref={scrollRef}
         horizontal
         showsHorizontalScrollIndicator={false}

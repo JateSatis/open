@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 
-import type { BubbleReactionsProps } from './types';
+import { isMergedLayout, type BubbleReactionsProps } from './types';
 import { VisitorReactionLine } from './VisitorReactionLine';
 
 import { byPopularity } from '@/features/interactions/reactionState';
@@ -10,7 +10,7 @@ export function VisitorReactions({ memoryKey, reactions, tone, layout }: BubbleR
   const entries = useMemo(() => byPopularity(reactions.visitors), [reactions.visitors]);
   const { mine } = reactions;
 
-  if (layout === 'merged' || entries.length === 0) return null;
+  if (isMergedLayout(layout) || entries.length === 0) return null;
 
   return (
     <VisitorReactionLine

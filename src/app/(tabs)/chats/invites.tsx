@@ -22,7 +22,9 @@ export default function InvitesScreen() {
   const openChat = useCallback((chatId: string) => router.push(`/chats/${chatId}`), [router]);
   const openPerson = useCallback(
     (userId: string) =>
-      userId === currentUserId ? router.navigate('/profile') : router.push(`/chats/people/${userId}`),
+      userId === currentUserId
+        ? router.navigate('/profile')
+        : router.push(`/chats/people/${userId}`),
     [currentUserId, router],
   );
   const accept = useCallback((chatId: string) => respond(chatId, 'accept'), [respond]);
@@ -58,6 +60,8 @@ export default function InvitesScreen() {
       ) : null}
 
       <SectionList
+        showsVerticalScrollIndicator={false}
+        showsHorizontalScrollIndicator={false}
         sections={sections}
         keyExtractor={(invite) => invite.chatId}
         stickySectionHeadersEnabled={false}

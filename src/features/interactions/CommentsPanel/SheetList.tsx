@@ -18,10 +18,7 @@ import {
 } from 'react-native-reanimated';
 
 import { GestureScrollView, useSheetScroll } from '@/components/ScrollSheet';
-import {
-  resetScrolledRows,
-  scrolledRowsCount,
-} from '@/features/interactions/MessageReactions';
+import { resetScrolledRows, scrolledRowsCount } from '@/features/interactions/MessageReactions';
 
 export type CommentsSheetContextValue = {
   animatedRef: AnimatedRef<ScrollView>;
@@ -50,39 +47,38 @@ function useCommentsSheet(): CommentsSheetContextValue {
 }
 
 /** Скролл списка, связанный с жестом закрытия. */
-const SheetScrollView = forwardRef<ScrollView, ScrollViewProps>(function SheetScrollView(
-  props,
-  ref,
-) {
-  const { animatedRef, gestureRef } = useCommentsSheet();
+const SheetScrollView = forwardRef<ScrollView, ScrollViewProps>(
+  function SheetScrollView(props, ref) {
+    const { animatedRef, gestureRef } = useCommentsSheet();
 
-  const attach = useCallback(
-    (instance: ComponentType | null) => {
-      gestureRef.current = instance;
+    const attach = useCallback(
+      (instance: ComponentType | null) => {
+        gestureRef.current = instance;
 
-      // RNGH описывает свой враппер как `ComponentType`, хотя наружу отдаёт
-      // сам `ScrollView` со всеми его методами.
-      const scrollView = instance as unknown as ScrollView | null;
+        // RNGH описывает свой враппер как `ComponentType`, хотя наружу отдаёт
+        // сам `ScrollView` со всеми его методами.
+        const scrollView = instance as unknown as ScrollView | null;
 
-      if (scrollView) animatedRef(scrollView);
-      if (typeof ref === 'function') ref(scrollView);
-      else if (ref) ref.current = scrollView;
-    },
-    [animatedRef, gestureRef, ref],
-  );
+        if (scrollView) animatedRef(scrollView);
+        if (typeof ref === 'function') ref(scrollView);
+        else if (ref) ref.current = scrollView;
+      },
+      [animatedRef, gestureRef, ref],
+    );
 
-  return (
-    <GestureScrollView
-      {...props}
-      ref={attach}
-      // Список упирается в верх, и дальше палец тянет шит — растяжение
-      // содержимого на Android и отскок на iOS спорили бы с ним.
-      overScrollMode="never"
-      bounces={false}
-      keyboardShouldPersistTaps="handled"
-    />
-  );
-});
+    return (
+      <GestureScrollView
+        {...props}
+        ref={attach}
+        // Список упирается в верх, и дальше палец тянет шит — растяжение
+        // содержимого на Android и отскок на iOS спорили бы с ним.
+        overScrollMode="never"
+        bounces={false}
+        keyboardShouldPersistTaps="handled"
+      />
+    );
+  },
+);
 
 export type CommentsSheetListProps<T> = Omit<FlashListProps<T>, 'renderScrollComponent'> & {
   listRef: Ref<FlashListRef<T>>;
@@ -110,6 +106,7 @@ export function CommentsSheetList<T>({ listRef, ...props }: CommentsSheetListPro
   return (
     <FlashList
       {...props}
+      showsHorizontalScrollIndicator={false}
       ref={listRef}
       showsVerticalScrollIndicator={false}
       renderScrollComponent={SheetScrollView}

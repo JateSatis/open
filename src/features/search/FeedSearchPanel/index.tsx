@@ -157,6 +157,7 @@ export function FeedSearchPanel({ query, onPickRecent }: FeedSearchPanelProps) {
 
   return (
     <FlashList
+      showsHorizontalScrollIndicator={false}
       ref={listRef}
       testID="feed-search-results"
       data={rows}

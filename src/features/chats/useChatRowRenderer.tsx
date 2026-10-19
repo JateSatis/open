@@ -9,6 +9,8 @@ import {
   type BubbleRow,
   type ChatListRow,
   type IslandHeaderRow,
+  type IslandItemRow,
+  toChatRows,
 } from '@/features/chats/islands/rows';
 import type { RowPoint } from '@/features/chats/fragments/fragmentSelection';
 import { isLocalMessage } from '@/features/chats/messageActions';
@@ -18,8 +20,6 @@ import { SystemMessage } from '@/features/chats/SystemMessage';
 import type { JumpHighlight } from '@/features/chats/useJumpToMessage';
 import { isSelectableRow } from '@/features/chats/useMessageSelection';
 import { Spacing } from '@/theme';
-
-const noop = () => undefined;
 
 type Options = {
   currentUserId: string | null;
@@ -41,7 +41,17 @@ type Options = {
   longPressAt?: (rowKey: string, point: RowPoint) => boolean | Promise<boolean>;
   retry: (localId: string) => void;
   hostName: (authorId: string | null) => string;
+  /** Тап по плашке островка — чат, откуда переслали. */
+  openChat?: (chatId: string) => void;
 };
+
+/** Облачки островка, которые можно выбрать. */
+function selectableItems(island: IslandHeaderRow['island'], currentUserId: string | null) {
+  return toChatRows([island]).filter(
+    (row): row is IslandItemRow =>
+      row.type === 'island-item' && isSelectableRow(row, currentUserId),
+  );
+}
 
 /**
  * Строки переписки: обычное сообщение, системное, плашка островка и облачко
@@ -64,24 +74,43 @@ export function useChatRowRenderer({
   longPressAt,
   retry,
   hostName,
+  openChat,
 }: Options) {
   /**
-   * Плашка островка — и в строке, и копией в меню. Долгое нажатие на неё —
-   * меню островка, как у облачка; переход в исходный чат — его первый пункт.
+   * Плашка островка — и в строке, и копией в меню. Тап по ней — исходный
+   * чат; долгое нажатие — меню островка, как у облачка.
    */
   const islandHeader = useCallback(
     (row: IslandHeaderRow, interactive: boolean) => {
       const { island } = row;
+      const sourceChatId = island.forward?.sourceChat?.id;
 
       return (
         <IslandHeader
           sourceName={island.forward?.sourceChat?.name ?? null}
           status={island.status}
+          onPress={
+            interactive && openChat && sourceChatId ? () => openChat(sourceChatId) : undefined
+          }
           onRetry={interactive && island.localId ? () => retry(island.localId!) : undefined}
         />
       );
     },
-    [retry],
+    [openChat, retry],
+  );
+
+  // В выборе тап по плашке отмечает островок целиком, а если он уже отмечен
+  // весь — снимает отметку.
+  const toggleIsland = useCallback(
+    (island: IslandHeaderRow['island']) => {
+      const items = selectableItems(island, currentUserId);
+      const target = !items.every((item) => isSelected(item.key));
+
+      for (const item of items) {
+        if (isSelected(item.key) !== target) toggleSelected(item.key);
+      }
+    },
+    [currentUserId, isSelected, toggleSelected],
   );
 
   /** Содержимое строки облачка; у последнего в островке — отступ снизу. */
@@ -102,15 +131,22 @@ export function useChatRowRenderer({
       const highlightKey = highlight?.messageId === row.key ? highlight.key : null;
 
       if (row.type === 'island-header') {
+        const headerItems = isSelecting ? selectableItems(row.island, currentUserId) : [];
+
         return (
           <MessageRow
             selectionMode={isSelecting}
-            selectable={false}
-            selected={false}
+            selectable={isSelecting && headerItems.length > 0}
+            // Кружок плашки — «островок отмечен целиком».
+            selected={
+              isSelecting &&
+              headerItems.length > 0 &&
+              headerItems.every((item) => isSelected(item.key))
+            }
             highlightKey={highlightKey}
             messageId={row.key}
             onOpenMenu={(anchor) => openMenu(row, anchor)}
-            onToggle={noop}
+            onToggle={() => toggleIsland(row.island)}
             frame={<IslandBorder top bottom={false} />}
           >
             {islandHeader(row, true)}
@@ -178,6 +214,7 @@ export function useChatRowRenderer({
       pressRow,
       startReply,
       swipeReply,
+      toggleIsland,
       toggleSelected,
     ],
   );

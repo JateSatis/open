@@ -96,6 +96,7 @@ export function EditAttachments({
 
   return (
     <ScrollView
+      showsVerticalScrollIndicator={false}
       horizontal
       showsHorizontalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"

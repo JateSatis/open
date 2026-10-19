@@ -152,6 +152,7 @@ describe('PopViewer subscription', () => {
     notify: true,
     unreadPosts: 0,
     unreadPops: 0,
+    inChatsAt: null,
   };
 
   it('offers a stranger «Подписаться» — without chats — then «Добавить в чаты»', async () => {

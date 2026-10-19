@@ -9,6 +9,12 @@ env:
   CHANNEL: Pop Lab
 ---
 - runFlow: subflows/open-app.yaml
+# Список «Чатов» упорядочен и по моменту входа: канал может оказаться под
+# панелью вкладок — докручиваем его к середине.
+- scrollUntilVisible:
+    element: ${CHANNEL}
+    direction: DOWN
+    centerElement: true
 - tapOn: ${CHANNEL}
 - tapOn:
     id: "segment-1"

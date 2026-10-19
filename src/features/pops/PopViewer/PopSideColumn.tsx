@@ -68,6 +68,7 @@ export function PopSideColumn({
     >
       <GestureDetector gesture={columnScroll}>
         <ScrollView
+          showsHorizontalScrollIndicator={false}
           testID="pop-reactions"
           style={{ height }}
           contentContainerStyle={styles.reactionsContent}

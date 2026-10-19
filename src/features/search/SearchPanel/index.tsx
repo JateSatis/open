@@ -184,7 +184,11 @@ export function SearchPanel({ query }: { query: string }) {
 
   return (
     <SectionList
+      showsHorizontalScrollIndicator={false}
       testID="chats-search-results"
+      // Список — в оставшееся под строкой поиска место: без границы по высоте
+      // он вытягивался на всё содержимое и не прокручивался вовсе.
+      style={styles.list}
       sections={sections}
       keyExtractor={(row) => row.key}
       renderItem={renderItem}

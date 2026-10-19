@@ -203,6 +203,24 @@ describe('reacting to a message', () => {
     });
   });
 
+  // Пост канала: зритель тапает вид, который ставили только участники, а у
+  // зрителей видов уже предел — база отказывает (`reaction_kinds_limit`).
+  it('rolls back a visitor tap over the kinds limit and says why, without a raw error', async () => {
+    mockedSet.mockRejectedValue({ code: 'OR001', message: 'reaction kinds limit' });
+
+    const { result } = await renderChat(false);
+
+    await act(async () =>
+      result.current.react.toggle({ id: 'm1', reactions: reactionsOf(result, 'm1') }, '👍'),
+    );
+
+    expect(reactionsOf(result, 'm1')).toEqual({ members: { '👍': 1 }, visitors: {}, mine: null });
+    expect(useInAppAlert.getState().alert).toMatchObject({
+      tone: 'error',
+      text: 'Разных реакций уже слишком много — выберите из поставленных',
+    });
+  });
+
   it('keeps one request in flight and sends only the last choice after it', async () => {
     const answers: ((value: { emoji: string; audience: 'member' } | null) => void)[] = [];
     mockedSet.mockImplementation(() => new Promise((resolve) => answers.push(resolve)));

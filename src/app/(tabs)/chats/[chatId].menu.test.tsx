@@ -148,6 +148,7 @@ function chatWith(participants: ChatSummary['participants']): ChatSummary {
     lastMessageAuthorId: null,
     lastPopAt: null,
     lastActivityAt: null,
+    enteredAt: null,
     previewIsPop: false,
     subscription: null,
     hasUnread: false,

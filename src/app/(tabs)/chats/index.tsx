@@ -20,6 +20,7 @@ import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
 import { useInvites } from '@/features/chats/useInvites';
 import type { ChatSummary } from '@/api/chats';
 import { useOnlineUsers } from '@/features/chats/useOnlineUsers';
+import { ConnectionBanner } from '@/features/connection/ConnectionBanner';
 import { SearchBar } from '@/features/search/SearchBar';
 import { SearchPanel } from '@/features/search/SearchPanel';
 import { useSearchMode } from '@/features/search/useSearchMode';
@@ -64,8 +65,8 @@ export default function ChatsScreen() {
   const closeRowMenu = useCallback(() => setRowMenu(null), []);
   const onCreate = useCallback(
     (item: CreateMenuItem) => {
-      // «Групповой чат» пока только закрывает меню: создание группы — отдельная задача.
-      if (item === 'channel') router.push('/chats/new-channel');
+      // «Чат» — выбор людей: один человек — диалог, несколько — группа.
+      router.push(item === 'chat' ? '/chats/new' : '/chats/new-channel');
     },
     [router],
   );
@@ -80,7 +81,7 @@ export default function ChatsScreen() {
 
   if (isLoading) {
     return (
-      <Screen edges={[]} overlay={<TabBar active="chats" />}>
+      <Screen edges={['top']} overlay={<TabBar active="chats" />}>
         <ActivityIndicator accessibilityLabel="Загрузка чатов" />
       </Screen>
     );
@@ -90,15 +91,13 @@ export default function ChatsScreen() {
     // Экран доходит до низа: панель вкладок лежит поверх списка и сама
     // отступает от системной навигации.
     <Screen
-      edges={search.active ? ['top'] : []}
+      edges={['top']}
       contentContainerStyle={{ paddingHorizontal: Spacing.three, paddingVertical: 0 }}
       // «+» — поверх панели: дымка над значками не заходит на кнопку.
-      overlay={
-        <>
-          <TabBar active="chats" />
-            </>
-      }
+      overlay={<TabBar active="chats" />}
     >
+      <ConnectionBanner style={{ marginHorizontal: -Spacing.three }} />
+
       <SearchBar
         value={search.query}
         onChangeText={search.setQuery}
@@ -117,6 +116,7 @@ export default function ChatsScreen() {
         <SearchPanel query={search.query} />
       ) : (
         <FlatList
+          showsHorizontalScrollIndicator={false}
           // Список — в оставшееся под поиском место, не во весь экран: иначе
           // он вытягивал экран за нижний край, и кнопка «+» уезжала туда же.
           style={{ flex: 1 }}

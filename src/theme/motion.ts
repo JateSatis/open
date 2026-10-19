@@ -4,4 +4,6 @@ export const Motion = {
   pageMs: 250,
   /** Недотянутая страница возвращается на место — без отскока за край. */
   pageSpring: { damping: 26, stiffness: 260, overshootClamping: true },
+  /** Полоска состояния связи раскрывается и сворачивается, сдвигая экран плавно. */
+  connectionBannerMs: 200,
 } as const;

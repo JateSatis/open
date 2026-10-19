@@ -26,7 +26,13 @@ export function original({ id, ...overrides }: OriginalInput): IslandOriginal {
     readAt: null,
     authorName: 'Джиган',
     authorAvatarUrl: null,
-    chat: { id: 'chat-src', name: 'Джиган и Самойлова', readUpTo: null, amMember: false },
+    chat: {
+      id: 'chat-src',
+      name: 'Джиган и Самойлова',
+      readUpTo: null,
+      amMember: false,
+      isChannelPosts: false,
+    },
     ...overrides,
   };
 }

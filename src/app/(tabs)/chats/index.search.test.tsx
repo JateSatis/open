@@ -74,6 +74,7 @@ const dialog: ChatSummary = {
   lastMessageAuthorId: 'anna',
   lastPopAt: null,
   lastActivityAt: READ_AT,
+  enteredAt: null,
   previewIsPop: false,
   subscription: null,
   hasUnread: false,
@@ -139,11 +140,10 @@ beforeEach(() => {
   reportRealtimeJoined();
 });
 
-it('hides the chat list and the header while searching, and brings them back on «Отмена»', async () => {
+it('hides the chat list while searching and brings it back on «Отмена», never touching a header', async () => {
   await openSearch();
 
   expect(screen.queryByText('до встречи')).toBeNull();
-  expect(mockSetOptions).toHaveBeenLastCalledWith({ headerShown: false });
 
   await type('анна');
   await fireEvent.press(screen.getByRole('button', { name: 'Отмена' }));
@@ -151,7 +151,8 @@ it('hides the chat list and the header while searching, and brings them back on 
   expect(await screen.findByText('до встречи')).toBeTruthy();
   expect(screen.queryByTestId('chats-search-input')).toBeNull();
   expect(screen.getByTestId('chats-search-open')).toBeTruthy();
-  expect(mockSetOptions).toHaveBeenLastCalledWith({ headerShown: true });
+  // Шапки у «Чатов» нет: поиск её не прячет и, закрываясь, не возвращает.
+  expect(mockSetOptions).not.toHaveBeenCalledWith({ headerShown: true });
 });
 
 it('leaves the search on the system «back» instead of the app', async () => {

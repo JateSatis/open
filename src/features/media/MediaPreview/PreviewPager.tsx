@@ -107,6 +107,7 @@ export function PreviewPager({
 
   return (
     <FlatList
+      showsVerticalScrollIndicator={false}
       ref={listRef}
       testID="media-preview-pager"
       data={gallery}

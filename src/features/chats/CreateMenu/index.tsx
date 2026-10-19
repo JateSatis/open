@@ -9,10 +9,10 @@ import { MenuList, menuListHeight, type MenuAction } from '@/components/MenuList
 import { MenuModal, useMenuTransition } from '@/components/MenuModal';
 import { Spacing } from '@/theme';
 
-export type CreateMenuItem = 'group' | 'channel';
+export type CreateMenuItem = 'chat' | 'channel';
 
 const ACTIONS: readonly MenuAction<CreateMenuItem>[] = [
-  { id: 'group', label: 'Групповой чат' },
+  { id: 'chat', label: 'Чат' },
   { id: 'channel', label: 'Канал' },
 ];
 
@@ -26,9 +26,8 @@ export type CreateMenuProps = {
 };
 
 /**
- * Кнопка «+» списка чатов и её меню. Меню стоит над кнопкой, у левого края
- * экрана — с тем же отступом, что у кнопки справа. Затемнение и анимации —
- * как у меню сообщения.
+ * Кнопка «+» списка чатов и её меню. Меню стоит над кнопкой, правым краем
+ * по её правому краю. Затемнение и анимации — как у меню сообщения.
  */
 export function CreateMenu({ onSelect, bottomInset }: CreateMenuProps) {
   const buttonRef = useRef<View>(null);
@@ -50,7 +49,7 @@ export function CreateMenu({ onSelect, bottomInset }: CreateMenuProps) {
 
   const position = anchor
     ? {
-        left: windowWidth - (anchor.x + anchor.width),
+        right: windowWidth - (anchor.x + anchor.width),
         top: anchor.y - Spacing.two - menuListHeight(ACTIONS.length),
       }
     : null;

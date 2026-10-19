@@ -118,6 +118,7 @@ export function SheetList<T>(props: FlashListProps<T>) {
   return (
     <FlashList
       {...props}
+      showsHorizontalScrollIndicator={false}
       showsVerticalScrollIndicator={false}
       renderScrollComponent={SheetScrollView}
     />

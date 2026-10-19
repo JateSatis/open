@@ -22,6 +22,8 @@ export type Subscription = {
   notify: boolean;
   unreadPosts: number;
   unreadPops: number;
+  /** Когда подписка попала в «Чаты» — мой момент входа для порядка списка; не в чатах — null. */
+  inChatsAt: string | null;
 };
 
 /** Подписка на канал. */
@@ -49,6 +51,7 @@ type SubscriptionRow = {
   notify: boolean;
   unread_posts: number;
   unread_pops: number;
+  in_chats_at?: string | null;
 };
 
 function toSubscription(row: SubscriptionRow): Subscription {
@@ -59,6 +62,7 @@ function toSubscription(row: SubscriptionRow): Subscription {
     notify: row.notify,
     unreadPosts: row.unread_posts,
     unreadPops: row.unread_pops,
+    inChatsAt: row.in_chats_at ?? null,
   };
 }
 

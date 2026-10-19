@@ -27,6 +27,7 @@ import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
 import { popSheetSection } from '@/features/pops/popSheetSection';
 import { useCanPublish } from '@/features/pops/queries';
 import { PopsSection } from '@/features/pops/PopsSection';
+import type { SectionRequest } from '@/features/channels/sectionRequest';
 import { formatUsername } from '@/features/profile/username';
 import { useTheme } from '@/hooks/use-theme';
 import { reloadMissing, loadStateOf } from '@/lib/loadState';
@@ -39,17 +40,22 @@ export type ChannelScreenProps = {
   /** С какого раздела открыть. Из «Чатов» — тот, где свежее непрочитанное. */
   section?: ChannelSection;
   /**
-   * Ключ перехода к посту снаружи (цитата, островок, пересланный комментарий).
-   * Новый ключ переключает экран на «Посты» — и уже открытый, ниже в стеке.
+   * Раздел, запрошенный снаружи: «Посты» — переход к посту (цитата, островок,
+   * пересланный комментарий) или поиск, «Попсы» — имя канала в просмотре
+   * попсов. Новый ключ переключает экран — и уже открытый, ниже в стеке.
    */
-  postsRequest?: string;
+  sectionRequest?: SectionRequest;
 };
 
 /**
  * Экран канала: под шапкой — «Посты» | «Попсы», разделы листаются свайпом и
  * тапом по сегменту. «Посты» — переписка чата постов, «Попсы» — сетка попсов канала.
  */
-export function ChannelScreen({ channelId, section = 'posts', postsRequest }: ChannelScreenProps) {
+export function ChannelScreen({
+  channelId,
+  section = 'posts',
+  sectionRequest,
+}: ChannelScreenProps) {
   const theme = useTheme();
   const queryClient = useQueryClient();
   const query = useChannel(channelId);
@@ -78,15 +84,19 @@ export function ChannelScreen({ channelId, section = 'posts', postsRequest }: Ch
   return (
     <ChannelSections
       channel={channel}
-      initialIndex={postsRequest ? 0 : SECTION_KEYS.indexOf(section)}
-      postsRequest={postsRequest}
+      initialIndex={SECTION_KEYS.indexOf(sectionRequest?.section ?? section)}
+      sectionRequest={sectionRequest}
     />
   );
 }
 
-type ChannelSectionsProps = { channel: Channel; initialIndex: number; postsRequest?: string };
+type ChannelSectionsProps = {
+  channel: Channel;
+  initialIndex: number;
+  sectionRequest?: SectionRequest;
+};
 
-function ChannelSections({ channel, initialIndex, postsRequest }: ChannelSectionsProps) {
+function ChannelSections({ channel, initialIndex, sectionRequest }: ChannelSectionsProps) {
   const theme = useTheme();
   const { width } = useWindowDimensions();
   const router = useRouter();
@@ -150,19 +160,22 @@ function ChannelSections({ channel, initialIndex, postsRequest }: ChannelSection
     [position],
   );
 
-  // Прыгать к посту можно только в «Постах»: уже открытый на «Попсах» экран,
-  // к которому вернулись, переключается. Ключ прошлого перехода остаётся в
-  // адресе, но эффект ждёт нового — раздел, выбранный после, он не трогает.
-  const [handledRequest, setHandledRequest] = useState(postsRequest);
+  // Уже открытый экран, к которому вернулись с запросом раздела (прыжок к
+  // посту — только в «Постах», имя канала в просмотре попсов — «Попсы»),
+  // переключается. Ключ прошлого запроса остаётся в адресе, но ждём нового —
+  // раздел, выбранный после, прежний не трогает.
+  const requestKey = sectionRequest?.key;
+  const requestedIndex = sectionRequest ? SECTION_KEYS.indexOf(sectionRequest.section) : -1;
+  const [handledRequest, setHandledRequest] = useState(requestKey);
 
-  if (postsRequest !== handledRequest) {
-    setHandledRequest(postsRequest);
-    if (postsRequest) setIndex(0);
+  if (requestKey !== handledRequest) {
+    setHandledRequest(requestKey);
+    if (requestKey) setIndex(requestedIndex);
   }
 
   useEffect(() => {
-    if (postsRequest) position.set(withTiming(0, { duration: SECTION_SETTLE_MS }));
-  }, [position, postsRequest]);
+    if (requestKey) position.set(withTiming(requestedIndex, { duration: SECTION_SETTLE_MS }));
+  }, [position, requestKey, requestedIndex]);
 
   // Подпись шапки — `@имя.ch` и число по разделу: у «Постов» читатели, у
   // «Попсов» все подписчики.

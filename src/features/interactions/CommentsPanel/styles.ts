@@ -137,7 +137,7 @@ export const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.half,
-    height: Sizes.threadToggle,
+    minHeight: Sizes.threadToggle,
     marginTop: -Spacing.one,
     marginBottom: Spacing.one,
   },
@@ -148,6 +148,9 @@ export const styles = StyleSheet.create({
   },
   repliesButtonOwn: {
     alignSelf: 'flex-end',
+  },
+  repliesLabel: {
+    flexShrink: 0,
   },
   /** Стрелка назад и «Ответы» в шапке окна треда. */
   titleStart: {

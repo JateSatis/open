@@ -163,7 +163,11 @@ export function CallScreen() {
         </Text>
       ) : null}
 
-      <ScrollView contentContainerStyle={styles.grid}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.grid}
+      >
         {call.speakers.map((speaker) => (
           <SpeakerTile
             key={speaker.id}

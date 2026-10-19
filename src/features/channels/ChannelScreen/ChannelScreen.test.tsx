@@ -163,6 +163,7 @@ const postsChat: ChatSummary = {
   lastMessageAuthorId: null,
   lastPopAt: null,
   lastActivityAt: null,
+  enteredAt: null,
   previewIsPop: false,
   subscription: null,
   hasUnread: false,
@@ -297,7 +298,7 @@ describe('ChannelScreen: переход к посту снаружи', () => {
     screen.getByRole('tab', { name }).props.accessibilityState?.selected;
 
   it('opens on «Посты» for a jump to a post, even when «Попсы» were asked', async () => {
-    await renderWithQuery(<ChannelScreen channelId="channel-1" section="pops" postsRequest="42" />);
+    await renderWithQuery(<ChannelScreen channelId="channel-1" section="pops" sectionRequest={{ section: 'posts', key: '42' }} />);
     await screen.findByText('первый пост');
 
     expect(selected('Посты')).toBe(true);
@@ -309,7 +310,7 @@ describe('ChannelScreen: переход к посту снаружи', () => {
     expect(selected('Попсы')).toBe(true);
 
     await act(async () => {
-      view.rerender(<ChannelScreen channelId="channel-1" section="pops" postsRequest="42" />);
+      view.rerender(<ChannelScreen channelId="channel-1" section="pops" sectionRequest={{ section: 'posts', key: '42' }} />);
     });
     expect(selected('Посты')).toBe(true);
 
@@ -318,14 +319,27 @@ describe('ChannelScreen: переход к посту снаружи', () => {
       fireEvent.press(screen.getByRole('tab', { name: 'Попсы' }));
     });
     await act(async () => {
-      view.rerender(<ChannelScreen channelId="channel-1" section="pops" postsRequest="42" />);
+      view.rerender(<ChannelScreen channelId="channel-1" section="pops" sectionRequest={{ section: 'posts', key: '42' }} />);
     });
     expect(selected('Попсы')).toBe(true);
 
     await act(async () => {
-      view.rerender(<ChannelScreen channelId="channel-1" section="pops" postsRequest="43" />);
+      view.rerender(<ChannelScreen channelId="channel-1" section="pops" sectionRequest={{ section: 'posts', key: '43' }} />);
     });
     expect(selected('Посты')).toBe(true);
+  });
+
+  it('switches a screen left on «Посты» to «Попсы» when «Попсы» are asked', async () => {
+    const view = await renderWithQuery(<ChannelScreen channelId="channel-1" />);
+    await screen.findByText('первый пост');
+    expect(selected('Посты')).toBe(true);
+
+    await act(async () => {
+      view.rerender(
+        <ChannelScreen channelId="channel-1" sectionRequest={{ section: 'pops', key: '7' }} />,
+      );
+    });
+    expect(selected('Попсы')).toBe(true);
   });
 });
 
@@ -337,6 +351,7 @@ describe('ChannelScreen subscription', () => {
     notify: true,
     unreadPosts: 0,
     unreadPops: 0,
+    inChatsAt: null,
   };
 
   // База в миниатюре: подписка и счётчики канала меняются вместе с действиями,
@@ -388,6 +403,7 @@ describe('ChannelScreen subscription', () => {
         ...stored,
         unreadPosts: posts ? 0 : stored.unreadPosts,
         unreadPops: pops ? 0 : stored.unreadPops,
+        inChatsAt: null,
       };
     });
   });

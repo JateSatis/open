@@ -107,7 +107,12 @@ export function ReactionPicker({
         style,
       ]}
     >
-      <ScrollView scrollEnabled={expanded} showsVerticalScrollIndicator={expanded} bounces={false}>
+      <ScrollView
+        showsHorizontalScrollIndicator={false}
+        scrollEnabled={expanded}
+        showsVerticalScrollIndicator={false}
+        bounces={false}
+      >
         <View style={styles.grid}>
           {geometry.firstRow.map(cell)}
           {geometry.expandable ? (

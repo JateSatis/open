@@ -131,10 +131,7 @@ function ChatEditForm({ chat }: { chat: ChatSummary }) {
       }
 
       if (descriptionChanged) {
-        await withDeadline(
-          setChatDescription(chat.id, cleanDescription || null),
-          TEXT_DEADLINE_MS,
-        );
+        await withDeadline(setChatDescription(chat.id, cleanDescription || null), TEXT_DEADLINE_MS);
         // Страница под этим экраном показывает новое описание сразу, не
         // дожидаясь перечитывания.
         queryClient.setQueryData<ChatSummary>(chatQueryKey(chat.id), (current) =>
@@ -236,6 +233,8 @@ function ChatEditForm({ chat }: { chat: ChatSummary }) {
         }}
       />
       <KeyboardAwareScrollView
+        showsVerticalScrollIndicator={false}
+        showsHorizontalScrollIndicator={false}
         style={[styles.flex, { backgroundColor: theme.background }]}
         contentContainerStyle={[styles.content, { paddingBottom: Spacing.four + insets.bottom }]}
         keyboardShouldPersistTaps="handled"

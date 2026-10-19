@@ -139,6 +139,7 @@ const base: ChatSummary = {
   lastMessageAuthorId: null,
   lastPopAt: null,
   lastActivityAt: null,
+  enteredAt: null,
   previewIsPop: false,
   subscription: null,
   hasUnread: false,
@@ -356,6 +357,7 @@ describe('ChatInfoPage', () => {
         notify: true,
         unreadPosts: 0,
         unreadPops: 0,
+        inChatsAt: null,
       });
 
       await renderWithQuery(<Page chat={strangers} />);

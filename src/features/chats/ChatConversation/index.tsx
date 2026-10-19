@@ -412,10 +412,10 @@ export function ChatConversation({
         ...message,
         authorName: author?.displayName ?? null,
         authorAvatarUrl: author?.avatarUrl ?? null,
-        chat: { ...thisChat, readUpTo, amMember: isMember },
+        chat: { ...thisChat, readUpTo, amMember: isMember, isChannelPosts: isPosts },
       };
     },
-    [isMember, peopleById, readUpTo, thisChat],
+    [isMember, isPosts, peopleById, readUpTo, thisChat],
   );
 
   // Пост с попом — только в «Постах» канала.
@@ -622,6 +622,7 @@ export function ChatConversation({
     longPressAt: fragments.longPressAt,
     retry,
     hostName: authorName,
+    openChat: navigation.openChat,
   });
 
   // Строки на экране — для засчитанных показов: меряются снаружи списка по ключу.
@@ -902,6 +903,8 @@ export function ChatConversation({
             <RowRegistryContext.Provider value={rowRegistry}>
               <TileViewportContext.Provider value={measureListFrame}>
                 <FlatList
+                  showsVerticalScrollIndicator={false}
+                  showsHorizontalScrollIndicator={false}
                   ref={listRef}
                   testID="messages-list"
                   inverted

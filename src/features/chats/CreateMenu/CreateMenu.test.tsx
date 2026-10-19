@@ -32,7 +32,7 @@ async function finishClosing() {
 }
 
 describe('CreateMenu', () => {
-  it('opens a menu with «Групповой чат» above «Канал»', async () => {
+  it('opens a menu with «Чат» above «Канал»', async () => {
     await render(<CreateMenu onSelect={jest.fn()} />);
 
     expect(screen.queryByTestId('create-menu')).toBeNull();
@@ -41,17 +41,18 @@ describe('CreateMenu', () => {
 
     const items = screen.getAllByRole('menuitem').map((item) => item.props.accessibilityLabel);
 
-    expect(items).toEqual(['Групповой чат', 'Канал']);
+    expect(items).toEqual(['Чат', 'Канал']);
   });
 
-  it('stands above the button, with the left margin equal to the button right margin', async () => {
+  it('stands above the button, its right edge on the button right edge', async () => {
     await render(<CreateMenu onSelect={jest.fn()} />);
     await fireEvent.press(screen.getByTestId('create-button'));
 
     const style = StyleSheet.flatten(screen.getByTestId('create-menu').props.style);
     const menuHeight = 2 * Sizes.menuRowHeight + Spacing.one * 2;
 
-    expect(style.left).toBe(16);
+    expect(style.right).toBe(16);
+    expect(style.left).toBeUndefined();
     expect((style.top as number) + menuHeight).toBeLessThan(BUTTON.y);
   });
 

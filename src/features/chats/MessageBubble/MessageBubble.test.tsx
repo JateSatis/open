@@ -60,6 +60,28 @@ function mediaMessage(overrides: Partial<ChatMessage> = {}): ChatMessage {
   });
 }
 
+type Node = ReturnType<typeof screen.getByTestId>;
+
+/**
+ * Какие из `ids` есть внутри `root` — в порядке дерева, то есть сверху вниз
+ * по облачку: его части стоят столбцом.
+ */
+function stackOrder(root: Node, ids: string[]): string[] {
+  const found: string[] = [];
+  const walk = (node: Node) => {
+    const id = node.props.testID as string | undefined;
+
+    if (id && ids.includes(id) && !found.includes(id)) found.push(id);
+    for (const child of node.children) {
+      if (typeof child !== 'string') walk(child as Node);
+    }
+  };
+
+  walk(root);
+
+  return found;
+}
+
 const baseProps = {
   isOwn: false,
   isRead: false,
@@ -424,19 +446,23 @@ describe('MessageBubble', () => {
   describe('reactions', () => {
     const reactions = { members: { '👍': 2 }, visitors: { '🔥': 1 }, mine: null };
 
-    it('puts member reactions in the bottom row and visitors on a line below it', async () => {
+    // Сверху вниз: текст, крупные реакции, строка посетителей, полоска статуса.
+    it('stacks text, member reactions, visitors and the status line last', async () => {
       await render(<MessageBubble message={textMessage({ reactions })} {...baseProps} />);
 
-      const row = screen.getByTestId('bubble-footer-info');
-
-      expect(within(row).getByTestId('member-reactions')).toBeTruthy();
-      expect(within(row).queryByTestId('visitor-reactions')).toBeNull();
       expect(
-        within(screen.getByTestId('message-bubble')).getByTestId('visitor-reactions'),
-      ).toBeTruthy();
+        stackOrder(screen.getByTestId('message-bubble'), [
+          'member-reactions',
+          'visitor-reactions',
+          'bubble-footer-info',
+        ]),
+      ).toEqual(['member-reactions', 'visitor-reactions', 'bubble-footer-info']);
+      expect(
+        within(screen.getByTestId('bubble-footer-info')).queryByTestId('member-reactions'),
+      ).toBeNull();
     });
 
-    it('with only visitor reactions keeps the bottom row empty between time and views', async () => {
+    it('with only visitor reactions puts their line above the status line', async () => {
       await render(
         <MessageBubble
           message={textMessage({ reactions: { ...reactions, members: {} } })}
@@ -445,27 +471,115 @@ describe('MessageBubble', () => {
       );
 
       expect(screen.queryByTestId('bubble-footer-reactions')).toBeNull();
-      expect(screen.getByTestId('visitor-reactions')).toBeTruthy();
+      expect(
+        stackOrder(screen.getByTestId('message-bubble'), [
+          'visitor-reactions',
+          'bubble-footer-info',
+        ]),
+      ).toEqual(['visitor-reactions', 'bubble-footer-info']);
     });
 
-    it('my caption-less album grows a bubble of my colour for its reactions', async () => {
+    it('my caption-less album grows a bubble of my colour; the status moves under the media', async () => {
       await render(<MessageBubble message={mediaMessage({ reactions })} {...baseProps} isOwn />);
 
       const bubble = screen.getByTestId('message-bubble');
 
-      expect(within(bubble).getByTestId('member-reactions')).toBeTruthy();
-      expect(within(bubble).getByTestId('visitor-reactions')).toBeTruthy();
       expect(StyleSheet.flatten(bubble.props.style).backgroundColor).not.toBe('transparent');
+      expect(screen.queryByTestId('media-meta-overlay')).toBeNull();
+      expect(
+        stackOrder(bubble, ['member-reactions', 'visitor-reactions', 'bubble-footer-info']),
+      ).toEqual(['member-reactions', 'visitor-reactions', 'bubble-footer-info']);
     });
 
-    it('my album has no bubble and no room while there are no reactions', async () => {
+    it('a visitor reaction alone moves the status under the media too', async () => {
+      await render(
+        <MessageBubble
+          message={mediaMessage({ reactions: { ...reactions, members: {} } })}
+          {...baseProps}
+        />,
+      );
+
+      expect(screen.queryByTestId('media-meta-overlay')).toBeNull();
+      expect(screen.getByTestId('bubble-footer-info')).toBeTruthy();
+    });
+
+    it('my album has no bubble and keeps the status on the media while nothing is under it', async () => {
       await render(<MessageBubble message={mediaMessage()} {...baseProps} isOwn />);
 
       const bubble = screen.getByTestId('message-bubble');
 
       expect(StyleSheet.flatten(bubble.props.style).backgroundColor).toBe('transparent');
+      expect(screen.getByTestId('media-meta-overlay')).toBeTruthy();
+      expect(screen.queryByTestId('bubble-footer-info')).toBeNull();
       expect(screen.queryByTestId('member-reactions')).toBeNull();
-      expect(screen.queryByTestId('visitor-reactions')).toBeNull();
+    });
+
+    it('a caption takes the status off the media and under the text', async () => {
+      await render(<MessageBubble message={mediaMessage({ text: 'подпись' })} {...baseProps} />);
+
+      expect(screen.queryByTestId('media-meta-overlay')).toBeNull();
+      expect(screen.getByTestId('bubble-footer-info')).toBeTruthy();
+    });
+
+    describe('channel post (mergedCounts)', () => {
+      const postReactions = {
+        members: { '👍': 1, '🔥': 1 },
+        visitors: { '🔥': 2, '😂': 1 },
+        mine: null,
+        reactors: {
+          '👍': [
+            { userId: 'owner', name: 'Владелец', avatarUrl: null, audience: 'member' as const },
+          ],
+        },
+      };
+
+      it('shows every reaction in one large row with summed counts and no visitors line', async () => {
+        await render(
+          <MessageBubble
+            message={textMessage({ reactions: postReactions })}
+            {...baseProps}
+            reactionsLayout="mergedCounts"
+          />,
+        );
+
+        expect(screen.queryByTestId('visitor-reactions')).toBeNull();
+        // 🔥: 1 от владельца и 2 от зрителей.
+        expect(screen.getByLabelText('🔥 3')).toBeTruthy();
+        expect(screen.getByLabelText('😂 1')).toBeTruthy();
+      });
+
+      it('draws no avatars: a single reaction is bare, several show the number', async () => {
+        await render(
+          <MessageBubble
+            message={textMessage({ reactions: postReactions })}
+            {...baseProps}
+            reactionsLayout="mergedCounts"
+          />,
+        );
+
+        expect(screen.queryByTestId('reaction-people-👍')).toBeNull();
+        expect(within(screen.getByTestId('reaction-chip-👍')).queryByText('1')).toBeNull();
+        expect(within(screen.getByTestId('reaction-chip-🔥')).getByText('3')).toBeTruthy();
+      });
+
+      it('lets a visitor tap any reaction, members’ ones too', async () => {
+        const onReactionToggle = jest.fn();
+        const user = userEvent.setup();
+
+        await render(
+          <MessageBubble
+            message={textMessage({ reactions: postReactions })}
+            {...baseProps}
+            reactionsLayout="mergedCounts"
+            reactionAudience="visitor"
+            onReactionToggle={onReactionToggle}
+          />,
+        );
+
+        await user.press(screen.getByTestId('reaction-chip-👍'));
+
+        expect(onReactionToggle).toHaveBeenCalledWith('👍');
+      });
     });
 
     it('a comment shows one shared row and no visitors line', async () => {

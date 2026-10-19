@@ -111,8 +111,20 @@ const mockedReactions = listMessageReactions as jest.MockedFunction<typeof listM
 const mockedSession = useSession as jest.MockedFunction<typeof useSession>;
 
 const AT = '2026-09-30T10:00:00Z';
-const JS = { id: 'chat-js', name: 'Джиган и Самойлова', readUpTo: null, amMember: false };
-const HATE = { id: 'chat-hate', name: 'Хейтеры Джигана', readUpTo: null, amMember: true };
+const JS = {
+  id: 'chat-js',
+  name: 'Джиган и Самойлова',
+  readUpTo: null,
+  amMember: false,
+  isChannelPosts: false,
+};
+const HATE = {
+  id: 'chat-hate',
+  name: 'Хейтеры Джигана',
+  readUpTo: null,
+  amMember: true,
+  isChannelPosts: false,
+};
 
 // Пример из задачи: Вася (я) переслал в «Васю и Свету» два облачка островка
 // «Хейтеров» — оригиналы из «Джигана и Самойловой» — и одно обычное сообщение
@@ -167,6 +179,7 @@ function chat(): ChatSummary {
     lastMessageAuthorId: null,
     lastPopAt: null,
     lastActivityAt: null,
+    enteredAt: null,
     previewIsPop: false,
     subscription: null,
     hasUnread: false,
@@ -291,19 +304,58 @@ describe('forward island', () => {
     );
   });
 
+  it('opens the chat it was forwarded from on a tap on the plate', async () => {
+    await renderChat();
+
+    await fireEvent.press(screen.getByLabelText('Переслано из чата «Хейтеры Джигана»'));
+
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/chats/[chatId]',
+      params: { chatId: 'chat-hate' },
+    });
+    // Тап — не меню.
+    expect(screen.queryByTestId('message-menu')).toBeNull();
+  });
+
+  it('selects the whole island on a tap on the plate while selecting, without leaving', async () => {
+    await renderChat();
+    await longPress('m1');
+
+    await fireEvent.press(screen.getByTestId('message-row-isl/header'));
+
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(markOf('Самойлова, ты дура!').props.accessibilityState).toMatchObject({ checked: true });
+    expect(markOf('Ну Джиган и конченый придурок!').props.accessibilityState).toMatchObject({
+      checked: true,
+    });
+    // Кружок плашки — тоже отмечен: островок выбран целиком.
+    expect(screen.getByTestId('message-row-isl/header').props.accessibilityState).toMatchObject({
+      checked: true,
+    });
+
+    // Весь островок уже отмечен — второй тап снимает отметку.
+    await fireEvent.press(screen.getByTestId('message-row-isl/header'));
+
+    expect(markOf('Самойлова, ты дура!').props.accessibilityState).toMatchObject({
+      checked: false,
+    });
+  });
+
   it('adds «<author> из <chat>» only to bubbles from another chat than the plate', async () => {
     await renderChat();
 
     // 6b: оригиналы из «Джигана и Самойловой».
-    expect(within(bubbleWith('Самойлова, ты дура!')).getByTestId('message-source-chat')).toHaveTextContent(
-      'Джиган и Самойлова',
-    );
+    expect(
+      within(bubbleWith('Самойлова, ты дура!')).getByTestId('message-source-chat'),
+    ).toHaveTextContent('Джиган и Самойлова');
     expect(within(bubbleWith('Сам ты дурак, Джиган!')).getByText('Самойлова')).toBeTruthy();
     // 6a: сообщение из «Хейтеров» — только автор.
     expect(
       within(bubbleWith('Ну Джиган и конченый придурок!')).queryByTestId('message-source-chat'),
     ).toBeNull();
-    expect(within(bubbleWith('Ну Джиган и конченый придурок!')).getByText('Второй админ')).toBeTruthy();
+    expect(
+      within(bubbleWith('Ну Джиган и конченый придурок!')).getByText('Второй админ'),
+    ).toBeTruthy();
   });
 
   it('shows the original’s own reactions and comments, not zeros', async () => {
@@ -334,7 +386,9 @@ describe('forward island', () => {
   it('keeps a stub in place of a deleted original', async () => {
     await renderChat();
 
-    expect(within(screen.getByTestId('deleted-original')).getByText('Сообщение удалено')).toBeTruthy();
+    expect(
+      within(screen.getByTestId('deleted-original')).getByText('Сообщение удалено'),
+    ).toBeTruthy();
   });
 
   it('puts a reaction from the island on the original, in the row of the original’s chat', async () => {
@@ -365,7 +419,11 @@ describe('forward island', () => {
     await act(async () => listeners.get('chat-js')?.onReactionsChanged?.('o1'));
 
     expect(
-      await within(bubbleWith('Самойлова, ты дура!')).findByLabelText('🔥 18', {}, { timeout: 2000 }),
+      await within(bubbleWith('Самойлова, ты дура!')).findByLabelText(
+        '🔥 18',
+        {},
+        { timeout: 2000 },
+      ),
     ).toBeTruthy();
   });
 

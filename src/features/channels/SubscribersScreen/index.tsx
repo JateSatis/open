@@ -23,8 +23,7 @@ import { describeLoadError } from '@/lib/network';
 export const channelSubscribersQueryKey = (channelId: string) =>
   ['channel', channelId, 'subscribers'] as const;
 
-export const chatSubscribersQueryKey = (chatId: string) =>
-  ['chat', chatId, 'subscribers'] as const;
+export const chatSubscribersQueryKey = (chatId: string) => ['chat', chatId, 'subscribers'] as const;
 
 /** Чьи подписчики: канала (видит создатель) или чужого диалога и группы (видят участники). */
 export type SubscribersTarget = { kind: 'channel'; id: string } | { kind: 'chat'; id: string };
@@ -82,6 +81,8 @@ export function SubscribersScreen({ target }: SubscribersScreenProps) {
 
   return (
     <FlatList
+      showsVerticalScrollIndicator={false}
+      showsHorizontalScrollIndicator={false}
       testID="subscribers-list"
       style={{ backgroundColor: theme.background }}
       contentContainerStyle={[styles.list, { paddingBottom: Spacing.two + insets.bottom }]}
