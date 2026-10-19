@@ -12,6 +12,7 @@ import { dismissTopConfirmDialog } from '@/components/ConfirmDialog/store';
 import type { CommentsPanelTarget } from '@/features/interactions/comments/commentsPanelStore';
 import { InAppNoticeToast } from '@/features/notifications/InAppMessageToast/NoticeToast';
 import { useTheme } from '@/hooks/use-theme';
+import { closeEmojiPanel } from '@/features/chats/EmojiPanel';
 
 export type PanelWindowProps = {
   target: CommentsPanelTarget;
@@ -46,6 +47,8 @@ export function PanelWindow({ target, onOpenPerson, hostChatId }: PanelWindowPro
   /** «Назад» отвечает на вопрос, потом выходит из правки и выбора и только потом закрывает панель. */
   const handleBack = useCallback(() => {
     if (dismissTopConfirmDialog()) return;
+    // «Назад» в окне приходит сюда, а не в BackHandler: панель эмодзи — первой.
+    if (closeEmojiPanel()) return;
     if (backRef.current()) return;
 
     close();

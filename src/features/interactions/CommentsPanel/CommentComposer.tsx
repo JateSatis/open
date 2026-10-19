@@ -111,6 +111,7 @@ export function CommentComposer({
         onSend={send}
         onTyping={typing}
         onFieldActivate={activateField}
+        keyboardOwner="comments"
         onAttachPressIn={armSheet}
         onAttachPressOut={releaseMediaSheetArm}
         onAttachPress={openSheet}
