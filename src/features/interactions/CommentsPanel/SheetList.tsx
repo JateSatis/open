@@ -105,8 +105,8 @@ export function CommentsSheetList<T>({ listRef, ...props }: CommentsSheetListPro
 
   return (
     <FlashList
-      showsHorizontalScrollIndicator={false}
       {...props}
+      showsHorizontalScrollIndicator={false}
       ref={listRef}
       showsVerticalScrollIndicator={false}
       renderScrollComponent={SheetScrollView}

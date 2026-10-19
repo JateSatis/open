@@ -61,8 +61,8 @@ const TabScrollView = forwardRef<ScrollView, ScrollViewProps>(function TabScroll
 
   return (
     <Animated.ScrollView
-      showsHorizontalScrollIndicator={false}
       {...props}
+      showsHorizontalScrollIndicator={false}
       ref={attach}
       // Растяжение края на Android спорило бы с раскрытием фото.
       overScrollMode="never"
@@ -237,8 +237,8 @@ export function InfoTabList<T>({ tab, footer, ...props }: InfoTabListProps<T>) {
       <View style={[styles.fill, !shown && styles.hidden]}>
         <FlashList
           showsVerticalScrollIndicator={false}
-          showsHorizontalScrollIndicator={false}
           {...props}
+          showsHorizontalScrollIndicator={false}
           ref={listRef}
           renderScrollComponent={TabScrollView}
           ListHeaderComponent={header}

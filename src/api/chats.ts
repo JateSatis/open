@@ -331,7 +331,7 @@ export async function listChats(): Promise<ChatSummary[]> {
   const userId = await getCurrentUserId();
 
   const [membership, subscriptions] = await Promise.all([
-    supabase.from('chat_members').select('chat_id').eq('user_id', userId),
+    supabase.from('chat_members').select('chat_id, joined_at').eq('user_id', userId),
     // Сбой подписок не должен прятать свои диалоги и группы: подписки
     // вернутся со следующим перечитыванием.
     listChatSubscriptions().catch((): Subscription[] => []),
@@ -340,6 +340,11 @@ export async function listChats(): Promise<ChatSummary[]> {
   if (membership.error) throw membership.error;
 
   const subscriptionByChat = new Map(subscriptions.map((item) => [item.chatId, item]));
+  // Мой момент входа — из моих строк, а не из участников всех чатов: та
+  // выборка общая и длинная, и лимит строк срезал бы как раз свежие вступления.
+  const joinedAtByChat = new Map(
+    (membership.data ?? []).map((row) => [row.chat_id, row.joined_at]),
+  );
   const chatIds = [
     ...new Set([
       ...(membership.data ?? []).map((row) => row.chat_id),
@@ -359,14 +364,15 @@ export async function listChats(): Promise<ChatSummary[]> {
   const peopleByChat = await fetchChatPeople(chats.map((chat) => chat.id));
 
   return chats
-    .map((chat) =>
-      toSummary(
-        chat,
-        peopleByChat.get(chat.id) ?? NO_PEOPLE,
-        userId,
-        subscriptionByChat.get(chat.id) ?? null,
-      ),
-    )
+    .map((chat) => {
+      const subscription = subscriptionByChat.get(chat.id) ?? null;
+      const summary = toSummary(chat, peopleByChat.get(chat.id) ?? NO_PEOPLE, userId, subscription);
+
+      return {
+        ...summary,
+        enteredAt: subscription?.inChatsAt ?? joinedAtByChat.get(chat.id) ?? summary.enteredAt,
+      };
+    })
     .sort(byChatListOrder);
 }
 

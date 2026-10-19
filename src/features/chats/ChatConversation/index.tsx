@@ -415,7 +415,7 @@ export function ChatConversation({
         chat: { ...thisChat, readUpTo, amMember: isMember, isChannelPosts: isPosts },
       };
     },
-    [isMember, peopleById, readUpTo, thisChat],
+    [isMember, isPosts, peopleById, readUpTo, thisChat],
   );
 
   // Пост с попом — только в «Постах» канала.

@@ -8,7 +8,6 @@ import {
   exitFragmentMode,
   getFragmentState,
   toggleFragmentMode,
-  useFragmentActiveKey,
 } from '@/features/chats/fragments/fragmentStore';
 
 type Options = {
@@ -28,8 +27,6 @@ type Options = {
  * уводит с экрана, а режим гаснет вместе с фокусом.
  */
 export function useFragmentMode({ isMember, isFocused, isSelecting }: Options) {
-  const activeKey = useFragmentActiveKey();
-
   useEffect(() => {
     if (!isFocused || isSelecting) exitFragmentMode();
   }, [isFocused, isSelecting]);
