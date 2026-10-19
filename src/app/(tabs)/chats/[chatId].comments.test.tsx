@@ -278,7 +278,13 @@ const MESSAGES = [
       commentsCount: 1,
       viewsCount: 0,
       readAt: null,
-      chat: { id: 'chat-1', name: 'Разговор', readUpTo: null, amMember: true },
+      chat: {
+        id: 'chat-1',
+        name: 'Разговор',
+        readUpTo: null,
+        amMember: true,
+        isChannelPosts: false,
+      },
     }),
   ]),
   message('m3', 3, { kind: 'voice', text: null, attachments: [voice], commentsCount: 5 }),
@@ -684,7 +690,13 @@ describe('a visitor in the comments', () => {
             commentsCount: 1,
             viewsCount: 0,
             readAt: null,
-            chat: { id: 'chat-2', name: 'Другой', readUpTo: null, amMember: false },
+            chat: {
+              id: 'chat-2',
+              name: 'Другой',
+              readUpTo: null,
+              amMember: false,
+              isChannelPosts: false,
+            },
           }),
         ]),
         message('m1', 1),
@@ -1086,7 +1098,12 @@ describe('fragment quote over a comment', () => {
     await waitFor(() => expect(screen.queryByTestId('fragment-panel')).toBeNull());
     expect(await screen.findByTestId('quote-highlight')).toBeTruthy();
     expect(jest.mocked(trackClusterEvent)).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: 'quote_followed', messageId: 'm1', rangeStart: 6, rangeEnd: 8 }),
+      expect.objectContaining({
+        kind: 'quote_followed',
+        messageId: 'm1',
+        rangeStart: 6,
+        rangeEnd: 8,
+      }),
     );
   });
 

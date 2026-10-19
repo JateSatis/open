@@ -18,7 +18,10 @@ export type ShownPerson = { key: string; name: string; avatarUrl: string | null 
 export type ReactionBadgeProps = {
   emoji: string;
   count: number;
-  /** Один-два поставивших — их аватары вместо числа. `null` — число. */
+  /**
+   * Один-два поставивших — их аватары вместо числа. `null` — число. Пустой
+   * список — под эмодзи ничего (одна реакция в посте канала).
+   */
   people: readonly ShownPerson[] | null;
   mine: boolean;
   tone: ReactionsTone;
@@ -74,7 +77,7 @@ export function ReactionBadge({
         </View>
 
         <View style={styles.badgeLabel}>
-          {people ? (
+          {people?.length === 0 ? null : people ? (
             <View testID={`reaction-people-${emoji}`} style={styles.people}>
               {people.map((person, index) => (
                 <View

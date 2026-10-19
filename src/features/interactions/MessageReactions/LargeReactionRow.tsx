@@ -2,7 +2,7 @@ import { useCallback, useMemo } from 'react';
 
 import { MemberReactionRow } from './MemberReactionRow';
 import type { ShownPerson } from './ReactionBadge';
-import type { BubbleReactionsProps, ReactionsLayout } from './types';
+import { isMergedLayout, type BubbleReactionsProps, type ReactionsLayout } from './types';
 
 import type { MessageReactions as Reactions } from '@/api/reactionCounts';
 import { mergedCounts, rowOrder, shownReactors } from '@/features/interactions/reactionState';
@@ -11,14 +11,14 @@ import { mergedCounts, rowOrder, shownReactors } from '@/features/interactions/r
 function largeRowEntries(reactions: Reactions, layout: ReactionsLayout): [string, number][] {
   const { mine } = reactions;
 
-  if (layout === 'merged') return rowOrder(mergedCounts(reactions), mine?.emoji ?? null);
+  if (isMergedLayout(layout)) return rowOrder(mergedCounts(reactions), mine?.emoji ?? null);
 
   return rowOrder(reactions.members, mine?.audience === 'member' ? mine.emoji : null);
 }
 
 /**
- * Крупный ряд: у сообщения — реакции участников, у комментария — все. Нет
- * реакций — ничего, и места под ряд в строке нет.
+ * Крупный ряд: у сообщения — реакции участников, у комментария и поста
+ * канала — все. Нет реакций — ничего, и места под ряд нет.
  */
 export function LargeReactionRow({
   memoryKey,
@@ -31,13 +31,16 @@ export function LargeReactionRow({
 }: BubbleReactionsProps) {
   const entries = useMemo(() => largeRowEntries(reactions, layout), [layout, reactions]);
   const { mine } = reactions;
-  const mineHere =
-    layout === 'merged' || mine?.audience === 'member' ? (mine?.emoji ?? null) : null;
-  // У сообщения ряд участников нажимает только участник; общий ряд комментария — любой.
-  const canTap = Boolean(onToggle) && (layout === 'merged' || audience === 'member');
+  const merged = isMergedLayout(layout);
+  const mineHere = merged || mine?.audience === 'member' ? (mine?.emoji ?? null) : null;
+  // У сообщения ряд участников нажимает только участник; общий ряд — любой.
+  const canTap = Boolean(onToggle) && (merged || audience === 'member');
 
   const peopleOf = useCallback(
     (emoji: string, count: number): ShownPerson[] | null => {
+      // Пост канала: аватаров нет никогда — одна реакция без подписи, дальше число.
+      if (layout === 'mergedCounts') return count === 1 ? [] : null;
+
       const reactors = shownReactors(
         reactions,
         emoji,

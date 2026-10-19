@@ -3,10 +3,20 @@ import type { ReactionsTone } from './tones';
 import type { MessageReactions as Reactions, ReactionAudience } from '@/api/reactionCounts';
 
 /**
- * Как реакции разложены по облачку: у сообщения — ряд участников и строка
- * зрителей отдельно, у комментария — один общий ряд.
+ * Как реакции разложены по облачку:
+ * - `split` — у сообщения чата: ряд участников и строка зрителей отдельно;
+ * - `merged` — у комментария: один общий ряд, под реакцией аватары
+ *   одного-двух поставивших;
+ * - `mergedCounts` — у поста канала: один общий ряд без аватаров — у одной
+ *   реакции только эмодзи, у нескольких число.
+ * В обоих общих рядах реакцию нажимает любой — участник и зритель.
  */
-export type ReactionsLayout = 'split' | 'merged';
+export type ReactionsLayout = 'split' | 'merged' | 'mergedCounts';
+
+/** Общий ряд: участники и зрители сложены, строки зрителей нет. */
+export function isMergedLayout(layout: ReactionsLayout): boolean {
+  return layout !== 'split';
+}
 
 /** Свежие имя и фото человека — из участников чата, если он там есть. */
 export type ResolvePerson = (

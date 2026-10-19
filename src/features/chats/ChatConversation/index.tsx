@@ -412,7 +412,7 @@ export function ChatConversation({
         ...message,
         authorName: author?.displayName ?? null,
         authorAvatarUrl: author?.avatarUrl ?? null,
-        chat: { ...thisChat, readUpTo, amMember: isMember },
+        chat: { ...thisChat, readUpTo, amMember: isMember, isChannelPosts: isPosts },
       };
     },
     [isMember, peopleById, readUpTo, thisChat],
