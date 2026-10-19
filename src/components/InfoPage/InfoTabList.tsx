@@ -19,12 +19,10 @@ import {
   type ScrollViewProps,
 } from 'react-native';
 import Animated, {
-  scrollTo,
   useAnimatedReaction,
   useAnimatedRef,
   useScrollOffset,
   useSharedValue,
-  runOnJS,
   type AnimatedRef,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -64,7 +62,7 @@ const TabScrollView = forwardRef<ScrollView, ScrollViewProps>(function TabScroll
       {...props}
       showsHorizontalScrollIndicator={false}
       ref={attach}
-      // Растяжение края на Android спорило бы с раскрытием фото.
+      // Растяжение края на Android растягивало бы список под неподвижным фото.
       overScrollMode="never"
       showsVerticalScrollIndicator={false}
     />
@@ -89,7 +87,7 @@ export type InfoTabListProps<T> = Omit<
  */
 export function InfoTabList<T>({ tab, footer, ...props }: InfoTabListProps<T>) {
   const scroll = useInfoScroll();
-  const { geometry, listTop, stickY, viewportHeight } = scroll;
+  const { listTop, stickY, viewportHeight } = scroll;
   const insets = useSafeAreaInsets();
   const listRef = useRef<FlashListRef<T>>(null);
   const animatedRef = useAnimatedRef<Animated.ScrollView>();
@@ -97,7 +95,7 @@ export function InfoTabList<T>({ tab, footer, ...props }: InfoTabListProps<T>) {
   const [initialY] = useState(scroll.initialOffset);
   // Список встаёт на своё начальное смещение только когда содержимого уже
   // хватает: раньше нативный скролл обрезал бы его до нуля, и шапка
-  // мелькнула бы раскрытым фото. До того список не виден и шапку не ведёт.
+  // мелькнула бы развёрнутой. До того список не виден и шапку не ведёт.
   const positioned = useSharedValue(initialY === 0);
   const [shown, setShown] = useState(initialY === 0);
   const [contentHeight, setContentHeight] = useState(0);
@@ -114,39 +112,15 @@ export function InfoTabList<T>({ tab, footer, ...props }: InfoTabListProps<T>) {
     [offset, register, tab],
   );
 
-  const { scrollY, activeTab, dragging, expanded, onThreshold } = scroll;
-  const { expand, expandThreshold } = geometry;
+  const { scrollY, activeTab, dragging } = scroll;
 
-  // Активная вкладка ведёт шапку. Инерция, долетевшая до верха, раскрывать
-  // фото не должна: раскрытие — только пальцем.
+  // Активная вкладка ведёт шапку.
   useAnimatedReaction(
     () => offset.value,
-    (y, previous) => {
+    (y) => {
       if (activeTab.value !== tab || !positioned.value) return;
 
       scrollY.set(y);
-
-      if (expand <= 0) return;
-
-      if (y <= 0.5) expanded.set(true);
-      else if (y >= expand) expanded.set(false);
-
-      if (
-        !dragging.value &&
-        !expanded.value &&
-        y < expand &&
-        previous !== null &&
-        previous >= expand
-      ) {
-        scrollTo(animatedRef, 0, expand, false);
-        return;
-      }
-
-      const mark = expand - expandThreshold;
-
-      if (dragging.value && previous !== null && previous > mark && y <= mark) {
-        runOnJS(onThreshold)();
-      }
     },
   );
 

@@ -1,44 +1,57 @@
-import { infoGeometry, snapTarget, syncedOffset } from './geometry';
+import { infoGeometry, snapTarget, syncedOffset, titleProgress } from './geometry';
 
-const withPhoto = infoGeometry({ width: 400, insetTop: 24, hasActions: true, expandable: true });
-const noPhoto = infoGeometry({ width: 400, insetTop: 24, hasActions: false, expandable: false });
+const withActions = infoGeometry({ width: 400, insetTop: 24, hasActions: true });
+const noActions = infoGeometry({ width: 400, insetTop: 24, hasActions: false });
+const narrow = infoGeometry({ width: 200, insetTop: 24, hasActions: true });
 
 describe('infoGeometry', () => {
-  it('opens a photo into a full-width square and nothing without one', () => {
-    expect(withPhoto.expandedHeight).toBeGreaterThanOrEqual(400);
-    expect(withPhoto.expand).toBe(withPhoto.expandedHeight - withPhoto.heroHeight);
-    expect(noPhoto.expand).toBe(0);
-    expect(noPhoto.expandedHeight).toBe(noPhoto.heroHeight);
+  it('starts with a full-width photo, at least square', () => {
+    expect(withActions.heroHeight).toBe(400);
+    expect(noActions.heroHeight).toBe(400);
   });
 
-  it('puts the action row under the name, and leaves room for it only when there are actions', () => {
-    expect(withPhoto.actionsTop).toBeGreaterThan(withPhoto.nameTop);
-    expect(withPhoto.heroHeight).toBeGreaterThan(noPhoto.heroHeight);
+  it('keeps the name and actions clear of the bar on a narrow screen', () => {
+    expect(narrow.heroHeight).toBeGreaterThan(200);
+    expect(narrow.nameTop).toBeGreaterThan(narrow.barBottom);
+  });
+
+  it('puts the name at the bottom of the photo, above the actions when there are any', () => {
+    expect(withActions.actionsTop).toBeGreaterThan(withActions.nameTop);
+    expect(noActions.nameTop).toBeGreaterThan(withActions.nameTop);
+    expect(withActions.actionsTop).toBeLessThan(withActions.heroHeight);
+  });
+
+  it('collapses once the photo bottom reaches the bar', () => {
+    expect(withActions.collapse).toBe(withActions.heroHeight - withActions.barBottom);
+  });
+});
+
+describe('titleProgress', () => {
+  const { titleStart, titleShift, nameTop, barBottom, collapse } = withActions;
+
+  it('keeps the name on the photo while it rides up, and moves it to the bar before it reaches it', () => {
+    expect(titleProgress(-50, withActions)).toBe(0);
+    expect(titleProgress(0, withActions)).toBe(0);
+    expect(titleProgress(titleStart, withActions)).toBe(0);
+    expect(titleStart + titleShift).toBe(nameTop - barBottom);
+    expect(titleProgress(nameTop - barBottom, withActions)).toBe(1);
+    expect(titleProgress(collapse + 500, withActions)).toBe(1);
   });
 });
 
 describe('snapTarget', () => {
-  const { expand, collapse, expandThreshold } = withPhoto;
+  const { collapse, titleStart: start, titleShift } = withActions;
 
-  it('keeps the photo open once pulled past the threshold, springs back otherwise', () => {
-    expect(snapTarget(expand - expandThreshold - 1, withPhoto, false)).toBe(0);
-    expect(snapTarget(expand - expandThreshold + 5, withPhoto, false)).toBe(expand);
+  it('never leaves the name halfway between the photo and the bar', () => {
+    expect(snapTarget(start + titleShift * 0.3, withActions)).toBe(start);
+    expect(snapTarget(start + titleShift * 0.7, withActions)).toBe(start + titleShift);
   });
 
-  it('closes an open photo from its own side of the threshold', () => {
-    expect(snapTarget(expandThreshold + 5, withPhoto, true)).toBe(expand);
-    expect(snapTarget(expandThreshold - 5, withPhoto, true)).toBe(0);
-  });
-
-  it('never leaves the header half-collapsed', () => {
-    expect(snapTarget(expand + collapse * 0.3, withPhoto, false)).toBe(expand);
-    expect(snapTarget(expand + collapse * 0.7, withPhoto, false)).toBe(expand + collapse);
-  });
-
-  it('leaves the rest alone: settled states and the scrolled content', () => {
-    expect(snapTarget(0, withPhoto, true)).toBeNull();
-    expect(snapTarget(expand, withPhoto, false)).toBeNull();
-    expect(snapTarget(expand + collapse + 300, withPhoto, false)).toBeNull();
+  it('leaves the rest alone: the rest position, a pull-down, the photo midway and the content', () => {
+    expect(snapTarget(0, withActions)).toBeNull();
+    expect(snapTarget(-40, withActions)).toBeNull();
+    expect(snapTarget(start / 2, withActions)).toBeNull();
+    expect(snapTarget(collapse + 300, withActions)).toBeNull();
   });
 });
 
