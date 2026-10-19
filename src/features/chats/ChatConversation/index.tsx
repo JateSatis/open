@@ -3,7 +3,6 @@ import { useIsFocused, useNavigation, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   ActivityIndicator,
-  BackHandler,
   FlatList,
   Keyboard,
   useWindowDimensions,
@@ -21,12 +20,18 @@ import type { Pop } from '@/api/pops';
 import type { DraftPop } from '@/features/chats/composerDraftStore';
 import type { LiveQuote } from '@/features/chats/messages/types';
 import { LoadFailed } from '@/components/LoadFailed';
+import {
+  useSlidePageBack,
+  useSlidePageLeaveGuard,
+  useSlidePageSwipeStart,
+} from '@/components/SlidePage';
 import { Text } from '@/components/Text';
 import { useMarkChannelSectionRead } from '@/features/channels/useMarkChannelSectionRead';
 import { subscribersLabel } from '@/features/channels/subscriberText';
 import { ChatFooter, modePlate } from '@/features/chats/ChatFooter';
 import { ChatMenu } from '@/features/chats/ChatMenu';
 import { ChatScreenHeader } from '@/features/chats/ChatScreenHeader';
+import { closeEmojiPanel } from '@/features/chats/EmojiPanel/useEmojiPanel';
 import { ChatSearchHeader } from '@/features/chats/chatSearch/ChatSearchHeader';
 import { ChatSearchPlate } from '@/features/chats/chatSearch/ChatSearchPlate';
 import { ChatSearchResults } from '@/features/chats/chatSearch/ChatSearchResults';
@@ -512,17 +517,21 @@ export function ChatConversation({
   // Системный «назад» в правке выходит из правки, а не из чата.
   // На время выбора «назад» принадлежит выбору.
   const selectionActive = selection.isActive;
+  const backFromEdit = useCallback(() => void leaveEdit(), [leaveEdit]);
 
-  useEffect(() => {
-    if (!isEditing || selectionActive) return;
+  useSlidePageBack(isFocused && isEditing && !selectionActive, backFromEdit);
 
-    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
-      void leaveEdit();
-      return true;
-    });
+  // Свайп страницы посреди правки: страница встаёт на место, пока правка
+  // спрашивает, выходить ли.
+  useSlidePageLeaveGuard(
+    useCallback(
+      () => (readChatDraft(chatId).mode?.type === 'edit' ? leaveEdit() : null),
+      [chatId, leaveEdit],
+    ),
+  );
 
-    return () => subscription.remove();
-  }, [isEditing, leaveEdit, selectionActive]);
+  // Страницу потянули — панель эмодзи не едет вместе с ней.
+  useSlidePageSwipeStart(useCallback(() => void closeEmojiPanel('chat'), []));
 
   // Уход из чата посреди правки — тем же выходом: с вопросом, если что-то изменено.
   useEffect(
@@ -542,17 +551,10 @@ export function ChatConversation({
   const { isActive: isSelecting, clear: clearSelection } = selection;
 
   useEffect(() => {
-    if (!isSelecting) return;
+    if (isSelecting) Keyboard.dismiss();
+  }, [isSelecting]);
 
-    Keyboard.dismiss();
-
-    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
-      clearSelection();
-      return true;
-    });
-
-    return () => subscription.remove();
-  }, [clearSelection, isSelecting]);
+  useSlidePageBack(isFocused && isSelecting, clearSelection);
 
   const { openComment } = navigation;
   const openForwardedComment = useCallback(

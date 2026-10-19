@@ -1,14 +1,16 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { Stack, useIsFocused, useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
+import { useIsFocused, useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, useWindowDimensions, View } from 'react-native';
-import { useSharedValue, withTiming } from 'react-native-reanimated';
+import { useDerivedValue, useSharedValue, withTiming } from 'react-native-reanimated';
 
 import { styles } from './styles';
 
 import type { Channel } from '@/api/channels';
 import type { ChannelRef } from '@/api/chats';
 import { LoadFailed } from '@/components/LoadFailed';
+import { PageBar } from '@/components/PageBar';
+import { SlidePage, useSlideBack, type SlideBack } from '@/components/SlidePage';
 import { SegmentedControl } from '@/components/SegmentedControl';
 import { Text } from '@/components/Text';
 import { ChannelMenu } from '@/features/channels/ChannelMenu';
@@ -50,6 +52,10 @@ export type ChannelScreenProps = {
 /**
  * Экран канала: под шапкой — «Посты» | «Попсы», разделы листаются свайпом и
  * тапом по сегменту. «Посты» — переписка чата постов, «Попсы» — сетка попсов канала.
+ *
+ * Экран — страница (`SlidePage`): уезжает свайпом вправо за пальцем. С
+ * «Попсов» свайп вправо сначала листает на «Посты», с «Постов» — уводит
+ * страницу. Под ней пусто (холодный старт ссылкой) — назад ведёт в «Чаты».
  */
 export function ChannelScreen({
   channelId,
@@ -61,28 +67,37 @@ export function ChannelScreen({
   const query = useChannel(channelId);
   const channel = query.data;
   const state = loadStateOf(query);
+  const router = useRouter();
+  const toChats = useCallback(() => router.replace('/chats'), [router]);
+  // Одна на маршрут: заглушка и разделы въезжают и уходят одним движением.
+  const slide = useSlideBack(toChats);
 
   if (!channel) {
     return (
-      <View style={[styles.centered, { backgroundColor: theme.background }]}>
-        <Stack.Screen options={{ title: 'Канал' }} />
-        {state === 'paused' ? (
-          // Без сети запрос стоит на паузе: крутилка обещала бы данные, которых не будет.
-          <Text color="textSecondary">Нет связи</Text>
-        ) : state === 'failed' ? (
-          <LoadFailed
-            message="Не удалось открыть канал"
-            onRetry={() => reloadMissing(queryClient, [channelQueryKey(channelId)])}
-          />
-        ) : (
-          <ActivityIndicator accessibilityLabel="Загрузка канала" />
-        )}
-      </View>
+      <SlidePage slide={slide}>
+        <PageBar onBack={slide.close}>
+          <Text variant="bodyBold">Канал</Text>
+        </PageBar>
+        <View style={[styles.centered, { backgroundColor: theme.background }]}>
+          {state === 'paused' ? (
+            // Без сети запрос стоит на паузе: крутилка обещала бы данные, которых не будет.
+            <Text color="textSecondary">Нет связи</Text>
+          ) : state === 'failed' ? (
+            <LoadFailed
+              message="Не удалось открыть канал"
+              onRetry={() => reloadMissing(queryClient, [channelQueryKey(channelId)])}
+            />
+          ) : (
+            <ActivityIndicator accessibilityLabel="Загрузка канала" />
+          )}
+        </View>
+      </SlidePage>
     );
   }
 
   return (
     <ChannelSections
+      slide={slide}
       channel={channel}
       initialIndex={SECTION_KEYS.indexOf(sectionRequest?.section ?? section)}
       sectionRequest={sectionRequest}
@@ -91,12 +106,13 @@ export function ChannelScreen({
 }
 
 type ChannelSectionsProps = {
+  slide: SlideBack;
   channel: Channel;
   initialIndex: number;
   sectionRequest?: SectionRequest;
 };
 
-function ChannelSections({ channel, initialIndex, sectionRequest }: ChannelSectionsProps) {
+function ChannelSections({ slide, channel, initialIndex, sectionRequest }: ChannelSectionsProps) {
   const theme = useTheme();
   const { width } = useWindowDimensions();
   const router = useRouter();
@@ -104,6 +120,10 @@ function ChannelSections({ channel, initialIndex, sectionRequest }: ChannelSecti
   const focused = useIsFocused();
   const position = useSharedValue(initialIndex);
   const [index, setIndex] = useState(initialIndex);
+  // Тянуть страницу можно с «Постов»: с «Попсов» свайп вправо листает назад.
+  const canSwipeBack = useDerivedValue(() => position.value < 0.01);
+  const { makeSwipe } = slide;
+  const swipeBack = useMemo(() => makeSwipe(canSwipeBack), [canSwipeBack, makeSwipe]);
   const { subscription } = useChannelSubscription(channel.id);
   const navigation = useNavigation();
   const searchOpen = useLocalSearchParams<ChatSearchParams>().search === '1';
@@ -191,7 +211,10 @@ function ChannelSections({ channel, initialIndex, sectionRequest }: ChannelSecti
       subtitle,
       right: <ChannelMenu channelId={channel.id} isOwner={isOwner} />,
       onTitlePress: () =>
-        router.push({ pathname: '/chats/channel-info/[channelId]', params: { channelId: channel.id } }),
+        router.push({
+          pathname: '/chats/channel-info/[channelId]',
+          params: { channelId: channel.id },
+        }),
     }),
     [channel.id, isOwner, router, subtitle],
   );
@@ -218,30 +241,33 @@ function ChannelSections({ channel, initialIndex, sectionRequest }: ChannelSecti
   );
 
   return (
-    <View style={[styles.flex, { backgroundColor: theme.background }]}>
-      {/* Поиск по постам ставит своё поле на место шапки — сегменты над ним
+    <SlidePage slide={slide} swipe={swipeBack}>
+      <View style={[styles.flex, { backgroundColor: theme.background }]}>
+        {/* Поиск по постам ставит своё поле на место шапки — сегменты над ним
           оказались бы под статус-баром. */}
-      {searching ? null : (
-        <View style={styles.segments}>
-          <SegmentedControl
-            segments={SECTIONS}
-            position={position}
-            selectedIndex={index}
-            onSelect={select}
-            badges={badges}
-          />
-        </View>
-      )}
+        {searching ? null : (
+          <View style={styles.segments}>
+            <SegmentedControl
+              segments={SECTIONS}
+              position={position}
+              selectedIndex={index}
+              onSelect={select}
+              badges={badges}
+            />
+          </View>
+        )}
 
-      <SectionPager
-        position={position}
-        width={width}
-        pages={pages}
-        index={index}
-        onIndexChange={setIndex}
-      />
+        <SectionPager
+          position={position}
+          width={width}
+          pages={pages}
+          index={index}
+          onIndexChange={setIndex}
+          waitFor={swipeBack}
+        />
 
-      <SubscribeBar channelId={channel.id} section={SECTION_KEYS[index]} />
-    </View>
+        <SubscribeBar channelId={channel.id} section={SECTION_KEYS[index]} />
+      </View>
+    </SlidePage>
   );
 }

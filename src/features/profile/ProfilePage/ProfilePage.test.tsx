@@ -1,8 +1,11 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
+import { Gesture } from 'react-native-gesture-handler';
+import { makeMutable } from 'react-native-reanimated';
 
 import { ProfilePage } from './index';
 
 import type { Profile } from '@/api/profile';
+import type { SlideBack } from '@/components/InfoPage';
 import { Text } from '@/components/Text';
 
 jest.mock('expo-router', () => ({ useIsFocused: () => true }));
@@ -67,11 +70,19 @@ describe('ProfilePage', () => {
   });
 
   it('goes back from the arrow on the photo', async () => {
-    const onBack = jest.fn();
+    const close = jest.fn();
+    const slideBack: SlideBack = {
+      offset: makeMutable(0),
+      close,
+      makeSwipe: () => Gesture.Pan(),
+      interceptBack: () => () => undefined,
+      guardLeave: () => () => undefined,
+      onSwipeStart: () => () => undefined,
+    };
 
-    await render(<ProfilePage profile={profile} onBack={onBack} />);
+    await render(<ProfilePage profile={profile} slideBack={slideBack} />);
     await fireEvent.press(screen.getByTestId('info-back'));
 
-    expect(onBack).toHaveBeenCalled();
+    expect(close).toHaveBeenCalled();
   });
 });

@@ -4,6 +4,7 @@ import { KeyboardController, useKeyboardHandler } from 'react-native-keyboard-co
 import { runOnJS, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useSlidePage } from '@/components/SlidePage/context';
 import {
   attachEmojiPanel,
   detachEmojiPanel,
@@ -223,20 +224,35 @@ export function useEmojiPanel(
   );
 
   // «Назад» закрывает панель, а не экран. В окне `Modal` — через `closeEmojiPanel`.
+  // Поле переписки на странице, которая сама ведёт «назад» (`SlidePage`), —
+  // через неё: системный жест с ходом туда, а не в `BackHandler`.
+  const page = useSlidePage();
+
   useEffect(() => {
     if (mode !== 'emoji') return;
 
     closers.set(owner, close);
-    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
-      close();
-      return true;
-    });
+
+    const intercept =
+      page && owner === 'chat'
+        ? page.interceptBack(() => {
+            close();
+            return true;
+          })
+        : null;
+    const subscription = intercept
+      ? null
+      : BackHandler.addEventListener('hardwareBackPress', () => {
+          close();
+          return true;
+        });
 
     return () => {
-      subscription.remove();
+      intercept?.();
+      subscription?.remove();
       if (closers.get(owner) === close) closers.delete(owner);
     };
-  }, [close, mode, owner]);
+  }, [close, mode, owner, page]);
 
   // Экран ушёл под другой — панель закрывается, «назад» достаётся верхнему экрану.
   // Закрывается следующим кадром — уже под новым экраном, не мешая его въезду.

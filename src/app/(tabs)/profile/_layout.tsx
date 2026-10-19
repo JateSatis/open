@@ -1,5 +1,6 @@
 import { Stack } from 'expo-router';
 
+import { SLIDE_PAGE } from '@/components/SlidePage/screenOptions';
 import { ConnectionTitle } from '@/features/connection/ConnectionTitle';
 
 export default function ProfileLayout() {
@@ -15,11 +16,9 @@ export default function ProfileLayout() {
         name="account"
         options={{ headerTitle: () => <ConnectionTitle title="Аккаунт" /> }}
       />
-      {/* Static "edit" and "account" win over this route, so they are unambiguous. */}
-      <Stack.Screen
-        name="[userId]"
-        options={{ headerTitle: () => <ConnectionTitle title="Профиль" /> }}
-      />
+      {/* Static "edit" and "account" win over this route, so they are unambiguous.
+          Чужой профиль — страница (см. `SlidePage`). */}
+      <Stack.Screen name="[userId]" options={SLIDE_PAGE} />
     </Stack>
   );
 }

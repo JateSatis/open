@@ -1,7 +1,11 @@
-import { Stack, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
+import { useCallback } from 'react';
 
 import { Button } from '@/components/Button';
+import { PageBar } from '@/components/PageBar';
 import { Screen } from '@/components/Screen';
+import { SlidePage, useSlideBack } from '@/components/SlidePage';
+import { Text } from '@/components/Text';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
 import { ProfileLoader } from '@/features/profile/ProfileLoader';
 import { ProfilePage } from '@/features/profile/ProfilePage';
@@ -12,32 +16,43 @@ import { useProfile } from '@/features/profile/queries';
  * внутри «Чатов», чтобы «назад» возвращал в чат, а не в свой профиль.
  * `stack` — в каком стеке открыт: туда же кладутся его «Диалоги».
  *
- * Загруженный профиль — без шапки стека: фото во всю ширину, «назад» на нём.
- * Пока грузится или не загрузился — обычная шапка, чтобы было куда уйти.
+ * Профиль — страница: въезжает справа и уезжает свайпом за пальцем туда,
+ * откуда открыт. Загруженный — фото во всю ширину, «назад» на нём; пока
+ * грузится или не загрузился — простая шапка, чтобы было куда уйти. Под ним
+ * пусто (открыли ссылкой) — назад ведёт в корень вкладки.
  */
 export function UserProfile({ userId, stack }: { userId: string; stack: 'chats' | 'profile' }) {
   const router = useRouter();
   const currentUserId = useCurrentUserId();
   const { data: profile, isPending, error, refetch } = useProfile(userId);
   const isMe = currentUserId !== null && userId === currentUserId;
+  const toRoot = useCallback(
+    () => router.replace(stack === 'chats' ? '/chats' : '/profile'),
+    [router, stack],
+  );
+  // Одна на маршрут: заглушка и профиль въезжают и уходят одним движением.
+  const slide = useSlideBack(toRoot);
 
   if (!profile) {
     return (
-      <Screen edges={['bottom']}>
-        <Stack.Screen options={{ headerShown: true, title: 'Профиль' }} />
-        <ProfileLoader isPending={isPending} error={error} onRetry={() => refetch()}>
-          {null}
-        </ProfileLoader>
-      </Screen>
+      <SlidePage slide={slide}>
+        <PageBar onBack={slide.close}>
+          <Text variant="bodyBold">Профиль</Text>
+        </PageBar>
+        <Screen edges={['bottom']}>
+          <ProfileLoader isPending={isPending} error={error} onRetry={() => refetch()}>
+            {null}
+          </ProfileLoader>
+        </Screen>
+      </SlidePage>
     );
   }
 
   return (
     <>
-      <Stack.Screen options={{ headerShown: false }} />
       <ProfilePage
         profile={profile}
-        onBack={() => router.back()}
+        slideBack={slide}
         actions={
           isMe ? null : (
             <>

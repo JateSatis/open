@@ -14,7 +14,7 @@ jest.mock('expo-router', () => ({
   useIsFocused: () => true,
   Stack: { Screen: () => null },
   useLocalSearchParams: jest.fn(),
-  useRouter: () => ({ push: mockPush, back: mockBack }),
+  useRouter: () => ({ push: mockPush, back: mockBack, canGoBack: () => true }),
 }));
 
 jest.mock('@/api/profile', () => ({ getProfile: jest.fn() }));

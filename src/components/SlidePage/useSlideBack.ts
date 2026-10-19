@@ -1,5 +1,5 @@
 import { useIsFocused, useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BackHandler, useWindowDimensions } from 'react-native';
 import { Gesture } from 'react-native-gesture-handler';
 import {
@@ -24,6 +24,13 @@ const ACTIVATION_X = 14;
 /** Вертикальный сдвиг раньше этого отдаёт касание прокрутке. */
 const FAIL_Y = 12;
 
+/**
+ * Уход со страницы требует ответа (правка сообщения: «выйти без
+ * сохранения?»). `null` — уходить можно сразу; обещание — страница сначала
+ * встаёт на место и уходит, только если ответ «да».
+ */
+export type LeaveGuard = () => Promise<boolean> | null;
+
 export type SlideBack = {
   /** Сдвиг страницы вправо, dp: 0 — на месте, ширина экрана — ушла. */
   offset: SharedValue<number>;
@@ -34,12 +41,23 @@ export type SlideBack = {
    * в начале касания: можно ли сейчас тянуть страницу, а не листать вкладки.
    */
   makeSwipe: (canStart: SharedValue<boolean>) => ReturnType<typeof Gesture.Pan>;
+  /**
+   * Системное «назад» сначала спрашивает этих: вернул `true` — «назад»
+   * забрано (выход из выбора, из правки), страница остаётся. Последний
+   * добавленный спрашивается первым. Отдаёт снятие.
+   */
+  interceptBack: (handler: () => boolean) => () => void;
+  /** Спросить перед уходом. Отдаёт снятие. */
+  guardLeave: (guard: LeaveGuard) => () => void;
+  /** Свайп страницы узнал себя: убрать клавиатуру и панели под пальцем. Отдаёт снятие. */
+  onSwipeStart: (listener: () => void) => () => void;
 };
 
 /**
  * Страница, которая въезжает справа и уезжает за пальцем. Экран открыт
- * прозрачным поверх переписки и без анимации стека: движение целиком здесь,
- * переписка под ним остаётся на своём месте и видна, пока страницу тянут.
+ * прозрачным поверх предыдущего и без анимации стека: движение целиком здесь,
+ * предыдущий экран под ним остаётся на своём месте и виден, пока страницу
+ * тянут.
  *
  * Свайп от самого края на Android с жестовой навигацией забирает система:
  * где она отдаёт ход жеста (predictive back), страница едет за ним через
@@ -57,6 +75,11 @@ export function useSlideBack(fallback?: () => void): SlideBack {
   const leavingNow = useSharedValue(false);
   /** Где был палец в начале системного жеста: страница едет на разницу. */
   const gestureStart = useSharedValue(0);
+  // Списки на всё время жизни страницы: меняются без перерисовки. Не ref:
+  // их читают и обработчики жестов.
+  const [backHandlers] = useState<(() => boolean)[]>(() => []);
+  const [guards] = useState<LeaveGuard[]>(() => []);
+  const [swipeListeners] = useState<(() => void)[]>(() => []);
 
   // Под страницей может не оказаться экрана (открыли ссылкой с холодного
   // старта) — тогда уйти туда, куда скажет владелец.
@@ -65,7 +88,11 @@ export function useSlideBack(fallback?: () => void): SlideBack {
     else fallback?.();
   }, [fallback, router]);
 
-  const close = useCallback(() => {
+  const settle = useCallback(() => {
+    offset.set(withSpring(0, Motion.pageSpring));
+  }, [offset]);
+
+  const leave = useCallback(() => {
     if (leaving.current) return;
 
     leaving.current = true;
@@ -77,9 +104,32 @@ export function useSlideBack(fallback?: () => void): SlideBack {
     );
   }, [finish, leavingNow, offset, width]);
 
-  const settle = useCallback(() => {
-    offset.set(withSpring(0, Motion.pageSpring));
-  }, [offset]);
+  const close = useCallback(() => {
+    if (leaving.current) return;
+
+    for (let i = guards.length - 1; i >= 0; i--) {
+      const answer = guards[i]();
+
+      if (answer) {
+        // Пока спрашивают, страница стоит на месте, а не висит на полпути.
+        settle();
+        void answer.then((yes) => {
+          if (yes) leave();
+        });
+        return;
+      }
+    }
+
+    leave();
+  }, [guards, leave, settle]);
+
+  const back = useCallback(() => {
+    for (let i = backHandlers.length - 1; i >= 0; i--) {
+      if (backHandlers[i]()) return;
+    }
+
+    close();
+  }, [backHandlers, close]);
 
   useEffect(() => {
     offset.set(withTiming(0, { duration: Motion.pageMs, easing: Easing.out(Easing.cubic) }));
@@ -93,7 +143,8 @@ export function useSlideBack(fallback?: () => void): SlideBack {
         gestureStart.set(event.touchX);
       },
       onProgress: (event) => {
-        if (leaving.current) return;
+        // «Назад» заберёт кто-то на странице — она за жестом не едет.
+        if (leaving.current || backHandlers.length > 0) return;
 
         const shift =
           event.edge === 'left'
@@ -103,9 +154,12 @@ export function useSlideBack(fallback?: () => void): SlideBack {
         offset.set(Math.max(0, shift));
       },
       onCancel: settle,
-      onBack: close,
+      onBack: () => {
+        if (backHandlers.length > 0) settle();
+        back();
+      },
     });
-  }, [close, focused, gestureStart, offset, settle]);
+  }, [back, backHandlers, focused, gestureStart, offset, settle]);
 
   // Где система не пускает «назад» через диспетчер (realme с выключенным
   // predictive back), кнопка и жест приходят в React Native обычным
@@ -114,12 +168,16 @@ export function useSlideBack(fallback?: () => void): SlideBack {
     if (!focused) return;
 
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
-      close();
+      back();
       return true;
     });
 
     return () => subscription.remove();
-  }, [close, focused]);
+  }, [back, focused]);
+
+  const swipeStarted = useCallback(() => {
+    swipeListeners.forEach((listener) => listener());
+  }, [swipeListeners]);
 
   const startX = useSharedValue(0);
   const startY = useSharedValue(0);
@@ -152,6 +210,9 @@ export function useSlideBack(fallback?: () => void): SlideBack {
           else if (dx < -ACTIVATION_X / 2) manager.fail();
           else if (dx > ACTIVATION_X) manager.activate();
         })
+        .onStart(() => {
+          runOnJS(swipeStarted)();
+        })
         .onUpdate((event) => {
           offset.set(Math.max(0, event.translationX));
         })
@@ -162,8 +223,31 @@ export function useSlideBack(fallback?: () => void): SlideBack {
             offset.set(withSpring(0, Motion.pageSpring));
           }
         }),
-    [close, leavingNow, offset, startX, startY, width],
+    [close, leavingNow, offset, startX, startY, swipeStarted, width],
   );
 
-  return useMemo(() => ({ offset, close, makeSwipe }), [close, makeSwipe, offset]);
+  const interceptBack = useCallback(
+    (handler: () => boolean) => addTo(backHandlers, handler),
+    [backHandlers],
+  );
+  const guardLeave = useCallback((guard: LeaveGuard) => addTo(guards, guard), [guards]);
+  const onSwipeStart = useCallback(
+    (listener: () => void) => addTo(swipeListeners, listener),
+    [swipeListeners],
+  );
+
+  return useMemo(
+    () => ({ offset, close, makeSwipe, interceptBack, guardLeave, onSwipeStart }),
+    [close, guardLeave, interceptBack, makeSwipe, offset, onSwipeStart],
+  );
+}
+
+function addTo<T>(list: T[], item: T): () => void {
+  list.push(item);
+
+  return () => {
+    const at = list.lastIndexOf(item);
+
+    if (at !== -1) list.splice(at, 1);
+  };
 }

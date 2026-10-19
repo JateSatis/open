@@ -25,6 +25,8 @@ export const Colors = {
     mediaControl: 'rgba(255, 255, 255, 0.14)',
     /** Затемнение фона под модальными окнами — одинаковое в обеих темах. */
     overlay: 'rgba(0, 0, 0, 0.5)',
+    /** Шапка экрана — как нативная шапка стека (`card` темы навигации). */
+    headerBackground: '#ffffff',
     /**
      * Дымка под панелью вкладок, снизу вверх: у края — фон экрана
      * (`tabBarScrim`), у значков — полупрозрачная (`tabBarScrimSoft`), над
@@ -138,6 +140,7 @@ export const Colors = {
     textOnMediaSecondary: 'rgba(255, 255, 255, 0.6)',
     mediaControl: 'rgba(255, 255, 255, 0.14)',
     overlay: 'rgba(0, 0, 0, 0.5)',
+    headerBackground: '#121212',
     tabBarScrim: 'rgba(0, 0, 0, 1)',
     tabBarScrimSoft: 'rgba(0, 0, 0, 0.85)',
     tabBarScrimClear: 'rgba(0, 0, 0, 0)',

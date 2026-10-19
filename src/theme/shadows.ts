@@ -7,6 +7,13 @@ export const Shadows = {
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 3 },
   },
+  /** Шапка экрана над содержимым — как тень нативной шапки стека на Android. */
+  header: {
+    elevation: 4,
+    shadowOpacity: 0.15,
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 1 },
+  },
   /** Текст и значки прямо на видео, без подложки: читаются и на светлом кадре. */
   onMedia: {
     shadowOpacity: 0.5,
