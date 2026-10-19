@@ -51,7 +51,7 @@ export const styles = StyleSheet.create({
     paddingHorizontal: Spacing.three,
     gap: Spacing.one,
   },
-  /** Реакции под мозаикой без подписи — внутри облачка, с отступами, как у подписи. */
+  /** Низ под мозаикой без подписи — реакции и полоска статуса, с отступами, как у подписи. */
   mediaReactions: {
     padding: Spacing.two,
     gap: Spacing.one,
@@ -68,12 +68,10 @@ export const styles = StyleSheet.create({
     gap: Spacing.two,
   },
   /**
-   * Место крупного ряда реакций: растягивает облачко под ряд, пока оно не
-   * упрётся в свой предел, дальше сжимается — и ряд прокручивается вбок.
+   * Место крупного ряда реакций над полоской статуса: облачко растёт под ряд,
+   * пока не упрётся в свой предел, дальше ряд прокручивается вбок.
    */
   footerReactions: {
-    flexGrow: 1,
-    flexShrink: 1,
     minWidth: 0,
   },
   footerSpacer: {

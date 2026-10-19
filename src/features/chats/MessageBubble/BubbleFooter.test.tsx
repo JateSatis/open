@@ -1,5 +1,5 @@
 import { render, screen, within } from '@testing-library/react-native';
-import { Text } from 'react-native';
+import { Text, View } from 'react-native';
 
 import { BubbleFooter } from './BubbleFooter';
 
@@ -25,18 +25,20 @@ describe('BubbleFooter', () => {
     expect(screen.queryByTestId('bubble-footer-reactions')).toBeNull();
   });
 
-  it('puts member reactions between the status and the views, visitors below the row', async () => {
+  // Полоска статуса — всегда последняя строка: реакции над ней, а не в ней.
+  it('stacks member reactions, then visitors, then the status line at the very bottom', async () => {
     await render(
-      <BubbleFooter
-        meta={<Text>14:45</Text>}
-        reactions={<Text>👍</Text>}
-        views={<Text>👁 12</Text>}
-        visitors={<Text testID="visitors">🔥 1</Text>}
-      />,
+      <View testID="bubble">
+        <BubbleFooter
+          meta={<Text>14:45</Text>}
+          reactions={<Text>👍</Text>}
+          views={<Text>👁 12</Text>}
+          visitors={<Text testID="visitors">🔥 1</Text>}
+        />
+      </View>,
     );
 
-    expect(order('bubble-footer-info')).toEqual(['14:45', '👍', '👁 12']);
-    expect(within(screen.getByTestId('bubble-footer-info')).queryByText('🔥 1')).toBeNull();
-    expect(screen.getByTestId('visitors')).toBeTruthy();
+    expect(order('bubble-footer-info')).toEqual(['14:45', '👁 12']);
+    expect(order('bubble')).toEqual(['👍', '🔥 1', '14:45', '👁 12']);
   });
 });

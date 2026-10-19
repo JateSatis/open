@@ -74,7 +74,7 @@ export type MessageBubbleProps = {
   onReactionToggle?: (emoji: string) => void;
   /**
    * Как разложены реакции: у сообщения — крупный ряд участников и строка
-   * зрителей, у комментария — один общий ряд.
+   * зрителей, у комментария и поста канала — один общий ряд.
    */
   reactionsLayout?: ReactionsLayout;
   /** Свежие имя и фото поставившего реакцию — из участников чата. */
@@ -176,7 +176,7 @@ export function MessageBubble({
   const [tiles] = useState(createTileRegistry);
   const anyReactions = hasReactions(message.reactions);
   const hasLargeRow =
-    reactionsLayout === 'merged' ? anyReactions : Object.keys(message.reactions.members).length > 0;
+    reactionsLayout === 'split' ? Object.keys(message.reactions.members).length > 0 : anyReactions;
   const hasVisitorLine =
     reactionsLayout === 'split' && Object.keys(message.reactions.visitors).length > 0;
   const textColor = isOwn ? 'primaryText' : 'text';
@@ -234,13 +234,17 @@ export function MessageBubble({
   const namesAuthor = !isOwn && showAuthor;
   const showAuthorLine = namesAuthor || Boolean(sourceChat);
 
+  // Полоска статуса лежит поверх медиа, только пока под ним ничего нет: ни
+  // подписи, ни одной реакции. Иначе она — нижняя строка облачка под медиа.
+  // Признак один на всё: от него же скругление низа мозаики и фон облачка.
+  const metaOnMedia = !message.text && !anyReactions;
   // Без подписи, имени, цитаты и реакций у альбома облачка нет — только
   // мозаика, и в её зазорах виден фон чата, как в Telegram. С первой реакцией
-  // облачко появляется: реакции стоят в нём, под мозаикой.
-  const bareMedia = !message.text && !showAuthorLine && !hasAnnotations && !anyReactions;
+  // облачко появляется: реакции и полоска стоят в нём, под мозаикой.
+  const bareMedia = metaOnMedia && !showAuthorLine && !hasAnnotations;
   // Какими краями мозаика касается краёв облачка: там её углы скруглены.
   const mosaicTop = !showAuthorLine && !hasAnnotations;
-  const mosaicBottom = !message.text && !anyReactions;
+  const mosaicBottom = metaOnMedia;
   const mosaicEdges = useMemo(
     () => ({ top: mosaicTop, bottom: mosaicBottom }),
     [mosaicBottom, mosaicTop],
@@ -382,15 +386,19 @@ export function MessageBubble({
               onArm={isPopPost ? undefined : armViewer}
               onDisarm={isPopPost ? undefined : disarmViewer}
             >
-              {message.text ? null : (
-                // Без подписи время со статусом — плашкой в левом нижнем углу
-                // медиа, просмотры — в правом.
-                <View pointerEvents="box-none" style={styles.mediaOverlay}>
+              {metaOnMedia ? (
+                // Под медиа ничего нет — время со статусом плашкой в левом
+                // нижнем углу медиа, просмотры — в правом.
+                <View
+                  testID="media-meta-overlay"
+                  pointerEvents="box-none"
+                  style={styles.mediaOverlay}
+                >
                   {meta('overlay')}
                   <View style={styles.footerSpacer} />
                   {views('overlay')}
                 </View>
-              )}
+              ) : null}
             </MediaAttachmentGrid>
 
             {message.text ? (
@@ -398,13 +406,9 @@ export function MessageBubble({
                 {body}
                 {footer}
               </View>
-            ) : anyReactions ? (
-              // Под мозаикой нет времени и просмотров — ряд занимает всю ширину.
-              <View style={styles.mediaReactions}>
-                {largeRow}
-                {visitorLine}
-              </View>
-            ) : null}
+            ) : metaOnMedia ? null : (
+              <View style={styles.mediaReactions}>{footer}</View>
+            )}
           </View>
         </View>
       ) : (
