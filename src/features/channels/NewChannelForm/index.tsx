@@ -88,6 +88,8 @@ export function NewChannelForm({ onCreated }: NewChannelFormProps) {
       style={[styles.flex, { backgroundColor: theme.background }, keyboardInsetStyle]}
     >
       <KeyboardAwareScrollView
+        showsVerticalScrollIndicator={false}
+        showsHorizontalScrollIndicator={false}
         style={styles.flex}
         contentContainerStyle={styles.fields}
         keyboardShouldPersistTaps="handled"

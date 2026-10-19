@@ -33,9 +33,7 @@ export function ForwardChatPicker({ onPick }: ForwardChatPickerProps) {
   // я не могу, пересылку база отвергла бы.
   const found = useMemo(
     () =>
-      chats.filter(
-        (chat) => !chat.subscription && matchesChatQuery(chat, query, currentUserId),
-      ),
+      chats.filter((chat) => !chat.subscription && matchesChatQuery(chat, query, currentUserId)),
     [chats, currentUserId, query],
   );
 
@@ -62,16 +60,14 @@ export function ForwardChatPicker({ onPick }: ForwardChatPickerProps) {
         <ActivityIndicator accessibilityLabel="Загрузка чатов" />
       ) : (
         <FlatList
+          showsVerticalScrollIndicator={false}
+          showsHorizontalScrollIndicator={false}
           data={found}
           keyExtractor={(chat) => chat.id}
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={[styles.list, { paddingBottom: insets.bottom }]}
           renderItem={({ item }) => (
-            <ChatListItem
-              chat={item}
-              currentUserId={currentUserId}
-              onPress={onPick}
-            />
+            <ChatListItem chat={item} currentUserId={currentUserId} onPress={onPick} />
           )}
           ListEmptyComponent={
             <Text color="textSecondary" style={styles.message}>

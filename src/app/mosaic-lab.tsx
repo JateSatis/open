@@ -83,6 +83,8 @@ export default function MosaicLabScreen() {
 
   return (
     <FlatList
+      showsVerticalScrollIndicator={false}
+      showsHorizontalScrollIndicator={false}
       inverted
       data={messages}
       keyExtractor={(message) => message.id}

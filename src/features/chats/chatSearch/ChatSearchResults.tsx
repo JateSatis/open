@@ -31,6 +31,8 @@ export function ChatSearchResults({ search, onSelect }: ChatSearchResultsProps) 
       style={[StyleSheet.absoluteFill, { backgroundColor: theme.background }]}
     >
       <FlatList
+        showsVerticalScrollIndicator={false}
+        showsHorizontalScrollIndicator={false}
         data={search.hits}
         keyExtractor={(hit) => hit.id}
         keyboardShouldPersistTaps="handled"

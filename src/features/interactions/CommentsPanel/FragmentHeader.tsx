@@ -29,7 +29,8 @@ function merged(member: ReactionCounts, visitor: ReactionCounts) {
   const counts = new Map<string, number>();
 
   for (const row of [member, visitor]) {
-    for (const [emoji, count] of Object.entries(row)) counts.set(emoji, (counts.get(emoji) ?? 0) + count);
+    for (const [emoji, count] of Object.entries(row))
+      counts.set(emoji, (counts.get(emoji) ?? 0) + count);
   }
 
   return [...counts].sort((a, b) => b[1] - a[1]);
@@ -79,12 +80,16 @@ export function FragmentHeader({
     <View style={styles.fragmentHeader}>
       <View
         testID="fragment-quote"
-        style={[styles.fragmentQuote, { borderLeftColor: theme.primary, backgroundColor: theme.quoteBackground }]}
+        style={[
+          styles.fragmentQuote,
+          { borderLeftColor: theme.primary, backgroundColor: theme.quoteBackground },
+        ]}
       >
         <Text numberOfLines={4}>{quote}</Text>
       </View>
 
       <ScrollView
+        showsVerticalScrollIndicator={false}
         testID="fragment-reactions"
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -95,12 +100,16 @@ export function FragmentHeader({
             key={emoji}
             testID={`fragment-reaction-${emoji}`}
             accessibilityRole="button"
-            accessibilityLabel={mine === emoji ? `Снять реакцию ${emoji}` : `Реакция ${emoji}, ${count}`}
+            accessibilityLabel={
+              mine === emoji ? `Снять реакцию ${emoji}` : `Реакция ${emoji}, ${count}`
+            }
             accessibilityState={{ selected: mine === emoji }}
             onPress={() => toggle(emoji)}
             style={[
               styles.fragmentChip,
-              { backgroundColor: mine === emoji ? theme.messageHighlight : theme.backgroundElement },
+              {
+                backgroundColor: mine === emoji ? theme.messageHighlight : theme.backgroundElement,
+              },
             ]}
           >
             <Text variant="small">{emoji}</Text>

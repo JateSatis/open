@@ -126,6 +126,8 @@ export function ChatInviteScreen({ chatId }: ChatInviteScreenProps) {
         <LoadFailed message="Не удалось загрузить людей" onRetry={candidates.retry} />
       ) : (
         <FlatList
+          showsVerticalScrollIndicator={false}
+          showsHorizontalScrollIndicator={false}
           testID="invite-people"
           style={styles.flex}
           contentContainerStyle={styles.list}

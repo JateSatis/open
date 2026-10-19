@@ -903,6 +903,8 @@ export function ChatConversation({
             <RowRegistryContext.Provider value={rowRegistry}>
               <TileViewportContext.Provider value={measureListFrame}>
                 <FlatList
+                  showsVerticalScrollIndicator={false}
+                  showsHorizontalScrollIndicator={false}
                   ref={listRef}
                   testID="messages-list"
                   inverted

@@ -123,6 +123,7 @@ export function MemberReactionRow({
   return (
     <GestureDetector gesture={native}>
       <ScrollView
+        showsVerticalScrollIndicator={false}
         ref={scrollRef}
         testID="member-reactions"
         horizontal

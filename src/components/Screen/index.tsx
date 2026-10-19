@@ -28,13 +28,14 @@ export function Screen({
   const theme = useTheme();
 
   return (
-    <SafeAreaView
-      edges={edges}
-      style={[styles.flex, { backgroundColor: theme.background }, style]}>
+    <SafeAreaView edges={edges} style={[styles.flex, { backgroundColor: theme.background }, style]}>
       {scrollable ? (
         <ScrollView
+          showsVerticalScrollIndicator={false}
+          showsHorizontalScrollIndicator={false}
           style={styles.flex}
-          contentContainerStyle={[styles.content, contentContainerStyle]}>
+          contentContainerStyle={[styles.content, contentContainerStyle]}
+        >
           {children}
         </ScrollView>
       ) : (

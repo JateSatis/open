@@ -116,6 +116,8 @@ export default function NewChatScreen() {
         <ActivityIndicator accessibilityLabel="Загрузка пользователей" />
       ) : (
         <FlatList
+          showsVerticalScrollIndicator={false}
+          showsHorizontalScrollIndicator={false}
           style={styles.flex}
           contentContainerStyle={styles.list}
           data={people}

@@ -113,6 +113,7 @@ export default function ChatsScreen() {
         <SearchPanel query={search.query} />
       ) : (
         <FlatList
+          showsHorizontalScrollIndicator={false}
           // Список — в оставшееся под поиском место, не во весь экран: иначе
           // он вытягивал экран за нижний край, и кнопка «+» уезжала туда же.
           style={{ flex: 1 }}

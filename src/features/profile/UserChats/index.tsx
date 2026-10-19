@@ -40,6 +40,8 @@ export function UserChats({ userId }: { userId: string }) {
         </View>
       ) : (
         <FlatList
+          showsVerticalScrollIndicator={false}
+          showsHorizontalScrollIndicator={false}
           testID="user-chats-list"
           data={chats}
           keyExtractor={(chat) => chat.id}

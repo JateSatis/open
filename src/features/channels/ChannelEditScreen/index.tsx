@@ -103,8 +103,7 @@ function ChannelEditForm({ channel }: { channel: Channel }) {
       (validateUsername(cleanUsername) !== null ||
         availability.status === 'taken' ||
         availability.status === 'checking'));
-  const canSave =
-    dirty && cleanTitle !== '' && !usernameInvalid && !saving && !prepared.preparing;
+  const canSave = dirty && cleanTitle !== '' && !usernameInvalid && !saving && !prepared.preparing;
 
   const submit = useCallback(async () => {
     setError(null);
@@ -157,6 +156,8 @@ function ChannelEditForm({ channel }: { channel: Channel }) {
         }}
       />
       <KeyboardAwareScrollView
+        showsVerticalScrollIndicator={false}
+        showsHorizontalScrollIndicator={false}
         style={[styles.flex, { backgroundColor: theme.background }]}
         contentContainerStyle={[styles.content, { paddingBottom: Spacing.four + insets.bottom }]}
         keyboardShouldPersistTaps="handled"
