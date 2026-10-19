@@ -26,7 +26,14 @@ const WINDOW = 'media-picker-window';
 // его, но шапку рисуем: в ней живёт место, тап по которому закрывает шит.
 // Копия composer'а в шите без кнопки записи, но модуль всё равно подгружается.
 jest.mock('@/features/media/HoldToRecordRow', () => ({
-  HoldToRecordRow: ({ children }: { children: unknown }) => children,
+  // Строка ввода как есть; справа — «Отправить», когда она стоит на месте микрофона.
+  HoldToRecordRow: ({ children, trailing }: { children: unknown; trailing?: unknown }) =>
+    jest.requireActual('react').createElement(
+      jest.requireActual('react').Fragment,
+      null,
+      children,
+      trailing,
+    ),
 }));
 jest.mock('@/features/media', () => {
   const React = require('react');

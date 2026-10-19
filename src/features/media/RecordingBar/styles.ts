@@ -43,6 +43,10 @@ export const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'flex-end',
   },
+  hintRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   hintClip: {
     flex: 1,
     alignItems: 'flex-end',

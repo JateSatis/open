@@ -1,3 +1,4 @@
+import { SymbolView } from 'expo-symbols';
 import { useCallback, useEffect, useRef } from 'react';
 import { View } from 'react-native';
 import { GestureDetector } from 'react-native-gesture-handler';
@@ -12,9 +13,12 @@ import Animated, {
 import { LOCK_DISTANCE, styles } from './styles';
 import { useRecordGesture, type RecordGestureAction } from './useRecordGesture';
 
-import { Text } from '@/components/Text';
 import type { HoldToRecord } from '@/features/media/useHoldToRecord';
 import { useTheme } from '@/hooks/use-theme';
+import { ComposerSizes } from '@/theme';
+
+const MIC = { ios: 'mic.fill', android: 'mic', web: 'mic' } as const;
+const SEND = { ios: 'arrow.up', android: 'send', web: 'send' } as const;
 
 /**
  * Где палец относительно точки касания, на UI-потоке: за ним едут круг под
@@ -37,8 +41,9 @@ export type RecordButtonProps = {
 };
 
 /**
- * Кнопка записи «Г». Буква вместо иконки намеренно, как «M»: набор иконок
- * ещё не выбран. Сам жест — в `useRecordGesture`.
+ * Кнопка записи — микрофон в круге. Под пальцем во время записи — большой
+ * круг с микрофоном, над ним замок; закреплённая запись — со стрелкой
+ * «Отправить». Сам жест — в `useRecordGesture`.
  */
 export function RecordButton({ hold, drag, disabled = false }: RecordButtonProps) {
   const theme = useTheme();
@@ -95,7 +100,7 @@ export function RecordButton({ hold, drag, disabled = false }: RecordButtonProps
         style={[styles.slot, styles.disabled]}
       >
         <View style={[styles.button, { backgroundColor: theme.backgroundElement }]}>
-          <Text variant="bodyBold">Г</Text>
+          <SymbolView name={MIC} size={ComposerSizes.buttonIcon} tintColor={theme.textSecondary} />
         </View>
       </View>
     );
@@ -115,7 +120,7 @@ export function RecordButton({ hold, drag, disabled = false }: RecordButtonProps
             { backgroundColor: theme.backgroundElement, opacity: active ? 0 : 1 },
           ]}
         >
-          <Text variant="bodyBold">Г</Text>
+          <SymbolView name={MIC} size={ComposerSizes.buttonIcon} tintColor={theme.textSecondary} />
         </View>
 
         {active ? (
@@ -123,13 +128,21 @@ export function RecordButton({ hold, drag, disabled = false }: RecordButtonProps
             pointerEvents="none"
             style={[styles.lock, { backgroundColor: theme.backgroundElement }, lockStyle]}
           >
-            <Text variant="bodyBold" style={{ color: theme.text }}>
-              {locked ? '🔒' : '🔓'}
-            </Text>
+            <SymbolView
+              name={
+                locked
+                  ? { ios: 'lock.fill', android: 'lock', web: 'lock' }
+                  : { ios: 'lock.open', android: 'lock_open', web: 'lock_open' }
+              }
+              size={ComposerSizes.buttonIcon}
+              tintColor={theme.text}
+            />
             {locked ? null : (
-              <Text variant="bodyBold" style={{ color: theme.textSecondary }}>
-                ▲
-              </Text>
+              <SymbolView
+                name={{ ios: 'chevron.up', android: 'keyboard_arrow_up', web: 'keyboard_arrow_up' }}
+                size={ComposerSizes.buttonIcon}
+                tintColor={theme.textSecondary}
+              />
             )}
           </Animated.View>
         ) : null}
@@ -138,9 +151,11 @@ export function RecordButton({ hold, drag, disabled = false }: RecordButtonProps
           pointerEvents="none"
           style={[styles.circle, { backgroundColor: theme.primary }, circleStyle]}
         >
-          <Text variant="bodyBold" style={{ color: theme.primaryText }}>
-            {locked ? '➤' : 'Г'}
-          </Text>
+          <SymbolView
+            name={locked ? SEND : MIC}
+            size={ComposerSizes.buttonIcon + ComposerSizes.buttonIcon / 2}
+            tintColor={theme.primaryText}
+          />
         </Animated.View>
       </View>
     </GestureDetector>

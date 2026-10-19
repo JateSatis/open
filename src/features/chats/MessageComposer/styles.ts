@@ -1,6 +1,6 @@
 import { StyleSheet } from 'react-native';
 
-import { Radii, Spacing, Typography } from '@/theme';
+import { ComposerSizes, Opacity, Radii, Spacing, Typography } from '@/theme';
 
 export const styles = StyleSheet.create({
   container: {
@@ -10,36 +10,40 @@ export const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
     gap: Spacing.two,
-    paddingHorizontal: Spacing.three,
+    paddingHorizontal: Spacing.two,
     paddingVertical: Spacing.two,
+  },
+  /** Поле занимает всё место между кнопками по краям; кнопка эмодзи — внутри, слева. */
+  fieldBox: {
+    flex: 1,
+    minHeight: ComposerSizes.fieldMinHeight,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    borderWidth: 1,
+    borderRadius: Radii.lg,
+  },
+  /** Квадрат в одну строку поля: кнопка эмодзи стоит у нижнего края, когда поле растёт. */
+  fieldButton: {
+    width: ComposerSizes.fieldMinHeight,
+    height: ComposerSizes.fieldMinHeight - 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  locked: {
+    opacity: Opacity.disabled,
   },
   field: {
     flex: 1,
     maxHeight: Spacing.six + Spacing.five,
-    borderWidth: 1,
-    borderRadius: Radii.lg,
-    paddingVertical: Spacing.two,
-    paddingHorizontal: Spacing.three,
+    paddingTop: Spacing.two,
+    paddingBottom: Spacing.two,
+    paddingLeft: 0,
+    paddingRight: Spacing.three,
     ...Typography.body,
   },
   notice: {
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.three,
     borderTopWidth: StyleSheet.hairlineWidth,
-  },
-  sendWrapper: {
-    position: 'relative',
-  },
-  mediaBadge: {
-    position: 'absolute',
-    top: -Spacing.one,
-    right: -Spacing.one,
-    minWidth: Spacing.four,
-    height: Spacing.four,
-    borderRadius: Radii.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: Spacing.one,
-    borderWidth: 2,
   },
 });

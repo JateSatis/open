@@ -1,15 +1,26 @@
-import type { ReactNode, Ref } from 'react';
-import { TextInput, View } from 'react-native';
+import { SymbolView } from 'expo-symbols';
+import { useEffect, useRef, type ReactNode, type RefObject } from 'react';
+import { Pressable, TextInput, View } from 'react-native';
 
+import { ComposerButton } from './ComposerButton';
 import { styles } from './styles';
 
-import { Button } from '@/components/Button';
 import { Text } from '@/components/Text';
+import type { KeyboardOwner } from '@/features/chats/composerKeyboard';
+import {
+  deleteBefore,
+  EmojiPanel,
+  insertAt,
+  rememberEmoji,
+  useEmojiPanel,
+  type Selection,
+} from '@/features/chats/EmojiPanel';
 import { HoldToRecordRow } from '@/features/media/HoldToRecordRow';
 import { perfMark, perfMarkStart } from '@/features/media/perf';
 import { useSelectionCount } from '@/features/media/selectionStore';
 import type { LocalMedia } from '@/features/media/types';
 import { useTheme } from '@/hooks/use-theme';
+import { ComposerSizes } from '@/theme';
 
 export type MessageComposerProps = {
   text: string;
@@ -27,7 +38,7 @@ export type MessageComposerProps = {
    */
   onAttachPress?: () => void;
   /**
-   * Касание и уход пальца с кнопки медиа. Шит открывает отпускание
+   * Касание и уход пальца со скрепки. Шит открывает отпускание
    * (`onAttachPress`), а касание только готовит его — пока палец на кнопке,
    * успевает родиться окно шита.
    */
@@ -40,6 +51,11 @@ export type MessageComposerProps = {
    */
   onFieldActivate?: () => void;
   /**
+   * Чьё это поле для клавиатуры (`composerKeyboard`): под чатом, в шите медиа
+   * или в панели комментариев. По нему панель эмодзи занимает место клавиатуры.
+   */
+  keyboardOwner?: KeyboardOwner;
+  /**
    * Записанное голосовое. Без обработчика кнопки записи нет — так у копии
    * composer'а внутри шита медиа.
    */
@@ -49,14 +65,14 @@ export type MessageComposerProps = {
   /** Плашка режима над полем: ответ, пересылка. */
   plate?: ReactNode;
   /** Поле — чтобы отдать ему фокус, когда человек выбрал «Ответить». */
-  inputRef?: Ref<TextInput>;
+  inputRef?: RefObject<TextInput | null>;
   /** Отправить можно и с пустым полем: например, пересылку без подписи. */
   canSendEmpty?: boolean;
   /** Подсказка в пустом поле: «Сообщение» в чате, «Комментарий» в панели комментариев. */
   placeholder?: string;
   /**
-   * Правка: «О» сохраняет, а активна ли она — решает итог правки целиком
-   * (текст, оставленные вложения, запись), а не одно поле.
+   * Правка: справа «Сохранить», а активна ли она — решает итог правки
+   * целиком (текст, оставленные вложения, запись), а не одно поле.
    */
   edit?: {
     canSave: boolean;
@@ -67,6 +83,15 @@ export type MessageComposerProps = {
   };
 };
 
+const SEND_ICON = { ios: 'arrow.up', android: 'send', web: 'send' } as const;
+const SAVE_ICON = { ios: 'checkmark', android: 'check', web: 'check' } as const;
+
+/**
+ * Панель ввода: скрепка в круге слева, поле со всем остальным местом и
+ * кнопкой эмодзи внутри, справа — микрофон, а когда есть что отправить —
+ * «Отправить» (в правке — «Сохранить»). Эмодзи открывают панель на месте
+ * клавиатуры (`EmojiPanel`).
+ */
 export function MessageComposer({
   text,
   onChangeText,
@@ -77,6 +102,7 @@ export function MessageComposer({
   onAttachPressIn,
   onAttachPressOut,
   onFieldActivate,
+  keyboardOwner = 'chat',
   onSendVoice,
   onRecordingVoice,
   plate,
@@ -89,6 +115,21 @@ export function MessageComposer({
   // Счётчик берётся из стора выбора, а не приходит пропом: иначе выбор файла
   // перерисовывал бы весь экран чата ради цифры в кружке.
   const mediaCount = useSelectionCount();
+  const ownRef = useRef<TextInput | null>(null);
+  const fieldRef = inputRef ?? ownRef;
+  const panel = useEmojiPanel(keyboardOwner, fieldRef);
+  const selection = useRef<Selection>({ start: text.length, end: text.length });
+  const pendingSelection = useRef<Selection | null>(null);
+
+  // Текст из панели эмодзи пришёл сверху — курсор туда, где вставили, а не в конец.
+  useEffect(() => {
+    const next = pendingSelection.current;
+
+    if (!next) return;
+
+    pendingSelection.current = null;
+    fieldRef.current?.setSelection(next.start, next.end);
+  }, [fieldRef, text]);
 
   if (!canSend) {
     return (
@@ -101,6 +142,10 @@ export function MessageComposer({
   }
 
   const isEmpty = edit ? !edit.canSave : !text.trim() && mediaCount === 0 && !canSendEmpty;
+  const textLocked = edit?.textLocked ?? false;
+  // Микрофон — когда отправлять нечего; в правке — только пока сохранять
+  // нечего, а записать новое голосовое можно.
+  const showMic = Boolean(onSendVoice) && (edit ? !edit.canSave && !edit.recordDisabled : isEmpty);
 
   const submit = () => {
     if (isEmpty) return;
@@ -108,58 +153,40 @@ export function MessageComposer({
     onSend();
   };
 
+  const applyEdit = (next: { text: string; selection: Selection } | null) => {
+    if (!next) return;
+
+    selection.current = next.selection;
+    pendingSelection.current = next.selection;
+    onChangeText(next.text);
+    onTyping();
+  };
+
+  const pickEmoji = (emoji: string) => {
+    rememberEmoji(emoji);
+    applyEdit(insertAt(text, selection.current, emoji));
+  };
+
+  const sendButton = (
+    <ComposerButton
+      testID="composer-send"
+      icon={edit ? SAVE_ICON : SEND_ICON}
+      accessibilityLabel={edit ? 'Сохранить' : 'Отправить'}
+      variant="primary"
+      disabled={isEmpty}
+      count={edit ? 0 : mediaCount}
+      onPress={submit}
+    />
+  );
+
   const inputs = (
     <>
-      <TextInput
-        ref={inputRef}
-        accessibilityLabel={placeholder}
-        placeholder={edit?.textLocked ? 'Без подписи' : placeholder}
-        placeholderTextColor={theme.textSecondary}
-        value={text}
-        editable={!edit?.textLocked}
-        multiline
-        onPressIn={onFieldActivate}
-        onFocus={onFieldActivate}
-        onChangeText={(value) => {
-          onChangeText(value);
-          onTyping();
-        }}
-        style={[styles.field, { color: theme.text, borderColor: theme.border }]}
-      />
-
-      <View style={styles.sendWrapper}>
-        {/* Буква, как «М» и «Г»: иконки ещё не выбраны, а слово целиком
-            съедало ширину поля на крупном шрифте. */}
-        <Button
-          label="О"
-          accessibilityLabel={edit ? 'Сохранить' : 'Отправить'}
-          size="sm"
-          disabled={isEmpty}
-          onPress={submit}
-        />
-
-        {mediaCount > 0 ? (
-          <View
-            style={[
-              styles.mediaBadge,
-              { backgroundColor: theme.danger, borderColor: theme.background },
-            ]}
-          >
-            <Text variant="caption" color="textInverse">
-              {mediaCount}
-            </Text>
-          </View>
-        ) : null}
-      </View>
-
       {onAttachPress ? (
-        // Буква вместо иконки — намеренно: набор иконок ещё не выбран, и
-        // дизайн заменит эту кнопку на нормальную, не трогая остальной код.
-        <Button
-          label="M"
+        <ComposerButton
+          testID="composer-attach"
+          icon={{ ios: 'paperclip', android: 'attach_file', web: 'attach_file' }}
           accessibilityLabel="Фото и видео"
-          variant="secondary"
-          size="sm"
+          variant="plain"
           disabled={edit?.attachDisabled}
           onPressIn={() => {
             perfMarkStart('M: касание');
@@ -172,6 +199,53 @@ export function MessageComposer({
           }}
         />
       ) : null}
+
+      <View style={[styles.fieldBox, { borderColor: theme.border }]}>
+        <Pressable
+          testID="composer-emoji"
+          accessibilityRole="button"
+          accessibilityLabel={panel.mode === 'emoji' ? 'Клавиатура' : 'Эмодзи'}
+          disabled={textLocked}
+          onPress={panel.toggle}
+          hitSlop={ComposerSizes.button - ComposerSizes.fieldMinHeight}
+          style={[styles.fieldButton, textLocked && styles.locked]}
+        >
+          <SymbolView
+            name={
+              panel.mode === 'emoji'
+                ? { ios: 'keyboard', android: 'keyboard', web: 'keyboard' }
+                : { ios: 'face.smiling', android: 'mood', web: 'mood' }
+            }
+            size={ComposerSizes.fieldIcon}
+            tintColor={theme.textSecondary}
+          />
+        </Pressable>
+
+        <TextInput
+          ref={fieldRef}
+          accessibilityLabel={placeholder}
+          placeholder={textLocked ? 'Без подписи' : placeholder}
+          placeholderTextColor={theme.textSecondary}
+          value={text}
+          editable={!textLocked}
+          multiline
+          // Пока открыта панель эмодзи, поле в фокусе, но без клавиатуры.
+          showSoftInputOnFocus={panel.mode !== 'emoji'}
+          onPressIn={() => {
+            panel.onFieldPressIn();
+            onFieldActivate?.();
+          }}
+          onFocus={onFieldActivate}
+          onSelectionChange={(event) => {
+            selection.current = event.nativeEvent.selection;
+          }}
+          onChangeText={(value) => {
+            onChangeText(value);
+            onTyping();
+          }}
+          style={[styles.field, { color: theme.text }]}
+        />
+      </View>
     </>
   );
 
@@ -184,12 +258,26 @@ export function MessageComposer({
           onSend={onSendVoice}
           onActivity={onRecordingVoice}
           recordDisabled={edit?.recordDisabled}
+          trailing={showMic ? undefined : sendButton}
         >
           {inputs}
         </HoldToRecordRow>
       ) : (
-        <View style={styles.row}>{inputs}</View>
+        <View style={styles.row}>
+          {inputs}
+          {sendButton}
+        </View>
       )}
+
+      {panel.mounted ? (
+        <EmojiPanel
+          size={panel.size}
+          open={panel.mode !== 'off'}
+          onPick={pickEmoji}
+          onDelete={() => applyEdit(deleteBefore(text, selection.current))}
+          onReady={panel.onPanelReady}
+        />
+      ) : null}
     </View>
   );
 }
