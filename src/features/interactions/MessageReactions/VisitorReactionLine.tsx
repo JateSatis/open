@@ -1,140 +1,158 @@
-import { useEffect, useRef, useState } from 'react';
-import { View, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ScrollView,
+  View,
+  useWindowDimensions,
+  type LayoutChangeEvent,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+} from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 
-import { estimateLineWidth, fitScale, VISITOR_LINE, VISITOR_MIN_SCALE } from './lineScale';
-import { readLineMetrics, rememberLineMetrics } from './rowMemory';
+import { onRowsReset, readRowOffset, rememberRowOffset } from './rowMemory';
 import { styles } from './styles';
 import { visitorColors, type ReactionsTone } from './tones';
 
+import { useEnclosingHorizontalGestures } from '@/components/HorizontalGestureScope';
 import { Text } from '@/components/Text';
 import { formatViewsCount } from '@/features/chats/ViewsCount/formatViewsCount';
 import { useTheme } from '@/hooks/use-theme';
-import { Radii, Typography } from '@/theme';
+import { Typography } from '@/theme';
 
 const APPEAR_MS = 160;
+/** Сдвиг прокрутки в событиях — чаще не нужно: он лишь запоминается для копии. */
+const SCROLL_THROTTLE_MS = 32;
 
 export type VisitorReactionLineProps = {
-  /** Ключ памяти: масштаб переживает облачко и достаётся его копии. */
+  /** Ключ памяти: сдвиг переживает облачко и достаётся его копии. */
   memoryKey: string;
   /** По популярности. */
   entries: readonly [string, number][];
   /** Моя реакция в этом ряду. */
   mine: string | null;
   tone: ReactionsTone;
+  /** Копия облачка: не прокручивается, сдвиг — как у оригинала. */
+  frozen: boolean;
 };
 
 /**
- * Реакции зрителей — маленькие, строкой по центру под нижней строкой
- * облачка. Не нажимаются: касание проходит облачку, и оно открывает меню.
- * Высота строки постоянна, а масштаб считается от ширины облачка, — поэтому
- * облачко не прыгает, пока строка подбирает размер.
+ * Реакции зрителей — маленькие, в нижней строке облачка между временем и
+ * просмотрами. Размер постоянный: строка расширяет облачко до его предела,
+ * дальше прокручивается вбок, а время и просмотры стоят на месте. Не
+ * нажимаются: тап проходит облачку, и оно открывает меню.
  */
-export function VisitorReactionLine({ memoryKey, entries, mine, tone }: VisitorReactionLineProps) {
+export function VisitorReactionLine({
+  memoryKey,
+  entries,
+  mine,
+  tone,
+  frozen,
+}: VisitorReactionLineProps) {
   const theme = useTheme();
   const colors = visitorColors(tone);
-  const labels = entries.map(([emoji, count]) => [emoji, formatViewsCount(count)] as const);
-  const [remembered] = useState(() => readLineMetrics(memoryKey));
-  const [natural, setNatural] = useState(() => remembered?.natural ?? estimateLineWidth(labels));
-  const [available, setAvailable] = useState<number | null>(null);
-  // Строку без уменьшения меряет линейка — один раз на набор реакций: замер
-  // уменьшенной строки не строго пропорционален масштабу, и пересчёт по нему
-  // качал бы ширину облачка туда-сюда.
-  const signature = labels.map(([emoji, count]) => emoji + count).join(' ');
-  const measuredFor = useRef<string | null>(null);
-  const scale = available === null ? (remembered?.scale ?? 1) : fitScale(natural, available);
-  // До замера ширины без памяти строка не видна: показалась бы не в своём размере.
-  const ready = available !== null || remembered !== undefined;
-  // Рамка держит высоту строки и при крупном системном шрифте.
+  const enclosing = useEnclosingHorizontalGestures();
+  const scrollRef = useRef<ScrollView>(null);
+  const [initialOffset] = useState(() => readRowOffset(memoryKey));
+  const [scrolled, setScrolled] = useState(initialOffset > 0);
+  const [viewWidth, setViewWidth] = useState(0);
+  const [contentWidth, setContentWidth] = useState(0);
+  const scrollable = viewWidth > 0 && contentWidth > viewWidth;
+  // Высота строки — как у времени рядом, и при крупном системном шрифте:
+  // строка появляется, а облачко не меняет высоту.
   const { fontScale } = useWindowDimensions();
+  const height = { height: Typography.caption.lineHeight * fontScale };
 
-  // Память — по замеренному, а не по значениям прошлой отрисовки: её копия
-  // облачка берёт с первого кадра.
+  // Касание, начатое на прокручиваемой строке, — ей: свайп-ответ ждёт, пока
+  // она откажется. Не прокручивается — не мешает ему вовсе.
+  const native = useMemo(
+    () =>
+      Gesture.Native()
+        .enabled(scrollable && !frozen)
+        .blocksExternalGesture(...enclosing),
+    [enclosing, frozen, scrollable],
+  );
+
+  // Строка стала короче — запомненный сдвиг не больше возможного: иначе
+  // копия облачка срезала бы первые реакции.
   useEffect(() => {
-    if (available !== null) {
-      rememberLineMetrics(memoryKey, { natural, scale: fitScale(natural, available) });
-    }
-  }, [available, memoryKey, natural]);
+    if (frozen || viewWidth === 0) return;
 
-  const font = {
-    fontSize: Typography.caption.fontSize * scale,
-    lineHeight: Typography.caption.lineHeight * scale,
+    const max = Math.max(0, contentWidth - viewWidth);
+
+    if (readRowOffset(memoryKey) > max) rememberRowOffset(memoryKey, max);
+  }, [contentWidth, frozen, memoryKey, viewWidth]);
+
+  useEffect(() => {
+    if (!scrolled || frozen) return;
+
+    return onRowsReset(() => {
+      scrollRef.current?.scrollTo({ x: 0, animated: true });
+      rememberRowOffset(memoryKey, 0);
+      setScrolled(false);
+    });
+  }, [frozen, memoryKey, scrolled]);
+
+  const onScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const x = Math.max(0, event.nativeEvent.contentOffset.x);
+
+    rememberRowOffset(memoryKey, x);
+    if (x > 0 !== scrolled) setScrolled(x > 0);
   };
 
-  const onFrame = (event: LayoutChangeEvent) => setAvailable(event.nativeEvent.layout.width);
-
-  const onRuler = (event: LayoutChangeEvent) => {
-    if (measuredFor.current === signature) return;
-
-    measuredFor.current = signature;
-    setNatural(event.nativeEvent.layout.width);
-  };
+  const items = entries.map(([emoji, count]) => (
+    <View
+      key={emoji}
+      testID={`visitor-reaction-${emoji}`}
+      accessible
+      accessibilityLabel={`Зрители: ${emoji} ${count}`}
+      accessibilityState={{ selected: mine === emoji }}
+      style={[styles.visitor, mine === emoji && { backgroundColor: theme[colors.mine] }]}
+    >
+      <Text variant="caption">{emoji}</Text>
+      <Text variant="caption" color={colors.text}>
+        {formatViewsCount(count)}
+      </Text>
+    </View>
+  ));
 
   return (
     <Animated.View
       testID="visitor-reactions"
       entering={FadeIn.duration(APPEAR_MS)}
       exiting={FadeOut.duration(APPEAR_MS)}
-      pointerEvents="none"
-      onLayout={onFrame}
-      // Облачко не уже строки в самом мелком виде — иначе ей некуда влезть.
-      style={[
-        styles.visitorFrame,
-        {
-          minWidth: natural * VISITOR_MIN_SCALE,
-          height: Typography.caption.lineHeight * fontScale,
-        },
-      ]}
+      style={[styles.visitorFrame, height]}
     >
-      <View
-        style={[styles.visitorRuler, styles.hidden]}
-        importantForAccessibility="no-hide-descendants"
-      >
-        <View onLayout={onRuler} style={[styles.visitorLine, { gap: VISITOR_LINE.between }]}>
-          {labels.map(([emoji, count]) => (
-            <View
-              key={emoji}
-              style={[
-                styles.visitor,
-                { gap: VISITOR_LINE.inner, paddingHorizontal: VISITOR_LINE.padding },
-              ]}
-            >
-              <Text variant="caption">{emoji}</Text>
-              <Text variant="caption">{count}</Text>
-            </View>
-          ))}
+      {frozen ? (
+        // Копия — без прокрутки: сдвиг сразу на месте, а не доезжает после
+        // первого кадра, как у `contentOffset`.
+        <View style={styles.rowClip} pointerEvents="none">
+          <View style={[styles.visitorLine, { transform: [{ translateX: -initialOffset }] }]}>
+            {items}
+          </View>
         </View>
-      </View>
-
-      <View style={[styles.visitorCenter, !ready && styles.hidden]}>
-        <View style={[styles.visitorLine, { gap: VISITOR_LINE.between * scale }]}>
-          {entries.map(([emoji, count], index) => (
-            <View
-              key={emoji}
-              testID={`visitor-reaction-${emoji}`}
-              accessible
-              accessibilityLabel={`Зрители: ${emoji} ${count}`}
-              accessibilityState={{ selected: mine === emoji }}
-              style={[
-                styles.visitor,
-                {
-                  gap: VISITOR_LINE.inner * scale,
-                  paddingHorizontal: VISITOR_LINE.padding * scale,
-                  borderRadius: Radii.sm * scale,
-                },
-                mine === emoji && { backgroundColor: theme[colors.mine] },
-              ]}
-            >
-              <Text variant="caption" style={font}>
-                {emoji}
-              </Text>
-              <Text variant="caption" color={colors.text} style={font}>
-                {labels[index][1]}
-              </Text>
-            </View>
-          ))}
-        </View>
-      </View>
+      ) : (
+        <GestureDetector gesture={native}>
+          <ScrollView
+            ref={scrollRef}
+            horizontal
+            // Не прокручивается — касание целиком облачку.
+            pointerEvents={scrollable ? 'auto' : 'none'}
+            scrollEnabled={scrollable}
+            showsHorizontalScrollIndicator={false}
+            showsVerticalScrollIndicator={false}
+            contentOffset={initialOffset > 0 ? { x: initialOffset, y: 0 } : undefined}
+            onScroll={onScroll}
+            scrollEventThrottle={SCROLL_THROTTLE_MS}
+            onLayout={(event: LayoutChangeEvent) => setViewWidth(event.nativeEvent.layout.width)}
+            onContentSizeChange={setContentWidth}
+            style={styles.visitorScroll}
+            contentContainerStyle={styles.visitorLine}
+          >
+            {items}
+          </ScrollView>
+        </GestureDetector>
+      )}
     </Animated.View>
   );
 }

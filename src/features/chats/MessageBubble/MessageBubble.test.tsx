@@ -446,23 +446,24 @@ describe('MessageBubble', () => {
   describe('reactions', () => {
     const reactions = { members: { '👍': 2 }, visitors: { '🔥': 1 }, mine: null };
 
-    // Сверху вниз: текст, крупные реакции, строка посетителей, полоска статуса.
-    it('stacks text, member reactions, visitors and the status line last', async () => {
+    // Сверху вниз: текст, крупные реакции, полоска статуса — а реакции
+    // посетителей в ней, между временем и просмотрами.
+    it('stacks text, member reactions and the status line last, visitors inside it', async () => {
       await render(<MessageBubble message={textMessage({ reactions })} {...baseProps} />);
 
       expect(
-        stackOrder(screen.getByTestId('message-bubble'), [
-          'member-reactions',
-          'visitor-reactions',
-          'bubble-footer-info',
-        ]),
-      ).toEqual(['member-reactions', 'visitor-reactions', 'bubble-footer-info']);
-      expect(
-        within(screen.getByTestId('bubble-footer-info')).queryByTestId('member-reactions'),
-      ).toBeNull();
+        stackOrder(screen.getByTestId('message-bubble'), ['member-reactions', 'bubble-footer-info']),
+      ).toEqual(['member-reactions', 'bubble-footer-info']);
+      const info = screen.getByTestId('bubble-footer-info');
+
+      expect(within(info).queryByTestId('member-reactions')).toBeNull();
+      expect(stackOrder(info, ['bubble-footer-meta', 'visitor-reactions'])).toEqual([
+        'bubble-footer-meta',
+        'visitor-reactions',
+      ]);
     });
 
-    it('with only visitor reactions puts their line above the status line', async () => {
+    it('with only visitor reactions puts them into the status line, with no row above', async () => {
       await render(
         <MessageBubble
           message={textMessage({ reactions: { ...reactions, members: {} } })}
@@ -472,11 +473,8 @@ describe('MessageBubble', () => {
 
       expect(screen.queryByTestId('bubble-footer-reactions')).toBeNull();
       expect(
-        stackOrder(screen.getByTestId('message-bubble'), [
-          'visitor-reactions',
-          'bubble-footer-info',
-        ]),
-      ).toEqual(['visitor-reactions', 'bubble-footer-info']);
+        within(screen.getByTestId('bubble-footer-visitors')).getByTestId('visitor-reactions'),
+      ).toBeTruthy();
     });
 
     it('my caption-less album grows a bubble of my colour; the status moves under the media', async () => {
@@ -486,9 +484,13 @@ describe('MessageBubble', () => {
 
       expect(StyleSheet.flatten(bubble.props.style).backgroundColor).not.toBe('transparent');
       expect(screen.queryByTestId('media-meta-overlay')).toBeNull();
+      expect(stackOrder(bubble, ['member-reactions', 'bubble-footer-info'])).toEqual([
+        'member-reactions',
+        'bubble-footer-info',
+      ]);
       expect(
-        stackOrder(bubble, ['member-reactions', 'visitor-reactions', 'bubble-footer-info']),
-      ).toEqual(['member-reactions', 'visitor-reactions', 'bubble-footer-info']);
+        within(screen.getByTestId('bubble-footer-info')).getByTestId('visitor-reactions'),
+      ).toBeTruthy();
     });
 
     it('a visitor reaction alone moves the status under the media too', async () => {

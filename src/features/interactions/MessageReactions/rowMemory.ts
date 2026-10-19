@@ -1,5 +1,5 @@
 // Состояние рядов реакций, которое переживает облачко: сдвиг прокрученного
-// ряда участников и масштаб строки зрителей. По id сообщения: копия облачка
+// ряда участников и строки зрителей. По id сообщения: копия облачка
 // в меню и над шитом комментариев с первого кадра встаёт так же, как
 // оригинал, без прыжка. Это вид, а не данные сервера, — поэтому не в кеше
 // запросов, а здесь, рядом с рядами.
@@ -7,10 +7,6 @@
 import { makeMutable } from 'react-native-reanimated';
 
 const offsets = new Map<string, number>();
-/** Строка зрителей: ширина без уменьшения и масштаб, с которым её показали. */
-export type LineMetrics = { natural: number; scale: number };
-
-const lines = new Map<string, LineMetrics>();
 
 /** Сколько рядов держать в памяти: больше — забываются самые старые. */
 const MAX_REMEMBERED = 500;
@@ -33,14 +29,6 @@ export function readRowOffset(id: string): number {
 export function rememberRowOffset(id: string, offset: number) {
   if (offset <= 0) offsets.delete(id);
   else remember(offsets, id, offset);
-}
-
-export function readLineMetrics(id: string): LineMetrics | undefined {
-  return lines.get(id);
-}
-
-export function rememberLineMetrics(id: string, metrics: LineMetrics) {
-  remember(lines, id, metrics);
 }
 
 const resetListeners = new Set<() => void>();
