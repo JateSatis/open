@@ -25,8 +25,9 @@ describe('BubbleFooter', () => {
     expect(screen.queryByTestId('bubble-footer-reactions')).toBeNull();
   });
 
-  // Полоска статуса — всегда последняя строка: реакции над ней, а не в ней.
-  it('stacks member reactions, then visitors, then the status line at the very bottom', async () => {
+  // Полоска статуса — всегда последняя строка: крупный ряд над ней, а
+  // реакции зрителей — в ней, между временем и просмотрами.
+  it('puts member reactions above the status line and visitors inside it, between time and views', async () => {
     await render(
       <View testID="bubble">
         <BubbleFooter
@@ -38,7 +39,8 @@ describe('BubbleFooter', () => {
       </View>,
     );
 
-    expect(order('bubble-footer-info')).toEqual(['14:45', '👁 12']);
-    expect(order('bubble')).toEqual(['👍', '🔥 1', '14:45', '👁 12']);
+    expect(order('bubble-footer-info')).toEqual(['14:45', '🔥 1', '👁 12']);
+    expect(order('bubble')).toEqual(['👍', '14:45', '🔥 1', '👁 12']);
+    expect(order('bubble-footer-visitors')).toEqual(['🔥 1']);
   });
 });

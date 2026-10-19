@@ -21,13 +21,19 @@ export type HoldToRecordRowProps = {
   onActivity?: () => void;
   /** Кнопка записи есть, но записывать сейчас нельзя. */
   recordDisabled?: boolean;
+  /**
+   * Кнопка на месте микрофона, пока запись не идёт: «Отправить», когда в поле
+   * есть что отправить. Начатая запись доживает до конца — её кнопка не
+   * размонтируется, даже если на её место просится другая.
+   */
+  trailing?: ReactNode;
   style?: StyleProp<ViewStyle>;
 };
 
 /**
- * Строка ввода с кнопкой записи голосового справа. Переиспользуется всюду,
- * где можно ответить голосом: в чате сегодня, в комментариях и при правке
- * голосового потом. Встраивающему не нужно знать ни про жест, ни про
+ * Строка ввода с кнопкой записи голосового справа (или с `trailing` на её
+ * месте). Переиспользуется всюду, где можно ответить голосом: в чате, в
+ * комментариях и при правке голосового. Встраивающему не нужно знать ни про жест, ни про
  * рекордер — он получает готовый `LocalMedia`.
  */
 export function HoldToRecordRow({
@@ -35,6 +41,7 @@ export function HoldToRecordRow({
   onSend,
   onActivity,
   recordDisabled = false,
+  trailing,
   style,
 }: HoldToRecordRowProps) {
   const theme = useTheme();
@@ -60,7 +67,11 @@ export function HoldToRecordRow({
       </View>
 
       {/* Идущая запись доживает до конца, даже если кнопка стала неактивной. */}
-      <RecordButton hold={hold} drag={drag} disabled={recordDisabled && hold.phase === 'idle'} />
+      {trailing && hold.phase === 'idle' ? (
+        trailing
+      ) : (
+        <RecordButton hold={hold} drag={drag} disabled={recordDisabled && hold.phase === 'idle'} />
+      )}
 
       {hold.notice ? (
         <View

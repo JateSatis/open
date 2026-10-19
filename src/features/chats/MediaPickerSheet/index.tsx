@@ -77,6 +77,7 @@ import { countRender, perfMark } from '@/features/media/perf';
 import { isolatePhotoEdits } from '@/features/media/photoEdits/editsStore';
 import { useHasSelection, useMediaSelection } from '@/features/media/selectionStore';
 import { useTheme } from '@/hooks/use-theme';
+import { closeEmojiPanel } from '@/features/chats/EmojiPanel';
 
 /** Жест закрытия — снаружи нужен только тестам. */
 export const SHEET_PAN_TEST_ID = 'media-picker-pan';
@@ -380,6 +381,8 @@ function SheetWindow({ phase, composer, pick: pickProp, avatar, sections }: Shee
    */
   const handleBack = useCallback(() => {
     if (dismissTopConfirmDialog()) return;
+    // «Назад» в окне приходит сюда, а не в BackHandler: панель эмодзи — первой.
+    if (closeEmojiPanel('sheet')) return;
 
     if (handlePreviewBack()) return;
 
@@ -569,6 +572,7 @@ function SheetWindow({ phase, composer, pick: pickProp, avatar, sections }: Shee
                 onSend={submit}
                 onTyping={composer.onTyping}
                 onFieldActivate={claimKeyboardForSheet}
+                keyboardOwner="sheet"
                 plate={composer.plate}
                 edit={composer.editing ? SHEET_EDIT : undefined}
                 placeholder={composer.placeholder}

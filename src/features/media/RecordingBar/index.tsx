@@ -1,3 +1,4 @@
+import { SymbolView } from 'expo-symbols';
 import { useEffect } from 'react';
 import { Pressable, View } from 'react-native';
 import Animated, {
@@ -18,8 +19,9 @@ import type { RecordDrag } from '@/features/media/RecordButton';
 import { CANCEL_DISTANCE } from '@/features/media/RecordButton/styles';
 import type { HoldToRecord } from '@/features/media/useHoldToRecord';
 import { useTheme } from '@/hooks/use-theme';
+import { Typography } from '@/theme';
 
-export const CANCEL_HINT = '‹ Влево — отмена';
+export const CANCEL_HINT = 'Влево — отмена';
 
 /** Как часто мигает точка записи. */
 const BLINK_MS = 600;
@@ -98,7 +100,12 @@ export function RecordingBar({ hold, drag }: RecordingBarProps) {
       ) : (
         // Подсказка едет влево внутри своей области и не наезжает на уровни.
         <View style={styles.hintClip}>
-          <Animated.View style={hintStyle}>
+          <Animated.View style={[styles.hintRow, hintStyle]}>
+            <SymbolView
+              name={{ ios: 'chevron.left', android: 'chevron_left', web: 'chevron_left' }}
+              size={Typography.small.lineHeight}
+              tintColor={theme.textSecondary}
+            />
             <Text variant="small" color="textSecondary" numberOfLines={1}>
               {CANCEL_HINT}
             </Text>

@@ -27,16 +27,12 @@ export type InfoScroll = {
   activeTab: SharedValue<number>;
   /** Палец на списке. */
   dragging: SharedValue<boolean>;
-  /** Фото раскрыто и стоит раскрытым — инерция его не открывает и не закрывает. */
-  expanded: SharedValue<boolean>;
   register: (tab: number, handle: InfoTabListHandle) => () => void;
   /** Откуда начать только что смонтированный список вкладки. */
   initialOffset: () => number;
   /** Список активной вкладки остановился: довести шапку и подтянуть соседей. */
   onSettle: (tab: number, y: number) => void;
   onDragStart: () => void;
-  /** Палец пересёк порог раскрытия фото — короткая вибрация. */
-  onThreshold: () => void;
 };
 
 export const InfoScrollContext = createContext<InfoScroll | null>(null);

@@ -1,0 +1,52 @@
+appId: com.openger.app
+name: Панель эмодзи вместо клавиатуры — вставка, «стереть», «назад», отправка; справа микрофон ↔ «Отправить»
+tags:
+  - chats
+env:
+  CHAT: Plany
+---
+- runFlow: subflows/open-app.yaml
+- tapOn: ${CHAT}
+- assertVisible:
+    id: "record-voice-button"
+- evalScript: ${output.msg = 'maestro-' + Date.now()}
+- tapOn: "Сообщение"
+- inputText: ${output.msg}
+# Есть текст — на месте микрофона «Отправить».
+- assertVisible:
+    id: "composer-send"
+- assertNotVisible:
+    id: "record-voice-button"
+# Эмодзи — панель вместо клавиатуры, кнопка в поле стала «клавиатурой».
+- tapOn:
+    id: "composer-emoji"
+- assertVisible:
+    id: "emoji-panel"
+- assertVisible: "Клавиатура"
+- tapOn:
+    id: "emoji-tab-smileys"
+- tapOn:
+    id: "emoji-😀"
+- tapOn:
+    id: "emoji-😀"
+# «Стереть» убирает один эмодзи целиком.
+- tapOn:
+    id: "emoji-delete"
+# «Назад» закрывает панель, а не чат.
+- back
+- assertNotVisible:
+    id: "emoji-panel"
+- assertVisible:
+    id: "composer-send"
+- tapOn:
+    id: "composer-send"
+- assertVisible: ${output.msg + '😀'}
+# Поле пустое — снова микрофон.
+- assertVisible:
+    id: "record-voice-button"
+# Уборка: тестовое сообщение удаляется.
+- longPressOn: ${output.msg + '😀'}
+- tapOn: "Удалить"
+- assertVisible: "Удалить сообщение?"
+- tapOn: "Удалить"
+- assertNotVisible: ${output.msg + '😀'}

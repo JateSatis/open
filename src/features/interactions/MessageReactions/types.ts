@@ -24,7 +24,7 @@ export type ResolvePerson = (
 ) => { name: string; avatarUrl: string | null } | undefined;
 
 export type BubbleReactionsProps = {
-  /** Ключ памяти рядов (сдвиг, масштаб): у облачка и его копии один. */
+  /** Ключ памяти рядов (сдвиг прокрутки): у облачка и его копии один. */
   memoryKey: string;
   reactions: Reactions;
   tone: ReactionsTone;

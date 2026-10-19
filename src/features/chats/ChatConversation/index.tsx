@@ -1024,6 +1024,8 @@ export function ChatConversation({
                     // Запись в правке не уходит в чат — и «записывает голосовое…» не правда.
                     onRecordingVoice: isEditing ? noop : notifyRecordingVoice,
                     inputRef: composerRef,
+                    // Экран ушёл под другой — панель эмодзи закрывается вместе с ним.
+                    screenFocused: isFocused,
                     pop: isEditing ? null : popChip,
                   }
             }

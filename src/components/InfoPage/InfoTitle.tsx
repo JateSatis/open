@@ -1,12 +1,11 @@
-import { useState } from 'react';
-import { StyleSheet, type LayoutChangeEvent } from 'react-native';
+import { StyleSheet } from 'react-native';
 import Animated, {
   interpolateColor,
   useAnimatedStyle,
   type SharedValue,
 } from 'react-native-reanimated';
 
-import { clamp01, lerp, type InfoGeometry } from './geometry';
+import { lerp, titleProgress, type InfoGeometry } from './geometry';
 import type { InfoStatus } from './types';
 
 import { useTheme } from '@/hooks/use-theme';
@@ -25,14 +24,14 @@ export type InfoTitleProps = {
   title: string;
   status: InfoStatus | null;
   summary: string;
-  hasActions: boolean;
+  /** Слева в панели стрелка «назад»: имя в плашке стоит правее неё. */
+  hasBack: boolean;
 };
 
 /**
- * Имя и статус. Одни и те же строки едут из-под аватарки в панель (схлопывание)
- * и в левый нижний угол фото (раскрытие), меняя размер и цвет. Строки
- * выровнены по левому краю, а «по центру» — сдвиг на половину своей ширины:
- * так одна анимация ведёт их во все три положения.
+ * Имя и статус. В покое — внизу слева на фото, крупно и белым; едут вверх
+ * вместе с фото, а на последнем отрезке перетекают в компактную плашку,
+ * меняя размер и цвет. Одна анимация ведёт оба положения.
  */
 export function InfoTitle({
   geometry,
@@ -42,86 +41,77 @@ export function InfoTitle({
   title,
   status,
   summary,
-  hasActions,
+  hasBack,
 }: InfoTitleProps) {
   const theme = useTheme();
-  const [nameWidth, setNameWidth] = useState(0);
-  const [statusWidth, setStatusWidth] = useState(0);
-  const { width, expand, collapse, nameTop, expandedHeight } = geometry;
+  const { width, nameTop } = geometry;
   const maxWidth = width - Spacing.three * 2;
+  // Имя на фото увеличено: в увеличенном виде оно тоже не шире строки.
+  const nameMaxWidth = maxWidth / S.nameScaleExpanded;
 
+  const barLeft = hasBack ? S.barTitleLeft : Spacing.three;
   const statusColor = status?.accent ? theme.primary : theme.textSecondary;
-  const photoNameTop =
-    expandedHeight -
-    S.heroBottom -
-    (hasActions ? S.actionHeight + S.actionsGap : 0) -
-    (S.nameLine * S.nameScaleExpanded + S.statusLine);
-  const compactTop =
-    insetTop +
-    (S.barHeight - (S.nameLine * S.nameScaleCompact + S.statusLine * S.statusScaleCompact)) / 2;
+  // В плашке имя со строкой под ним — по центру панели; без статуса и
+  // сводки вкладок строки под именем нет, и по центру — одно имя.
+  const secondLine = status || summary ? S.statusLine * S.statusScaleCompact : 0;
+  const compactTop = insetTop + (S.barHeight - (S.nameLine * S.nameScaleCompact + secondLine)) / 2;
 
-  const nameStyle = useAnimatedStyle(() => {
-    const y = scrollY.value;
-    const q = expand > 0 ? clamp01((expand - y) / expand) : 0;
-    const p = clamp01((y - expand) / collapse);
-    const centered = (width - Math.min(nameWidth, maxWidth)) / 2;
-    const x = q > 0 ? lerp(centered, Spacing.three, q) : lerp(centered, S.barTitleLeft, p);
-    const top = q > 0 ? lerp(nameTop, photoNameTop, q) : lerp(nameTop, compactTop, p);
-    const scale = q > 0 ? lerp(1, S.nameScaleExpanded, q) : lerp(1, S.nameScaleCompact, p);
-
-    return {
-      color: interpolateColor(q, [0, 1], [theme.text, theme.textOnMedia]),
-      textShadowColor: interpolateColor(q, [0, 1], [TRANSPARENT, theme.mediaScrim]),
-      transform: [{ translateX: x }, { translateY: top }, { scale }],
-    };
-  });
-
-  const statusPosition = (y: number, ownWidth: number) => {
+  const position = (y: number) => {
     'worklet';
-    const q = expand > 0 ? clamp01((expand - y) / expand) : 0;
-    const p = clamp01((y - expand) / collapse);
-    const centered = (width - Math.min(ownWidth, maxWidth)) / 2;
-    const nameScale = q > 0 ? lerp(1, S.nameScaleExpanded, q) : lerp(1, S.nameScaleCompact, p);
-    const nameY = q > 0 ? lerp(nameTop, photoNameTop, q) : lerp(nameTop, compactTop, p);
+    const t = titleProgress(y, geometry);
+    const nameScale = lerp(S.nameScaleExpanded, S.nameScaleCompact, t);
+    const nameY = lerp(nameTop - y, compactTop, t);
 
     return {
-      x: q > 0 ? lerp(centered, Spacing.three, q) : lerp(centered, S.barTitleLeft, p),
-      y: nameY + S.nameLine * nameScale,
-      scale: q > 0 ? 1 : lerp(1, S.statusScaleCompact, p),
-      q,
+      t,
+      x: lerp(Spacing.three, barLeft, t),
+      nameY,
+      nameScale,
+      statusY: nameY + S.nameLine * nameScale,
+      statusScale: lerp(1, S.statusScaleCompact, t),
     };
   };
 
+  const nameStyle = useAnimatedStyle(() => {
+    const at = position(scrollY.value);
+
+    return {
+      color: interpolateColor(at.t, [0, 1], [theme.textOnMedia, theme.text]),
+      textShadowColor: interpolateColor(at.t, [0, 1], [theme.mediaScrim, TRANSPARENT]),
+      transform: [{ translateX: at.x }, { translateY: at.nameY }, { scale: at.nameScale }],
+    };
+  });
+
   const statusStyle = useAnimatedStyle(() => {
-    const at = statusPosition(scrollY.value, statusWidth);
+    const at = position(scrollY.value);
 
     return {
       opacity: 1 - stuck.value,
-      color: interpolateColor(at.q, [0, 1], [statusColor, theme.textOnMedia]),
-      textShadowColor: interpolateColor(at.q, [0, 1], [TRANSPARENT, theme.mediaScrim]),
-      transform: [{ translateX: at.x }, { translateY: at.y }, { scale: at.scale }],
+      color: interpolateColor(at.t, [0, 1], [theme.textOnMedia, statusColor]),
+      textShadowColor: interpolateColor(at.t, [0, 1], [theme.mediaScrim, TRANSPARENT]),
+      transform: [{ translateX: at.x }, { translateY: at.statusY }, { scale: at.statusScale }],
     };
   });
 
   const summaryStyle = useAnimatedStyle(() => {
-    const at = statusPosition(scrollY.value, 0);
+    const at = position(scrollY.value);
 
     return {
       opacity: stuck.value,
-      transform: [{ translateX: S.barTitleLeft }, { translateY: at.y }, { scale: at.scale }],
+      transform: [
+        { translateX: barLeft },
+        { translateY: at.statusY },
+        { scale: at.statusScale },
+      ],
     };
   });
-
-  const measure = (set: (value: number) => void) => (event: LayoutChangeEvent) =>
-    set(event.nativeEvent.layout.width);
 
   return (
     <>
       <Animated.Text
         testID="info-title"
         numberOfLines={1}
-        onLayout={measure(setNameWidth)}
-        style={[styles.line, styles.name, styles.onPhoto, { maxWidth }, nameStyle]}
+        style={[styles.line, styles.name, styles.onPhoto, { maxWidth: nameMaxWidth }, nameStyle]}
       >
         {title}
       </Animated.Text>
@@ -129,7 +119,6 @@ export function InfoTitle({
         <Animated.Text
           testID="info-status"
           numberOfLines={1}
-          onLayout={measure(setStatusWidth)}
           style={[styles.line, styles.status, styles.onPhoto, { maxWidth }, statusStyle]}
         >
           {status.text}
@@ -141,7 +130,7 @@ export function InfoTitle({
         style={[
           styles.line,
           styles.status,
-          { maxWidth: maxWidth - S.barTitleLeft, color: theme.textSecondary },
+          { maxWidth: maxWidth - barLeft, color: theme.textSecondary },
           summaryStyle,
         ]}
       >

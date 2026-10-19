@@ -61,7 +61,7 @@ export const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     gap: Spacing.one,
   },
-  /** Строка низа облачка: время и статус слева, просмотры справа. */
+  /** Строка низа облачка: время и статус слева, просмотры справа, зрители между ними. */
   footer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -76,6 +76,21 @@ export const styles = StyleSheet.create({
   },
   footerSpacer: {
     flexGrow: 1,
+  },
+  /** Время и просмотры не сжимаются: сжимается и прокручивается строка зрителей. */
+  footerEdge: {
+    flexShrink: 0,
+  },
+  /**
+   * Свободное место между временем и просмотрами; реакции зрителей — по его
+   * центру. Шириной по ним, пока облачку есть куда расти.
+   */
+  footerMiddle: {
+    flexGrow: 1,
+    flexShrink: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
   },
   /** Время и просмотры поверх медиа без подписи — у нижнего края мозаики. */
   mediaOverlay: {

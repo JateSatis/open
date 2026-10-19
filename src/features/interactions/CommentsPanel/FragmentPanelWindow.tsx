@@ -18,6 +18,7 @@ import type {
 import { InAppNoticeToast } from '@/features/notifications/InAppMessageToast/NoticeToast';
 import { useTheme } from '@/hooks/use-theme';
 import { Sizes } from '@/theme';
+import { closeEmojiPanel } from '@/features/chats/EmojiPanel';
 
 export type FragmentPanelWindowProps = {
   target: CommentsPanelTarget & { fragment: FragmentPanelSubject };
@@ -48,6 +49,8 @@ export function FragmentPanelWindow({ target, onOpenPerson, hostChatId }: Fragme
   /** «Назад» отвечает на вопрос, потом выходит из правки, выбора и треда и только потом закрывает. */
   const handleBack = useCallback(() => {
     if (dismissTopConfirmDialog()) return;
+    // «Назад» в окне приходит сюда, а не в BackHandler: панель эмодзи — первой.
+    if (closeEmojiPanel('comments')) return;
     if (backRef.current()) return;
 
     close();

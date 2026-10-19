@@ -4,6 +4,7 @@ import { View } from 'react-native';
 import { styles } from './styles';
 
 import { Text } from '@/components/Text';
+import { initialOf } from '@/lib/initialOf';
 import { useTheme } from '@/hooks/use-theme';
 import { Sizes } from '@/theme';
 
@@ -35,7 +36,7 @@ export function Avatar({ uri, name, size = 40 }: AvatarProps) {
         style={size >= Sizes.avatarLargeLetter ? largeLetter(size) : undefined}
         accessibilityLabel={name}
       >
-        {name.trim().charAt(0).toUpperCase() || '?'}
+        {initialOf(name)}
       </Text>
     </View>
   );

@@ -120,35 +120,39 @@ jest.mock('@/features/media/HoldToRecordRow', () => {
       children,
       onSend,
       recordDisabled,
+      trailing,
     }: {
       children: unknown;
       onSend: (voice: unknown) => void;
       recordDisabled?: boolean;
+      trailing?: unknown;
     }) =>
       createElement(
         Fragment,
         null,
         children,
-        createElement(
-          Pressable,
-          {
-            accessibilityRole: 'button',
-            accessibilityLabel: 'Записать голосовое',
-            disabled: recordDisabled,
-            accessibilityState: { disabled: Boolean(recordDisabled) },
-            onPress: () =>
-              onSend({
-                kind: 'voice',
-                uri: 'file:///cache/new.m4a',
-                mimeType: 'audio/mp4',
-                width: null,
-                height: null,
-                durationMs: 3000,
-                waveform: [1, 2, 3],
-              }),
-          },
-          createElement(Text, null, 'Г'),
-        ),
+        // Как настоящая строка: на месте микрофона — «Сохранить», пока запись не идёт.
+        trailing ??
+          createElement(
+            Pressable,
+            {
+              accessibilityRole: 'button',
+              accessibilityLabel: 'Записать голосовое',
+              disabled: recordDisabled,
+              accessibilityState: { disabled: Boolean(recordDisabled) },
+              onPress: () =>
+                onSend({
+                  kind: 'voice',
+                  uri: 'file:///cache/new.m4a',
+                  mimeType: 'audio/mp4',
+                  width: null,
+                  height: null,
+                  durationMs: 3000,
+                  waveform: [1, 2, 3],
+                }),
+            },
+            createElement(Text, null, 'Г'),
+          ),
       ),
   };
 });
@@ -409,14 +413,19 @@ describe('editing text', () => {
     expect(mockedConfirm).not.toHaveBeenCalled();
   });
 
-  it('cannot save an empty message', async () => {
+  // Сохранить пустое нельзя; справа вместо «Сохранить» — микрофон: пустую
+  // правку можно превратить в голосовое.
+  it('cannot save an empty message, and offers to record instead', async () => {
     await renderWithQuery(<ChatScreen />);
     await screen.findByText('привет');
     await startEditing('m1');
 
+    expect(screen.getByLabelText('Сохранить')).toBeEnabled();
+
     await userEvent.setup().clear(field());
 
-    expect(screen.getByLabelText('Сохранить')).toBeDisabled();
+    expect(screen.queryByLabelText('Сохранить')).toBeNull();
+    expect(screen.getByLabelText('Записать голосовое')).toBeEnabled();
   });
 
   it('puts the old version back and explains when the server refuses', async () => {
@@ -532,8 +541,9 @@ describe('editing an album', () => {
     await startEditing('a1');
 
     expect(screen.getAllByTestId('edit-attachment')).toHaveLength(2);
-    // Голосовое к альбому не добавить: итог нарушил бы инвариант.
-    expect(screen.getByLabelText('Записать голосовое')).toBeDisabled();
+    // Голосовое к альбому не добавить: итог нарушил бы инвариант. Микрофона и нет —
+    // справа «Сохранить».
+    expect(screen.queryByLabelText('Записать голосовое')).toBeNull();
 
     fireEvent.press(screen.getAllByRole('button', { name: 'Убрать фото' })[0]);
 
@@ -572,9 +582,7 @@ describe('editing an album', () => {
 describe('editing a voice message', () => {
   beforeEach(() => {
     mockedListMessages.mockResolvedValue({
-      items: [
-        { ...message('v1', null, 'user-1', 3), kind: 'voice', attachments: [voiceFile] },
-      ],
+      items: [{ ...message('v1', null, 'user-1', 3), kind: 'voice', attachments: [voiceFile] }],
       nextCursor: null,
     });
   });
@@ -588,7 +596,9 @@ describe('editing a voice message', () => {
     expect(within(screen.getByTestId('composer-plate')).getByText('Голосовое')).toBeTruthy();
     expect(field().props.editable).toBe(false);
     expect(screen.getByRole('button', { name: 'Фото и видео' })).toBeDisabled();
-    expect(screen.getByLabelText('Записать голосовое')).toBeDisabled();
+    // Второе голосовое не записать: справа «Сохранить», микрофона нет.
+    expect(screen.queryByLabelText('Записать голосовое')).toBeNull();
+    expect(screen.getByLabelText('Сохранить')).toBeTruthy();
   });
 
   it('becomes text once the recording is taken out', async () => {
@@ -602,18 +612,23 @@ describe('editing a voice message', () => {
 
     await waitFor(() => expect(field().props.editable).toBe(true));
     expect(screen.queryByTestId('edit-voice-chip')).toBeNull();
-    expect(screen.getByLabelText('Сохранить')).toBeDisabled();
+    // Пустая правка: сохранять нечего, справа микрофон.
+    expect(screen.queryByLabelText('Сохранить')).toBeNull();
     expect(screen.getByLabelText('Записать голосовое')).toBeEnabled();
 
     const user = userEvent.setup();
 
     await user.type(field(), 'расшифровка');
-    // Текст есть — голосовое к нему уже не записать.
-    expect(screen.getByLabelText('Записать голосовое')).toBeDisabled();
+    // Текст есть — голосовое к нему уже не записать: справа «Сохранить».
+    expect(screen.queryByLabelText('Записать голосовое')).toBeNull();
     await user.press(screen.getByLabelText('Сохранить'));
 
     await waitFor(() =>
-      expect(mockedEdit).toHaveBeenCalledWith('v1', { text: 'расшифровка', media: [], voice: null }),
+      expect(mockedEdit).toHaveBeenCalledWith('v1', {
+        text: 'расшифровка',
+        media: [],
+        voice: null,
+      }),
     );
   });
 

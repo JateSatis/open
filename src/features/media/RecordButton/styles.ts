@@ -1,6 +1,6 @@
 import { StyleSheet } from 'react-native';
 
-import { Radii, Spacing } from '@/theme';
+import { ComposerSizes, Radii, Spacing } from '@/theme';
 
 /**
  * Круг под пальцем во время записи — заметно больше кнопки, как в Telegram:
@@ -20,14 +20,13 @@ export const styles = StyleSheet.create({
   disabled: {
     opacity: 0.5,
   },
+  /** Круг, как скрепка слева: строка ввода симметрична. */
   button: {
+    width: ComposerSizes.button,
+    height: ComposerSizes.button,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: Radii.md,
-    borderWidth: 1,
-    borderColor: 'transparent',
-    paddingVertical: Spacing.one,
-    paddingHorizontal: Spacing.three,
+    borderRadius: Radii.full,
   },
   // Круг растёт вверх от низа строки, а не во все стороны от центра кнопки:
   // под строкой край экрана, и он обрезал бы нижнюю половину круга.

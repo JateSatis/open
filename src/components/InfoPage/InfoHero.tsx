@@ -3,34 +3,31 @@ import { SymbolView } from 'expo-symbols';
 import { Pressable, StyleSheet, View } from 'react-native';
 import Animated, { useAnimatedStyle, type SharedValue } from 'react-native-reanimated';
 
-import { clamp01, lerp, type InfoGeometry } from './geometry';
+import { clamp01, type InfoGeometry } from './geometry';
 import type { InfoAction, InfoAvatar } from './types';
 
-import { Avatar } from '@/components/Avatar';
-import { AvatarPair } from '@/components/AvatarPair';
+import type { AvatarPairPerson } from '@/components/AvatarPair';
 import { Text } from '@/components/Text';
+import { initialOf } from '@/lib/initialOf';
 import { useTheme } from '@/hooks/use-theme';
 import { InfoPageOpacity, InfoPageSizes, Opacity, Radii, Spacing } from '@/theme';
 
 const S = InfoPageSizes;
 
 /**
- * Где аватарка при прокрутке `y`: из круга в раскрытое фото выше покоя, вверх
- * с содержимым ниже (уменьшение и растворение — поверх, в стиле).
+ * Где фото при прокрутке `y`: в покое — от верха экрана на всю высоту шапки,
+ * дальше уезжает вверх вместе с содержимым. Потягивание вниз за покой
+ * удлиняет фото сверху, а не сдвигает его: над ним не открывается пустота.
  */
-export function avatarRect(y: number, geometry: InfoGeometry) {
+export function photoRect(y: number, geometry: InfoGeometry) {
   'worklet';
-  const { width, expand, avatarTop, expandedHeight } = geometry;
-  const q = expand > 0 ? clamp01((expand - y) / expand) : 0;
-  const size = S.avatar;
-  const lift = y > expand ? (y - expand) * 0.6 : 0;
+  const { width, heroHeight } = geometry;
 
   return {
-    x: lerp((width - size) / 2, 0, q),
-    y: lerp(avatarTop, 0, q) - lift,
-    width: lerp(size, width, q),
-    height: lerp(size, expandedHeight, q),
-    radius: lerp(size / 2, 0, Math.min(1, q * 1.4)),
+    x: 0,
+    y: -Math.min(Math.max(y, 0), heroHeight),
+    width,
+    height: heroHeight - Math.min(y, 0),
   };
 }
 
@@ -42,40 +39,55 @@ export type InfoHeroProps = {
 };
 
 /**
- * Аватарка и ряд кнопок шапки. Положение — из одной величины прокрутки:
- * выше покоя аватарка растёт из круга в фото на всю ширину, ниже —
- * уменьшается, уезжает вверх и тает; кнопки сжимаются и тают.
+ * Фото во всю ширину и ряд кнопок на нём. Нет фото — блок того же размера
+ * цвета аватарки с крупной буквой; двое — две половины. Положение — из одной
+ * величины прокрутки: фото едет вверх вместе с содержимым, кнопки тают,
+ * подходя к панели.
  */
 export function InfoHero({ geometry, scrollY, avatar, actions }: InfoHeroProps) {
-  const { expand, collapse } = geometry;
-  // Двое внахлёст — сами по себе два круга: круглая маска срезала бы второго.
-  const masked = avatar.kind === 'single';
+  const theme = useTheme();
 
-  const avatarStyle = useAnimatedStyle(() => {
-    const rect = avatarRect(scrollY.value, geometry);
-    const p = clamp01((scrollY.value - expand) / collapse);
+  const photoStyle = useAnimatedStyle(() => {
+    const rect = photoRect(scrollY.value, geometry);
 
-    return {
-      left: rect.x,
-      top: rect.y,
-      width: rect.width,
-      height: rect.height,
-      borderRadius: masked ? rect.radius : 0,
-      opacity: 1 - clamp01(p * 1.6),
-      transform: [{ scale: lerp(1, 0.4, p) }],
-    };
+    return { top: rect.y, height: rect.height };
   });
 
   return (
     <>
-      {/* Касания проходят сквозь аватарку к списку: за неё тянут шапку. Тап по
-          ней ловит страница (`avatarRect`). */}
+      {/* Касания проходят сквозь фото к списку: за него листают страницу.
+          Тап по нему ловит страница (`photoRect`). */}
       <Animated.View
         testID="info-avatar"
         pointerEvents="none"
-        style={[styles.avatar, masked && styles.masked, avatarStyle]}
+        style={[styles.photo, { width: geometry.width }, photoStyle]}
       >
-        <AvatarFace avatar={avatar} />
+        <PhotoFace
+          avatar={avatar}
+          // Буква — посередине места между панелью и именем, а не под именем.
+          letterSpace={{
+            paddingTop: geometry.barBottom,
+            paddingBottom: geometry.heroHeight - geometry.nameTop,
+          }}
+        />
+        <View
+          style={[
+            styles.scrimTop,
+            {
+              height: S.photoScrimTop + geometry.barBottom - S.barHeight,
+              experimental_backgroundImage: `linear-gradient(to bottom, ${theme.mediaScrim} 0%, transparent 100%)`,
+            },
+          ]}
+        />
+        <View
+          style={[
+            styles.scrimBottom,
+            {
+              height: S.photoScrimBottom,
+              experimental_backgroundImage: `linear-gradient(to top, ${theme.mediaScrim} 0%, transparent 100%)`,
+            },
+          ]}
+        />
       </Animated.View>
 
       {actions.length > 0 ? (
@@ -85,24 +97,70 @@ export function InfoHero({ geometry, scrollY, avatar, actions }: InfoHeroProps) 
   );
 }
 
-function AvatarFace({ avatar }: { avatar: InfoAvatar }) {
+type LetterSpace = { paddingTop: number; paddingBottom: number };
+
+function PhotoFace({ avatar, letterSpace }: { avatar: InfoAvatar; letterSpace: LetterSpace }) {
+  const theme = useTheme();
+
   if (avatar.kind === 'pair') {
-    return <AvatarPair first={avatar.first} second={avatar.second} size={S.avatar} />;
+    return (
+      <View testID="info-avatar-pair" style={[styles.pair, { backgroundColor: theme.background }]}>
+        <PersonFace person={avatar.first} letterSpace={letterSpace} testID="info-avatar-first" />
+        <PersonFace person={avatar.second} letterSpace={letterSpace} testID="info-avatar-second" />
+      </View>
+    );
   }
 
-  if (avatar.uri) {
+  return <PersonFace person={{ uri: avatar.uri, name: avatar.name }} letterSpace={letterSpace} />;
+}
+
+/** Одно лицо во весь свой блок: фото или буква на цвете аватарки. */
+function PersonFace({
+  person,
+  letterSpace,
+  testID,
+}: {
+  person: AvatarPairPerson;
+  letterSpace: LetterSpace;
+  testID?: string;
+}) {
+  const theme = useTheme();
+
+  if (person.uri) {
     return (
       <Image
-        source={{ uri: avatar.uri }}
-        style={styles.fill}
+        testID={testID}
+        source={{ uri: person.uri }}
+        style={styles.face}
         contentFit="cover"
-        accessibilityLabel={avatar.name}
+        accessibilityLabel={person.name}
         transition={0}
       />
     );
   }
 
-  return <Avatar uri={null} name={avatar.name} size={S.avatar} />;
+  return (
+    <View
+      testID={testID}
+      style={[
+        styles.face,
+        styles.letterBox,
+        letterSpace,
+        { backgroundColor: theme.backgroundSelected },
+      ]}
+    >
+      <LetterOf name={person.name} />
+    </View>
+  );
+}
+
+/** Крупная буква имени — как у аватарки без фото, только во весь блок. */
+function LetterOf({ name }: { name: string }) {
+  return (
+    <Text variant="title" color="textSecondary" accessibilityLabel={name} style={styles.letter}>
+      {initialOf(name)}
+    </Text>
+  );
 }
 
 function InfoActions({
@@ -115,29 +173,18 @@ function InfoActions({
   actions: InfoAction[];
 }) {
   const theme = useTheme();
-  const { expand, collapse, actionsTop, expandedHeight } = geometry;
-  const photoTop = expandedHeight - S.heroBottom - S.actionHeight;
+  const { actionsTop, barBottom } = geometry;
 
   const rowStyle = useAnimatedStyle(() => {
     const y = scrollY.value;
-    const q = expand > 0 ? clamp01((expand - y) / expand) : 0;
-    const p = clamp01((y - expand) / collapse);
+    const top = actionsTop - y;
 
     return {
-      top: lerp(actionsTop, photoTop, q),
-      opacity: 1 - clamp01(p * 2.2),
-      transform: [
-        { translateY: -Math.max(0, y - expand) },
-        { scaleY: lerp(1, 0.5, clamp01(p * 2)) },
-      ],
+      top,
+      // Подходя к панели, кнопки тают: под неё они не заезжают.
+      opacity: clamp01((top - barBottom) / S.actionHeight),
     };
   });
-  const plainStyle = useAnimatedStyle(() => ({
-    opacity: expand > 0 ? 1 - clamp01((expand - scrollY.value) / expand) : 1,
-  }));
-  const photoStyle = useAnimatedStyle(() => ({
-    opacity: expand > 0 ? clamp01((expand - scrollY.value) / expand) : 0,
-  }));
 
   return (
     <Animated.View style={[styles.actions, rowStyle]} pointerEvents="box-none">
@@ -151,32 +198,14 @@ function InfoActions({
           onPress={action.onPress}
           style={({ pressed }) => [styles.action, pressed && styles.pressed]}
         >
-          <Animated.View style={[StyleSheet.absoluteFill, plainStyle]} pointerEvents="none">
-            <View style={[styles.actionFill, { backgroundColor: theme.text }]} />
-          </Animated.View>
-          <Animated.View style={[StyleSheet.absoluteFill, photoStyle]} pointerEvents="none">
-            <View style={[styles.actionFillPhoto, { backgroundColor: theme.viewerBackground }]} />
-          </Animated.View>
-          <View>
-            <Animated.View style={plainStyle}>
-              <SymbolView name={action.icon} size={S.actionIcon} tintColor={theme.primary} />
-            </Animated.View>
-            <Animated.View style={[StyleSheet.absoluteFill, photoStyle]}>
-              <SymbolView name={action.icon} size={S.actionIcon} tintColor={theme.textOnMedia} />
-            </Animated.View>
-          </View>
-          <View>
-            <Animated.View style={plainStyle}>
-              <Text variant="caption" color="primary" numberOfLines={1}>
-                {action.label}
-              </Text>
-            </Animated.View>
-            <Animated.View style={[StyleSheet.absoluteFill, photoStyle]}>
-              <Text variant="caption" color="textOnMedia" numberOfLines={1}>
-                {action.label}
-              </Text>
-            </Animated.View>
-          </View>
+          <View
+            style={[styles.actionFill, { backgroundColor: theme.viewerBackground }]}
+            pointerEvents="none"
+          />
+          <SymbolView name={action.icon} size={S.actionIcon} tintColor={theme.textOnMedia} />
+          <Text variant="caption" color="textOnMedia" numberOfLines={1}>
+            {action.label}
+          </Text>
         </Pressable>
       ))}
     </Animated.View>
@@ -184,19 +213,40 @@ function InfoActions({
 }
 
 const styles = StyleSheet.create({
-  avatar: {
+  photo: {
     position: 'absolute',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  masked: {
+    left: 0,
     overflow: 'hidden',
   },
-  fill: {
-    width: '100%',
-    height: '100%',
+  face: {
+    flex: 1,
+    alignSelf: 'stretch',
+  },
+  pair: {
+    flex: 1,
+    flexDirection: 'row',
+    gap: S.pairGap,
+  },
+  letterBox: {
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  letter: {
+    fontSize: S.photoLetter,
+    lineHeight: S.photoLetterLine,
+    textAlign: 'center',
+  },
+  scrimTop: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+  },
+  scrimBottom: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   actions: {
     position: 'absolute',
@@ -215,10 +265,6 @@ const styles = StyleSheet.create({
     gap: Spacing.one,
   },
   actionFill: {
-    ...StyleSheet.absoluteFill,
-    opacity: InfoPageOpacity.actionFill,
-  },
-  actionFillPhoto: {
     ...StyleSheet.absoluteFill,
     opacity: InfoPageOpacity.actionFillOnPhoto,
   },

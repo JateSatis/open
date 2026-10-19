@@ -2,7 +2,10 @@ import { renderHook } from '@testing-library/react-native';
 import { KeyboardController, useKeyboardHandler } from 'react-native-keyboard-controller';
 
 import {
+  attachEmojiPanel,
   claimKeyboardForChat,
+  detachEmojiPanel,
+  emojiPanelHeight,
   claimKeyboardForComments,
   claimKeyboardForSheet,
   getKeyboardOwner,
@@ -139,5 +142,26 @@ describe('composer keyboard ownership', () => {
     keyboard('onEnd', 0);
 
     expect(getKeyboardOwner()).toBe('chat');
+  });
+
+  // Панель эмодзи встала на место клавиатуры: поле поднимается на то, что
+  // сверх панели (полоса навигации), — клавиатура уезжает, а поле стоит.
+  it('keeps the composer where it was while the emoji panel takes the keyboard place', async () => {
+    const { chat, sheet } = await renderBoth();
+    const inset = 30;
+
+    keyboard('onEnd', 300);
+    attachEmojiPanel('chat', inset);
+    emojiPanelHeight.value = 300 - inset;
+
+    keyboard('onMove', 150);
+    expect(chat.value).toBe(inset);
+    keyboard('onEnd', 0);
+    expect(chat.value).toBe(inset);
+    expect(sheet.value).toBe(0);
+
+    detachEmojiPanel();
+    keyboard('onEnd', 0);
+    expect(chat.value).toBe(0);
   });
 });

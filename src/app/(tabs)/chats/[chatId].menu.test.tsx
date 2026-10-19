@@ -113,7 +113,14 @@ jest.mock('@/features/media', () => ({
   stopVoice: jest.fn(),
 }));
 jest.mock('@/features/media/HoldToRecordRow', () => ({
-  HoldToRecordRow: ({ children }: { children: unknown }) => children,
+  // Строка ввода как есть; справа — «Отправить», когда она стоит на месте микрофона.
+  HoldToRecordRow: ({ children, trailing }: { children: unknown; trailing?: unknown }) =>
+    jest.requireActual('react').createElement(
+      jest.requireActual('react').Fragment,
+      null,
+      children,
+      trailing,
+    ),
 }));
 jest.mock('@/features/media/galleryPrefetch', () => ({ prefetchGallery: jest.fn() }));
 

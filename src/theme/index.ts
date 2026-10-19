@@ -10,3 +10,4 @@ export * from './motion';
 export * from './infoPage';
 export * from './tabBar';
 export * from './clusterLook';
+export * from './composer';

@@ -5,8 +5,14 @@ import { VisitorReactionLine } from './VisitorReactionLine';
 
 import { byPopularity } from '@/features/interactions/reactionState';
 
-/** Строка зрителей — только у сообщения. Нет реакций зрителей — нет и строки. */
-export function VisitorReactions({ memoryKey, reactions, tone, layout }: BubbleReactionsProps) {
+/** Реакции зрителей — только у сообщения. Нет реакций зрителей — нет и строки. */
+export function VisitorReactions({
+  memoryKey,
+  reactions,
+  tone,
+  layout,
+  onToggle,
+}: BubbleReactionsProps) {
   const entries = useMemo(() => byPopularity(reactions.visitors), [reactions.visitors]);
   const { mine } = reactions;
 
@@ -14,10 +20,13 @@ export function VisitorReactions({ memoryKey, reactions, tone, layout }: BubbleR
 
   return (
     <VisitorReactionLine
-      memoryKey={memoryKey}
+      // Сдвиг строки зрителей помнится отдельно от ряда участников того же облачка.
+      memoryKey={`${memoryKey}/visitors`}
       entries={entries}
       mine={mine?.audience === 'visitor' ? mine.emoji : null}
       tone={tone}
+      // Без обработчика — копия облачка (как у крупного ряда).
+      frozen={!onToggle}
     />
   );
 }

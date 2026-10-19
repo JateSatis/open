@@ -1,6 +1,6 @@
 import { SymbolView } from 'expo-symbols';
 import { forwardRef } from 'react';
-import { Pressable, StyleSheet, type View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 
 import type { InfoIcon } from './types';
@@ -23,15 +23,17 @@ export function InfoBarIcon({ icon }: InfoBarIconProps) {
   const plainStyle = useAnimatedStyle(() => ({ opacity: 1 - (photo?.value ?? 0) }));
   const onPhotoStyle = useAnimatedStyle(() => ({ opacity: photo?.value ?? 0 }));
 
+  // Обе иконки — в своей рамке: белая ложится ровно на обычную, а не в угол
+  // кнопки с её полями.
   return (
-    <>
+    <View>
       <Animated.View style={plainStyle}>
         <SymbolView name={icon} size={InfoPageSizes.barIcon} tintColor={theme.text} />
       </Animated.View>
       <Animated.View style={[StyleSheet.absoluteFill, onPhotoStyle]} pointerEvents="none">
         <SymbolView name={icon} size={InfoPageSizes.barIcon} tintColor={theme.textOnMedia} />
       </Animated.View>
-    </>
+    </View>
   );
 }
 

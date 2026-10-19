@@ -53,38 +53,30 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  /** Строка зрителей: постоянной высоты, растянута по облачку — от её ширины масштаб. */
-  visitorFrame: {
-    alignSelf: 'stretch',
-  },
   /**
-   * Сама строка — поверх рамки, по центру: её ширина не распирает облачко,
-   * распирает только `minWidth` рамки.
+   * Строка зрителей в нижней строке облачка: шириной по реакциям, пока
+   * облачку есть куда расти, дальше сжимается и прокручивается.
    */
-  visitorCenter: {
-    ...StyleSheet.absoluteFill,
+  visitorFrame: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexShrink: 1,
+    minWidth: 0,
   },
-  /** Линейка: та же строка без уменьшения, невидимая, — по ней ширина «как есть». */
-  visitorRuler: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    flexDirection: 'row',
+  visitorScroll: {
+    flexGrow: 0,
+    flexShrink: 1,
   },
   visitorLine: {
     flexDirection: 'row',
     alignItems: 'center',
-    flexShrink: 0,
+    gap: Spacing.one,
   },
   visitor: {
     flexDirection: 'row',
     alignItems: 'center',
     flexShrink: 0,
-  },
-  hidden: {
-    opacity: 0,
+    gap: Spacing.half,
+    paddingHorizontal: Spacing.one,
+    borderRadius: Radii.sm,
   },
 });

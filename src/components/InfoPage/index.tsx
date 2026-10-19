@@ -1,4 +1,3 @@
-import * as Haptics from 'expo-haptics';
 import {
   useCallback,
   useEffect,
@@ -22,9 +21,9 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { mixColors, useAvatarTint } from './avatarTint';
-import { clamp01, infoGeometry, snapTarget, syncedOffset } from './geometry';
+import { clamp01, infoGeometry, snapTarget, syncedOffset, titleProgress } from './geometry';
 import { InfoBarButton } from './InfoBarButton';
-import { avatarRect, InfoHero } from './InfoHero';
+import { InfoHero, photoRect } from './InfoHero';
 import { InfoTabsBar } from './InfoTabsBar';
 import { InfoTabList } from './InfoTabList';
 import { InfoTitle } from './InfoTitle';
@@ -68,12 +67,23 @@ const renderNothing = () => null;
 const STICK_FADE = 12;
 /** Палец сдвинулся дальше — это уже не тап по аватарке, а протяжка. */
 const TAP_SLOP = 10;
-/** Цвет аватарки подмешивается в фон плавно, а не скачком. */
-const TINT_FADE_MS = 300;
+
+/** Страница без въезда-ухода: на месте, свайп вправо её не тянет. */
+function useStillSlide(): Pick<SlideBack, 'offset' | 'makeSwipe'> {
+  const offset = useSharedValue(0);
+  const makeSwipe = useCallback(() => Gesture.Pan().enabled(false), []);
+
+  return { offset, makeSwipe };
+}
 
 export type InfoPageProps = {
-  /** Въезд и уход страницы — из `useSlideBack` у владельца: ему тоже бывает нужно уйти. */
-  slideBack: SlideBack;
+  /**
+   * Въезд и уход страницы — из `useSlideBack` у владельца: ему тоже бывает
+   * нужно уйти. Нет — страница стоит на месте как обычный экран (профиль).
+   */
+  slideBack?: SlideBack;
+  /** «Назад» без въезда-ухода: экран стека. Нет ни его, ни `slideBack` — стрелки нет. */
+  onBack?: () => void;
   title: string;
   status: InfoStatus | null;
   avatar: InfoAvatar;
@@ -83,7 +93,7 @@ export type InfoPageProps = {
   /** Карточки под шапкой: информация, «Подписаться». */
   cards?: ReactNode;
   tabs: InfoTab[];
-  /** Тап по раскрытому фото: полноэкранный просмотр. Нет — фото не раскрывается. */
+  /** Тап по фото: полноэкранный просмотр. Нет — фото не нажимается. */
   onOpenPhoto?: () => void;
   /** Открытый поиск — поле на месте панели; `null` — панель как обычно. */
   search?: InfoSearch | null;
@@ -93,10 +103,11 @@ export type InfoPageProps = {
 };
 
 /**
- * Страница информации — чат, а дальше профиль и канал: крупная шапка с
- * аватаркой на подкрашенном её цветом градиенте, которая схлопывается в
- * компактный заголовок; фото, раскрывающееся потягиванием вниз; карточки и
- * вкладки с таблеткой и свайпом. Въезжает справа и уезжает за пальцем.
+ * Страница информации — чат, группа, канал, профиль: сверху фото во всю
+ * ширину (нет фото — блок с буквой) с именем внизу слева; при прокрутке фото
+ * уезжает вместе с содержимым и оставляет компактную плашку с именем;
+ * карточки и вкладки с таблеткой и свайпом. Въезжает справа и уезжает за
+ * пальцем, если владелец дал `slideBack`.
  *
  * Шапка и карточки лежат поверх списков вкладок и двигаются по смещению
  * активного списка (см. `geometry.ts`), поэтому листается нативный скролл, а
@@ -104,6 +115,7 @@ export type InfoPageProps = {
  */
 export function InfoPage({
   slideBack,
+  onBack,
   title,
   status,
   avatar,
@@ -119,26 +131,29 @@ export function InfoPage({
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { width, height: windowHeight } = useWindowDimensions();
-  const { offset: slide, close, makeSwipe } = slideBack;
+  const still = useStillSlide();
+  const { offset: slide, makeSwipe } = slideBack ?? still;
+  const goBack = onBack ?? slideBack?.close;
 
   const photoUri = avatar.kind === 'single' ? avatar.uri : null;
-  const expandable = Boolean(photoUri && onOpenPhoto);
+  const tappable = Boolean(photoUri && onOpenPhoto);
   const geometry = useMemo(
-    () => infoGeometry({ width, insetTop: insets.top, hasActions: actions.length > 0, expandable }),
-    [actions.length, expandable, insets.top, width],
+    () => infoGeometry({ width, insetTop: insets.top, hasActions: actions.length > 0 }),
+    [actions.length, insets.top, width],
   );
-  const { expand, expandedHeight, heroHeight, barBottom } = geometry;
+  const { heroHeight, barBottom, collapse } = geometry;
 
   const [cardsHeight, setCardsHeight] = useState<number | null>(cards ? null : 0);
   const [pageHeight, setPageHeight] = useState(windowHeight);
-  const tabsTop = expandedHeight + (cardsHeight ?? 0);
-  const stickY = tabsTop - barBottom;
-  const listTop = tabsTop + S.tabsHeight;
+  const tabsTop = heroHeight + (cardsHeight ?? 0);
+  // Без вкладок прилипать нечему: страница листается до конца карточек, но
+  // хотя бы до того, как фото уйдёт под плашку.
+  const stickY = tabs.length > 0 ? tabsTop - barBottom : Math.max(collapse, tabsTop - pageHeight);
+  const listTop = tabs.length > 0 ? tabsTop + S.tabsHeight : tabsTop;
 
-  const scrollY = useSharedValue(expand);
+  const scrollY = useSharedValue(0);
   const activeTab = useSharedValue(0);
   const dragging = useSharedValue(false);
-  const expanded = useSharedValue(false);
   const position = useSharedValue(0);
   const [index, setIndex] = useState(0);
   const lastTab = Math.max(0, tabs.length - 1);
@@ -155,20 +170,13 @@ export function InfoPage({
   // Списки вкладок по номеру. Не ref: их читают и обработчики жестов.
   const [handles] = useState(() => new Map<number, InfoTabListHandle>());
 
-  // Раскрытие могло пропасть (фото убрали) — покой страницы сдвигается.
-  useEffect(() => {
-    if (scrollY.value < expand) return;
-    if (expand === 0) expanded.set(false);
-  }, [expand, expanded, scrollY]);
-
   // Тянуть страницу вправо можно с первой вкладки: дальше свайп вправо
   // листает вкладки назад.
   const canSwipeBack = useDerivedValue(() => position.value < 0.01);
   const swipeBack = useMemo(() => makeSwipe(canSwipeBack), [canSwipeBack, makeSwipe]);
 
-  const photoProgress = useDerivedValue(() =>
-    expand > 0 ? clamp01((expand - scrollY.value) / expand) : 0,
-  );
+  // Насколько панель ещё на фото: иконки на нём белые.
+  const photoProgress = useDerivedValue(() => 1 - titleProgress(scrollY.value, geometry));
   const stuck = useDerivedValue(() => clamp01((scrollY.value - stickY + STICK_FADE) / STICK_FADE));
 
   const syncOthers = useCallback(
@@ -193,7 +201,6 @@ export function InfoPage({
       scrollY,
       activeTab,
       dragging,
-      expanded,
       register: (tab, handle) => {
         handles.set(tab, handle);
 
@@ -201,11 +208,11 @@ export function InfoPage({
           if (handles.get(tab) === handle) handles.delete(tab);
         };
       },
-      initialOffset: () => syncedOffset(scrollY.value, geometry.expand, stickY),
+      initialOffset: () => syncedOffset(scrollY.value, 0, stickY),
       onSettle: (tab, y) => {
         if (tab !== activeTab.value) return;
 
-        const target = snapTarget(y, geometry, expanded.value);
+        const target = snapTarget(y, geometry);
 
         if (target !== null && Math.abs(target - y) > 0.5) {
           handles.get(tab)?.scrollTo(target, true);
@@ -214,22 +221,8 @@ export function InfoPage({
         syncOthers(target ?? y);
       },
       onDragStart: () => {},
-      onThreshold: () => {
-        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      },
     }),
-    [
-      activeTab,
-      dragging,
-      expanded,
-      geometry,
-      handles,
-      listTop,
-      pageHeight,
-      scrollY,
-      stickY,
-      syncOthers,
-    ],
+    [activeTab, dragging, geometry, handles, listTop, pageHeight, scrollY, stickY, syncOthers],
   );
 
   const activate = useCallback(
@@ -308,62 +301,46 @@ export function InfoPage({
     },
   );
 
-  const onAvatarPress = useCallback(() => {
-    if (!expandable) return;
+  const openPhoto = useCallback(() => onOpenPhoto?.(), [onOpenPhoto]);
+  const actionsTop = actions.length > 0 ? geometry.actionsTop : null;
 
-    if (expanded.value) {
-      onOpenPhoto?.();
-      return;
-    }
-
-    const handle = handles.get(activeTab.value);
-
-    if (handle) handle.scrollTo(0, true);
-    else onOpenPhoto?.();
-  }, [activeTab, expandable, expanded, handles, onOpenPhoto]);
-
-  // Тап по аватарке ловит вся страница: сама аватарка пропускает касания к
-  // списку, чтобы за неё можно было тянуть шапку. Панель сверху — не аватарка.
-  const avatarTap = useMemo(
+  // Тап по фото ловит вся страница: само фото пропускает касания к списку,
+  // чтобы за него можно было листать. Панель и кнопки на фото — не фото.
+  const photoTap = useMemo(
     () =>
       Gesture.Tap()
-        .enabled(expandable)
+        .enabled(tappable)
         .maxDistance(TAP_SLOP)
         .onEnd((event, success) => {
           if (!success || event.y < barBottom) return;
 
-          const rect = avatarRect(scrollY.value, geometry);
-          const inside =
-            event.x >= rect.x &&
-            event.x <= rect.x + rect.width &&
-            event.y >= rect.y &&
-            event.y <= rect.y + rect.height;
+          const y = scrollY.value;
+          const rect = photoRect(y, geometry);
 
-          if (inside && scrollY.value <= geometry.expand + geometry.collapse * 0.3) {
-            runOnJS(onAvatarPress)();
+          if (event.y > rect.y + rect.height || titleProgress(y, geometry) > 0.5) return;
+          if (
+            actionsTop !== null &&
+            event.y >= actionsTop - y &&
+            event.y <= actionsTop - y + S.actionHeight
+          ) {
+            return;
           }
+
+          runOnJS(openPhoto)();
         }),
-    [barBottom, expandable, geometry, onAvatarPress, scrollY],
+    [actionsTop, barBottom, geometry, openPhoto, scrollY, tappable],
   );
   const pageGesture = useMemo(
-    () => Gesture.Simultaneous(swipeBack, avatarTap),
-    [avatarTap, swipeBack],
+    () => Gesture.Simultaneous(swipeBack, photoTap),
+    [photoTap, swipeBack],
   );
 
-  // Цвет шапки: из фото, без фото — нейтральный цвет заглушки.
+  // Цвет плашки: из фото, без фото — нейтральный цвет заглушки.
   const tint = useAvatarTint(photoUri);
   const neutralTop = mixColors(theme.background, theme.backgroundSelected, 1);
   const tintedTop = tint
     ? mixColors(theme.background, tint, InfoPageOpacity.tintStrength)
     : neutralTop;
-  const tintShown = useSharedValue(tint ? 1 : 0);
-
-  useEffect(() => {
-    tintShown.set(withTiming(tint ? 1 : 0, { duration: TINT_FADE_MS }));
-  }, [tint, tintShown]);
-
-  const gradientHeight = Math.min(expand + heroHeight + S.gradientTail, tabsTop);
-  const solidShare = gradientHeight > 0 ? expand / gradientHeight : 0;
 
   const pageStyle = useAnimatedStyle(() => ({ transform: [{ translateX: slide.value }] }));
   const backdropStyle = useAnimatedStyle(() => ({
@@ -372,11 +349,8 @@ export function InfoPage({
   const overlayStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: -Math.min(scrollY.value, stickY) }],
   }));
-  const tintStyle = useAnimatedStyle(() => ({ opacity: tintShown.value }));
   const barStyle = useAnimatedStyle(() => ({
-    opacity: clamp01(
-      (scrollY.value - expand - geometry.collapse * 0.5) / (geometry.collapse * 0.5),
-    ),
+    opacity: titleProgress(scrollY.value, geometry),
   }));
 
   const summary = tabs[shownIndex]?.summary ?? '';
@@ -396,8 +370,8 @@ export function InfoPage({
         >
           <InfoPhotoProgressContext.Provider value={photoProgress}>
             <InfoScrollContext.Provider value={scroll}>
-              {/* Без вкладок список всё равно нужен: шапку схлопывает и фото
-                  раскрывает его прокрутка. */}
+              {/* Без вкладок список всё равно нужен: фото уводит и карточки
+                  листает его прокрутка. */}
               {ready && tabs.length === 0 ? (
                 <View style={StyleSheet.absoluteFill}>
                   <InfoTabList tab={0} data={EMPTY} renderItem={renderNothing} />
@@ -422,29 +396,12 @@ export function InfoPage({
               ) : null}
 
               <Animated.View style={[styles.overlay, overlayStyle]} pointerEvents="box-none">
-                <View pointerEvents="none" style={[styles.gradient, { height: gradientHeight }]}>
-                  <Gradient
-                    top={neutralTop}
-                    bottom={theme.background}
-                    solidShare={solidShare}
-                    width={width}
-                    height={gradientHeight}
-                  />
-                  <Animated.View style={[StyleSheet.absoluteFill, tintStyle]}>
-                    <Gradient
-                      top={tintedTop}
-                      bottom={theme.background}
-                      solidShare={solidShare}
-                      width={width}
-                      height={gradientHeight}
-                    />
-                  </Animated.View>
-                </View>
-                <View style={{ height: expandedHeight }} pointerEvents="none" />
+                <View style={{ height: heroHeight }} pointerEvents="none" />
                 {cards ? (
                   <View
                     testID="info-cards"
                     pointerEvents="box-none"
+                    style={styles.cards}
                     onLayout={(event) => setCardsHeight(event.nativeEvent.layout.height)}
                   >
                     {cards}
@@ -482,7 +439,7 @@ export function InfoPage({
                   title={title}
                   status={status}
                   summary={summary}
-                  hasActions={actions.length > 0}
+                  hasBack={Boolean(goBack)}
                 />
               </View>
 
@@ -507,12 +464,14 @@ export function InfoPage({
                 </View>
               ) : (
                 <View style={[styles.bar, { top: insets.top }]} pointerEvents="box-none">
-                  <InfoBarButton
-                    testID="info-back"
-                    icon={{ ios: 'chevron.left', android: 'arrow_back', web: 'arrow_back' }}
-                    accessibilityLabel="Назад"
-                    onPress={close}
-                  />
+                  {goBack ? (
+                    <InfoBarButton
+                      testID="info-back"
+                      icon={{ ios: 'chevron.left', android: 'arrow_back', web: 'arrow_back' }}
+                      accessibilityLabel="Назад"
+                      onPress={goBack}
+                    />
+                  ) : null}
                   <View style={styles.barRight}>
                     {searchTab ? (
                       <InfoBarButton
@@ -534,37 +493,6 @@ export function InfoPage({
   );
 }
 
-/**
- * Вертикальный градиент — нативный фон вью: стоит в первом же кадре (холст
- * Skia появлялся с задержкой). Сверху сплошной цвет на `solidShare` высоты —
- * под фото, которое при раскрытии сдвигает градиент вниз.
- */
-function Gradient({
-  top,
-  bottom,
-  solidShare,
-  width,
-  height,
-}: {
-  top: string;
-  bottom: string;
-  solidShare: number;
-  width: number;
-  height: number;
-}) {
-  const solid = `${(solidShare * 100).toFixed(2)}%`;
-
-  return (
-    <View
-      style={{
-        width,
-        height,
-        experimental_backgroundImage: `linear-gradient(to bottom, ${top} 0%, ${top} ${solid}, ${bottom} 100%)`,
-      }}
-    />
-  );
-}
-
 const styles = StyleSheet.create({
   page: {
     flex: 1,
@@ -573,13 +501,11 @@ const styles = StyleSheet.create({
   fill: {
     flex: 1,
   },
-  overlay: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: 0,
+  /** Карточки не прилипают к краю фото. */
+  cards: {
+    paddingTop: Spacing.three,
   },
-  gradient: {
+  overlay: {
     position: 'absolute',
     left: 0,
     right: 0,
