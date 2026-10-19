@@ -123,14 +123,14 @@ it('«Подписаться» subscribes to the channel of this pop', async () 
   await waitFor(() => expect(subscribeToChannel).toHaveBeenCalledWith('B', false));
 });
 
-it('the channel name opens that channel above the viewer', async () => {
+it('the channel name opens that channel above the viewer, on its «Попсы»', async () => {
   await open(mixed, 'b');
 
   fireEvent.press(within(screen.getByTestId('pop-page-active')).getByTestId('pop-channel-name'));
 
   expect(mockPush).toHaveBeenCalledWith({
     pathname: '/channel/[channelId]',
-    params: { channelId: 'B' },
+    params: { channelId: 'B', section: 'pops' },
   });
   expect(mockBack).not.toHaveBeenCalled();
 });
