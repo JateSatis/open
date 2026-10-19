@@ -74,6 +74,7 @@ const dialog: ChatSummary = {
   lastMessageAuthorId: 'anna',
   lastPopAt: null,
   lastActivityAt: READ_AT,
+  enteredAt: null,
   previewIsPop: false,
   subscription: null,
   hasUnread: false,

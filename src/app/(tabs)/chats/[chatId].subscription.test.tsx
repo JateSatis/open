@@ -154,6 +154,7 @@ function chatWith(participants: ChatSummary['participants']): ChatSummary {
     lastMessageAuthorId: null,
     lastPopAt: null,
     lastActivityAt: null,
+    enteredAt: null,
     previewIsPop: false,
     subscription: null,
     hasUnread: false,
@@ -173,6 +174,7 @@ const subscription: Subscription = {
   notify: true,
   unreadPosts: 0,
   unreadPops: 0,
+  inChatsAt: null,
 };
 
 /** Подписка и счётчик живут в «базе» теста и меняются вместе с действиями. */

@@ -11,6 +11,7 @@ import { acquireChatTopic, type ChatActivity, type ChatTopicListener } from '@/a
 import { MESSAGE_COLUMNS, messagesSelect, toMessage, type Message } from '@/api/messageRows';
 import { publishPop, type PublishPopInput } from '@/api/pops';
 import { listChatSubscriptions, type Subscription } from '@/api/subscriptions';
+import { byChatListOrder } from '@/api/chatListOrder';
 import { supabase } from '@/api/supabase';
 
 export { toPreview, type MessagePreview } from '@/api/messagePreview';
@@ -94,8 +95,14 @@ export type ChatSummary = {
   lastMessageAuthorId: string | null;
   /** Свежий живой поп канала; у обычного чата — null. */
   lastPopAt: string | null;
-  /** Свежее из последнего сообщения и попа — по нему чат встаёт в списке. */
+  /** Свежее из последнего сообщения и попа — время в строке списка. */
   lastActivityAt: string | null;
+  /**
+   * Мой момент входа: вступил в чат (создал, принял заявку) или подписка
+   * попала в «Чаты». Только что вошедший чат стоит в списке наверху, пока в
+   * других не появится что-то свежее, — см. `chatListOrderAt`.
+   */
+  enteredAt: string | null;
   /**
    * Самое свежее в канале — поп без поста: превью тогда «Новый попс». Поп с
    * постом публикуется одной транзакцией и получает то же время, что пост, —
@@ -228,6 +235,7 @@ export function toSummary(
 ): ChatSummary {
   const participants = people.members.map(toParticipant);
   const mine = participants.find((participant) => participant.id === viewerId);
+  const mineJoinedAt = people.members.find((member) => member.user_id === viewerId)?.joined_at;
   const lastPopAt = chat.channel?.last_pop_at ?? null;
   const previewIsPop =
     lastPopAt !== null && (chat.last_message_at === null || lastPopAt > chat.last_message_at);
@@ -253,20 +261,12 @@ export function toSummary(
     lastMessageAuthorId: chat.last_message_author_id,
     lastPopAt,
     lastActivityAt: previewIsPop ? lastPopAt : chat.last_message_at,
+    enteredAt: subscription?.inChatsAt ?? mineJoinedAt ?? null,
     previewIsPop,
     subscription,
     hasUnread: subscription ? subscription.unreadPosts + subscription.unreadPops > 0 : memberUnread,
     subscribersCount: chat.subscribers_count,
   };
-}
-
-/** Свежие сверху; чаты без единого сообщения — в конце. */
-function byActivity(a: ChatSummary, b: ChatSummary): number {
-  if (a.lastActivityAt === b.lastActivityAt) return 0;
-  if (a.lastActivityAt === null) return 1;
-  if (b.lastActivityAt === null) return -1;
-
-  return a.lastActivityAt > b.lastActivityAt ? -1 : 1;
 }
 
 export async function getCurrentUserId(): Promise<string> {
@@ -367,7 +367,7 @@ export async function listChats(): Promise<ChatSummary[]> {
         subscriptionByChat.get(chat.id) ?? null,
       ),
     )
-    .sort(byActivity);
+    .sort(byChatListOrder);
 }
 
 export const CHATS_OF_PAGE_SIZE = 30;

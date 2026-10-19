@@ -163,6 +163,7 @@ const postsChat: ChatSummary = {
   lastMessageAuthorId: null,
   lastPopAt: null,
   lastActivityAt: null,
+  enteredAt: null,
   previewIsPop: false,
   subscription: null,
   hasUnread: false,
@@ -350,6 +351,7 @@ describe('ChannelScreen subscription', () => {
     notify: true,
     unreadPosts: 0,
     unreadPops: 0,
+    inChatsAt: null,
   };
 
   // База в миниатюре: подписка и счётчики канала меняются вместе с действиями,
@@ -401,6 +403,7 @@ describe('ChannelScreen subscription', () => {
         ...stored,
         unreadPosts: posts ? 0 : stored.unreadPosts,
         unreadPops: pops ? 0 : stored.unreadPops,
+        inChatsAt: null,
       };
     });
   });

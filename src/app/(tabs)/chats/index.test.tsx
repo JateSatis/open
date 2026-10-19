@@ -81,6 +81,7 @@ const chat: ChatSummary = {
   lastMessageAuthorId: 'user-2',
   lastPopAt: null,
   lastActivityAt: '2026-09-16T10:00:00Z',
+  enteredAt: null,
   previewIsPop: false,
   subscription: null,
   hasUnread: false,
@@ -151,6 +152,7 @@ describe('ChatsScreen', () => {
       notify: true,
       unreadPosts: 0,
       unreadPops: 1,
+      inChatsAt: null,
     };
     const readChannel: ChatSummary = {
       ...chat,
@@ -162,6 +164,7 @@ describe('ChatsScreen', () => {
       lastMessageAuthorId: 'owner-1',
       lastPopAt: '2026-09-16T11:00:00Z',
       lastActivityAt: '2026-09-16T11:00:00Z',
+      enteredAt: null,
       previewIsPop: true,
       subscription,
       hasUnread: true,
@@ -191,6 +194,7 @@ describe('ChatsScreen', () => {
           ...readChannel,
           lastMessageAt: '2026-09-16T12:00:00Z',
           lastActivityAt: '2026-09-16T12:00:00Z',
+          enteredAt: null,
           previewIsPop: false,
           subscription: { ...subscription, unreadPosts: 2 },
         },
@@ -308,6 +312,7 @@ describe('ChatsScreen', () => {
         notify: true,
         unreadPosts: 1,
         unreadPops: 0,
+        inChatsAt: null,
       },
       hasUnread: true,
     };

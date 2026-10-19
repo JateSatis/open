@@ -2,6 +2,7 @@ import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useCallback } from 'react';
 
 import type { Channel } from '@/api/channels';
+import { byChatListOrder } from '@/api/chatListOrder';
 import type { ChatSummary } from '@/api/chats';
 import {
   markChannelRead,
@@ -17,6 +18,20 @@ import { showNotice } from '@/features/notifications/alertsStore';
 import { withDeadline } from '@/lib/deadline';
 
 export { channelSubscriptionQueryKey };
+
+/**
+ * Подписка с новым `inChats` — и с моментом попадания в «Чаты», как его
+ * ставит база: уже лежавшая в чатах свой момент сохраняет.
+ */
+function withInChats<T extends ChannelSubscription>(subscription: T, inChats: boolean): T {
+  const inChatsAt = !inChats
+    ? null
+    : subscription.inChats
+      ? subscription.inChatsAt
+      : new Date().toISOString();
+
+  return { ...subscription, inChats, inChatsAt };
+}
 
 /** Сколько ждать ответа базы на действие с подпиской, прежде чем откатить его. */
 const ACTION_DEADLINE_MS = 10_000;
@@ -79,14 +94,23 @@ function applySubscription(
       : channel,
   );
   queryClient.setQueryData<ChatSummary[]>(chatsQueryKey, (chats) =>
-    chats?.flatMap((chat) => {
-      if (chat.channel?.id !== channelId || !chat.subscription) return [chat];
-      if (!next?.inChats) return [];
+    chats
+      ?.flatMap((chat) => {
+        if (chat.channel?.id !== channelId || !chat.subscription) return [chat];
+        if (!next?.inChats) return [];
 
-      const unread = next.unreadPosts + next.unreadPops > 0;
+        const unread = next.unreadPosts + next.unreadPops > 0;
 
-      return [{ ...chat, subscription: next, hasUnread: unread }];
-    }),
+        return [
+          {
+            ...chat,
+            subscription: next,
+            hasUnread: unread,
+            enteredAt: next.inChatsAt ?? chat.enteredAt,
+          },
+        ];
+      })
+      .sort(byChatListOrder),
   );
 }
 
@@ -120,7 +144,8 @@ export function useSubscriptionActions(channelId: string): SubscriptionActions {
       // в строке списка, и без неё «Прочитать все» убрало бы строку.
       const listed = snapshot.chats?.find((chat) => chat.channel?.id === channelId)?.subscription;
       const current =
-        snapshot.subscription ?? (listed?.channelId ? { ...listed, channelId: listed.channelId } : null);
+        snapshot.subscription ??
+        (listed?.channelId ? { ...listed, channelId: listed.channelId } : null);
 
       await queryClient.cancelQueries({ queryKey: channelSubscriptionQueryKey(channelId) });
       applySubscription(queryClient, channelId, current, next(current));
@@ -145,16 +170,18 @@ export function useSubscriptionActions(channelId: string): SubscriptionActions {
     (addToChats: boolean) =>
       run(
         (current) =>
-          current
-            ? { ...current, inChats: current.inChats || addToChats }
-            : {
-                channelId,
-                chatId: postsChatOf(queryClient, channelId) ?? '',
-                inChats: addToChats,
-                notify: true,
-                unreadPosts: 0,
-                unreadPops: 0,
-              },
+          withInChats(
+            current ?? {
+              channelId,
+              chatId: postsChatOf(queryClient, channelId) ?? '',
+              inChats: false,
+              notify: true,
+              unreadPosts: 0,
+              unreadPops: 0,
+              inChatsAt: null,
+            },
+            (current?.inChats ?? false) || addToChats,
+          ),
         () => subscribeToChannel(channelId, addToChats),
         'Не удалось подписаться',
       ),
@@ -164,7 +191,7 @@ export function useSubscriptionActions(channelId: string): SubscriptionActions {
   const setInChats = useCallback(
     (inChats: boolean) =>
       run(
-        (current) => (current ? { ...current, inChats } : current),
+        (current) => (current ? withInChats(current, inChats) : current),
         () => setChannelInChats(channelId, inChats),
         inChats ? 'Не удалось добавить в чаты' : 'Не удалось убрать из чатов',
       ),

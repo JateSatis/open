@@ -123,6 +123,7 @@ const subscription = (overrides: Partial<ChannelSubscription> = {}): ChannelSubs
   notify: true,
   unreadPosts: 0,
   unreadPops: 0,
+  inChatsAt: null,
   ...overrides,
 });
 

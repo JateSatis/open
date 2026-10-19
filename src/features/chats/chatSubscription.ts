@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect } from 'react';
 
+import { byChatListOrder } from '@/api/chatListOrder';
 import type { ChatSummary } from '@/api/chats';
 import {
   getMyChatSubscription,
@@ -84,12 +85,21 @@ function applySubscription(
     chat ? { ...chat, subscribersCount: Math.max(0, chat.subscribersCount + delta) } : chat,
   );
   queryClient.setQueryData<ChatSummary[]>(chatsQueryKey, (chats) =>
-    chats?.flatMap((chat) => {
-      if (chat.id !== chatId || !chat.subscription) return [chat];
-      if (!next) return [];
+    chats
+      ?.flatMap((chat) => {
+        if (chat.id !== chatId || !chat.subscription) return [chat];
+        if (!next) return [];
 
-      return [{ ...chat, subscription: next, hasUnread: next.unreadPosts > 0 }];
-    }),
+        return [
+          {
+            ...chat,
+            subscription: next,
+            hasUnread: next.unreadPosts > 0,
+            enteredAt: next.inChatsAt ?? chat.enteredAt,
+          },
+        ];
+      })
+      .sort(byChatListOrder),
   );
 }
 
@@ -153,6 +163,7 @@ export function useChatSubscriptionActions(chatId: string): ChatSubscriptionActi
             notify: true,
             unreadPosts: 0,
             unreadPops: 0,
+            inChatsAt: new Date().toISOString(),
           },
         () => subscribeToChat(chatId),
         'Не удалось подписаться',
@@ -171,7 +182,12 @@ export function useChatSubscriptionActions(chatId: string): ChatSubscriptionActi
   );
 
   const unsubscribe = useCallback(
-    () => run(() => null, () => unsubscribeFromChat(chatId), 'Не удалось отписаться'),
+    () =>
+      run(
+        () => null,
+        () => unsubscribeFromChat(chatId),
+        'Не удалось отписаться',
+      ),
     [chatId, run],
   );
 
@@ -212,7 +228,11 @@ export function useMarkChatSubscriptionRead(
         queryClient.setQueryData<ChatSummary[]>(chatsQueryKey, (chats) =>
           chats?.map((chat) =>
             chat.id === chatId && chat.subscription
-              ? { ...chat, subscription: { ...chat.subscription, unreadPosts: 0 }, hasUnread: false }
+              ? {
+                  ...chat,
+                  subscription: { ...chat.subscription, unreadPosts: 0 },
+                  hasUnread: false,
+                }
               : chat,
           ),
         );

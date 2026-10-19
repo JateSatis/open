@@ -55,6 +55,7 @@ const group: ChatSummary = {
   lastMessageAuthorId: 'user-2',
   lastPopAt: null,
   lastActivityAt: '2026-09-16T10:00:00Z',
+  enteredAt: null,
   previewIsPop: false,
   subscription: null,
   hasUnread: false,
