@@ -14,6 +14,73 @@ export type Database = {
   }
   public: {
     Tables: {
+      account_installations: {
+        Row: {
+          created_at: string
+          id: string
+          installation_id: string
+          last_seen_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          installation_id: string
+          last_seen_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          installation_id?: string
+          last_seen_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "account_installations_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      account_restrictions: {
+        Row: {
+          actors: number
+          created_at: string
+          id: string
+          restricted_until: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          actors: number
+          created_at?: string
+          id?: string
+          restricted_until: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          actors?: number
+          created_at?: string
+          id?: string
+          restricted_until?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "account_restrictions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       attachments: {
         Row: {
           created_at: string
@@ -83,6 +150,42 @@ export type Database = {
             columns: ["pop_id"]
             isOneToOne: false
             referencedRelation: "pops"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      blocks: {
+        Row: {
+          blocked_id: string
+          blocker_id: string
+          created_at: string
+          id: string
+        }
+        Insert: {
+          blocked_id: string
+          blocker_id: string
+          created_at?: string
+          id?: string
+        }
+        Update: {
+          blocked_id?: string
+          blocker_id?: string
+          created_at?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "blocks_blocked_id_fkey"
+            columns: ["blocked_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "blocks_blocker_id_fkey"
+            columns: ["blocker_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -257,6 +360,7 @@ export type Database = {
           last_message_author_id: string | null
           last_message_text: string | null
           owner_id: string | null
+          request_pending: boolean
           subscribers_count: number
           time_restricted: boolean
           title: string | null
@@ -265,6 +369,7 @@ export type Database = {
           chat_display_name: string | null
           chat_read_up_to: string | null
           last_message_at: string | null
+          last_message_preview: string | null
         }
         Insert: {
           avatar_url?: string | null
@@ -278,6 +383,7 @@ export type Database = {
           last_message_author_id?: string | null
           last_message_text?: string | null
           owner_id?: string | null
+          request_pending?: boolean
           subscribers_count?: number
           time_restricted?: boolean
           title?: string | null
@@ -295,6 +401,7 @@ export type Database = {
           last_message_author_id?: string | null
           last_message_text?: string | null
           owner_id?: string | null
+          request_pending?: boolean
           subscribers_count?: number
           time_restricted?: boolean
           title?: string | null
@@ -675,6 +782,35 @@ export type Database = {
           },
         ]
       }
+      contact_request_log: {
+        Row: {
+          created_at: string
+          id: string
+          kind: string
+          requester_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          kind: string
+          requester_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          kind?: string
+          requester_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contact_request_log_requester_id_fkey"
+            columns: ["requester_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       devices: {
         Row: {
           app_version: string | null
@@ -725,6 +861,58 @@ export type Database = {
           {
             foreignKeyName: "devices_user_id_fkey"
             columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      dialogue_requests: {
+        Row: {
+          addressee_id: string
+          chat_id: string
+          closed_at: string | null
+          created_at: string
+          id: string
+          outcome: string | null
+          requester_id: string
+        }
+        Insert: {
+          addressee_id: string
+          chat_id: string
+          closed_at?: string | null
+          created_at?: string
+          id?: string
+          outcome?: string | null
+          requester_id: string
+        }
+        Update: {
+          addressee_id?: string
+          chat_id?: string
+          closed_at?: string | null
+          created_at?: string
+          id?: string
+          outcome?: string | null
+          requester_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dialogue_requests_addressee_id_fkey"
+            columns: ["addressee_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dialogue_requests_chat_id_fkey"
+            columns: ["chat_id"]
+            isOneToOne: false
+            referencedRelation: "chats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dialogue_requests_requester_id_fkey"
+            columns: ["requester_id"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -2048,7 +2236,6 @@ export type Database = {
           dialogue_participant_name_masking: string
           friends_list_visibility: string
           id: string
-          incoming_dialogue_requests: string
           initialized_at: string | null
           message_activity_metadata_visibility: string
           profile_identity_masking: string
@@ -2068,7 +2255,6 @@ export type Database = {
           dialogue_participant_name_masking: string
           friends_list_visibility: string
           id?: string
-          incoming_dialogue_requests: string
           initialized_at?: string | null
           message_activity_metadata_visibility: string
           profile_identity_masking: string
@@ -2088,7 +2274,6 @@ export type Database = {
           dialogue_participant_name_masking?: string
           friends_list_visibility?: string
           id?: string
-          incoming_dialogue_requests?: string
           initialized_at?: string | null
           message_activity_metadata_visibility?: string
           profile_identity_masking?: string
@@ -3008,6 +3193,85 @@ export type Database = {
         }
         Relationships: []
       }
+      reports: {
+        Row: {
+          chat_id: string | null
+          comment: string | null
+          created_at: string
+          id: string
+          reason: string
+          reporter_id: string | null
+          target_kind: string
+          target_user_id: string | null
+        }
+        Insert: {
+          chat_id?: string | null
+          comment?: string | null
+          created_at?: string
+          id?: string
+          reason: string
+          reporter_id?: string | null
+          target_kind: string
+          target_user_id?: string | null
+        }
+        Update: {
+          chat_id?: string | null
+          comment?: string | null
+          created_at?: string
+          id?: string
+          reason?: string
+          reporter_id?: string | null
+          target_kind?: string
+          target_user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reports_chat_id_fkey"
+            columns: ["chat_id"]
+            isOneToOne: false
+            referencedRelation: "chats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reports_reporter_id_fkey"
+            columns: ["reporter_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reports_target_user_id_fkey"
+            columns: ["target_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      safety_config: {
+        Row: {
+          created_at: string
+          id: string
+          note: string | null
+          params: Json
+          version: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          note?: string | null
+          params: Json
+          version: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          note?: string | null
+          params?: Json
+          version?: number
+        }
+        Relationships: []
+      }
       search_request_log: {
         Row: {
           created_at: string
@@ -3294,6 +3558,7 @@ export type Database = {
           edited_at: string | null
           forwarded_comment_id: string | null
           fragments_count: number | null
+          hidden: boolean | null
           id: string | null
           kind: string | null
           member_reactions: Json | null
@@ -3427,6 +3692,9 @@ export type Database = {
         Returns: string[]
       }
       attach_fragment: { Args: { fragment: string }; Returns: string }
+      block_user: { Args: { p_user: string }; Returns: undefined }
+      blocked_pair: { Args: { p_a: string; p_b: string }; Returns: boolean }
+      blocker_message_visible: { Args: { p_chat: string }; Returns: boolean }
       call_duration_text: {
         Args: { ended: string; started: string }
         Returns: string
@@ -3506,6 +3774,7 @@ export type Database = {
           error: true
         } & "the function public.chat_read_up_to with parameter or with a single unnamed json/jsonb parameter, but no matches were found in the schema cache"
       }
+      chat_readable: { Args: { p_chat: string }; Returns: boolean }
       chat_reads_visible: { Args: { p_chat: string }; Returns: boolean }
       chat_time_restricted_now: { Args: { p_chat: string }; Returns: boolean }
       chat_time_visible: { Args: { p_chat: string }; Returns: boolean }
@@ -3517,6 +3786,14 @@ export type Database = {
         }[]
       }
       check_comment_shape: { Args: { target: string }; Returns: undefined }
+      check_contact_request_limit: {
+        Args: { p_count: number; p_user: string }
+        Returns: undefined
+      }
+      check_dialogue_retry: {
+        Args: { p_me: string; p_peer: string }
+        Returns: undefined
+      }
       check_message_shape: { Args: { target: string }; Returns: undefined }
       clean_group_avatar_url: { Args: { url: string }; Returns: string }
       clean_own_avatar_url: {
@@ -3541,6 +3818,7 @@ export type Database = {
       }
       common_prefix_length: { Args: { a: string; b: string }; Returns: number }
       common_suffix_length: { Args: { a: string; b: string }; Returns: number }
+      contact_restricted: { Args: { p_user: string }; Returns: boolean }
       count_chat_search: {
         Args: { query: string; target_chat: string }
         Returns: number
@@ -3559,6 +3837,7 @@ export type Database = {
           chat_avatar_url?: string
           chat_title?: string
           invitee_ids: string[]
+          request_text?: string
         }
         Returns: Json
       }
@@ -3752,6 +4031,10 @@ export type Database = {
         Args: { invitee_ids: string[]; target_chat: string }
         Returns: number
       }
+      is_blocked_by: {
+        Args: { p_author: string; p_viewer: string }
+        Returns: boolean
+      }
       is_comment_thread_root: {
         Args: { root: string; target_message: string }
         Returns: boolean
@@ -3772,6 +4055,12 @@ export type Database = {
           error: true
         } & "the function public.last_message_at with parameter or with a single unnamed json/jsonb parameter, but no matches were found in the schema cache"
       }
+      last_message_preview: {
+        Args: { "": Database["public"]["Tables"]["chats"]["Row"] }
+        Returns: {
+          error: true
+        } & "the function public.last_message_preview with parameter or with a single unnamed json/jsonb parameter, but no matches were found in the schema cache"
+      }
       latest_chat_messages: {
         Args: { chat_ids: string[]; per_chat?: number }
         Returns: {
@@ -3786,6 +4075,7 @@ export type Database = {
           edited_at: string | null
           forwarded_comment_id: string | null
           fragments_count: number | null
+          hidden: boolean | null
           id: string | null
           kind: string | null
           member_reactions: Json | null
@@ -3812,6 +4102,22 @@ export type Database = {
       }
       latest_local_date: { Args: never; Returns: string }
       leave_chat: { Args: { target_chat: string }; Returns: undefined }
+      linked_accounts: { Args: { p_user: string }; Returns: string[] }
+      list_blocked_users: {
+        Args: {
+          p_before_created_at?: string
+          p_before_id?: string
+          p_limit?: number
+        }
+        Returns: {
+          avatar_url: string
+          block_id: string
+          created_at: string
+          display_name: string
+          user_id: string
+          username: string
+        }[]
+      }
       list_channel_subscribers: {
         Args: {
           before_created?: string
@@ -4112,6 +4418,8 @@ export type Database = {
           id: string
         }[]
       }
+      my_block_peers: { Args: never; Returns: string[] }
+      my_blockers: { Args: never; Returns: string[] }
       my_channel_subscriptions: {
         Args: { target_channel?: string }
         Returns: {
@@ -4145,7 +4453,6 @@ export type Database = {
           dialogue_participant_name_masking: string
           friends_list_visibility: string
           id: string
-          incoming_dialogue_requests: string
           initialized_at: string | null
           message_activity_metadata_visibility: string
           profile_identity_masking: string
@@ -4333,6 +4640,10 @@ export type Database = {
         Args: { extra?: string[]; target_chat: string }
         Returns: undefined
       }
+      open_dialogue_request: {
+        Args: { p_chat: string; p_peer: string }
+        Returns: undefined
+      }
       outsider_chat_title: { Args: { target_chat: string }; Returns: string }
       pass_chat_ownership: {
         Args: { leaving: string; target_chat: string }
@@ -4429,7 +4740,6 @@ export type Database = {
           dialogue_participant_name_masking: string
           friends_list_visibility: string
           id: string
-          incoming_dialogue_requests: string
           initialized_at: string | null
           message_activity_metadata_visibility: string
           profile_identity_masking: string
@@ -4458,6 +4768,7 @@ export type Database = {
         }
         Returns: Json
       }
+      purge_contact_request_log: { Args: never; Returns: undefined }
       purge_friend_request_log: { Args: never; Returns: number }
       purge_search_request_log: { Args: never; Returns: undefined }
       purge_user_presence: { Args: never; Returns: undefined }
@@ -4548,6 +4859,7 @@ export type Database = {
               isSetofReturn: true
             }
           }
+      realtime_chat_readable: { Args: { p_topic: string }; Returns: boolean }
       realtime_topic_member: {
         Args: { p_prefix: string; p_topic: string }
         Returns: boolean
@@ -4636,6 +4948,7 @@ export type Database = {
         Args: { pop_ids: string[]; session_id: string }
         Returns: undefined
       }
+      refresh_auto_restriction: { Args: { p_user: string }; Returns: undefined }
       refresh_chat_time_restricted: {
         Args: { p_chat: string }
         Returns: undefined
@@ -4654,6 +4967,10 @@ export type Database = {
         }
         Returns: string
       }
+      remember_installation: {
+        Args: { p_installation: string; p_user: string }
+        Returns: undefined
+      }
       remove_chat_member: {
         Args: { target_chat: string; target_user: string }
         Returns: undefined
@@ -4667,7 +4984,26 @@ export type Database = {
         Args: { fragment: string; reactor: string }
         Returns: undefined
       }
+      report_user: {
+        Args: {
+          p_block?: boolean
+          p_chat?: string
+          p_comment?: string
+          p_reason: string
+          p_user: string
+        }
+        Returns: undefined
+      }
+      require_chat_readable_by: {
+        Args: { p_chat: string; p_user: string; p_what: string }
+        Returns: undefined
+      }
+      require_contact_allowed: {
+        Args: { p_actor: string; p_author: string; p_chat: string }
+        Returns: undefined
+      }
       require_friend_target: { Args: { p_other: string }; Returns: string }
+      require_not_restricted: { Args: { p_me: string }; Returns: undefined }
       resolve_comment_thread: {
         Args: {
           reply_to: string[]
@@ -4676,6 +5012,8 @@ export type Database = {
         }
         Returns: string
       }
+      safety_int: { Args: { p_key: string }; Returns: number }
+      safety_settings: { Args: never; Returns: Json }
       search_channels: {
         Args: { max_count?: number; query: string }
         Returns: {
@@ -4997,6 +5335,7 @@ export type Database = {
         Returns: number
       }
       touch_device: { Args: { p_installation_id: string }; Returns: boolean }
+      unblock_user: { Args: { p_user: string }; Returns: undefined }
       unpin_comment: { Args: { target: string }; Returns: undefined }
       unpin_message: {
         Args: { target_chat?: string; target_message: string }
