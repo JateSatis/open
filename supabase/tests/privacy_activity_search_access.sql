@@ -390,6 +390,43 @@ begin
   perform pg_temp.act_as(v);
   perform public.search_entities('зпр');
   perform pg_temp.check('К4.3 после окна снова работает', true);
+
+  -- ============================================================ ревью
+  perform pg_temp.as_owner();
+  delete from public.search_request_log;
+  perform pg_temp.act_as(v);
+  perform pg_temp.check('«@» — не каталог: только знакомые',
+    not exists (select 1 from public.search_people('@', null, null, 50) where id in (a, w, f, m)));
+
+  perform pg_temp.act_as(a);
+  perform pg_temp.check('reads_visible: A не видит прочтения в личке с S',
+    (select bool_and(not reads_visible and time_visible) from public.message_rows where chat_id = dm_as));
+
+  -- Два сеанса: один ушёл в фон, другой открыт — «в сети».
+  perform pg_temp.as_owner();
+  delete from public.user_presence where user_id = w;
+  insert into public.user_presence (user_id, session_id, last_seen_at, online_until) values
+    (w, gen_random_uuid(), now(), null),
+    (w, gen_random_uuid(), now() - interval '10 seconds', now() + interval '1 minute');
+  perform pg_temp.act_as(s);
+  perform pg_temp.check('в сети, пока открыт хоть один сеанс',
+    (select online from public.activity_statuses(array[w])));
+
+  -- Дружба пропала — сигнал «перечитай» в скрывающий чат.
+  perform pg_temp.as_owner();
+  delete from realtime.messages where topic = 'chat:' || friends_grp;
+  delete from public.friendships where least(requester_id, addressee_id) = least(a, f)
+    and greatest(requester_id, addressee_id) = greatest(a, f);
+  perform pg_temp.check('дружба пропала — time_visibility_changed',
+    exists (select 1 from realtime.messages
+      where topic = 'chat:' || friends_grp and event = 'time_visibility_changed'));
+
+  -- Вступил скрывающий — сигнал.
+  delete from realtime.messages where topic = 'chat:' || dm_fw;
+  insert into public.chat_members (chat_id, user_id) values (dm_fw, a);
+  perform pg_temp.check('вступил скрывающий — time_visibility_changed',
+    exists (select 1 from realtime.messages
+      where topic = 'chat:' || dm_fw and event = 'time_visibility_changed'));
 end;
 $$;
 
