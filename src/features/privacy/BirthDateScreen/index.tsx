@@ -1,0 +1,94 @@
+import { useState } from 'react';
+import { View } from 'react-native';
+
+import { styles } from './styles';
+
+import { BirthDateTooYoungError } from '@/api/privacy';
+import { Button } from '@/components/Button';
+import { Screen } from '@/components/Screen';
+import { Text } from '@/components/Text';
+import { useDeleteAccount } from '@/features/auth/accountQueries';
+import { BirthDateField } from '@/features/privacy/BirthDateField';
+import { describeBirthDateError } from '@/features/privacy/birthDateErrors';
+import { useSetBirthDate } from '@/features/privacy/queries';
+
+/**
+ * Первый вход: дата рождения до вкладок. Пропустить нельзя. Возраст решает
+ * сервер: «младше 13» приходит его отказом, и тогда — экран отказа с выходом,
+ * который удаляет аккаунт.
+ */
+export function BirthDateScreen() {
+  const [date, setDate] = useState<string | null>(null);
+  const [tooYoung, setTooYoung] = useState(false);
+  const save = useSetBirthDate();
+  const deletion = useDeleteAccount();
+
+  const onContinue = () => {
+    if (!date) return;
+
+    save.mutate(date, {
+      onError: (error) => {
+        if (error instanceof BirthDateTooYoungError) setTooYoung(true);
+      },
+    });
+  };
+
+  if (tooYoung) {
+    return (
+      <Screen scrollable contentContainerStyle={styles.content}>
+        <Text variant="title">Регистрация в Open возможна с 13 лет</Text>
+        <Text variant="body" color="textSecondary">
+          Если дата указана с ошибкой, измените её. Если нет — выйдите: аккаунт будет удалён.
+        </Text>
+        <View style={styles.actions}>
+          <Button
+            label="Изменить дату"
+            variant="secondary"
+            disabled={deletion.isPending}
+            onPress={() => {
+              save.reset();
+              setTooYoung(false);
+            }}
+          />
+          <Button
+            label="Выйти"
+            variant="danger"
+            loading={deletion.isPending}
+            onPress={() => deletion.mutate()}
+          />
+          {deletion.error ? (
+            <Text variant="small" color="danger">
+              Не удалось удалить аккаунт. Проверьте интернет и попробуйте ещё раз.
+            </Text>
+          ) : null}
+        </View>
+      </Screen>
+    );
+  }
+
+  const problem = describeBirthDateError(save.error);
+
+  return (
+    <Screen scrollable contentContainerStyle={styles.content}>
+      <Text variant="title">Дата рождения</Text>
+      <Text variant="body" color="textSecondary">
+        От неё зависят начальные настройки конфиденциальности. Дату рождения не видит никто,
+        кроме вас.
+      </Text>
+      <BirthDateField value={date} onChange={setDate} disabled={save.isPending} />
+      {problem ? (
+        <Text variant="small" color="danger">
+          {problem}
+        </Text>
+      ) : null}
+      <View style={styles.actions}>
+        <Button
+          label="Продолжить"
+          disabled={!date}
+          loading={save.isPending}
+          onPress={onContinue}
+        />
+      </View>
+    </Screen>
+  );
+}

@@ -53,3 +53,25 @@ export function formatLastSeen(iso: string | null, now: Date = new Date()): stri
 
   return `был(а) ${formatShortDate(date, now)}`;
 }
+
+const MONTHS_GENITIVE = [
+  'января',
+  'февраля',
+  'марта',
+  'апреля',
+  'мая',
+  'июня',
+  'июля',
+  'августа',
+  'сентября',
+  'октября',
+  'ноября',
+  'декабря',
+];
+
+/** «12 марта 2008» из `YYYY-MM-DD` — без часовых поясов: это день, а не момент. */
+export function formatDateOnly(value: string): string {
+  const [year, month, day] = value.split('-').map(Number);
+
+  return `${day} ${MONTHS_GENITIVE[month - 1]} ${year}`;
+}

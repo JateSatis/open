@@ -19,6 +19,7 @@ import { AccountLifecycle } from '@/features/auth/AccountLifecycle';
 import { ConnectionWatcher } from '@/features/connection/ConnectionWatcher';
 import { reportRequestFailed, reportRequestSucceeded } from '@/features/connection/connectionStore';
 import { InAppMessageToast } from '@/features/notifications/InAppMessageToast';
+import { BirthDateGate } from '@/features/privacy/BirthDateGate';
 import { JournalSession } from '@/features/recs/journal/JournalSession';
 import { IncomingCallOverlay } from '@/features/streams/IncomingCallOverlay';
 import { BelowReturnBar, ReturnToCallBar } from '@/features/streams/ReturnToCallBar';
@@ -91,6 +92,7 @@ export default function RootLayout() {
             <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
               <ConnectionWatcher />
               <AccountLifecycle />
+              <BirthDateGate />
               <JournalSession />
               {/* Свёрнутый звонок сдвигает навигатор вниз, а не перекрывает шапки. */}
               <BelowReturnBar>
@@ -98,6 +100,8 @@ export default function RootLayout() {
                     касания, см. modules/scroll-tap. Окна Modal — со своей. */}
                 <ScrollTap style={styles.flex}>
                   <Stack screenOptions={{ headerShown: false }}>
+                    {/* Дата рождения при первом входе: пропустить нельзя, уйти жестом — тоже. */}
+                    <Stack.Screen name="birth-date" options={{ gestureEnabled: false }} />
                     <Stack.Screen
                       name="call"
                       options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }}
