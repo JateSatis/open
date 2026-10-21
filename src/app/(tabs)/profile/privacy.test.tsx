@@ -1,8 +1,8 @@
-import { screen, userEvent, waitFor } from '@testing-library/react-native';
+import { screen, userEvent, waitFor, within } from '@testing-library/react-native';
 
 import PrivacyRoute from './privacy';
 
-import { getMyPrivacySettings, setPrivacySetting } from '@/api/privacy';
+import { getMyPrivacySettings, setPrivacySetting, type PrivacySettings } from '@/api/privacy';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { renderWithQuery } from '@/test/renderWithQuery';
 import { Colors } from '@/theme';
@@ -25,9 +25,28 @@ const mocked = {
   useColorScheme: useColorScheme as jest.Mock,
 };
 
-function settings(friendsListVisibility: string) {
-  return { birthDate: '2010-05-01', friendsListVisibility };
-}
+const TEEN: PrivacySettings = {
+  birthDate: '2010-05-01',
+  friendsListVisibility: 'nobody',
+  activityStatusVisibility: 'friends',
+  messageTimeVisibility: 'friends',
+  searchVisibility: 'friends',
+};
+
+const ADULT: PrivacySettings = {
+  birthDate: '1990-05-01',
+  friendsListVisibility: 'everyone',
+  activityStatusVisibility: 'everyone',
+  messageTimeVisibility: 'everyone',
+  searchVisibility: 'everyone',
+};
+
+const TITLES = {
+  activity: 'Кто видит, что я в сети',
+  time: 'Кто видит время сообщений и прочтение',
+  search: 'Кто может найти меня в поиске',
+  friends: 'Кто видит список друзей',
+};
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -36,51 +55,66 @@ beforeEach(() => {
 
 describe('Конфиденциальность и безопасность', () => {
   it.each([
-    ['подросток', 'nobody', 'Никто'],
-    ['взрослый', 'everyone', 'Все'],
-  ])('К5.1 %s видит текущее значение списка друзей', async (_who, value, label) => {
-    mocked.getMyPrivacySettings.mockResolvedValue(settings(value));
+    ['подросток', TEEN, 'Только друзья'],
+    ['взрослый', ADULT, 'Все'],
+  ])('К5.1 %s видит текущее значение трёх настроек этапа', async (_who, value, label) => {
+    mocked.getMyPrivacySettings.mockResolvedValue(value);
 
     await renderWithQuery(<PrivacyRoute />);
 
-    expect(await screen.findByText('Кто видит список друзей')).toBeTruthy();
-    expect(screen.getByLabelText(`Кто видит список друзей: ${label}, выбрано`)).toBeTruthy();
+    expect(await screen.findByText(TITLES.activity)).toBeTruthy();
+    for (const title of [TITLES.activity, TITLES.time, TITLES.search]) {
+      expect(screen.getByLabelText(`${title}: ${label}, выбрано`)).toBeTruthy();
+    }
   });
 
-  it('пока работает одна настройка — других групп нет, заглушек нет', async () => {
-    mocked.getMyPrivacySettings.mockResolvedValue(settings('nobody'));
+  it('группы «Активность» и «Поиск и контакты», список друзей — на месте', async () => {
+    mocked.getMyPrivacySettings.mockResolvedValue(TEEN);
 
     await renderWithQuery(<PrivacyRoute />);
-    await screen.findByText('Кто видит список друзей');
 
-    expect(screen.queryByText(/Идентичность|Активность|Поиск и контакты/i)).toBeNull();
+    expect(await screen.findByText('Активность')).toBeTruthy();
+    expect(screen.getByText('Поиск и контакты')).toBeTruthy();
+    expect(screen.getByLabelText(`${TITLES.friends}: Никто, выбрано`)).toBeTruthy();
+    // Остальные группы появятся, когда сервер начнёт их применять.
+    expect(screen.queryByText(/Идентичность|Контент и данные/i)).toBeNull();
   });
 
-  it('К5.2 выбор сохраняется на сервере и сразу отмечен', async () => {
-    mocked.getMyPrivacySettings.mockResolvedValue(settings('nobody'));
-    mocked.setPrivacySetting.mockImplementation(() => {
-      mocked.getMyPrivacySettings.mockResolvedValue(settings('friends'));
+  it.each([
+    ['privacy-activity-status', 'activity_status_visibility', TITLES.activity],
+    ['privacy-message-time', 'message_activity_metadata_visibility', TITLES.time],
+    ['privacy-search', 'account_search_visibility', TITLES.search],
+    ['privacy-friends-list', 'friends_list_visibility', TITLES.friends],
+  ])('К5.2 %s: выбор сохраняется на сервере и сразу отмечен', async (testID, key, title) => {
+    let current = ADULT;
+    mocked.getMyPrivacySettings.mockImplementation(() => Promise.resolve(current));
+    mocked.setPrivacySetting.mockImplementation((setting: string, value: string) => {
+      current = {
+        ...current,
+        ...(setting === 'activity_status_visibility' ? { activityStatusVisibility: value } : {}),
+        ...(setting === 'message_activity_metadata_visibility' ? { messageTimeVisibility: value } : {}),
+        ...(setting === 'account_search_visibility' ? { searchVisibility: value } : {}),
+        ...(setting === 'friends_list_visibility' ? { friendsListVisibility: value } : {}),
+      } as PrivacySettings;
 
       return Promise.resolve();
     });
     const user = userEvent.setup();
 
     await renderWithQuery(<PrivacyRoute />);
-    await user.press(await screen.findByText('Только друзья'));
+    await user.press(await screen.findByTestId(`${testID}-nobody`));
 
-    expect(mocked.setPrivacySetting).toHaveBeenCalledWith('friends_list_visibility', 'friends');
-    expect(
-      await screen.findByLabelText('Кто видит список друзей: Только друзья, выбрано'),
-    ).toBeTruthy();
+    expect(mocked.setPrivacySetting).toHaveBeenCalledWith(key, 'nobody');
+    expect(await screen.findByLabelText(`${title}: Никто, выбрано`)).toBeTruthy();
   });
 
   it('сервер не принял — значение откатывается, понятный текст', async () => {
-    mocked.getMyPrivacySettings.mockResolvedValue(settings('nobody'));
+    mocked.getMyPrivacySettings.mockResolvedValue(TEEN);
     mocked.setPrivacySetting.mockRejectedValue(new Error('offline'));
     const user = userEvent.setup();
 
     await renderWithQuery(<PrivacyRoute />);
-    await user.press(await screen.findByText('Все'));
+    await user.press(await screen.findByTestId('privacy-message-time-everyone'));
 
     expect(
       await screen.findByText(
@@ -88,30 +122,32 @@ describe('Конфиденциальность и безопасность', () 
       ),
     ).toBeTruthy();
     await waitFor(() =>
-      expect(screen.getByLabelText('Кто видит список друзей: Никто, выбрано')).toBeTruthy(),
+      expect(screen.getByLabelText(`${TITLES.time}: Только друзья, выбрано`)).toBeTruthy(),
     );
   });
 
-  it('формулировка без обещаний: «скрывает от…», а не «никто никогда»', async () => {
-    mocked.getMyPrivacySettings.mockResolvedValue(settings('nobody'));
+  it('пояснения говорят, что скрыто, и не обещают анонимности', async () => {
+    mocked.getMyPrivacySettings.mockResolvedValue(TEEN);
 
     await renderWithQuery(<PrivacyRoute />);
 
-    expect(await screen.findByText(/^Скрывает строку «Друзья»/)).toBeTruthy();
+    expect(await screen.findByText(/во всех диалогах, где вы участвуете/)).toBeTruthy();
+    expect(screen.getByText(/Вы тоже не увидите прочтение у тех, от кого скрыли время/)).toBeTruthy();
+    expect(screen.getByText(/Сам текст переписки остаётся публичным/)).toBeTruthy();
+    expect(screen.getByText(/Звонки остаются публичными/)).toBeTruthy();
     expect(screen.queryByText(/никогда|анонимн|гарант/i)).toBeNull();
   });
 
-  it.each(['light', 'dark'] as const)('К5.7 цвета темы %s — из src/theme', async (scheme) => {
+  it.each(['light', 'dark'] as const)('К5.3 цвета темы %s — из src/theme', async (scheme) => {
     mocked.useColorScheme.mockReturnValue(scheme);
-    mocked.getMyPrivacySettings.mockResolvedValue(settings('nobody'));
+    mocked.getMyPrivacySettings.mockResolvedValue(TEEN);
 
     await renderWithQuery(<PrivacyRoute />);
 
-    expect(await screen.findByText('Только друзья')).toHaveStyle({
-      color: Colors[scheme].text,
-    });
-    expect(screen.getByText('Кто видит список друзей')).toHaveStyle({
-      color: Colors[scheme].textSecondary,
-    });
+    const activity = await screen.findByTestId('privacy-activity-status-friends');
+
+    expect(within(activity).getByText('Только друзья')).toHaveStyle({ color: Colors[scheme].text });
+    expect(screen.getByText(TITLES.activity)).toHaveStyle({ color: Colors[scheme].textSecondary });
+    expect(screen.getByText('Активность')).toHaveStyle({ color: Colors[scheme].text });
   });
 });

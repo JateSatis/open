@@ -8,6 +8,12 @@ export const styles = StyleSheet.create({
     paddingTop: Spacing.three,
     paddingBottom: Spacing.five,
   },
+  group: {
+    gap: Spacing.three,
+  },
+  groupTitle: {
+    marginHorizontal: Spacing.three,
+  },
   message: {
     marginHorizontal: Spacing.three,
   },

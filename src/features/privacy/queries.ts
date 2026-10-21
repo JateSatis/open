@@ -12,6 +12,14 @@ import {
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
 import { friendKeys } from '@/features/friends/queries';
 
+/** Поле состояния экрана у каждой настройки, которую клиент меняет. */
+const SETTING_FIELDS: Record<EditablePrivacySetting, keyof Omit<PrivacySettings, 'birthDate'>> = {
+  friends_list_visibility: 'friendsListVisibility',
+  activity_status_visibility: 'activityStatusVisibility',
+  message_activity_metadata_visibility: 'messageTimeVisibility',
+  account_search_visibility: 'searchVisibility',
+};
+
 import { isBirthDateKnown, rememberBirthDateKnown } from './birthDateKnown';
 
 export const privacyKeys = {
@@ -59,11 +67,8 @@ export function useSetPrivacySetting() {
       await queryClient.cancelQueries({ queryKey: key });
       const previous = queryClient.getQueryData<PrivacySettings | null>(key);
 
-      if (previous && setting === 'friends_list_visibility') {
-        queryClient.setQueryData<PrivacySettings>(key, {
-          ...previous,
-          friendsListVisibility: value,
-        });
+      if (previous) {
+        queryClient.setQueryData<PrivacySettings>(key, { ...previous, [SETTING_FIELDS[setting]]: value });
       }
 
       return { previous };
@@ -71,10 +76,21 @@ export function useSetPrivacySetting() {
     onError: (_error, _variables, context) => {
       if (context?.previous !== undefined) queryClient.setQueryData(key, context.previous);
     },
-    onSettled: () => {
+    onSettled: (_data, _error, { setting }) => {
       void queryClient.invalidateQueries({ queryKey: key });
       // Строка «Друзья» в своём профиле зависит от настройки.
       if (userId) void queryClient.invalidateQueries({ queryKey: friendKeys.summary(userId) });
+      // Куда слать мои «печатает» — по настройке активности: старый ответ
+      // слал бы туда, куда я уже не хочу. Время у других перечитывается по
+      // сигналу базы в топики моих чатов.
+      if (setting === 'activity_status_visibility') {
+        void queryClient.invalidateQueries({ queryKey: ['typingAudience'] });
+      }
+      // Прочтение взаимно: скрыв время, я сам не вижу чужих отметок. Сообщения
+      // открытых чатов перечитает сигнал базы в их топики, здесь — участники.
+      if (setting === 'message_activity_metadata_visibility') {
+        void queryClient.invalidateQueries({ queryKey: ['chat'] });
+      }
     },
   });
 }
