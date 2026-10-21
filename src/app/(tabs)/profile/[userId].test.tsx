@@ -12,7 +12,9 @@ import {
   removeFriend,
   sendFriendRequest,
 } from '@/api/friends';
+import { blockUser, isBlockedByMe, reportUser } from '@/api/blocks';
 import { getProfile } from '@/api/profile';
+import { ProfileUnavailableError } from '@/api/profileErrors';
 import { ConfirmDialogHost } from '@/components/ConfirmDialog';
 import { resetConfirmDialogQueue } from '@/components/ConfirmDialog/store';
 import { useSession } from '@/features/auth/useSession';
@@ -30,6 +32,12 @@ jest.mock('expo-router', () => ({
 
 jest.mock('@/api/profile', () => ({ getProfile: jest.fn() }));
 jest.mock('@/api/supabase', () => ({ supabase: {} }));
+jest.mock('@/api/blocks', () => ({
+  blockUser: jest.fn(),
+  unblockUser: jest.fn(),
+  reportUser: jest.fn(),
+  isBlockedByMe: jest.fn(),
+}));
 jest.mock('@/api/friends', () => ({
   ...jest.requireActual('@/api/friends'),
   getFriendshipStatus: jest.fn(),
@@ -79,6 +87,9 @@ beforeEach(() => {
   friends.status.mockResolvedValue('none');
   friends.summary.mockResolvedValue({ listVisible: true, friendsCount: 3, incomingCount: null });
   resetConfirmDialogQueue();
+  (isBlockedByMe as jest.Mock).mockResolvedValue(false);
+  (blockUser as jest.Mock).mockResolvedValue(undefined);
+  (reportUser as jest.Mock).mockResolvedValue(undefined);
 });
 
 describe('UserProfileScreen', () => {
@@ -281,5 +292,67 @@ describe('UserProfileScreen — друзья', () => {
     await screen.findByText('Анна');
 
     expect(screen.queryByTestId('friend-button')).toBeNull();
+  });
+});
+
+describe('UserProfileScreen — блокировка и жалоба', () => {
+  function renderProfile() {
+    getProfileMock.mockResolvedValue(profile);
+
+    return renderWithQuery(
+      <>
+        <UserProfileScreen />
+        <ConfirmDialogHost />
+      </>,
+    );
+  }
+
+  it('К2 «Ещё» → «Заблокировать» — только после подтверждения с пояснением', async () => {
+    await renderProfile();
+
+    await fireEvent.press(await screen.findByTestId('person-safety-button'));
+    await fireEvent.press(await screen.findByText('Заблокировать'));
+    expect(await screen.findByText('Заблокировать Анна?')).toBeTruthy();
+    expect(screen.getByText(/О блокировке ему не сообщат/)).toBeTruthy();
+    expect(blockUser).not.toHaveBeenCalled();
+
+    const buttons = screen.getAllByRole('button', { name: 'Заблокировать' });
+    await fireEvent.press(buttons[buttons.length - 1]);
+
+    await waitFor(() => expect(blockUser).toHaveBeenCalledWith('user-2'));
+  });
+
+  it('заблокированному мной — «Разблокировать» в меню', async () => {
+    (isBlockedByMe as jest.Mock).mockResolvedValue(true);
+    await renderProfile();
+
+    await fireEvent.press(await screen.findByText('Заблокирован(а) · Ещё'));
+
+    expect(await screen.findByText('Разблокировать')).toBeTruthy();
+    expect(screen.queryByText('Заблокировать')).toBeNull();
+  });
+
+  it('К3.1 жалоба на профиль без блокировки', async () => {
+    await renderProfile();
+
+    await fireEvent.press(await screen.findByTestId('person-safety-button'));
+    await fireEvent.press(await screen.findByText('Пожаловаться'));
+    await fireEvent.press(await screen.findByText('Угрозы'));
+    await fireEvent(screen.getByTestId('report-also-block'), 'valueChange', false);
+    await fireEvent.press(screen.getByTestId('report-send'));
+
+    expect(await screen.findByText('Жалоба отправлена')).toBeTruthy();
+    expect(reportUser).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: 'user-2', reason: 'threats', chatId: null, block: false }),
+    );
+  });
+
+  it('К2.1 профиль заблокировавшего — «Пользователь недоступен», без повтора', async () => {
+    getProfileMock.mockRejectedValue(new ProfileUnavailableError());
+
+    await renderWithQuery(<UserProfileScreen />);
+
+    expect(await screen.findByText('Пользователь недоступен')).toBeTruthy();
+    expect(screen.queryByText('Повторить')).toBeNull();
   });
 });

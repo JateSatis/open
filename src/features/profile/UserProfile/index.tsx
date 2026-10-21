@@ -9,6 +9,7 @@ import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
 import { FriendButton } from '@/features/friends/FriendButton';
 import { FriendsCard } from '@/features/friends/FriendsCard';
 import { ProfileLoader } from '@/features/profile/ProfileLoader';
+import { PersonSafetyActions } from '@/features/moderation/PersonSafetyActions';
 import { ProfilePage } from '@/features/profile/ProfilePage';
 import { useProfile } from '@/features/profile/queries';
 import { displayNameOf } from '@/features/profile/username';
@@ -61,7 +62,9 @@ export function UserProfile({ userId, stack }: { userId: string; stack: 'chats' 
                 ? router.navigate('/profile/friends')
                 : router.push({
                     pathname:
-                      stack === 'chats' ? '/chats/people/friends/[userId]' : '/profile/friends/[userId]',
+                      stack === 'chats'
+                        ? '/chats/people/friends/[userId]'
+                        : '/profile/friends/[userId]',
                     params: { userId: profile.id },
                   })
             }
@@ -90,6 +93,7 @@ export function UserProfile({ userId, stack }: { userId: string; stack: 'chats' 
                   })
                 }
               />
+              <PersonSafetyActions userId={profile.id} name={displayNameOf(profile)} />
             </>
           )
         }

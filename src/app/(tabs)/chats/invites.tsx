@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, RefreshControl, SectionList, View } from 'react-native';
 
 import type { ChatInvite } from '@/api/invites';
@@ -9,6 +9,9 @@ import { InviteCard } from '@/features/chats/InviteCard';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
 import { useInvites } from '@/features/chats/useInvites';
 import { useRespondToInvite } from '@/features/chats/useRespondToInvite';
+import { confirmBlock } from '@/features/moderation/confirmBlock';
+import { useSetBlocked } from '@/features/moderation/queries';
+import { ReportSheet, type ReportTarget } from '@/features/moderation/ReportSheet';
 import { Spacing } from '@/theme';
 
 type Section = { title: string; data: ChatInvite[] };
@@ -29,6 +32,27 @@ export default function InvitesScreen() {
   );
   const accept = useCallback((chatId: string) => respond(chatId, 'accept'), [respond]);
   const decline = useCallback((chatId: string) => respond(chatId, 'decline'), [respond]);
+  const setBlocked = useSetBlocked();
+  const [report, setReport] = useState<ReportTarget | null>(null);
+  // Блокировка отклоняет заявку сама — сервер одной транзакцией.
+  const block = useCallback(
+    async (invite: ChatInvite) => {
+      if (!invite.inviter) return;
+      if (await confirmBlock(invite.inviter.displayName)) {
+        setBlocked.mutate({ userId: invite.inviter.id, blocked: true });
+      }
+    },
+    [setBlocked],
+  );
+  const reportInvite = useCallback((invite: ChatInvite) => {
+    if (invite.inviter) {
+      setReport({
+        userId: invite.inviter.id,
+        name: invite.inviter.displayName,
+        chatId: invite.chatId,
+      });
+    }
+  }, []);
 
   const sections = useMemo(
     (): Section[] => [
@@ -46,7 +70,12 @@ export default function InvitesScreen() {
     );
   }
 
-  const problem = error ?? respondError;
+  const problem =
+    error ??
+    respondError ??
+    (setBlocked.error
+      ? 'Не удалось заблокировать. Проверьте интернет и попробуйте ещё раз.'
+      : null);
 
   return (
     <Screen
@@ -82,6 +111,8 @@ export default function InvitesScreen() {
             onAccept={accept}
             onDecline={decline}
             onOpenPerson={openPerson}
+            onBlock={(invite) => void block(invite)}
+            onReport={reportInvite}
           />
         )}
         ListEmptyComponent={
@@ -92,6 +123,8 @@ export default function InvitesScreen() {
           )
         }
       />
+
+      <ReportSheet target={report} onClose={() => setReport(null)} />
     </Screen>
   );
 }

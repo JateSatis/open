@@ -1,13 +1,19 @@
+import { useRouter } from 'expo-router';
+import { SymbolView } from 'expo-symbols';
 import { ActivityIndicator, View } from 'react-native';
 
 import { styles } from './styles';
 
 import type { EditablePrivacySetting, Visibility } from '@/api/privacy';
 import { Screen } from '@/components/Screen';
+import { SettingsRow } from '@/components/SettingsRow';
+import { SettingsSection } from '@/components/SettingsSection';
 import { Text } from '@/components/Text';
 import { useMyPrivacySettings, useSetPrivacySetting } from '@/features/privacy/queries';
 import { VisibilityChoice } from '@/features/privacy/VisibilityChoice';
+import { useTheme } from '@/hooks/use-theme';
 import { describeLoadError } from '@/lib/network';
+import { Sizes } from '@/theme';
 
 /**
  * «Конфиденциальность и безопасность». Здесь только настройки, которые уже
@@ -17,6 +23,8 @@ import { describeLoadError } from '@/lib/network';
  * не обещают анонимности: переписка в Open публична.
  */
 export function PrivacyScreen() {
+  const router = useRouter();
+  const theme = useTheme();
   const { data, isPending, error } = useMyPrivacySettings();
   const change = useSetPrivacySetting();
   const loadError = describeLoadError(error, 'Не удалось загрузить настройки');
@@ -72,6 +80,23 @@ export function PrivacyScreen() {
               value={data.friendsListVisibility}
               onChange={set('friends_list_visibility')}
             />
+            <SettingsSection
+              title="Заявки и блокировки"
+              footer="Люди, которые вам не друзья, могут прислать заявку — одно сообщение без медиа. Переписка начнётся, когда вы её примете."
+            >
+              <SettingsRow
+                testID="privacy-blocked"
+                title="Заблокированные"
+                accessory={
+                  <SymbolView
+                    name={{ ios: 'chevron.right', android: 'chevron_right', web: 'chevron_right' }}
+                    size={Sizes.menuIcon}
+                    tintColor={theme.textSecondary}
+                  />
+                }
+                onPress={() => router.push('/profile/blocked')}
+              />
+            </SettingsSection>
           </View>
         </>
       ) : null}

@@ -21,6 +21,10 @@ export default function ProfileLayout() {
         options={{ headerTitle: () => <ConnectionTitle title="Конфиденциальность" /> }}
       />
       <Stack.Screen
+        name="blocked"
+        options={{ headerTitle: () => <ConnectionTitle title="Заблокированные" /> }}
+      />
+      <Stack.Screen
         name="friends/index"
         options={{ headerTitle: () => <ConnectionTitle title="Друзья" /> }}
       />

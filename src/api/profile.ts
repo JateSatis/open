@@ -2,6 +2,7 @@
 // `src/api/types.gen.ts`, сгенерированный из миграций. Здесь описан только
 // доменный `Profile` — то, чем профилем пользуется остальное приложение.
 
+import { ProfileUnavailableError } from '@/api/profileErrors';
 import { supabase } from '@/api/supabase';
 import type { Tables, TablesUpdate } from '@/api/types.gen';
 
@@ -34,6 +35,11 @@ export class UsernameTakenError extends Error {
     this.name = 'UsernameTakenError';
   }
 }
+
+/** Код PostgREST «.single() не нашёл строку». */
+const NO_ROW_CODE = 'PGRST116';
+
+export { ProfileUnavailableError };
 
 export class NotAuthenticatedError extends Error {
   constructor() {
@@ -80,7 +86,7 @@ export async function getProfile(userId: string): Promise<Profile> {
     .single();
 
   if (error) {
-    throw error;
+    throw error.code === NO_ROW_CODE ? new ProfileUnavailableError() : error;
   }
 
   return toProfile(data);
