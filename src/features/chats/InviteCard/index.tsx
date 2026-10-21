@@ -6,6 +6,7 @@ import type { Message } from '@/api/chats';
 import type { ChatInvite } from '@/api/invites';
 import { Avatar } from '@/components/Avatar';
 import { Button } from '@/components/Button';
+import { LinkButton } from '@/components/LinkButton';
 import { Text } from '@/components/Text';
 import { formatChatTimestamp, listNames } from '@/features/chats/chatDisplay';
 import { useTheme } from '@/hooks/use-theme';
@@ -20,6 +21,10 @@ export type InviteCardProps = {
   onDecline: (chatId: string) => void;
   /** Тап по позвавшему — его профиль. */
   onOpenPerson?: (userId: string) => void;
+  /** Заявка на диалог: заблокировать отправителя. */
+  onBlock?: (invite: ChatInvite) => void;
+  /** Заявка на диалог: пожаловаться на отправителя. */
+  onReport?: (invite: ChatInvite) => void;
 };
 
 function previewText(message: Message): string {
@@ -45,6 +50,8 @@ export function InviteCard({
   onAccept,
   onDecline,
   onOpenPerson,
+  onBlock,
+  onReport,
 }: InviteCardProps) {
   const theme = useTheme();
   const { chat, inviter } = invite;
@@ -79,7 +86,9 @@ export function InviteCard({
             <Text variant="caption" color="textSecondary" numberOfLines={1}>
               {chat.kind === 'group'
                 ? `${inviterName} зовёт вас в группу`
-                : `${inviterName} зовёт вас в диалог`}
+                : chat.requestPending
+                  ? `${inviterName} хочет начать диалог`
+                  : `${inviterName} зовёт вас в диалог`}
             </Text>
           </View>
           <Text variant="caption" color="textSecondary">
@@ -133,6 +142,28 @@ export function InviteCard({
           style={styles.action}
         />
       </View>
+
+      {/* Заявку на диалог от не-друга можно не только отклонить. */}
+      {chat.requestPending && inviter && (onBlock || onReport) ? (
+        <View style={styles.safety}>
+          {onBlock ? (
+            <LinkButton
+              label="Заблокировать"
+              color="danger"
+              disabled={responding !== null}
+              onPress={() => onBlock(invite)}
+            />
+          ) : null}
+          {onReport ? (
+            <LinkButton
+              label="Пожаловаться"
+              color="danger"
+              disabled={responding !== null}
+              onPress={() => onReport(invite)}
+            />
+          ) : null}
+        </View>
+      ) : null}
     </View>
   );
 }

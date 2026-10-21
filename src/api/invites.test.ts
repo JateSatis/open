@@ -28,6 +28,7 @@ describe('createChat', () => {
       invitee_ids: ['user-2'],
       chat_title: 'Поход',
       chat_avatar_url: null,
+      request_text: null,
     });
     expect(supabase.from).not.toHaveBeenCalled();
   });
@@ -41,6 +42,7 @@ describe('createChat', () => {
       invitee_ids: ['user-2'],
       chat_title: null,
       chat_avatar_url: null,
+      request_text: null,
     });
   });
 

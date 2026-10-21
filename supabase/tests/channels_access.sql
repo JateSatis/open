@@ -711,6 +711,10 @@ begin
     perform pg_temp.check('две цели сразу — отказ', sqlstate in ('23514', '23503'), sqlstate || ' ' || sqlerrm);
   end;
 
+  -- Друзья: личка без заявки, писать можно сразу (этап 3 приватности).
+  perform set_config('role', 'postgres', true);
+  insert into public.friendships (requester_id, addressee_id, status, accepted_at)
+  values (a, b, 'accepted', now());
   perform pg_temp.act_as(a);
   own_chat := (public.create_chat(array[b], null) ->> 'chat_id')::uuid;
   perform pg_temp.act_as(b);

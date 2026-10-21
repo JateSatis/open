@@ -3,6 +3,7 @@ import { View } from 'react-native';
 
 import { styles } from './styles';
 
+import { describeContactRefusal } from '@/api/contactErrors';
 import { FriendRequestLimitError, type FriendshipStatus } from '@/api/friends';
 import { Button } from '@/components/Button';
 import { confirm } from '@/components/ConfirmDialog';
@@ -20,6 +21,10 @@ const LABELS: Record<Exclude<FriendshipStatus, 'self'>, string> = {
 function describeError(error: Error | null): string | null {
   if (!error) return null;
   if (error instanceof FriendRequestLimitError) return error.message;
+
+  const refusal = describeContactRefusal(error);
+
+  if (refusal) return refusal;
 
   return 'Не получилось. Проверьте интернет и попробуйте ещё раз.';
 }

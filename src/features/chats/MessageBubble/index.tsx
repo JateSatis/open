@@ -298,6 +298,23 @@ export function MessageBubble({
       </View>
     ) : null;
 
+  // Сообщение заблокировавшего меня в чужом мне чате: база отдала заглушку
+  // без текста и вложений — облачко говорит только, что оно было.
+  if ('hidden' in message && message.hidden) {
+    return (
+      <View
+        testID="message-bubble-hidden"
+        style={[styles.bubble, wide && styles.wide, { backgroundColor: bubbleColor }]}
+      >
+        <View style={styles.content}>
+          <Text variant="small" color="textSecondary">
+            Сообщение скрыто
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
   const body = message.text ? (
     <SelectableText
       text={message.text}

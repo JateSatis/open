@@ -7,6 +7,7 @@ import type { ComposerMode } from '@/features/chats/composerDraftStore';
 import { ChatSubscribeBar } from '@/features/chats/ChatSubscribeBar';
 import { claimKeyboardForChat } from '@/features/chats/composerKeyboard';
 import { InviteResponseBar } from '@/features/chats/InviteResponseBar';
+import { RequestSentBar } from '@/features/chats/RequestSentBar';
 import {
   armMediaSheet,
   openMediaSheet,
@@ -14,10 +15,7 @@ import {
 } from '@/features/chats/MediaPickerSheet';
 import { EditAttachments } from '@/features/chats/EditAttachments';
 import { MessageComposer, type MessageComposerProps } from '@/features/chats/MessageComposer';
-import {
-  PopAttachmentChip,
-  type PopAttachmentChipProps,
-} from '@/features/chats/PopAttachmentChip';
+import { PopAttachmentChip, type PopAttachmentChipProps } from '@/features/chats/PopAttachmentChip';
 import { describeMode } from '@/features/chats/messageQuote';
 import type { SelectionActionContext, SelectionActionId } from '@/features/chats/messageActions';
 import { SelectionActionBar } from '@/features/chats/SelectionActionBar';
@@ -73,6 +71,8 @@ export type ChatFooterProps = {
   } | null;
   /** Посторонний без подписки в чужом диалоге или группе: «Подписаться». */
   subscribe: { chatId: string } | null;
+  /** Я отправил заявку на диалог, её ещё не приняли: писать нельзя. */
+  requestSent?: boolean;
   composer: {
     text: string;
     onChangeText: (text: string) => void;
@@ -98,7 +98,13 @@ export type ChatFooterProps = {
  * с плашкой режима. Что из них видно, решает состояние экрана; поле при этом
  * не размонтируется.
  */
-export function ChatFooter({ selection, invite, subscribe, composer }: ChatFooterProps) {
+export function ChatFooter({
+  selection,
+  invite,
+  subscribe,
+  requestSent = false,
+  composer,
+}: ChatFooterProps) {
   return (
     <>
       {selection.isActive ? (
@@ -116,7 +122,13 @@ export function ChatFooter({ selection, invite, subscribe, composer }: ChatFoote
           />
         )
       ) : subscribe ? (
-        selection.isActive ? null : <ChatSubscribeBar chatId={subscribe.chatId} />
+        selection.isActive ? null : (
+          <ChatSubscribeBar chatId={subscribe.chatId} />
+        )
+      ) : requestSent ? (
+        selection.isActive ? null : (
+          <RequestSentBar />
+        )
       ) : composer ? (
         // На время выбора поле ввода прячется, а не размонтируется: черновик
         // и заранее подготовленный рекордер голосовых остаются как были.

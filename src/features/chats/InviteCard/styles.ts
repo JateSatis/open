@@ -34,4 +34,9 @@ export const styles = StyleSheet.create({
   action: {
     flex: 1,
   },
+  safety: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: Spacing.four,
+  },
 });

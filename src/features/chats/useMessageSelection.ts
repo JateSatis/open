@@ -22,10 +22,14 @@ export type MessageSelection = {
  * убрать её из островка.
  */
 export function isSelectableRow(row: BubbleRow, currentUserId: string | null): boolean {
-  if (row.type === 'message') return !isLocalMessage(row.message);
+  // Заглушку скрытого сообщения ни переслать, ни процитировать — и выбирать незачем.
+  if (row.type === 'message') return !isLocalMessage(row.message) && !row.message.hidden;
   if (isLocalMessage(row.island)) return false;
 
-  return row.item.original !== null || row.island.authorId === currentUserId;
+  return (
+    (row.item.original !== null && !row.item.original.hidden) ||
+    row.island.authorId === currentUserId
+  );
 }
 
 /**
@@ -43,9 +47,7 @@ export function useMessageSelection(
   const selected = useMemo(() => {
     if (keys.size === 0) return [];
 
-    return rows
-      .filter((row): row is BubbleRow => isBubbleRow(row) && keys.has(row.key))
-      .reverse();
+    return rows.filter((row): row is BubbleRow => isBubbleRow(row) && keys.has(row.key)).reverse();
   }, [keys, rows]);
 
   const selectedKeys = useMemo(() => new Set(selected.map((row) => row.key)), [selected]);

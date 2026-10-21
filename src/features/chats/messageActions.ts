@@ -75,7 +75,12 @@ export function isEditable(message: ChatMessage): boolean {
  * отправленное — можно, как в Telegram.
  */
 export function canReactTo(message: ChatMessage): boolean {
-  return !isLocalMessage(message) && message.kind !== 'system' && message.kind !== 'forward';
+  return (
+    !isLocalMessage(message) &&
+    !message.hidden &&
+    message.kind !== 'system' &&
+    message.kind !== 'forward'
+  );
 }
 
 /**
@@ -84,7 +89,12 @@ export function canReactTo(message: ChatMessage): boolean {
  * неподтверждённого сервером: база такие комментарии и не примет.
  */
 export function canCommentOn(message: ChatMessage): boolean {
-  return !isLocalMessage(message) && message.kind !== 'system' && message.kind !== 'forward';
+  return (
+    !isLocalMessage(message) &&
+    !message.hidden &&
+    message.kind !== 'system' &&
+    message.kind !== 'forward'
+  );
 }
 
 export function hasCopyableText(message: ChatMessage): boolean {
@@ -173,6 +183,9 @@ export const MESSAGE_ACTIONS: readonly MessageAction[] = [
 ];
 
 export function visibleMessageActions(context: MessageActionContext): MessageAction[] {
+  // Заглушка скрытого сообщения: с ним нечего делать — ни ответить, ни переслать.
+  if (context.message.hidden) return [];
+
   return MESSAGE_ACTIONS.filter((action) => action.isVisible(context));
 }
 

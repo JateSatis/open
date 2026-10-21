@@ -92,6 +92,13 @@ export type ChatSummary = {
   ownerId: string | null;
   /** Описание группы; у остальных чатов — null. */
   description: string | null;
+  /** Кто создал чат; у заявки на диалог — её отправитель. */
+  createdBy?: string | null;
+  /**
+   * Личка-заявка от не-друга, ещё не принятая: видна только двоим, у
+   * отправителя одно текстовое сообщение, писать дальше нельзя.
+   */
+  requestPending?: boolean;
   /** Только у чата постов: его имя и аватарка — канала. */
   channel: ChannelRef | null;
   participants: ChatParticipant[];
@@ -191,7 +198,7 @@ export type Page<T> = {
 };
 
 const CHAT_COLUMNS =
-  'id, kind, title, username, avatar_url, owner_id, description, last_message_at, last_message_text, last_message_author_id, subscribers_count, channel:channels(id, title, username, avatar_url, last_pop_at)';
+  'id, kind, title, username, avatar_url, owner_id, description, created_by, request_pending, last_message_at, last_message_preview, last_message_author_id, subscribers_count, channel:channels(id, title, username, avatar_url, last_pop_at)';
 const WAITING_COLUMNS = 'chat_id, user_id, display_name, avatar_url, username';
 export const chatsSelect = () => supabase.from('chats').select(CHAT_COLUMNS);
 const waitingSelect = () => supabase.from('chat_waiting_invitees').select(WAITING_COLUMNS);
@@ -288,10 +295,13 @@ export function toSummary(
     avatarUrl: chat.avatar_url,
     ownerId: chat.owner_id,
     description: chat.description,
+    createdBy: chat.created_by,
+    requestPending: chat.request_pending,
     channel: toChannelRef(chat.channel),
     participants,
     waiting: people.waiting,
-    lastMessagePreview: chat.last_message_text,
+    // Сообщение заблокировавшего меня в чужом мне чате база отдаёт заглушкой.
+    lastMessagePreview: chat.last_message_preview,
     lastMessageAt: chat.last_message_at,
     lastMessageAuthorId: chat.last_message_author_id,
     lastPopAt,

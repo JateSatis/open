@@ -1,5 +1,6 @@
 // Первым: livekit-client ждёт WebRTC в глобальной области с момента загрузки.
 import { ChatGoneError } from '@/api/chatGone';
+import { ProfileUnavailableError } from '@/api/profileErrors';
 import '@/features/streams/livekitGlobals';
 
 import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -60,8 +61,12 @@ export default function RootLayout() {
             // Одна тихая повторная попытка вслед за первой: со сроком запроса
             // (`REQUEST_TIMEOUT_MS`) это около 20 с до того, как экран честно
             // скажет «не удалось загрузить», вместо минуты с лишним по умолчанию.
-            // Удалённый чат от повтора не вернётся — сразу «Чат удалён».
-            retry: (failures, error) => !(error instanceof ChatGoneError) && failures < 1,
+            // Удалённый чат и недоступный профиль от повтора не вернутся — сразу
+            // «Чат удалён» и «Пользователь недоступен».
+            retry: (failures, error) =>
+              !(error instanceof ChatGoneError) &&
+              !(error instanceof ProfileUnavailableError) &&
+              failures < 1,
             retryDelay: QUERY_RETRY_DELAY_MS,
           },
         },

@@ -3,6 +3,7 @@ import { ActivityIndicator, View } from 'react-native';
 
 import { styles } from './styles';
 
+import { ProfileUnavailableError } from '@/api/profileErrors';
 import { Button } from '@/components/Button';
 import { Text } from '@/components/Text';
 import { useTheme } from '@/hooks/use-theme';
@@ -22,6 +23,14 @@ export function ProfileLoader({ isPending, error, onRetry, children }: ProfileLo
     return (
       <View style={styles.centered}>
         <ActivityIndicator accessibilityLabel="Загрузка профиля" color={theme.primary} />
+      </View>
+    );
+  }
+
+  if (error instanceof ProfileUnavailableError) {
+    return (
+      <View style={styles.centered}>
+        <Text color="textSecondary">Пользователь недоступен</Text>
       </View>
     );
   }

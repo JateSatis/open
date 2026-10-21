@@ -59,7 +59,7 @@ declare
 begin
   -- Диалог Ани и Петра, группа Ани с Петром и E (E ещё не принял)
   perform pg_temp.act_as(a);
-  dialog := (public.create_chat(array[b], null) ->> 'chat_id')::uuid;
+  dialog := (public.create_chat(array[b], null, null, 'Привет, это заявка') ->> 'chat_id')::uuid;
   grp := (public.create_chat(array[b, e], 'Группа') ->> 'chat_id')::uuid;
   r := public.create_channel('Канал', 'chat_subs_chan_zz', null, null);
   posts_chat := (r ->> 'chat_id')::uuid;
@@ -189,7 +189,7 @@ begin
 
   -- Название глазами постороннего — по правилам клиента
   perform pg_temp.act_as(a);
-  pending_dialog := (public.create_chat(array[d], null) ->> 'chat_id')::uuid;
+  pending_dialog := (public.create_chat(array[d], null, null, 'Привет, это заявка') ->> 'chat_id')::uuid;
   untitled_group := (public.create_chat(array[d, e], null) ->> 'chat_id')::uuid;
   perform set_config('role', 'postgres', true);
   perform pg_temp.check('название: диалог с ещё не принявшим — оба',

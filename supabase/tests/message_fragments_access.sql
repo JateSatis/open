@@ -82,8 +82,8 @@ declare
 begin
   -- ------------------------------------------------------------- подготовка
   perform pg_temp.act_as(a);
-  chat := (public.create_chat(array[b], null) ->> 'chat_id')::uuid;
-  other_chat := (public.create_chat(array[d], null) ->> 'chat_id')::uuid;
+  chat := (public.create_chat(array[b], null, null, 'Привет, это заявка') ->> 'chat_id')::uuid;
+  other_chat := (public.create_chat(array[d], null, null, 'Привет, это заявка') ->> 'chat_id')::uuid;
   perform pg_temp.act_as(b);
   perform public.accept_chat_invite(chat);
   perform pg_temp.act_as(d);

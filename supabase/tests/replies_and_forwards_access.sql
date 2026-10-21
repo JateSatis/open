@@ -79,9 +79,9 @@ begin
   perform pg_temp.act_as(a);
   -- E позван в чат A–B, но заявку не принял: писать туда он не может.
   chat_ab := (public.create_chat(array[b, e], null) ->> 'chat_id')::uuid;
-  chat_ac := (public.create_chat(array[c], null) ->> 'chat_id')::uuid;
+  chat_ac := (public.create_chat(array[c], null, null, 'Привет, это заявка') ->> 'chat_id')::uuid;
   perform pg_temp.act_as(d);
-  chat_dc := (public.create_chat(array[c], null) ->> 'chat_id')::uuid;
+  chat_dc := (public.create_chat(array[c], null, null, 'Привет, это заявка') ->> 'chat_id')::uuid;
 
   perform pg_temp.act_as(b);
   perform public.accept_chat_invite(chat_ab);

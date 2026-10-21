@@ -7,6 +7,9 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { renderWithQuery } from '@/test/renderWithQuery';
 import { Colors } from '@/theme';
 
+const mockPush = jest.fn();
+
+jest.mock('expo-router', () => ({ useRouter: () => ({ push: mockPush }) }));
 jest.mock('@/api/supabase', () => ({ supabase: {} }));
 jest.mock('@/api/friends', () => ({}));
 jest.mock('@/api/privacy', () => ({
@@ -149,5 +152,17 @@ describe('Конфиденциальность и безопасность', () 
     expect(within(activity).getByText('Только друзья')).toHaveStyle({ color: Colors[scheme].text });
     expect(screen.getByText(TITLES.activity)).toHaveStyle({ color: Colors[scheme].textSecondary });
     expect(screen.getByText('Активность')).toHaveStyle({ color: Colors[scheme].text });
+  });
+
+  it('К5.1 «Заблокированные» ведёт к списку; «Заявок на диалог» как настройки нет', async () => {
+    mocked.getMyPrivacySettings.mockResolvedValue(ADULT);
+    const user = userEvent.setup();
+
+    await renderWithQuery(<PrivacyRoute />);
+    await user.press(await screen.findByTestId('privacy-blocked'));
+
+    expect(mockPush).toHaveBeenCalledWith('/profile/blocked');
+    expect(screen.getByText(/могут прислать заявку — одно сообщение без медиа/)).toBeTruthy();
+    expect(screen.queryByText('Заявки на диалог')).toBeNull();
   });
 });

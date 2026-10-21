@@ -116,6 +116,34 @@ describe('NewChatScreen', () => {
     expect(mockReplace).toHaveBeenCalledWith('/chats/chat-new');
   });
 
+  it('К1.1 не-другу — экран заявки, чат ещё не создан', async () => {
+    mockedCreate.mockResolvedValue({ outcome: 'request_needed' });
+    const user = userEvent.setup();
+
+    await renderWithQuery(<NewChatScreen />);
+    await user.press(await screen.findByText('Марина'));
+    await user.press(screen.getByText('Позвать в диалог'));
+
+    await waitFor(() =>
+      expect(mockReplace).toHaveBeenCalledWith({
+        pathname: '/chats/request/[userId]',
+        params: { userId: 'user-2' },
+      }),
+    );
+  });
+
+  it('К2.2 заблокированному — «Пользователь недоступен»', async () => {
+    mockedCreate.mockRejectedValue(Object.assign(new Error('x'), { code: 'OPN08' }));
+    const user = userEvent.setup();
+
+    await renderWithQuery(<NewChatScreen />);
+    await user.press(await screen.findByText('Марина'));
+    await user.press(screen.getByText('Позвать в диалог'));
+
+    expect(await screen.findByText('Пользователь недоступен')).toBeTruthy();
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+
   it('arrives from a profile with that person already picked', async () => {
     mockSearchParams.mockReturnValueOnce({ with: 'user-3' });
     const user = userEvent.setup();

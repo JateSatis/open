@@ -110,7 +110,7 @@ begin
   insert into public.messages (chat_id, author_id, kind, text) values (grp, c, 'text', 'сообщение C в группе') returning id into m_a;
 
   perform pg_temp.act_as(b);
-  dm := (public.create_chat(array[c], null) ->> 'chat_id')::uuid;
+  dm := (public.create_chat(array[c], null, null, 'Привет, это заявка') ->> 'chat_id')::uuid;
   perform pg_temp.act_as(c);
   perform public.accept_chat_invite(dm);
   insert into public.messages (chat_id, author_id, kind, text) values (dm, c, 'text', 'привет от C') returning id into m_c;
