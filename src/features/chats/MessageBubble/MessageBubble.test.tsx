@@ -144,6 +144,35 @@ describe('MessageBubble', () => {
     expect(screen.queryByTestId('message-status-sent')).toBeNull();
   });
 
+  it('время чата скрыто настройкой участника — ни часов, ни галочек, «ред.» остаётся', async () => {
+    await render(
+      <MessageBubble
+        {...baseProps}
+        isOwn
+        message={textMessage({ authorId: 'me', createdAt: null, edited: true, editMark: 1 })}
+      />,
+    );
+
+    expect(screen.queryByTestId('message-time')).toBeNull();
+    expect(screen.queryByTestId('message-status-sent')).toBeNull();
+    expect(screen.queryByTestId('message-status-read')).toBeNull();
+    expect(screen.getByText('ред.')).toBeTruthy();
+  });
+
+  it('прочтение скрыто (взаимность) — время есть, галочек нет', async () => {
+    await render(
+      <MessageBubble
+        {...baseProps}
+        isOwn
+        message={textMessage({ authorId: 'me', readsVisible: false })}
+      />,
+    );
+
+    expect(screen.getByText('13:00')).toBeTruthy();
+    expect(screen.queryByTestId('message-status-sent')).toBeNull();
+    expect(screen.queryByTestId('message-status-read')).toBeNull();
+  });
+
   it('у чужого иконки статуса нет', async () => {
     await render(<MessageBubble {...baseProps} isRead message={textMessage()} />);
 

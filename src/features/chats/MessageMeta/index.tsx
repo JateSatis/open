@@ -41,9 +41,11 @@ function deliveryState(
 ): DeliveryState | null {
   if (message.status === 'failed') return 'failed';
   if (message.status === 'sending' || message.editStatus === 'saving') return 'sending';
-  // Время чата скрыто настройкой участника — галочек нет: «прочитано» скрыто
-  // вместе с временем, а одна галочка у всех врала бы «не прочитано».
-  if (!isOwn || !receipts || message.createdAt === null) return null;
+  // Время или прочтение чата скрыто настройкой — галочек нет: одна галочка
+  // у всех врала бы «не прочитано».
+  if (!isOwn || !receipts || message.createdAt === null || message.readsVisible === false) {
+    return null;
+  }
 
   return isRead ? 'read' : 'sent';
 }

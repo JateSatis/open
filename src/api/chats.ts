@@ -13,7 +13,7 @@ import {
   type ChatTopicListener,
   type TypingAudience,
 } from '@/api/chatTopics';
-import { MESSAGE_COLUMNS, messagesSelect, toMessage, type Message } from '@/api/messageRows';
+import { messagesSelect, toMessage, type Message } from '@/api/messageRows';
 import { publishPop, type PublishPopInput } from '@/api/pops';
 import { listChatSubscriptions, type Subscription } from '@/api/subscriptions';
 import { byChatListOrder } from '@/api/chatListOrder';
@@ -316,6 +316,8 @@ export async function getCurrentUserId(): Promise<string> {
 
 /** Сколько чатов в одном запросе участников — столько база принимает за раз. */
 const PEOPLE_CHATS_CHUNK = 500;
+/** Строк участников за запрос — не больше предела строк PostgREST (1000). */
+const PEOPLE_PAGE_ROWS = 1000;
 
 async function fetchMembers(chatIds: string[]): Promise<MemberRow[]> {
   const chunks: string[][] = [];
@@ -324,16 +326,30 @@ async function fetchMembers(chatIds: string[]): Promise<MemberRow[]> {
     chunks.push(chatIds.slice(at, at + PEOPLE_CHATS_CHUNK));
   }
 
-  const results = await Promise.all(
-    chunks.map((ids) => supabase.rpc('chat_people', { chat_ids: ids })),
-  );
+  // Ответ — строки участников, а не чатов: большие группы упёрлись бы в
+  // предел строк PostgREST, поэтому каждая пачка читается страницами.
+  const readChunk = async (ids: string[]) => {
+    const rows = [];
 
-  return results.flatMap(({ data, error }) => {
-    if (error) throw error;
+    for (let from = 0; ; from += PEOPLE_PAGE_ROWS) {
+      const { data, error } = await supabase
+        .rpc('chat_people', { chat_ids: ids })
+        .range(from, from + PEOPLE_PAGE_ROWS - 1);
 
+      if (error) throw error;
+
+      rows.push(...(data ?? []));
+
+      if ((data ?? []).length < PEOPLE_PAGE_ROWS) return rows;
+    }
+  };
+
+  const results = await Promise.all(chunks.map(readChunk));
+
+  return results.flatMap((data) => {
     // Порядок вступления база уже навела (`position`); колонки результата
     // rpc генератор типов не размечает как nullable.
-    return (data ?? []).map((row) => ({
+    return data.map((row) => ({
       chat_id: row.chat_id,
       user_id: row.user_id,
       display_name: row.display_name ?? null,

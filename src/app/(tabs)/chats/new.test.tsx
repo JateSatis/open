@@ -25,6 +25,18 @@ jest.mock('@/features/auth/useSession', () => ({
 }));
 
 jest.mock('@/api/chats', () => ({}));
+jest.mock('@/api/profile', () => ({
+  getProfile: jest.fn((id: string) =>
+    Promise.resolve({
+      id,
+      username: 'stranger',
+      displayName: 'Незнакомка',
+      avatarUrl: null,
+      bio: null,
+      status: null,
+    }),
+  ),
+}));
 jest.mock('@/api/groups', () => ({ searchPeople: jest.fn() }));
 
 jest.mock('@/api/invites', () => {
@@ -293,6 +305,16 @@ describe('NewChatScreen', () => {
   });
 
   describe('people without a catalogue', () => {
+    it('keeps a person picked from their profile visible though they are not among people I know', async () => {
+      mockSearchParams.mockReturnValueOnce({ with: 'user-77' });
+
+      await renderWithQuery(<NewChatScreen />);
+
+      // Незнакомого без запроса в списке нет — выбранный не должен быть невидимым.
+      expect(await screen.findByRole('checkbox', { name: 'Незнакомка' })).toBeChecked();
+      expect(screen.getByText('Марина')).toBeTruthy();
+    });
+
     it('shows people I know without a query: the server gives friends and people from my chats', async () => {
       await renderWithQuery(<NewChatScreen />);
 

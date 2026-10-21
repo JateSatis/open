@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, View } from 'react-native';
 import {
   useReanimatedKeyboardAnimation,
@@ -8,6 +8,7 @@ import {
 import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import type { Person } from '@/api/chats';
 import { SEARCH_RATE_LIMIT_TEXT } from '@/api/searchLimits';
 import { Button } from '@/components/Button';
 import { Input } from '@/components/Input';
@@ -17,6 +18,7 @@ import { PersonPickItem } from '@/features/chats/PersonPickItem';
 import { useCreateChat } from '@/features/chats/useCreateChat';
 import { usePeopleSearch } from '@/features/chats/usePeopleSearch';
 import { useConnectionStatus } from '@/features/connection/useConnectionStatus';
+import { useProfile } from '@/features/profile/queries';
 import { useTheme } from '@/hooks/use-theme';
 import { Spacing } from '@/theme';
 
@@ -53,6 +55,34 @@ export default function NewChatScreen() {
   // Фото не сбрасывается, когда выбор сузился до одного: снова двое — оно на месте.
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
   const isGroup = selected.length > 1;
+  // Выбранные остаются в списке, даже когда их нет в выдаче: позвали из
+  // чужого профиля (незнакомого без запроса не видно) или выбрали, а потом
+  // сменили запрос. Невидимый выбранный ушёл бы в чат незаметно.
+  const [picked, setPicked] = useState<ReadonlyMap<string, Person>>(new Map());
+  // Кого позвали из профиля — один раз, при входе: адрес потом не важен.
+  const [preselectedId] = useState(preselected);
+  const { data: preselectedProfile } = useProfile(preselectedId);
+  const listed = useMemo(() => {
+    const known = new Map(picked);
+
+    if (preselectedProfile) {
+      known.set(preselectedProfile.id, {
+        id: preselectedProfile.id,
+        displayName: preselectedProfile.displayName ?? 'Без имени',
+        avatarUrl: preselectedProfile.avatarUrl,
+        username: preselectedProfile.username,
+      });
+    }
+
+    const shown = new Set(people.people.map((person) => person.id));
+    const hiddenSelected = selected.flatMap((id) => {
+      const person = known.get(id);
+
+      return person && !shown.has(id) ? [person] : [];
+    });
+
+    return [...hiddenSelected, ...people.people];
+  }, [people.people, picked, preselectedProfile, selected]);
 
   // replace, а не push: «назад» из нового чата ведёт к списку, а не обратно в выбор.
   const openChat = useCallback((chatId: string) => router.replace(`/chats/${chatId}`), [router]);
@@ -61,13 +91,16 @@ export default function NewChatScreen() {
   const toggle = useCallback(
     (personId: string) => {
       dismissProblem();
+      const person = people.people.find((item) => item.id === personId);
+
+      if (person) setPicked((current) => new Map(current).set(personId, person));
       setSelected((current) =>
         current.includes(personId)
           ? current.filter((id) => id !== personId)
           : [...current, personId],
       );
     },
-    [dismissProblem],
+    [dismissProblem, people.people],
   );
 
   /**
@@ -143,7 +176,7 @@ export default function NewChatScreen() {
           showsHorizontalScrollIndicator={false}
           style={styles.flex}
           contentContainerStyle={styles.list}
-          data={people.people}
+          data={listed}
           keyExtractor={(person) => person.id}
           keyboardShouldPersistTaps="handled"
           onEndReached={people.loadMore}

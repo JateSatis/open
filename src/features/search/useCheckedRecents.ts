@@ -4,6 +4,9 @@ import { useMemo } from 'react';
 import { recheckRecentSearches } from '@/api/search';
 import type { RecentSearch } from '@/features/search/recentSearches';
 
+/** Сколько верить перепроверке: настройку поиска меняют редко. */
+const RECHECK_STALE_MS = 60_000;
+
 /**
  * «Недавние» лежат на телефоне снимками, и без перепроверки история
  * воскрешала бы человека, который с тех пор закрыл от меня поиск, или время
@@ -28,6 +31,9 @@ export function useCheckedRecents(recent: RecentSearch[]): RecentSearch[] {
     queryKey: ['search', 'recentRecheck', personIds.join(','), messageIds.join(',')],
     queryFn: () => recheckRecentSearches(personIds, messageIds),
     enabled: personIds.length > 0 || messageIds.length > 0,
+    // Новое в «Недавних» не прячет уже проверенное, пока идёт перепроверка.
+    placeholderData: (previous) => previous,
+    staleTime: RECHECK_STALE_MS,
   });
 
   return useMemo(

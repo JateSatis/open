@@ -252,6 +252,12 @@ export type Message = {
   viewsCount: number;
   /** Когда его впервые увидел другой участник чата. `null` — ещё никто или время скрыто. */
   readAt: string | null;
+  /**
+   * Прочтение в этом чате видно мне. `false` — скрыто (чужой или моей
+   * настройкой: кто скрыл время, тот не видит и чужих отметок), и `readAt:
+   * null` значит «неизвестно», а не «не прочитано». Нет — видно.
+   */
+  readsVisible?: boolean;
   /** Метка звонка у системного сообщения; нет — это не звонок. */
   call?: CallMark | null;
   /** Событие состава группы у системного сообщения; нет — это не оно. */
@@ -275,7 +281,7 @@ const MESSAGE_ATTACHMENT_COLUMNS =
 // если оно скрыто от смотрящего (миграция `20261030110000_privacy_message_time.sql`).
 const REPLY_COLUMNS =
   `replies:message_replies!message_replies_message_fkey(position, quoted_id, via:message_rows!message_replies_quoted_forward_fkey(id, seq), quoted:message_rows!message_replies_quoted_fkey(id, author_id, kind, text, seq, created_at, edit_mark, author:profiles!messages_author_id_fkey(display_name), attachments(${PREVIEW_ATTACHMENT_COLUMNS})))` as const;
-const REACTION_AND_COMMENT_COLUMNS = `${REACTION_COLUMNS}, comments_count, clusters_count, views_count, read_at` as const;
+const REACTION_AND_COMMENT_COLUMNS = `${REACTION_COLUMNS}, comments_count, clusters_count, views_count, read_at, reads_visible` as const;
 const ORIGINAL_COLUMNS = `id, chat_id, author_id, kind, text, seq, created_at, edited_at, edited, edit_mark, attachments(${MESSAGE_ATTACHMENT_COLUMNS}), ${REPLY_COLUMNS}, ${REACTION_AND_COMMENT_COLUMNS}, author:profiles!messages_author_id_fkey(display_name, avatar_url), chat:chats!messages_chat_id_fkey(id, kind, chat_display_name, chat_read_up_to, chat_am_member)` as const;
 
 const FORWARDED_COMMENT_COLUMNS = `forwarded_comment_id, forwarded:comments!messages_forwarded_comment_fkey(id, message_id, pop_id, chat_id, thread_root_id, fragment_id, ${FRAGMENT_QUOTE_COLUMNS}, author_id, kind, text, created_at, edited_at, ${REACTION_COLUMNS}, author:profiles(display_name, avatar_url), comment_attachments(${ATTACHMENT_COLUMNS}), chat:chats!comments_chat_id_fkey(id, chat_display_name, chat_am_member), target:message_rows!comments_message_fkey(id, author_id, kind, text, seq, author:profiles!messages_author_id_fkey(display_name), attachments(${PREVIEW_ATTACHMENT_COLUMNS})), pop:pops!comments_pop_id_fkey(id, channel_id, poster_url, caption))` as const;
@@ -445,6 +451,7 @@ type ContentRow = Pick<
   | 'clusters_count'
   | 'views_count'
   | 'read_at'
+  | 'reads_visible'
 >;
 
 function toContent(row: ContentRow): Message {
@@ -467,6 +474,7 @@ function toContent(row: ContentRow): Message {
     clustersCount: row.clusters_count,
     viewsCount: row.views_count,
     readAt: row.read_at,
+    readsVisible: row.reads_visible,
   };
 }
 

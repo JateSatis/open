@@ -3221,6 +3221,7 @@ export type Database = {
           id: string
           last_seen_at: string
           online_until: string | null
+          session_id: string | null
           updated_at: string
           user_id: string
         }
@@ -3229,6 +3230,7 @@ export type Database = {
           id?: string
           last_seen_at?: string
           online_until?: string | null
+          session_id?: string | null
           updated_at?: string
           user_id: string
         }
@@ -3237,6 +3239,7 @@ export type Database = {
           id?: string
           last_seen_at?: string
           online_until?: string | null
+          session_id?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -3244,7 +3247,7 @@ export type Database = {
           {
             foreignKeyName: "user_presence_user_id_fkey"
             columns: ["user_id"]
-            isOneToOne: true
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -3296,6 +3299,7 @@ export type Database = {
           member_reactions: Json | null
           reactions_count: number | null
           read_at: string | null
+          reads_visible: boolean | null
           seq: number | null
           source_chat_id: string | null
           stream_id: string | null
@@ -3502,8 +3506,16 @@ export type Database = {
           error: true
         } & "the function public.chat_read_up_to with parameter or with a single unnamed json/jsonb parameter, but no matches were found in the schema cache"
       }
+      chat_reads_visible: { Args: { p_chat: string }; Returns: boolean }
       chat_time_restricted_now: { Args: { p_chat: string }; Returns: boolean }
       chat_time_visible: { Args: { p_chat: string }; Returns: boolean }
+      chat_visibility: {
+        Args: { p_chat: string }
+        Returns: {
+          reads: boolean
+          visible: boolean
+        }[]
+      }
       check_comment_shape: { Args: { target: string }; Returns: undefined }
       check_message_shape: { Args: { target: string }; Returns: undefined }
       clean_group_avatar_url: { Args: { url: string }; Returns: string }
@@ -3779,6 +3791,7 @@ export type Database = {
           member_reactions: Json | null
           reactions_count: number | null
           read_at: string | null
+          reads_visible: boolean | null
           seq: number | null
           source_chat_id: string | null
           stream_id: string | null
@@ -4447,6 +4460,7 @@ export type Database = {
       }
       purge_friend_request_log: { Args: never; Returns: number }
       purge_search_request_log: { Args: never; Returns: undefined }
+      purge_user_presence: { Args: never; Returns: undefined }
       reaction_counts_add: {
         Args: { counts: Json; delta: number; emoji: string }
         Returns: Json
@@ -4948,6 +4962,7 @@ export type Database = {
           emoji: string
         }[]
       }
+      signal_time_visibility: { Args: { p_chat: string }; Returns: undefined }
       start_call: { Args: { target_chat: string }; Returns: Json }
       stream_join_info: {
         Args: { caller: string; target_stream: string }

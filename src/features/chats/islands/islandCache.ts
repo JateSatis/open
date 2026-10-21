@@ -78,6 +78,7 @@ export function withFreshContent(original: IslandOriginal, fresh: Message): Isla
     edited: fresh.edited,
     editMark: fresh.editMark,
     readAt: fresh.readAt,
+    readsVisible: fresh.readsVisible,
     attachments: fresh.attachments,
     replies: fresh.replies,
     reactions: fresh.reactions,
