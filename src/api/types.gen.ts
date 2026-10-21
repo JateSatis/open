@@ -3447,6 +3447,7 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      latest_local_date: { Args: never; Returns: string }
       leave_chat: { Args: { target_chat: string }; Returns: undefined }
       list_channel_subscribers: {
         Args: {

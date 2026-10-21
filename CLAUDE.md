@@ -252,7 +252,10 @@ privacy_settings     приватная строка аккаунта, 1:1 с п
                      set_privacy_setting. Применение настроек — только через
                      privacy_allows(настройка, владелец, зритель): сам видит всё,
                      friends — are_friends. Обе закрыты от клиента. Без даты дольше суток
-                     — аккаунт удаляет pg_cron (delete_abandoned_accounts)
+                     и без активности сеанса за сутки — аккаунт удаляет pg_cron
+                     (delete_abandoned_accounts). Отказы даты считаются по самому
+                     позднему поясу (latest_local_date, UTC+14), значения по возрасту —
+                     по UTC, в сторону защиты
 friendships          друзья: одна строка на пару (уникальный индекс по least/greatest),
                      requester → addressee, pending | accepted | declined. Друзья — только
                      accepted (are_friends). Отказ отправителю не раскрывается: для него

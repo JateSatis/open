@@ -44,7 +44,12 @@ insert into auth.users (id, email, raw_user_meta_data, aud, role, created_at) va
   ('00000000-0000-4000-8000-0000000001b1', 'pb@test.local', '{"full_name":"Тест B"}', 'authenticated', 'authenticated', now()),
   ('00000000-0000-4000-8000-0000000001c1', 'pc@test.local', '{"full_name":"Тест C"}', 'authenticated', 'authenticated', now()),
   ('00000000-0000-4000-8000-0000000001d1', 'pd@test.local', '{"full_name":"Тест D"}', 'authenticated', 'authenticated', now()),
-  ('00000000-0000-4000-8000-0000000001e1', 'pe@test.local', '{"full_name":"Брошенный"}', 'authenticated', 'authenticated', now());
+  ('00000000-0000-4000-8000-0000000001e1', 'pe@test.local', '{"full_name":"Брошенный"}', 'authenticated', 'authenticated', now()),
+  ('00000000-0000-4000-8000-0000000001f1', 'pf@test.local', '{"full_name":"Без даты, но живой"}', 'authenticated', 'authenticated', now());
+
+-- У F живой сеанс: без даты, но приложением пользуется.
+insert into auth.sessions (id, user_id, created_at, updated_at) values
+  ('00000000-0000-4000-8000-00000000f001', '00000000-0000-4000-8000-0000000001f1', now(), now());
 
 create function pg_temp.act_as(uid uuid) returns void language plpgsql as $$
 begin
@@ -76,6 +81,7 @@ declare
   c uuid := '00000000-0000-4000-8000-0000000001c1';
   d uuid := '00000000-0000-4000-8000-0000000001d1';
   e uuid := '00000000-0000-4000-8000-0000000001e1';
+  f uuid := '00000000-0000-4000-8000-0000000001f1';
   age15 date := (current_date - interval '15 years' - interval '10 days')::date;
   age25 date := (current_date - interval '25 years' - interval '10 days')::date;
   age12 date := (current_date - interval '12 years' - interval '10 days')::date;
@@ -147,7 +153,7 @@ begin
   -- ===================================================== К1.5 отказы
   perform pg_temp.act_as(b);
   begin
-    perform public.set_birth_date(current_date + 1);
+    perform public.set_birth_date(public.latest_local_date() + 1);
     perform pg_temp.check('К1.5 дата в будущем отклонена', false, 'прошло');
   exception when others then perform pg_temp.check('К1.5 дата в будущем отклонена (OPN03)', sqlstate = 'OPN03', sqlstate || ' ' || sqlerrm);
   end;
@@ -176,10 +182,17 @@ begin
       and pg_temp.settings_of(c) = minor
   );
   perform pg_temp.act_as(c);
-  perform public.set_birth_date((current_date - interval '13 years')::date);
+  begin
+    perform public.set_birth_date((public.latest_local_date() - interval '13 years')::date + 1);
+    perform pg_temp.check('13 лет только завтра и по самому позднему поясу — отказ', false, 'прошло');
+  exception when others then perform pg_temp.check('13 лет только завтра и по самому позднему поясу — отказ', sqlstate = 'OPN04', sqlstate);
+  end;
+  -- 13 исполняется сегодня где-то на Земле (UTC+14) — принято, хотя в UTC
+  -- может быть ещё вчера.
+  perform public.set_birth_date((public.latest_local_date() - interval '13 years')::date);
   perform pg_temp.act_as_postgres();
   perform pg_temp.check(
-    'ровно 13 лет сегодня — принято, подростковый набор',
+    'ровно 13 по самому позднему поясу — принято, подростковый набор',
     pg_temp.settings_of(c) = minor
       and (select initialized_at is not null from public.privacy_settings where user_id = c)
   );
@@ -450,13 +463,17 @@ begin
 
   -- ===================================================== Брошенные аккаунты
   perform pg_temp.act_as_postgres();
-  update public.privacy_settings set created_at = now() - interval '25 hours' where user_id in (e, a);
+  update public.privacy_settings set created_at = now() - interval '25 hours' where user_id in (e, a, f);
   n := public.delete_abandoned_accounts();
   perform pg_temp.check('брошенный без даты удалён', not exists (select 1 from auth.users where id = e)
     and not exists (select 1 from public.profiles where id = e), n::text);
   perform pg_temp.check('старый аккаунт с датой не тронут', exists (select 1 from auth.users where id = a));
-  perform pg_temp.check('без даты старше суток не осталось',
-    not exists (select 1 from public.privacy_settings where birth_date is null and created_at < now() - interval '24 hours'));
+  perform pg_temp.check('без даты, но с живым за сутки сеансом — не удалён',
+    exists (select 1 from auth.users where id = f));
+  update auth.sessions set created_at = now() - interval '2 days', updated_at = now() - interval '2 days',
+    refreshed_at = null where user_id = f;
+  n := public.delete_abandoned_accounts();
+  perform pg_temp.check('сеанс затих на сутки — удалён', not exists (select 1 from auth.users where id = f), n::text);
 
   -- Удаление аккаунта уносит дружбы.
   delete from auth.users where id = c;
