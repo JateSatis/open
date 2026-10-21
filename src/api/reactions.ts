@@ -77,13 +77,14 @@ export async function listMessageReactions(
 ): Promise<{ id: string; reactions: MessageReactions }[]> {
   if (messageIds.length === 0) return [];
 
+  // Из представления: вычисляемые связи `my_reaction` и `reactors` у таблицы
+  // `messages` клиенту больше не доступны — у неё закрыты колонки времени.
   const { data, error } = await supabase
-    .from('messages')
+    .from('message_rows')
     .select(`id, ${REACTION_COLUMNS}` as const)
-    .in('id', messageIds.slice(0, MAX_IDS))
-    .is('deleted_at', null);
+    .in('id', messageIds.slice(0, MAX_IDS));
 
   if (error) throw error;
 
-  return (data ?? []).map((row) => ({ id: row.id, reactions: toReactions(row) }));
+  return (data ?? []).flatMap((row) => (row.id ? [{ id: row.id, reactions: toReactions(row) }] : []));
 }

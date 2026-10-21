@@ -122,7 +122,10 @@ function draftOf(
     // Ряд знает только база; до её ответа своего пузыря он не касается —
     // пометку «участник» рисуют лишь у чужих.
     audience: 'visitor',
+    seq: 0,
     createdAt: new Date(at).toISOString(),
+    edited: false,
+    editMark: null,
     editedAt: null,
     replies: [],
     forward: null,

@@ -5,9 +5,10 @@ import { BackHandler } from 'react-native';
 import ChatsScreen from './index';
 
 import type { ChatSummary } from '@/api/chats';
-import { listChats, subscribeToOnlineUsers } from '@/api/chats';
+import { listChats } from '@/api/chats';
 import { listInvites } from '@/api/invites';
 import {
+  recheckRecentSearches,
   searchEntities,
   searchMessages,
   type SearchEntity,
@@ -46,12 +47,18 @@ jest.mock('expo-router', () => ({
 }));
 
 jest.mock('@/features/auth/useSession', () => ({ useSession: jest.fn() }));
-jest.mock('@/api/chats', () => ({ listChats: jest.fn(), subscribeToOnlineUsers: jest.fn() }));
+jest.mock('@/api/chats', () => ({ listChats: jest.fn() }));
+jest.mock('@/api/chatInfo', () => ({ getLastSeen: jest.fn(() => Promise.resolve(new Map())) }));
 jest.mock('@/api/invites', () => ({ listInvites: jest.fn() }));
-jest.mock('@/api/search', () => ({ searchEntities: jest.fn(), searchMessages: jest.fn() }));
+jest.mock('@/api/search', () => ({
+  searchEntities: jest.fn(),
+  searchMessages: jest.fn(),
+  recheckRecentSearches: jest.fn(),
+}));
 
 const mockedEntities = jest.mocked(searchEntities);
 const mockedMessages = jest.mocked(searchMessages);
+const mockedRecheck = jest.mocked(recheckRecentSearches);
 
 const READ_AT = '2026-10-13T09:00:00Z';
 
@@ -74,6 +81,7 @@ const dialog: ChatSummary = {
   lastMessageAuthorId: 'anna',
   lastPopAt: null,
   lastActivityAt: READ_AT,
+  listPosition: null,
   enteredAt: null,
   previewIsPop: false,
   subscription: null,
@@ -108,6 +116,7 @@ const post: SearchMessage = {
   authorId: 'anna',
   authorName: 'Анна',
   text: 'Ёлка уже стоит',
+  seq: 1,
   createdAt: '2026-10-12T10:00:00Z',
   fuzzy: false,
 };
@@ -131,11 +140,15 @@ beforeEach(() => {
     isAuthenticated: true,
     isLoading: false,
   });
-  jest.mocked(subscribeToOnlineUsers).mockReturnValue(() => {});
   jest.mocked(listChats).mockResolvedValue([dialog]);
   jest.mocked(listInvites).mockResolvedValue([]);
   mockedEntities.mockResolvedValue([]);
   mockedMessages.mockResolvedValue({ items: [], nextCursor: null });
+  // Сервер подтверждает всё сохранённое; что он скрыл — свой тест.
+  mockedRecheck.mockImplementation(async (people, messages) => ({
+    people: new Set(people),
+    messages: new Map(messages.map((id) => [id, '2026-10-12T10:00:00Z'])),
+  }));
   resetConnectionState();
   reportRealtimeJoined();
 });
@@ -273,18 +286,44 @@ it('opens a channel, a person and a post with a jump, and remembers them in «Н
     params: {
       channelId: 'ch-1',
       jumpTo: 'msg-1',
-      jumpAt: post.createdAt,
+      jumpSeq: String(post.seq),
       jumpKey: expect.any(String),
     },
   });
 
   await type('');
   expect(await screen.findByText('Недавние')).toBeTruthy();
+  // Люди и сообщения «Недавних» показываются после перепроверки сервером.
+  expect(await screen.findByRole('button', { name: 'Ёлкин' })).toBeTruthy();
   const rows = screen.getAllByRole('button').map((button) => button.props.accessibilityLabel);
   expect(rows.indexOf(`Ёлки-палки: ${post.text}`)).toBeLessThan(rows.indexOf('Ёлкин'));
 
   await fireEvent.press(screen.getByRole('button', { name: 'Очистить' }));
   expect(screen.queryByText('Недавние')).toBeNull();
+});
+
+it('К3.4 forgets a person in «Недавние» once the server no longer lets me find them', async () => {
+  mockedEntities.mockResolvedValue([
+    entity({
+      section: 'global',
+      kind: 'person',
+      id: 'p1',
+      personId: 'p1',
+      title: 'Ёлкин',
+      chatId: null,
+      channelId: null,
+    }),
+  ]);
+  await openSearch();
+  await type('елк');
+  // Человек закрыл от меня поиск после того, как я его нашёл: сохранённую
+  // строку сервер больше не подтверждает.
+  mockedRecheck.mockResolvedValue({ people: new Set(), messages: new Map() });
+  await fireEvent.press(await screen.findByRole('button', { name: 'Ёлкин' }));
+  await type('');
+
+  await waitFor(() => expect(mockedRecheck).toHaveBeenCalledWith(['p1'], []));
+  await waitFor(() => expect(screen.queryByRole('button', { name: 'Ёлкин' })).toBeNull());
 });
 
 it('opens a message of a group chat in that chat, with a new jump key every time', async () => {
@@ -320,7 +359,7 @@ it('loads the next page of messages when scrolled to the end', async () => {
   mockedMessages.mockImplementation(async (_query, cursor) =>
     cursor
       ? { items: [{ ...post, id: 'msg-2', text: 'Ёлка вторая' }], nextCursor: null }
-      : { items: [post], nextCursor: { createdAt: post.createdAt, id: post.id } },
+      : { items: [post], nextCursor: post.seq },
   );
   await openSearch();
   await type('елк');
@@ -331,7 +370,7 @@ it('loads the next page of messages when scrolled to the end', async () => {
   await waitFor(() =>
     expect(mockedMessages).toHaveBeenLastCalledWith(
       'елк',
-      { createdAt: post.createdAt, id: post.id },
+      post.seq,
       expect.anything(),
     ),
   );
@@ -417,7 +456,7 @@ it('asks again when the screen is back in focus — a subscription may have move
 it('keeps the messages already shown when the next page fails', async () => {
   mockedMessages.mockImplementation(async (_query, cursor) => {
     if (cursor) throw new Error('timeout');
-    return { items: [post], nextCursor: { createdAt: post.createdAt, id: post.id } };
+    return { items: [post], nextCursor: post.seq };
   });
   mockedEntities.mockResolvedValue([entity({})]);
   await openSearch();

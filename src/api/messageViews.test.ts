@@ -52,11 +52,10 @@ describe('recordMessageViews', () => {
 
 describe('listMessageViews', () => {
   it('читает счётчики и «прочитано» живых сообщений', async () => {
-    const is = jest.fn().mockResolvedValue({
+    const inFilter = jest.fn().mockResolvedValue({
       data: [{ id: 'm1', views_count: 3, read_at: '2026-10-05T10:00:00Z' }],
       error: null,
     });
-    const inFilter = jest.fn(() => ({ is }));
     const select = jest.fn(() => ({ in: inFilter }));
 
     from.mockReturnValue({ select });
@@ -64,7 +63,8 @@ describe('listMessageViews', () => {
     await expect(listMessageViews(['m1'])).resolves.toEqual([
       { id: 'm1', viewsCount: 3, readAt: '2026-10-05T10:00:00Z' },
     ]);
-    expect(from).toHaveBeenCalledWith('messages');
-    expect(is).toHaveBeenCalledWith('deleted_at', null);
+    // Представление отдаёт только живые и прячет просмотры участников и
+    // «прочитано» скрытого от меня чата.
+    expect(from).toHaveBeenCalledWith('message_rows');
   });
 });

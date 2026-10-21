@@ -31,9 +31,9 @@ const nextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() 
 const notFound = () => showNotice('Не удалось найти сообщение', 'error');
 const changed = () => showNotice('Этот кусок текста изменён');
 
-/** Время строки: у облачка островка — время островка, до него и догружать. */
-function createdAtOf(row: ChatListRow): string {
-  return row.type === 'message' ? row.message.createdAt : row.island.createdAt;
+/** Номер строки: у облачка островка — номер островка, до него и догружать. */
+function seqOf(row: ChatListRow): number {
+  return row.type === 'message' ? row.message.seq : row.island.seq;
 }
 
 /**
@@ -137,16 +137,16 @@ export function useFragmentJump({ chatId, rows, jump, isFocused }: Options) {
       }
 
       const row = rowsRef.current.find((item) => item.key === key);
-      const createdAt = row ? createdAtOf(row) : request.createdAt;
+      const seq = row ? seqOf(row) : request.seq;
 
       if (request.lost) {
-        if (await jump(key, createdAt)) changed();
+        if (await jump(key, seq)) changed();
         else notFound();
 
         return;
       }
 
-      if (!(await jump(key, createdAt, { flash: false }))) {
+      if (!(await jump(key, seq, { flash: false }))) {
         notFound();
         return;
       }
@@ -158,7 +158,7 @@ export function useFragmentJump({ chatId, rows, jump, isFocused }: Options) {
       // Сообщение на экране, но текст не измерить (сборка без модуля, облачко
       // не отрисовалось) — хотя бы вспышка, а не «не найдено».
       if (!shown) {
-        await jump(key, createdAt);
+        await jump(key, seq);
         return;
       }
 
@@ -166,7 +166,7 @@ export function useFragmentJump({ chatId, rows, jump, isFocused }: Options) {
       const range = quoteRange(entry.text, request.text, request.start, request.end);
 
       if (!range) {
-        await jump(key, createdAt);
+        await jump(key, seq);
         changed();
         return;
       }

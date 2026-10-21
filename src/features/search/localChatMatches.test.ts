@@ -30,6 +30,7 @@ function chat(overrides: Partial<ChatSummary>): ChatSummary {
     lastMessageAuthorId: null,
     lastPopAt: null,
     lastActivityAt: null,
+    listPosition: null,
     enteredAt: null,
     previewIsPop: false,
     subscription: null,

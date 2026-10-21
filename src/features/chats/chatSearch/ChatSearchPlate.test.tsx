@@ -8,6 +8,7 @@ const hit = (id: string) => ({
   authorId: 'a',
   authorName: 'Аня',
   text: `про zebra ${id}`,
+  seq: Number(id),
   createdAt: '2026-10-14T10:00:00Z',
 });
 

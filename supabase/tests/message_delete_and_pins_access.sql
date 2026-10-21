@@ -50,6 +50,16 @@ begin
 end;
 $$;
 
+-- Тестовые аккаунты рождаются с защитными настройками приватности
+-- (20261029100000_privacy_settings.sql). Здесь проверяется не она: время,
+-- «в сети» и поиск открыты всем — их скрытие проверяет
+-- privacy_activity_search_access.sql.
+update public.privacy_settings set
+  message_activity_metadata_visibility = 'everyone',
+  activity_status_visibility = 'everyone',
+  account_search_visibility = 'everyone'
+where user_id in (select id from auth.users where email like '%@test.local');
+
 do $$
 declare
   a uuid := '00000000-0000-4000-8000-0000000000a1';
@@ -296,7 +306,7 @@ begin
   perform public.delete_messages(array[mb]);
   select last_message_text into s from public.chats where id = chat_ab;
   perform pg_temp.check('живых не осталось — превью пустое', s is null, coalesce(s, 'null'));
-  select count(*) into n from public.chats where id = chat_ab and last_message_at is null;
+  select count(*) into n from public.chats ch where ch.id = chat_ab and public.last_message_at(ch) is null;
   perform pg_temp.check('живых не осталось — время превью пустое', n = 1, n::text);
 end;
 $$;

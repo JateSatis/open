@@ -12,7 +12,6 @@ jest.mock('@/api/chats', () => ({ getChat: jest.fn() }));
 jest.mock('@/api/chatInfo', () => ({ getLastSeen: jest.fn() }));
 jest.mock('@/api/groups', () => ({ searchPeople: jest.fn(), inviteToChat: jest.fn() }));
 jest.mock('@/features/chats/useCurrentUserId', () => ({ useCurrentUserId: () => 'me' }));
-jest.mock('@/features/chats/useOnlineUsers', () => ({ useOnlineUsers: () => new Set(['vera']) }));
 
 const mockBack = jest.fn();
 
@@ -44,6 +43,7 @@ const group: ChatSummary = {
   lastMessageAuthorId: null,
   lastPopAt: null,
   lastActivityAt: null,
+  listPosition: null,
   enteredAt: null,
   previewIsPop: false,
   subscription: null,
@@ -54,7 +54,7 @@ const group: ChatSummary = {
 beforeEach(() => {
   jest.clearAllMocks();
   jest.mocked(getChat).mockResolvedValue(group);
-  jest.mocked(getLastSeen).mockResolvedValue(new Map());
+  jest.mocked(getLastSeen).mockResolvedValue(new Map([['vera', { online: true, lastSeenAt: null }]]));
   jest.mocked(searchPeople).mockResolvedValue({
     items: [
       candidate('anna', 'Анна'),

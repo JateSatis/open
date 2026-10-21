@@ -66,6 +66,16 @@ create function pg_temp.files(msg uuid) returns text language sql as $$
   from public.attachments where message_id = msg
 $$;
 
+-- Тестовые аккаунты рождаются с защитными настройками приватности
+-- (20261029100000_privacy_settings.sql). Здесь проверяется не она: время,
+-- «в сети» и поиск открыты всем — их скрытие проверяет
+-- privacy_activity_search_access.sql.
+update public.privacy_settings set
+  message_activity_metadata_visibility = 'everyone',
+  activity_status_visibility = 'everyone',
+  account_search_visibility = 'everyone'
+where user_id in (select id from auth.users where email like '%@test.local');
+
 do $$
 declare
   a uuid := '00000000-0000-4000-8000-0000000000a3';
@@ -74,6 +84,7 @@ declare
   d uuid := '00000000-0000-4000-8000-0000000000d3';
   chat_ab uuid;
   chat_ac uuid;
+  fresh uuid;
   plain uuid;
   older uuid;
   mb uuid;
@@ -188,9 +199,12 @@ begin
   end;
 
   -- Новое сообщение не приходит «уже изменённым».
-  insert into public.messages (chat_id, author_id, kind, text, created_at, edited_at)
-  values (chat_ab, a, 'text', 'с выдуманной правкой', t + interval '5 minutes', now() - interval '1 day')
-  returning edited_at into ts;
+  -- Время клиенту из таблицы не читается — вставка без returning, чтение из
+  -- представления.
+  fresh := gen_random_uuid();
+  insert into public.messages (id, chat_id, author_id, kind, text, created_at, edited_at)
+  values (fresh, chat_ab, a, 'text', 'с выдуманной правкой', t + interval '5 minutes', now() - interval '1 day');
+  select edited_at into ts from public.message_rows where id = fresh;
   perform pg_temp.check('edited_at при вставке сбрасывает сервер', ts is null, ts::text);
 
   -- Удаление из 4a работает, как раньше.
@@ -203,7 +217,7 @@ begin
 
   -- ======================================================= правка текста
   perform public.edit_message(plain, '  стало  ');
-  select text, edited_at into s, ts from public.messages where id = plain;
+  select text, edited_at into s, ts from public.message_rows where id = plain;
   perform pg_temp.check('автор правит текст функцией (пробелы по краям срезаны)', s = 'стало', s);
   perform pg_temp.check('edited_at ставит сервер — время транзакции', ts = now(), ts::text);
 
@@ -548,19 +562,19 @@ begin
   set constraints all immediate;
   set constraints all deferred;
   perform pg_temp.as_service();
-  update public.chats set last_message_at = t + interval '20 minutes', last_message_text = 'последнее'
-  where id = chat_ab;
+  update public.chats set last_message_text = 'последнее' where id = chat_ab;
   perform pg_temp.act_as(a);
 
   select last_message_text into s from public.chats where id = chat_ab;
   perform pg_temp.check('правка не последнего не трогает превью', s = 'последнее', s);
 
+  select public.last_message_at(ch) into ts from public.chats ch where ch.id = chat_ab;
   perform public.edit_message(latest, 'последнее, поправленное');
   select last_message_text into s from public.chats where id = chat_ab;
   perform pg_temp.check('правка последнего меняет превью', s = 'последнее, поправленное', s);
 
-  select last_message_at into ts from public.chats where id = chat_ab;
-  perform pg_temp.check('правка не поднимает чат в списке', ts = t + interval '20 minutes', ts::text);
+  perform pg_temp.check('правка не поднимает чат в списке',
+    (select public.last_message_at(ch) from public.chats ch where ch.id = chat_ab) = ts, ts::text);
 
   perform public.edit_message(latest, null, '[{"url":"https://x/7.jpg","mime_type":"image/jpeg"}]'::jsonb, null);
   select last_message_text into s from public.chats where id = chat_ab;

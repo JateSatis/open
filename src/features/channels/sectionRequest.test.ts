@@ -7,7 +7,7 @@ describe('sectionRequestOf', () => {
         section: 'pops',
         sectionKey: '1',
         jumpTo: 'm',
-        jumpAt: 't',
+        jumpSeq: 't',
         jumpKey: '9',
       }),
     ).toEqual({ section: 'posts', key: '9' });

@@ -45,9 +45,19 @@ create function pg_temp.block(q text, which text) returns text[] language sql as
 $$;
 
 create function pg_temp.messages(q text) returns text[] language sql as $$
-  select coalesce(array_agg(text order by created_at desc, message_id desc), '{}')
-  from public.search_messages(q, null, null, 50);
+  select coalesce(array_agg(text order by seq desc), '{}')
+  from public.search_messages(q, null, 50);
 $$;
+
+-- Тестовые аккаунты рождаются с защитными настройками приватности
+-- (20261029100000_privacy_settings.sql). Здесь проверяется не она: время,
+-- «в сети» и поиск открыты всем — их скрытие проверяет
+-- privacy_activity_search_access.sql.
+update public.privacy_settings set
+  message_activity_metadata_visibility = 'everyone',
+  activity_status_visibility = 'everyone',
+  account_search_visibility = 'everyone'
+where user_id in (select id from auth.users where email like '%@test.local');
 
 do $$
 declare
@@ -211,11 +221,11 @@ begin
     got = array['direct:Максимилиан и Другой Человек'], got::text);
 
   -- ------------------------------------------------------------ пагинация
-  page_ids := array(select message_id from public.search_messages('пагинациязэ', null, null, 2));
-  select * into page1 from public.search_messages('пагинациязэ', null, null, 2) offset 1 limit 1;
-  page2_ids := array(select message_id from public.search_messages('пагинациязэ', page1.created_at, page1.message_id, 2));
-  got := array(select m.text from public.search_messages('пагинациязэ', null, null, 2) m)
-      || array(select m.text from public.search_messages('пагинациязэ', page1.created_at, page1.message_id, 2) m);
+  page_ids := array(select message_id from public.search_messages('пагинациязэ', null, 2));
+  select * into page1 from public.search_messages('пагинациязэ', null, 2) offset 1 limit 1;
+  page2_ids := array(select message_id from public.search_messages('пагинациязэ', page1.seq, 2));
+  got := array(select m.text from public.search_messages('пагинациязэ', null, 2) m)
+      || array(select m.text from public.search_messages('пагинациязэ', page1.seq, 2) m);
   perform pg_temp.check('К3.11 от новых к старым, страницы без дублей и пропусков',
     got = array['пагинациязэ третье', 'пагинациязэ второе', 'пагинациязэ первое']
       and not (page_ids && page2_ids), got::text);
@@ -224,9 +234,9 @@ begin
   got := pg_temp.messages('тлеграмзэ');
   perform pg_temp.check('опечатка в сообщении — когда точного нет', got @> array['Длинное слово телеграмзэ внутри'], got::text);
   perform pg_temp.check('опечатка помечена fuzzy',
-    (select bool_and(fuzzy) from public.search_messages('тлеграмзэ', null, null, 50)), null);
+    (select bool_and(fuzzy) from public.search_messages('тлеграмзэ', null, 50)), null);
   perform pg_temp.check('точное совпадение — без опечаток',
-    not (select bool_or(fuzzy) from public.search_messages('зэтест', null, null, 50)), null);
+    not (select bool_or(fuzzy) from public.search_messages('зэтест', null, 50)), null);
 
   -- ---------------------------------------------------------- без входа
   perform set_config('request.jwt.claims', '{}', true);

@@ -25,7 +25,7 @@ const forward: CommentForward = {
     fragmentQuote: null,
     target: {
       id: 'm1',
-      createdAt: '2026-10-04T09:00:00Z',
+      seq: Date.parse('2026-09-30T10:01:00Z'),
       authorId: 'user-1',
       authorName: 'Марина',
       preview: {

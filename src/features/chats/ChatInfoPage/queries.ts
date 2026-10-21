@@ -1,15 +1,16 @@
-import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useMemo, useRef } from 'react';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { useMemo } from 'react';
 
 import {
   getChatInfoSummary,
-  getLastSeen,
   listChatMedia,
   listChatVoices,
   listCommonGroups,
   type InfoCursor,
+  type MessageCursor,
 } from '@/api/chatInfo';
 import type { InfoStatus } from '@/components/InfoPage';
+import { usePeopleActivity } from '@/features/chats/useOnlineUsers';
 import { formatLastSeen } from '@/lib/dates';
 
 // Ключи — под ключом чата: перечитывание чата после событий (`chatQueryKey`
@@ -19,11 +20,7 @@ export const chatInfoKeys = {
   media: (chatId: string) => ['chat', chatId, 'info', 'media'] as const,
   voices: (chatId: string) => ['chat', chatId, 'info', 'voices'] as const,
   commonGroups: (userId: string) => ['commonGroups', userId] as const,
-  lastSeen: (userIds: string[]) => ['lastSeen', userIds.join(',')] as const,
 };
-
-/** Сколько подождать отметку ушедшего из сети, прежде чем её перечитать. */
-const LAST_SEEN_SETTLE_MS = 2500;
 
 export function useChatInfoSummary(chatId: string) {
   return useQuery({
@@ -36,7 +33,7 @@ export function useChatMedia(chatId: string) {
   return useInfiniteQuery({
     queryKey: chatInfoKeys.media(chatId),
     queryFn: ({ pageParam }) => listChatMedia(chatId, pageParam),
-    initialPageParam: null as InfoCursor | null,
+    initialPageParam: null as MessageCursor | null,
     getNextPageParam: (last) => last.next ?? undefined,
   });
 }
@@ -45,7 +42,7 @@ export function useChatVoices(chatId: string) {
   return useInfiniteQuery({
     queryKey: chatInfoKeys.voices(chatId),
     queryFn: ({ pageParam }) => listChatVoices(chatId, pageParam),
-    initialPageParam: null as InfoCursor | null,
+    initialPageParam: null as MessageCursor | null,
     getNextPageParam: (last) => last.next ?? undefined,
   });
 }
@@ -61,49 +58,25 @@ export function useCommonGroups(userId: string | null, enabled: boolean) {
 }
 
 /**
- * Статус людей: «в сети» из Presence, иначе «был(а) …» из профиля. Кто
- * только что ушёл из сети — его отметка перечитывается: приложение отметило
- * её, уходя в фон.
+ * Статус людей с сервера: «в сети», иначе «был(а) …». Кому настройка не
+ * разрешает — «был(а) давно», как у ни разу не заходившего: скрытое не
+ * отличить от неизвестного.
  */
-export function usePeopleStatus(
-  userIds: string[],
-  online: Set<string>,
-): Map<string, InfoStatus | null> {
-  const queryClient = useQueryClient();
-  const ids = useMemo(() => [...userIds].sort(), [userIds]);
-  const key = chatInfoKeys.lastSeen(ids);
-  const { data } = useQuery({
-    queryKey: key,
-    queryFn: () => getLastSeen(ids),
-    enabled: ids.length > 0,
-  });
-  const wasOnline = useRef(new Set<string>());
-
-  useEffect(() => {
-    const left = [...wasOnline.current].some((id) => !online.has(id) && ids.includes(id));
-
-    wasOnline.current = new Set(ids.filter((id) => online.has(id)));
-    if (!left) return;
-
-    // Ушедший отмечается сам, отдельным запросом, — дать ему дойти.
-    const timer = setTimeout(
-      () => void queryClient.invalidateQueries({ queryKey: chatInfoKeys.lastSeen(ids) }),
-      LAST_SEEN_SETTLE_MS,
-    );
-
-    return () => clearTimeout(timer);
-  }, [ids, online, queryClient]);
+export function usePeopleStatus(userIds: string[]): Map<string, InfoStatus | null> {
+  const activity = usePeopleActivity(userIds);
 
   return useMemo(() => {
     const statuses = new Map<string, InfoStatus | null>();
 
-    for (const id of ids) {
-      if (online.has(id)) statuses.set(id, { text: 'в сети', accent: true });
-      // Пока отметка не пришла — пусто, а не «был(а) давно».
-      else if (data) statuses.set(id, { text: formatLastSeen(data.get(id) ?? null) });
+    for (const id of userIds) {
+      const status = activity?.get(id);
+
+      if (status?.online) statuses.set(id, { text: 'в сети', accent: true });
+      // Пока ответа нет — пусто, а не «был(а) давно».
+      else if (activity) statuses.set(id, { text: formatLastSeen(status?.lastSeenAt ?? null) });
       else statuses.set(id, null);
     }
 
     return statuses;
-  }, [data, ids, online]);
+  }, [activity, userIds]);
 }

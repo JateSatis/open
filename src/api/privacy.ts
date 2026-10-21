@@ -15,10 +15,20 @@ export type PrivacySettings = {
   /** `YYYY-MM-DD`; null — дату ещё не указали. */
   birthDate: string | null;
   friendsListVisibility: Visibility;
+  /** Кто видит, что я в сети: «в сети», «был(а) в …», «печатает». */
+  activityStatusVisibility: Visibility;
+  /** Кто видит время сообщений и прочтение в диалогах, где я участвую. */
+  messageTimeVisibility: Visibility;
+  /** Кто может найти меня в поиске. */
+  searchVisibility: Visibility;
 };
 
-/** Настройки, которые клиент уже умеет менять. Остальные ждут этапов 2–6. */
-export type EditablePrivacySetting = 'friends_list_visibility';
+/** Настройки, которые клиент уже умеет менять. Остальные ждут этапов 3–6. */
+export type EditablePrivacySetting =
+  | 'friends_list_visibility'
+  | 'activity_status_visibility'
+  | 'message_activity_metadata_visibility'
+  | 'account_search_visibility';
 
 /** Будущая дата. */
 export const BIRTH_DATE_IN_FUTURE_CODE = 'OPN03';
@@ -47,6 +57,9 @@ function toSettings(row: PrivacyRow): PrivacySettings {
   return {
     birthDate: row.birth_date,
     friendsListVisibility: toVisibility(row.friends_list_visibility),
+    activityStatusVisibility: toVisibility(row.activity_status_visibility),
+    messageTimeVisibility: toVisibility(row.message_activity_metadata_visibility),
+    searchVisibility: toVisibility(row.account_search_visibility),
   };
 }
 

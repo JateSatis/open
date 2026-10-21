@@ -128,6 +128,6 @@ export function originalAsMessage(original: NonNullable<IslandItem['original']>)
 }
 
 /** Островок, где стоит облачко, — для ответа, закрепа и прыжка. У обычного сообщения — `null`. */
-export function anchorOf(row: BubbleRow): { id: string; createdAt: string } | null {
-  return row.type === 'island-item' ? { id: row.island.id, createdAt: row.island.createdAt } : null;
+export function anchorOf(row: BubbleRow): { id: string; seq: number } | null {
+  return row.type === 'island-item' ? { id: row.island.id, seq: row.island.seq } : null;
 }

@@ -152,11 +152,15 @@ export function readUpTo(chat: ChatSummary | null, currentUserId: string | null)
 
   if (others.length === 0) return null;
 
-  return others.reduce(
-    (earliest, participant) =>
-      participant.lastReadAt < earliest ? participant.lastReadAt : earliest,
-    others[0].lastReadAt,
-  );
+  // Отметки скрыты вместе с временем чата — «прочитано» неизвестно.
+  let earliest: string | null = null;
+
+  for (const { lastReadAt } of others) {
+    if (lastReadAt === null) return null;
+    if (earliest === null || lastReadAt < earliest) earliest = lastReadAt;
+  }
+
+  return earliest;
 }
 
 /** Поиск чата по названию и по именам участников — для выбора, куда переслать. */

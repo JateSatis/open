@@ -20,6 +20,7 @@ import { originalIds } from '@/features/chats/islands/islandCache';
 import {
   knownEdits,
   mergeMessages,
+  newestSeq,
   patchCommentCounts,
   patchClusterCounts,
   patchReactions,
@@ -48,11 +49,11 @@ async function firstPage(chatId: string): Promise<ChatHistory> {
 }
 
 /**
- * Всё, что пришло после `since`, от старого к новому. `null` — пропущено
- * больше, чем имеет смысл дочитывать по страницам: дешевле начать историю
- * заново с первой страницы.
+ * Всё, что пришло после номера `since`, от старого к новому. `null` —
+ * пропущено больше, чем имеет смысл дочитывать по страницам: дешевле начать
+ * историю заново с первой страницы.
  */
-async function fetchNewer(chatId: string, since: string): Promise<Message[] | null> {
+async function fetchNewer(chatId: string, since: number): Promise<Message[] | null> {
   const newer: Message[] = [];
   let cursor = since;
 
@@ -63,7 +64,7 @@ async function fetchNewer(chatId: string, since: string): Promise<Message[] | nu
 
     if (batch.length < MESSAGE_PAGE_SIZE) return newer;
 
-    cursor = batch[batch.length - 1].createdAt;
+    cursor = batch[batch.length - 1].seq;
   }
 
   return null;
@@ -82,10 +83,10 @@ export async function pullNewMessages(
 
   if (!history) return [];
 
-  const since = history.items[0]?.createdAt;
+  const since = newestSeq(history);
   // В пустом чате дочитывать не от чего — первое сообщение забираем обычной
   // страницей, иначе диалог оживает только после повторного входа.
-  const incoming = since
+  const incoming = since !== null
     ? ((await fetchNewer(chatId, since)) ?? [])
     : [...(await listMessages(chatId)).items].reverse();
 
@@ -108,9 +109,9 @@ export async function pullNewMessages(
  */
 export async function loadHistory(queryClient: QueryClient, chatId: string): Promise<ChatHistory> {
   const cached = readHistory(queryClient, chatId);
-  const since = cached?.items[0]?.createdAt;
+  const since = cached ? newestSeq(cached) : null;
 
-  if (!cached || !since) return firstPage(chatId);
+  if (!cached || since === null) return firstPage(chatId);
 
   // Оригиналы в островках — тоже загруженное: их правки, удаления, реакции и
   // комментарии за время обрыва дочитываются вместе с остальным.
@@ -166,7 +167,7 @@ export async function loadHistory(queryClient: QueryClient, chatId: string): Pro
 async function fetchStaleEdits(history: ChatHistory, ids: string[]): Promise<Message[]> {
   const known = knownEdits(history);
   const edits = await listMessageEdits(ids);
-  const stale = edits.filter((edit) => known.get(edit.id) !== edit.editedAt).map((edit) => edit.id);
+  const stale = edits.filter((edit) => known.get(edit.id) !== edit.editMark).map((edit) => edit.id);
 
   return listMessagesByIds(stale);
 }
@@ -184,14 +185,37 @@ function loadedEverywhere(queryClient: QueryClient): Set<string> {
   return loaded;
 }
 
-function editsEverywhere(queryClient: QueryClient): Map<string, string | null> {
-  const known = new Map<string, string | null>();
+function editsEverywhere(queryClient: QueryClient): Map<string, number | null> {
+  const known = new Map<string, number | null>();
 
   for (const history of readAllHistories(queryClient)) {
-    knownEdits(history).forEach((editedAt, id) => known.set(id, editedAt));
+    knownEdits(history).forEach((editMark, id) => known.set(id, editMark));
   }
 
   return known;
+}
+
+/**
+ * Участник чата сменил, кому видно время: перечитать всё загруженное этого
+ * чата — время, даты и прочтение появляются или пропадают на месте, без
+ * перезагрузки истории и без прыжка списка.
+ */
+export async function refreshChatTimes(queryClient: QueryClient, chatId: string): Promise<void> {
+  const history = readHistory(queryClient, chatId);
+
+  if (!history) return;
+
+  const ids = [
+    ...history.items.filter((message) => message.status === 'sent').map((message) => message.id),
+    ...quotedIds(history),
+    ...originalIds(history.items),
+  ].slice(0, MAX_TOMBSTONE_IDS);
+
+  if (ids.length === 0) return;
+
+  const fresh = await listMessagesByIds(ids);
+
+  updateHistory(queryClient, chatId, (current) => replaceMessages(current, fresh));
 }
 
 /**

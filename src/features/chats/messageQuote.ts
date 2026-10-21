@@ -60,7 +60,17 @@ export function previewOf(message: Message): MessagePreview {
 
 /** Пересланный комментарий одной строкой — как сообщение того же вида. */
 export function commentPreviewOf(comment: ForwardedComment): MessagePreview {
-  return previewOf({ ...comment, forward: null, replies: [], commentsCount: 0, viewsCount: 0, readAt: null } as Message);
+  return previewOf({
+    ...comment,
+    seq: 0,
+    edited: comment.editedAt !== null,
+    editMark: null,
+    forward: null,
+    replies: [],
+    commentsCount: 0,
+    viewsCount: 0,
+    readAt: null,
+  } as Message);
 }
 
 /** «Фото», «Альбом», «🎤 Голосовое сообщение (0:12)» — или сам текст. */
@@ -101,8 +111,9 @@ export function quoteOf(
     state: 'live',
     authorId: message.authorId,
     authorName: message.authorId ? authorName : null,
+    seq: message.seq,
     createdAt: message.createdAt,
-    editedAt: message.editedAt,
+    editMark: message.editMark,
     preview: previewOf(message),
     via,
   };

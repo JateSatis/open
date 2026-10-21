@@ -28,6 +28,7 @@ const message: SearchMessage = {
   authorId: 'a',
   authorName: 'Аня',
   text: 'привет',
+  seq: 1,
   createdAt: '2026-10-13T10:00:00Z',
   fuzzy: false,
 };

@@ -107,10 +107,8 @@ jest.mock('@/features/streams/useChatCall', () => ({
 }));
 
 let mockUserId = 'me';
-let mockOnline = new Set<string>();
 
 jest.mock('@/features/chats/useCurrentUserId', () => ({ useCurrentUserId: () => mockUserId }));
-jest.mock('@/features/chats/useOnlineUsers', () => ({ useOnlineUsers: () => mockOnline }));
 
 const mockedSummary = getChatInfoSummary as jest.MockedFunction<typeof getChatInfoSummary>;
 const mockedLastSeen = getLastSeen as jest.MockedFunction<typeof getLastSeen>;
@@ -139,6 +137,7 @@ const base: ChatSummary = {
   lastMessageAuthorId: null,
   lastPopAt: null,
   lastActivityAt: null,
+  listPosition: null,
   enteredAt: null,
   previewIsPop: false,
   subscription: null,
@@ -178,7 +177,6 @@ function summary(overrides: Partial<ChatInfoSummary> = {}): ChatInfoSummary {
 beforeEach(() => {
   jest.clearAllMocks();
   mockUserId = 'me';
-  mockOnline = new Set();
   mockedSummary.mockResolvedValue(summary());
   mockedLastSeen.mockResolvedValue(new Map());
   jest.mocked(listChatMedia).mockResolvedValue({ items: [], next: null });
@@ -210,8 +208,12 @@ describe('ChatInfoPage', () => {
     });
 
     it('lists members with me first, then online, and marks the owner', async () => {
-      mockOnline = new Set(['oleg']);
-      mockedLastSeen.mockResolvedValue(new Map([['anna', null]]));
+      mockedLastSeen.mockResolvedValue(
+        new Map([
+          ['oleg', { online: true, lastSeenAt: null }],
+          ['anna', { online: false, lastSeenAt: null }],
+        ]),
+      );
 
       await renderWithQuery(<Page chat={base} />);
       await layoutCards();
@@ -257,7 +259,7 @@ describe('ChatInfoPage', () => {
 
   describe('own dialog', () => {
     it('is about the other person: name, «в сети» and a call button', async () => {
-      mockOnline = new Set(['anna']);
+      mockedLastSeen.mockResolvedValue(new Map([['anna', { online: true, lastSeenAt: null }]]));
 
       await renderWithQuery(<Page chat={dialog} />);
 
@@ -272,7 +274,9 @@ describe('ChatInfoPage', () => {
     it('says when they were last seen', async () => {
       const today = new Date();
       today.setHours(16, 10, 0, 0);
-      mockedLastSeen.mockResolvedValue(new Map([['anna', today.toISOString()]]));
+      mockedLastSeen.mockResolvedValue(
+        new Map([['anna', { online: false, lastSeenAt: today.toISOString() }]]),
+      );
 
       await renderWithQuery(<Page chat={dialog} />);
 

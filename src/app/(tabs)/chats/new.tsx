@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, View } from 'react-native';
 import {
   useReanimatedKeyboardAnimation,
@@ -8,13 +8,17 @@ import {
 import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import type { Person } from '@/api/chats';
+import { SEARCH_RATE_LIMIT_TEXT } from '@/api/searchLimits';
 import { Button } from '@/components/Button';
 import { Input } from '@/components/Input';
 import { Text } from '@/components/Text';
 import { AvatarPicker } from '@/features/chats/AvatarPicker';
 import { PersonPickItem } from '@/features/chats/PersonPickItem';
 import { useCreateChat } from '@/features/chats/useCreateChat';
-import { usePeople } from '@/features/chats/usePeople';
+import { usePeopleSearch } from '@/features/chats/usePeopleSearch';
+import { useConnectionStatus } from '@/features/connection/useConnectionStatus';
+import { useProfile } from '@/features/profile/queries';
 import { useTheme } from '@/hooks/use-theme';
 import { Spacing } from '@/theme';
 
@@ -22,8 +26,10 @@ const GROUP_AVATAR_LABELS = { pick: 'Выбрать фото группы', chan
 
 /**
  * Выбор людей и создание чата. Один выбранный — личный диалог, несколько —
- * группа. Люди, с которыми переписка уже есть, не прячутся: новый чат с тем же
- * человеком допустим, когда в прежнем все приняли заявки.
+ * группа. Без запроса — друзья и люди из моих чатов; остальных находят
+ * поиском, с учётом их настройки «Кто может найти меня в поиске»: каталога
+ * всех пользователей нет. Люди, с которыми переписка уже есть, не прячутся:
+ * новый чат с тем же человеком допустим, когда в прежнем все приняли заявки.
  */
 export default function NewChatScreen() {
   const router = useRouter();
@@ -33,7 +39,14 @@ export default function NewChatScreen() {
   const { height: windowHeight } = useKeyboardWindow();
   const containerRef = useRef<View | null>(null);
   const [bottomOffset, setBottomOffset] = useState(0);
-  const { people, isLoading, error } = usePeople();
+  const connection = useConnectionStatus();
+  const [query, setQuery] = useState('');
+  const people = usePeopleSearch(query);
+  const peopleError = people.rateLimited
+    ? SEARCH_RATE_LIMIT_TEXT
+    : people.failed && connection === 'online'
+      ? 'Не удалось загрузить людей'
+      : null;
   // «Написать» из чужого профиля открывает этот экран с уже выбранным
   // человеком; дальше работают обычные правила создания чата.
   const { with: preselected } = useLocalSearchParams<{ with?: string }>();
@@ -42,6 +55,34 @@ export default function NewChatScreen() {
   // Фото не сбрасывается, когда выбор сузился до одного: снова двое — оно на месте.
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
   const isGroup = selected.length > 1;
+  // Выбранные остаются в списке, даже когда их нет в выдаче: позвали из
+  // чужого профиля (незнакомого без запроса не видно) или выбрали, а потом
+  // сменили запрос. Невидимый выбранный ушёл бы в чат незаметно.
+  const [picked, setPicked] = useState<ReadonlyMap<string, Person>>(new Map());
+  // Кого позвали из профиля — один раз, при входе: адрес потом не важен.
+  const [preselectedId] = useState(preselected);
+  const { data: preselectedProfile } = useProfile(preselectedId);
+  const listed = useMemo(() => {
+    const known = new Map(picked);
+
+    if (preselectedProfile) {
+      known.set(preselectedProfile.id, {
+        id: preselectedProfile.id,
+        displayName: preselectedProfile.displayName ?? 'Без имени',
+        avatarUrl: preselectedProfile.avatarUrl,
+        username: preselectedProfile.username,
+      });
+    }
+
+    const shown = new Set(people.people.map((person) => person.id));
+    const hiddenSelected = selected.flatMap((id) => {
+      const person = known.get(id);
+
+      return person && !shown.has(id) ? [person] : [];
+    });
+
+    return [...hiddenSelected, ...people.people];
+  }, [people.people, picked, preselectedProfile, selected]);
 
   // replace, а не push: «назад» из нового чата ведёт к списку, а не обратно в выбор.
   const openChat = useCallback((chatId: string) => router.replace(`/chats/${chatId}`), [router]);
@@ -50,13 +91,16 @@ export default function NewChatScreen() {
   const toggle = useCallback(
     (personId: string) => {
       dismissProblem();
+      const person = people.people.find((item) => item.id === personId);
+
+      if (person) setPicked((current) => new Map(current).set(personId, person));
       setSelected((current) =>
         current.includes(personId)
           ? current.filter((id) => id !== personId)
           : [...current, personId],
       );
     },
-    [dismissProblem],
+    [dismissProblem, people.people],
   );
 
   /**
@@ -112,7 +156,19 @@ export default function NewChatScreen() {
         </View>
       </View>
 
-      {isLoading ? (
+      <View style={styles.search}>
+        <Input
+          testID="new-chat-search"
+          accessibilityLabel="Поиск людей"
+          placeholder="Поиск по имени или @username"
+          value={query}
+          onChangeText={setQuery}
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+      </View>
+
+      {people.isLoading ? (
         <ActivityIndicator accessibilityLabel="Загрузка пользователей" />
       ) : (
         <FlatList
@@ -120,9 +176,11 @@ export default function NewChatScreen() {
           showsHorizontalScrollIndicator={false}
           style={styles.flex}
           contentContainerStyle={styles.list}
-          data={people}
+          data={listed}
           keyExtractor={(person) => person.id}
           keyboardShouldPersistTaps="handled"
+          onEndReached={people.loadMore}
+          onEndReachedThreshold={0.5}
           renderItem={({ item }) => (
             <PersonPickItem
               person={item}
@@ -131,7 +189,13 @@ export default function NewChatScreen() {
             />
           )}
           ListEmptyComponent={
-            error ? null : <Text color="textSecondary">Позвать пока некого: в Open вы первый.</Text>
+            peopleError ? null : (
+              <Text color="textSecondary">
+                {query.trim()
+                  ? 'Никого не нашлось'
+                  : 'Здесь будут ваши друзья и люди из ваших чатов. Остальных найдите поиском.'}
+              </Text>
+            )
           }
         />
       )}
@@ -142,7 +206,7 @@ export default function NewChatScreen() {
           { borderTopColor: theme.border, paddingBottom: Math.max(insets.bottom, Spacing.two) },
         ]}
       >
-        {error ? <Text color="danger">{error}</Text> : null}
+        {peopleError ? <Text color="danger">{peopleError}</Text> : null}
 
         {problem?.kind === 'duplicate' ? (
           <View style={styles.duplicate}>
@@ -193,6 +257,10 @@ const styles = StyleSheet.create({
   },
   titleField: {
     flex: 1,
+  },
+  search: {
+    paddingHorizontal: Spacing.three,
+    paddingBottom: Spacing.two,
   },
   list: {
     paddingHorizontal: Spacing.three,

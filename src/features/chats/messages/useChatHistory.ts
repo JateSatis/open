@@ -39,16 +39,16 @@ export type ChatHistoryState = {
   resumeLoadMore: (atEdge: boolean) => void;
   /**
    * Догружает страницы назад, пока в истории не окажется сообщение с этим
-   * временем, — по одной странице, «загрузить весь чат» не существует.
+   * номером, — по одной странице, «загрузить весь чат» не существует.
    * Отвечает, дошли ли до него.
    */
-  loadUntil: (createdAt: string) => Promise<boolean>;
+  loadUntil: (seq: number) => Promise<boolean>;
 };
 
-function reached(history: ChatHistory | undefined, createdAt: string): boolean {
+function reached(history: ChatHistory | undefined, seq: number): boolean {
   const oldest = history?.items[history.items.length - 1];
 
-  return oldest !== undefined && oldest.createdAt <= createdAt;
+  return oldest !== undefined && oldest.seq <= seq;
 }
 
 /**
@@ -76,9 +76,9 @@ export function useChatHistory(chatId: string): ChatHistoryState {
   const fetchOlder = useCallback((): Promise<void> => {
     if (loadingMoreRef.current) return loadingMoreRef.current;
 
-    const cursor = readHistory(queryClient, chatId)?.nextCursor;
+    const cursor = readHistory(queryClient, chatId)?.nextCursor ?? null;
 
-    if (!cursor) return Promise.resolve();
+    if (cursor === null) return Promise.resolve();
 
     setIsLoadingMore(true);
 
@@ -121,13 +121,13 @@ export function useChatHistory(chatId: string): ChatHistoryState {
   );
 
   const loadUntil = useCallback(
-    async (createdAt: string): Promise<boolean> => {
+    async (seq: number): Promise<boolean> => {
       for (;;) {
         const history = readHistory(queryClient, chatId);
 
         if (!history) return false;
-        if (reached(history, createdAt)) return true;
-        if (!history.nextCursor) return false;
+        if (reached(history, seq)) return true;
+        if (history.nextCursor === null) return false;
 
         // Переход к сообщению — явное действие человека: пробуем и после неудачи.
         await fetchOlder();
@@ -145,7 +145,7 @@ export function useChatHistory(chatId: string): ChatHistoryState {
     isLoading: state === 'loading' || state === 'paused',
     failed: state === 'failed',
     isLoadingMore,
-    hasMore: Boolean(data?.nextCursor),
+    hasMore: data?.nextCursor !== undefined && data.nextCursor !== null,
     // Не вышло дочитать поверх уже загруженного — не повод для плашки: следующее
     // событие или вход в чат дочитают снова. Не вышло загрузить вовсе — это
     // `failed`, экран сбоя, а не плашка.

@@ -26,8 +26,9 @@ export function copyableText(message: ChatMessage): string | null {
 /**
  * Текст для буфера обмена. Одно сообщение — как есть. Несколько — в порядке
  * переписки, у каждого автор и время, как в Telegram: иначе вставленная
- * куда-то реплика теряет, кто и когда её сказал. Сообщения без текста
- * пропускаются — голосовое или фото в буфер текстом не положить.
+ * куда-то реплика теряет, кто и когда её сказал. Время скрыто настройкой
+ * участника — только автор. Сообщения без текста пропускаются — голосовое
+ * или фото в буфер текстом не положить.
  */
 export function formatMessagesForCopy(
   messages: ChatMessage[],
@@ -35,14 +36,15 @@ export function formatMessagesForCopy(
 ): string {
   const withText = messages
     .filter((message) => copyableText(message)?.trim())
-    .sort((a, b) => (a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : 0));
+    .sort((a, b) => a.seq - b.seq);
 
   if (withText.length === 1) return copyableText(withText[0]) ?? '';
 
   return withText
-    .map(
-      (message) =>
-        `${authorName(message.authorId)}, [${formatStamp(message.createdAt)}]\n${message.text}`,
+    .map((message) =>
+      message.createdAt
+        ? `${authorName(message.authorId)}, [${formatStamp(message.createdAt)}]\n${message.text}`
+        : `${authorName(message.authorId)}\n${message.text}`,
     )
     .join('\n\n');
 }

@@ -22,7 +22,6 @@ import { subscribersLabel } from '@/features/channels/subscriberText';
 import { useChannelChangedSignal } from '@/features/channels/useChannelChangedSignal';
 import { useChannelSubscription } from '@/features/channels/useChannelSubscription';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
-import { useOnlineUsers } from '@/features/chats/useOnlineUsers';
 import { MediaViewer } from '@/features/media';
 import { showNotice } from '@/features/notifications/alertsStore';
 import { useProfile } from '@/features/profile/queries';
@@ -41,7 +40,6 @@ export type ChannelInfoPageProps = {
 export function ChannelInfoPage({ channel, slideBack }: ChannelInfoPageProps) {
   const router = useRouter();
   const currentUserId = useCurrentUserId();
-  const online = useOnlineUsers(currentUserId);
   const channelId = channel.id;
   const isOwner = currentUserId !== null && channel.ownerId === currentUserId;
   const { status, subscription } = useChannelSubscription(channelId);
@@ -116,7 +114,6 @@ export function ChannelInfoPage({ channel, slideBack }: ChannelInfoPageProps) {
     channel,
     summary,
     isOwner,
-    online,
     subscriberQuery,
     onOpenPerson: openPerson,
     onShowInChat: showInChat,

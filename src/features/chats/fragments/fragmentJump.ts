@@ -13,8 +13,8 @@ export type FragmentJump = {
   chatId: string | undefined;
   /** Строка, у которой открыли панель: в островке одно сообщение бывает дважды. */
   rowKey: string | undefined;
-  /** Время сообщения — до него догружается история. */
-  createdAt: string;
+  /** Номер сообщения — до него догружается история. */
+  seq: number;
   /** Цитата и где она сейчас в тексте, в code points. */
   text: string;
   start: number;

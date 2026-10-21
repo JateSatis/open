@@ -26,8 +26,11 @@ function textMessage(overrides: Partial<ChatMessage> = {}): ChatMessage {
     authorId: 'user-2',
     kind: 'text',
     text: 'привет',
+    seq: Date.parse('2026-09-22T10:00:00Z'),
     createdAt: '2026-09-22T10:00:00Z',
     editedAt: null,
+    edited: false,
+    editMark: null,
     attachments: [],
     replies: [],
     forward: null,
@@ -141,6 +144,35 @@ describe('MessageBubble', () => {
     expect(screen.queryByTestId('message-status-sent')).toBeNull();
   });
 
+  it('время чата скрыто настройкой участника — ни часов, ни галочек, «ред.» остаётся', async () => {
+    await render(
+      <MessageBubble
+        {...baseProps}
+        isOwn
+        message={textMessage({ authorId: 'me', createdAt: null, edited: true, editMark: 1 })}
+      />,
+    );
+
+    expect(screen.queryByTestId('message-time')).toBeNull();
+    expect(screen.queryByTestId('message-status-sent')).toBeNull();
+    expect(screen.queryByTestId('message-status-read')).toBeNull();
+    expect(screen.getByText('ред.')).toBeTruthy();
+  });
+
+  it('прочтение скрыто (взаимность) — время есть, галочек нет', async () => {
+    await render(
+      <MessageBubble
+        {...baseProps}
+        isOwn
+        message={textMessage({ authorId: 'me', readsVisible: false })}
+      />,
+    );
+
+    expect(screen.getByText('13:00')).toBeTruthy();
+    expect(screen.queryByTestId('message-status-sent')).toBeNull();
+    expect(screen.queryByTestId('message-status-read')).toBeNull();
+  });
+
   it('у чужого иконки статуса нет', async () => {
     await render(<MessageBubble {...baseProps} isRead message={textMessage()} />);
 
@@ -199,7 +231,10 @@ describe('MessageBubble', () => {
 
   it('у чужого исправленного — «ред.» сразу после времени', async () => {
     await render(
-      <MessageBubble {...baseProps} message={textMessage({ editedAt: '2026-09-22T10:05:00Z' })} />,
+      <MessageBubble
+        {...baseProps}
+        message={textMessage({ editedAt: '2026-09-22T10:05:00Z', edited: true, editMark: 1 })}
+      />,
     );
 
     const meta = within(screen.getByTestId('message-meta'))

@@ -44,6 +44,16 @@ begin
 end;
 $$;
 
+-- Тестовые аккаунты рождаются с защитными настройками приватности
+-- (20261029100000_privacy_settings.sql). Здесь проверяется не она: время,
+-- «в сети» и поиск открыты всем — их скрытие проверяет
+-- privacy_activity_search_access.sql.
+update public.privacy_settings set
+  message_activity_metadata_visibility = 'everyone',
+  activity_status_visibility = 'everyone',
+  account_search_visibility = 'everyone'
+where user_id in (select id from auth.users where email like '%@test.local');
+
 do $$
 declare
   a uuid := '00000000-0000-4000-8000-0000000001a1';
@@ -84,22 +94,22 @@ begin
 
   -- ---------------------------------------------------------- «был(а) в …»
   perform public.mark_seen();
-  select last_seen_at into t from public.profiles where id = a;
+  select last_seen_at into t from public.activity_statuses(array[a]);
   perform pg_temp.check('mark_seen ставит свою отметку', t is not null);
 
-  select last_seen_at into t from public.profiles where id = b;
+  select last_seen_at into t from public.activity_statuses(array[b]);
   perform pg_temp.check('mark_seen не трогает чужую', t is null);
 
   begin
-    update public.profiles set last_seen_at = now() - interval '1 day' where id = a;
-    perform pg_temp.check('клиент не пишет last_seen_at напрямую', false, 'прошло');
+    update public.user_presence set last_seen_at = now() - interval '1 day' where user_id = a;
+    perform pg_temp.check('клиент не пишет отметку напрямую', false, 'прошло');
   exception when others then
-    perform pg_temp.check('клиент не пишет last_seen_at напрямую', sqlstate = '42501', sqlerrm);
+    perform pg_temp.check('клиент не пишет отметку напрямую', sqlstate = '42501', sqlerrm);
   end;
 
   perform pg_temp.act_as(c);
-  select count(*) into n from public.profiles where id = a and last_seen_at is not null;
-  perform pg_temp.check('посторонний видит отметку', n = 1);
+  select count(*) into n from public.activity_statuses(array[a]) where online and last_seen_at is not null;
+  perform pg_temp.check('посторонний видит «в сети» при «видно всем»', n = 1);
 
   -- ----------------------------------------------------------- выборки
   select count(*) into n from public.list_chat_media(dm);
@@ -110,11 +120,11 @@ begin
   perform pg_temp.check('свежее сверху, внутри альбома — по порядку',
     s = 'https://x/3.jpg,https://x/1.jpg,https://x/2.mp4', s);
 
-  select count(*) into n from public.list_chat_media(dm, null, null, 1);
+  select count(*) into n from public.list_chat_media(dm, null, 1);
   perform pg_temp.check('страница — по сообщениям', n = 1, n::text);
 
   select count(*) into n
-  from public.list_chat_media(dm, (select created_at from public.messages where id = photo), photo);
+  from public.list_chat_media(dm, (select seq from public.message_rows where id = photo));
   perform pg_temp.check('курсор отдаёт старше себя: альбом целиком', n = 2, n::text);
 
   select count(*) into n from public.list_chat_voices(dm);

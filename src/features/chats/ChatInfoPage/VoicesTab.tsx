@@ -27,7 +27,7 @@ type Row = { type: 'voice'; item: ChatVoiceItem } | { type: 'skeleton'; key: str
 export type VoicesTabProps = {
   tab: number;
   chatId: string;
-  onShowInChat: (messageId: string, createdAt: string) => void;
+  onShowInChat: (messageId: string, seq: number) => void;
 };
 
 /**
@@ -107,7 +107,7 @@ export function VoicesTab({ tab, chatId, onShowInChat }: VoicesTabProps) {
         anchor={menu?.anchor ?? null}
         actions={SHOW_IN_CHAT}
         onSelect={() => {
-          if (menu) onShowInChat(menu.item.messageId, menu.item.createdAt);
+          if (menu) onShowInChat(menu.item.messageId, menu.item.seq);
         }}
         onClosed={() => setMenu(null)}
       />
@@ -206,7 +206,12 @@ const VoiceRow = memo(function VoiceRow({
         )}
         <View style={styles.text}>
           <Text variant="bodyBold" numberOfLines={1}>
-            {formatDateTime(item.createdAt)}
+            {/* Время чата бывает скрыто — тогда строку называет вид записи. */}
+            {item.createdAt
+              ? formatDateTime(item.createdAt)
+              : item.kind === 'video_note'
+                ? 'Видеосообщение'
+                : 'Голосовое'}
           </Text>
           <Text variant="small" color="textSecondary" numberOfLines={1}>
             {`${author} • ${formatDuration(playback.isActive ? playback.positionMs : item.durationMs)}`}

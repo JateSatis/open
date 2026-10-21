@@ -18,7 +18,6 @@ const SEARCH_DEBOUNCE_MS = 300;
 export type SubscribersTabProps = {
   tab: number;
   channelId: string;
-  online: Set<string>;
   /** Поиск: `null` — закрыт, весь список. */
   query: string | null;
   onOpenPerson: (userId: string) => void;
@@ -29,7 +28,7 @@ export type SubscribersTabProps = {
  * «читатель», если канал у человека в «Чатах». Поиск — по уже загруженным,
  * пока загружены все; иначе — на сервере.
  */
-export function SubscribersTab({ tab, channelId, online, query, onOpenPerson }: SubscribersTabProps) {
+export function SubscribersTab({ tab, channelId, query, onOpenPerson }: SubscribersTabProps) {
   const queryClient = useQueryClient();
   const needle = (query ?? '').trim();
   const debounced = useDebounced(needle, SEARCH_DEBOUNCE_MS);
@@ -54,7 +53,7 @@ export function SubscribersTab({ tab, channelId, online, query, onOpenPerson }: 
   }, [needle, searchingRemotely, source.data]);
 
   const ids = useMemo(() => rows.map((row) => row.userId), [rows]);
-  const statuses = usePeopleStatus(ids, online);
+  const statuses = usePeopleStatus(ids);
 
   const loadMore = useCallback(() => {
     if (hasNextPage && !isFetchingNextPage) void fetchNextPage();

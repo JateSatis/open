@@ -71,7 +71,14 @@ export function withFreshContent(original: IslandOriginal, fresh: Message): Isla
     ...original,
     kind: fresh.kind,
     text: fresh.text,
+    // Время оригинала бывает скрыто — и может скрыться или открыться, пока
+    // островок на экране.
+    createdAt: fresh.createdAt,
     editedAt: fresh.editedAt,
+    edited: fresh.edited,
+    editMark: fresh.editMark,
+    readAt: fresh.readAt,
+    readsVisible: fresh.readsVisible,
     attachments: fresh.attachments,
     replies: fresh.replies,
     reactions: fresh.reactions,

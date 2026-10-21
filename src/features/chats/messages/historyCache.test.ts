@@ -18,8 +18,11 @@ function message(id: string, overrides: Partial<ChatMessage> = {}): ChatMessage 
     authorId: 'user-1',
     kind: 'text',
     text: id,
+    seq: Date.parse('2026-09-29T10:00:00Z'),
     createdAt: '2026-09-29T10:00:00Z',
     editedAt: null,
+    edited: false,
+    editMark: null,
     attachments: [],
     replies: [],
     forward: null,
@@ -37,8 +40,9 @@ const liveQuote = (messageId: string) => ({
   state: 'live' as const,
   authorId: 'user-2',
   authorName: 'Марина',
+  seq: Date.parse('2026-09-29T09:00:00Z'),
   createdAt: '2026-09-29T09:00:00Z',
-  editedAt: null,
+  editMark: null,
   preview: {
     kind: 'text' as const,
     text: 'оригинал',
@@ -78,7 +82,12 @@ describe('replaceMessages', () => {
       items: [message('reply', { replies: [liveQuote('orig')] }), message('orig', { text: 'было' })],
       nextCursor: null,
     };
-    const edited = { ...message('orig', { text: 'стало' }), editedAt: '2026-09-29T11:00:00Z' };
+    const edited = {
+      ...message('orig', { text: 'стало' }),
+      editedAt: '2026-09-29T11:00:00Z',
+      edited: true,
+      editMark: 1,
+    };
 
     const next = replaceMessages(history, [edited]);
 
@@ -86,7 +95,7 @@ describe('replaceMessages', () => {
     expect(next.items[1]).toMatchObject({ text: 'стало', editedAt: '2026-09-29T11:00:00Z' });
     expect(next.items[0].replies[0]).toMatchObject({
       state: 'live',
-      editedAt: '2026-09-29T11:00:00Z',
+      editMark: 1,
       preview: { text: 'стало' },
     });
   });
@@ -94,7 +103,7 @@ describe('replaceMessages', () => {
   it('refreshes a quote even when its message is not loaded, without adding it', () => {
     const history: ChatHistory = {
       items: [message('reply', { replies: [liveQuote('far')] })],
-      nextCursor: 'cursor',
+      nextCursor: 1,
     };
 
     const next = replaceMessages(history, [message('far', { text: 'далеко, но свежее' })]);
@@ -111,17 +120,17 @@ describe('replaceMessages', () => {
 });
 
 describe('knownEdits', () => {
-  it('knows the edit time of loaded messages and of quoted ones', () => {
-    const quote = { ...liveQuote('far'), editedAt: '2026-09-29T08:00:00Z' };
+  it('knows the edit number of loaded messages and of quoted ones', () => {
+    const quote = { ...liveQuote('far'), editMark: 2 };
     const history: ChatHistory = {
-      items: [message('a', { editedAt: '2026-09-29T09:00:00Z', replies: [quote] })],
+      items: [message('a', { editedAt: '2026-09-29T09:00:00Z', edited: true, editMark: 1, replies: [quote] })],
       nextCursor: null,
     };
 
     expect(knownEdits(history)).toEqual(
       new Map([
-        ['a', '2026-09-29T09:00:00Z'],
-        ['far', '2026-09-29T08:00:00Z'],
+        ['a', 1],
+        ['far', 2],
       ]),
     );
   });
@@ -131,7 +140,7 @@ describe('quotedIds', () => {
   it('lists live quotes even when their messages are not loaded', () => {
     const history: ChatHistory = {
       items: [message('reply', { replies: [liveQuote('old'), { messageId: 'x', state: 'deleted' }] })],
-      nextCursor: 'cursor',
+      nextCursor: 1,
     };
 
     expect(quotedIds(history)).toEqual(['old']);

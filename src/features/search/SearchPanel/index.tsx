@@ -16,6 +16,7 @@ import {
   useRecentSearches,
 } from '@/features/search/recentSearches';
 import { parseSearchQuery } from '@/features/search/searchText';
+import { useCheckedRecents } from '@/features/search/useCheckedRecents';
 import {
   buildSearchSections,
   type ExpandableSection,
@@ -46,7 +47,7 @@ const NO_QUERY = parseSearchQuery('');
  */
 export function SearchPanel({ query }: { query: string }) {
   const results = useSearch(query);
-  const recent = useRecentSearches((state) => state.items);
+  const recent = useCheckedRecents(useRecentSearches((state) => state.items));
   const open = useOpenSearchResult();
   // Раскрытие — свойство запроса: новая буква сворачивает блоки обратно.
   const [expansion, setExpansion] = useState<{ query: string; open: Set<ExpandableSection> }>({

@@ -279,7 +279,7 @@ export function ChatConversation({
         return;
       }
 
-      void jumpTo(target.key, target.createdAt).then(() => {
+      void jumpTo(target.key, target.seq).then(() => {
         if (focusedRef.current) open();
       });
     },
@@ -575,7 +575,7 @@ export function ChatConversation({
         messageId: comment.subject.id,
         commentId: comment.id,
         target: comment.target
-          ? { key: comment.target.id, createdAt: comment.target.createdAt }
+          ? { key: comment.target.id, seq: comment.target.seq }
           : null,
       });
     },
@@ -793,12 +793,12 @@ export function ChatConversation({
   const { advance: advancePin } = pinCursor;
 
   const openPinned = useCallback(
-    (pin: { messageId: string; forwardId: string | null; messageCreatedAt: string }) => {
+    (pin: { messageId: string; forwardId: string | null; messageSeq: number }) => {
       advancePin();
       // Закреп облачка островка — к его строке в островке.
       const key = pin.forwardId ? islandItemKey(pin.forwardId, pin.messageId) : pin.messageId;
 
-      void jumpTo(key, pin.messageCreatedAt).then((found) => {
+      void jumpTo(key, pin.messageSeq).then((found) => {
         if (!found) showNotice('Не удалось найти сообщение', 'error');
       });
     },

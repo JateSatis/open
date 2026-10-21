@@ -191,6 +191,7 @@ function chatWith(participants: ChatSummary['participants']): ChatSummary {
     lastMessageAuthorId: null,
     lastPopAt: null,
     lastActivityAt: null,
+    listPosition: null,
     enteredAt: null,
     previewIsPop: false,
     subscription: null,
@@ -208,8 +209,11 @@ function message(id: string, text: string | null, authorId: string, minute = 0):
     authorId,
     kind: 'text',
     text,
+    seq: Date.parse(`2026-09-29T10:0${minute}:00Z`),
     createdAt: `2026-09-29T10:0${minute}:00Z`,
     editedAt: null,
+    edited: false,
+    editMark: null,
     attachments: [],
     replies: [],
     forward: null,
@@ -385,7 +389,7 @@ describe('editing text', () => {
   });
 
   it('shows the confirmed version with «ред.» next to the time', async () => {
-    mockedEdit.mockResolvedValue({ ...message('m1', 'эй, всё', 'user-1', 1), editedAt: AT });
+    mockedEdit.mockResolvedValue({ ...message('m1', 'эй, всё', 'user-1', 1), editedAt: AT, edited: true, editMark: 1 });
 
     await renderWithQuery(<ChatScreen />);
     await screen.findByText('привет');
@@ -656,8 +660,9 @@ describe('edits by others', () => {
     state: 'live',
     authorId: 'user-2',
     authorName: 'Марина',
+    seq: Date.parse('2026-09-29T10:02:00Z'),
     createdAt: '2026-09-29T10:02:00Z',
-    editedAt: null,
+    editMark: null,
     preview: {
       kind: 'text',
       text: 'привет',
@@ -677,7 +682,7 @@ describe('edits by others', () => {
       nextCursor: null,
     });
     mockedByIds.mockResolvedValue([
-      { ...message('m2', 'привет, исправила', 'user-2', 2), editedAt: AT },
+      { ...message('m2', 'привет, исправила', 'user-2', 2), editedAt: AT, edited: true, editMark: 1 },
     ]);
 
     await renderWithQuery(<ChatScreen />);
@@ -691,9 +696,9 @@ describe('edits by others', () => {
   });
 
   it('catches up on edits it missed while the channel was gone', async () => {
-    mockedEdits.mockResolvedValue([{ id: 'm2', editedAt: AT }]);
+    mockedEdits.mockResolvedValue([{ id: 'm2', editMark: 1 }]);
     mockedByIds.mockResolvedValue([
-      { ...message('m2', 'поправила, пока тебя не было', 'user-2', 2), editedAt: AT },
+      { ...message('m2', 'поправила, пока тебя не было', 'user-2', 2), editedAt: AT, edited: true, editMark: 1 },
     ]);
 
     await renderWithQuery(<ChatScreen />);

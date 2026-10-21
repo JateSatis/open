@@ -156,6 +156,7 @@ function chatWith(participants: ChatSummary['participants']): ChatSummary {
     lastMessageAuthorId: null,
     lastPopAt: null,
     lastActivityAt: null,
+    listPosition: null,
     enteredAt: null,
     previewIsPop: false,
     subscription: null,
@@ -173,8 +174,11 @@ function message(id: string, text: string, authorId: string): Message {
     authorId,
     kind: 'text',
     text,
+    seq: Date.parse(SENT_AT),
     createdAt: SENT_AT,
     editedAt: null,
+    edited: false,
+    editMark: null,
     attachments: [],
     replies: [],
     forward: null,
@@ -563,7 +567,7 @@ describe('ChatScreen', () => {
   it('pages further back through the history when the list is scrolled up', async () => {
     mockedListMessages.mockResolvedValueOnce({
       items: [message('m2', 'второе', 'user-2')],
-      nextCursor: SENT_AT,
+      nextCursor: Date.parse(SENT_AT),
     });
     mockedListMessages.mockResolvedValueOnce({
       items: [message('m1', 'первое', 'user-2')],
@@ -576,7 +580,7 @@ describe('ChatScreen', () => {
     fireEvent(screen.getByTestId('messages-list'), 'endReached');
 
     expect(await screen.findByText('первое')).toBeTruthy();
-    expect(mockedListMessages).toHaveBeenLastCalledWith('chat-1', { cursor: SENT_AT });
+    expect(mockedListMessages).toHaveBeenLastCalledWith('chat-1', { cursor: Date.parse(SENT_AT) });
   });
 
   it('pulls a broadcast message from the database instead of trusting the payload', async () => {
@@ -592,7 +596,7 @@ describe('ChatScreen', () => {
     handlers?.onMessage();
 
     expect(await screen.findByText('ещё сообщение')).toBeTruthy();
-    expect(listMessagesSince).toHaveBeenCalledWith('chat-1', SENT_AT);
+    expect(listMessagesSince).toHaveBeenCalledWith('chat-1', Date.parse(SENT_AT));
   });
 
   it('turns an own message read as soon as another member sees it', async () => {

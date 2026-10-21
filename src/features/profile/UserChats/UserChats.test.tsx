@@ -37,6 +37,7 @@ function chat(id: string, overrides: Partial<ChatSummary>): ChatSummary {
     lastMessageAuthorId: 'user-3',
     lastPopAt: null,
     lastActivityAt: '2026-10-01T10:00:00Z',
+    listPosition: null,
     enteredAt: null,
     previewIsPop: false,
     subscription: null,

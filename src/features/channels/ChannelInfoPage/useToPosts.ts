@@ -42,8 +42,8 @@ export function useToPosts(channelId: string, close: () => void) {
   );
 
   const showInChat = useCallback(
-    (messageId: string, createdAt: string) =>
-      toPosts({ jumpTo: messageId, jumpAt: createdAt, jumpKey: String(Date.now()) }),
+    (messageId: string, seq: number) =>
+      toPosts({ jumpTo: messageId, jumpSeq: String(seq), jumpKey: String(Date.now()) }),
     [toPosts],
   );
   const searchPosts = useCallback(

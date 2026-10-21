@@ -156,7 +156,8 @@ function isRecent(value: unknown): value is RecentSearch {
 }
 
 const chats = createRecentList<RecentSearch>({
-  prefix: 'search.recent.v1:',
+  // v2: у сообщения есть номер `seq` — по нему прыжок; снимки v1 без него.
+  prefix: 'search.recent.v2:',
   keyOf: recentKey,
   isItem: isRecent,
 });

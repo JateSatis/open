@@ -88,7 +88,7 @@ function forwardedOf(
     target: live
       ? {
           id: live.message.id,
-          createdAt: live.message.createdAt,
+          seq: live.message.seq,
           authorId: live.message.authorId,
           authorName: live.authorName,
           preview: previewOf(live.message as ChatMessage),

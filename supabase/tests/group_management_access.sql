@@ -57,6 +57,16 @@ exception when others then
 end;
 $$;
 
+-- Тестовые аккаунты рождаются с защитными настройками приватности
+-- (20261029100000_privacy_settings.sql). Здесь проверяется не она: время,
+-- «в сети» и поиск открыты всем — их скрытие проверяет
+-- privacy_activity_search_access.sql.
+update public.privacy_settings set
+  message_activity_metadata_visibility = 'everyone',
+  activity_status_visibility = 'everyone',
+  account_search_visibility = 'everyone'
+where user_id in (select id from auth.users where email like '%@test.local');
+
 do $$
 declare
   a uuid := '00000000-0000-4000-8000-0000000002a1';
@@ -212,8 +222,8 @@ begin
   perform pg_temp.check('владелец ушёл — владение у самого давнего',
     (select owner_id from public.chats where id = grp) = b);
   perform pg_temp.check('строки «покинул(а)» и «Владельцем стал(а)» по порядку',
-    (select array_agg(system_event order by created_at) from (
-      select system_event, created_at from public.messages
+    (select array_agg(system_event order by seq) from (
+      select system_event, seq from public.message_rows
       where chat_id = grp and system_event in ('member_left', 'owner_changed')
     ) x) = array['member_left', 'owner_changed']);
   -- Превью пишет отложенный триггер — на коммите.

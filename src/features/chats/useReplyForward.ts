@@ -59,7 +59,7 @@ function quoteOfRow(
   return quoteOf(
     content,
     name,
-    anchor ? { forwardId: anchor.id, createdAt: anchor.createdAt } : null,
+    anchor ? { forwardId: anchor.id, seq: anchor.seq } : null,
   );
 }
 

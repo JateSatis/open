@@ -96,8 +96,8 @@ export type FragmentWhereabouts =
       start: number;
       end: number;
       lost: boolean;
-      /** Время сообщения — до него догружается история. */
-      messageCreatedAt: string;
+      /** Номер сообщения — до него догружается история. */
+      messageSeq: number;
     }
   | { state: 'deleted' }
   | { state: 'missing' };
@@ -114,20 +114,21 @@ export async function locateFragment(
   const { data, error } = await supabase
     .from('message_fragments')
     .select(
-      'start_offset, end_offset, anchor_state, message:messages!message_fragments_message_fkey(created_at)',
+      'start_offset, end_offset, anchor_state, message:message_rows!message_fragments_message_fkey(seq)',
     )
     .eq('id', fragmentId)
     .maybeSingle();
 
   if (error) throw error;
 
-  if (data?.message) {
+  // Колонки представления генератор типов размечает nullable целиком.
+  if (data?.message && data.message.seq !== null) {
     return {
       state: 'live',
       start: data.start_offset,
       end: data.end_offset,
       lost: data.anchor_state === 'lost',
-      messageCreatedAt: data.message.created_at,
+      messageSeq: data.message.seq,
     };
   }
 

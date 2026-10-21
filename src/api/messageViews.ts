@@ -32,17 +32,17 @@ export async function recordMessageViews(
 export async function listMessageViews(messageIds: string[]): Promise<MessageViews[]> {
   if (messageIds.length === 0) return [];
 
+  // Из представления: просмотры участников и «прочитано» скрытого от меня
+  // чата оно не отдаёт.
   const { data, error } = await supabase
-    .from('messages')
+    .from('message_rows')
     .select('id, views_count, read_at')
-    .in('id', messageIds)
-    .is('deleted_at', null);
+    .in('id', messageIds);
 
   if (error) throw error;
 
-  return (data ?? []).map((row) => ({
-    id: row.id,
-    viewsCount: row.views_count,
-    readAt: row.read_at,
-  }));
+  // Колонки представления генератор типов размечает nullable целиком.
+  return (data ?? []).flatMap((row) =>
+    row.id ? [{ id: row.id, viewsCount: row.views_count ?? 0, readAt: row.read_at }] : [],
+  );
 }

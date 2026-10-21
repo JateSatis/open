@@ -26,6 +26,8 @@ jest.mock('@/api/reactions', () => ({
   setMessageReaction: jest.fn(),
 }));
 jest.mock('@/api/chats', () => ({
+  getChat: jest.fn(() => new Promise(() => undefined)),
+  getTypingAudience: jest.fn(() => Promise.resolve('none')),
   listMessages: jest.fn(),
   listMessagesSince: jest.fn(),
   sendMessage: jest.fn(),
@@ -118,8 +120,11 @@ describe('useChatMessages sending media', () => {
       authorId: 'user-1',
       kind: 'media',
       text: null,
+      seq: Date.parse('2026-09-22T10:00:00Z'),
       createdAt: '2026-09-22T10:00:00Z',
       editedAt: null,
+      edited: false,
+      editMark: null,
       attachments: [
         {
           id: 'att-1',
@@ -219,8 +224,11 @@ describe('useChatMessages sending media', () => {
       authorId: 'user-1',
       kind: 'media',
       text: null,
+      seq: Date.parse('2026-09-22T10:00:00Z'),
       createdAt: '2026-09-22T10:00:00Z',
       editedAt: null,
+      edited: false,
+      editMark: null,
       attachments: [],
       replies: [],
       forward: null,
@@ -284,8 +292,11 @@ describe('useChatMessages sending media', () => {
       authorId: 'user-1',
       kind: 'text',
       text: 'привет',
+      seq: Date.parse('2026-09-16T10:05:00Z'),
       createdAt: '2026-09-16T10:05:00Z',
       editedAt: null,
+      edited: false,
+      editMark: null,
       attachments: [],
       replies: [],
       forward: null,
@@ -319,8 +330,11 @@ describe('useChatMessages sending media', () => {
           authorId: 'user-2',
           kind: 'text' as const,
           text: 'до этого',
+          seq: Date.parse('2026-09-22T09:00:00Z'),
           createdAt: '2026-09-22T09:00:00Z',
           editedAt: null,
+          edited: false,
+          editMark: null,
           attachments: [],
           replies: [],
           forward: null,
@@ -339,8 +353,11 @@ describe('useChatMessages sending media', () => {
       authorId: 'user-1',
       kind: 'text' as const,
       text: 'привет',
+      seq: Date.parse('2026-09-22T10:00:00Z'),
       createdAt: '2026-09-22T10:00:00Z',
       editedAt: null,
+      edited: false,
+      editMark: null,
       attachments: [],
       replies: [],
       forward: null,
@@ -436,8 +453,11 @@ describe('useChatMessages large albums', () => {
           authorId: 'user-1',
           kind: 'media',
           text: null,
+          seq: Date.parse('2026-09-26T10:00:00Z'),
           createdAt: '2026-09-26T10:00:00Z',
           editedAt: null,
+          edited: false,
+          editMark: null,
           attachments: [],
           replies: [],
           forward: null,
@@ -486,8 +506,11 @@ describe('useChatMessages voice messages', () => {
     authorId: 'user-1',
     kind: 'voice' as const,
     text: null,
+    seq: Date.parse('2026-09-26T10:00:00Z'),
     createdAt: '2026-09-26T10:00:00Z',
     editedAt: null,
+    edited: false,
+    editMark: null,
     attachments: [
       {
         id: 'att-voice',
@@ -596,7 +619,66 @@ describe('useChatMessages voice messages', () => {
     await waitFor(() => expect(result.current.activities).toEqual([]));
   });
 
+  /** Я участник чата, а база решила, куда слать мои «печатает». */
+  function memberWithAudience(audience: 'chat' | 'members' | 'none') {
+    const api = jest.requireMock('@/api/chats') as {
+      getChat: jest.Mock;
+      getTypingAudience: jest.Mock;
+    };
+
+    api.getChat.mockResolvedValue({
+      id: 'chat-1',
+      kind: 'direct',
+      participants: [{ id: 'user-1', displayName: 'Я', avatarUrl: null, lastReadAt: null }],
+      waiting: [],
+    });
+    api.getTypingAudience.mockResolvedValue(audience);
+  }
+
   it('announces recording right away even right after typing', async () => {
+    memberWithAudience('chat');
+    const broadcastTyping = jest.fn();
+    mockedSubscribe.mockReturnValue({ broadcastTyping, unsubscribe: jest.fn() });
+
+    const { result } = await renderHook(() => useChatMessages('chat-1', 'user-1'), { wrapper });
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    await waitFor(() =>
+      expect(jest.requireMock('@/api/chats').getTypingAudience).toHaveBeenCalledWith('chat-1'),
+    );
+    await act(async () => result.current.notifyTyping());
+    await act(async () => result.current.notifyRecordingVoice());
+    await act(async () => result.current.notifyRecordingVoice());
+
+    expect(broadcastTyping.mock.calls).toEqual([
+      ['user-1', 'typing', 'chat'],
+      ['user-1', 'recording_voice', 'chat'],
+    ]);
+  });
+
+  it('sends «typing» only where the database allows: members topic or nowhere', async () => {
+    // К1.5: «только друзьям» и все участники друзья — топик участников;
+    // не-друг в чате — никуда. Решает база (`my_typing_audience`).
+    memberWithAudience('members');
+    const broadcastTyping = jest.fn();
+    mockedSubscribe.mockReturnValue({ broadcastTyping, unsubscribe: jest.fn() });
+
+    const { result } = await renderHook(() => useChatMessages('chat-1', 'user-1'), { wrapper });
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    await waitFor(() =>
+      expect(jest.requireMock('@/api/chats').getTypingAudience).toHaveBeenCalled(),
+    );
+    await act(async () => result.current.notifyTyping());
+
+    expect(broadcastTyping).toHaveBeenLastCalledWith('user-1', 'typing', 'members');
+    // Подписка участника слушает и топик участников.
+    expect(mockedSubscribe).toHaveBeenLastCalledWith('chat-1', expect.anything(), true);
+  });
+
+  it('stays silent until the database has answered where to send «typing»', async () => {
+    memberWithAudience('chat');
+    jest.requireMock('@/api/chats').getTypingAudience.mockReturnValue(new Promise(() => undefined));
     const broadcastTyping = jest.fn();
     mockedSubscribe.mockReturnValue({ broadcastTyping, unsubscribe: jest.fn() });
 
@@ -604,13 +686,8 @@ describe('useChatMessages voice messages', () => {
 
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     await act(async () => result.current.notifyTyping());
-    await act(async () => result.current.notifyRecordingVoice());
-    await act(async () => result.current.notifyRecordingVoice());
 
-    expect(broadcastTyping.mock.calls).toEqual([
-      ['user-1', 'typing'],
-      ['user-1', 'recording_voice'],
-    ]);
+    expect(broadcastTyping).toHaveBeenLastCalledWith('user-1', 'typing', 'none');
   });
 });
 
@@ -624,8 +701,11 @@ describe('useChatMessages removing own unsent messages', () => {
     authorId: 'user-1',
     kind: 'text' as const,
     text: 'передумал',
+    seq: Date.parse('2026-09-27T10:00:00Z'),
     createdAt: '2026-09-27T10:00:00Z',
     editedAt: null,
+    edited: false,
+    editMark: null,
     attachments: [],
     replies: [],
     forward: null,
@@ -681,8 +761,9 @@ describe('useChatMessages replies and forwards', () => {
     state: 'live' as const,
     authorId: 'user-2',
     authorName: 'Марина',
+    seq: Date.parse('2026-09-29T09:00:00Z'),
     createdAt: '2026-09-29T09:00:00Z',
-    editedAt: null,
+    editMark: null,
     preview: {
       kind: 'text' as const,
       text: 'оригинал',
@@ -722,8 +803,11 @@ describe('useChatMessages replies and forwards', () => {
         authorId: 'user-1',
         kind: 'text',
         text: 'согласен',
+        seq: Date.parse('2026-09-29T10:00:00Z'),
         createdAt: '2026-09-29T10:00:00Z',
         editedAt: null,
+        edited: false,
+        editMark: null,
         attachments: [],
         replies: [quote],
         forward: null,
@@ -751,8 +835,11 @@ describe('useChatMessages replies and forwards', () => {
         authorId: 'user-1',
         kind: 'text',
         text: input.text ?? null,
+        seq: Date.parse('2026-09-29T10:00:00Z'),
         createdAt: '2026-09-29T10:00:00Z',
         editedAt: null,
+        edited: false,
+        editMark: null,
         attachments: [],
         replies: [],
         forward: null,
@@ -778,8 +865,8 @@ describe('useChatMessages replies and forwards', () => {
     // оригиналов: «late» стоял выше, хоть и написан позже.
     await act(() =>
       result.current.forward('смотри', SOURCE, [
-        { original: original({ id: 'late', createdAt: '2026-09-29T09:05:00Z' }) },
-        { original: original({ id: 'early', createdAt: '2026-09-29T09:01:00Z' }) },
+        { original: original({ id: 'late', seq: Date.parse('2026-09-29T09:05:00Z'), createdAt: '2026-09-29T09:05:00Z' }) },
+        { original: original({ id: 'early', seq: Date.parse('2026-09-29T09:01:00Z'), createdAt: '2026-09-29T09:01:00Z' }) },
       ]),
     );
 

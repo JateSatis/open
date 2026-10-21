@@ -21,7 +21,7 @@ export function useOpenSearchResult(): (item: RecentSearch) => void {
         const { message } = item;
         const jump = {
           jumpTo: message.id,
-          jumpAt: message.createdAt,
+          jumpSeq: String(message.seq),
           jumpKey: String(Date.now()),
         };
 

@@ -25,16 +25,16 @@ export type PinnedMessagesState = {
    * Отказ сервера откатывает закреп и пробрасывается вызвавшему — ему решать,
    * что сказать. `island` — островок этого чата, где стоит сообщение из другого.
    */
-  pin: (message: Message, island?: { id: string; createdAt: string } | null) => Promise<void>;
+  pin: (message: Message, island?: { id: string; seq: number } | null) => Promise<void>;
   unpin: (messageId: string) => Promise<void>;
 };
 
-function toPinned(message: Message, island: { id: string; createdAt: string } | null): PinnedMessage {
+function toPinned(message: Message, island: { id: string; seq: number } | null): PinnedMessage {
   return {
     messageId: message.id,
     forwardId: island?.id ?? null,
-    messageCreatedAt: island?.createdAt ?? message.createdAt,
-    originalCreatedAt: message.createdAt,
+    messageSeq: island?.seq ?? message.seq,
+    originalSeq: message.seq,
     kind: message.kind,
     text: message.text,
     thumbnailUrl: attachmentThumbnail(message.attachments),
@@ -79,7 +79,7 @@ export function usePinnedMessages(chatId: string): PinnedMessagesState {
   );
 
   const pin = useCallback(
-    (message: Message, island: { id: string; createdAt: string } | null = null) =>
+    (message: Message, island: { id: string; seq: number } | null = null) =>
       change(
         (current) =>
           current.some((pinned) => pinned.messageId === message.id)

@@ -56,6 +56,10 @@ describe('privacy api', () => {
     await expect(getMyPrivacySettings()).resolves.toEqual({
       birthDate: null,
       friendsListVisibility: 'nobody',
+      // Чего сервер не прислал — защитное «никто».
+      activityStatusVisibility: 'nobody',
+      messageTimeVisibility: 'nobody',
+      searchVisibility: 'nobody',
     });
 
     mockedRpc.mockResolvedValueOnce({ data: { id: null }, error: null });

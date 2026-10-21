@@ -18,6 +18,7 @@ import {
   type MessageAttachment,
   type SendMessageMedia,
 } from '@/api/chats';
+import { PENDING_SEQ } from '@/api/pendingSeq';
 import { MAX_ALBUM_SIZE } from '@/features/chats/lib/mosaicLayout';
 import { mergeMessages, updateHistory } from '@/features/chats/messages/historyCache';
 import {
@@ -53,6 +54,13 @@ import { isNetworkError } from '@/lib/network';
 import { NO_REACTIONS } from '@/api/reactionCounts';
 
 let localIdCounter = 0;
+let pendingSeqCounter = 0;
+
+/** Номер неподтверждённого: выше любого настоящего, по порядку создания. */
+function nextPendingSeq(): number {
+  pendingSeqCounter += 1;
+  return PENDING_SEQ + pendingSeqCounter;
+}
 
 export function nextLocalId(): string {
   localIdCounter += 1;
@@ -449,8 +457,11 @@ function textDraft(
     authorId: currentUserId,
     kind: 'text',
     text,
+    seq: nextPendingSeq(),
     createdAt: new Date(at).toISOString(),
     editedAt: null,
+    edited: false,
+    editMark: null,
     reactions: NO_REACTIONS,
     commentsCount: 0,
     viewsCount: 0,
@@ -493,8 +504,11 @@ export function sendPost(
       kind: 'media',
       text: part.text || null,
       // Миллисекунда между частями держит их порядок в списке.
+      seq: nextPendingSeq(),
       createdAt: new Date(now + index).toISOString(),
       editedAt: null,
+      edited: false,
+      editMark: null,
       reactions: NO_REACTIONS,
       commentsCount: 0,
       viewsCount: 0,
@@ -537,8 +551,11 @@ export function sendVoice(
     authorId: currentUserId,
     kind: 'voice',
     text: null,
+    seq: nextPendingSeq(),
     createdAt: new Date().toISOString(),
     editedAt: null,
+    edited: false,
+    editMark: null,
     reactions: NO_REACTIONS,
     commentsCount: 0,
     viewsCount: 0,
@@ -590,8 +607,11 @@ export function sendForward(
     authorId: currentUserId,
     kind: 'forward',
     text: null,
+    seq: nextPendingSeq(),
     createdAt: new Date(now + 1).toISOString(),
     editedAt: null,
+    edited: false,
+    editMark: null,
     reactions: NO_REACTIONS,
     commentsCount: 0,
     viewsCount: 0,
@@ -659,8 +679,11 @@ export function sendCommentForward(
       authorId: currentUserId,
       kind: 'comment_forward',
       text: null,
+      seq: nextPendingSeq(),
       createdAt: new Date(now + 1 + index).toISOString(),
       editedAt: null,
+      edited: false,
+      editMark: null,
       reactions: NO_REACTIONS,
       commentsCount: 0,
       viewsCount: 0,
@@ -740,8 +763,11 @@ export function sendPopPost(
     authorId: currentUserId,
     kind: 'media',
     text: trimmed || null,
+    seq: nextPendingSeq(),
     createdAt: new Date().toISOString(),
     editedAt: null,
+    edited: false,
+    editMark: null,
     reactions: NO_REACTIONS,
     commentsCount: 0,
     viewsCount: 0,

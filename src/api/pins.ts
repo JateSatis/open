@@ -15,13 +15,13 @@ export type PinnedMessage = {
    */
   forwardId: string | null;
   /**
-   * Где сообщение стоит в переписке этого чата — его время или время
+   * Где сообщение стоит в переписке этого чата — его номер или номер
    * островка. По нему закрепы идут по порядку, как в переписке, и по нему же
    * к закрепу прыгают.
    */
-  messageCreatedAt: string;
-  /** Время самого сообщения — порядок внутри одного островка. */
-  originalCreatedAt: string;
+  messageSeq: number;
+  /** Номер самого сообщения — порядок внутри одного островка. */
+  originalSeq: number;
   kind: MessageKind;
   text: string | null;
   /** Картинка для миниатюры: фото или постер видео из первого вложения. */
@@ -32,7 +32,7 @@ const pinsSelect = () =>
   supabase
     .from('message_pins')
     .select(
-      'message_id, forward_id, message:messages!message_pins_message_fkey(id, created_at, kind, text, attachments(url, poster_url, mime_type, position, pop:pops(poster_url))), forward:messages!message_pins_forward_fkey(created_at)',
+      'message_id, forward_id, message:message_rows!message_pins_message_fkey(id, seq, kind, text, attachments(url, poster_url, mime_type, position, pop:pops(poster_url))), forward:message_rows!message_pins_forward_fkey(seq)',
     );
 
 type PinRow = QueryData<ReturnType<typeof pinsSelect>>[number];
@@ -52,14 +52,15 @@ function thumbnailOf(row: NonNullable<PinRow['message']>): string | null {
 function toPinned(row: PinRow): PinnedMessage | null {
   // Сообщение удалено — его закреп база снимает сама, но между удалением и
   // перечитыванием строка ещё может прийти без сообщения.
-  if (!row.message) return null;
+  // Колонки представления генератор типов размечает nullable целиком.
+  if (!row.message || row.message.seq === null) return null;
 
   return {
     messageId: row.message_id,
     forwardId: row.forward_id,
-    messageCreatedAt: row.forward?.created_at ?? row.message.created_at,
-    originalCreatedAt: row.message.created_at,
-    kind: toMessageKind(row.message.kind),
+    messageSeq: row.forward?.seq ?? row.message.seq,
+    originalSeq: row.message.seq,
+    kind: toMessageKind(row.message.kind ?? 'system'),
     text: row.message.text,
     thumbnailUrl: thumbnailOf(row.message),
   };
@@ -77,12 +78,9 @@ export async function listPinnedMessages(chatId: string): Promise<PinnedMessage[
     .sort(byPlaceInChat);
 }
 
-/** Порядок закрепов — как в переписке: по месту в чате, внутри островка — по времени оригинала. */
+/** Порядок закрепов — как в переписке: по месту в чате, внутри островка — по номеру оригинала. */
 export function byPlaceInChat(a: PinnedMessage, b: PinnedMessage): number {
-  if (a.messageCreatedAt !== b.messageCreatedAt) return a.messageCreatedAt < b.messageCreatedAt ? -1 : 1;
-  if (a.originalCreatedAt === b.originalCreatedAt) return 0;
-
-  return a.originalCreatedAt < b.originalCreatedAt ? -1 : 1;
+  return a.messageSeq - b.messageSeq || a.originalSeq - b.originalSeq;
 }
 
 /** Закрепляет сообщение; `forwardId` — островок этого чата, где стоит сообщение из другого. */

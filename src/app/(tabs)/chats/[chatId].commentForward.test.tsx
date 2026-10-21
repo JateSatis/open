@@ -146,6 +146,7 @@ const chat: ChatSummary = {
   lastMessageAuthorId: null,
   lastPopAt: null,
   lastActivityAt: null,
+  listPosition: null,
   enteredAt: null,
   previewIsPop: false,
   subscription: null,
@@ -162,8 +163,11 @@ function message(id: string, minute: number, overrides: Partial<Message> = {}): 
     authorId: 'user-1',
     kind: 'text',
     text: `текст ${id}`,
+    seq: Date.parse(`2026-09-30T10:0${minute}:00Z`),
     createdAt: `2026-09-30T10:0${minute}:00Z`,
     editedAt: null,
+    edited: false,
+    editMark: null,
     attachments: [],
     replies: [],
     forward: null,
@@ -199,7 +203,7 @@ function forwarded(
     fragmentQuote: null,
     target: {
       id: targetId,
-      createdAt: '2026-09-30T10:01:00Z',
+      seq: Date.parse('2026-09-30T10:01:00Z'),
       authorId: 'user-1',
       authorName: 'Марина',
       preview: {
@@ -283,7 +287,7 @@ describe('tapping a forwarded comment', () => {
         comments: 'm9',
         comment: 'c1',
         jumpTo: 'm9',
-        jumpAt: '2026-09-30T10:01:00Z',
+        jumpSeq: String(Date.parse('2026-09-30T10:01:00Z')),
         jumpKey: expect.any(String),
       },
     });
@@ -322,7 +326,7 @@ describe('tapping a forwarded comment', () => {
     mockStack = {
       index: 1,
       routes: [
-        { name: '[chatId]', key: 'chat-b', params: { chatId: 'chat-2', jumpTo: 'old', jumpAt: AT } },
+        { name: '[chatId]', key: 'chat-b', params: { chatId: 'chat-2', jumpTo: 'old', jumpSeq: AT } },
         { name: '[chatId]', key: 'chat-a', params: { chatId: 'chat-1' } },
       ],
     };
@@ -339,7 +343,7 @@ describe('tapping a forwarded comment', () => {
       expect.objectContaining({
         type: 'SET_PARAMS',
         payload: {
-          params: expect.objectContaining({ comments: 'm9', jumpTo: undefined, jumpAt: undefined }),
+          params: expect.objectContaining({ comments: 'm9', jumpTo: undefined, jumpSeq: undefined }),
         },
       }),
     );
@@ -387,7 +391,7 @@ describe('arriving at a forwarded comment', () => {
       comments: 'm1',
       comment: 'c1',
       jumpTo: 'm1',
-      jumpAt: '2026-09-30T10:01:00Z',
+      jumpSeq: String(Date.parse('2026-09-30T10:01:00Z')),
       jumpKey: '1',
     };
 

@@ -31,6 +31,16 @@ create function pg_temp.check(name text, ok boolean, detail text default null) r
   insert into results (name, ok, detail) values (name, ok, detail);
 $$;
 
+-- Тестовые аккаунты рождаются с защитными настройками приватности
+-- (20261029100000_privacy_settings.sql). Здесь проверяется не она: время,
+-- «в сети» и поиск открыты всем — их скрытие проверяет
+-- privacy_activity_search_access.sql.
+update public.privacy_settings set
+  message_activity_metadata_visibility = 'everyone',
+  activity_status_visibility = 'everyone',
+  account_search_visibility = 'everyone'
+where user_id in (select id from auth.users where email like '%@test.local');
+
 do $$
 declare
   a uuid := '00000000-0000-4000-8000-0000000006a1';
@@ -161,8 +171,8 @@ begin
   select * into st from public.my_subscriptions(dialog);
   perform pg_temp.check('отметка подписчика: непрочитанного нет', st.unread_posts = 0);
   perform pg_temp.check('отметка подписчика не трогает отметки участников',
-    (select min(last_read_at) < now() or true from public.chat_members where chat_id = dialog)
-    and (select read_at is null from public.messages where chat_id = dialog and author_id = b));
+    (select min(last_read_at) < now() or true from public.chat_people(array[dialog]))
+    and (select read_at is null from public.message_rows where chat_id = dialog and author_id = b));
 
   -- События: подписчику — с notify и названием глазами постороннего
   perform set_config('role', 'postgres', true);

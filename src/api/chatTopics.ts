@@ -9,6 +9,11 @@
 //
 // Payload любого события — только сигнал: строки всегда перечитываются из
 // базы, где видимость решает RLS.
+//
+// У чата два топика: `chat:<id>` слушает любой, `chat-members:<id>` — только
+// участники (политики `realtime.messages`). Во второй уходит «печатает» того,
+// кто показывает активность только друзьям и пишет в чате, где все остальные
+// — его друзья (`my_typing_audience`).
 
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
@@ -16,6 +21,9 @@ import { supabase } from '@/api/supabase';
 
 /** Что человек делает прямо сейчас — для «печатает…» и «записывает голосовое…». */
 export type ChatActivity = 'typing' | 'recording_voice';
+
+/** Куда слать «печатает»: всем, только участникам или никуда — решает база. */
+export type TypingAudience = 'chat' | 'members' | 'none';
 
 export type ChatTopicListener = {
   onMessage?: () => void;
@@ -36,6 +44,11 @@ export type ChatTopicListener = {
   /** У этих сообщений выросли просмотры или появилось «прочитано». */
   onViewsChanged?: (messageIds: string[]) => void;
   onStreamChanged?: () => void;
+  /**
+   * Участник сменил, кому видно время сообщений: время, даты и прочтение в
+   * этом чате пора перечитать.
+   */
+  onTimeVisibilityChanged?: () => void;
   /** Из островка этого чата убрали сообщения. */
   onForwardChanged?: (forwardId: string) => void;
   onTyping?: (userId: string, activity: ChatActivity) => void;
@@ -44,12 +57,15 @@ export type ChatTopicListener = {
 };
 
 export type ChatTopic = {
-  broadcastTyping: (userId: string, activity: ChatActivity) => void;
+  /** `members` — в топик участников; открыть его может только участник. */
+  broadcastTyping: (userId: string, activity: ChatActivity, audience: TypingAudience) => void;
   release: () => void;
 };
 
 type Entry = {
   channel: RealtimeChannel;
+  /** Топик участников — открывается первым, кто в него пишет или его слушает. */
+  members: RealtimeChannel | null;
   listeners: Set<ChatTopicListener>;
   /** Ушёл последний слушатель — канал ещё немного живёт, вдруг вернутся. */
   closing: ReturnType<typeof setTimeout> | null;
@@ -81,13 +97,39 @@ function toActivity(value: unknown): ChatActivity {
   return value === 'recording_voice' ? value : 'typing';
 }
 
+function typingFrom(payload: unknown): { userId: string; activity: ChatActivity } | null {
+  const { userId, activity } = (payload ?? {}) as { userId?: unknown; activity?: unknown };
+
+  // Событие без `activity` — от версии приложения до голосовых: это набор текста.
+  return typeof userId === 'string' ? { userId, activity: toActivity(activity) } : null;
+}
+
+/**
+ * Топик участников: «печатает» тех, кто показывает активность только
+ * друзьям. Посторонний его не откроет — политика откажет, и канал просто
+ * останется молчащим.
+ */
+function openMembers(chatId: string, entry: Entry): RealtimeChannel {
+  const channel = supabase.channel(`chat-members:${chatId}`, { config: { private: true } });
+
+  channel
+    .on('broadcast', { event: 'typing' }, ({ payload }) => {
+      const typing = typingFrom(payload);
+
+      if (typing) [...entry.listeners].forEach((l) => l.onTyping?.(typing.userId, typing.activity));
+    })
+    .subscribe();
+
+  return channel;
+}
+
 function open(chatId: string): Entry {
   // Private channels carry the user's token, which is what the policies on
   // realtime.messages check; without this the subscription is rejected.
   void supabase.realtime.setAuth();
 
   const channel = supabase.channel(`chat:${chatId}`, { config: { private: true } });
-  const entry: Entry = { channel, listeners: new Set(), closing: null };
+  const entry: Entry = { channel, members: null, listeners: new Set(), closing: null };
   const each = (call: (listener: ChatTopicListener) => void) =>
     [...entry.listeners].forEach(call);
   let joinedBefore = false;
@@ -134,11 +176,13 @@ function open(chatId: string): Entry {
       if (id) each((l) => l.onForwardChanged?.(id));
     })
     .on('broadcast', { event: 'stream_changed' }, () => each((l) => l.onStreamChanged?.()))
+    .on('broadcast', { event: 'time_visibility_changed' }, () =>
+      each((l) => l.onTimeVisibilityChanged?.()),
+    )
     .on('broadcast', { event: 'typing' }, ({ payload }) => {
-      const { userId, activity } = (payload ?? {}) as { userId?: unknown; activity?: unknown };
+      const typing = typingFrom(payload);
 
-      // Событие без `activity` — от версии приложения до голосовых: это набор текста.
-      if (typeof userId === 'string') each((l) => l.onTyping?.(userId, toActivity(activity)));
+      if (typing) each((l) => l.onTyping?.(typing.userId, typing.activity));
     })
     .subscribe((status) => {
       // Первая подписка — не переподключение: историю в этот момент грузит
@@ -158,8 +202,14 @@ function open(chatId: string): Entry {
 /**
  * Слушать топик чата. Канал общий: первый слушатель его открывает,
  * последний — отпускает. Вызвавший обязан вызвать `release` в cleanup.
+ * `asMember` — слушать и топик участников: «печатает» тех, кто показывает
+ * его только друзьям.
  */
-export function acquireChatTopic(chatId: string, listener: ChatTopicListener): ChatTopic {
+export function acquireChatTopic(
+  chatId: string,
+  listener: ChatTopicListener,
+  asMember = false,
+): ChatTopic {
   let entry = topics.get(chatId);
 
   if (!entry) {
@@ -177,9 +227,16 @@ export function acquireChatTopic(chatId: string, listener: ChatTopicListener): C
   const current = entry;
   let released = false;
 
+  if (asMember) current.members ??= openMembers(chatId, current);
+
   return {
-    broadcastTyping: (userId, activity) => {
-      void current.channel.send({
+    broadcastTyping: (userId, activity, audience) => {
+      if (audience === 'none') return;
+
+      const target =
+        audience === 'members' ? (current.members ??= openMembers(chatId, current)) : current.channel;
+
+      void target.send({
         type: 'broadcast',
         event: 'typing',
         payload: { userId, activity },
@@ -201,6 +258,7 @@ export function acquireChatTopic(chatId: string, listener: ChatTopicListener): C
         if (topics.get(chatId) === current) topics.delete(chatId);
 
         void supabase.removeChannel(current.channel);
+        if (current.members) void supabase.removeChannel(current.members);
       }, LINGER_MS);
     },
   };
