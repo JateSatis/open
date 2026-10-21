@@ -505,7 +505,9 @@ rec_hidden_channels  строку. Свои читает сам, пишут set_
 
 devices              устройства, где выполнен вход: сеанс Supabase, модель, последняя
                      активность; сюда же ложатся push-токены. Приватная таблица
-user_presence        «в сети» и «был(а) в …»: last_seen_at и online_until. Пишет только
+user_presence        «в сети» и «был(а) в …» по сеансу (user_id + session_id из JWT):
+                     last_seen_at и online_until; человек «в сети», пока в сети хоть
+                     один сеанс. Пишет только
                      mark_seen(online) — клиент раз в минуту, пока открыт, и при уходе в
                      фон; читает только activity_statuses(ids) с privacy_allows
                      ('activity_status_visibility'): скрытое отдаётся как у ни разу не
