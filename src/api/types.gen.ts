@@ -1138,6 +1138,80 @@ export type Database = {
           },
         ]
       }
+      friend_request_log: {
+        Row: {
+          created_at: string
+          id: string
+          requester_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          requester_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          requester_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "friend_request_log_requester_id_fkey"
+            columns: ["requester_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      friendships: {
+        Row: {
+          accepted_at: string | null
+          addressee_id: string
+          created_at: string
+          id: string
+          requester_id: string
+          responded_at: string | null
+          status: string
+          withdrawn_at: string | null
+        }
+        Insert: {
+          accepted_at?: string | null
+          addressee_id: string
+          created_at?: string
+          id?: string
+          requester_id: string
+          responded_at?: string | null
+          status?: string
+          withdrawn_at?: string | null
+        }
+        Update: {
+          accepted_at?: string | null
+          addressee_id?: string
+          created_at?: string
+          id?: string
+          requester_id?: string
+          responded_at?: string | null
+          status?: string
+          withdrawn_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "friendships_addressee_id_fkey"
+            columns: ["addressee_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "friendships_requester_id_fkey"
+            columns: ["requester_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       legacy_comment_quotes: {
         Row: {
           comment_id: string
@@ -1822,6 +1896,77 @@ export type Database = {
             columns: ["channel_id"]
             isOneToOne: false
             referencedRelation: "channels"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      privacy_settings: {
+        Row: {
+          account_search_visibility: string
+          activity_status_visibility: string
+          avatar_visibility: string
+          birth_date: string | null
+          created_at: string
+          dialogue_hidden_text_visibility: string
+          dialogue_media_visibility: string
+          dialogue_participant_name_masking: string
+          friends_list_visibility: string
+          id: string
+          incoming_dialogue_requests: string
+          initialized_at: string | null
+          message_activity_metadata_visibility: string
+          profile_identity_masking: string
+          public_message_visibility_delay: string
+          updated_at: string
+          uploaded_media_metadata_stripping: boolean
+          user_id: string
+        }
+        Insert: {
+          account_search_visibility: string
+          activity_status_visibility: string
+          avatar_visibility: string
+          birth_date?: string | null
+          created_at?: string
+          dialogue_hidden_text_visibility: string
+          dialogue_media_visibility: string
+          dialogue_participant_name_masking: string
+          friends_list_visibility: string
+          id?: string
+          incoming_dialogue_requests: string
+          initialized_at?: string | null
+          message_activity_metadata_visibility: string
+          profile_identity_masking: string
+          public_message_visibility_delay: string
+          updated_at?: string
+          uploaded_media_metadata_stripping: boolean
+          user_id: string
+        }
+        Update: {
+          account_search_visibility?: string
+          activity_status_visibility?: string
+          avatar_visibility?: string
+          birth_date?: string | null
+          created_at?: string
+          dialogue_hidden_text_visibility?: string
+          dialogue_media_visibility?: string
+          dialogue_participant_name_masking?: string
+          friends_list_visibility?: string
+          id?: string
+          incoming_dialogue_requests?: string
+          initialized_at?: string | null
+          message_activity_metadata_visibility?: string
+          profile_identity_masking?: string
+          public_message_visibility_delay?: string
+          updated_at?: string
+          uploaded_media_metadata_stripping?: boolean
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "privacy_settings_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -2939,6 +3084,7 @@ export type Database = {
     }
     Functions: {
       accept_chat_invite: { Args: { target_chat: string }; Returns: undefined }
+      accept_friend_request: { Args: { p_user: string }; Returns: string }
       add_comment_replies: {
         Args: {
           new_comment: string
@@ -2951,6 +3097,12 @@ export type Database = {
         Args: { new_message: string; reply_to: string[]; target_chat: string }
         Returns: undefined
       }
+      age_in_years: { Args: { p_birth: string }; Returns: number }
+      apply_privacy_defaults: {
+        Args: { p_minor: boolean; p_user: string }
+        Returns: undefined
+      }
+      are_friends: { Args: { p_a: string; p_b: string }; Returns: boolean }
       area_fragment_ids: {
         Args: { area_end: number; area_start: number; target_message: string }
         Returns: string[]
@@ -2978,6 +3130,7 @@ export type Database = {
         Args: { target_chat: string; target_user: string }
         Returns: undefined
       }
+      cancel_friend_request: { Args: { p_user: string }; Returns: string }
       channel_info_summary: {
         Args: { target_channel: string }
         Returns: {
@@ -3065,6 +3218,8 @@ export type Database = {
       }
       current_session_id: { Args: never; Returns: string }
       decline_chat_invite: { Args: { target_chat: string }; Returns: undefined }
+      decline_friend_request: { Args: { p_user: string }; Returns: string }
+      delete_abandoned_accounts: { Args: never; Returns: number }
       delete_comment: { Args: { target_comment: string }; Returns: undefined }
       delete_direct_chat: { Args: { target_chat: string }; Returns: undefined }
       delete_messages: { Args: { message_ids: string[] }; Returns: undefined }
@@ -3209,6 +3364,35 @@ export type Database = {
         }
         Returns: string[]
       }
+      friend_request_limit_reached: {
+        Args: { p_user: string }
+        Returns: boolean
+      }
+      friends_summary: { Args: { p_user: string }; Returns: Json }
+      friendship_of: {
+        Args: { p_a: string; p_b: string }
+        Returns: {
+          accepted_at: string | null
+          addressee_id: string
+          created_at: string
+          id: string
+          requester_id: string
+          responded_at: string | null
+          status: string
+          withdrawn_at: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "friendships"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      friendship_status: { Args: { p_user: string }; Returns: string }
+      friendship_status_for: {
+        Args: { p_other: string; p_viewer: string }
+        Returns: string
+      }
       insert_pop_post: {
         Args: {
           message_text: string
@@ -3263,6 +3447,7 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      latest_local_date: { Args: never; Returns: string }
       leave_chat: { Args: { target_chat: string }; Returns: undefined }
       list_channel_subscribers: {
         Args: {
@@ -3394,6 +3579,37 @@ export type Database = {
           username: string
         }[]
       }
+      list_friends: {
+        Args: {
+          p_before_accepted_at?: string
+          p_before_id?: string
+          p_limit?: number
+          p_user: string
+        }
+        Returns: {
+          accepted_at: string
+          avatar_url: string
+          display_name: string
+          friendship_id: string
+          user_id: string
+          username: string
+        }[]
+      }
+      list_incoming_friend_requests: {
+        Args: {
+          p_before_created_at?: string
+          p_before_id?: string
+          p_limit?: number
+        }
+        Returns: {
+          avatar_url: string
+          created_at: string
+          display_name: string
+          friendship_id: string
+          user_id: string
+          username: string
+        }[]
+      }
       list_message_clusters: {
         Args: { target_message: string }
         Returns: {
@@ -3475,6 +3691,10 @@ export type Database = {
         Args: { target_message: string }
         Returns: undefined
       }
+      lock_friend_pair: {
+        Args: { p_a: string; p_b: string }
+        Returns: undefined
+      }
       lock_managed_channel: {
         Args: { target_channel: string; what: string }
         Returns: undefined
@@ -3537,6 +3757,35 @@ export type Database = {
           unread_pops: number
           unread_posts: number
         }[]
+      }
+      my_privacy_settings: {
+        Args: never
+        Returns: {
+          account_search_visibility: string
+          activity_status_visibility: string
+          avatar_visibility: string
+          birth_date: string | null
+          created_at: string
+          dialogue_hidden_text_visibility: string
+          dialogue_media_visibility: string
+          dialogue_participant_name_masking: string
+          friends_list_visibility: string
+          id: string
+          incoming_dialogue_requests: string
+          initialized_at: string | null
+          message_activity_metadata_visibility: string
+          profile_identity_masking: string
+          public_message_visibility_delay: string
+          updated_at: string
+          uploaded_media_metadata_stripping: boolean
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "privacy_settings"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       my_reaction:
         | {
@@ -3744,6 +3993,40 @@ export type Database = {
         }
         Returns: undefined
       }
+      privacy_allows: {
+        Args: { p_owner: string; p_setting: string; p_viewer: string }
+        Returns: boolean
+      }
+      privacy_default_settings: { Args: { p_minor: boolean }; Returns: Json }
+      privacy_settings_row: {
+        Args: { p_minor: boolean; p_user: string }
+        Returns: {
+          account_search_visibility: string
+          activity_status_visibility: string
+          avatar_visibility: string
+          birth_date: string | null
+          created_at: string
+          dialogue_hidden_text_visibility: string
+          dialogue_media_visibility: string
+          dialogue_participant_name_masking: string
+          friends_list_visibility: string
+          id: string
+          incoming_dialogue_requests: string
+          initialized_at: string | null
+          message_activity_metadata_visibility: string
+          profile_identity_masking: string
+          public_message_visibility_delay: string
+          updated_at: string
+          uploaded_media_metadata_stripping: boolean
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "privacy_settings"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       publish_pop: {
         Args: {
           also_post?: boolean
@@ -3757,6 +4040,7 @@ export type Database = {
         }
         Returns: Json
       }
+      purge_friend_request_log: { Args: never; Returns: number }
       reaction_counts_add: {
         Args: { counts: Json; delta: number; emoji: string }
         Returns: Json
@@ -3921,10 +4205,12 @@ export type Database = {
         Args: { message_ids: string[]; target_forward: string }
         Returns: undefined
       }
+      remove_friend: { Args: { p_user: string }; Returns: string }
       replace_cluster_reaction: {
         Args: { fragment: string; reactor: string }
         Returns: undefined
       }
+      require_friend_target: { Args: { p_other: string }; Returns: string }
       resolve_comment_thread: {
         Args: {
           reply_to: string[]
@@ -4092,6 +4378,7 @@ export type Database = {
         }
         Returns: string
       }
+      send_friend_request: { Args: { p_user: string }; Returns: string }
       send_media_message: {
         Args: {
           media: Json
@@ -4143,6 +4430,7 @@ export type Database = {
         }
         Returns: string
       }
+      set_birth_date: { Args: { p_birth_date: string }; Returns: Json }
       set_channel_avatar: {
         Args: { new_avatar_url: string; target_channel: string }
         Returns: string
@@ -4207,6 +4495,10 @@ export type Database = {
       }
       set_pop_not_interested: {
         Args: { target_pop: string; value: boolean }
+        Returns: undefined
+      }
+      set_privacy_setting: {
+        Args: { p_key: string; p_value: string }
         Returns: undefined
       }
       set_reaction: {

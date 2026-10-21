@@ -170,3 +170,36 @@ jest.mock('@shopify/react-native-skia', () => ({
   TextAlign: { Center: 2 },
   Skia: { Path: { Make: () => ({}) }, Surface: { Make: () => null } },
 }));
+
+// Нативный выбор даты из @expo/ui. В тестах — кнопка «выбрать», которая
+// отдаёт день из `globalThis.mockPickerDate` (или текущее значение), и
+// кнопка «закрыть» — как отмена диалога Android.
+jest.mock('@expo/ui/community/datetime-picker', () => {
+  const { Pressable, Text, View } = require('react-native');
+
+  const { createElement: h } = require('react');
+
+  function DateTimePicker(props) {
+    const picked = globalThis.mockPickerDate ?? props.value;
+
+    return h(
+      View,
+      { testID: props.testID },
+      h(
+        Pressable,
+        {
+          testID: `${props.testID}-pick`,
+          onPress: () => props.onValueChange?.({ nativeEvent: {} }, picked),
+        },
+        h(Text, null, 'выбрать'),
+      ),
+      h(
+        Pressable,
+        { testID: `${props.testID}-dismiss`, onPress: () => props.onDismiss?.() },
+        h(Text, null, 'закрыть'),
+      ),
+    );
+  }
+
+  return { DateTimePicker, default: DateTimePicker };
+});

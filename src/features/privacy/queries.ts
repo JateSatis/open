@@ -1,0 +1,114 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect } from 'react';
+
+import {
+  getMyPrivacySettings,
+  setBirthDate,
+  setPrivacySetting,
+  type EditablePrivacySetting,
+  type PrivacySettings,
+  type Visibility,
+} from '@/api/privacy';
+import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
+import { friendKeys } from '@/features/friends/queries';
+
+import { isBirthDateKnown, rememberBirthDateKnown } from './birthDateKnown';
+
+export const privacyKeys = {
+  mine: (userId: string | null) => ['privacy', 'mine', userId] as const,
+  birthDateKnown: (userId: string | null) => ['privacy', 'birthDateKnown', userId] as const,
+};
+
+export function useMyPrivacySettings() {
+  const userId = useCurrentUserId();
+
+  return useQuery({
+    queryKey: privacyKeys.mine(userId),
+    queryFn: getMyPrivacySettings,
+    enabled: userId !== null,
+  });
+}
+
+export function useSetBirthDate() {
+  const queryClient = useQueryClient();
+  const userId = useCurrentUserId();
+
+  return useMutation<void, Error, string>({
+    mutationFn: (birthDate) => setBirthDate(birthDate),
+    // Без сети мутация не встаёт на паузу, а честно падает — человек видит ошибку.
+    networkMode: 'always',
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: privacyKeys.mine(userId) }),
+  });
+}
+
+/** Смена настройки — сразу на экране, откат, если сервер не принял. */
+export function useSetPrivacySetting() {
+  const queryClient = useQueryClient();
+  const userId = useCurrentUserId();
+  const key = privacyKeys.mine(userId);
+
+  return useMutation<
+    void,
+    Error,
+    { setting: EditablePrivacySetting; value: Visibility },
+    { previous: PrivacySettings | null | undefined }
+  >({
+    mutationFn: ({ setting, value }) => setPrivacySetting(setting, value),
+    networkMode: 'always',
+    onMutate: async ({ setting, value }) => {
+      await queryClient.cancelQueries({ queryKey: key });
+      const previous = queryClient.getQueryData<PrivacySettings | null>(key);
+
+      if (previous && setting === 'friends_list_visibility') {
+        queryClient.setQueryData<PrivacySettings>(key, {
+          ...previous,
+          friendsListVisibility: value,
+        });
+      }
+
+      return { previous };
+    },
+    onError: (_error, _variables, context) => {
+      if (context?.previous !== undefined) queryClient.setQueryData(key, context.previous);
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: key });
+      // Строка «Друзья» в своём профиле зависит от настройки.
+      if (userId) void queryClient.invalidateQueries({ queryKey: friendKeys.summary(userId) });
+    },
+  });
+}
+
+export type BirthDateGate = 'loading' | 'required' | 'ok';
+
+/**
+ * Нужно ли сейчас показать экран даты. Ответ сервера главнее всего. Пока его
+ * нет: аккаунт, у которого дата уже была, проходит сразу; новый — ждёт, но
+ * только пока запрос реально идёт. Без сети (запрос на паузе) или при сбое
+ * приложение не запирается: значения на сервере и так защитные, а ворота
+ * сработают, когда запрос пройдёт.
+ */
+export function useBirthDateGate(): BirthDateGate {
+  const userId = useCurrentUserId();
+  const { data, fetchStatus } = useMyPrivacySettings();
+  const known = useQuery({
+    queryKey: privacyKeys.birthDateKnown(userId),
+    queryFn: () => isBirthDateKnown(userId as string),
+    enabled: userId !== null,
+    networkMode: 'always',
+    staleTime: Infinity,
+  });
+  const hasDate = Boolean(data?.birthDate);
+
+  useEffect(() => {
+    if (userId && hasDate) void rememberBirthDateKnown(userId);
+  }, [userId, hasDate]);
+
+  if (userId === null) return 'ok';
+  if (data) return data.birthDate === null ? 'required' : 'ok';
+  if (known.isPending) return 'loading';
+  if (known.data) return 'ok';
+  if (fetchStatus === 'fetching') return 'loading';
+
+  return 'ok';
+}

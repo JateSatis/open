@@ -16,6 +16,8 @@ export type ProfilePageProps = {
   lead?: ReactNode;
   /** Кнопки под карточкой — у своего профиля и у чужого разные. */
   actions?: ReactNode;
+  /** Карточки между карточкой профиля и кнопками: «Друзья». */
+  extraCards?: ReactNode;
   /** Справа сверху на фото: шестерёнка своего профиля. */
   barRight?: ReactNode;
   /** «Назад» на фото — у чужого профиля: страница въезжает и уезжает за пальцем. */
@@ -34,6 +36,7 @@ export function ProfilePage({
   profile,
   lead,
   actions,
+  extraCards,
   barRight,
   slideBack,
   bottomInset = 0,
@@ -76,6 +79,7 @@ export function ProfilePage({
                 />
               ) : null}
             </InfoCard>
+            {extraCards}
             {actions ? <View style={styles.actions}>{actions}</View> : null}
           </View>
         }

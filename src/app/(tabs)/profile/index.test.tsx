@@ -3,6 +3,7 @@ import { router } from 'expo-router';
 
 import MyProfileScreen from './index';
 
+import { getFriendsSummary } from '@/api/friends';
 import { getMyProfile } from '@/api/profile';
 import { renderWithQuery } from '@/features/profile/renderWithQuery';
 
@@ -13,6 +14,14 @@ jest.mock('expo-router', () => ({
 }));
 
 jest.mock('@/api/profile', () => ({ getMyProfile: jest.fn() }));
+jest.mock('@/api/friends', () => ({ getFriendsSummary: jest.fn() }));
+jest.mock('@/features/auth/useSession', () => ({
+  useSession: () => ({
+    session: { user: { id: 'user-1' } },
+    isAuthenticated: true,
+    isLoading: false,
+  }),
+}));
 
 // Верх профиля — страница информации: цвет плашки из фото (Skia) и просмотр фото.
 jest.mock('@shopify/react-native-skia', () => ({
@@ -25,6 +34,7 @@ jest.mock('@/features/media', () => ({ MediaViewer: () => null }));
 
 const getMyProfileMock = getMyProfile as jest.Mock;
 const pushMock = router.push as jest.Mock;
+const getFriendsSummaryMock = getFriendsSummary as jest.Mock;
 
 const profile = {
   id: 'user-1',
@@ -36,6 +46,7 @@ const profile = {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  getFriendsSummaryMock.mockResolvedValue({ listVisible: true, friendsCount: 2, incomingCount: 0 });
 });
 
 describe('MyProfileScreen', () => {
@@ -99,5 +110,29 @@ describe('MyProfileScreen', () => {
     await fireEvent.press(await findByText('Повторить'));
 
     expect(await findByText('Максим')).toBeTruthy();
+  });
+});
+
+describe('MyProfileScreen — друзья', () => {
+  it('К4.1 строка «Друзья» показывает входящие заявки и ведёт к своему списку', async () => {
+    getMyProfileMock.mockResolvedValue(profile);
+    getFriendsSummaryMock.mockResolvedValue({ listVisible: true, friendsCount: 2, incomingCount: 1 });
+
+    const { findByTestId, getByLabelText } = await renderWithQuery(<MyProfileScreen />);
+
+    expect(await findByTestId('profile-friends-requests')).toBeTruthy();
+    expect(getByLabelText('Друзья, новых заявок: 1')).toBeTruthy();
+
+    await fireEvent.press(await findByTestId('profile-friends'));
+    expect(pushMock).toHaveBeenCalledWith('/profile/friends');
+  });
+
+  it('без заявок — только число друзей', async () => {
+    getMyProfileMock.mockResolvedValue(profile);
+
+    const { findByLabelText, queryByTestId } = await renderWithQuery(<MyProfileScreen />);
+
+    expect(await findByLabelText('Друзья: 2')).toBeTruthy();
+    expect(queryByTestId('profile-friends-requests')).toBeNull();
   });
 });
