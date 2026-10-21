@@ -8,6 +8,7 @@ import { Screen } from '@/components/Screen';
 import { TabBar, useTabBarHeight } from '@/components/TabBar';
 import { Text } from '@/components/Text';
 import { ConnectionBanner } from '@/features/connection/ConnectionBanner';
+import { FriendsCard } from '@/features/friends/FriendsCard';
 import { ProfileLoader } from '@/features/profile/ProfileLoader';
 import { ProfilePage } from '@/features/profile/ProfilePage';
 import { useMyProfile } from '@/features/profile/queries';
@@ -64,6 +65,9 @@ export default function MyProfileScreen() {
                 />
               </View>
             ) : null
+          }
+          extraCards={
+            <FriendsCard userId={profile.id} onPress={() => router.push('/profile/friends')} />
           }
           actions={
             <Button

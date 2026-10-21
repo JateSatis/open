@@ -6,9 +6,12 @@ import { PlainPageBar } from '@/components/PageBar';
 import { Screen } from '@/components/Screen';
 import { SlidePage, useSlideBack } from '@/components/SlidePage';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
+import { FriendButton } from '@/features/friends/FriendButton';
+import { FriendsCard } from '@/features/friends/FriendsCard';
 import { ProfileLoader } from '@/features/profile/ProfileLoader';
 import { ProfilePage } from '@/features/profile/ProfilePage';
 import { useProfile } from '@/features/profile/queries';
+import { displayNameOf } from '@/features/profile/username';
 
 /**
  * Чужой профиль. Один экран на две вкладки: из переписки он открывается
@@ -50,9 +53,24 @@ export function UserProfile({ userId, stack }: { userId: string; stack: 'chats' 
       <ProfilePage
         profile={profile}
         slideBack={slide}
+        extraCards={
+          <FriendsCard
+            userId={profile.id}
+            onPress={() =>
+              isMe
+                ? router.navigate('/profile/friends')
+                : router.push({
+                    pathname:
+                      stack === 'chats' ? '/chats/people/friends/[userId]' : '/profile/friends/[userId]',
+                    params: { userId: profile.id },
+                  })
+            }
+          />
+        }
         actions={
           isMe ? null : (
             <>
+              <FriendButton userId={profile.id} name={displayNameOf(profile)} />
               <Button
                 label="Написать"
                 onPress={() =>
