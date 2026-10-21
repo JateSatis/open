@@ -9,6 +9,7 @@ import {
   type SearchMessage,
   type SearchMessagesCursor,
 } from '@/api/search';
+import { isSearchRateLimited, SEARCH_RATE_LIMIT_TEXT } from '@/api/searchLimits';
 import { useChats } from '@/features/chats/useChats';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
 import { useConnectionStatus } from '@/features/connection/useConnectionStatus';
@@ -137,12 +138,14 @@ export function useSearch(query: string): SearchResults {
 
   const notice = offline
     ? 'Нет связи — ищем только по вашим чатам.'
-    : failed
-      ? (describeLoadError(
-          entities.error ?? messages.error,
-          'Не удалось выполнить поиск. Попробуйте ещё раз.',
-        ) ?? 'Нет связи — ищем только по вашим чатам.')
-      : null;
+    : failed && isSearchRateLimited(entities.error)
+      ? SEARCH_RATE_LIMIT_TEXT
+      : failed
+        ? (describeLoadError(
+            entities.error ?? messages.error,
+            'Не удалось выполнить поиск. Попробуйте ещё раз.',
+          ) ?? 'Нет связи — ищем только по вашим чатам.')
+        : null;
 
   const { fetchNextPage, hasNextPage, isFetchingNextPage } = messages;
 
