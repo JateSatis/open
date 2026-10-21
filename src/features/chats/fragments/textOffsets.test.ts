@@ -1,6 +1,7 @@
 import {
   boundaryAtOrAfter,
   boundaryAtOrBefore,
+  extendByWords,
   fromServerRange,
   graphemeBoundaries,
   snapToBoundary,
@@ -9,6 +10,7 @@ import {
   toUtf16Offset,
   truncateGraphemes,
   wordAt,
+  wordRangeAt,
 } from './textOffsets';
 
 /** Графемы строкой — чтобы видеть, что склеилось. */
@@ -106,6 +108,62 @@ describe('word under the finger', () => {
 
   it('takes the word to the left from the space after it', () => {
     expect(at('слово конец', 5)).toBe('слово');
+  });
+});
+
+describe('extending a selection by words', () => {
+  /** Протяжка от слова `from` до смещения: что выделено. */
+  function extend(text: string, from: string, to: number): string {
+    const bounds = graphemeBoundaries(text);
+    const at = text.indexOf(from);
+    const range = extendByWords(text, bounds, { start: at, end: at + from.length }, to);
+
+    return text.slice(range.start, range.end);
+  }
+
+  it('grows forward and backward by whole Cyrillic words', () => {
+    const text = 'Мы идём в кино завтра';
+
+    expect(extend(text, 'в', text.indexOf('ино'))).toBe('в кино');
+    expect(extend(text, 'в', text.indexOf('дём'))).toBe('идём в');
+    expect(extend(text, 'в', text.indexOf('в'))).toBe('в');
+  });
+
+  it('keeps the anchor word when the finger crosses back over it', () => {
+    const text = 'один два три';
+
+    expect(extend(text, 'два', text.length - 1)).toBe('два три');
+    expect(extend(text, 'два', 0)).toBe('один два');
+  });
+
+  it("treats don’t, e-mail and 3.14 as single words", () => {
+    const text = "say don’t send e-mail at 3.14 ok";
+
+    expect(extend(text, 'say', text.indexOf('’'))).toBe('say don’t');
+    expect(extend(text, 'send', text.indexOf('-'))).toBe('send e-mail');
+    expect(extend(text, 'at', text.indexOf('.14'))).toBe('at 3.14');
+  });
+
+  it('takes an emoji whole, as one step', () => {
+    const text = 'ура 🎉👍🏽 да';
+
+    expect(extend(text, 'ура', text.indexOf('👍'))).toBe('ура 🎉👍🏽');
+    expect(extend(text, 'да', text.indexOf('🎉') + 1)).toBe('🎉👍🏽 да');
+  });
+
+  it('does not end the selection on a space or a line break', () => {
+    const text = 'первая строка\n\nвторая';
+
+    expect(extend(text, 'первая', text.indexOf('\n') + 1)).toBe('первая строка');
+    expect(extend(text, 'вторая', text.indexOf('\n') + 1)).toBe('вторая');
+    expect(extend('a   b', 'b', 2)).toBe('b');
+  });
+
+  it('finds the same word as wordAt over precomputed bounds', () => {
+    const text = 'кто-то пришёл';
+
+    expect(wordRangeAt(text, graphemeBoundaries(text), 2)).toEqual(wordAt(text, 2));
+    expect(wordRangeAt('', [0], 0)).toEqual({ start: 0, end: 0 });
   });
 });
 

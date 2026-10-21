@@ -3,7 +3,6 @@ import { useIsFocused, useNavigation, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   ActivityIndicator,
-  BackHandler,
   FlatList,
   Keyboard,
   useWindowDimensions,
@@ -21,12 +20,18 @@ import type { Pop } from '@/api/pops';
 import type { DraftPop } from '@/features/chats/composerDraftStore';
 import type { LiveQuote } from '@/features/chats/messages/types';
 import { LoadFailed } from '@/components/LoadFailed';
+import {
+  useSlidePageBack,
+  useSlidePageLeaveGuard,
+  useSlidePageSwipeStart,
+} from '@/components/SlidePage';
 import { Text } from '@/components/Text';
 import { useMarkChannelSectionRead } from '@/features/channels/useMarkChannelSectionRead';
 import { subscribersLabel } from '@/features/channels/subscriberText';
 import { ChatFooter, modePlate } from '@/features/chats/ChatFooter';
 import { ChatMenu } from '@/features/chats/ChatMenu';
 import { ChatScreenHeader } from '@/features/chats/ChatScreenHeader';
+import { closeEmojiPanel } from '@/features/chats/EmojiPanel/useEmojiPanel';
 import { ChatSearchHeader } from '@/features/chats/chatSearch/ChatSearchHeader';
 import { ChatSearchPlate } from '@/features/chats/chatSearch/ChatSearchPlate';
 import { ChatSearchResults } from '@/features/chats/chatSearch/ChatSearchResults';
@@ -87,6 +92,7 @@ import {
 } from '@/features/chats/fragments/fragmentStore';
 import { useFragmentJump } from '@/features/chats/fragments/useFragmentJump';
 import { useFragmentMode } from '@/features/chats/fragments/useFragmentMode';
+import { registerSelectionScroller } from '@/features/chats/fragments/selectionAutoScroll';
 import { useComposerDraft } from '@/features/chats/useComposerDraft';
 import { chatQueryKey, useChat } from '@/features/chats/useChat';
 import { useChatMessages } from '@/features/chats/useChatMessages';
@@ -136,6 +142,8 @@ const rowKey = (row: ChatListRow) => row.key;
 const KEEP_READING_POSITION = { minIndexForVisible: 0, autoscrollToTopThreshold: Spacing.six };
 /** Положение прокрутки нужно учёту просмотров лишь примерно: у низа или нет. */
 const VIEWS_SCROLL_THROTTLE_MS = 100;
+/** Столько после шага автопрокрутки выделения события прокрутки не двигают её смещение. */
+const AUTO_SCROLL_QUIET_MS = VIEWS_SCROLL_THROTTLE_MS * 3;
 /** Ближе этой доли экрана к старейшему сообщению — пора догружать историю. */
 const HISTORY_EDGE = 0.4;
 
@@ -511,17 +519,21 @@ export function ChatConversation({
   // Системный «назад» в правке выходит из правки, а не из чата.
   // На время выбора «назад» принадлежит выбору.
   const selectionActive = selection.isActive;
+  const backFromEdit = useCallback(() => void leaveEdit(), [leaveEdit]);
 
-  useEffect(() => {
-    if (!isEditing || selectionActive) return;
+  useSlidePageBack(isFocused && isEditing && !selectionActive, backFromEdit);
 
-    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
-      void leaveEdit();
-      return true;
-    });
+  // Свайп страницы посреди правки: страница встаёт на место, пока правка
+  // спрашивает, выходить ли.
+  useSlidePageLeaveGuard(
+    useCallback(
+      () => (readChatDraft(chatId).mode?.type === 'edit' ? leaveEdit() : null),
+      [chatId, leaveEdit],
+    ),
+  );
 
-    return () => subscription.remove();
-  }, [isEditing, leaveEdit, selectionActive]);
+  // Страницу потянули — панель эмодзи не едет вместе с ней.
+  useSlidePageSwipeStart(useCallback(() => void closeEmojiPanel('chat'), []));
 
   // Уход из чата посреди правки — тем же выходом: с вопросом, если что-то изменено.
   useEffect(
@@ -541,17 +553,10 @@ export function ChatConversation({
   const { isActive: isSelecting, clear: clearSelection } = selection;
 
   useEffect(() => {
-    if (!isSelecting) return;
+    if (isSelecting) Keyboard.dismiss();
+  }, [isSelecting]);
 
-    Keyboard.dismiss();
-
-    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
-      clearSelection();
-      return true;
-    });
-
-    return () => subscription.remove();
-  }, [clearSelection, isSelecting]);
+  useSlidePageBack(isFocused && isSelecting, clearSelection);
 
   const { openComment } = navigation;
   const openForwardedComment = useCallback(
@@ -660,13 +665,53 @@ export function ChatConversation({
     [resumeLoadMore],
   );
 
+  // Где сейчас прокрутка и сколько её всего — автопрокрутке выделения: она
+  // двигает список сама, кадр за кадром, не дожидаясь событий прокрутки.
+  // Пока список двигает автопрокрутка, события прокрутки (раз в 100 мс)
+  // везут смещение на несколько кадров старше — их смещение не берётся.
+  const scrollState = useRef({ offset: 0, content: 0, viewport: 0, drivenAt: 0 });
+  const trackOffset = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    if (Date.now() - scrollState.current.drivenAt > AUTO_SCROLL_QUIET_MS) {
+      scrollState.current.offset = event.nativeEvent.contentOffset.y;
+    }
+  }, []);
+
   const onListScroll = useCallback(
     (event: Parameters<typeof viewsOnScroll>[0]) => {
+      trackOffset(event);
       viewsOnScroll(event);
       resetScrolledRows();
     },
-    [viewsOnScroll],
+    [trackOffset, viewsOnScroll],
   );
+
+  useEffect(() => {
+    if (!isFocused) return;
+
+    return registerSelectionScroller({
+      measure: async () => {
+        const frame = await measureListFrame();
+
+        return frame ? { top: frame.y, bottom: frame.y + frame.height } : null;
+      },
+      // Список перевёрнут: смещение растёт к старым сообщениям, то есть
+      // содержимое на экране едет вниз.
+      scrollBy: (delta) => {
+        const state = scrollState.current;
+        const max = Math.max(0, state.content - state.viewport);
+        const next = Math.min(max, Math.max(0, state.offset + delta));
+        const moved = next - state.offset;
+
+        if (moved !== 0) {
+          state.offset = next;
+          state.drivenAt = Date.now();
+          listRef.current?.scrollToOffset({ offset: next, animated: false });
+        }
+
+        return moved;
+      },
+    });
+  }, [isFocused, measureListFrame]);
 
   const { toggle: toggleReaction } = reactions;
   const menuRow = menu.target?.item ?? null;
@@ -916,6 +961,14 @@ export function ChatConversation({
                   onViewableItemsChanged={views.onViewableItemsChanged}
                   onScroll={onListScroll}
                   onScrollBeginDrag={onListDragStart}
+                  onScrollEndDrag={trackOffset}
+                  onMomentumScrollEnd={trackOffset}
+                  onContentSizeChange={(_width, height) => {
+                    scrollState.current.content = height;
+                  }}
+                  onLayout={(event) => {
+                    scrollState.current.viewport = event.nativeEvent.layout.height;
+                  }}
                   scrollEventThrottle={VIEWS_SCROLL_THROTTLE_MS}
                   contentContainerStyle={styles.list}
                   // The list is inverted, so its "end" is the top of the screen:

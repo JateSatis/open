@@ -2,7 +2,7 @@ import { useCallback, useState, type ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import type { Profile } from '@/api/profile';
-import { InfoCard, InfoPage, InfoTextRow } from '@/components/InfoPage';
+import { InfoCard, InfoPage, InfoTextRow, type SlideBack } from '@/components/InfoPage';
 import { MediaViewer } from '@/features/media';
 import { showNotice } from '@/features/notifications/alertsStore';
 import { displayNameOf, formatUsername } from '@/features/profile/username';
@@ -18,8 +18,8 @@ export type ProfilePageProps = {
   actions?: ReactNode;
   /** Справа сверху на фото: шестерёнка своего профиля. */
   barRight?: ReactNode;
-  /** «Назад» на фото — у чужого профиля. */
-  onBack?: () => void;
+  /** «Назад» на фото — у чужого профиля: страница въезжает и уезжает за пальцем. */
+  slideBack?: SlideBack;
   /** Снизу под кнопками: место под панелью вкладок. */
   bottomInset?: number;
 };
@@ -35,7 +35,7 @@ export function ProfilePage({
   lead,
   actions,
   barRight,
-  onBack,
+  slideBack,
   bottomInset = 0,
 }: ProfilePageProps) {
   const [photoOpen, setPhotoOpen] = useState(false);
@@ -48,7 +48,7 @@ export function ProfilePage({
     <>
       <InfoPage
         testID="profile-page"
-        onBack={onBack}
+        slideBack={slideBack}
         title={name}
         status={profile.status ? { text: profile.status } : null}
         avatar={{ kind: 'single', uri: photoUri, name }}

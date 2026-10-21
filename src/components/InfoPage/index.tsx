@@ -36,7 +36,7 @@ import type {
   InfoStatus,
   InfoTab,
 } from './types';
-import type { SlideBack } from './useSlideBack';
+import type { SlideBack } from '@/components/SlidePage/useSlideBack';
 import { InfoPhotoProgressContext } from './visual';
 
 import { BarSearchField } from '@/components/BarSearchField';
@@ -50,7 +50,7 @@ export { InfoLinkRow } from './InfoLinkRow';
 export { InfoPersonRow } from './InfoPersonRow';
 export { InfoTabList } from './InfoTabList';
 export { useInfoTabsViewport } from './scroll';
-export { useSlideBack, type SlideBack } from './useSlideBack';
+export { useSlideBack, type SlideBack } from '@/components/SlidePage/useSlideBack';
 export type {
   InfoAction,
   InfoAvatar,

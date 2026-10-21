@@ -7,6 +7,8 @@ import { runOnJS, useSharedValue, withSpring, type SharedValue } from 'react-nat
 
 import { CANCEL_DISTANCE, LOCK_DISTANCE } from './styles';
 
+import { useEnclosingHorizontalGestures } from '@/components/HorizontalGestureScope';
+
 export type RecordGestureAction =
   'pressIn' | 'release' | 'slideCancel' | 'lock' | 'sendLocked' | 'systemCancel';
 
@@ -45,6 +47,7 @@ export function useRecordGesture({ drag, locked, onAction }: Params) {
   const crossed = useSharedValue(false);
   const originX = useSharedValue(0);
   const originY = useSharedValue(0);
+  const enclosing = useEnclosingHorizontalGestures();
 
   return useMemo(
     () =>
@@ -106,7 +109,9 @@ export function useRecordGesture({ drag, locked, onAction }: Params) {
 
           drag.x.value = withSpring(0);
           drag.y.value = withSpring(0);
-        }),
-    [crossed, drag, locked, onAction, originX, originY, startedLocked],
+        })
+        // Пока палец на кнопке записи, свайп страницы её не утащит.
+        .blocksExternalGesture(...enclosing),
+    [crossed, drag, enclosing, locked, onAction, originX, originY, startedLocked],
   );
 }

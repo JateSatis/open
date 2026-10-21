@@ -14,6 +14,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ScrollTap } from '../../modules/scroll-tap';
 
 import { ConfirmDialogHost } from '@/components/ConfirmDialog';
+import { SLIDE_PAGE } from '@/components/SlidePage/screenOptions';
 import { AccountLifecycle } from '@/features/auth/AccountLifecycle';
 import { ConnectionWatcher } from '@/features/connection/ConnectionWatcher';
 import { reportRequestFailed, reportRequestSucceeded } from '@/features/connection/connectionStore';
@@ -106,11 +107,8 @@ export default function RootLayout() {
                     {/* Просмотр попсов — на весь экран, без вкладок, на чёрном фоне. */}
                     <Stack.Screen name="pops/[channelId]" options={{ statusBarStyle: 'light' }} />
                     <Stack.Screen name="pops/search" options={{ statusBarStyle: 'light' }} />
-                    {/* Канал из «Ленты» — поверх вкладок, со своей шапкой. */}
-                    <Stack.Screen
-                      name="channel/[channelId]"
-                      options={{ headerShown: true, title: 'Канал' }}
-                    />
+                    {/* Канал из «Ленты» — поверх вкладок, страницей (см. `SlidePage`). */}
+                    <Stack.Screen name="channel/[channelId]" options={SLIDE_PAGE} />
                   </Stack>
                 </ScrollTap>
               </BelowReturnBar>

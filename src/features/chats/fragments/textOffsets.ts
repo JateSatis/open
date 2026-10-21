@@ -148,8 +148,18 @@ function isWordGrapheme(text: string, start: number, end: number): boolean {
  * пробел) — одна графема под пальцем. Диапазон — UTF-16 `[start, end)`.
  */
 export function wordAt(text: string, offset: number): { start: number; end: number } {
-  const bounds = graphemeBoundaries(text);
+  return wordRangeAt(text, graphemeBoundaries(text), offset);
+}
 
+/**
+ * То же, что `wordAt`, над уже посчитанными границами графем: протяжка
+ * выделения спрашивает слово на каждом сдвиге пальца, а границы у текста одни.
+ */
+export function wordRangeAt(
+  text: string,
+  bounds: readonly number[],
+  offset: number,
+): { start: number; end: number } {
   if (bounds.length < 2) return { start: 0, end: 0 };
 
   // Графема под смещением: последняя граница не правее, конец — следующая.
@@ -164,7 +174,13 @@ export function wordAt(text: string, offset: number): { start: number; end: numb
   const isJoiner = (i: number) =>
     bounds[i + 1] - bounds[i] === 1 && JOINER.test(text[bounds[i]]);
 
-  if (!isWord(index)) {
+  const graphemes = bounds.length - 1;
+
+  // Знак внутри слова («кто-то», «3.14») — часть слова, а не отдельный символ.
+  const insideWord =
+    isJoiner(index) && index > 0 && isWord(index - 1) && index + 1 < graphemes && isWord(index + 1);
+
+  if (!isWord(index) && !insideWord) {
     // Палец между словом и пробелом в конце строки — берём слово слева.
     if (index > 0 && isWord(index - 1) && /\s/.test(text[bounds[index]])) index -= 1;
     else return at(index);
@@ -177,8 +193,6 @@ export function wordAt(text: string, offset: number): { start: number; end: numb
     first -= 1;
   }
 
-  const graphemes = bounds.length - 1;
-
   while (
     last < graphemes - 1 &&
     (isWord(last + 1) || (isJoiner(last + 1) && last + 2 < graphemes && isWord(last + 2)))
@@ -187,6 +201,44 @@ export function wordAt(text: string, offset: number): { start: number; end: numb
   }
 
   return { start: bounds[first], end: bounds[last + 1] };
+}
+
+/**
+ * Протяжка выделения по словам: от исходного слова `anchor` до слова под
+ * смещением, целыми словами. Исходное слово всегда внутри: палец за ним —
+ * растёт вперёд, перед ним — назад. Пробел или перевод строки под пальцем
+ * в край выделения не входит — край остаётся у ближайшего к пальцу слова.
+ */
+export function extendByWords(
+  text: string,
+  bounds: readonly number[],
+  anchor: { start: number; end: number },
+  offset: number,
+): { start: number; end: number } {
+  const word = wordRangeAt(text, bounds, offset);
+  const blank = word.end <= word.start || !text.slice(word.start, word.end).trim();
+
+  if (word.start >= anchor.end) {
+    if (!blank) return { start: anchor.start, end: word.end };
+
+    let end = word.start;
+
+    while (end > anchor.end && /\s/.test(text[end - 1])) end -= 1;
+
+    return { start: anchor.start, end };
+  }
+
+  if (word.end <= anchor.start) {
+    if (!blank) return { start: word.start, end: anchor.end };
+
+    let start = word.end;
+
+    while (start < anchor.start && /\s/.test(text[start])) start += 1;
+
+    return { start, end: anchor.end };
+  }
+
+  return { start: Math.min(anchor.start, word.start), end: Math.max(anchor.end, word.end) };
 }
 
 /** UTF-16 → code points: сколько кодовых точек до этого смещения. */

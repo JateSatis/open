@@ -1,9 +1,12 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { Redirect, useLocalSearchParams } from 'expo-router';
+import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useCallback } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 
 import type { ChatSummary } from '@/api/chats';
 import { LoadFailed } from '@/components/LoadFailed';
+import { PlainPageBar } from '@/components/PageBar';
+import { SlidePage, useSlideBack } from '@/components/SlidePage';
 import { ChatConversation } from '@/features/chats/ChatConversation';
 import { messagesQueryKey } from '@/features/chats/messages/historyCache';
 import { chatQueryKey, useChat } from '@/features/chats/useChat';
@@ -20,6 +23,10 @@ import { reloadMissing } from '@/lib/loadState';
  * Чтобы переписка не успела мелькнуть и подписаться на чат, который окажется
  * каналом, вид чата узнаётся до неё: из списка чатов, если он там есть, иначе
  * — ожиданием самого чата.
+ *
+ * Экран — страница (`SlidePage`): въезжает справа и уезжает свайпом за
+ * пальцем, под ней виден экран, откуда пришли. Открыли с холодного старта и
+ * под ней пусто — назад ведёт в «Чаты».
  */
 export default function ChatScreen() {
   const params = useLocalSearchParams<{ chatId: string } & JumpParams>();
@@ -31,6 +38,9 @@ export default function ChatScreen() {
     ?.find((chat) => chat.id === chatId);
   const { chat, isLoading, failed } = useChat(chatId);
   const known = chat ?? listed ?? null;
+  const router = useRouter();
+  const toChats = useCallback(() => router.replace('/chats'), [router]);
+  const slide = useSlideBack(toChats);
 
   // Прыжок к посту и шит комментария едут дальше, на экран канала: его
   // «Посты» читают их из своего адреса.
@@ -50,24 +60,34 @@ export default function ChatScreen() {
   // маршрут снова ушёл бы в крутилку и размонтировал её — и так по кругу.
   if (!known && failed) {
     return (
-      <View style={{ flex: 1, backgroundColor: theme.background }}>
-        <LoadFailed
-          message="Не удалось загрузить переписку"
-          onRetry={() =>
-            reloadMissing(queryClient, [chatQueryKey(chatId), messagesQueryKey(chatId)])
-          }
-        />
-      </View>
+      <SlidePage slide={slide}>
+        <PlainPageBar title="Чат" onBack={slide.close} />
+        <View style={{ flex: 1, backgroundColor: theme.background }}>
+          <LoadFailed
+            message="Не удалось загрузить переписку"
+            onRetry={() =>
+              reloadMissing(queryClient, [chatQueryKey(chatId), messagesQueryKey(chatId)])
+            }
+          />
+        </View>
+      </SlidePage>
     );
   }
 
   if (!known && isLoading) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', backgroundColor: theme.background }}>
-        <ActivityIndicator accessibilityLabel="Загрузка переписки" />
-      </View>
+      <SlidePage slide={slide}>
+        <PlainPageBar title="Чат" onBack={slide.close} />
+        <View style={{ flex: 1, justifyContent: 'center', backgroundColor: theme.background }}>
+          <ActivityIndicator accessibilityLabel="Загрузка переписки" />
+        </View>
+      </SlidePage>
     );
   }
 
-  return <ChatConversation chatId={chatId} />;
+  return (
+    <SlidePage slide={slide}>
+      <ChatConversation chatId={chatId} />
+    </SlidePage>
+  );
 }

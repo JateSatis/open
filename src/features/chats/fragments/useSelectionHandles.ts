@@ -3,26 +3,23 @@ import { Gesture, type GestureType } from 'react-native-gesture-handler';
 import { runOnJS, useSharedValue } from 'react-native-reanimated';
 
 import {
-  dragHandle,
+  beginHandleDrag,
+  endSelectionDrag,
   handleSpots,
   hitHandle,
+  moveSelectionDrag,
   type HandleSpots,
 } from '@/features/chats/fragments/fragmentSelection';
 import {
   getFragmentState,
   subscribeTextSelection,
-  updateTextSelection,
   useRowHasSelection,
 } from '@/features/chats/fragments/fragmentStore';
 
 const EDGES = ['start', 'end'] as const;
 
-function setDragging(edge: 0 | 1 | 2) {
-  updateTextSelection({ dragging: edge === 0 ? null : EDGES[edge - 1] });
-}
-
-function drag(edge: 1 | 2, x: number, y: number) {
-  dragHandle(EDGES[edge - 1], x, y);
+function grab(rowKey: string, edge: 1 | 2, lift: number) {
+  beginHandleDrag(rowKey, EDGES[edge - 1], lift);
 }
 
 /**
@@ -35,12 +32,19 @@ function drag(edge: 1 | 2, x: number, y: number) {
  * положения ручек лежат в shared value и обновляются подпиской на стор, а не
  * перерисовкой строки. Жест один на всё время выделения: пересоздание посреди
  * перетаскивания оборвало бы его.
+ *
+ * Тянет ручку протяжка (`fragmentSelection`) — по пальцу в окне, а не в
+ * строке: у края переписки она прокручивает её сама, и строка уезжает из-под
+ * стоящего пальца. Пока ручку держат, охватывающие горизонтальные жесты
+ * (свайп страницы) ждут.
  */
-export function useSelectionHandles(rowKey: string): GestureType | undefined {
+export function useSelectionHandles(
+  rowKey: string,
+  enclosing: readonly GestureType[],
+): GestureType {
   const active = useRowHasSelection(rowKey);
   const spots = useSharedValue<HandleSpots | null>(null);
   const grabbed = useSharedValue<0 | 1 | 2>(0);
-  const lift = useSharedValue(0);
 
   useEffect(() => {
     if (!active) {
@@ -59,52 +63,54 @@ export function useSelectionHandles(rowKey: string): GestureType | undefined {
     return subscribeTextSelection(place);
   }, [active, rowKey, spots]);
 
-  return useMemo(() => {
-    if (!active) return undefined;
+  // Жест есть у строки всегда, без выделения — выключен: появись он в гонке
+  // строки только с выделением, состав гонки сменился бы, и обработчики строки
+  // переподключились бы посреди касания — оборвав протяжку, которая это
+  // выделение и создала.
+  return useMemo(
+    () =>
+      Gesture.Pan()
+        .enabled(active)
+        .manualActivation(true)
+        .withTestId(`selection-handles-${rowKey}`)
+        .onTouchesDown((event, manager) => {
+          const at = spots.get();
+          const touch = event.allTouches[0];
 
-    return Gesture.Pan()
-      .manualActivation(true)
-      .withTestId(`selection-handles-${rowKey}`)
-      .onTouchesDown((event, manager) => {
-        const at = spots.get();
-        const touch = event.allTouches[0];
+          if (!at || !touch || event.numberOfTouches > 1) {
+            manager.fail();
+            return;
+          }
 
-        if (!at || !touch || event.numberOfTouches > 1) {
-          manager.fail();
-          return;
-        }
+          const x = touch.x - at.originX;
+          const y = touch.y - at.originY;
+          const edge = hitHandle(at, x, y);
 
-        const x = touch.x - at.originX;
-        const y = touch.y - at.originY;
-        const edge = hitHandle(at, x, y);
+          if (edge === 0) {
+            manager.fail();
+            return;
+          }
 
-        if (edge === 0) {
-          manager.fail();
-          return;
-        }
+          // Где палец держит каплю относительно середины строки — чтобы ручка
+          // не прыгала под палец.
+          const caret = edge === 1 ? at.start : at.end;
 
-        // Где палец держит каплю относительно середины строки — чтобы ручка
-        // не прыгала под палец.
-        const caret = edge === 1 ? at.start : at.end;
+          grabbed.set(edge);
+          runOnJS(grab)(rowKey, edge, y - (caret.top + caret.bottom) / 2);
+          manager.activate();
+        })
+        .onUpdate((event) => {
+          if (grabbed.get() === 0) return;
 
-        lift.set(y - (caret.top + caret.bottom) / 2);
-        grabbed.set(edge);
-        runOnJS(setDragging)(edge);
-        manager.activate();
-      })
-      .onUpdate((event) => {
-        const edge = grabbed.get();
-        const at = spots.get();
+          runOnJS(moveSelectionDrag)(event.absoluteX, event.absoluteY);
+        })
+        .onFinalize(() => {
+          if (grabbed.get() === 0) return;
 
-        if (edge === 0 || !at) return;
-
-        runOnJS(drag)(edge, event.x - at.originX, event.y - at.originY - lift.get());
-      })
-      .onFinalize(() => {
-        if (grabbed.get() === 0) return;
-
-        grabbed.set(0);
-        runOnJS(setDragging)(0);
-      });
-  }, [active, grabbed, lift, rowKey, spots]);
+          grabbed.set(0);
+          runOnJS(endSelectionDrag)('handle');
+        })
+        .blocksExternalGesture(...enclosing),
+    [active, enclosing, grabbed, rowKey, spots],
+  );
 }

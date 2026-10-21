@@ -4,6 +4,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 
 import { BAR_GAP, BAR_WIDTH, MIN_BAR_HEIGHT, styles, WAVEFORM_HEIGHT } from './styles';
 
+import { useEnclosingHorizontalGestures } from '@/components/HorizontalGestureScope';
 import { WAVEFORM_BARS, WAVEFORM_MAX } from '@/features/media/lib/waveform';
 
 export type WaveformProps = {
@@ -47,6 +48,8 @@ export function Waveform({
   const fractionAt = (x: number) => Math.min(1, Math.max(0, x / WAVEFORM_WIDTH));
 
   const seekTo = (x: number) => onSeek?.(fractionAt(x));
+  // Свайп страницы и свайп-ответ ждут, пока палец ведёт по волне.
+  const enclosing = useEnclosingHorizontalGestures();
 
   // Протяжка включается только горизонтальным движением: вертикальный
   // жест остаётся списку сообщений.
@@ -57,7 +60,8 @@ export function Waveform({
     .failOffsetY([-BAR_WIDTH * 4, BAR_WIDTH * 4])
     .onUpdate((event) => setScrub(fractionAt(event.x)))
     .onEnd((event) => seekTo(event.x))
-    .onFinalize(() => setScrub(null));
+    .onFinalize(() => setScrub(null))
+    .blocksExternalGesture(...enclosing);
 
   const tap = Gesture.Tap()
     .runOnJS(true)

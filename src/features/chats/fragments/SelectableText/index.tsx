@@ -81,7 +81,10 @@ export function SelectableText({
       >
         {text}
       </RNText>
-      {selection ? <SelectionLayer selection={selection} isOwn={isOwn} part="handles" /> : null}
+      {/* Пока выделение тянут словами, ручек нет: они появятся, когда палец отпустят. */}
+      {selection && selection.dragging !== 'words' ? (
+        <SelectionLayer selection={selection} isOwn={isOwn} part="handles" />
+      ) : null}
     </>
   );
 

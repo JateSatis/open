@@ -1,10 +1,11 @@
 import { useIsFocused } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { useEffect, useRef } from 'react';
-import { BackHandler, Pressable, TextInput, View } from 'react-native';
+import { Pressable, TextInput, View } from 'react-native';
 
 import { styles } from './styles';
 
+import { useSlidePageBack } from '@/components/SlidePage/context';
 import { useTheme } from '@/hooks/use-theme';
 import { InfoPageSizes, Sizes } from '@/theme';
 
@@ -53,16 +54,9 @@ export function BarSearchField({
   // поверх профиль иначе не закрывался бы, а под ним закрывался поиск.
   const isScreenFocused = useIsFocused();
 
-  useEffect(() => {
-    if (!isScreenFocused) return;
-
-    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
-      onClose();
-      return true;
-    });
-
-    return () => subscription.remove();
-  }, [isScreenFocused, onClose]);
+  // На странице, которая сама ведёт «назад» (`SlidePage`), — через неё:
+  // иначе системный жест с ходом увёл бы страницу, не закрыв поиск.
+  useSlidePageBack(isScreenFocused, onClose);
 
   return (
     <View style={styles.row}>

@@ -1,0 +1,47 @@
+appId: com.openger.app
+name: Переписка и канал уходят свайпом вправо, недотянутая страница возвращается
+tags:
+  - chats
+  - channels
+env:
+  CHAT: Plany
+---
+- runFlow: subflows/open-app.yaml
+- tapOn: ${CHAT}
+- assertVisible:
+    id: "page-back"
+# Короткий сдвиг — страница пружинит обратно, переписка на месте.
+- swipe:
+    start: 30%, 55%
+    end: 45%, 55%
+    duration: 600
+- assertVisible:
+    id: "messages-list"
+- assertVisible:
+    id: "page-back"
+# Свайп за порог из середины экрана — назад в «Чаты».
+- swipe:
+    start: 25%, 55%
+    end: 95%, 55%
+    duration: 300
+- assertVisible:
+    id: "chats-search-open"
+- assertNotVisible:
+    id: "page-back"
+# Канал: с «Попсов» свайп листает на «Посты», следующий уводит канал.
+- tapOn: "Test Kanal"
+- assertVisible:
+    id: "section-pager"
+- tapOn: "Попсы"
+- swipe:
+    start: 25%, 60%
+    end: 95%, 60%
+    duration: 300
+- assertVisible:
+    id: "section-pager"
+- swipe:
+    start: 25%, 60%
+    end: 95%, 60%
+    duration: 300
+- assertVisible:
+    id: "chats-search-open"
