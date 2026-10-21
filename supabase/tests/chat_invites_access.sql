@@ -50,7 +50,8 @@ declare
 begin
   -- ---------------------------------------------------------------- создание
   perform pg_temp.act_as(a);
-  res := public.create_chat(array[b], null);
+  -- B не друг A: личка начинается заявкой с текстом (этап 3 приватности).
+  res := public.create_chat(array[b], null, null, 'Привет, это заявка');
   chat_ab := (res ->> 'chat_id')::uuid;
   perform pg_temp.check('A создаёт диалог с B', res ->> 'outcome' = 'created', res::text);
 
@@ -169,8 +170,9 @@ begin
   exception when others then perform pg_temp.check('заявку нельзя вставить напрямую', true, sqlerrm);
   end;
 
+  -- Непринятая заявка на диалог видна только двоим — и «не ответил» тоже.
   select count(*) into n from public.chat_waiting_invitees where chat_id = chat_ab and user_id = b;
-  perform pg_temp.check('посетитель видит, что B не ответил', n = 1, n::text);
+  perform pg_temp.check('посетитель не видит заявку на диалог', n = 0, n::text);
 
   -- ------------------------------------------------------------ приглашённый B
   perform pg_temp.act_as(b);
@@ -255,7 +257,7 @@ begin
   end;
 
   select count(*) into n from public.latest_chat_messages(array[chat_ab], 3);
-  perform pg_temp.check('последние сообщения чата читаются', n = 1, n::text);
+  perform pg_temp.check('последние сообщения чата читаются', n = 2, n::text);
 
   -- ------------------------------------------------ после принятия всеми — можно
   perform pg_temp.act_as(a);
@@ -263,7 +265,7 @@ begin
   select count(*) into n from public.chat_waiting_invitees where chat_id = chat_ab;
   perform pg_temp.check('принявший пропадает из «не ответил»', n = 0, n::text);
 
-  res := public.create_chat(array[b], 'второй');
+  res := public.create_chat(array[b], 'второй', null, 'Снова привет');
   chat_ab2 := (res ->> 'chat_id')::uuid;
   perform pg_temp.check(
     'после принятия всеми новый диалог создаётся',

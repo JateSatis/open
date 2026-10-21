@@ -127,7 +127,7 @@ begin
   perform pg_temp.check('прямой UPDATE названия: отказ', code = '42501', code);
 
   perform pg_temp.act_as(a);
-  dm := (public.create_chat(array[e], null) ->> 'chat_id')::uuid;
+  dm := (public.create_chat(array[e], null, null, 'Привет, это заявка') ->> 'chat_id')::uuid;
   code := pg_temp.denied(format('select public.set_chat_description(%L, %L)', dm, 'x'));
   perform pg_temp.check('описание у диалога: отказ', code = '22023', code);
 
@@ -300,7 +300,7 @@ begin
   perform pg_temp.check('удалённый диалог не ищется',
     (select count(*) from public.search_chat_messages(dm, 'тюльпан')) = 0);
   perform pg_temp.check('новый диалог с тем же человеком создаётся',
-    (public.create_chat(array[e], null) ->> 'outcome') = 'created');
+    (public.create_chat(array[e], null, null, 'Привет, это заявка') ->> 'outcome') = 'created');
 end;
 $$;
 

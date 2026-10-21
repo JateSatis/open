@@ -56,6 +56,10 @@ declare
   s text;
   bars smallint[];
 begin
+  -- Друзья: диалог открывается сразу, без заявки (этап 3 приватности).
+  insert into public.friendships (requester_id, addressee_id, status, accepted_at)
+  values (a, b, 'accepted', now());
+
   perform pg_temp.act_as(a);
   chat_ab := (public.create_chat(array[b], null) ->> 'chat_id')::uuid;
 

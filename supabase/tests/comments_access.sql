@@ -98,7 +98,7 @@ begin
   -- ------------------------------------------------------------- подготовка
   -- A звал B, B принял. D в чат не звали — он посетитель.
   perform pg_temp.act_as(a);
-  chat := (public.create_chat(array[b], null) ->> 'chat_id')::uuid;
+  chat := (public.create_chat(array[b], null, null, 'Привет, это заявка') ->> 'chat_id')::uuid;
   perform pg_temp.act_as(b);
   perform public.accept_chat_invite(chat);
 
@@ -111,6 +111,10 @@ begin
   perform public.delete_messages(array[gone]);
 
   -- Другой чат — для подделки чата комментария.
+  -- Друзья: личка без заявки, писать можно сразу (этап 3 приватности).
+  perform set_config('role', 'postgres', true);
+  insert into public.friendships (requester_id, addressee_id, status, accepted_at)
+  values (d, a, 'accepted', now());
   perform pg_temp.act_as(d);
   chat_other := (public.create_chat(array[a], null) ->> 'chat_id')::uuid;
   foreign_msg := pg_temp.say(chat_other, d, 'в другом чате');

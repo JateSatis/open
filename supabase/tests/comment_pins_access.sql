@@ -92,7 +92,7 @@ begin
   values (chat, b, 'text', 'сообщение B') returning id into m_b;
 
   perform pg_temp.act_as(a);
-  dm := (public.create_chat(array[d], null) ->> 'chat_id')::uuid;
+  dm := (public.create_chat(array[d], null, null, 'Привет, это заявка') ->> 'chat_id')::uuid;
   perform pg_temp.act_as(d);
   perform public.accept_chat_invite(dm);
 

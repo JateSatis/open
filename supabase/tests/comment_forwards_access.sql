@@ -73,7 +73,7 @@ begin
   -- ------------------------------------------------------------- подготовка
   -- A и B — участники чата, D — посетитель; у D свой чат с A.
   perform pg_temp.act_as(a);
-  chat := (public.create_chat(array[b], null) ->> 'chat_id')::uuid;
+  chat := (public.create_chat(array[b], null, null, 'Привет, это заявка') ->> 'chat_id')::uuid;
   perform pg_temp.act_as(b);
   perform public.accept_chat_invite(chat);
 
@@ -85,7 +85,7 @@ begin
   live := public.send_comment(m, 'живой комментарий');
   gone := public.send_comment(m, 'будет удалён');
   perform public.delete_comment(gone);
-  chat_d := (public.create_chat(array[a], null) ->> 'chat_id')::uuid;
+  chat_d := (public.create_chat(array[a], null, null, 'Привет, это заявка') ->> 'chat_id')::uuid;
   perform pg_temp.act_as(a);
   perform public.accept_chat_invite(chat_d);
 

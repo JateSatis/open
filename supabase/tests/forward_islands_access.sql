@@ -82,11 +82,11 @@ declare
 begin
   -- ------------------------------------------------------------- подготовка
   perform pg_temp.act_as(j);
-  chat_js := (public.create_chat(array[sam], 'Джиган и Самойлова') ->> 'chat_id')::uuid;
+  chat_js := (public.create_chat(array[sam], 'Джиган и Самойлова', null, 'Привет, это заявка') ->> 'chat_id')::uuid;
   perform pg_temp.act_as(h1);
   chat_hate := (public.create_chat(array[h2, v], 'Хейтеры Джигана') ->> 'chat_id')::uuid;
   perform pg_temp.act_as(v);
-  chat_vs := (public.create_chat(array[sv], 'Вася и Света') ->> 'chat_id')::uuid;
+  chat_vs := (public.create_chat(array[sv], 'Вася и Света', null, 'Привет, это заявка') ->> 'chat_id')::uuid;
 
   perform pg_temp.act_as(sam);
   perform public.accept_chat_invite(chat_js);

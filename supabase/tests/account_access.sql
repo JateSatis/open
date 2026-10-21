@@ -279,9 +279,9 @@ begin
   perform pg_temp.act_as(a, sa_emu);
   perform public.register_device(install_emu, 'android', 'sdk_gphone64', '16', '1.0.0');
 
-  chat_ab := (public.create_chat(array[b], null) ->> 'chat_id')::uuid;
+  -- B не друг A: первое сообщение лички — текст заявки (этап 3 приватности).
+  chat_ab := (public.create_chat(array[b], null, null, 'от A') ->> 'chat_id')::uuid;
   chat_group := (public.create_chat(array[b, c], 'Группа') ->> 'chat_id')::uuid;
-  insert into public.messages (chat_id, author_id, kind, text) values (chat_ab, a, 'text', 'от A');
   perform pg_temp.act_as(b, sb);
   perform public.accept_chat_invite(chat_ab);
   perform public.accept_chat_invite(chat_group);
