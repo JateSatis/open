@@ -261,6 +261,19 @@ describe('UserProfileScreen — друзья', () => {
     expect(screen.queryByTestId('profile-friends')).toBeNull();
   });
 
+  it('статус не загрузился — нажатие перечитывает его, а не молчит', async () => {
+    friends.status.mockRejectedValueOnce(new Error('offline')).mockResolvedValue('incoming');
+    await renderProfile();
+
+    expect(
+      await screen.findByText('Не удалось загрузить. Нажмите, чтобы попробовать ещё раз.'),
+    ).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('friend-button'));
+
+    expect(await screen.findByText('Принять заявку')).toBeTruthy();
+    expect(friends.send).not.toHaveBeenCalled();
+  });
+
   it('у себя кнопки дружбы нет', async () => {
     useSessionMock.mockReturnValue({ session: { user: { id: 'user-2' } } });
     friends.status.mockResolvedValue('self');

@@ -4,7 +4,6 @@ import {
   getMyPrivacySettings,
   setBirthDate,
   setPrivacySetting,
-  toDateOnly,
 } from './privacy';
 
 import { supabase } from '@/api/supabase';
@@ -61,9 +60,5 @@ describe('privacy api', () => {
 
     mockedRpc.mockResolvedValueOnce({ data: { id: null }, error: null });
     await expect(getMyPrivacySettings()).resolves.toBeNull();
-  });
-
-  it('день по местному календарю, без сдвига к UTC', () => {
-    expect(toDateOnly(new Date(2008, 2, 12, 0, 30))).toBe('2008-03-12');
   });
 });

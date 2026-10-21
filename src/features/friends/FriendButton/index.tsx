@@ -29,7 +29,7 @@ function describeError(error: Error | null): string | null {
  * «Заявка отправлена» — это решает сервер, кнопка лишь показывает его ответ.
  */
 export function FriendButton({ userId, name }: { userId: string; name: string }) {
-  const { data: status, isPending } = useFriendshipStatus(userId);
+  const { data: status, isPending, isError, refetch } = useFriendshipStatus(userId);
   const action = useFriendAction();
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -38,6 +38,12 @@ export function FriendButton({ userId, name }: { userId: string; name: string })
   const run = (kind: FriendAction) => action.mutate({ action: kind, userId });
 
   const onPress = async () => {
+    // Не знаем, кто мы друг другу, — сначала узнать, а не гадать.
+    if (isError) {
+      void refetch();
+      return;
+    }
+
     switch (status) {
       case 'none':
         run('send');
@@ -63,7 +69,9 @@ export function FriendButton({ userId, name }: { userId: string; name: string })
     }
   };
 
-  const problem = describeError(action.error);
+  const problem =
+    describeError(action.error) ??
+    (isError ? 'Не удалось загрузить. Нажмите, чтобы попробовать ещё раз.' : null);
 
   return (
     <View style={styles.container}>

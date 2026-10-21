@@ -64,21 +64,6 @@ export async function getMyPrivacySettings(): Promise<PrivacySettings | null> {
   return toSettings(data);
 }
 
-/** `YYYY-MM-DD` по местному календарю: `toISOString` сдвинул бы день к UTC. */
-export function toDateOnly(date: Date): string {
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-
-  return `${date.getFullYear()}-${month}-${day}`;
-}
-
-/** Обратно — полночь местного дня. */
-export function fromDateOnly(value: string): Date {
-  const [year, month, day] = value.split('-').map(Number);
-
-  return new Date(year, month - 1, day);
-}
-
 export async function setBirthDate(birthDate: string): Promise<void> {
   const { error } = await supabase.rpc('set_birth_date', { p_birth_date: birthDate });
 

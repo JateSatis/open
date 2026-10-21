@@ -82,8 +82,11 @@ export function useFriendAction() {
     onSuccess: (status, { userId }) => {
       queryClient.setQueryData(friendKeys.status(userId), status);
     },
-    onSettled: (_status, _error, { userId }) => {
+    onError: (_error, { userId }) => {
+      // Ответа нет — состояние пары неизвестно, его надо перечитать.
       void queryClient.invalidateQueries({ queryKey: friendKeys.status(userId) });
+    },
+    onSettled: (_status, _error, { userId }) => {
       void queryClient.invalidateQueries({ queryKey: friendKeys.summary(userId) });
       void queryClient.invalidateQueries({ queryKey: friendKeys.list(userId) });
       void queryClient.invalidateQueries({ queryKey: friendKeys.incoming() });
