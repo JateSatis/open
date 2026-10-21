@@ -95,6 +95,20 @@ const baseProps = {
 };
 
 describe('MessageBubble', () => {
+  it('К2.5 сообщение заблокировавшего — заглушка без текста и реакций', async () => {
+    await render(
+      <MessageBubble
+        {...baseProps}
+        message={textMessage({ text: null, hidden: true })}
+        comments={{ count: 3, onPress: jest.fn() }}
+      />,
+    );
+
+    expect(screen.getByTestId('message-bubble-hidden')).toBeTruthy();
+    expect(screen.getByText('Сообщение скрыто')).toBeTruthy();
+    expect(screen.queryByTestId('comments-slot')).toBeNull();
+  });
+
   it('без аватара у чужого облачка имя автора видно', async () => {
     await render(<MessageBubble {...baseProps} message={textMessage()} showAvatar={false} />);
 

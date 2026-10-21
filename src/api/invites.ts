@@ -17,6 +17,7 @@ import {
   type Message,
   type Person,
 } from '@/api/chats';
+import { toContactError } from '@/api/contactErrors';
 import { supabase } from '@/api/supabase';
 
 /** Сколько последних сообщений показывает карточка заявки. */
@@ -45,6 +46,11 @@ export type CreateChatInput = {
   title?: string;
   /** Фото группы, уже загруженное (`uploadGroupAvatar`). У диалога база его игнорирует. */
   avatarUrl?: string | null;
+  /**
+   * Текст заявки на диалог не-другу — её первое и до принятия единственное
+   * сообщение. Без него база лишь проверяет, можно ли написать.
+   */
+  requestText?: string;
 };
 
 export type CreateChatResult =
@@ -53,7 +59,12 @@ export type CreateChatResult =
    * Эти же люди уже зовут меня в чат с тем же составом. Второй чат не
    * создаётся — вместо него открывается их заявка (решение человека).
    */
-  | { outcome: 'incoming_invite'; chatId: string };
+  | { outcome: 'incoming_invite'; chatId: string }
+  /**
+   * Позван один человек, и он мне не друг: писать ему можно только заявкой —
+   * одним текстовым сообщением. Чат ещё не создан.
+   */
+  | { outcome: 'request_needed' };
 
 /**
  * Я уже звал этот же набор людей, и в том чате ещё не все приняли. Несёт id
@@ -83,6 +94,7 @@ function toPerson(row: InviterRow): Person | null {
 function toResult(data: unknown): CreateChatResult {
   const row = (typeof data === 'object' && data !== null ? data : {}) as Record<string, unknown>;
 
+  if (row.outcome === 'request_needed') return { outcome: 'request_needed' };
   if (typeof row.chat_id !== 'string') throw new Error('Не удалось создать чат');
 
   return row.outcome === 'incoming_invite'
@@ -91,14 +103,17 @@ function toResult(data: unknown): CreateChatResult {
 }
 
 /**
- * Один выбранный — личный диалог, несколько — группа. Все проверки (не себя,
- * не удалённый профиль, не повтор набора) делает база под блокировкой: два
- * одновременных нажатия не создадут два чата.
+ * Один выбранный — личный диалог, несколько — группа. Друг — сразу диалог;
+ * не-друг — заявка (`request_needed`, затем вызов с `requestText`). Все
+ * проверки (не себя, не удалённый профиль, не повтор набора, блокировки,
+ * лимиты) делает база под блокировкой: два одновременных нажатия не создадут
+ * два чата.
  */
 export async function createChat({
   inviteeIds,
   title,
   avatarUrl,
+  requestText,
 }: CreateChatInput): Promise<CreateChatResult> {
   const { data, error } = await supabase.rpc('create_chat', {
     invitee_ids: inviteeIds,
@@ -106,6 +121,7 @@ export async function createChat({
     // аргументы rpc как nullable — отсюда приведение.
     chat_title: (title?.trim() || null) as string,
     chat_avatar_url: (avatarUrl ?? null) as string,
+    request_text: (requestText?.trim() || null) as string,
   });
 
   if (error) {
@@ -113,7 +129,7 @@ export async function createChat({
       throw new DuplicateChatError(error.details);
     }
 
-    throw error;
+    throw toContactError(error);
   }
 
   return toResult(data);
@@ -216,7 +232,7 @@ export async function getMyInvite(chatId: string): Promise<MyInvite | null> {
 export async function acceptInvite(chatId: string): Promise<void> {
   const { error } = await supabase.rpc('accept_chat_invite', { target_chat: chatId });
 
-  if (error) throw error;
+  if (error) throw toContactError(error);
 }
 
 /** Отклонить можно только входящую: принятая — это уже участие в чате. */

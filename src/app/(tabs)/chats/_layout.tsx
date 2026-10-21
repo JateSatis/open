@@ -20,6 +20,7 @@ export default function ChatsLayout() {
           чтобы тот был виден, пока страницу тянут (см. `SlidePage`). */}
       <Stack.Screen name="people/[userId]" options={SLIDE_PAGE} />
       <Stack.Screen name="[chatId]" options={SLIDE_PAGE} />
+      <Stack.Screen name="request/[userId]" options={SLIDE_PAGE} />
       <Stack.Screen name="channel/[channelId]" options={SLIDE_PAGE} />
       <Stack.Screen name="channel-subscribers/[channelId]" options={{ title: 'Подписчики' }} />
       <Stack.Screen name="chat-subscribers/[chatId]" options={{ title: 'Подписчики' }} />

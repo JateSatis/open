@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useState } from 'react';
 
+import { describeContactRefusal } from '@/api/contactErrors';
 import { createChat, DuplicateChatError, type CreateChatResult } from '@/api/invites';
 import { chatsQueryKey } from '@/features/chats/useChats';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
@@ -70,11 +71,20 @@ async function createWithAvatar(input: NewChat, userId: string | null): Promise<
   return result;
 }
 
+/** Текст отказа создания для человека. */
+export function describeCreateChatError(cause: Error): string | null {
+  return describeContactRefusal(cause) ?? describeLoadError(cause, 'Не удалось создать чат');
+}
+
 /**
  * Создаёт чат и отдаёт id чата, который надо открыть: новый или — при
- * встречной заявке — тот, куда меня уже позвали эти же люди.
+ * встречной заявке — тот, куда меня уже позвали эти же люди. Один позванный
+ * не-друг — чата ещё нет: `onRequest` ведёт к заявке на диалог.
  */
-export function useCreateChat(onOpen: (chatId: string) => void): CreateChatState {
+export function useCreateChat(
+  onOpen: (chatId: string) => void,
+  onRequest?: (userId: string) => void,
+): CreateChatState {
   const queryClient = useQueryClient();
   const userId = useCurrentUserId();
   const [problem, setProblem] = useState<CreateChatProblem | null>(null);
@@ -84,7 +94,12 @@ export function useCreateChat(onOpen: (chatId: string) => void): CreateChatState
     // бы молча. Создание пробуется сразу и честно падает.
     networkMode: 'always',
     mutationFn: (input: NewChat) => createWithAvatar(input, userId),
-    onSuccess: (result) => {
+    onSuccess: (result, input) => {
+      if (result.outcome === 'request_needed') {
+        onRequest?.(input.inviteeIds[0]);
+        return;
+      }
+
       void queryClient.invalidateQueries({ queryKey: chatsQueryKey });
 
       if (result.outcome === 'incoming_invite') {
@@ -97,7 +112,7 @@ export function useCreateChat(onOpen: (chatId: string) => void): CreateChatState
       setProblem(
         cause instanceof DuplicateChatError
           ? { kind: 'duplicate', chatId: cause.chatId }
-          : { kind: 'failed', message: describeLoadError(cause, 'Не удалось создать чат') },
+          : { kind: 'failed', message: describeCreateChatError(cause) },
       );
     },
   });

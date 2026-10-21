@@ -30,6 +30,7 @@ const GROUP_AVATAR_LABELS = { pick: 'Выбрать фото группы', chan
  * поиском, с учётом их настройки «Кто может найти меня в поиске»: каталога
  * всех пользователей нет. Люди, с которыми переписка уже есть, не прячутся:
  * новый чат с тем же человеком допустим, когда в прежнем все приняли заявки.
+ * Другу диалог открывается сразу, не-другу — экран заявки.
  */
 export default function NewChatScreen() {
   const router = useRouter();
@@ -86,7 +87,13 @@ export default function NewChatScreen() {
 
   // replace, а не push: «назад» из нового чата ведёт к списку, а не обратно в выбор.
   const openChat = useCallback((chatId: string) => router.replace(`/chats/${chatId}`), [router]);
-  const { isCreating, problem, create, dismissProblem } = useCreateChat(openChat);
+  // Не-другу пишут заявкой: чат появится вместе с её текстом.
+  const openRequest = useCallback(
+    (userId: string) =>
+      router.replace({ pathname: '/chats/request/[userId]', params: { userId } }),
+    [router],
+  );
+  const { isCreating, problem, create, dismissProblem } = useCreateChat(openChat, openRequest);
 
   const toggle = useCallback(
     (personId: string) => {

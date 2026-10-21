@@ -5,11 +5,7 @@
 
 import type { QueryData } from '@supabase/supabase-js';
 
-import {
-  PREVIEW_ATTACHMENT_COLUMNS,
-  toPreview,
-  type MessagePreview,
-} from '@/api/messagePreview';
+import { PREVIEW_ATTACHMENT_COLUMNS, toPreview, type MessagePreview } from '@/api/messagePreview';
 import { FRAGMENT_QUOTE_COLUMNS, toFragmentQuote, type FragmentQuote } from '@/api/fragmentQuote';
 import { REACTION_COLUMNS, toReactions, type MessageReactions } from '@/api/reactionCounts';
 import { supabase } from '@/api/supabase';
@@ -97,11 +93,7 @@ export type CallMark = {
 
 /** Событие состава группы — системная строка в переписке. */
 export type MemberEvent =
-  | 'member_invited'
-  | 'member_joined'
-  | 'member_left'
-  | 'member_removed'
-  | 'owner_changed';
+  'member_invited' | 'member_joined' | 'member_left' | 'member_removed' | 'owner_changed';
 
 /**
  * Системная строка состава. Имена — нынешние, из профилей: переименовался —
@@ -269,9 +261,16 @@ export type Message = {
   author?: { displayName: string; avatarUrl: string | null } | null;
   /** Пересланный комментарий (вид `comment_forward`). У остальных нет. */
   commentForward?: CommentForward | null;
+  /**
+   * Сообщение того, кто меня заблокировал, в чужом мне чате: база отдаёт
+   * заглушку без текста, вложений и реакций. Облачко — «Сообщение скрыто»,
+   * без меню и откликов.
+   */
+  hidden?: boolean;
 };
 
-const ATTACHMENT_COLUMNS = 'id, url, poster_url, mime_type, width, height, duration_ms, waveform, position';
+const ATTACHMENT_COLUMNS =
+  'id, url, poster_url, mime_type, width, height, duration_ms, waveform, position';
 // Вложение сообщения бывает ссылкой на поп: файл тогда — попа.
 const MESSAGE_ATTACHMENT_COLUMNS =
   `${ATTACHMENT_COLUMNS}, pop_id, pop:pops(channel_id, url, poster_url, mime_type, width, height, duration_ms)` as const;
@@ -281,10 +280,13 @@ const MESSAGE_ATTACHMENT_COLUMNS =
 // если оно скрыто от смотрящего (миграция `20261030110000_privacy_message_time.sql`).
 const REPLY_COLUMNS =
   `replies:message_replies!message_replies_message_fkey(position, quoted_id, via:message_rows!message_replies_quoted_forward_fkey(id, seq), quoted:message_rows!message_replies_quoted_fkey(id, author_id, kind, text, seq, created_at, edit_mark, author:profiles!messages_author_id_fkey(display_name), attachments(${PREVIEW_ATTACHMENT_COLUMNS})))` as const;
-const REACTION_AND_COMMENT_COLUMNS = `${REACTION_COLUMNS}, comments_count, clusters_count, views_count, read_at, reads_visible` as const;
-const ORIGINAL_COLUMNS = `id, chat_id, author_id, kind, text, seq, created_at, edited_at, edited, edit_mark, attachments(${MESSAGE_ATTACHMENT_COLUMNS}), ${REPLY_COLUMNS}, ${REACTION_AND_COMMENT_COLUMNS}, author:profiles!messages_author_id_fkey(display_name, avatar_url), chat:chats!messages_chat_id_fkey(id, kind, chat_display_name, chat_read_up_to, chat_am_member)` as const;
+const REACTION_AND_COMMENT_COLUMNS =
+  `${REACTION_COLUMNS}, comments_count, clusters_count, views_count, read_at, reads_visible, hidden` as const;
+const ORIGINAL_COLUMNS =
+  `id, chat_id, author_id, kind, text, seq, created_at, edited_at, edited, edit_mark, attachments(${MESSAGE_ATTACHMENT_COLUMNS}), ${REPLY_COLUMNS}, ${REACTION_AND_COMMENT_COLUMNS}, author:profiles!messages_author_id_fkey(display_name, avatar_url), chat:chats!messages_chat_id_fkey(id, kind, chat_display_name, chat_read_up_to, chat_am_member)` as const;
 
-const FORWARDED_COMMENT_COLUMNS = `forwarded_comment_id, forwarded:comments!messages_forwarded_comment_fkey(id, message_id, pop_id, chat_id, thread_root_id, fragment_id, ${FRAGMENT_QUOTE_COLUMNS}, author_id, kind, text, created_at, edited_at, ${REACTION_COLUMNS}, author:profiles(display_name, avatar_url), comment_attachments(${ATTACHMENT_COLUMNS}), chat:chats!comments_chat_id_fkey(id, chat_display_name, chat_am_member), target:message_rows!comments_message_fkey(id, author_id, kind, text, seq, author:profiles!messages_author_id_fkey(display_name), attachments(${PREVIEW_ATTACHMENT_COLUMNS})), pop:pops!comments_pop_id_fkey(id, channel_id, poster_url, caption))` as const;
+const FORWARDED_COMMENT_COLUMNS =
+  `forwarded_comment_id, forwarded:comments!messages_forwarded_comment_fkey(id, message_id, pop_id, chat_id, thread_root_id, fragment_id, ${FRAGMENT_QUOTE_COLUMNS}, author_id, kind, text, created_at, edited_at, ${REACTION_COLUMNS}, author:profiles(display_name, avatar_url), comment_attachments(${ATTACHMENT_COLUMNS}), chat:chats!comments_chat_id_fkey(id, chat_display_name, chat_am_member), target:message_rows!comments_message_fkey(id, author_id, kind, text, seq, author:profiles!messages_author_id_fkey(display_name), attachments(${PREVIEW_ATTACHMENT_COLUMNS})), pop:pops!comments_pop_id_fkey(id, channel_id, poster_url, caption))` as const;
 
 // Островок приходит сразу с оригиналами: их текст, файлы, автор, чат,
 // реакции и комментарии — той же выборкой. Своя реакция — вычисляемой связью
@@ -452,6 +454,7 @@ type ContentRow = Pick<
   | 'views_count'
   | 'read_at'
   | 'reads_visible'
+  | 'hidden'
 >;
 
 function toContent(row: ContentRow): Message {
@@ -475,11 +478,31 @@ function toContent(row: ContentRow): Message {
     viewsCount: row.views_count,
     readAt: row.read_at,
     readsVisible: row.reads_visible,
+    hidden: row.hidden === true,
+  };
+}
+
+/**
+ * Заглушка скрытого сообщения: вид у неё настоящий (на нём держатся связи
+ * представления), но показывать нечего — она текстовая и пустая.
+ */
+function withoutHidden<T extends Message>(message: T): T {
+  if (!message.hidden) return message;
+
+  return {
+    ...message,
+    kind: 'text',
+    text: null,
+    attachments: [],
+    replies: [],
+    forward: null,
+    call: null,
+    commentForward: null,
   };
 }
 
 function toOriginal(row: OriginalRow): IslandOriginal {
-  return {
+  return withoutHidden({
     ...toContent(row),
     // Аккаунт удалён — ссылка обнулилась; скрытый профиль база тоже не отдаёт.
     authorName: row.author_id && row.author ? (row.author.display_name ?? 'Без имени') : null,
@@ -493,7 +516,7 @@ function toOriginal(row: OriginalRow): IslandOriginal {
           isChannelPosts: row.chat.kind === 'channel_posts',
         }
       : null,
-  };
+  });
 }
 
 function toIsland(row: MessageRow): ForwardIsland | null {
@@ -577,7 +600,7 @@ function toCommentForward(row: MessageRow): CommentForward | null {
 }
 
 export function toMessage(row: MessageRow): Message {
-  return {
+  return withoutHidden({
     ...toContent(row),
     forward: toIsland(row),
     call: toCallMark(row),
@@ -586,5 +609,5 @@ export function toMessage(row: MessageRow): Message {
       ? { displayName: row.author.display_name ?? 'Без имени', avatarUrl: row.author.avatar_url }
       : null,
     commentForward: toCommentForward(row),
-  };
+  });
 }

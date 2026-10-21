@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useState } from 'react';
 
+import { describeContactRefusal } from '@/api/contactErrors';
 import { acceptInvite, declineInvite } from '@/api/invites';
 import { chatQueryKey } from '@/features/chats/useChat';
 import { chatsQueryKey } from '@/features/chats/useChats';
@@ -43,6 +44,7 @@ export function useRespondToInvite(): RespondToInviteState {
       ]),
     onError: (cause: Error, { answer }) => {
       setError(
+        describeContactRefusal(cause) ??
         describeLoadError(
           cause,
           answer === 'accept' ? 'Не удалось принять заявку' : 'Не удалось отклонить заявку',

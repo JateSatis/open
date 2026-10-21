@@ -242,6 +242,8 @@ export function ChatConversation({
   const menu = useMessageMenu<ChatListRow>(measureListFrame);
   const draft = useComposerDraft(chatId);
   const isMember = chat ? isChatMember(chat, currentUserId) : false;
+  // Моя заявка на диалог ещё не принята: одно сообщение уже ушло, дальше ждать.
+  const requestSent = Boolean(chat?.requestPending && chat.createdBy === currentUserId);
   const isFocused = useIsFocused() && active;
   // Заявку спрашиваем только у не-участника: участнику отвечать уже не на что.
   const myInvite = useMyInvite(chatId, chat !== null && !isMember);
@@ -574,9 +576,7 @@ export function ChatConversation({
       openComment(comment.chatId, {
         messageId: comment.subject.id,
         commentId: comment.id,
-        target: comment.target
-          ? { key: comment.target.id, seq: comment.target.seq }
-          : null,
+        target: comment.target ? { key: comment.target.id, seq: comment.target.seq } : null,
       });
     },
     [openComment],
@@ -905,11 +905,14 @@ export function ChatConversation({
             channelHeader?.right
           ) : isMember ? (
             <View style={styles.headerActions}>
-              <CallButton
-                live={call.stream !== null}
-                disabled={call.busy}
-                onPress={call.startOrJoin}
-              />
+              {/* В заявку не звонят — это решает и база. */}
+              {chat?.requestPending ? null : (
+                <CallButton
+                  live={call.stream !== null}
+                  disabled={call.busy}
+                  onPress={call.startOrJoin}
+                />
+              )}
               <ChatMenu chatId={chatId} isMember subscription={null} />
             </View>
           ) : chat && !gone ? (
@@ -931,7 +934,7 @@ export function ChatConversation({
 
         <PinnedBar pins={pins.pins} index={pinCursor.index} onPress={openPinned} />
 
-        <WaitingBanner waiting={waitingForOthers} />
+        {requestSent ? null : <WaitingBanner waiting={waitingForOthers} />}
 
         {gone ? (
           <View testID="chat-gone" style={styles.centered}>
@@ -1057,12 +1060,13 @@ export function ChatConversation({
                 ? { chatId }
                 : null
             }
+            requestSent={requestSent}
             // Постороннему писать некуда: поле ввода не показывается вовсе. Пока
             // чат грузится, оно смонтировано с надписью вместо поля (`canSend`
             // ложно): смонтированное заранее, оно встаёт над клавиатурой вовремя.
             // Переписка не загрузилась — писать некуда, пока она не откроется.
             composer={
-              failed || gone || (!isMember && (isPosts || chat !== null))
+              failed || gone || requestSent || (!isMember && (isPosts || chat !== null))
                 ? null
                 : {
                     text: draft.text,
