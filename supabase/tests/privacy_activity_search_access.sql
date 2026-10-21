@@ -267,6 +267,20 @@ begin
   perform pg_temp.check('друг видит все просмотры и прочтение',
     (select views_count = 2 and read_at is not null from public.message_rows where id = msg_s));
 
+  -- Взаимность: A скрыл время от S — и сам не видит прочтения S.
+  perform pg_temp.act_as(s);
+  perform public.record_message_views(dm_as, array[msg_a], gen_random_uuid());
+  perform pg_temp.act_as(a);
+  perform pg_temp.check('К5 взаимность: A не видит прочтения S, время видит',
+    (select read_at is null and created_at is not null from public.message_rows where id = msg_a));
+  perform pg_temp.check('К5 взаимность: отметка S в chat_people скрыта от A',
+    (select last_read_at is null from public.chat_people(array[dm_as]) where user_id = s));
+  perform pg_temp.check('К5 взаимность: просмотр S не в счётчике у A',
+    (select views_count from public.message_rows where id = msg_a) = 0);
+  perform pg_temp.act_as(f);
+  perform pg_temp.check('друг видит прочтение S сообщения A',
+    (select read_at is not null from public.message_rows where id = msg_a));
+
   -- К2.4: «никому» — и друг не видит, сам A видит.
   perform pg_temp.as_owner();
   update public.privacy_settings set message_activity_metadata_visibility = 'nobody' where user_id = a;
