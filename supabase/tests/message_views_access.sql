@@ -58,13 +58,23 @@ $$;
 -- «неуникальные/уникальные/прочитано» одной строкой.
 create function pg_temp.views(msg uuid) returns text language sql as $$
   select views_count || '/' || unique_views_count || '/' || (read_at is not null)
-  from public.messages where id = msg
+  from public.message_rows where id = msg
 $$;
 
 -- Прошло больше 10 секунд с последнего засчитанного просмотра.
 create function pg_temp.later(msg uuid) returns void language sql as $$
   update public.message_views set counted_at = counted_at - interval '11 seconds' where message_id = msg
 $$;
+
+-- Тестовые аккаунты рождаются с защитными настройками приватности
+-- (20261029100000_privacy_settings.sql). Здесь проверяется не она: время,
+-- «в сети» и поиск открыты всем — их скрытие проверяет
+-- privacy_activity_search_access.sql.
+update public.privacy_settings set
+  message_activity_metadata_visibility = 'everyone',
+  activity_status_visibility = 'everyone',
+  account_search_visibility = 'everyone'
+where user_id in (select id from auth.users where email like '%@test.local');
 
 do $$
 declare

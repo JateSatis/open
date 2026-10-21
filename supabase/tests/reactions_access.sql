@@ -79,10 +79,20 @@ $$;
 -- Моя реакция на сообщение: «ряд:реакция» или пусто.
 create function pg_temp.mine(msg uuid) returns text language sql as $$
   select coalesce(
-    (select r.audience || ':' || r.emoji from public.messages m, public.my_reaction(m) r where m.id = msg),
+    (select r.audience || ':' || r.emoji from public.message_rows m, public.my_reaction(m) r where m.id = msg),
     ''
   )
 $$;
+
+-- Тестовые аккаунты рождаются с защитными настройками приватности
+-- (20261029100000_privacy_settings.sql). Здесь проверяется не она: время,
+-- «в сети» и поиск открыты всем — их скрытие проверяет
+-- privacy_activity_search_access.sql.
+update public.privacy_settings set
+  message_activity_metadata_visibility = 'everyone',
+  activity_status_visibility = 'everyone',
+  account_search_visibility = 'everyone'
+where user_id in (select id from auth.users where email like '%@test.local');
 
 do $$
 declare
