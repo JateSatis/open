@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { View } from 'react-native';
+import { Pressable, View } from 'react-native';
 
 import { styles } from './styles';
 
@@ -13,15 +13,25 @@ export type SettingsRowProps = {
   accessory?: ReactNode;
   /** Разделитель сверху — у всех строк, кроме первой в карточке. */
   divided?: boolean;
+  /** Строка целиком — кнопка: переход на экран или выбор значения. */
+  onPress?: () => void;
+  testID?: string;
+  accessibilityLabel?: string;
 };
 
-export function SettingsRow({ title, subtitle, accessory, divided = false }: SettingsRowProps) {
+export function SettingsRow({
+  title,
+  subtitle,
+  accessory,
+  divided = false,
+  onPress,
+  testID,
+  accessibilityLabel,
+}: SettingsRowProps) {
   const theme = useTheme();
-
-  return (
-    <View
-      style={[styles.row, divided && [styles.divided, { borderTopColor: theme.border }]]}
-    >
+  const rowStyle = [styles.row, divided && [styles.divided, { borderTopColor: theme.border }]];
+  const content = (
+    <>
       <View style={styles.text}>
         <Text variant="body" numberOfLines={1}>
           {title}
@@ -33,6 +43,26 @@ export function SettingsRow({ title, subtitle, accessory, divided = false }: Set
         ) : null}
       </View>
       {accessory ? <View style={styles.accessory}>{accessory}</View> : null}
-    </View>
+    </>
+  );
+
+  if (!onPress) {
+    return (
+      <View testID={testID} style={rowStyle}>
+        {content}
+      </View>
+    );
+  }
+
+  return (
+    <Pressable
+      testID={testID}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      onPress={onPress}
+      style={({ pressed }) => [rowStyle, pressed && { backgroundColor: theme.backgroundSelected }]}
+    >
+      {content}
+    </Pressable>
   );
 }

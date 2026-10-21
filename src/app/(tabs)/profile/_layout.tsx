@@ -16,6 +16,18 @@ export default function ProfileLayout() {
         name="account"
         options={{ headerTitle: () => <ConnectionTitle title="Аккаунт" /> }}
       />
+      <Stack.Screen
+        name="privacy"
+        options={{ headerTitle: () => <ConnectionTitle title="Конфиденциальность" /> }}
+      />
+      <Stack.Screen
+        name="friends/index"
+        options={{ headerTitle: () => <ConnectionTitle title="Друзья" /> }}
+      />
+      <Stack.Screen
+        name="friends/[userId]"
+        options={{ headerTitle: () => <ConnectionTitle title="Друзья" /> }}
+      />
       {/* Static "edit" and "account" win over this route, so they are unambiguous.
           Чужой профиль — страница (см. `SlidePage`). */}
       <Stack.Screen name="[userId]" options={SLIDE_PAGE} />

@@ -14,6 +14,12 @@ import {
   unlinkIdentity,
   type Device,
 } from '@/api/account';
+import {
+  BirthDateTooYoungError,
+  getMyPrivacySettings,
+  setBirthDate,
+  setPrivacySetting,
+} from '@/api/privacy';
 import { ConfirmDialogHost } from '@/components/ConfirmDialog';
 import { resetConfirmDialogQueue } from '@/components/ConfirmDialog/store';
 import { requestGoogleIdToken, signOutOfGoogle } from '@/features/auth/signIn';
@@ -30,6 +36,21 @@ jest.mock('@/api/account', () => ({
   deleteMyAccount: jest.fn(),
   markDeviceSignedOut: jest.fn(),
   signOutLocally: jest.fn(),
+}));
+
+jest.mock('expo-router', () => ({ router: { push: jest.fn() } }));
+
+jest.mock('@/api/privacy', () => ({
+  ...jest.requireActual('@/api/privacy'),
+  getMyPrivacySettings: jest.fn(),
+  setBirthDate: jest.fn(),
+  setPrivacySetting: jest.fn(),
+}));
+jest.mock('@/api/friends', () => ({}));
+jest.mock('@/api/supabase', () => ({ supabase: {} }));
+
+jest.mock('@/features/auth/useSession', () => ({
+  useSession: () => ({ session: { user: { id: 'me' } }, isAuthenticated: true, isLoading: false }),
 }));
 
 jest.mock('@/features/auth/signIn', () => ({
@@ -59,7 +80,15 @@ const mocked = {
   requestGoogleIdToken: requestGoogleIdToken as jest.Mock,
   signOutOfGoogle: signOutOfGoogle as jest.Mock,
   useAppleSignInAvailable: useAppleSignInAvailable as jest.Mock,
+  getMyPrivacySettings: getMyPrivacySettings as jest.Mock,
+  setBirthDate: setBirthDate as jest.Mock,
+  setPrivacySetting: setPrivacySetting as jest.Mock,
 };
+
+declare global {
+  // Какой день отдаёт подменённый нативный выбор даты (src/test/jest.setup.js).
+  var mockPickerDate: Date | undefined;
+}
 
 const now = new Date().toISOString();
 
@@ -105,6 +134,11 @@ beforeEach(() => {
   mocked.signOutLocally.mockResolvedValue(undefined);
   mocked.signOutOfGoogle.mockResolvedValue(undefined);
   mocked.deleteMyAccount.mockResolvedValue(undefined);
+  mocked.getMyPrivacySettings.mockResolvedValue({
+    birthDate: '2008-03-12',
+    friendsListVisibility: 'nobody',
+  });
+  globalThis.mockPickerDate = undefined;
 });
 
 describe('AccountScreen — способы входа', () => {
@@ -286,5 +320,60 @@ describe('AccountScreen — выход и удаление', () => {
       await screen.findByText('Не удалось удалить аккаунт. Проверьте интернет и попробуйте ещё раз.'),
     ).toBeTruthy();
     expect(mocked.signOutLocally).not.toHaveBeenCalled();
+  });
+});
+
+describe('AccountScreen — дата рождения', () => {
+  it('К3.1 строка показывает текущую дату', async () => {
+    await renderAccount();
+
+    expect(await screen.findByText('12 марта 2008')).toBeTruthy();
+    expect(screen.getByText(/Её изменение не меняет настройки конфиденциальности/)).toBeTruthy();
+  });
+
+  it('К3.2 новая дата сохраняется, настройки не трогаются', async () => {
+    mocked.setBirthDate.mockImplementation((date: string) => {
+      mocked.getMyPrivacySettings.mockResolvedValue({
+        birthDate: date,
+        friendsListVisibility: 'nobody',
+      });
+
+      return Promise.resolve();
+    });
+    globalThis.mockPickerDate = new Date(2001, 5, 2, 12);
+    const user = userEvent.setup();
+
+    await renderAccount();
+    await user.press(await screen.findByTestId('account-birth-date'));
+    await user.press(screen.getByTestId('birth-date-picker-pick'));
+    await user.press(screen.getByText('Сохранить'));
+
+    await waitFor(() => expect(mocked.setBirthDate).toHaveBeenCalledWith('2001-06-02'));
+    expect(await screen.findByText('2 июня 2001')).toBeTruthy();
+    expect(mocked.setPrivacySetting).not.toHaveBeenCalled();
+  });
+
+  it('К3.3 младше 13 — понятный текст, прежняя дата на месте', async () => {
+    mocked.setBirthDate.mockRejectedValue(new BirthDateTooYoungError());
+    globalThis.mockPickerDate = new Date(new Date().getFullYear() - 10, 0, 1, 12);
+    const user = userEvent.setup();
+
+    await renderAccount();
+    await user.press(await screen.findByTestId('account-birth-date'));
+    await user.press(screen.getByTestId('birth-date-picker-pick'));
+    await user.press(screen.getByText('Сохранить'));
+
+    expect(await screen.findByText('Регистрация в Open возможна с 13 лет.')).toBeTruthy();
+    expect(screen.getByText('12 марта 2008')).toBeTruthy();
+  });
+
+  it('ведёт на экран «Конфиденциальность и безопасность»', async () => {
+    const { router } = jest.requireMock('expo-router') as { router: { push: jest.Mock } };
+    const user = userEvent.setup();
+
+    await renderAccount();
+    await user.press(await screen.findByText('Конфиденциальность и безопасность'));
+
+    expect(router.push).toHaveBeenCalledWith('/profile/privacy');
   });
 });
