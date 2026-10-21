@@ -15,8 +15,15 @@ export function chatListOrderAt(chat: ChatSummary): string | null {
   return Date.parse(entered) > Date.parse(activity) ? entered : activity;
 }
 
-/** Порядок «Чатов»: свежие сверху; чат без активности и без момента входа — в конце. */
+/**
+ * Порядок «Чатов»: свежие сверху. Место от сервера (`listPosition`) — главнее
+ * времени: у чата, где время от меня скрыто, сравнивать нечего, а сервер
+ * сравнивает настоящее. Нет места у обоих — по времени; чат без активности и
+ * без момента входа — в конце.
+ */
 export function byChatListOrder(a: ChatSummary, b: ChatSummary): number {
+  if (a.listPosition !== null && b.listPosition !== null) return a.listPosition - b.listPosition;
+
   const left = chatListOrderAt(a);
   const right = chatListOrderAt(b);
 

@@ -37,10 +37,15 @@ export function SystemMessage({ message, currentUserId, isMember, hostName }: Sy
         {/* Время — продолжение строки: при переносе оно идёт за словами, а не висит сбоку. */}
         <Text variant="small" color={missed ? 'danger' : 'textSecondary'} style={styles.text}>
           {text}
-          {'  '}
-          <Text variant="caption" color="textSecondary">
-            {formatMessageTime(message.createdAt)}
-          </Text>
+          {/* Время чата скрыто настройкой участника — строки без часов. */}
+          {message.createdAt ? (
+            <>
+              {'  '}
+              <Text variant="caption" color="textSecondary">
+                {formatMessageTime(message.createdAt)}
+              </Text>
+            </>
+          ) : null}
         </Text>
       </View>
     </View>

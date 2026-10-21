@@ -49,7 +49,6 @@ export function ChatInfoPage({ chat, slideBack }: ChatInfoPageProps) {
   const router = useRouter();
   const navigation = useNavigation();
   const currentUserId = useCurrentUserId();
-  const online = useOnlineUsers(currentUserId);
   const chatId = chat.id;
   const isGroup = chat.kind === 'group';
   const isMember = isChatMember(chat, currentUserId);
@@ -81,7 +80,8 @@ export function ChatInfoPage({ chat, slideBack }: ChatInfoPageProps) {
           : (pair ?? []).map((person) => person.id),
     [chat.participants, isGroup, other, pair],
   );
-  const statuses = usePeopleStatus(people, online);
+  const statuses = usePeopleStatus(people);
+  const online = useOnlineUsers(people);
 
   const title = chatTitle(chat, currentUserId);
   const count = chat.participants.length;
@@ -131,8 +131,8 @@ export function ChatInfoPage({ chat, slideBack }: ChatInfoPageProps) {
   );
 
   const showInChat = useCallback(
-    (messageId: string, createdAt: string) =>
-      toThisChat({ jumpTo: messageId, jumpAt: createdAt, jumpKey: String(Date.now()) }),
+    (messageId: string, seq: number) =>
+      toThisChat({ jumpTo: messageId, jumpSeq: String(seq), jumpKey: String(Date.now()) }),
     [toThisChat],
   );
   const searchChat = useCallback(

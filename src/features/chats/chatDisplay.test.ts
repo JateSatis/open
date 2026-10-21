@@ -32,6 +32,7 @@ const direct: ChatSummary = {
   lastMessageAuthorId: null,
   lastPopAt: null,
   lastActivityAt: null,
+  listPosition: null,
   enteredAt: null,
   previewIsPop: false,
   subscription: null,

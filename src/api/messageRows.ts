@@ -53,7 +53,9 @@ export type MessageAttachment = {
 };
 
 /** Где в этом чате стоит сообщение из другого чата: островок, который его держит. */
-export type IslandAnchor = { forwardId: string; createdAt: string };
+export type IslandAnchor = { forwardId: string; seq: number };
+
+export { PENDING_SEQ } from '@/api/pendingSeq';
 
 /**
  * Цитата в ответе — ссылка на сообщение, а не копия: правки оригинала видны в
@@ -69,9 +71,12 @@ export type QuotedMessage =
       authorId: string | null;
       /** `null` — аккаунт автора удалён. */
       authorName: string | null;
-      createdAt: string;
-      /** Когда оригинал правили в последний раз — чтобы узнать, что цитата устарела. */
-      editedAt: string | null;
+      /** Номер оригинала — до него догружается история при переходе к цитате. */
+      seq: number;
+      /** `null` — время чата оригинала скрыто от меня. */
+      createdAt: string | null;
+      /** Номер правки оригинала — чтобы узнать, что цитата устарела, не зная времени. */
+      editMark: number | null;
       preview: MessagePreview;
       via?: IslandAnchor | null;
     };
@@ -117,7 +122,7 @@ export type ChatRef = { id: string; name: string };
 
 /** Чат оригинала глазами смотрящего: от него зависят ряд реакций и «прочитано». */
 export type OriginChat = ChatRef & {
-  /** До какого момента чат прочитали все, кроме меня. */
+  /** До какого момента чат прочитали все, кроме меня. `null` — никто или время скрыто. */
   readUpTo: string | null;
   /** Я участник этого чата — моя реакция ляжет в ряд участников. */
   amMember: boolean;
@@ -187,8 +192,8 @@ export type ForwardedComment = {
   /** Сообщение под комментарием; `null` — удалено или комментарий к попу. */
   target: {
     id: string;
-    /** Время сообщения — до него догружается история при переходе к нему. */
-    createdAt: string;
+    /** Номер сообщения — до него догружается история при переходе к нему. */
+    seq: number;
     authorId: string | null;
     /** `null` — аккаунт автора удалён. */
     authorName: string | null;
@@ -213,9 +218,22 @@ export type Message = {
   authorId: string | null;
   kind: MessageKind;
   text: string | null;
-  createdAt: string;
-  /** Время последней правки, серверное. `null` — сообщение не правили. */
+  /**
+   * Порядок в переписке: монотонный номер сервера. Курсор страниц, догрузки
+   * и перехода к сообщению — он, а не время: время бывает скрыто.
+   */
+  seq: number;
+  /**
+   * Время отправки, серверное. `null` — время этого чата скрыто от меня
+   * настройкой участника: ни часов, ни даты.
+   */
+  createdAt: string | null;
+  /** Время последней правки, серверное. `null` — не правили или время скрыто. */
   editedAt: string | null;
+  /** Сообщение правили — «изменено» видно и без времени. */
+  edited: boolean;
+  /** Номер правки — меняется с каждой; `null` — не правили. */
+  editMark: number | null;
   attachments: MessageAttachment[];
   /** На что это ответ — по порядку. Пусто у обычного сообщения. */
   replies: QuotedMessage[];
@@ -232,7 +250,7 @@ export type Message = {
   clustersCount?: number;
   /** Сколько раз сообщение показывалось на экранах — неуникальные просмотры. Пишет база. */
   viewsCount: number;
-  /** Когда его впервые увидел другой участник чата. `null` — ещё никто. */
+  /** Когда его впервые увидел другой участник чата. `null` — ещё никто или время скрыто. */
   readAt: string | null;
   /** Метка звонка у системного сообщения; нет — это не звонок. */
   call?: CallMark | null;
@@ -253,18 +271,20 @@ const MESSAGE_ATTACHMENT_COLUMNS =
   `${ATTACHMENT_COLUMNS}, pop_id, pop:pops(channel_id, url, poster_url, mime_type, width, height, duration_ms)` as const;
 // Подсказки внешних ключей нужны, потому что `messages` связана с `profiles`,
 // `chats` и сама с собой через несколько таблиц сразу.
+// Сообщения читаются из представления `message_rows`: время в нём — null,
+// если оно скрыто от смотрящего (миграция `20261030110000_privacy_message_time.sql`).
 const REPLY_COLUMNS =
-  `replies:message_replies!message_replies_message_fkey(position, quoted_id, via:messages!message_replies_quoted_forward_fkey(id, created_at), quoted:messages!message_replies_quoted_fkey(id, author_id, kind, text, created_at, edited_at, author:profiles!messages_author_id_fkey(display_name), attachments(${PREVIEW_ATTACHMENT_COLUMNS})))` as const;
+  `replies:message_replies!message_replies_message_fkey(position, quoted_id, via:message_rows!message_replies_quoted_forward_fkey(id, seq), quoted:message_rows!message_replies_quoted_fkey(id, author_id, kind, text, seq, created_at, edit_mark, author:profiles!messages_author_id_fkey(display_name), attachments(${PREVIEW_ATTACHMENT_COLUMNS})))` as const;
 const REACTION_AND_COMMENT_COLUMNS = `${REACTION_COLUMNS}, comments_count, clusters_count, views_count, read_at` as const;
-const ORIGINAL_COLUMNS = `id, chat_id, author_id, kind, text, created_at, edited_at, attachments(${MESSAGE_ATTACHMENT_COLUMNS}), ${REPLY_COLUMNS}, ${REACTION_AND_COMMENT_COLUMNS}, author:profiles!messages_author_id_fkey(display_name, avatar_url), chat:chats!messages_chat_id_fkey(id, kind, chat_display_name, chat_read_up_to, chat_am_member)` as const;
+const ORIGINAL_COLUMNS = `id, chat_id, author_id, kind, text, seq, created_at, edited_at, edited, edit_mark, attachments(${MESSAGE_ATTACHMENT_COLUMNS}), ${REPLY_COLUMNS}, ${REACTION_AND_COMMENT_COLUMNS}, author:profiles!messages_author_id_fkey(display_name, avatar_url), chat:chats!messages_chat_id_fkey(id, kind, chat_display_name, chat_read_up_to, chat_am_member)` as const;
 
-const FORWARDED_COMMENT_COLUMNS = `forwarded_comment_id, forwarded:comments!messages_forwarded_comment_fkey(id, message_id, pop_id, chat_id, thread_root_id, fragment_id, ${FRAGMENT_QUOTE_COLUMNS}, author_id, kind, text, created_at, edited_at, ${REACTION_COLUMNS}, author:profiles(display_name, avatar_url), comment_attachments(${ATTACHMENT_COLUMNS}), chat:chats!comments_chat_id_fkey(id, chat_display_name, chat_am_member), target:messages!comments_message_fkey(id, author_id, kind, text, created_at, author:profiles!messages_author_id_fkey(display_name), attachments(${PREVIEW_ATTACHMENT_COLUMNS})), pop:pops!comments_pop_id_fkey(id, channel_id, poster_url, caption))` as const;
+const FORWARDED_COMMENT_COLUMNS = `forwarded_comment_id, forwarded:comments!messages_forwarded_comment_fkey(id, message_id, pop_id, chat_id, thread_root_id, fragment_id, ${FRAGMENT_QUOTE_COLUMNS}, author_id, kind, text, created_at, edited_at, ${REACTION_COLUMNS}, author:profiles(display_name, avatar_url), comment_attachments(${ATTACHMENT_COLUMNS}), chat:chats!comments_chat_id_fkey(id, chat_display_name, chat_am_member), target:message_rows!comments_message_fkey(id, author_id, kind, text, seq, author:profiles!messages_author_id_fkey(display_name), attachments(${PREVIEW_ATTACHMENT_COLUMNS})), pop:pops!comments_pop_id_fkey(id, channel_id, poster_url, caption))` as const;
 
 // Островок приходит сразу с оригиналами: их текст, файлы, автор, чат,
 // реакции и комментарии — той же выборкой. Своя реакция — вычисляемой связью
 // `my_reaction`, и у оригинала тоже.
 export const MESSAGE_COLUMNS =
-  `id, chat_id, author_id, kind, text, created_at, edited_at, attachments(${MESSAGE_ATTACHMENT_COLUMNS}), ${REPLY_COLUMNS}, ${REACTION_AND_COMMENT_COLUMNS}, stream_id, system_event, system_user_id, author:profiles!messages_author_id_fkey(display_name, avatar_url), subject:profiles!messages_system_user_id_fkey(display_name), stream:streams!messages_stream_id_fkey(host_id, started_at, ended_at), my_call:my_stream_participation(id), source_chat:chats!messages_source_chat_id_fkey(id, chat_display_name), items:forward_items!forward_items_forward_fkey(id, position, message_id, original:messages!forward_items_message_fkey(${ORIGINAL_COLUMNS})), ${FORWARDED_COMMENT_COLUMNS}` as const;
+  `id, chat_id, author_id, kind, text, seq, created_at, edited_at, edited, edit_mark, attachments(${MESSAGE_ATTACHMENT_COLUMNS}), ${REPLY_COLUMNS}, ${REACTION_AND_COMMENT_COLUMNS}, stream_id, system_event, system_user_id, author:profiles!messages_author_id_fkey(display_name, avatar_url), subject:profiles!messages_system_user_id_fkey(display_name), stream:streams!messages_stream_id_fkey(host_id, started_at, ended_at), my_call:my_stream_participation(id), source_chat:chats!messages_source_chat_id_fkey(id, chat_display_name), items:forward_items!forward_items_forward_fkey(id, position, message_id, original:message_rows!forward_items_message_fkey(${ORIGINAL_COLUMNS})), ${FORWARDED_COMMENT_COLUMNS}` as const;
 
 // Мозаика в облачке должна собираться в порядке выбора файлов, а PostgREST
 // не гарантирует порядок вложенной выборки сам по себе — нужен явный order
@@ -272,7 +292,7 @@ export const MESSAGE_COLUMNS =
 // вложенных оригиналах порядок наводит разбор ниже.
 export const messagesSelect = () =>
   supabase
-    .from('messages')
+    .from('message_rows')
     .select(MESSAGE_COLUMNS)
     .order('position', { referencedTable: 'attachments' });
 
@@ -348,7 +368,7 @@ function toAttachments(
 
 function toQuoted(row: ReplyRow): QuotedMessage {
   const quoted = row.quoted;
-  const via = row.via ? { forwardId: row.via.id, createdAt: row.via.created_at } : null;
+  const via = row.via ? { forwardId: row.via.id, seq: row.via.seq } : null;
 
   // Оригинал приходит, только пока он жив: удалённое SELECT-политика не отдаёт.
   if (!quoted) return { messageId: row.quoted_id, state: 'deleted', via };
@@ -358,8 +378,9 @@ function toQuoted(row: ReplyRow): QuotedMessage {
     state: 'live',
     authorId: quoted.author_id,
     authorName: quoted.author_id ? (quoted.author?.display_name ?? 'Без имени') : null,
+    seq: quoted.seq,
     createdAt: quoted.created_at,
-    editedAt: quoted.edited_at,
+    editMark: quoted.edit_mark,
     preview: toPreview(toMessageKind(quoted.kind), quoted.text, quoted.attachments ?? []),
     via,
   };
@@ -409,8 +430,11 @@ type ContentRow = Pick<
   | 'author_id'
   | 'kind'
   | 'text'
+  | 'seq'
   | 'created_at'
   | 'edited_at'
+  | 'edited'
+  | 'edit_mark'
   | 'attachments'
   | 'replies'
   | 'member_reactions'
@@ -430,8 +454,11 @@ function toContent(row: ContentRow): Message {
     authorId: row.author_id,
     kind: toMessageKind(row.kind),
     text: row.text,
+    seq: row.seq,
     createdAt: row.created_at,
     editedAt: row.edited_at,
+    edited: row.edited,
+    editMark: row.edit_mark,
     attachments: toAttachments(row.attachments),
     replies: [...(row.replies ?? [])].sort((a, b) => a.position - b.position).map(toQuoted),
     forward: null,
@@ -504,7 +531,7 @@ function toForwardedComment(row: ForwardedRow): ForwardedComment {
     target: target
       ? {
           id: target.id,
-          createdAt: target.created_at,
+          seq: target.seq,
           authorId: target.author_id,
           authorName: target.author_id ? (target.author?.display_name ?? 'Без имени') : null,
           preview: toPreview(toMessageKind(target.kind), target.text, target.attachments ?? []),

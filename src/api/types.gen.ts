@@ -68,6 +68,13 @@ export type Database = {
             foreignKeyName: "attachments_message_id_message_kind_fkey"
             columns: ["message_id", "message_kind"]
             isOneToOne: false
+            referencedRelation: "message_rows"
+            referencedColumns: ["id", "kind"]
+          },
+          {
+            foreignKeyName: "attachments_message_id_message_kind_fkey"
+            columns: ["message_id", "message_kind"]
+            isOneToOne: false
             referencedRelation: "messages"
             referencedColumns: ["id", "kind"]
           },
@@ -247,16 +254,17 @@ export type Database = {
           founding_member_ids: string[]
           id: string
           kind: string
-          last_message_at: string | null
           last_message_author_id: string | null
           last_message_text: string | null
           owner_id: string | null
           subscribers_count: number
+          time_restricted: boolean
           title: string | null
           username: string | null
           chat_am_member: boolean | null
           chat_display_name: string | null
           chat_read_up_to: string | null
+          last_message_at: string | null
         }
         Insert: {
           avatar_url?: string | null
@@ -267,11 +275,11 @@ export type Database = {
           founding_member_ids?: string[]
           id?: string
           kind: string
-          last_message_at?: string | null
           last_message_author_id?: string | null
           last_message_text?: string | null
           owner_id?: string | null
           subscribers_count?: number
+          time_restricted?: boolean
           title?: string | null
           username?: string | null
         }
@@ -284,11 +292,11 @@ export type Database = {
           founding_member_ids?: string[]
           id?: string
           kind?: string
-          last_message_at?: string | null
           last_message_author_id?: string | null
           last_message_text?: string | null
           owner_id?: string | null
           subscribers_count?: number
+          time_restricted?: boolean
           title?: string | null
           username?: string | null
         }
@@ -641,6 +649,13 @@ export type Database = {
             foreignKeyName: "comments_message_fkey"
             columns: ["message_id", "chat_id"]
             isOneToOne: false
+            referencedRelation: "message_rows"
+            referencedColumns: ["id", "chat_id"]
+          },
+          {
+            foreignKeyName: "comments_message_fkey"
+            columns: ["message_id", "chat_id"]
+            isOneToOne: false
             referencedRelation: "messages"
             referencedColumns: ["id", "chat_id"]
           },
@@ -759,6 +774,13 @@ export type Database = {
             foreignKeyName: "forward_items_forward_fkey"
             columns: ["forward_id", "chat_id"]
             isOneToOne: false
+            referencedRelation: "message_rows"
+            referencedColumns: ["id", "chat_id"]
+          },
+          {
+            foreignKeyName: "forward_items_forward_fkey"
+            columns: ["forward_id", "chat_id"]
+            isOneToOne: false
             referencedRelation: "messages"
             referencedColumns: ["id", "chat_id"]
           },
@@ -766,8 +788,22 @@ export type Database = {
             foreignKeyName: "forward_items_forward_kind_fkey"
             columns: ["forward_id", "forward_kind"]
             isOneToOne: false
+            referencedRelation: "message_rows"
+            referencedColumns: ["id", "kind"]
+          },
+          {
+            foreignKeyName: "forward_items_forward_kind_fkey"
+            columns: ["forward_id", "forward_kind"]
+            isOneToOne: false
             referencedRelation: "messages"
             referencedColumns: ["id", "kind"]
+          },
+          {
+            foreignKeyName: "forward_items_message_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "message_rows"
+            referencedColumns: ["id"]
           },
           {
             foreignKeyName: "forward_items_message_fkey"
@@ -834,6 +870,13 @@ export type Database = {
           scorer?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "fragment_cluster_decisions_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "message_rows"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "fragment_cluster_decisions_message_id_fkey"
             columns: ["message_id"]
@@ -912,6 +955,13 @@ export type Database = {
             foreignKeyName: "fragment_cluster_events_message_id_fkey"
             columns: ["message_id"]
             isOneToOne: false
+            referencedRelation: "message_rows"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fragment_cluster_events_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
             referencedRelation: "messages"
             referencedColumns: ["id"]
           },
@@ -976,6 +1026,13 @@ export type Database = {
             columns: ["decision_id"]
             isOneToOne: false
             referencedRelation: "fragment_cluster_decisions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fragment_cluster_state_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: true
+            referencedRelation: "message_rows"
             referencedColumns: ["id"]
           },
           {
@@ -1133,6 +1190,13 @@ export type Database = {
             foreignKeyName: "fragment_clusters_message_fkey"
             columns: ["message_id", "chat_id"]
             isOneToOne: false
+            referencedRelation: "message_rows"
+            referencedColumns: ["id", "chat_id"]
+          },
+          {
+            foreignKeyName: "fragment_clusters_message_fkey"
+            columns: ["message_id", "chat_id"]
+            isOneToOne: false
             referencedRelation: "messages"
             referencedColumns: ["id", "chat_id"]
           },
@@ -1281,6 +1345,13 @@ export type Database = {
             foreignKeyName: "legacy_forward_copies_copy_id_fkey"
             columns: ["copy_id"]
             isOneToOne: false
+            referencedRelation: "message_rows"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "legacy_forward_copies_copy_id_fkey"
+            columns: ["copy_id"]
+            isOneToOne: false
             referencedRelation: "messages"
             referencedColumns: ["id"]
           },
@@ -1388,6 +1459,13 @@ export type Database = {
             foreignKeyName: "message_fragments_message_fkey"
             columns: ["message_id", "chat_id"]
             isOneToOne: false
+            referencedRelation: "message_rows"
+            referencedColumns: ["id", "chat_id"]
+          },
+          {
+            foreignKeyName: "message_fragments_message_fkey"
+            columns: ["message_id", "chat_id"]
+            isOneToOne: false
             referencedRelation: "messages"
             referencedColumns: ["id", "chat_id"]
           },
@@ -1433,8 +1511,22 @@ export type Database = {
             foreignKeyName: "message_pins_forward_fkey"
             columns: ["forward_id", "chat_id"]
             isOneToOne: false
+            referencedRelation: "message_rows"
+            referencedColumns: ["id", "chat_id"]
+          },
+          {
+            foreignKeyName: "message_pins_forward_fkey"
+            columns: ["forward_id", "chat_id"]
+            isOneToOne: false
             referencedRelation: "messages"
             referencedColumns: ["id", "chat_id"]
+          },
+          {
+            foreignKeyName: "message_pins_message_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "message_rows"
+            referencedColumns: ["id"]
           },
           {
             foreignKeyName: "message_pins_message_fkey"
@@ -1492,6 +1584,13 @@ export type Database = {
             foreignKeyName: "message_replies_message_fkey"
             columns: ["message_id", "chat_id"]
             isOneToOne: false
+            referencedRelation: "message_rows"
+            referencedColumns: ["id", "chat_id"]
+          },
+          {
+            foreignKeyName: "message_replies_message_fkey"
+            columns: ["message_id", "chat_id"]
+            isOneToOne: false
             referencedRelation: "messages"
             referencedColumns: ["id", "chat_id"]
           },
@@ -1499,8 +1598,22 @@ export type Database = {
             foreignKeyName: "message_replies_quoted_fkey"
             columns: ["quoted_id"]
             isOneToOne: false
+            referencedRelation: "message_rows"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_replies_quoted_fkey"
+            columns: ["quoted_id"]
+            isOneToOne: false
             referencedRelation: "messages"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_replies_quoted_forward_fkey"
+            columns: ["quoted_forward_id", "chat_id"]
+            isOneToOne: false
+            referencedRelation: "message_rows"
+            referencedColumns: ["id", "chat_id"]
           },
           {
             foreignKeyName: "message_replies_quoted_forward_fkey"
@@ -1564,6 +1677,13 @@ export type Database = {
             foreignKeyName: "message_revisions_message_id_fkey"
             columns: ["message_id"]
             isOneToOne: false
+            referencedRelation: "message_rows"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_revisions_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
             referencedRelation: "messages"
             referencedColumns: ["id"]
           },
@@ -1599,6 +1719,13 @@ export type Database = {
             foreignKeyName: "message_views_message_id_fkey"
             columns: ["message_id"]
             isOneToOne: false
+            referencedRelation: "message_rows"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_views_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
             referencedRelation: "messages"
             referencedColumns: ["id"]
           },
@@ -1625,8 +1752,11 @@ export type Database = {
           id: string
           kind: string
           member_reactions: Json
+          member_unique_views_count: number
+          member_views_count: number
           reactions_count: number
           read_at: string | null
+          seq: number
           source_chat_id: string | null
           stream_id: string | null
           system_event: string | null
@@ -1685,8 +1815,11 @@ export type Database = {
           id?: string
           kind: string
           member_reactions?: Json
+          member_unique_views_count?: number
+          member_views_count?: number
           reactions_count?: number
           read_at?: string | null
+          seq?: never
           source_chat_id?: string | null
           stream_id?: string | null
           system_event?: string | null
@@ -1709,8 +1842,11 @@ export type Database = {
           id?: string
           kind?: string
           member_reactions?: Json
+          member_unique_views_count?: number
+          member_views_count?: number
           reactions_count?: number
           read_at?: string | null
+          seq?: never
           source_chat_id?: string | null
           stream_id?: string | null
           system_event?: string | null
@@ -1979,7 +2115,6 @@ export type Database = {
           deleted_at: string | null
           display_name: string | null
           id: string
-          last_seen_at: string | null
           status: string | null
           username: string | null
         }
@@ -1990,7 +2125,6 @@ export type Database = {
           deleted_at?: string | null
           display_name?: string | null
           id: string
-          last_seen_at?: string | null
           status?: string | null
           username?: string | null
         }
@@ -2001,7 +2135,6 @@ export type Database = {
           deleted_at?: string | null
           display_name?: string | null
           id?: string
-          last_seen_at?: string | null
           status?: string | null
           username?: string | null
         }
@@ -2875,6 +3008,35 @@ export type Database = {
         }
         Relationships: []
       }
+      search_request_log: {
+        Row: {
+          created_at: string
+          id: string
+          kind: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          kind: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          kind?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "search_request_log_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       stream_participants: {
         Row: {
           created_at: string
@@ -3053,6 +3215,41 @@ export type Database = {
           },
         ]
       }
+      user_presence: {
+        Row: {
+          created_at: string
+          id: string
+          last_seen_at: string
+          online_until: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          last_seen_at?: string
+          online_until?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          last_seen_at?: string
+          online_until?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_presence_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       chat_waiting_invitees: {
@@ -3081,10 +3278,128 @@ export type Database = {
           },
         ]
       }
+      message_rows: {
+        Row: {
+          author_id: string | null
+          chat_id: string | null
+          clusters_count: number | null
+          comments_count: number | null
+          created_at: string | null
+          deleted_at: string | null
+          edit_mark: number | null
+          edited: boolean | null
+          edited_at: string | null
+          forwarded_comment_id: string | null
+          fragments_count: number | null
+          id: string | null
+          kind: string | null
+          member_reactions: Json | null
+          reactions_count: number | null
+          read_at: string | null
+          seq: number | null
+          source_chat_id: string | null
+          stream_id: string | null
+          system_event: string | null
+          system_user_id: string | null
+          text: string | null
+          time_visible: boolean | null
+          unique_views_count: number | null
+          views_count: number | null
+          visitor_reactions: Json | null
+          my_reaction: {
+            audience: string
+            chat_id: string | null
+            created_at: string
+            deleted_at: string | null
+            emoji: string
+            id: string
+            target_id: string
+            target_type: string
+            updated_at: string
+            user_id: string | null
+          } | null
+          my_stream_participation: {
+            created_at: string
+            deleted_at: string | null
+            id: string
+            joined_at: string
+            last_event_at: string
+            left_at: string | null
+            livekit_sid: string | null
+            role: string
+            stream_id: string
+            user_id: string | null
+          } | null
+          reactors: {
+            audience: string
+            chat_id: string | null
+            created_at: string
+            deleted_at: string | null
+            emoji: string
+            id: string
+            target_id: string
+            target_type: string
+            updated_at: string
+            user_id: string | null
+          } | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "messages_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "messages_chat_id_fkey"
+            columns: ["chat_id"]
+            isOneToOne: false
+            referencedRelation: "chats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "messages_forwarded_comment_fkey"
+            columns: ["forwarded_comment_id"]
+            isOneToOne: false
+            referencedRelation: "comments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "messages_source_chat_id_fkey"
+            columns: ["source_chat_id"]
+            isOneToOne: false
+            referencedRelation: "chats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "messages_stream_id_fkey"
+            columns: ["stream_id"]
+            isOneToOne: false
+            referencedRelation: "streams"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "messages_system_user_id_fkey"
+            columns: ["system_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       accept_chat_invite: { Args: { target_chat: string }; Returns: undefined }
       accept_friend_request: { Args: { p_user: string }; Returns: string }
+      activity_statuses: {
+        Args: { user_ids: string[] }
+        Returns: {
+          last_seen_at: string
+          online: boolean
+          user_id: string
+        }[]
+      }
       add_comment_replies: {
         Args: {
           new_comment: string
@@ -3154,6 +3469,10 @@ export type Database = {
           error: true
         } & "the function public.chat_display_name with parameter or with a single unnamed json/jsonb parameter, but no matches were found in the schema cache"
       }
+      chat_found_by_names: {
+        Args: { p_chat: string; p_viewer: string }
+        Returns: boolean
+      }
       chat_info_summary: {
         Args: { target_chat: string }
         Returns: {
@@ -3164,12 +3483,27 @@ export type Database = {
           voices: number
         }[]
       }
+      chat_people: {
+        Args: { chat_ids: string[] }
+        Returns: {
+          avatar_url: string
+          chat_id: string
+          display_name: string
+          joined_at: string
+          last_read_at: string
+          position: number
+          user_id: string
+          username: string
+        }[]
+      }
       chat_read_up_to: {
         Args: { "": Database["public"]["Tables"]["chats"]["Row"] }
         Returns: {
           error: true
         } & "the function public.chat_read_up_to with parameter or with a single unnamed json/jsonb parameter, but no matches were found in the schema cache"
       }
+      chat_time_restricted_now: { Args: { p_chat: string }; Returns: boolean }
+      chat_time_visible: { Args: { p_chat: string }; Returns: boolean }
       check_comment_shape: { Args: { target: string }; Returns: undefined }
       check_message_shape: { Args: { target: string }; Returns: undefined }
       clean_group_avatar_url: { Args: { url: string }; Returns: string }
@@ -3414,35 +3748,51 @@ export type Database = {
         Args: { candidate: string; own_id?: string; target_kind: string }
         Returns: boolean
       }
+      known_people_ids: {
+        Args: { p_me: string }
+        Returns: {
+          person_id: string
+        }[]
+      }
+      last_message_at: {
+        Args: { "": Database["public"]["Tables"]["chats"]["Row"] }
+        Returns: {
+          error: true
+        } & "the function public.last_message_at with parameter or with a single unnamed json/jsonb parameter, but no matches were found in the schema cache"
+      }
       latest_chat_messages: {
         Args: { chat_ids: string[]; per_chat?: number }
         Returns: {
           author_id: string | null
-          chat_id: string
-          clusters_count: number
-          comments_count: number
-          created_at: string
+          chat_id: string | null
+          clusters_count: number | null
+          comments_count: number | null
+          created_at: string | null
           deleted_at: string | null
+          edit_mark: number | null
+          edited: boolean | null
           edited_at: string | null
           forwarded_comment_id: string | null
-          fragments_count: number
-          id: string
-          kind: string
-          member_reactions: Json
-          reactions_count: number
+          fragments_count: number | null
+          id: string | null
+          kind: string | null
+          member_reactions: Json | null
+          reactions_count: number | null
           read_at: string | null
+          seq: number | null
           source_chat_id: string | null
           stream_id: string | null
           system_event: string | null
           system_user_id: string | null
           text: string | null
-          unique_views_count: number
-          views_count: number
-          visitor_reactions: Json
+          time_visible: boolean | null
+          unique_views_count: number | null
+          views_count: number | null
+          visitor_reactions: Json | null
         }[]
         SetofOptions: {
           from: "*"
-          to: "messages"
+          to: "message_rows"
           isOneToOne: false
           isSetofReturn: true
         }
@@ -3468,12 +3818,7 @@ export type Database = {
         }[]
       }
       list_chat_media: {
-        Args: {
-          before_at?: string
-          before_id?: string
-          page_size?: number
-          target_chat: string
-        }
+        Args: { before_seq?: number; page_size?: number; target_chat: string }
         Returns: {
           attachment_id: string
           created_at: string
@@ -3483,6 +3828,7 @@ export type Database = {
           mime_type: string
           position: number
           poster_url: string
+          seq: number
           url: string
           width: number
         }[]
@@ -3504,12 +3850,7 @@ export type Database = {
         }[]
       }
       list_chat_voices: {
-        Args: {
-          before_at?: string
-          before_id?: string
-          page_size?: number
-          target_chat: string
-        }
+        Args: { before_seq?: number; page_size?: number; target_chat: string }
         Returns: {
           attachment_id: string
           author_id: string
@@ -3520,6 +3861,7 @@ export type Database = {
           message_id: string
           mime_type: string
           poster_url: string
+          seq: number
           url: string
           waveform: number[]
         }[]
@@ -3711,7 +4053,7 @@ export type Database = {
         }
         Returns: undefined
       }
-      mark_chat_read: { Args: { target_chat: string }; Returns: string }
+      mark_chat_read: { Args: { target_chat: string }; Returns: undefined }
       mark_chat_subscription_read: {
         Args: { target_chat: string }
         Returns: undefined
@@ -3720,21 +4062,31 @@ export type Database = {
         Args: { p_installation_id: string }
         Returns: undefined
       }
-      mark_seen: { Args: never; Returns: undefined }
+      mark_seen: { Args: { online?: boolean }; Returns: undefined }
       member_event_text: {
         Args: { actor_name: string; event: string; subject_name: string }
         Returns: string
       }
+      message_edit_count: { Args: { p_message: string }; Returns: number }
       message_edits: {
         Args: { message_ids: string[] }
         Returns: {
+          edit_mark: number
           edited_at: string
           id: string
         }[]
       }
+      message_found_by_author: {
+        Args: { p_author: string; p_chat: string; p_viewer: string }
+        Returns: boolean
+      }
       message_preview_text: {
         Args: { m: Database["public"]["Tables"]["messages"]["Row"] }
         Returns: string
+      }
+      message_sent_now: {
+        Args: { p_chat?: string; p_message: string }
+        Returns: boolean
       }
       message_shown_in_chat: {
         Args: { target_chat: string; target_message: string; via: string }
@@ -3756,6 +4108,15 @@ export type Database = {
           notify: boolean
           unread_pops: number
           unread_posts: number
+        }[]
+      }
+      my_chat_list: {
+        Args: never
+        Returns: {
+          chat_id: string
+          entered_at: string
+          has_unread: boolean
+          position: number
         }[]
       }
       my_privacy_settings: {
@@ -3833,6 +4194,27 @@ export type Database = {
             }
           }
         | {
+            Args: { "": Database["public"]["Views"]["message_rows"]["Row"] }
+            Returns: {
+              audience: string
+              chat_id: string | null
+              created_at: string
+              deleted_at: string | null
+              emoji: string
+              id: string
+              target_id: string
+              target_type: string
+              updated_at: string
+              user_id: string | null
+            }
+            SetofOptions: {
+              from: "message_rows"
+              to: "reactions"
+              isOneToOne: true
+              isSetofReturn: true
+            }
+          }
+        | {
             Args: { "": Database["public"]["Tables"]["messages"]["Row"] }
             Returns: {
               audience: string
@@ -3874,27 +4256,49 @@ export type Database = {
               isSetofReturn: true
             }
           }
-      my_stream_participation: {
-        Args: { "": Database["public"]["Tables"]["messages"]["Row"] }
-        Returns: {
-          created_at: string
-          deleted_at: string | null
-          id: string
-          joined_at: string
-          last_event_at: string
-          left_at: string | null
-          livekit_sid: string | null
-          role: string
-          stream_id: string
-          user_id: string | null
-        }
-        SetofOptions: {
-          from: "messages"
-          to: "stream_participants"
-          isOneToOne: true
-          isSetofReturn: true
-        }
-      }
+      my_stream_participation:
+        | {
+            Args: { "": Database["public"]["Views"]["message_rows"]["Row"] }
+            Returns: {
+              created_at: string
+              deleted_at: string | null
+              id: string
+              joined_at: string
+              last_event_at: string
+              left_at: string | null
+              livekit_sid: string | null
+              role: string
+              stream_id: string
+              user_id: string | null
+            }
+            SetofOptions: {
+              from: "message_rows"
+              to: "stream_participants"
+              isOneToOne: true
+              isSetofReturn: true
+            }
+          }
+        | {
+            Args: { "": Database["public"]["Tables"]["messages"]["Row"] }
+            Returns: {
+              created_at: string
+              deleted_at: string | null
+              id: string
+              joined_at: string
+              last_event_at: string
+              left_at: string | null
+              livekit_sid: string | null
+              role: string
+              stream_id: string
+              user_id: string | null
+            }
+            SetofOptions: {
+              from: "messages"
+              to: "stream_participants"
+              isOneToOne: true
+              isSetofReturn: true
+            }
+          }
       my_subscriptions: {
         Args: { target_chat?: string }
         Returns: {
@@ -3907,6 +4311,7 @@ export type Database = {
           unread_posts: number
         }[]
       }
+      my_typing_audience: { Args: { target_chat: string }; Returns: string }
       notify_channel_changed: {
         Args: { target_channel: string }
         Returns: undefined
@@ -4041,6 +4446,7 @@ export type Database = {
         Returns: Json
       }
       purge_friend_request_log: { Args: never; Returns: number }
+      purge_search_request_log: { Args: never; Returns: undefined }
       reaction_counts_add: {
         Args: { counts: Json; delta: number; emoji: string }
         Returns: Json
@@ -4087,6 +4493,27 @@ export type Database = {
             }
           }
         | {
+            Args: { "": Database["public"]["Views"]["message_rows"]["Row"] }
+            Returns: {
+              audience: string
+              chat_id: string | null
+              created_at: string
+              deleted_at: string | null
+              emoji: string
+              id: string
+              target_id: string
+              target_type: string
+              updated_at: string
+              user_id: string | null
+            }[]
+            SetofOptions: {
+              from: "message_rows"
+              to: "reactions"
+              isOneToOne: false
+              isSetofReturn: true
+            }
+          }
+        | {
             Args: { "": Database["public"]["Tables"]["messages"]["Row"] }
             Returns: {
               audience: string
@@ -4107,6 +4534,10 @@ export type Database = {
               isSetofReturn: true
             }
           }
+      realtime_topic_member: {
+        Args: { p_prefix: string; p_topic: string }
+        Returns: boolean
+      }
       rec_apply_impressions: { Args: { max_rows: number }; Returns: number }
       rec_count_reject: {
         Args: { event_kind: string; n?: number; why: string }
@@ -4167,6 +4598,14 @@ export type Database = {
         Returns: boolean
       }
       rec_text: { Args: { j: Json; key: string }; Returns: string }
+      recheck_recent_searches: {
+        Args: { message_ids: string[]; person_ids: string[] }
+        Returns: {
+          created_at: string
+          id: string
+          kind: string
+        }[]
+      }
       reconcile_stream: {
         Args: { connected: Json; room: string }
         Returns: string
@@ -4181,6 +4620,10 @@ export type Database = {
       }
       record_pop_views: {
         Args: { pop_ids: string[]; session_id: string }
+        Returns: undefined
+      }
+      refresh_chat_time_restricted: {
+        Args: { p_chat: string }
         Returns: undefined
       }
       refresh_message_clusters: {
@@ -4234,8 +4677,7 @@ export type Database = {
       }
       search_chat_messages: {
         Args: {
-          before_created?: string
-          before_id?: string
+          before_seq?: number
           page_size?: number
           query: string
           target_chat: string
@@ -4245,6 +4687,7 @@ export type Database = {
           author_name: string
           created_at: string
           message_id: string
+          seq: number
           text: string
         }[]
       }
@@ -4267,12 +4710,7 @@ export type Database = {
       search_level: { Args: { field: string; needle: string }; Returns: number }
       search_like: { Args: { needle: string }; Returns: string }
       search_messages: {
-        Args: {
-          before_created?: string
-          before_id?: string
-          page_size?: number
-          query: string
-        }
+        Args: { before_seq?: number; page_size?: number; query: string }
         Returns: {
           author_id: string
           author_name: string
@@ -4284,6 +4722,7 @@ export type Database = {
           created_at: string
           fuzzy: boolean
           message_id: string
+          seq: number
           text: string
         }[]
       }
@@ -4344,6 +4783,7 @@ export type Database = {
           width: number
         }[]
       }
+      search_rate_hit: { Args: { p_kind: string }; Returns: undefined }
       search_tsquery: { Args: { needle: string }; Returns: unknown }
       search_tsv: { Args: { value: string }; Returns: unknown }
       search_words: { Args: { value: string }; Returns: string }

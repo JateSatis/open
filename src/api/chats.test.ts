@@ -85,6 +85,7 @@ function messageRow(id: string, createdAt: string) {
     author_id: 'user-1',
     kind: 'text',
     text: `сообщение ${id}`,
+    seq: Date.parse(createdAt),
     created_at: createdAt,
     attachments: [],
   };
@@ -105,13 +106,15 @@ describe('listMessages', () => {
 
     const page = await listMessages('chat-1', { limit: 2 });
 
-    expect(mockedFrom).toHaveBeenCalledWith('messages');
+    // Из представления: время в нём скрыто от тех, кому его не видно.
+    expect(mockedFrom).toHaveBeenCalledWith('message_rows');
     expect(builder.argsOf('limit')).toEqual([2]);
     // Первый order — за порядок вложений внутри сообщения (см. messagesSelect).
     expect(builder.argsOf('order', 0)).toEqual(['position', { referencedTable: 'attachments' }]);
-    expect(builder.argsOf('order', 1)).toEqual(['created_at', { ascending: false }]);
+    // Порядок и курсор — номер, а не время: время бывает скрыто.
+    expect(builder.argsOf('order', 1)).toEqual(['seq', { ascending: false }]);
     expect(page.items.map((message) => message.id)).toEqual(['m2', 'm1']);
-    expect(page.nextCursor).toBe('2026-09-16T10:00:00Z');
+    expect(page.nextCursor).toBe(Date.parse('2026-09-16T10:00:00Z'));
   });
 
   it('stops paging when the page is not full', async () => {
@@ -130,9 +133,9 @@ describe('listMessages', () => {
     const builder = new QueryBuilderMock({ data: [], error: null });
     mockedFrom.mockReturnValue(builder);
 
-    await listMessages('chat-1', { cursor: '2026-09-16T10:00:00Z' });
+    await listMessages('chat-1', { cursor: 42 });
 
-    expect(builder.argsOf('lt')).toEqual(['created_at', '2026-09-16T10:00:00Z']);
+    expect(builder.argsOf('lt')).toEqual(['seq', 42]);
   });
 
   it('does not filter by cursor on the first page', async () => {
@@ -155,9 +158,12 @@ describe('sendMessage', () => {
 
     const message = await sendMessage('chat-1', { text: '  привет  ' });
 
+    // Id выбирает клиент: вставка не возвращает строку (время из таблицы не
+    // читается), а читается она из представления по этому id.
     expect(builder.argsOf('insert')).toEqual([
-      { chat_id: 'chat-1', author_id: 'user-1', kind: 'text', text: 'привет' },
+      { id: expect.any(String), chat_id: 'chat-1', author_id: 'user-1', kind: 'text', text: 'привет' },
     ]);
+    expect(builder.used('select')).toBe(true);
     expect(message.id).toBe('m1');
   });
 

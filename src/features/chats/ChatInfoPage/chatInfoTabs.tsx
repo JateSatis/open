@@ -19,7 +19,7 @@ export type ChatInfoTabsInput = {
   memberQuery: string | null;
   onOpenPerson: (userId: string) => void;
   onOpenChat: (chatId: string) => void;
-  onShowInChat: (messageId: string, createdAt: string) => void;
+  onShowInChat: (messageId: string, seq: number) => void;
   onRemoveMember: (person: Person) => void;
   onCancelInvite: (person: Person) => void;
   onSearchMembers: () => void;

@@ -41,14 +41,18 @@ function deliveryState(
 ): DeliveryState | null {
   if (message.status === 'failed') return 'failed';
   if (message.status === 'sending' || message.editStatus === 'saving') return 'sending';
-  if (!isOwn || !receipts) return null;
+  // Время чата скрыто настройкой участника — галочек нет: «прочитано» скрыто
+  // вместе с временем, а одна галочка у всех врала бы «не прочитано».
+  if (!isOwn || !receipts || message.createdAt === null) return null;
 
   return isRead ? 'read' : 'sent';
 }
 
 /**
- * Время сообщения — всегда видно и всегда одного цвета. Справа от него у
- * моего сообщения иконка статуса, за ней — «ред.», если сообщение правили.
+ * Время сообщения — всегда одного цвета. Справа от него у моего сообщения
+ * иконка статуса, за ней — «ред.», если сообщение правили. Время чата скрыто
+ * настройкой участника — ни часов, ни галочек; «ред.» остаётся: факт правки
+ * времени не раскрывает. Показать нечего — плашки нет.
  */
 export function MessageMeta({
   message,
@@ -62,7 +66,10 @@ export function MessageMeta({
   const overlay = variant === 'overlay';
   const tone: ThemeColor = overlay ? 'textOnMedia' : isOwn ? 'metaOnPrimary' : 'textSecondary';
   const state = deliveryState(message, isOwn, isRead, receipts);
-  const { localId } = message;
+  const { localId, createdAt } = message;
+  const edited = message.edited || message.editStatus === 'saving';
+
+  if (!createdAt && !state && !edited) return null;
 
   return (
     <View
@@ -72,9 +79,11 @@ export function MessageMeta({
         overlay && [styles.overlay, { backgroundColor: theme.mediaScrim }],
       ]}
     >
-      <Text testID="message-time" variant="meta" color={tone}>
-        {formatMessageTime(message.createdAt)}
-      </Text>
+      {createdAt ? (
+        <Text testID="message-time" variant="meta" color={tone}>
+          {formatMessageTime(createdAt)}
+        </Text>
+      ) : null}
 
       {state ? (
         <DeliveryStatus
@@ -84,7 +93,7 @@ export function MessageMeta({
         />
       ) : null}
 
-      {message.editedAt || message.editStatus === 'saving' ? (
+      {edited ? (
         <Text variant="meta" color={tone}>
           ред.
         </Text>

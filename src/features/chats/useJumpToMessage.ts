@@ -14,11 +14,11 @@ type ScrollFailure = { index: number; averageItemLength: number };
 export type JumpToMessage = {
   /**
    * Прокручивает к строке и подсвечивает её. Если она ещё не загружена,
-   * сначала догружает историю до `createdAt` — времени сообщения или
+   * сначала догружает историю до `seq` — номера сообщения или
    * островка, где оно стоит, — по страницам. Отвечает, нашлось ли.
    * `flash: false` — только прокрутка: строку подсветит тот, кто прыгал.
    */
-  jump: (rowKey: string, createdAt: string, options?: { flash?: boolean }) => Promise<boolean>;
+  jump: (rowKey: string, seq: number, options?: { flash?: boolean }) => Promise<boolean>;
   highlight: JumpHighlight | null;
   /** Для `onScrollToIndexFailed` списка: строки разной высоты, и до далёкой списку не долистать с первого раза. */
   onScrollToIndexFailed: (info: ScrollFailure) => void;
@@ -40,7 +40,7 @@ function centerOf(index: number) {
 export function useJumpToMessage(
   listRef: RefObject<FlatList<ChatListRow> | null>,
   rows: ChatListRow[],
-  loadUntil: (createdAt: string) => Promise<boolean>,
+  loadUntil: (seq: number) => Promise<boolean>,
 ): JumpToMessage {
   const [highlight, setHighlight] = useState<JumpHighlight | null>(null);
   // Каждый прыжок — со вспышкой и без — ждёт своей строки в списке.
@@ -73,8 +73,8 @@ export function useJumpToMessage(
   );
 
   const jump = useCallback(
-    async (rowKey: string, createdAt: string, { flash = true }: { flash?: boolean } = {}) => {
-      const found = await loadUntil(createdAt);
+    async (rowKey: string, seq: number, { flash = true }: { flash?: boolean } = {}) => {
+      const found = await loadUntil(seq);
 
       if (!found) return false;
 

@@ -27,8 +27,11 @@ function message(id: string, createdAt: string): Message {
     authorId: 'user-2',
     kind: 'text',
     text: id,
+    seq: Date.parse(createdAt),
     createdAt,
     editedAt: null,
+    edited: false,
+    editMark: null,
     attachments: [],
     replies: [],
     forward: null,
@@ -53,7 +56,7 @@ describe('useChatHistory: догрузка старых после сбоя', ()
     jest.clearAllMocks();
     mockedList.mockResolvedValueOnce({
       items: [message('new', '2026-10-12T10:00:00Z')],
-      nextCursor: 'cursor-1',
+      nextCursor: 1,
     });
   });
 

@@ -37,7 +37,7 @@ type Cell = { type: 'media'; item: ChatMediaItem } | { type: 'skeleton'; key: st
 export type MediaTabProps = {
   tab: number;
   chatId: string;
-  onShowInChat: (messageId: string, createdAt: string) => void;
+  onShowInChat: (messageId: string, seq: number) => void;
 };
 
 function isVideo(item: ChatMediaItem): boolean {
@@ -183,7 +183,7 @@ export function MediaTab({ tab, chatId, onShowInChat }: MediaTabProps) {
         anchor={menu?.anchor ?? null}
         actions={SHOW_IN_CHAT}
         onSelect={() => {
-          if (menu) onShowInChat(menu.item.messageId, menu.item.createdAt);
+          if (menu) onShowInChat(menu.item.messageId, menu.item.seq);
         }}
         onClosed={() => setMenu(null)}
       />

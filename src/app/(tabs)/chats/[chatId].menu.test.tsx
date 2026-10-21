@@ -155,6 +155,7 @@ function chatWith(participants: ChatSummary['participants']): ChatSummary {
     lastMessageAuthorId: null,
     lastPopAt: null,
     lastActivityAt: null,
+    listPosition: null,
     enteredAt: null,
     previewIsPop: false,
     subscription: null,
@@ -172,8 +173,11 @@ function message(id: string, text: string, authorId: string, minute = 0): Messag
     authorId,
     kind: 'text',
     text,
+    seq: Date.parse(`2026-09-27T10:0${minute}:00Z`),
     createdAt: `2026-09-27T10:0${minute}:00Z`,
     editedAt: null,
+    edited: false,
+    editMark: null,
     attachments: [],
     replies: [],
     forward: null,
@@ -325,7 +329,7 @@ describe('message menu', () => {
     await screen.findByText('привет');
 
     mockedPins.mockResolvedValue([
-      { messageId: 'm2', forwardId: null, messageCreatedAt: AT, originalCreatedAt: AT, kind: 'text', text: 'привет', thumbnailUrl: null },
+      { messageId: 'm2', forwardId: null, messageSeq: Date.parse(AT), originalSeq: Date.parse(AT), kind: 'text', text: 'привет', thumbnailUrl: null },
     ]);
     await tapMessage('m2');
     await choose('Закрепить');
@@ -391,7 +395,7 @@ describe('deleting', () => {
     await screen.findByText('привет');
 
     mockedPins.mockResolvedValue([
-      { messageId: 'm1', forwardId: null, messageCreatedAt: AT, originalCreatedAt: AT, kind: 'text', text: 'эй', thumbnailUrl: null },
+      { messageId: 'm1', forwardId: null, messageSeq: Date.parse(AT), originalSeq: Date.parse(AT), kind: 'text', text: 'эй', thumbnailUrl: null },
     ]);
     await act(async () => handlers?.onPinsChanged());
 
@@ -527,8 +531,8 @@ describe('selection', () => {
 
 describe('pinned bar', () => {
   const pins: PinnedMessage[] = [
-    { messageId: 'm1', forwardId: null, messageCreatedAt: '2026-09-27T10:01:00Z', originalCreatedAt: '2026-09-27T10:01:00Z', kind: 'text', text: 'эй', thumbnailUrl: null },
-    { messageId: 'm2', forwardId: null, messageCreatedAt: '2026-09-27T10:02:00Z', originalCreatedAt: '2026-09-27T10:02:00Z', kind: 'voice', text: null, thumbnailUrl: null },
+    { messageId: 'm1', forwardId: null, messageSeq: Date.parse('2026-09-27T10:01:00Z'), originalSeq: Date.parse('2026-09-27T10:01:00Z'), kind: 'text', text: 'эй', thumbnailUrl: null },
+    { messageId: 'm2', forwardId: null, messageSeq: Date.parse('2026-09-27T10:02:00Z'), originalSeq: Date.parse('2026-09-27T10:02:00Z'), kind: 'voice', text: null, thumbnailUrl: null },
   ];
 
   it('shows the newest pin with its number and steps back on each tap', async () => {
@@ -546,13 +550,13 @@ describe('pinned bar', () => {
 
   it('loads older pages until the pinned message is there', async () => {
     mockedPins.mockResolvedValue([
-      { messageId: 'm0', forwardId: null, messageCreatedAt: '2026-09-27T09:00:00Z', originalCreatedAt: '2026-09-27T09:00:00Z', kind: 'text', text: 'давнее', thumbnailUrl: null },
+      { messageId: 'm0', forwardId: null, messageSeq: Date.parse('2026-09-27T09:00:00Z'), originalSeq: Date.parse('2026-09-27T09:00:00Z'), kind: 'text', text: 'давнее', thumbnailUrl: null },
     ]);
     mockedListMessages
-      .mockResolvedValueOnce({ items: [message('m3', 'как дела?', 'user-1', 3)], nextCursor: '2026-09-27T10:03:00Z' })
-      .mockResolvedValueOnce({ items: [message('m2', 'привет', 'user-2', 2)], nextCursor: '2026-09-27T10:02:00Z' })
+      .mockResolvedValueOnce({ items: [message('m3', 'как дела?', 'user-1', 3)], nextCursor: Date.parse('2026-09-27T10:03:00Z') })
+      .mockResolvedValueOnce({ items: [message('m2', 'привет', 'user-2', 2)], nextCursor: Date.parse('2026-09-27T10:02:00Z') })
       .mockResolvedValueOnce({
-        items: [{ ...message('m0', 'давнее', 'user-2'), createdAt: '2026-09-27T09:00:00Z' }],
+        items: [{ ...message('m0', 'давнее', 'user-2'), seq: Date.parse('2026-09-27T09:00:00Z'), createdAt: '2026-09-27T09:00:00Z' }],
         nextCursor: null,
       });
 
@@ -565,7 +569,7 @@ describe('pinned bar', () => {
     await waitFor(() => expect(screen.getAllByText('давнее')).toHaveLength(2));
     expect(mockedListMessages).toHaveBeenCalledTimes(3);
     expect(mockedListMessages).toHaveBeenLastCalledWith('chat-1', {
-      cursor: '2026-09-27T10:02:00Z',
+      cursor: Date.parse('2026-09-27T10:02:00Z'),
     });
   });
 });

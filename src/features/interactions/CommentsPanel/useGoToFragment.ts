@@ -33,7 +33,7 @@ function fromCache(item: CommentItem, message: Message | null): FragmentWhereabo
     start: quote.start,
     end: quote.end,
     lost: quote.lost,
-    messageCreatedAt: message.createdAt,
+    messageSeq: message.seq,
   };
 }
 
@@ -106,7 +106,7 @@ export function useGoToFragment(
         messageId,
         chatId: target.chatId,
         rowKey: target.rowKey,
-        createdAt: where.messageCreatedAt,
+        seq: where.messageSeq,
         // Плашка всегда показывает цитату, с которой комментировали; в тексте
         // ищется она же.
         text: quote.text,

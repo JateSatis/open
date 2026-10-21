@@ -63,7 +63,12 @@ describe('an original shown in an island, in the cache', () => {
   });
 
   it('takes an edit, keeping its author and chat', () => {
-    const fresh = { ...original({ id: 'o1', text: 'поправлено' }), editedAt: '2026-10-01T00:00:00Z' };
+    const fresh = {
+      ...original({ id: 'o1', text: 'поправлено' }),
+      editedAt: '2026-10-01T00:00:00Z',
+      edited: true,
+      editMark: 1,
+    };
     const result = replaceMessages(history(forward()), [
       { ...fresh, authorName: undefined, chat: undefined } as unknown as Message,
     ]);
@@ -71,7 +76,8 @@ describe('an original shown in an island, in the cache', () => {
 
     expect(first).toMatchObject({ text: 'поправлено', authorName: 'Джиган' });
     expect(first?.chat?.name).toBe('Джиган и Самойлова');
-    expect(knownEdits(result).get('o1')).toBe('2026-10-01T00:00:00Z');
+    // Устаревшее узнаётся по номеру правки, а не по времени: время бывает скрыто.
+    expect(knownEdits(result).get('o1')).toBe(1);
   });
 
   it('takes fresh reactions and comment counts wherever it is shown', () => {

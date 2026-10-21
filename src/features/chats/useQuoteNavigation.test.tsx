@@ -22,7 +22,7 @@ jest.mock('expo-router', () => ({
 }));
 jest.mock('@/api/chats', () => ({ listDeletedMessageIds: jest.fn(() => Promise.resolve([])) }));
 
-const POSTED_AT = '2026-10-07T10:00:00Z';
+const POSTED_SEQ = 70;
 
 const channel: Channel = {
   id: 'channel-1',
@@ -67,7 +67,7 @@ async function renderNavigation(chatId = 'dialog-1') {
 /** Переход «к оригиналу» ждёт ответа базы об удалённых. */
 async function openPost(navigation: Awaited<ReturnType<typeof renderNavigation>>, id = 'p1') {
   await act(async () => {
-    navigation.openOriginal({ id, chatId: 'posts-1', createdAt: POSTED_AT });
+    navigation.openOriginal({ id, chatId: 'posts-1', seq: POSTED_SEQ });
   });
 }
 
@@ -94,7 +94,7 @@ describe('useQuoteNavigation: пост канала', () => {
 
     expect(mockPush).toHaveBeenCalledWith({
       pathname: '/chats/channel/[channelId]',
-      params: { channelId: 'channel-1', jumpTo: 'p1', jumpAt: POSTED_AT, jumpKey: '42' },
+      params: { channelId: 'channel-1', jumpTo: 'p1', jumpSeq: String(POSTED_SEQ), jumpKey: '42' },
     });
   });
 
@@ -103,7 +103,7 @@ describe('useQuoteNavigation: пост канала', () => {
 
     expect(mockPush).toHaveBeenCalledWith({
       pathname: '/chats/[chatId]',
-      params: { chatId: 'posts-1', jumpTo: 'p1', jumpAt: POSTED_AT, jumpKey: '42' },
+      params: { chatId: 'posts-1', jumpTo: 'p1', jumpSeq: String(POSTED_SEQ), jumpKey: '42' },
     });
   });
 
@@ -129,7 +129,7 @@ describe('useQuoteNavigation: пост канала', () => {
       payload: {
         params: {
           jumpTo: 'p9',
-          jumpAt: POSTED_AT,
+          jumpSeq: String(POSTED_SEQ),
           comments: undefined,
           comment: undefined,
           jumpKey: '42',
@@ -148,7 +148,7 @@ describe('useQuoteNavigation: пост канала', () => {
       navigation.openComment('posts-1', {
         messageId: 'p1',
         commentId: 'c1',
-        target: { key: 'p1', createdAt: POSTED_AT },
+        target: { key: 'p1', seq: POSTED_SEQ },
       }),
     );
 
@@ -157,7 +157,7 @@ describe('useQuoteNavigation: пост канала', () => {
       params: {
         channelId: 'channel-1',
         jumpTo: 'p1',
-        jumpAt: POSTED_AT,
+        jumpSeq: String(POSTED_SEQ),
         comments: 'p1',
         comment: 'c1',
         jumpKey: '42',
@@ -168,7 +168,7 @@ describe('useQuoteNavigation: пост канала', () => {
   it('jumps in place inside the channel itself, without navigating', async () => {
     await openPost(await renderNavigation('posts-1'));
 
-    expect(jump).toHaveBeenCalledWith('p1', POSTED_AT);
+    expect(jump).toHaveBeenCalledWith('p1', POSTED_SEQ);
     expect(mockPush).not.toHaveBeenCalled();
     expect(mockDispatch).not.toHaveBeenCalled();
   });

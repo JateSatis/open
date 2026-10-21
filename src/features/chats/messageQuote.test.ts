@@ -11,8 +11,11 @@ function message(overrides: Partial<ChatMessage> = {}): ChatMessage {
     authorId: 'user-2',
     kind: 'text',
     text: 'привет',
+    seq: Date.parse('2026-09-29T10:00:00Z'),
     createdAt: '2026-09-29T10:00:00Z',
     editedAt: null,
+    edited: false,
+    editMark: null,
     attachments: [],
     replies: [],
     forward: null,
@@ -82,7 +85,7 @@ describe('describePreview', () => {
 
 describe('quoteOf', () => {
   it('remembers the island a quoted original stands in', () => {
-    const via = { forwardId: 'isl', createdAt: '2026-09-30T10:00:00Z' };
+    const via = { forwardId: 'isl', seq: Date.parse('2026-09-30T10:00:00Z'), createdAt: '2026-09-30T10:00:00Z' };
 
     expect(quoteOf(message(), 'Марина', via)).toMatchObject({ messageId: 'm1', via });
     expect(quoteOf(message(), 'Марина').via).toBeNull();

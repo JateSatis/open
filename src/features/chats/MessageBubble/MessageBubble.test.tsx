@@ -26,8 +26,11 @@ function textMessage(overrides: Partial<ChatMessage> = {}): ChatMessage {
     authorId: 'user-2',
     kind: 'text',
     text: 'привет',
+    seq: Date.parse('2026-09-22T10:00:00Z'),
     createdAt: '2026-09-22T10:00:00Z',
     editedAt: null,
+    edited: false,
+    editMark: null,
     attachments: [],
     replies: [],
     forward: null,
@@ -199,7 +202,10 @@ describe('MessageBubble', () => {
 
   it('у чужого исправленного — «ред.» сразу после времени', async () => {
     await render(
-      <MessageBubble {...baseProps} message={textMessage({ editedAt: '2026-09-22T10:05:00Z' })} />,
+      <MessageBubble
+        {...baseProps}
+        message={textMessage({ editedAt: '2026-09-22T10:05:00Z', edited: true, editMark: 1 })}
+      />,
     );
 
     const meta = within(screen.getByTestId('message-meta'))

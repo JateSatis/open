@@ -72,7 +72,7 @@ export type ChatMessagesState = {
   /** Человек снова листает — догрузка истории после неудачи снова разрешена. */
   resumeLoadMore: (atEdge: boolean) => void;
   /** Догружает историю назад до сообщения с этим временем. Отвечает, дошли ли. */
-  loadUntil: (createdAt: string) => Promise<boolean>;
+  loadUntil: (seq: number) => Promise<boolean>;
   /** Текст с альбомом; с цитатами — это ответ. */
   send: (text: string, media?: OutgoingMedia[], replies?: LiveQuote[]) => void;
   sendVoice: (voice: LocalMedia, replies?: LiveQuote[]) => void;

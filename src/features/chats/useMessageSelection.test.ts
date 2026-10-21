@@ -14,8 +14,11 @@ function message(id: string, overrides: Partial<ChatMessage> = {}): ChatMessage 
     authorId: 'user-1',
     kind: 'text',
     text: id,
+    seq: Date.parse(`2026-09-27T10:0${id.length}:00Z`),
     createdAt: `2026-09-27T10:0${id.length}:00Z`,
     editedAt: null,
+    edited: false,
+    editMark: null,
     attachments: [],
     replies: [],
     forward: null,
@@ -107,8 +110,8 @@ describe('useMessageSelection', () => {
       message('z', { createdAt: '2026-09-27T12:00:00Z' }),
       sent(
         island('isl', '2026-09-27T11:00:00Z', [
-          original({ id: 'o1', createdAt: '2026-09-01T10:00:00Z' }),
-          original({ id: 'o2', createdAt: '2026-08-01T10:00:00Z' }),
+          original({ id: 'o1', seq: Date.parse('2026-09-01T10:00:00Z'), createdAt: '2026-09-01T10:00:00Z' }),
+          original({ id: 'o2', seq: Date.parse('2026-08-01T10:00:00Z'), createdAt: '2026-08-01T10:00:00Z' }),
         ]),
       ),
       message('a', { createdAt: '2026-09-27T10:00:00Z' }),

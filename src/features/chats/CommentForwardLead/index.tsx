@@ -69,8 +69,9 @@ export function CommentForwardLead({
         state: 'live',
         authorId: target.authorId,
         authorName: target.authorName,
+        seq: target.seq,
         createdAt: comment.createdAt,
-        editedAt: null,
+        editMark: null,
         preview: target.preview,
       }
     : { messageId: comment.subject.id, state: 'deleted' };

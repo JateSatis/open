@@ -141,7 +141,7 @@ const commentsSelect = () =>
 // роняет запрос целиком (PostgREST 42712).
 const targetSelect = () =>
   supabase
-    .from('messages')
+    .from('message_rows')
     .select(MESSAGE_COLUMNS)
     .order('position', { referencedTable: 'attachments' });
 
@@ -210,8 +210,12 @@ function toQuotedComment(row: CommentReplyRow): QuotedMessage {
     state: 'live',
     authorId: quoted.author_id,
     authorName: quoted.author_id ? (quoted.author?.display_name ?? 'Без имени') : null,
+    // Цитата комментария — не сообщение переписки: номера у неё нет, к ней
+    // переходят по id в ветке. Время комментариев на этом этапе не скрыто,
+    // и номер правки — время правки.
+    seq: 0,
     createdAt: quoted.created_at,
-    editedAt: quoted.edited_at,
+    editMark: quoted.edited_at ? Date.parse(quoted.edited_at) : null,
     preview: toPreview(toMessageKind(quoted.kind), quoted.text, attachments),
   };
 }

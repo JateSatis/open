@@ -9,7 +9,11 @@ import type { Comment, CommentAudience, FragmentQuote } from '@/api/comments';
 import { NO_REACTIONS } from '@/api/reactionCounts';
 import type { ChatMessage } from '@/features/chats/messages/types';
 
-export type CommentItem = ChatMessage & {
+// Время комментариев на этом этапе приватности не скрывается: оно есть всегда.
+// Номера переписки у комментария нет — `seq` у него 0, порядок в ветке — по
+// времени.
+export type CommentItem = Omit<ChatMessage, 'createdAt'> & {
+  createdAt: string;
   /** Сообщение, к которому комментарий. */
   targetId: string;
   audience: CommentAudience;
@@ -55,8 +59,11 @@ export function toCommentItem(comment: Comment): CommentItem {
     audience: comment.audience,
     kind: comment.kind,
     text: comment.text,
+    seq: 0,
     createdAt: comment.createdAt,
     editedAt: comment.editedAt,
+    edited: comment.editedAt !== null,
+    editMark: comment.editedAt ? Date.parse(comment.editedAt) : null,
     attachments: comment.attachments,
     replies: comment.replies,
     forward: null,

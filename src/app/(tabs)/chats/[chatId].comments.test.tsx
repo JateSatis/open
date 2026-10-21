@@ -224,6 +224,7 @@ const chat: ChatSummary = {
   lastMessageAuthorId: null,
   lastPopAt: null,
   lastActivityAt: null,
+  listPosition: null,
   enteredAt: null,
   previewIsPop: false,
   subscription: null,
@@ -240,8 +241,11 @@ function message(id: string, minute: number, overrides: Partial<Message> = {}): 
     authorId: 'user-1',
     kind: 'text',
     text: `текст ${id}`,
+    seq: Date.parse(`2026-09-30T10:0${minute}:00Z`),
     createdAt: `2026-09-30T10:0${minute}:00Z`,
     editedAt: null,
+    edited: false,
+    editMark: null,
     attachments: [],
     replies: [],
     forward: null,
@@ -1050,7 +1054,7 @@ describe('fragment quote over a comment', () => {
       start: 6,
       end: 8,
       lost: false,
-      messageCreatedAt: '2026-09-30T10:01:00Z',
+      messageSeq: 1,
     });
 
     await openSheet();
@@ -1080,7 +1084,7 @@ describe('fragment quote over a comment', () => {
       start: 6,
       end: 8,
       lost: false,
-      messageCreatedAt: '2026-09-30T10:01:00Z',
+      messageSeq: 1,
     });
 
     await renderChat();
@@ -1120,7 +1124,7 @@ describe('fragment quote over a comment', () => {
       start: 0,
       end: 2,
       lost: true,
-      messageCreatedAt: '2026-09-30T10:01:00Z',
+      messageSeq: 1,
     });
 
     await openSheet();

@@ -11,6 +11,7 @@
 import type { QueryClient } from '@tanstack/react-query';
 
 import type { Message } from '@/api/chats';
+import { PENDING_SEQ } from '@/api/pendingSeq';
 import type { MessageViews } from '@/api/messageViews';
 import type { MessageReactions } from '@/api/reactionCounts';
 import {
@@ -25,8 +26,8 @@ import { sameReactions } from '@/features/interactions/reactionState';
 export type ChatHistory = {
   /** Newest first — the list that renders them is inverted. */
   items: ChatMessage[];
-  /** `createdAt` самого старого загруженного, пока глубже есть что грузить. */
-  nextCursor: string | null;
+  /** `seq` самого старого загруженного, пока глубже есть что грузить. */
+  nextCursor: number | null;
 };
 
 export function messagesQueryKey(chatId: string) {
@@ -37,19 +38,29 @@ export function toSent(message: Message): ChatMessage {
   return { ...message, status: 'sent' };
 }
 
+// Порядок — по номеру сервера: время бывает скрыто. Неподтверждённые стоят
+// выше любого настоящего номера (`PENDING_SEQ`).
 function byNewest(a: ChatMessage, b: ChatMessage): number {
-  if (a.createdAt === b.createdAt) return 0;
+  return b.seq - a.seq;
+}
 
-  return a.createdAt > b.createdAt ? -1 : 1;
+/** Номер самого свежего подтверждённого сообщения истории; `null` — таких нет. */
+export function newestSeq(history: ChatHistory): number | null {
+  let newest: number | null = null;
+
+  for (const message of history.items) {
+    if (message.seq < PENDING_SEQ && (newest === null || message.seq > newest)) newest = message.seq;
+  }
+
+  return newest;
 }
 
 /**
  * Вливает сообщения в историю: уже известные остаются как есть (у своего
- * отправленного там локальные превью), новые встают по времени.
+ * отправленного там локальные превью), новые встают по номеру.
  *
  * `newer` — пришедшее после загруженного, в порядке от старого к новому
  * (так его отдаёт дочитывание); `older` — страница назад, от нового к старому.
- * При равном времени новое встаёт над известным, старое — под ним.
  */
 export function mergeMessages(
   history: ChatHistory,
@@ -148,7 +159,12 @@ export function replaceMessages(
           const quoted = quote.state === 'live' ? byId.get(quote.messageId) : undefined;
 
           return quoted && quote.state === 'live'
-            ? { ...quote, editedAt: quoted.editedAt, preview: previewOfMessage(quoted) }
+            ? {
+                ...quote,
+                createdAt: quoted.createdAt,
+                editMark: quoted.editMark,
+                preview: previewOfMessage(quoted),
+              }
             : quote;
         }),
       };
@@ -336,20 +352,20 @@ export function bumpCommentsCount(history: ChatHistory, messageId: string, delta
   return changed ? { ...history, items } : history;
 }
 
-/** Правленые версии, известные на экране, — чтобы знать, что уже устарело. */
-export function knownEdits(history: ChatHistory | undefined): Map<string, string | null> {
-  const known = new Map<string, string | null>();
+/** Номера правок, известные на экране, — чтобы знать, что уже устарело. */
+export function knownEdits(history: ChatHistory | undefined): Map<string, number | null> {
+  const known = new Map<string, number | null>();
 
   for (const message of history?.items ?? []) {
-    known.set(message.id, message.editedAt);
+    known.set(message.id, message.editMark);
 
     for (const item of message.forward?.items ?? []) {
-      if (item.original) known.set(item.original.id, item.original.editedAt);
+      if (item.original) known.set(item.original.id, item.original.editMark);
     }
 
     for (const quote of message.replies) {
       if (quote.state === 'live' && !known.has(quote.messageId)) {
-        known.set(quote.messageId, quote.editedAt);
+        known.set(quote.messageId, quote.editMark);
       }
     }
   }

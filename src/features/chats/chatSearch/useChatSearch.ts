@@ -50,7 +50,7 @@ export type ChatSearch = {
  */
 export function useChatSearch(
   chatId: string,
-  jump: (rowKey: string, createdAt: string) => Promise<boolean>,
+  jump: (rowKey: string, seq: number) => Promise<boolean>,
 ): ChatSearch {
   const params = useLocalSearchParams<ChatSearchParams>();
   const navigation = useNavigation();
@@ -102,7 +102,7 @@ export function useChatSearch(
       if (!hit) return;
 
       setPosition({ query: debounced, firstId, index: at });
-      void jump(hit.id, hit.createdAt);
+      void jump(hit.id, hit.seq);
     },
     [debounced, firstId, jump],
   );
@@ -111,7 +111,7 @@ export function useChatSearch(
   useEffect(() => {
     if (!first) return;
 
-    void jump(first.id, first.createdAt);
+    void jump(first.id, first.seq);
     // Только по новому запросу и его первому совпадению.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debounced, firstId]);

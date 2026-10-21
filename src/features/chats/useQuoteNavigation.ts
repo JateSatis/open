@@ -11,10 +11,10 @@ import { chatQueryKey } from '@/features/chats/useChat';
 import { islandItemKey } from '@/features/chats/islands/rows';
 import { showNotice } from '@/features/notifications/alertsStore';
 
-type Jump = (rowKey: string, createdAt: string) => Promise<boolean>;
+type Jump = (rowKey: string, seq: number) => Promise<boolean>;
 
-/** Куда прыгнуть в переписке: ключ строки и время, до которого догрузить историю. */
-export type JumpTarget = { key: string; createdAt: string };
+/** Куда прыгнуть в переписке: ключ строки и номер, до которого догрузить историю. */
+export type JumpTarget = { key: string; seq: number };
 
 /**
  * Комментарий, к которому пришли: шит его сообщения и само сообщение в
@@ -31,7 +31,7 @@ export type QuoteNavigation = {
   /** Чат целиком — плашка островка: откуда пересылали. */
   openChat: (chatId: string) => void;
   /** Сообщение в его чате — «из <чат>» и «Перейти к оригиналу» у облачка островка. */
-  openOriginal: (message: { id: string; chatId: string; createdAt: string }) => void;
+  openOriginal: (message: { id: string; chatId: string; seq: number }) => void;
   /** Пересланный комментарий — в его чат: шит с ним и сообщение под шитом. */
   openComment: (chatId: string, focus: CommentFocus) => void;
 };
@@ -77,8 +77,8 @@ function reportJump(found: boolean) {
 /** Строка цитаты в чате ответа: само сообщение или облачко островка, где оно стоит. */
 function quoteTarget(quote: Extract<QuotedMessage, { state: 'live' }>): JumpTarget {
   return quote.via
-    ? { key: islandItemKey(quote.via.forwardId, quote.messageId), createdAt: quote.via.createdAt }
-    : { key: quote.messageId, createdAt: quote.createdAt };
+    ? { key: islandItemKey(quote.via.forwardId, quote.messageId), seq: quote.via.seq }
+    : { key: quote.messageId, seq: quote.seq };
 }
 
 /**
@@ -95,7 +95,9 @@ export function useQuoteNavigation(
   const navigation = useNavigation();
   const queryClient = useQueryClient();
   const params = useLocalSearchParams<JumpParams>();
-  const { jumpTo, jumpAt, comments, comment } = params;
+  const { jumpTo, jumpSeq, comments, comment } = params;
+  // Номер приходит строкой адреса; не число — прыгать некуда.
+  const jumpAt = jumpSeq !== undefined && Number.isFinite(Number(jumpSeq)) ? Number(jumpSeq) : null;
   const handledJumpRef = useRef<string | null>(null);
   const requestedJump = jumpRequestOf(params);
 
@@ -111,12 +113,12 @@ export function useQuoteNavigation(
       focusComment({
         messageId: comments,
         commentId: comment,
-        target: jumpTo && jumpAt ? { key: jumpTo, createdAt: jumpAt } : null,
+        target: jumpTo && jumpAt !== null ? { key: jumpTo, seq: jumpAt } : null,
       });
       return;
     }
 
-    if (!jumpTo || !jumpAt) return;
+    if (!jumpTo || jumpAt === null) return;
 
     handledJumpRef.current = requestedJump;
     void jump(jumpTo, jumpAt).then(reportJump);
@@ -141,14 +143,14 @@ export function useQuoteNavigation(
     (targetChatId: string, target: JumpTarget | null, focus?: CommentFocus) => {
       if (targetChatId === chatId) {
         if (focus) focusComment(focus);
-        else if (target) void jump(target.key, target.createdAt).then(reportJump);
+        else if (target) void jump(target.key, target.seq).then(reportJump);
         return;
       }
 
       const to = focus ? focus.target : target;
       // Шит открывается по ключу перехода, даже когда прыгать некуда.
       const jumpParams = {
-        ...(to ? { jumpTo: to.key, jumpAt: to.createdAt } : {}),
+        ...(to ? { jumpTo: to.key, jumpSeq: String(to.seq) } : {}),
         ...(focus ? { comments: focus.messageId, comment: focus.commentId } : {}),
         ...(to || focus ? { jumpKey: String(Date.now()) } : {}),
       };
@@ -218,7 +220,7 @@ export function useQuoteNavigation(
   const openChat = useCallback((targetChatId: string) => goToChat(targetChatId, null), [goToChat]);
 
   const openOriginal = useCallback(
-    (message: { id: string; chatId: string; createdAt: string }) => {
+    (message: { id: string; chatId: string; seq: number }) => {
       // Оригинал могли удалить после того, как загрузилась эта страница:
       // спросить базу дешевле, чем открыть чужой чат и ничего там не найти.
       void listDeletedMessageIds([message.id])
@@ -229,7 +231,7 @@ export function useQuoteNavigation(
             return;
           }
 
-          goToChat(message.chatId, { key: message.id, createdAt: message.createdAt });
+          goToChat(message.chatId, { key: message.id, seq: message.seq });
         });
     },
     [goToChat],

@@ -47,7 +47,9 @@ export function optimisticEdit(original: ChatMessage, result: EditResult): ChatM
     ...original,
     kind,
     text: kind === 'voice' ? null : text,
-    editedAt: new Date().toISOString(),
+    // Скрытое время чата не появляется и у правки: «изменено» — без часов.
+    editedAt: original.createdAt === null ? null : new Date().toISOString(),
+    edited: true,
     editStatus: 'saving' as const,
   };
 

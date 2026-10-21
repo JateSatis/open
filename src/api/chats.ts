@@ -7,12 +7,18 @@
 import type { QueryData, RealtimeChannel } from '@supabase/supabase-js';
 
 import { ChatGoneError } from '@/api/chatGone';
-import { acquireChatTopic, type ChatActivity, type ChatTopicListener } from '@/api/chatTopics';
+import {
+  acquireChatTopic,
+  type ChatActivity,
+  type ChatTopicListener,
+  type TypingAudience,
+} from '@/api/chatTopics';
 import { MESSAGE_COLUMNS, messagesSelect, toMessage, type Message } from '@/api/messageRows';
 import { publishPop, type PublishPopInput } from '@/api/pops';
 import { listChatSubscriptions, type Subscription } from '@/api/subscriptions';
 import { byChatListOrder } from '@/api/chatListOrder';
 import { supabase } from '@/api/supabase';
+import { randomUuid } from '@/lib/uuid';
 
 export { toPreview, type MessagePreview } from '@/api/messagePreview';
 export {
@@ -36,8 +42,9 @@ export {
   type MessageKind,
   type OriginChat,
   type QuotedMessage,
+  PENDING_SEQ,
 } from '@/api/messageRows';
-export type { ChatActivity } from '@/api/chatTopics';
+export type { ChatActivity, TypingAudience } from '@/api/chatTopics';
 export { ChatGoneError } from '@/api/chatGone';
 
 export const MESSAGE_PAGE_SIZE = 30;
@@ -63,8 +70,11 @@ export type Person = {
 };
 
 export type ChatParticipant = Person & {
-  /** Everything posted up to this moment has been seen by this participant. */
-  lastReadAt: string;
+  /**
+   * Всё, что отправлено до этого момента, участник видел. `null` — время
+   * чата скрыто от меня настройкой участника.
+   */
+  lastReadAt: string | null;
 };
 
 export type ChatSummary = {
@@ -91,12 +101,19 @@ export type ChatSummary = {
    */
   waiting: Person[];
   lastMessagePreview: string | null;
+  /** `null` — сообщений нет или время чата скрыто от меня. */
   lastMessageAt: string | null;
   lastMessageAuthorId: string | null;
   /** Свежий живой поп канала; у обычного чата — null. */
   lastPopAt: string | null;
   /** Свежее из последнего сообщения и попа — время в строке списка. */
   lastActivityAt: string | null;
+  /**
+   * Место в моих «Чатах» по версии сервера (с нуля): он сравнивает
+   * настоящее время, которое от меня бывает скрыто. `null` — не из моего
+   * списка или ещё не знаем.
+   */
+  listPosition: number | null;
   /**
    * Мой момент входа: вступил в чат (создал, принял заявку) или подписка
    * попала в «Чаты». Только что вошедший чат стоит в списке наверху, пока в
@@ -175,16 +192,27 @@ export type Page<T> = {
 
 const CHAT_COLUMNS =
   'id, kind, title, username, avatar_url, owner_id, description, last_message_at, last_message_text, last_message_author_id, subscribers_count, channel:channels(id, title, username, avatar_url, last_pop_at)';
-const MEMBER_COLUMNS =
-  'chat_id, user_id, last_read_at, joined_at, profile:profiles(id, display_name, avatar_url, username)';
 const WAITING_COLUMNS = 'chat_id, user_id, display_name, avatar_url, username';
 export const chatsSelect = () => supabase.from('chats').select(CHAT_COLUMNS);
-const membersSelect = () => supabase.from('chat_members').select(MEMBER_COLUMNS);
 const waitingSelect = () => supabase.from('chat_waiting_invitees').select(WAITING_COLUMNS);
 
 type ChatRow = QueryData<ReturnType<typeof chatsSelect>>[number];
-type MemberRow = QueryData<ReturnType<typeof membersSelect>>[number];
 type WaitingRow = QueryData<ReturnType<typeof waitingSelect>>[number];
+
+/**
+ * Участник с профилем. Отметка прочтения и момент вступления — `null`, если
+ * время чата скрыто от меня (`chat_people`): колонки `chat_members` с
+ * временем клиенту больше не читаются.
+ */
+type MemberRow = {
+  chat_id: string;
+  user_id: string;
+  display_name: string | null;
+  avatar_url: string | null;
+  username: string | null;
+  last_read_at: string | null;
+  joined_at: string | null;
+};
 
 function toChatKind(kind: string): ChatKind {
   if (kind === 'channel_posts') return 'channel';
@@ -201,9 +229,9 @@ function toChannelRef(row: ChatRow['channel']): ChannelRef | null {
 function toParticipant(row: MemberRow): ChatParticipant {
   return {
     id: row.user_id,
-    displayName: row.profile?.display_name ?? 'Без имени',
-    avatarUrl: row.profile?.avatar_url ?? null,
-    username: row.profile?.username ?? null,
+    displayName: row.display_name ?? 'Без имени',
+    avatarUrl: row.avatar_url,
+    username: row.username,
     lastReadAt: row.last_read_at,
   };
 }
@@ -223,15 +251,20 @@ function toWaiting(row: WaitingRow): Person | null {
 
 export type ChatPeople = { members: MemberRow[]; waiting: Person[] };
 
+/** Строка моих «Чатов» от сервера: место, момент входа и непрочитанное участника. */
+export type ChatListEntry = { enteredAt: string | null; position: number; hasUnread: boolean };
+
 /**
  * Чат глазами `viewerId`: обычно это я, а в списке чужих чатов — их хозяин.
- * Непрочитанное — по его отметке прочтения, а не по моей.
+ * Непрочитанное — по его отметке прочтения, а не по моей; в моём списке —
+ * по ответу сервера (`entry`): время бывает скрыто, и сравнить его некому.
  */
 export function toSummary(
   chat: ChatRow,
   people: ChatPeople,
   viewerId: string,
   subscription: Subscription | null = null,
+  entry: ChatListEntry | null = null,
 ): ChatSummary {
   const participants = people.members.map(toParticipant);
   const mine = participants.find((participant) => participant.id === viewerId);
@@ -239,11 +272,13 @@ export function toSummary(
   const lastPopAt = chat.channel?.last_pop_at ?? null;
   const previewIsPop =
     lastPopAt !== null && (chat.last_message_at === null || lastPopAt > chat.last_message_at);
-  const memberUnread =
-    chat.last_message_at !== null &&
-    chat.last_message_author_id !== viewerId &&
-    mine !== undefined &&
-    chat.last_message_at > mine.lastReadAt;
+  const memberUnread = entry
+    ? entry.hasUnread
+    : chat.last_message_at !== null &&
+      chat.last_message_author_id !== viewerId &&
+      mine !== undefined &&
+      mine.lastReadAt !== null &&
+      chat.last_message_at > mine.lastReadAt;
 
   return {
     id: chat.id,
@@ -261,7 +296,8 @@ export function toSummary(
     lastMessageAuthorId: chat.last_message_author_id,
     lastPopAt,
     lastActivityAt: previewIsPop ? lastPopAt : chat.last_message_at,
-    enteredAt: subscription?.inChatsAt ?? mineJoinedAt ?? null,
+    listPosition: entry?.position ?? null,
+    enteredAt: subscription?.inChatsAt ?? entry?.enteredAt ?? mineJoinedAt ?? null,
     previewIsPop,
     subscription,
     hasUnread: subscription ? subscription.unreadPosts + subscription.unreadPops > 0 : memberUnread,
@@ -278,6 +314,37 @@ export async function getCurrentUserId(): Promise<string> {
   return data.user.id;
 }
 
+/** Сколько чатов в одном запросе участников — столько база принимает за раз. */
+const PEOPLE_CHATS_CHUNK = 500;
+
+async function fetchMembers(chatIds: string[]): Promise<MemberRow[]> {
+  const chunks: string[][] = [];
+
+  for (let at = 0; at < chatIds.length; at += PEOPLE_CHATS_CHUNK) {
+    chunks.push(chatIds.slice(at, at + PEOPLE_CHATS_CHUNK));
+  }
+
+  const results = await Promise.all(
+    chunks.map((ids) => supabase.rpc('chat_people', { chat_ids: ids })),
+  );
+
+  return results.flatMap(({ data, error }) => {
+    if (error) throw error;
+
+    // Порядок вступления база уже навела (`position`); колонки результата
+    // rpc генератор типов не размечает как nullable.
+    return (data ?? []).map((row) => ({
+      chat_id: row.chat_id,
+      user_id: row.user_id,
+      display_name: row.display_name ?? null,
+      avatar_url: row.avatar_url ?? null,
+      username: row.username ?? null,
+      last_read_at: row.last_read_at ?? null,
+      joined_at: row.joined_at ?? null,
+    }));
+  });
+}
+
 /**
  * Участники и ещё не принявшие — для нескольких чатов разом, двумя запросами.
  * Участники — в порядке вступления: так же база называет чужой диалог в
@@ -289,7 +356,10 @@ export async function fetchChatPeople(chatIds: string[]): Promise<Map<string, Ch
   if (chatIds.length === 0) return byChat;
 
   const [members, waiting] = await Promise.all([
-    membersSelect().in('chat_id', chatIds).order('joined_at', { ascending: true }),
+    fetchMembers(chatIds).then(
+      (data) => ({ data, error: null }),
+      (error: unknown) => ({ data: null, error }),
+    ),
     waitingSelect().in('chat_id', chatIds).order('invited_at', { ascending: true }),
   ]);
 
@@ -330,27 +400,26 @@ const NO_PEOPLE: ChatPeople = { members: [], waiting: [] };
 export async function listChats(): Promise<ChatSummary[]> {
   const userId = await getCurrentUserId();
 
-  const [membership, subscriptions] = await Promise.all([
-    supabase.from('chat_members').select('chat_id, joined_at').eq('user_id', userId),
+  const [list, subscriptions] = await Promise.all([
+    // Место, момент входа и непрочитанное — от сервера: время чата бывает
+    // скрыто от меня, а он сравнивает настоящее.
+    supabase.rpc('my_chat_list'),
     // Сбой подписок не должен прятать свои диалоги и группы: подписки
     // вернутся со следующим перечитыванием.
     listChatSubscriptions().catch((): Subscription[] => []),
   ]);
 
-  if (membership.error) throw membership.error;
+  if (list.error) throw list.error;
 
   const subscriptionByChat = new Map(subscriptions.map((item) => [item.chatId, item]));
-  // Мой момент входа — из моих строк, а не из участников всех чатов: та
-  // выборка общая и длинная, и лимит строк срезал бы как раз свежие вступления.
-  const joinedAtByChat = new Map(
-    (membership.data ?? []).map((row) => [row.chat_id, row.joined_at]),
-  );
-  const chatIds = [
-    ...new Set([
-      ...(membership.data ?? []).map((row) => row.chat_id),
-      ...subscriptionByChat.keys(),
+  // Колонки результата rpc генератор типов не размечает как nullable.
+  const entryByChat = new Map<string, ChatListEntry>(
+    (list.data ?? []).map((row) => [
+      row.chat_id,
+      { enteredAt: row.entered_at ?? null, position: row.position, hasUnread: row.has_unread === true },
     ]),
-  ];
+  );
+  const chatIds = [...new Set([...entryByChat.keys(), ...subscriptionByChat.keys()])];
 
   if (chatIds.length === 0) return [];
 
@@ -364,15 +433,15 @@ export async function listChats(): Promise<ChatSummary[]> {
   const peopleByChat = await fetchChatPeople(chats.map((chat) => chat.id));
 
   return chats
-    .map((chat) => {
-      const subscription = subscriptionByChat.get(chat.id) ?? null;
-      const summary = toSummary(chat, peopleByChat.get(chat.id) ?? NO_PEOPLE, userId, subscription);
-
-      return {
-        ...summary,
-        enteredAt: subscription?.inChatsAt ?? joinedAtByChat.get(chat.id) ?? summary.enteredAt,
-      };
-    })
+    .map((chat) =>
+      toSummary(
+        chat,
+        peopleByChat.get(chat.id) ?? NO_PEOPLE,
+        userId,
+        subscriptionByChat.get(chat.id) ?? null,
+        entryByChat.get(chat.id) ?? null,
+      ),
+    )
     .sort(byChatListOrder);
 }
 
@@ -381,8 +450,8 @@ export const CHATS_OF_PAGE_SIZE = 30;
 /**
  * Чаты другого человека — как этот список видит он сам: те, где он
  * участник, свежими вперёд, а «непрочитано» — по его отметке прочтения.
- * `chat_members` и `last_read_at` публичны по RLS, поэтому это обычная
- * выборка, без функции. Постранично: у человека бывают сотни чатов.
+ * Порядок — по вычисляемому `last_message_at`: чаты, время которых от меня
+ * скрыто, стоят в конце. Постранично: у человека бывают сотни чатов.
  *
  * Позже сюда добавятся чаты, на которые он подписан, — подписок в
  * приложении пока нет.
@@ -481,29 +550,6 @@ export async function setChatAvatar(
 }
 
 /**
- * Everyone except the signed-in user. A stand-in for search and contacts while
- * the product has neither — every account is reachable in one tap.
- */
-export async function listPeople(): Promise<Person[]> {
-  const userId = await getCurrentUserId();
-
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('id, display_name, avatar_url')
-    .neq('id', userId)
-    .is('deleted_at', null)
-    .order('display_name', { ascending: true, nullsFirst: false });
-
-  if (error) throw error;
-
-  return (data ?? []).map((row) => ({
-    id: row.id,
-    displayName: row.display_name ?? 'Без имени',
-    avatarUrl: row.avatar_url,
-  }));
-}
-
-/**
  * До какого момента чат прочитали все, кроме меня. Нужно облачку островка:
  * «прочитано» у своего сообщения там — по прочтению чата оригинала.
  */
@@ -530,25 +576,27 @@ export async function markChatRead(chatId: string): Promise<void> {
   if (error) throw error;
 }
 
+/** Страница переписки с курсором — номером самого старого сообщения на ней. */
+export type MessagePage = { items: Message[]; nextCursor: number | null };
+
 /**
  * One page of a chat, newest first. There is deliberately no "load the whole
- * chat" call: `cursor` is the `createdAt` of the oldest message already shown
- * and each call walks further back.
+ * chat" call: `cursor` is the `seq` of the oldest message already shown and
+ * each call walks further back. Номер, а не время: время бывает скрыто.
  */
 export async function listMessages(
   chatId: string,
-  params: { cursor?: string; limit?: number } = {},
-): Promise<Page<Message>> {
+  params: { cursor?: number; limit?: number } = {},
+): Promise<MessagePage> {
   const limit = params.limit ?? MESSAGE_PAGE_SIZE;
 
   let query = messagesSelect()
     .eq('chat_id', chatId)
-    .is('deleted_at', null)
-    .order('created_at', { ascending: false })
+    .order('seq', { ascending: false })
     .limit(limit);
 
-  if (params.cursor) {
-    query = query.lt('created_at', params.cursor);
+  if (params.cursor !== undefined) {
+    query = query.lt('seq', params.cursor);
   }
 
   const { data, error } = await query;
@@ -559,21 +607,20 @@ export async function listMessages(
 
   return {
     items,
-    nextCursor: items.length === limit ? items[items.length - 1].createdAt : null,
+    nextCursor: items.length === limit ? items[items.length - 1].seq : null,
   };
 }
 
 /**
- * Messages posted after `since`, oldest first. Used to settle a Realtime
+ * Messages posted after `sinceSeq`, oldest first. Used to settle a Realtime
  * broadcast: the payload is only a signal that something arrived, the rows
  * themselves always come from Postgres, where RLS decides what is visible.
  */
-export async function listMessagesSince(chatId: string, since: string): Promise<Message[]> {
+export async function listMessagesSince(chatId: string, sinceSeq: number): Promise<Message[]> {
   const { data, error } = await messagesSelect()
     .eq('chat_id', chatId)
-    .is('deleted_at', null)
-    .gt('created_at', since)
-    .order('created_at', { ascending: true })
+    .gt('seq', sinceSeq)
+    .order('seq', { ascending: true })
     .limit(MESSAGE_PAGE_SIZE);
 
   if (error) throw error;
@@ -588,14 +635,19 @@ export async function listMessagesSince(chatId: string, since: string): Promise<
  */
 async function sendTextMessage(chatId: string, text: string): Promise<Message> {
   const authorId = await getCurrentUserId();
+  // Id выбирает клиент: вставка не возвращает строку — время сообщения
+  // клиенту из таблицы не читается, — а читать её из представления нужно по id.
+  const id = randomUuid();
 
-  const { data, error } = await supabase
+  const { error } = await supabase
     .from('messages')
-    .insert({ chat_id: chatId, author_id: authorId, kind: 'text', text })
-    .select(MESSAGE_COLUMNS)
-    .single();
+    .insert({ id, chat_id: chatId, author_id: authorId, kind: 'text', text });
 
   if (error) throw error;
+
+  const { data, error: fetchError } = await messagesSelect().eq('id', id).single();
+
+  if (fetchError) throw fetchError;
 
   return toMessage(data);
 }
@@ -732,7 +784,7 @@ export async function forwardComments(chatId: string, commentIds: string[]): Pro
 
   const { data, error: fetchError } = await messagesSelect()
     .in('id', ids)
-    .order('created_at', { ascending: true });
+    .order('seq', { ascending: true });
 
   if (fetchError) throw fetchError;
 
@@ -843,7 +895,7 @@ export async function listClusterCounts(
 export async function listMessagesByIds(messageIds: string[]): Promise<Message[]> {
   if (messageIds.length === 0) return [];
 
-  const { data, error } = await messagesSelect().in('id', messageIds).is('deleted_at', null);
+  const { data, error } = await messagesSelect().in('id', messageIds);
 
   if (error) throw error;
 
@@ -851,19 +903,20 @@ export async function listMessagesByIds(messageIds: string[]): Promise<Message[]
 }
 
 /**
- * Время правки тех из этих сообщений, которые правили. Нужна, чтобы после
+ * Номер правки тех из этих сообщений, которые правили. Нужна, чтобы после
  * обрыва Realtime перечитать только изменившееся, а не всё загруженное.
+ * Номер, а не время правки: время бывает скрыто.
  */
 export async function listMessageEdits(
   messageIds: string[],
-): Promise<{ id: string; editedAt: string }[]> {
+): Promise<{ id: string; editMark: number }[]> {
   if (messageIds.length === 0) return [];
 
   const { data, error } = await supabase.rpc('message_edits', { message_ids: messageIds });
 
   if (error) throw error;
 
-  return (data ?? []).map((row) => ({ id: row.id, editedAt: row.edited_at }));
+  return (data ?? []).map((row) => ({ id: row.id, editMark: row.edit_mark }));
 }
 
 /**
@@ -915,7 +968,6 @@ export type IncomingMessage = {
   /** Вид сообщения; у старой базы — нет. О звонке сообщает входящий, а не карточка. */
   messageKind: string | null;
   text: string | null;
-  createdAt: string;
   /** Пост канала: подписан каналом, а не опубликовавшим человеком. */
   channel: IncomingChannel | null;
   /**
@@ -1000,6 +1052,8 @@ export type ChatChannelHandlers = {
   onViewsChanged?: (messageIds: string[]) => void;
   /** Звонок в чате начался, изменился его состав или он завершился. */
   onStreamChanged?: () => void;
+  /** Участник сменил, кому видно время: время, даты и прочтение — перечитать. */
+  onTimeVisibilityChanged?: () => void;
   /** Из островка этого чата убрали сообщения. Payload — подсказка, какой островок. */
   onForwardChanged?: (forwardId: string) => void;
   /**
@@ -1010,7 +1064,7 @@ export type ChatChannelHandlers = {
 };
 
 export type ChatChannel = {
-  broadcastTyping: (userId: string, activity?: ChatActivity) => void;
+  broadcastTyping: (userId: string, activity: ChatActivity, audience: TypingAudience) => void;
   unsubscribe: () => void;
 };
 
@@ -1028,7 +1082,6 @@ function toIncoming(payload: unknown): IncomingMessage | null {
     authorName: typeof row.author_name === 'string' ? row.author_name : 'Без имени',
     messageKind: typeof row.kind === 'string' ? row.kind : null,
     text: typeof row.text === 'string' ? row.text : null,
-    createdAt: typeof row.created_at === 'string' ? row.created_at : new Date().toISOString(),
     channel: toIncomingChannel(row),
     subscribedChatTitle: typeof row.chat_title === 'string' ? row.chat_title : null,
     notify: row.notify !== false,
@@ -1038,16 +1091,32 @@ function toIncoming(payload: unknown): IncomingMessage | null {
 /**
  * Канал чата — через общий реестр топиков (`chatTopics`): тот же топик слушают
  * и островки других чатов, и второй экран этого же чата, и отписка одного не
- * глушит остальных.
+ * глушит остальных. Участник слушает и топик участников.
  */
-export function subscribeToChat(chatId: string, handlers: ChatChannelHandlers): ChatChannel {
-  const topic = acquireChatTopic(chatId, handlers);
+export function subscribeToChat(
+  chatId: string,
+  handlers: ChatChannelHandlers,
+  asMember = false,
+): ChatChannel {
+  const topic = acquireChatTopic(chatId, handlers, asMember);
 
   return {
-    broadcastTyping: (userId: string, activity: ChatActivity = 'typing') =>
-      topic.broadcastTyping(userId, activity),
+    broadcastTyping: topic.broadcastTyping,
     unsubscribe: topic.release,
   };
+}
+
+/**
+ * Куда слать мои «печатает» и «записывает» в этот чат — по моей настройке
+ * «Кто видит, что я в сети» и по тому, все ли остальные участники мне друзья.
+ * Решает база (`my_typing_audience`): не участник — никуда.
+ */
+export async function getTypingAudience(chatId: string): Promise<TypingAudience> {
+  const { data, error } = await supabase.rpc('my_typing_audience', { target_chat: chatId });
+
+  if (error) throw error;
+
+  return data === 'chat' || data === 'members' ? data : 'none';
 }
 
 /**
@@ -1229,115 +1298,6 @@ export function subscribeToUserEvents(userId: string, handlers: UserChannelHandl
   };
 }
 
-type PresenceEntry = {
-  channel: RealtimeChannel;
-  userId: string;
-  listeners: Set<(userIds: string[]) => void>;
-  ids: string[];
-  joined: boolean;
-  /** Ушёл последний слушатель — канал ещё немного живёт, вдруг вернутся. */
-  closing: ReturnType<typeof setTimeout> | null;
-};
-
-/**
- * Сколько держать канал Presence без слушателей. Переход между экранами
- * отпускает его и тут же берёт снова, а закрывающийся канал
- * `supabase.channel()` отдал бы повторно, уже неживым (как в `chatTopics.ts`).
- */
-const PRESENCE_LINGER_MS = 3000;
-
-let presence: PresenceEntry | null = null;
-/** Видно ли меня в Presence: в фоне я не «в сети», даже пока сокет жив. */
-let presenceVisible = true;
-
-function trackPresence(entry: PresenceEntry) {
-  if (!entry.joined) return;
-
-  void (presenceVisible
-    ? entry.channel.track({ onlineAt: new Date().toISOString() })
-    : entry.channel.untrack());
-}
-
-/**
- * Presence of everyone currently in the app, used for the "в сети" status in
- * the chat list and on the chat info page. Returns the unsubscribe function —
- * leaking this channel is what makes Realtime go quiet after a few screen
- * transitions.
- *
- * Канал один на приложение, со счётчиком слушателей: `supabase.channel()` с
- * тем же топиком отдаёт тот же экземпляр, и отписка одного экрана глушила бы
- * «в сети» у остальных (см. `chatTopics.ts`).
- */
-export function subscribeToOnlineUsers(
-  userId: string,
-  onChange: (userIds: string[]) => void,
-): () => void {
-  if (presence && presence.userId !== userId) {
-    if (presence.closing) clearTimeout(presence.closing);
-    void supabase.removeChannel(presence.channel);
-    presence = null;
-  }
-
-  if (!presence) {
-    const channel: RealtimeChannel = supabase.channel('presence:online', {
-      config: { presence: { key: userId } },
-    });
-    const entry: PresenceEntry = {
-      channel,
-      userId,
-      listeners: new Set(),
-      ids: [],
-      joined: false,
-      closing: null,
-    };
-
-    channel
-      .on('presence', { event: 'sync' }, () => {
-        entry.ids = Object.keys(channel.presenceState());
-        entry.listeners.forEach((listener) => listener(entry.ids));
-      })
-      .subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          entry.joined = true;
-          trackPresence(entry);
-        }
-      });
-
-    presence = entry;
-  }
-
-  const entry = presence;
-
-  if (entry.closing) {
-    clearTimeout(entry.closing);
-    entry.closing = null;
-  }
-
-  entry.listeners.add(onChange);
-  if (entry.ids.length > 0) onChange(entry.ids);
-
-  return () => {
-    entry.listeners.delete(onChange);
-
-    if (entry.listeners.size > 0 || presence !== entry) return;
-
-    entry.closing = setTimeout(() => {
-      if (presence !== entry || entry.listeners.size > 0) return;
-
-      presence = null;
-      void supabase.removeChannel(entry.channel);
-    }, PRESENCE_LINGER_MS);
-  };
-}
-
-/** Показываться ли «в сети»: приложение ушло в фон — нет, вернулось — да. */
-export function setPresenceVisible(visible: boolean) {
-  if (presenceVisible === visible) return;
-
-  presenceVisible = visible;
-  if (presence) trackPresence(presence);
-}
-
 // Посты канала с попом — обычные сообщения его чата постов; поп публикует
 // `publish_pop` из `pops.ts`.
 
@@ -1384,8 +1344,8 @@ export async function sendPopPost(
 // Поиск по одному чату
 // =============================================================================
 
-/** Ключ следующей страницы совпадений: последнее совпадение прошлой. */
-export type ChatSearchCursor = { createdAt: string; id: string };
+/** Ключ следующей страницы совпадений: номер последнего совпадения прошлой. */
+export type ChatSearchCursor = number;
 
 /** Совпадение поиска по одному чату. */
 export type ChatSearchHit = {
@@ -1394,7 +1354,10 @@ export type ChatSearchHit = {
   /** `null` — аккаунт автора удалён. */
   authorName: string | null;
   text: string;
-  createdAt: string;
+  /** Номер сообщения — до него догружается история при переходе. */
+  seq: number;
+  /** `null` — время чата скрыто от меня. */
+  createdAt: string | null;
 };
 
 export type ChatSearchPage = {
@@ -1415,8 +1378,7 @@ export async function searchChatMessages(
   let request = supabase.rpc('search_chat_messages', {
     target_chat: chatId,
     query,
-    before_created: cursor?.createdAt,
-    before_id: cursor?.id,
+    before_seq: cursor ?? undefined,
     page_size: CHAT_SEARCH_PAGE_SIZE,
   });
 
@@ -1431,16 +1393,15 @@ export async function searchChatMessages(
     authorId: row.author_id ?? null,
     authorName: row.author_name ?? null,
     text: row.text ?? '',
-    createdAt: row.created_at,
+    seq: row.seq,
+    // Колонки результата rpc генератор типов не размечает как nullable.
+    createdAt: row.created_at ?? null,
   }));
   const last = items[items.length - 1];
 
   return {
     items,
-    nextCursor:
-      items.length === CHAT_SEARCH_PAGE_SIZE && last
-        ? { createdAt: last.createdAt, id: last.id }
-        : null,
+    nextCursor: items.length === CHAT_SEARCH_PAGE_SIZE && last ? last.seq : null,
   };
 }
 

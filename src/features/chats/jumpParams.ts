@@ -6,13 +6,13 @@
  */
 export type JumpParams = {
   jumpTo?: string;
-  jumpAt?: string;
+  jumpSeq?: string;
   jumpKey?: string;
   comments?: string;
   comment?: string;
 };
 
-export const JUMP_PARAM_NAMES = ['jumpTo', 'jumpAt', 'jumpKey', 'comments', 'comment'] as const;
+export const JUMP_PARAM_NAMES = ['jumpTo', 'jumpSeq', 'jumpKey', 'comments', 'comment'] as const;
 
 /** Только заданные параметры прыжка — без чужих ключей адреса и без пустых. */
 export function pickJumpParams(params: JumpParams): JumpParams {
@@ -33,7 +33,7 @@ export function pickJumpParams(params: JumpParams): JumpParams {
  */
 export function jumpRequestOf(params: JumpParams): string | undefined {
   const actionable = Boolean(
-    (params.comments && params.comment) || (params.jumpTo && params.jumpAt),
+    (params.comments && params.comment) || (params.jumpTo && params.jumpSeq),
   );
 
   return actionable ? (params.jumpKey ?? params.jumpTo ?? params.comments) : undefined;
