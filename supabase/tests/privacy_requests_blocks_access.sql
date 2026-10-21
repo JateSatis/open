@@ -201,6 +201,9 @@ begin
     where cm.user_id = a and c.id = rq));
   perform pg_temp.check('К1.3 V: поиск сообщений', not exists (
     select 1 from public.search_messages('заявка') s where s.chat_id = rq));
+  perform pg_temp.check('К1.3 V: поиск внутри чата', not exists (
+    select 1 from public.search_chat_messages(rq, 'заявка'))
+      and public.count_chat_search(rq, 'заявка') = 0);
   perform pg_temp.check('К1.3 V: топик chat:<id> не читается', not public.realtime_chat_readable('chat:' || rq));
   perform set_config('realtime.topic', 'chat:' || rq, true);
   perform pg_temp.check('К1.3 V: рассылки заявки не отдаются', not exists (
@@ -490,6 +493,21 @@ begin
   perform pg_temp.act_as(t);
   res := public.create_chat(array[u]);
   perform pg_temp.check('К4.2 по истечении срока снято', res ->> 'outcome' = 'request_needed', res::text);
+
+  -- Пять аккаунтов одного телефона — один человек, а не пять.
+  perform pg_temp.as_owner();
+  delete from public.account_restrictions where user_id = t;
+  delete from public.blocks where blocked_id = t;
+  delete from public.reports where target_user_id = t;
+  insert into public.account_installations (user_id, installation_id)
+  select k, '00000000-0000-4000-8000-0000000003ff'::uuid from unnest(ks) k;
+  for i in 1 .. 5 loop
+    perform pg_temp.act_as(ks[i]);
+    perform public.block_user(t);
+  end loop;
+  perform pg_temp.as_owner();
+  perform pg_temp.check('К4.3 пять аккаунтов одного устройства — не K разных людей',
+    not public.contact_restricted(t));
 
   perform pg_temp.as_owner();
   insert into public.safety_config (version, params) values (1000, '{"auto_restrict_actors": 1}');
