@@ -10,9 +10,9 @@ import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { styles } from './styles';
-import { useInviteCandidates } from './useInviteCandidates';
 
 import { inviteToChat } from '@/api/groups';
+import { SEARCH_RATE_LIMIT_TEXT } from '@/api/searchLimits';
 import { Button } from '@/components/Button';
 import { Input } from '@/components/Input';
 import { LoadFailed } from '@/components/LoadFailed';
@@ -21,7 +21,7 @@ import { usePeopleStatus } from '@/features/chats/ChatInfoPage/queries';
 import { PersonPickItem } from '@/features/chats/PersonPickItem';
 import { chatQueryKey, useChat } from '@/features/chats/useChat';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
-import { useOnlineUsers } from '@/features/chats/useOnlineUsers';
+import { usePeopleSearch } from '@/features/chats/usePeopleSearch';
 import { useTheme } from '@/hooks/use-theme';
 import { withDeadline } from '@/lib/deadline';
 import { isNetworkError } from '@/lib/network';
@@ -47,13 +47,12 @@ export function ChatInviteScreen({ chatId }: ChatInviteScreenProps) {
   const containerRef = useRef<View | null>(null);
   const [bottomOffset, setBottomOffset] = useState(0);
   const currentUserId = useCurrentUserId();
-  const online = useOnlineUsers(currentUserId);
   const { chat } = useChat(chatId);
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<string[]>([]);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const candidates = useInviteCandidates(query);
+  const candidates = usePeopleSearch(query);
 
   const members = useMemo(
     () => new Set((chat?.participants ?? []).map((person) => person.id)),
@@ -61,7 +60,7 @@ export function ChatInviteScreen({ chatId }: ChatInviteScreenProps) {
   );
   const invited = useMemo(() => new Set((chat?.waiting ?? []).map((person) => person.id)), [chat]);
   const ids = useMemo(() => candidates.people.map((person) => person.id), [candidates.people]);
-  const statuses = usePeopleStatus(ids, online);
+  const statuses = usePeopleStatus(ids);
 
   const toggle = useCallback((personId: string) => {
     setError(null);
@@ -123,7 +122,10 @@ export function ChatInviteScreen({ chatId }: ChatInviteScreenProps) {
           <ActivityIndicator accessibilityLabel="Загрузка людей" />
         </View>
       ) : candidates.failed ? (
-        <LoadFailed message="Не удалось загрузить людей" onRetry={candidates.retry} />
+        <LoadFailed
+          message={candidates.rateLimited ? SEARCH_RATE_LIMIT_TEXT : 'Не удалось загрузить людей'}
+          onRetry={candidates.retry}
+        />
       ) : (
         <FlatList
           showsVerticalScrollIndicator={false}

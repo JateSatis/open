@@ -44,6 +44,7 @@ function messageRow(index: number) {
     author_id: 'u1',
     author_name: 'Аня',
     text: `привет ${index}`,
+    seq: 1000 - index,
     created_at: `2026-10-13T10:${String(59 - index).padStart(2, '0')}:00Z`,
     fuzzy: false,
   };
@@ -134,8 +135,7 @@ describe('searchMessages', () => {
 
     expect(mockedRpc).toHaveBeenCalledWith('search_messages', {
       query: 'привет',
-      before_created: undefined,
-      before_id: undefined,
+      before_seq: undefined,
       page_size: SEARCH_MESSAGES_PAGE_SIZE,
     });
     expect(page.items[0]).toEqual<SearchMessage>({
@@ -148,28 +148,28 @@ describe('searchMessages', () => {
       authorId: 'u1',
       authorName: 'Аня',
       text: 'привет 1',
+      seq: 999,
       createdAt: messageRow(1).created_at,
       fuzzy: false,
     });
     expect(page.nextCursor).toBeNull();
   });
 
-  it('continues after the last row of a full page, by time and id', async () => {
+  it('continues after the last row of a full page, by its number', async () => {
     const rows = Array.from({ length: SEARCH_MESSAGES_PAGE_SIZE }, (_, index) => messageRow(index));
     respond({ data: rows, error: null });
 
     const page = await searchMessages('привет', null);
     const last = rows[rows.length - 1];
 
-    expect(page.nextCursor).toEqual({ createdAt: last.created_at, id: last.message_id });
+    expect(page.nextCursor).toBe(last.seq);
 
     respond({ data: [], error: null });
     await searchMessages('привет', page.nextCursor);
 
     expect(mockedRpc).toHaveBeenLastCalledWith('search_messages', {
       query: 'привет',
-      before_created: last.created_at,
-      before_id: last.message_id,
+      before_seq: last.seq,
       page_size: SEARCH_MESSAGES_PAGE_SIZE,
     });
   });

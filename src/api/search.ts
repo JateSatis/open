@@ -45,18 +45,23 @@ export type SearchMessage = {
   authorId: string | null;
   authorName: string;
   text: string;
-  createdAt: string;
+  /** Номер сообщения — до него догружается история при переходе. */
+  seq: number;
+  /** `null` — время чата скрыто от меня. */
+  createdAt: string | null;
   /** Найдено с опечаткой: точного совпадения по запросу нет. */
   fuzzy: boolean;
 };
 
-/** Ключ следующей страницы сообщений: последняя строка предыдущей. */
-export type SearchMessagesCursor = { createdAt: string; id: string };
+/** Ключ следующей страницы сообщений: номер последней строки предыдущей. */
+export type SearchMessagesCursor = number;
 
 export type SearchMessagesPage = {
   items: SearchMessage[];
   nextCursor: SearchMessagesCursor | null;
 };
+
+export { isSearchRateLimited, SEARCH_RATE_LIMIT_TEXT } from '@/api/searchLimits';
 
 /** Сколько строк блока приходит сразу: видно 3, остальное — за «Показать ещё». */
 export const SEARCH_MINE_LIMIT = 50;
@@ -125,8 +130,7 @@ export async function searchMessages(
 ): Promise<SearchMessagesPage> {
   let request = supabase.rpc('search_messages', {
     query,
-    before_created: cursor?.createdAt,
-    before_id: cursor?.id,
+    before_seq: cursor ?? undefined,
     page_size: SEARCH_MESSAGES_PAGE_SIZE,
   });
 
@@ -149,7 +153,8 @@ export async function searchMessages(
       authorId: row.author_id ?? null,
       authorName: row.author_name ?? 'Без имени',
       text: row.text ?? '',
-      createdAt: row.created_at,
+      seq: row.seq,
+      createdAt: row.created_at ?? null,
       fuzzy: row.fuzzy === true,
     };
   });
@@ -157,11 +162,44 @@ export async function searchMessages(
 
   return {
     items,
-    nextCursor:
-      items.length === SEARCH_MESSAGES_PAGE_SIZE && last
-        ? { createdAt: last.createdAt, id: last.id }
-        : null,
+    nextCursor: items.length === SEARCH_MESSAGES_PAGE_SIZE && last ? last.seq : null,
   };
+}
+
+/** Что из сохранённых «Недавних» ещё можно показать — по ответу сервера. */
+export type RecentRecheck = {
+  /** Люди, которые по-прежнему пускают меня в поиск. */
+  people: Set<string>;
+  /** Живые и находимые мне сообщения: id → время глазами меня сейчас. */
+  messages: Map<string, string | null>;
+};
+
+/**
+ * Перепроверить «Недавние»: они лежат на телефоне, и без этого история
+ * воскрешала бы человека, который с тех пор закрыл от меня поиск, или время
+ * сообщения, которое теперь скрыто.
+ */
+export async function recheckRecentSearches(
+  personIds: string[],
+  messageIds: string[],
+): Promise<RecentRecheck> {
+  const result: RecentRecheck = { people: new Set(), messages: new Map() };
+
+  if (personIds.length === 0 && messageIds.length === 0) return result;
+
+  const { data, error } = await supabase.rpc('recheck_recent_searches', {
+    person_ids: personIds,
+    message_ids: messageIds,
+  });
+
+  if (error) throw error;
+
+  for (const row of data ?? []) {
+    if (row.kind === 'person') result.people.add(row.id);
+    else result.messages.set(row.id, row.created_at ?? null);
+  }
+
+  return result;
 }
 
 // =============================================================================

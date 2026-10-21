@@ -22,8 +22,10 @@ export type PeoplePage = { items: PersonCandidate[]; next: PeopleCursor | null }
 export const PEOPLE_PAGE_SIZE = 30;
 
 /**
- * Люди по имени или `@имени`, страницей по алфавиту; пустой запрос — все.
- * Себя база не отдаёт.
+ * Люди страницей по алфавиту. Пустой запрос — знакомые: друзья и люди из
+ * моих личек и групп. Запрос — по имени или `@имени` среди знакомых и тех,
+ * кто пускает меня в поиск. Каталога всех нет; себя база не отдаёт. Частоту
+ * ограничивает сервер — отказ узнаёт `isSearchRateLimited`.
  */
 export async function searchPeople(
   query: string,

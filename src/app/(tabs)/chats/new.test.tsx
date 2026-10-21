@@ -1,9 +1,9 @@
 import type { Session as SupabaseSession } from '@supabase/supabase-js';
-import { screen, userEvent } from '@testing-library/react-native';
+import { screen, userEvent, waitFor } from '@testing-library/react-native';
 
 import NewChatScreen from './new';
 
-import { listPeople } from '@/api/chats';
+import { searchPeople } from '@/api/groups';
 import { createChat, DuplicateChatError } from '@/api/invites';
 import { useSession } from '@/features/auth/useSession';
 import { openMediaSheet } from '@/features/chats/MediaPickerSheet';
@@ -24,9 +24,8 @@ jest.mock('@/features/auth/useSession', () => ({
   useSession: jest.fn(),
 }));
 
-jest.mock('@/api/chats', () => ({
-  listPeople: jest.fn(),
-}));
+jest.mock('@/api/chats', () => ({}));
+jest.mock('@/api/groups', () => ({ searchPeople: jest.fn() }));
 
 jest.mock('@/api/invites', () => {
   class MockDuplicateChatError extends Error {
@@ -62,7 +61,7 @@ jest.mock('@/features/chats/MediaPickerSheet/MediaAvatarSheet', () => {
 });
 
 const mockedUpload = uploadGroupAvatar as jest.MockedFunction<typeof uploadGroupAvatar>;
-const mockedPeople = listPeople as jest.MockedFunction<typeof listPeople>;
+const mockedPeople = searchPeople as jest.MockedFunction<typeof searchPeople>;
 const mockedCreate = createChat as jest.MockedFunction<typeof createChat>;
 const mockedSession = useSession as jest.MockedFunction<typeof useSession>;
 
@@ -73,10 +72,13 @@ beforeEach(() => {
     isAuthenticated: true,
     isLoading: false,
   });
-  mockedPeople.mockResolvedValue([
-    { id: 'user-2', displayName: 'Марина', avatarUrl: null },
-    { id: 'user-3', displayName: 'Пётр', avatarUrl: null },
-  ]);
+  mockedPeople.mockResolvedValue({
+    items: [
+      { id: 'user-2', displayName: 'Марина', username: null, avatarUrl: null },
+      { id: 'user-3', displayName: 'Пётр', username: null, avatarUrl: null },
+    ],
+    next: null,
+  });
   mockedCreate.mockResolvedValue({ outcome: 'created', chatId: 'chat-new' });
   mockedUpload.mockResolvedValue({ url: 'https://x/g.jpg', path: 'user-1/group-avatar/g.jpg' });
   resetConnectionState();
@@ -287,6 +289,45 @@ describe('NewChatScreen', () => {
 
       expect(mockReplace).toHaveBeenCalledWith('/chats/chat-theirs');
       expect(removeUploadedMedia).toHaveBeenCalledWith('user-1/group-avatar/g.jpg');
+    });
+  });
+
+  describe('people without a catalogue', () => {
+    it('shows people I know without a query: the server gives friends and people from my chats', async () => {
+      await renderWithQuery(<NewChatScreen />);
+
+      await screen.findByText('Марина');
+      // Пустой запрос — не «все пользователи», а знакомые: так отвечает база.
+      expect(mockedPeople).toHaveBeenCalledWith('', null, expect.anything());
+    });
+
+    it('finds anyone else only by searching the server', async () => {
+      const user = userEvent.setup();
+      mockedPeople.mockImplementation(async (query) =>
+        query === 'вера'
+          ? { items: [{ id: 'user-9', displayName: 'Вера', username: 'vera', avatarUrl: null }], next: null }
+          : { items: [], next: null },
+      );
+
+      await renderWithQuery(<NewChatScreen />);
+      expect(
+        await screen.findByText(/Здесь будут ваши друзья и люди из ваших чатов/),
+      ).toBeTruthy();
+
+      await user.type(screen.getByLabelText('Поиск людей'), 'вера');
+
+      expect(await screen.findByText('Вера')).toBeTruthy();
+      await waitFor(() => expect(mockedPeople).toHaveBeenCalledWith('вера', null, expect.anything()));
+    });
+
+    it('explains the search rate limit in plain words', async () => {
+      mockedPeople.mockRejectedValue({ code: 'OPN06', message: 'Слишком много запросов поиска' });
+
+      await renderWithQuery(<NewChatScreen />);
+
+      expect(
+        await screen.findByText(/Слишком много запросов поиска подряд/),
+      ).toBeTruthy();
     });
   });
 });

@@ -8,13 +8,15 @@ import {
 import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { SEARCH_RATE_LIMIT_TEXT } from '@/api/searchLimits';
 import { Button } from '@/components/Button';
 import { Input } from '@/components/Input';
 import { Text } from '@/components/Text';
 import { AvatarPicker } from '@/features/chats/AvatarPicker';
 import { PersonPickItem } from '@/features/chats/PersonPickItem';
 import { useCreateChat } from '@/features/chats/useCreateChat';
-import { usePeople } from '@/features/chats/usePeople';
+import { usePeopleSearch } from '@/features/chats/usePeopleSearch';
+import { useConnectionStatus } from '@/features/connection/useConnectionStatus';
 import { useTheme } from '@/hooks/use-theme';
 import { Spacing } from '@/theme';
 
@@ -22,8 +24,10 @@ const GROUP_AVATAR_LABELS = { pick: 'Выбрать фото группы', chan
 
 /**
  * Выбор людей и создание чата. Один выбранный — личный диалог, несколько —
- * группа. Люди, с которыми переписка уже есть, не прячутся: новый чат с тем же
- * человеком допустим, когда в прежнем все приняли заявки.
+ * группа. Без запроса — друзья и люди из моих чатов; остальных находят
+ * поиском, с учётом их настройки «Кто может найти меня в поиске»: каталога
+ * всех пользователей нет. Люди, с которыми переписка уже есть, не прячутся:
+ * новый чат с тем же человеком допустим, когда в прежнем все приняли заявки.
  */
 export default function NewChatScreen() {
   const router = useRouter();
@@ -33,7 +37,14 @@ export default function NewChatScreen() {
   const { height: windowHeight } = useKeyboardWindow();
   const containerRef = useRef<View | null>(null);
   const [bottomOffset, setBottomOffset] = useState(0);
-  const { people, isLoading, error } = usePeople();
+  const connection = useConnectionStatus();
+  const [query, setQuery] = useState('');
+  const people = usePeopleSearch(query);
+  const peopleError = people.rateLimited
+    ? SEARCH_RATE_LIMIT_TEXT
+    : people.failed && connection === 'online'
+      ? 'Не удалось загрузить людей'
+      : null;
   // «Написать» из чужого профиля открывает этот экран с уже выбранным
   // человеком; дальше работают обычные правила создания чата.
   const { with: preselected } = useLocalSearchParams<{ with?: string }>();
@@ -112,7 +123,19 @@ export default function NewChatScreen() {
         </View>
       </View>
 
-      {isLoading ? (
+      <View style={styles.search}>
+        <Input
+          testID="new-chat-search"
+          accessibilityLabel="Поиск людей"
+          placeholder="Поиск по имени или @username"
+          value={query}
+          onChangeText={setQuery}
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+      </View>
+
+      {people.isLoading ? (
         <ActivityIndicator accessibilityLabel="Загрузка пользователей" />
       ) : (
         <FlatList
@@ -120,9 +143,11 @@ export default function NewChatScreen() {
           showsHorizontalScrollIndicator={false}
           style={styles.flex}
           contentContainerStyle={styles.list}
-          data={people}
+          data={people.people}
           keyExtractor={(person) => person.id}
           keyboardShouldPersistTaps="handled"
+          onEndReached={people.loadMore}
+          onEndReachedThreshold={0.5}
           renderItem={({ item }) => (
             <PersonPickItem
               person={item}
@@ -131,7 +156,13 @@ export default function NewChatScreen() {
             />
           )}
           ListEmptyComponent={
-            error ? null : <Text color="textSecondary">Позвать пока некого: в Open вы первый.</Text>
+            peopleError ? null : (
+              <Text color="textSecondary">
+                {query.trim()
+                  ? 'Никого не нашлось'
+                  : 'Здесь будут ваши друзья и люди из ваших чатов. Остальных найдите поиском.'}
+              </Text>
+            )
           }
         />
       )}
@@ -142,7 +173,7 @@ export default function NewChatScreen() {
           { borderTopColor: theme.border, paddingBottom: Math.max(insets.bottom, Spacing.two) },
         ]}
       >
-        {error ? <Text color="danger">{error}</Text> : null}
+        {peopleError ? <Text color="danger">{peopleError}</Text> : null}
 
         {problem?.kind === 'duplicate' ? (
           <View style={styles.duplicate}>
@@ -193,6 +224,10 @@ const styles = StyleSheet.create({
   },
   titleField: {
     flex: 1,
+  },
+  search: {
+    paddingHorizontal: Spacing.three,
+    paddingBottom: Spacing.two,
   },
   list: {
     paddingHorizontal: Spacing.three,
