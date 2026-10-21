@@ -566,7 +566,8 @@ reports              жалобы: кто, на кого, цель (dialogue_req
                      причина (spam | harassment | threats | other), комментарий. Пишет
                      только report_user (повтор не плодит строк, лимит reports_per_day,
                      OPN12), читает только сервисная роль. Ссылки на профили — set null
-account_restrictions автоограничение: auto_restrict_actors разных людей за
+account_restrictions автоограничение: auto_restrict_actors разных людей (аккаунты одного
+                     устройства — один человек, device_person) за
                      auto_restrict_window_hours заблокировали или пожаловались —
                      restricted_until на auto_restrict_hours (триггеры на blocks и
                      reports). contact_restricted — и по аккаунтам устройства.

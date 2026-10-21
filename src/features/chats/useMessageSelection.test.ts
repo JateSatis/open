@@ -39,6 +39,16 @@ const keysOf = (rows: { key: string }[]) => rows.map((row) => row.key);
 const newestFirst = rowsOf([message('c'), message('b'), message('a')]);
 
 describe('useMessageSelection', () => {
+  it('К2.5 заглушку скрытого сообщения выбрать нельзя', async () => {
+    const rows = rowsOf([message('c'), message('b', { hidden: true }), message('a')]);
+    const { result } = await renderHook(() => useMessageSelection(rows, 'user-1'));
+
+    await act(() => result.current.start('c'));
+    await act(() => result.current.toggle('b'));
+
+    expect(keysOf(result.current.selected)).toEqual(['c']);
+  });
+
   it('turns selection mode on with the first mark and off with the last', async () => {
     const { result } = await renderHook(() => useMessageSelection(newestFirst, 'user-1'));
 
