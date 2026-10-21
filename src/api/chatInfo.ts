@@ -9,6 +9,12 @@ export const CHAT_INFO_PAGE_SIZE = 30;
 /** Курсор постраничных выборок: время и id последней строки прошлой страницы. */
 export type InfoCursor = { at: string; id: string };
 
+/**
+ * Курсор вкладок с сообщениями — номер самого старого сообщения прошлой
+ * страницы: время сообщений бывает скрыто от смотрящего.
+ */
+export type MessageCursor = number;
+
 export type ChatInfoSummary = {
   /** Создатель группы — «владелец»; у диалога null. */
   ownerId: string | null;
@@ -39,7 +45,10 @@ export async function getChatInfoSummary(chatId: string): Promise<ChatInfoSummar
 export type ChatMediaItem = {
   id: string;
   messageId: string;
-  createdAt: string;
+  /** Номер сообщения — по нему «Показать в чате» догружает историю. */
+  seq: number;
+  /** `null` — время чата скрыто от меня. */
+  createdAt: string | null;
   url: string;
   posterUrl: string | null;
   mimeType: string;
@@ -48,7 +57,7 @@ export type ChatMediaItem = {
   durationMs: number | null;
 };
 
-export type ChatMediaPage = { items: ChatMediaItem[]; next: InfoCursor | null };
+export type ChatMediaPage = { items: ChatMediaItem[]; next: MessageCursor | null };
 
 /**
  * Страница медиа чата, свежие сверху. Страница режется по сообщениям, а не по
@@ -56,12 +65,11 @@ export type ChatMediaPage = { items: ChatMediaItem[]; next: InfoCursor | null };
  */
 export async function listChatMedia(
   chatId: string,
-  cursor: InfoCursor | null,
+  cursor: MessageCursor | null,
 ): Promise<ChatMediaPage> {
   const { data, error } = await supabase.rpc('list_chat_media', {
     target_chat: chatId,
-    before_at: cursor?.at,
-    before_id: cursor?.id,
+    before_seq: cursor ?? undefined,
     page_size: CHAT_INFO_PAGE_SIZE,
   });
 
@@ -71,7 +79,9 @@ export async function listChatMedia(
   const items = rows.map((row) => ({
     id: row.attachment_id,
     messageId: row.message_id,
-    createdAt: row.created_at,
+    seq: row.seq,
+    // Колонки результата rpc генератор типов не размечает как nullable.
+    createdAt: row.created_at ?? null,
     url: row.url,
     posterUrl: row.poster_url,
     mimeType: row.mime_type,
@@ -85,7 +95,7 @@ export async function listChatMedia(
   return {
     items,
     next:
-      last && messages >= CHAT_INFO_PAGE_SIZE ? { at: last.createdAt, id: last.messageId } : null,
+      last && messages >= CHAT_INFO_PAGE_SIZE ? last.seq : null,
   };
 }
 
@@ -93,7 +103,9 @@ export async function listChatMedia(
 export type ChatVoiceItem = {
   messageId: string;
   kind: 'voice' | 'video_note';
-  createdAt: string;
+  seq: number;
+  /** `null` — время чата скрыто от меня. */
+  createdAt: string | null;
   authorId: string | null;
   /** null — аккаунт автора удалён. */
   authorName: string | null;
@@ -105,16 +117,15 @@ export type ChatVoiceItem = {
   waveform: number[] | null;
 };
 
-export type ChatVoicePage = { items: ChatVoiceItem[]; next: InfoCursor | null };
+export type ChatVoicePage = { items: ChatVoiceItem[]; next: MessageCursor | null };
 
 export async function listChatVoices(
   chatId: string,
-  cursor: InfoCursor | null,
+  cursor: MessageCursor | null,
 ): Promise<ChatVoicePage> {
   const { data, error } = await supabase.rpc('list_chat_voices', {
     target_chat: chatId,
-    before_at: cursor?.at,
-    before_id: cursor?.id,
+    before_seq: cursor ?? undefined,
     page_size: CHAT_INFO_PAGE_SIZE,
   });
 
@@ -123,7 +134,8 @@ export async function listChatVoices(
   const items: ChatVoiceItem[] = (data ?? []).map((row) => ({
     messageId: row.message_id,
     kind: row.kind === 'video_note' ? 'video_note' : 'voice',
-    createdAt: row.created_at,
+    seq: row.seq,
+    createdAt: row.created_at ?? null,
     authorId: row.author_id,
     authorName: row.author_name,
     attachmentId: row.attachment_id,
@@ -138,9 +150,7 @@ export async function listChatVoices(
   return {
     items,
     next:
-      last && items.length >= CHAT_INFO_PAGE_SIZE
-        ? { at: last.createdAt, id: last.messageId }
-        : null,
+      last && items.length >= CHAT_INFO_PAGE_SIZE ? last.seq : null,
   };
 }
 
@@ -184,14 +194,24 @@ export async function listCommonGroups(
 }
 
 /**
- * Сколько id в одном запросе «был(а)»: id идут в адрес запроса, и у большой
- * группы он упёрся бы в предел длины.
+ * «В сети» и «был(а) в …» глазами смотрящего. Общего Presence-канала нет:
+ * внутри него не отфильтровать по зрителю, а авторизация Realtime не
+ * отзывается при смене настройки. Статус отдаёт база с проверкой настройки
+ * «Кто видит, что я в сети» (миграция `20261030130000_privacy_activity_status.sql`):
+ * закрытый, удалённый и ни разу не заходивший приходят одинаково.
  */
-const LAST_SEEN_CHUNK = 100;
+export type ActivityStatus = {
+  online: boolean;
+  /** `null` — неизвестно: скрыто настройкой или человек не заходил. */
+  lastSeenAt: string | null;
+};
 
-/** Когда люди были в приложении в последний раз: id → время или null («давно»). */
-export async function getLastSeen(userIds: string[]): Promise<Map<string, string | null>> {
-  const seen = new Map<string, string | null>();
+/** Сколько id в одном запросе «был(а)» — столько база принимает за раз. */
+const LAST_SEEN_CHUNK = 200;
+
+/** Статусы людей: id → «в сети» и когда был. Удалённых база не отдаёт. */
+export async function getLastSeen(userIds: string[]): Promise<Map<string, ActivityStatus>> {
+  const seen = new Map<string, ActivityStatus>();
   const chunks: string[][] = [];
 
   for (let at = 0; at < userIds.length; at += LAST_SEEN_CHUNK) {
@@ -199,23 +219,28 @@ export async function getLastSeen(userIds: string[]): Promise<Map<string, string
   }
 
   const results = await Promise.all(
-    chunks.map((ids) => supabase.from('profiles').select('id, last_seen_at').in('id', ids)),
+    chunks.map((ids) => supabase.rpc('activity_statuses', { user_ids: ids })),
   );
 
   for (const { data, error } of results) {
     if (error) throw error;
-    for (const row of data ?? []) seen.set(row.id, row.last_seen_at);
+
+    for (const row of data ?? []) {
+      // Колонки результата rpc генератор типов не размечает как nullable.
+      seen.set(row.user_id, { online: row.online === true, lastSeenAt: row.last_seen_at ?? null });
+    }
   }
 
   return seen;
 }
 
 /**
- * Отметить себя «был(а) сейчас». Пишет только база по моему токену; чаще раза
- * в 30 с строку не трогает.
+ * Отметить себя: на переднем плане — «в сети» ещё две минуты (подтверждать
+ * раз в минуту), уход в фон — «был(а) сейчас». Пишет только база по моему
+ * токену.
  */
-export async function markSeen(): Promise<void> {
-  const { error } = await supabase.rpc('mark_seen');
+export async function markSeen(online: boolean): Promise<void> {
+  const { error } = await supabase.rpc('mark_seen', { online });
 
   if (error) throw error;
 }

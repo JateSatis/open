@@ -8,7 +8,6 @@ import { useSession } from './useSession';
 
 import { registerDevice, signOutLocally, touchDevice } from '@/api/account';
 import { markSeen } from '@/api/chatInfo';
-import { setPresenceVisible } from '@/api/chats';
 import { getMediaSheetPhase, openMediaSheet } from '@/features/chats/MediaPickerSheet/sheetStore';
 import type { MediaLibraryItem } from '@/features/media';
 import { useMediaSelection } from '@/features/media/selectionStore';
@@ -23,7 +22,6 @@ jest.mock('@/api/account', () => ({
 }));
 
 jest.mock('@/api/chatInfo', () => ({ markSeen: jest.fn(() => Promise.resolve()) }));
-jest.mock('@/api/chats', () => ({ setPresenceVisible: jest.fn() }));
 
 jest.mock('./signIn', () => ({ signOutOfGoogle: jest.fn(() => Promise.resolve()) }));
 
@@ -220,14 +218,15 @@ describe('AccountLifecycle', () => {
     await setup();
 
     await waitFor(() => expect(mockedMarkSeen).toHaveBeenCalledTimes(1));
+    expect(mockedMarkSeen).toHaveBeenLastCalledWith(true);
 
+    // В фоне я не «в сети» — отметка ухода, а не подтверждение.
     await act(async () => appStateListener?.('background'));
     expect(mockedMarkSeen).toHaveBeenCalledTimes(2);
-    // В фоне я не «в сети», даже пока сокет жив.
-    expect(setPresenceVisible).toHaveBeenLastCalledWith(false);
+    expect(mockedMarkSeen).toHaveBeenLastCalledWith(false);
 
     await act(async () => appStateListener?.('active'));
     expect(mockedMarkSeen).toHaveBeenCalledTimes(3);
-    expect(setPresenceVisible).toHaveBeenLastCalledWith(true);
+    expect(mockedMarkSeen).toHaveBeenLastCalledWith(true);
   });
 });

@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, RefreshControl, View } from 'react-native';
 
 import { Button } from '@/components/Button';
@@ -29,8 +29,18 @@ import { Sizes, Spacing } from '@/theme';
 export default function ChatsScreen() {
   const router = useRouter();
   const currentUserId = useCurrentUserId();
-  const onlineIds = useOnlineUsers(currentUserId);
   const { chats, isLoading, isRefreshing, error, refresh } = useChats();
+  // Точка «в сети» — только у собеседников личных диалогов.
+  const peerIds = useMemo(
+    () =>
+      chats.flatMap((chat) => {
+        const peer = chat.kind === 'direct' ? counterpart(chat, currentUserId) : null;
+
+        return peer ? [peer.id] : [];
+      }),
+    [chats, currentUserId],
+  );
+  const onlineIds = useOnlineUsers(peerIds);
   const { incoming, declined, error: invitesError, refresh: refreshInvites } = useInvites();
 
   const [rowMenu, setRowMenu] = useState<SubscriptionRowTarget | null>(null);

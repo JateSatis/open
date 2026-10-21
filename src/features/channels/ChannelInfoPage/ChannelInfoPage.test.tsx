@@ -102,7 +102,6 @@ jest.mock('@/features/media/voicePlayback', () => ({
 let mockUserId = 'me';
 
 jest.mock('@/features/chats/useCurrentUserId', () => ({ useCurrentUserId: () => mockUserId }));
-jest.mock('@/features/chats/useOnlineUsers', () => ({ useOnlineUsers: () => new Set() }));
 
 const channel: Channel = {
   id: 'channel-1',

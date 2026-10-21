@@ -17,10 +17,9 @@ export type ChannelInfoTabsInput = {
   channel: Channel;
   summary: ChannelInfoSummary | undefined;
   isOwner: boolean;
-  online: Set<string>;
   subscriberQuery: string | null;
   onOpenPerson: (userId: string) => void;
-  onShowInChat: (messageId: string, createdAt: string) => void;
+  onShowInChat: (messageId: string, seq: number) => void;
   onSearchSubscribers: () => void;
 };
 
@@ -47,7 +46,6 @@ export function channelInfoTabs(input: ChannelInfoTabsInput): InfoTab[] {
         <SubscribersTab
           tab={tab}
           channelId={channel.id}
-          online={input.online}
           query={input.subscriberQuery}
           onOpenPerson={input.onOpenPerson}
         />

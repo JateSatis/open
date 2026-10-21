@@ -1,20 +1,28 @@
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { subscribeToChat, type ChatActivity, type ChatChannel } from '@/api/chats';
+import {
+  getTypingAudience,
+  subscribeToChat,
+  type ChatActivity,
+  type ChatChannel,
+  type TypingAudience,
+} from '@/api/chats';
+import { isChatMember } from '@/features/chats/chatDisplay';
 import { messagesQueryKey } from '@/features/chats/messages/historyCache';
 import {
   dropDeletedMessages,
   pullNewMessages,
   refreshCommentCounts,
   refreshEditedMessages,
+  refreshChatTimes,
   refreshClusterCounts,
   refreshIsland,
   refreshReactions,
   refreshViews,
 } from '@/features/chats/messages/sync';
 import type { UserActivity } from '@/features/chats/messages/types';
-import { chatQueryKey } from '@/features/chats/useChat';
+import { chatQueryKey, useChat } from '@/features/chats/useChat';
 import { pinsQueryKey } from '@/features/chats/usePinnedMessages';
 import { liveStreamQueryKey } from '@/features/streams/streamKeys';
 
@@ -30,6 +38,17 @@ const TYPING_THROTTLE_MS = 2000;
 const REACTIONS_BATCH_MS = 500;
 
 type Batch = { ids: Set<string>; timer: ReturnType<typeof setTimeout> | null };
+
+/**
+ * Сколько верить ответу «кому слать печатает». Он зависит от моей настройки
+ * (её смена сбрасывает ответ сразу) и от того, все ли участники мне друзья, —
+ * это меняется редко.
+ */
+const TYPING_AUDIENCE_STALE_MS = 60_000;
+
+export function typingAudienceKey(chatId: string) {
+  return ['typingAudience', chatId] as const;
+}
 
 export type ChatChannelState = {
   /** Кто сейчас печатает или записывает голосовое, кроме меня. */
@@ -47,6 +66,21 @@ export type ChatChannelState = {
  */
 export function useChatChannel(chatId: string, currentUserId: string | null): ChatChannelState {
   const queryClient = useQueryClient();
+  const { chat } = useChat(chatId);
+  const isMember = chat ? isChatMember(chat, currentUserId) : false;
+  // Куда слать мои «печатает»: решает база по моей настройке «Кто видит, что
+  // я в сети». Пока ответа нет — никуда: лучше промолчать, чем показаться.
+  const { data: audience = 'none' } = useQuery({
+    queryKey: typingAudienceKey(chatId),
+    queryFn: () => getTypingAudience(chatId),
+    enabled: isMember,
+    staleTime: TYPING_AUDIENCE_STALE_MS,
+  });
+  const audienceRef = useRef<TypingAudience>('none');
+
+  useEffect(() => {
+    audienceRef.current = isMember ? audience : 'none';
+  }, [audience, isMember]);
   const [activities, setActivities] = useState<UserActivity[]>([]);
   const channelRef = useRef<ChatChannel | null>(null);
   const typingTimersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>());
@@ -150,6 +184,12 @@ export function useChatChannel(chatId: string, currentUserId: string | null): Ch
         // Числа и сам факт звонка — из базы; payload только будит.
         void queryClient.invalidateQueries({ queryKey: liveStreamQueryKey(chatId) });
       },
+      onTimeVisibilityChanged: () => {
+        // Участник сменил, кому видно время: время, даты и прочтение у
+        // загруженных сообщений и у участников — перечитать на месте.
+        refreshChatTimes(queryClient, chatId).catch(() => undefined);
+        void queryClient.invalidateQueries({ queryKey: chatQueryKey(chatId) });
+      },
       onPinsChanged: () => {
         void queryClient.invalidateQueries({ queryKey: pinsQueryKey(chatId) });
       },
@@ -186,7 +226,7 @@ export function useChatChannel(chatId: string, currentUserId: string | null): Ch
           }, TYPING_TIMEOUT_MS),
         );
       },
-    });
+    }, isMember);
 
     channelRef.current = channel;
 
@@ -204,7 +244,7 @@ export function useChatChannel(chatId: string, currentUserId: string | null): Ch
       }
       setActivities([]);
     };
-  }, [catchUp, chatId, currentUserId, onNewMessage, queryClient]);
+  }, [catchUp, chatId, currentUserId, isMember, onNewMessage, queryClient]);
 
   const notifyActivity = useCallback(
     (activity: ChatActivity) => {
@@ -218,7 +258,7 @@ export function useChatChannel(chatId: string, currentUserId: string | null): Ch
       if (last && last.activity === activity && now - last.at < TYPING_THROTTLE_MS) return;
 
       lastActivitySentRef.current = { activity, at: now };
-      channelRef.current?.broadcastTyping(currentUserId, activity);
+      channelRef.current?.broadcastTyping(currentUserId, activity, audienceRef.current);
     },
     [currentUserId],
   );

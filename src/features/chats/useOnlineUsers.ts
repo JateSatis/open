@@ -1,29 +1,51 @@
-import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { useMemo } from 'react';
 
-import { subscribeToOnlineUsers } from '@/api/chats';
+import { getLastSeen, type ActivityStatus } from '@/api/chatInfo';
 
 /**
- * Ids of users currently present in the app, from a Realtime Presence channel.
- * Empty until the presence channel syncs, so callers must treat "not listed"
- * as "unknown or offline", never as a hard fact.
- *
- * Свёрнутое приложение снимает меня из Presence (`setPresenceVisible` в
- * `useAccountLifecycle`): сокет в фоне ещё живёт, и без этого я оставался бы
- * «в сети» вместо «был(а) в …».
+ * Как часто перечитывать статусы, пока экран открыт. Отметку «в сети»
+ * приложение подтверждает раз в минуту и снимает при уходе в фон, так что
+ * «в сети» появляется и пропадает с задержкой до полуминуты.
  */
-export function useOnlineUsers(userId: string | null): Set<string> {
-  const [onlineIds, setOnlineIds] = useState<Set<string>>(() => new Set());
+export const ACTIVITY_POLL_MS = 30_000;
 
-  useEffect(() => {
-    if (!userId) return;
+export function activityQueryKey(userIds: string[]) {
+  return ['activity', userIds.join(',')] as const;
+}
 
-    const unsubscribe = subscribeToOnlineUsers(userId, (ids) => setOnlineIds(new Set(ids)));
+/**
+ * Статусы людей с сервера: «в сети» и «был(а) в …» глазами смотрящего —
+ * настройку каждого проверяет база. Пока ответа нет — `undefined`.
+ */
+export function usePeopleActivity(userIds: string[]): Map<string, ActivityStatus> | undefined {
+  const ids = useMemo(() => [...new Set(userIds)].sort(), [userIds]);
+  const { data } = useQuery({
+    queryKey: activityQueryKey(ids),
+    queryFn: () => getLastSeen(ids),
+    enabled: ids.length > 0,
+    refetchInterval: ACTIVITY_POLL_MS,
+    staleTime: ACTIVITY_POLL_MS / 2,
+  });
 
-    return () => {
-      unsubscribe();
-      setOnlineIds(new Set());
-    };
-  }, [userId]);
+  return data;
+}
 
-  return onlineIds;
+/**
+ * Кто из этих людей сейчас «в сети». Пусто, пока ответа нет, и для тех, кто
+ * скрыл активность от меня, — «не в списке» значит «неизвестно или не в
+ * сети», а не твёрдый факт.
+ */
+export function useOnlineUsers(userIds: string[]): Set<string> {
+  const activity = usePeopleActivity(userIds);
+
+  return useMemo(() => {
+    const online = new Set<string>();
+
+    activity?.forEach((status, id) => {
+      if (status.online) online.add(id);
+    });
+
+    return online;
+  }, [activity]);
 }

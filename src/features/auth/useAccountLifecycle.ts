@@ -4,7 +4,6 @@ import { AppState } from 'react-native';
 
 import { registerDevice, touchDevice } from '@/api/account';
 import { markSeen } from '@/api/chatInfo';
-import { setPresenceVisible } from '@/api/chats';
 import { sessionIdOf } from '@/lib/jwt';
 import { isNetworkError } from '@/lib/network';
 
@@ -15,13 +14,14 @@ import { signOutQuietly } from './signOut';
 import { useSession } from './useSession';
 
 /**
- * Пока приложение открыто, отметка «был(а) в …» освежается так часто: если
- * приложение умрёт, не уйдя в фон, отметка отстанет не больше чем на это.
+ * Пока приложение открыто, «в сети» подтверждается так часто. База держит
+ * его две минуты после отметки: приложение умерло, не уйдя в фон, — через
+ * две минуты человек уже «был(а) в …».
  */
-const SEEN_INTERVAL_MS = 4 * 60 * 1000;
+const SEEN_INTERVAL_MS = 60 * 1000;
 
-function markSeenQuietly() {
-  markSeen().catch((error: unknown) => {
+function markSeenQuietly(online = true) {
+  markSeen(online).catch((error: unknown) => {
     if (!isNetworkError(error) && __DEV__) console.warn('mark_seen:', error);
   });
 }
@@ -104,28 +104,25 @@ export function useAccountLifecycle() {
   useEffect(() => {
     if (!sessionId) return;
 
-    markSeenQuietly();
-    let timer: ReturnType<typeof setInterval> | null = setInterval(
-      markSeenQuietly,
-      SEEN_INTERVAL_MS,
-    );
+    const confirmOnline = () => markSeenQuietly(true);
+
+    confirmOnline();
+    let timer: ReturnType<typeof setInterval> | null = setInterval(confirmOnline, SEEN_INTERVAL_MS);
 
     // Уход в фон — главная точка: «был(а) в 16:10» — это когда свернули.
     // Запрос уходит сразу, пока JS ещё не заморожен; не успел — останется
     // отметка возврата или последняя из открытого приложения.
     const subscription = AppState.addEventListener('change', (state) => {
       if (state === 'active') {
-        setPresenceVisible(true);
-        markSeenQuietly();
-        timer ??= setInterval(markSeenQuietly, SEEN_INTERVAL_MS);
+        confirmOnline();
+        timer ??= setInterval(confirmOnline, SEEN_INTERVAL_MS);
         return;
       }
 
       if (state === 'background') {
-        // В фоне я не «в сети», даже пока сокет ещё жив, — иначе «был(а) в …»
-        // не появился бы, пока система не закроет соединение.
-        setPresenceVisible(false);
-        markSeenQuietly();
+        // В фоне я не «в сети» — иначе «был(а) в …» появился бы только через
+        // две минуты, когда истечёт последнее подтверждение.
+        markSeenQuietly(false);
         if (timer) clearInterval(timer);
         timer = null;
       }

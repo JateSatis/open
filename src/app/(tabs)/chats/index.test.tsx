@@ -5,7 +5,8 @@ import { View } from 'react-native';
 import ChatsScreen from './index';
 
 import type { ChatSummary } from '@/api/chats';
-import { listChats, subscribeToOnlineUsers } from '@/api/chats';
+import { getLastSeen } from '@/api/chatInfo';
+import { listChats } from '@/api/chats';
 import { listInvites, type ChatInvite } from '@/api/invites';
 import {
   markChannelRead,
@@ -42,8 +43,9 @@ jest.mock('@/features/auth/useSession', () => ({
 
 jest.mock('@/api/chats', () => ({
   listChats: jest.fn(),
-  subscribeToOnlineUsers: jest.fn(),
 }));
+
+jest.mock('@/api/chatInfo', () => ({ getLastSeen: jest.fn() }));
 
 jest.mock('@/api/invites', () => ({
   listInvites: jest.fn(),
@@ -51,7 +53,7 @@ jest.mock('@/api/invites', () => ({
 
 const mockedListChats = listChats as jest.MockedFunction<typeof listChats>;
 const mockedInvites = listInvites as jest.MockedFunction<typeof listInvites>;
-const mockedPresence = subscribeToOnlineUsers as jest.MockedFunction<typeof subscribeToOnlineUsers>;
+const mockedStatuses = getLastSeen as jest.MockedFunction<typeof getLastSeen>;
 const mockedSession = useSession as jest.MockedFunction<typeof useSession>;
 
 function signedInAs(userId: string) {
@@ -81,6 +83,7 @@ const chat: ChatSummary = {
   lastMessageAuthorId: 'user-2',
   lastPopAt: null,
   lastActivityAt: '2026-09-16T10:00:00Z',
+  listPosition: null,
   enteredAt: null,
   previewIsPop: false,
   subscription: null,
@@ -104,7 +107,7 @@ function invite(chatId: string, status: ChatInvite['status']): ChatInvite {
 beforeEach(() => {
   jest.clearAllMocks();
   signedInAs('user-1');
-  mockedPresence.mockReturnValue(() => {});
+  mockedStatuses.mockResolvedValue(new Map());
   mockedListChats.mockResolvedValue([]);
   mockedInvites.mockResolvedValue([]);
   // Плашка о сбое загрузки появляется только при живой связи: об обрыве
@@ -164,6 +167,7 @@ describe('ChatsScreen', () => {
       lastMessageAuthorId: 'owner-1',
       lastPopAt: '2026-09-16T11:00:00Z',
       lastActivityAt: '2026-09-16T11:00:00Z',
+      listPosition: null,
       enteredAt: null,
       previewIsPop: true,
       subscription,
@@ -194,6 +198,7 @@ describe('ChatsScreen', () => {
           ...readChannel,
           lastMessageAt: '2026-09-16T12:00:00Z',
           lastActivityAt: '2026-09-16T12:00:00Z',
+          listPosition: null,
           enteredAt: null,
           previewIsPop: false,
           subscription: { ...subscription, unreadPosts: 2 },
@@ -494,14 +499,25 @@ describe('ChatsScreen', () => {
 
   it('marks a chat partner who is present as online', async () => {
     mockedListChats.mockResolvedValue([chat]);
-    mockedPresence.mockImplementation((_userId, onChange) => {
-      onChange(['user-1', 'user-2']);
-      return () => {};
-    });
+    mockedStatuses.mockResolvedValue(new Map([['user-2', { online: true, lastSeenAt: null }]]));
 
     await renderWithQuery(<ChatsScreen />);
 
     expect(await screen.findByText('в сети')).toBeTruthy();
+    // Статус спрашивается у сервера только для собеседника: настройку
+    // «Кто видит, что я в сети» проверяет база.
+    expect(mockedStatuses).toHaveBeenCalledWith(['user-2']);
+  });
+
+  it('shows no online mark when the server hides the partner status', async () => {
+    mockedListChats.mockResolvedValue([chat]);
+    mockedStatuses.mockResolvedValue(new Map([['user-2', { online: false, lastSeenAt: null }]]));
+
+    await renderWithQuery(<ChatsScreen />);
+    await screen.findByText('Марина');
+    await waitFor(() => expect(mockedStatuses).toHaveBeenCalled());
+
+    expect(screen.queryByText('в сети')).toBeNull();
   });
 
   it('opens the conversation when a chat is tapped', async () => {
@@ -535,15 +551,4 @@ describe('ChatsScreen', () => {
     expect(screen.queryByText(/Network request failed/)).toBeNull();
   });
 
-  it('leaves no presence channel behind on unmount', async () => {
-    const unsubscribe = jest.fn();
-    mockedListChats.mockResolvedValue([chat]);
-    mockedPresence.mockReturnValue(unsubscribe);
-
-    await renderWithQuery(<ChatsScreen />);
-    await screen.findByText('Марина');
-    await screen.unmount();
-
-    expect(unsubscribe).toHaveBeenCalled();
-  });
 });
