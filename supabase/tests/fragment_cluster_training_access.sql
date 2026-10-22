@@ -62,7 +62,7 @@ $$;
 
 create function pg_temp.at(m uuid, piece text) returns int
 language sql as $$
-  select strpos((select text from public.messages where id = m), piece) - 1
+  select strpos((select text from public.message_rows where id = m), piece) - 1
 $$;
 
 create function pg_temp.react(m uuid, piece text, emoji text) returns uuid

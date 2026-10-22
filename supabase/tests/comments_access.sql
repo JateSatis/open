@@ -129,7 +129,7 @@ begin
   set constraints all immediate;
   set constraints all deferred;
 
-  select last_message_text into preview_before from public.chats where id = chat;
+  select public.last_message_preview(ch) into preview_before from public.chat_rows ch where ch.id = chat;
   new_message_before := pg_temp.events('chat:' || chat::text, 'new_message');
   select count(*) into personal_before from realtime.messages
   where topic like 'user:%' and payload ->> 'chat_id' = chat::text;
@@ -428,7 +428,7 @@ begin
   perform pg_temp.check('комментарии не попадают в выборку сообщений чата', n = 3, n::text);
 
   perform pg_temp.as_service();
-  select last_message_text into s from public.chats where id = chat;
+  select public.last_message_preview(ch) into s from public.chat_rows ch where ch.id = chat;
   perform pg_temp.check('превью чата не тронуто комментариями', s = preview_before, coalesce(s, 'null') || ' / ' || coalesce(preview_before, 'null'));
   n := pg_temp.events('chat:' || chat::text, 'new_message');
   perform pg_temp.check('комментарии не шлют new_message в чат', n = new_message_before, n || ' / ' || new_message_before);

@@ -181,7 +181,7 @@ begin
   perform pg_temp.check('К4.2 освобождённое имя свободно', public.is_username_available('profile', 'same_zz'));
   update public.profiles set username = 'same_zz' where id = d;
   perform pg_temp.check('К4.2 другой человек берёт освобождённое имя',
-    (select username from public.profiles where id = d) = 'same_zz');
+    (select username from public.profile_cards(array[d])) = 'same_zz');
   perform pg_temp.check('своё имя профиля не занято для себя',
     public.is_username_available('profile', 'SAME_ZZ'));
   perform pg_temp.check('занятое другим человеком имя — занято',

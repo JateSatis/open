@@ -73,7 +73,10 @@ begin
   update public.privacy_settings set
     activity_status_visibility = 'everyone',
     message_activity_metadata_visibility = 'everyone',
-    account_search_visibility = 'everyone';
+    account_search_visibility = 'everyone',
+    profile_identity_masking = 'everyone',
+    dialogue_participant_name_masking = 'everyone',
+    avatar_visibility = 'everyone';
   update public.privacy_settings set
     activity_status_visibility = 'friends',
     message_activity_metadata_visibility = 'friends',
@@ -221,9 +224,9 @@ begin
   end;
 
   perform pg_temp.check('К2.7 chat_read_up_to скрыт',
-    (select public.chat_read_up_to(c) from public.chats c where c.id = dm_as) is null);
+    (select public.chat_read_up_to(c) from public.chat_rows c where c.id = dm_as) is null);
   perform pg_temp.check('К2.7 last_message_at скрыт',
-    (select public.last_message_at(c) from public.chats c where c.id = dm_as) is null);
+    (select public.last_message_at(c) from public.chat_rows c where c.id = dm_as) is null);
   perform pg_temp.check('К2.7 chat_people без отметок',
     not exists (select 1 from public.chat_people(array[dm_as]) where last_read_at is not null or joined_at is not null));
   perform pg_temp.check('К2.7 my_chat_list без момента входа',
@@ -247,7 +250,7 @@ begin
   perform pg_temp.check('К2.3 друг видит время, даты и прочтение',
     (select count(*) from public.message_rows where chat_id = dm_as and created_at is not null) = 2);
   perform pg_temp.check('К2.3 друг: last_message_at виден',
-    (select public.last_message_at(c) from public.chats c where c.id = dm_as) is not null);
+    (select public.last_message_at(c) from public.chat_rows c where c.id = dm_as) is not null);
 
   -- К2.8: просмотр A сообщения S не виден S счётчиком.
   perform pg_temp.act_as(a);

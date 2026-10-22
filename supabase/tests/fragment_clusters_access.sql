@@ -64,7 +64,7 @@ $$;
 /** Начало куска в тексте сообщения, code points от нуля. */
 create function pg_temp.at(m uuid, piece text) returns int
 language sql as $$
-  select strpos((select text from public.messages where id = m), piece) - 1
+  select strpos((select text from public.message_rows where id = m), piece) - 1
 $$;
 
 /** Реакция текущего пользователя на кусок текста; отдаёт фрагмент. */

@@ -52,12 +52,15 @@ $$;
 
 -- Тестовые аккаунты рождаются с защитными настройками приватности
 -- (20261029100000_privacy_settings.sql). Здесь проверяется не она: время,
--- «в сети» и поиск открыты всем — их скрытие проверяет
+-- «в сети», поиск и имя открыты всем — их скрытие проверяет
 -- privacy_activity_search_access.sql.
 update public.privacy_settings set
   message_activity_metadata_visibility = 'everyone',
   activity_status_visibility = 'everyone',
-  account_search_visibility = 'everyone'
+  account_search_visibility = 'everyone',
+  profile_identity_masking = 'everyone',
+  dialogue_participant_name_masking = 'everyone',
+  avatar_visibility = 'everyone'
 where user_id in (select id from auth.users where email like '%@test.local');
 
 do $$
@@ -98,7 +101,7 @@ begin
   set constraints all immediate;
   set constraints all deferred;
 
-  select last_message_text into s from public.chats where id = chat_ab;
+  select public.last_message_preview(ch) into s from public.chat_rows ch where ch.id = chat_ab;
   perform pg_temp.check('подготовка: превью — последнее сообщение', s = 'третье A', s);
 
   -- ====================================================== удаление: запреты
@@ -280,7 +283,7 @@ begin
   select count(*) into n from public.message_pins where message_id = m3;
   perform pg_temp.check('закреп удалённого сообщения снят', n = 0, n::text);
 
-  select last_message_text into s from public.chats where id = chat_ab;
+  select public.last_message_preview(ch) into s from public.chat_rows ch where ch.id = chat_ab;
   perform pg_temp.check('превью откатилось на предыдущее живое', s = 'ответ B', s);
 
   perform pg_temp.act_as(a);
@@ -296,7 +299,7 @@ begin
 
   -- Последнее своё удалено, превью сверху — чужое, его не трогаем.
   perform public.delete_messages(array[m1]);
-  select last_message_text into s from public.chats where id = chat_ab;
+  select public.last_message_preview(ch) into s from public.chat_rows ch where ch.id = chat_ab;
   perform pg_temp.check('удаление не последнего не трогает превью', s = 'ответ B', s);
 
   select count(*) into n from public.message_pins where chat_id = chat_ab;
@@ -304,9 +307,9 @@ begin
 
   perform pg_temp.act_as(b);
   perform public.delete_messages(array[mb]);
-  select last_message_text into s from public.chats where id = chat_ab;
+  select public.last_message_preview(ch) into s from public.chat_rows ch where ch.id = chat_ab;
   perform pg_temp.check('живых не осталось — превью пустое', s is null, coalesce(s, 'null'));
-  select count(*) into n from public.chats ch where ch.id = chat_ab and public.last_message_at(ch) is null;
+  select count(*) into n from public.chat_rows ch where ch.id = chat_ab and public.last_message_at(ch) is null;
   perform pg_temp.check('живых не осталось — время превью пустое', n = 1, n::text);
 end;
 $$;

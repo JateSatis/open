@@ -59,12 +59,15 @@ $$;
 
 -- Тестовые аккаунты рождаются с защитными настройками приватности
 -- (20261029100000_privacy_settings.sql). Здесь проверяется не она: время,
--- «в сети» и поиск открыты всем — их скрытие проверяет
+-- «в сети», поиск и имя открыты всем — их скрытие проверяет
 -- privacy_activity_search_access.sql.
 update public.privacy_settings set
   message_activity_metadata_visibility = 'everyone',
   activity_status_visibility = 'everyone',
-  account_search_visibility = 'everyone'
+  account_search_visibility = 'everyone',
+  profile_identity_masking = 'everyone',
+  dialogue_participant_name_masking = 'everyone',
+  avatar_visibility = 'everyone'
 where user_id in (select id from auth.users where email like '%@test.local');
 
 do $$
@@ -89,9 +92,9 @@ begin
   perform public.accept_chat_invite(grp);
 
   perform pg_temp.check('новая группа: владелец — создатель',
-    (select owner_id from public.chats where id = grp) = a);
+    (select owner_id from public.chat_rows where id = grp) = a);
   perform pg_temp.check('принял заявку — строка «вступил(а)»',
-    exists (select 1 from public.messages
+    exists (select 1 from public.message_rows
             where chat_id = grp and system_event = 'member_joined' and author_id = b));
 
   -- --------------------------------------------------------------- право настраивать
@@ -150,10 +153,10 @@ begin
     (select count(*) from public.chat_waiting_invitees
      where chat_id = grp and user_id in (d, e)) = 2);
   perform pg_temp.check('строки «пригласил(а)» — по одной на человека',
-    (select count(*) from public.messages
+    (select count(*) from public.message_rows
      where chat_id = grp and system_event = 'member_invited' and author_id = b) = 2);
   perform pg_temp.check('текст приглашения — с именами',
-    exists (select 1 from public.messages
+    exists (select 1 from public.message_rows
             where chat_id = grp and system_event = 'member_invited' and text = 'Борис пригласил(а) Дина'));
 
   perform pg_temp.act_as(c);
@@ -195,7 +198,7 @@ begin
   perform pg_temp.check('владелец удалил участника',
     not exists (select 1 from public.chat_members where chat_id = grp and user_id = d));
   perform pg_temp.check('строка «удалил(а)»',
-    exists (select 1 from public.messages
+    exists (select 1 from public.message_rows
             where chat_id = grp and system_event = 'member_removed' and author_id = a and system_user_id = d));
 
   perform pg_temp.act_as(d);
@@ -220,7 +223,7 @@ begin
   perform pg_temp.act_as(a);
   perform public.leave_chat(grp);
   perform pg_temp.check('владелец ушёл — владение у самого давнего',
-    (select owner_id from public.chats where id = grp) = b);
+    (select owner_id from public.chat_rows where id = grp) = b);
   perform pg_temp.check('строки «покинул(а)» и «Владельцем стал(а)» по порядку',
     (select array_agg(system_event order by seq) from (
       select system_event, seq from public.message_rows
@@ -229,8 +232,8 @@ begin
   -- Превью пишет отложенный триггер — на коммите.
   perform pg_temp.flush();
   perform pg_temp.check('превью «Чатов» — смена владельца',
-    (select last_message_text from public.chats where id = grp) = 'Владельцем стал(а) Борис',
-    (select last_message_text from public.chats where id = grp));
+    (select public.last_message_preview(ch) from public.chat_rows ch where ch.id = grp) = 'Владельцем стал(а) Борис',
+    (select public.last_message_preview(ch) from public.chat_rows ch where ch.id = grp));
 
   perform pg_temp.act_as(b);
   code := pg_temp.denied(format('select public.set_chat_title(%L, %L)', grp, 'От Бориса'));
@@ -244,12 +247,12 @@ begin
   perform pg_temp.as_admin();
   delete from auth.users where id = b;
   perform pg_temp.check('владелец удалил аккаунт — владение у Виктора',
-    (select owner_id from public.chats where id = grp) = c);
+    (select owner_id from public.chat_rows where id = grp) = c);
   perform pg_temp.check('строка «Владельцем стал(а)» после удаления аккаунта',
-    exists (select 1 from public.messages
+    exists (select 1 from public.message_rows
             where chat_id = grp and system_event = 'owner_changed' and system_user_id = c));
   perform pg_temp.check('строки удалённого аккаунта остались без автора',
-    exists (select 1 from public.messages
+    exists (select 1 from public.message_rows
             where chat_id = grp and system_event = 'member_invited' and author_id is null));
 
   -- --------------------------------------------------------------- последний участник
@@ -257,7 +260,7 @@ begin
   perform public.leave_chat(grp);
   perform pg_temp.check('последний ушёл — группа без участников и владельца',
     not exists (select 1 from public.chat_members where chat_id = grp)
-    and (select owner_id from public.chats where id = grp) is null);
+    and (select owner_id from public.chat_rows where id = grp) is null);
 
   -- --------------------------------------------------------------- удаление диалога
   perform pg_temp.act_as(e);

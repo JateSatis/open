@@ -54,7 +54,7 @@ begin
   perform pg_temp.check('вид чата — channel_posts',
     (select kind from public.chats where id = chat) = 'channel_posts');
   perform pg_temp.check('имя чата постов — название канала',
-    (select public.chat_display_name(x) from public.chats x where id = chat) = 'Канал A');
+    (select public.chat_display_name(x) from public.chat_rows x where id = chat) = 'Канал A');
 
   insert into public.messages (chat_id, author_id, kind, text)
   values (chat, a, 'text', 'первый пост') returning id into msg;
@@ -163,7 +163,7 @@ begin
 
   update public.profiles set username = 'Chan_A_ZZ' where id = b;
   perform pg_temp.check('профиль берёт имя канала',
-    (select username from public.profiles where id = b) = 'Chan_A_ZZ');
+    (select username from public.profile_cards(array[b])) = 'Chan_A_ZZ');
   update public.profiles set username = 'reader_b_zz' where id = b;
 
   select s.audience into aud from public.set_reaction('message', msg, emo) s;
@@ -180,7 +180,7 @@ begin
   perform pg_temp.act_as(b);
   perform public.forward_messages((dm ->> 'id')::uuid, chat, array[msg]);
   perform pg_temp.check('пост пересылается, заголовок островка — канал',
-    (select public.chat_display_name(x) from public.chats x
+    (select public.chat_display_name(x) from public.chat_rows x
      where x.id = (select source_chat_id from public.messages
                    where chat_id = (dm ->> 'id')::uuid and kind = 'forward' limit 1)) = 'Канал A');
 
@@ -247,11 +247,11 @@ begin
   perform pg_temp.check('поп с постом: поп и пост созданы',
     (r ->> 'pop_id')::uuid = pop
     and (select caption from public.pops where id = pop) = 'подпись'
-    and (select kind || '|' || text from public.messages where id = post) = 'media|подпись'
+    and (select kind || '|' || text from public.message_rows where id = post) = 'media|подпись'
     and (select pop_id from public.attachments where message_id = post) = pop);
 
   perform pg_temp.check('превью списка — Pop и текст',
-    (select last_message_text from public.chats where id = chat) = '🎬 Pop: подпись');
+    (select public.last_message_preview(ch) from public.chat_rows ch where ch.id = chat) = '🎬 Pop: подпись');
 
   r := public.publish_pop(chan, pop, video, 'Поп', 'подпись', true, 'подпись', null);
   perform pg_temp.check('повтор публикации отдаёт созданное, без дублей',
@@ -265,8 +265,8 @@ begin
 
   post2 := public.send_pop_post(chat, bare_pop, null, null);
   perform pg_temp.check('пост с существующим попом без текста',
-    (select text from public.messages where id = post2) is null
-    and (select last_message_text from public.chats where id = chat) = '🎬 Pop');
+    (select text from public.message_rows where id = post2) is null
+    and (select public.last_message_preview(ch) from public.chat_rows ch where ch.id = chat) = '🎬 Pop');
 
   perform public.publish_pop(other_chan, other_pop, video, 'Поп', null, false, null, null);
 
@@ -279,7 +279,7 @@ begin
 
   perform pg_temp.check('название попа сохраняется, пост берёт текст подписи, а не название',
     (select title from public.pops where id = pop) = 'Поп'
-    and (select text from public.messages where id = post) = 'подпись');
+    and (select text from public.message_rows where id = post) = 'подпись');
 
   begin
     perform public.publish_pop(chan, gen_random_uuid(), video, null, 'подпись', false, null, null);
@@ -354,7 +354,7 @@ begin
 
   perform public.edit_message(post, 'новый текст', jsonb_build_array(jsonb_build_object('attachment_id', att)));
   perform pg_temp.check('правка текста поста с попом',
-    (select text from public.messages where id = post) = 'новый текст'
+    (select text from public.message_rows where id = post) = 'новый текст'
     and (select pop_id from public.attachments where message_id = post) = pop);
 
   -- Удалённый поп (этап 3) не замораживает текст поста, который его показывает.
@@ -365,7 +365,7 @@ begin
     jsonb_build_array(jsonb_build_object('attachment_id',
       (select id from public.attachments where message_id = post2))));
   perform pg_temp.check('правка поста с удалённым попом',
-    (select text from public.messages where id = post2) = 'после удаления попа');
+    (select text from public.message_rows where id = post2) = 'после удаления попа');
 
   begin
     perform public.send_pop_post(chat, bare_pop, 'с удалённым', null);

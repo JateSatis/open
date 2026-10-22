@@ -77,7 +77,7 @@ begin
   select waveform into bars from public.attachments where message_id = msg;
   perform pg_temp.check('волна сохранена по порядку', bars = array[0, 5, 31, 12]::smallint[], bars::text);
 
-  select last_message_text into s from public.chats where id = chat_ab;
+  select public.last_message_preview(ch) into s from public.chat_rows ch where ch.id = chat_ab;
   perform pg_temp.check('превью с длительностью', s = '🎤 Голосовое сообщение (0:12)', s);
 
   msg := public.send_voice_message(chat_ab, pg_temp.voice(duration_ms => 800, waveform => 'null'));
@@ -85,13 +85,13 @@ begin
   set constraints all deferred;
   select waveform into bars from public.attachments where message_id = msg;
   perform pg_temp.check('голосовое без волны допустимо', bars is null);
-  select last_message_text into s from public.chats where id = chat_ab;
+  select public.last_message_preview(ch) into s from public.chat_rows ch where ch.id = chat_ab;
   perform pg_temp.check('короче секунды — «0:01», не «0:00»', s = '🎤 Голосовое сообщение (0:01)', s);
 
   msg := public.send_voice_message(chat_ab, pg_temp.voice(duration_ms => 125000));
   set constraints all immediate;
   set constraints all deferred;
-  select last_message_text into s from public.chats where id = chat_ab;
+  select public.last_message_preview(ch) into s from public.chat_rows ch where ch.id = chat_ab;
   perform pg_temp.check('превью минут', s = '🎤 Голосовое сообщение (2:05)', s);
 
   -- ----------------------------------------------------------- посторонний
@@ -231,14 +231,14 @@ begin
   ));
   set constraints all immediate;
   set constraints all deferred;
-  select last_message_text into s from public.chats where id = chat_ab;
+  select public.last_message_preview(ch) into s from public.chat_rows ch where ch.id = chat_ab;
   perform pg_temp.check('альбом с подписью: превью — подпись', s = 'подпись', s);
 
   begin
     msg := public.send_media_message(chat_ab, 'просто текст', null);
     set constraints all immediate;
     set constraints all deferred;
-    select last_message_text into s from public.chats where id = chat_ab;
+    select public.last_message_preview(ch) into s from public.chat_rows ch where ch.id = chat_ab;
     perform pg_temp.check('текст: превью — текст', s = 'просто текст', s);
   exception when others then
     perform pg_temp.check('текст: превью — текст', false, sqlerrm);

@@ -43,6 +43,13 @@ begin
 end;
 $$;
 
+create function pg_temp.act_as_postgres() returns void language plpgsql as $$
+begin
+  perform set_config('role', 'postgres', true);
+  perform set_config('request.jwt.claims', '', true);
+end;
+$$;
+
 create function pg_temp.act_as_anon() returns void language plpgsql as $$
 begin
   perform set_config('request.jwt.claims', json_build_object('role', 'anon')::text, true);
@@ -80,9 +87,9 @@ begin
   perform pg_temp.act_as(a, sa_phone);
 
   update public.profiles set display_name = 'Новое имя', status = 'в отпуске', bio = 'о себе',
-    username = 'test_acc_a', avatar_url = 'https://example.test/a.jpg'
+    username = 'test_acc_a', avatar_url = a || '/a.jpg'
   where id = a;
-  select display_name || '|' || status into s from public.profiles where id = a;
+  select display_name || '|' || status into s from public.profile_cards(array[a]);
   perform pg_temp.check('владелец меняет имя, статус, описание, аватар', s = 'Новое имя|в отпуске', s);
 
   begin
@@ -128,9 +135,11 @@ begin
   select count(*) into n from public.profiles where id = a and deleted_at is null;
   perform pg_temp.check('профиль A на месте после всех попыток', n = 1);
 
-  -- Посторонний видит статус в чужом профиле.
+  -- Посторонний видит статус в чужом профиле, если A открыл ему имя.
+  perform pg_temp.act_as_postgres();
+  update public.privacy_settings set profile_identity_masking = 'everyone' where user_id = a;
   perform pg_temp.act_as(b, sb);
-  select status into s from public.profiles where id = a;
+  select status into s from public.profile_cards(array[a]);
   perform pg_temp.check('B читает статус A', s = 'в отпуске', s);
 
   perform pg_temp.act_as_anon();
@@ -308,7 +317,7 @@ begin
   perform pg_temp.check('оба чата открываются', n = 2, n::text);
   select count(*) into n from public.messages where chat_id = chat_ab;
   perform pg_temp.check('сообщения диалога на месте (2)', n = 2, n::text);
-  select count(*) into n from public.messages where chat_id = chat_ab and author_id is null and text = 'от A';
+  select count(*) into n from public.message_rows where chat_id = chat_ab and author_id is null and text = 'от A';
   perform pg_temp.check('сообщение A осталось без автора', n = 1, n::text);
   select count(*) into n from public.chat_members where chat_id = chat_ab and user_id = b;
   perform pg_temp.check('B остался участником диалога', n = 1, n::text);

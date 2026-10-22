@@ -18,6 +18,11 @@ insert into auth.users (id, email, raw_user_meta_data, aud, role) values
   ('00000000-0000-4000-8000-0000000003b1', 'cb@test.local', '{"full_name":"Борис"}', 'authenticated', 'authenticated'),
   ('00000000-0000-4000-8000-0000000003c1', 'cc@test.local', '{"full_name":"Виктор"}', 'authenticated', 'authenticated');
 
+-- Тестовые аккаунты рождаются с подростковыми настройками: имя видно только
+-- друзьям. Здесь проверяется не подмена — её проверяет privacy_identity_access.sql.
+update public.privacy_settings set profile_identity_masking = 'everyone'
+where user_id in (select id from auth.users where email like '%@test.local');
+
 create function pg_temp.act_as(uid uuid) returns void language plpgsql as $$
 begin
   perform set_config('request.jwt.claims', json_build_object(
