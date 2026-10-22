@@ -9,10 +9,11 @@ const RECHECK_STALE_MS = 60_000;
 
 /**
  * «Недавние» лежат на телефоне снимками, и без перепроверки история
- * воскрешала бы человека, который с тех пор закрыл от меня поиск, или время
- * сообщения, которое теперь скрыто. Люди и сообщения показываются только
- * после ответа сервера: кого он не подтвердил — нет, у сообщений — время
- * глазами меня сейчас. Чаты и каналы открываются как есть: их видимость
+ * воскрешала бы человека, который с тех пор закрыл от меня поиск, его
+ * настоящее имя, которое он с тех пор скрыл, или время сообщения, которое
+ * теперь скрыто. Люди и сообщения показываются только после ответа сервера:
+ * кого он не подтвердил — нет, остальные — с именем и временем глазами меня
+ * сейчас. Чаты и каналы открываются как есть: их видимость
  * проверяет экран, который откроется.
  */
 export function useCheckedRecents(recent: RecentSearch[]): RecentSearch[] {
@@ -40,19 +41,24 @@ export function useCheckedRecents(recent: RecentSearch[]): RecentSearch[] {
     () =>
       recent.flatMap((item): RecentSearch[] => {
         if (item.type === 'message') {
-          if (!data?.messages.has(item.message.id)) return [];
+          const fresh = data?.messages.get(item.message.id);
+
+          if (!fresh) return [];
 
           return [
             {
               type: 'message',
-              message: { ...item.message, createdAt: data.messages.get(item.message.id) ?? null },
+              message: { ...item.message, createdAt: fresh.createdAt, authorName: fresh.authorName },
             },
           ];
         }
 
-        if (item.entity.kind === 'person' && !data?.people.has(item.entity.id)) return [];
+        if (item.entity.kind !== 'person') return [item];
 
-        return [item];
+        // Человек — каким он виден мне сейчас, а не каким был в момент тапа.
+        const person = data?.people.get(item.entity.id);
+
+        return person ? [{ type: 'entity', entity: { ...item.entity, ...person } }] : [];
       }),
     [data, recent],
   );

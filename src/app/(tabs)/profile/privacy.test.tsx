@@ -34,6 +34,10 @@ const TEEN: PrivacySettings = {
   activityStatusVisibility: 'friends',
   messageTimeVisibility: 'friends',
   searchVisibility: 'friends',
+  identityVisibility: 'friends',
+  dialogueNameVisibility: 'friends',
+  avatarVisibility: 'friends',
+  identityAlias: 'Илья Муромцев',
 };
 
 const ADULT: PrivacySettings = {
@@ -42,6 +46,10 @@ const ADULT: PrivacySettings = {
   activityStatusVisibility: 'everyone',
   messageTimeVisibility: 'everyone',
   searchVisibility: 'everyone',
+  identityVisibility: 'everyone',
+  dialogueNameVisibility: 'everyone',
+  avatarVisibility: 'everyone',
+  identityAlias: 'Вера Соколова',
 };
 
 const TITLES = {
@@ -79,8 +87,8 @@ describe('Конфиденциальность и безопасность', () 
     expect(await screen.findByText('Активность')).toBeTruthy();
     expect(screen.getByText('Поиск и контакты')).toBeTruthy();
     expect(screen.getByLabelText(`${TITLES.friends}: Никто, выбрано`)).toBeTruthy();
-    // Остальные группы появятся, когда сервер начнёт их применять.
-    expect(screen.queryByText(/Идентичность|Контент и данные/i)).toBeNull();
+    // «Контент и данные» появится, когда сервер начнёт их применять.
+    expect(screen.queryByText(/Контент и данные/i)).toBeNull();
   });
 
   it.each([

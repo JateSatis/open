@@ -40,6 +40,7 @@ import {
   type MyReaction,
 } from '@/api/reactionCounts';
 import { FRAGMENT_QUOTE_COLUMNS, toFragmentQuote, type FragmentQuote } from '@/api/fragmentQuote';
+import { opaqueFlag } from '@/api/opaquePeople';
 import { supabase } from '@/api/supabase';
 
 export type { FragmentQuote } from '@/api/fragmentQuote';
@@ -66,6 +67,11 @@ export type Comment = {
   /** `null` — аккаунт автора удалён. */
   authorName: string | null;
   authorAvatarUrl: string | null;
+  /**
+   * Автор подменён в диалоге сообщения: `authorId` — непрозрачный id чата,
+   * профиля за ним нет.
+   */
+  authorOpaque?: boolean;
   audience: CommentAudience;
   kind: CommentKind;
   text: string | null;
@@ -126,19 +132,20 @@ export type CommentTarget =
   | { state: 'deleted' }
   | { state: 'missing' };
 
+// Комментарии — из `comment_rows`: автор глазами смотрящего (имя, фото,
+// непрозрачный id считает база), профили клиенту не читаются.
 const COMMENT_COLUMNS =
-  `id, target_id, chat_id, author_id, kind, text, audience, created_at, edited_at, deleted_at, thread_root_id, fragment_id, replies_count, rank, author:profiles(display_name, avatar_url), ${FRAGMENT_QUOTE_COLUMNS}, comment_attachments(id, url, poster_url, mime_type, width, height, duration_ms, waveform), ${REACTION_COLUMNS}, replies:comment_replies!comment_replies_comment_fkey(position, quoted_id, quoted:comments!comment_replies_quoted_fkey(id, author_id, kind, text, created_at, edited_at, author:profiles(display_name), comment_attachments(url, poster_url, mime_type, duration_ms, position)))` as const;
+  `id, target_id, chat_id, author_id, author_name, author_avatar_url, author_opaque, kind, text, audience, created_at, edited_at, deleted_at, thread_root_id, fragment_id, replies_count, rank, ${FRAGMENT_QUOTE_COLUMNS}, comment_attachments(id, url, poster_url, mime_type, width, height, duration_ms, waveform), ${REACTION_COLUMNS}, replies:comment_replies!comment_replies_comment_fkey(position, quoted_id, quoted:comment_rows!comment_replies_quoted_fkey(id, author_id, author_name, author_opaque, kind, text, created_at, edited_at, comment_attachments(url, poster_url, mime_type, duration_ms, position)))` as const;
 
 // Мозаика собирается в порядке выбора файлов, а PostgREST не гарантирует
 // порядок вложенной выборки без явного order.
 const commentsSelect = () =>
   supabase
-    .from('comments')
+    .from('comment_rows')
     .select(COMMENT_COLUMNS)
     .order('position', { referencedTable: 'comment_attachments' });
 
-// Автор (имя и аватарка) — уже в `MESSAGE_COLUMNS`: вторая такая же связь
-// роняет запрос целиком (PostgREST 42712).
+// Автор (имя и аватарка) — колонки `MESSAGE_COLUMNS`, глазами смотрящего.
 const targetSelect = () =>
   supabase
     .from('message_rows')
@@ -209,7 +216,8 @@ function toQuotedComment(row: CommentReplyRow): QuotedMessage {
     messageId: quoted.id,
     state: 'live',
     authorId: quoted.author_id,
-    authorName: quoted.author_id ? (quoted.author?.display_name ?? 'Без имени') : null,
+    authorName: quoted.author_id ? (quoted.author_name ?? 'Без имени') : null,
+    authorOpaque: opaqueFlag(quoted.author_id, quoted.author_opaque),
     // Цитата комментария — не сообщение переписки: номера у неё нет, к ней
     // переходят по id в ветке. Время комментариев на этом этапе не скрыто,
     // и номер правки — время правки.
@@ -232,9 +240,10 @@ export function toComment(row: CommentRow): Comment {
     targetId: row.target_id ?? '',
     chatId: row.chat_id,
     authorId: row.author_id,
-    // Аккаунт удалён — ссылка обнулилась; скрытый профиль база тоже не отдаёт.
-    authorName: row.author_id && row.author ? (row.author.display_name ?? 'Без имени') : null,
-    authorAvatarUrl: row.author?.avatar_url ?? null,
+    // Аккаунт удалён — ссылка обнулилась, имени нет.
+    authorName: row.author_id ? (row.author_name ?? 'Без имени') : null,
+    authorAvatarUrl: row.author_avatar_url,
+    authorOpaque: opaqueFlag(row.author_id, row.author_opaque),
     audience: row.audience === 'member' ? 'member' : 'visitor',
     kind: toKind(row.kind),
     text: row.text,
@@ -569,7 +578,7 @@ export async function listCommentReactions(
   if (commentIds.length === 0) return [];
 
   const { data, error } = await supabase
-    .from('comments')
+    .from('comment_rows')
     .select(`id, ${REACTION_COLUMNS}` as const)
     .in('id', commentIds.slice(0, 500))
     .is('deleted_at', null);
@@ -603,8 +612,8 @@ export async function getCommentTarget(messageId: string): Promise<CommentTarget
     return {
       state: 'live',
       message: toMessage(data),
-      authorName: data.author_id && data.author ? (data.author.display_name ?? 'Без имени') : null,
-      authorAvatarUrl: data.author?.avatar_url ?? null,
+      authorName: data.author_id ? (data.author_name ?? 'Без имени') : null,
+      authorAvatarUrl: data.author_avatar_url,
     };
   }
 

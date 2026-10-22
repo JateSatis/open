@@ -7,6 +7,7 @@ import { chatInfoTabs } from './chatInfoTabs';
 import { useChatInfoSummary, usePeopleStatus } from './queries';
 import { useGroupActions } from './useGroupActions';
 
+import { isOpaquePersonId } from '@/api/opaquePeople';
 import type { ChatSummary } from '@/api/chats';
 import {
   InfoBarButton,
@@ -92,6 +93,9 @@ export function ChatInfoPage({ chat, slideBack }: ChatInfoPageProps) {
         router.navigate('/profile');
         return;
       }
+
+      // Подменённый в диалоге: id непрозрачный, профиля за ним нет.
+      if (isOpaquePersonId(personId)) return;
 
       router.push({ pathname: '/chats/people/[userId]', params: { userId: personId } });
     },

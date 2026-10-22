@@ -17,6 +17,7 @@ import { messagesSelect, toMessage, type Message } from '@/api/messageRows';
 import { publishPop, type PublishPopInput } from '@/api/pops';
 import { listChatSubscriptions, type Subscription } from '@/api/subscriptions';
 import { byChatListOrder } from '@/api/chatListOrder';
+import { opaqueFlag } from '@/api/opaquePeople';
 import { supabase } from '@/api/supabase';
 import { randomUuid } from '@/lib/uuid';
 
@@ -60,13 +61,22 @@ export type ChannelRef = {
   avatarUrl: string | null;
 };
 
-/** Человек, как его показывают в списках: без ролей и состояний. */
+/**
+ * Человек, как его показывают в списках: без ролей и состояний. Имя, фото и
+ * `@имя` — глазами смотрящего (их считает база по настройкам человека).
+ */
 export type Person = {
+  /** Настоящий id или, при `opaque`, непрозрачный id этого чата. */
   id: string;
   displayName: string;
   avatarUrl: string | null;
   /** `@имя` без `@`; есть не во всех списках — там, где по нему ищут. */
   username?: string | null;
+  /**
+   * Человек подменён для меня в этом диалоге: `id` не ведёт к профилю, «в
+   * сети» по нему не спросить. Нет — обычный id.
+   */
+  opaque?: boolean;
 };
 
 export type ChatParticipant = Person & {
@@ -197,10 +207,12 @@ export type Page<T> = {
   nextCursor: string | null;
 };
 
+// Чаты — из `chat_rows`: владелец, создатель и автор последнего сообщения в
+// нём — id глазами смотрящего (непрозрачный, если человек подменён).
 const CHAT_COLUMNS =
   'id, kind, title, username, avatar_url, owner_id, description, created_by, request_pending, last_message_at, last_message_preview, last_message_author_id, subscribers_count, channel:channels(id, title, username, avatar_url, last_pop_at)';
-const WAITING_COLUMNS = 'chat_id, user_id, display_name, avatar_url, username';
-export const chatsSelect = () => supabase.from('chats').select(CHAT_COLUMNS);
+const WAITING_COLUMNS = 'chat_id, user_id, display_name, avatar_url, username, opaque';
+export const chatsSelect = () => supabase.from('chat_rows').select(CHAT_COLUMNS);
 const waitingSelect = () => supabase.from('chat_waiting_invitees').select(WAITING_COLUMNS);
 
 type ChatRow = QueryData<ReturnType<typeof chatsSelect>>[number];
@@ -219,6 +231,7 @@ type MemberRow = {
   username: string | null;
   last_read_at: string | null;
   joined_at: string | null;
+  opaque: boolean;
 };
 
 function toChatKind(kind: string): ChatKind {
@@ -239,6 +252,7 @@ function toParticipant(row: MemberRow): ChatParticipant {
     displayName: row.display_name ?? 'Без имени',
     avatarUrl: row.avatar_url,
     username: row.username,
+    opaque: opaqueFlag(row.user_id, row.opaque),
     lastReadAt: row.last_read_at,
   };
 }
@@ -253,6 +267,7 @@ function toWaiting(row: WaitingRow): Person | null {
     displayName: row.display_name ?? 'Без имени',
     avatarUrl: row.avatar_url,
     username: row.username,
+    opaque: opaqueFlag(row.user_id, row.opaque),
   };
 }
 
@@ -367,6 +382,7 @@ async function fetchMembers(chatIds: string[]): Promise<MemberRow[]> {
       username: row.username ?? null,
       last_read_at: row.last_read_at ?? null,
       joined_at: row.joined_at ?? null,
+      opaque: row.opaque === true,
     }));
   });
 }
@@ -476,25 +492,22 @@ export const CHATS_OF_PAGE_SIZE = 30;
 /**
  * Чаты другого человека — как этот список видит он сам: те, где он
  * участник, свежими вперёд, а «непрочитано» — по его отметке прочтения.
- * Порядок — по вычисляемому `last_message_at`: чаты, время которых от меня
- * скрыто, стоят в конце. Постранично: у человека бывают сотни чатов.
- *
- * Позже сюда добавятся чаты, на которые он подписан, — подписок в
- * приложении пока нет.
+ * Чатов, где он подменён для меня в диалоге, база не отдаёт: иначе профиль
+ * связал бы его с псевдонимами в этих диалогах. Порядок — по последнему
+ * сообщению: чаты, время которых от меня скрыто, стоят в конце.
+ * Постранично: у человека бывают сотни чатов.
  */
 export async function listChatsOf(
   userId: string,
   page: number,
 ): Promise<Page<ChatSummary> & { nextPage: number | null }> {
-  const from = page * CHATS_OF_PAGE_SIZE;
   const { data, error } = await supabase
-    .from('chats')
-    .select(`${CHAT_COLUMNS}, viewer:chat_members!inner(user_id)`)
-    .eq('viewer.user_id', userId)
-    .is('deleted_at', null)
-    .order('last_message_at', { ascending: false, nullsFirst: false })
-    .order('id', { ascending: true })
-    .range(from, from + CHATS_OF_PAGE_SIZE - 1);
+    .rpc('list_person_chats', {
+      p_person: userId,
+      p_offset: page * CHATS_OF_PAGE_SIZE,
+      p_limit: CHATS_OF_PAGE_SIZE,
+    })
+    .select(CHAT_COLUMNS);
 
   if (error) throw error;
 
@@ -581,7 +594,7 @@ export async function setChatAvatar(
  */
 export async function getChatReadUpTo(chatId: string): Promise<string | null> {
   const { data, error } = await supabase
-    .from('chats')
+    .from('chat_rows')
     .select('id, chat_read_up_to')
     .eq('id', chatId)
     .maybeSingle();
@@ -989,8 +1002,10 @@ export async function listDeletedMessageIds(messageIds: string[]): Promise<strin
 export type IncomingMessage = {
   messageId: string;
   chatId: string;
+  /** Автор глазами получателя; при `authorOpaque` — непрозрачный id чата. */
   authorId: string | null;
   authorName: string;
+  authorOpaque?: boolean;
   /** Вид сообщения; у старой базы — нет. О звонке сообщает входящий, а не карточка. */
   messageKind: string | null;
   text: string | null;
@@ -1080,6 +1095,8 @@ export type ChatChannelHandlers = {
   onStreamChanged?: () => void;
   /** Участник сменил, кому видно время: время, даты и прочтение — перечитать. */
   onTimeVisibilityChanged?: () => void;
+  /** Участник сменил, кому видны его имя и фото: людей перечитать. */
+  onPeopleChanged?: () => void;
   /** Из островка этого чата убрали сообщения. Payload — подсказка, какой островок. */
   onForwardChanged?: (forwardId: string) => void;
   /**
@@ -1106,6 +1123,7 @@ function toIncoming(payload: unknown): IncomingMessage | null {
     chatId: row.chat_id,
     authorId: typeof row.author_id === 'string' ? row.author_id : null,
     authorName: typeof row.author_name === 'string' ? row.author_name : 'Без имени',
+    authorOpaque: opaqueFlag(typeof row.author_id === 'string' ? row.author_id : null, row.author_opaque === true),
     messageKind: typeof row.kind === 'string' ? row.kind : null,
     text: typeof row.text === 'string' ? row.text : null,
     channel: toIncomingChannel(row),
@@ -1379,6 +1397,8 @@ export type ChatSearchHit = {
   authorId: string | null;
   /** `null` — аккаунт автора удалён. */
   authorName: string | null;
+  /** Автор подменён в диалоге: id непрозрачный. */
+  authorOpaque?: boolean;
   text: string;
   /** Номер сообщения — до него догружается история при переходе. */
   seq: number;
@@ -1418,6 +1438,7 @@ export async function searchChatMessages(
     id: row.message_id,
     authorId: row.author_id ?? null,
     authorName: row.author_name ?? null,
+    authorOpaque: opaqueFlag(row.author_id, row.author_opaque),
     text: row.text ?? '',
     seq: row.seq,
     // Колонки результата rpc генератор типов не размечает как nullable.

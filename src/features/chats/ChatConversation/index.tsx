@@ -15,6 +15,7 @@ import Animated from 'react-native-reanimated';
 
 import { styles } from './styles';
 
+import { isOpaquePersonId } from '@/api/opaquePeople';
 import type { ChannelRef, ForwardedComment, IslandOriginal, Person } from '@/api/chats';
 import type { Pop } from '@/api/pops';
 import type { DraftPop } from '@/features/chats/composerDraftStore';
@@ -343,6 +344,9 @@ export function ChatConversation({
         router.navigate('/profile');
         return;
       }
+
+      // Подменённый в диалоге: id непрозрачный, профиля за ним нет.
+      if (isOpaquePersonId(personId)) return;
 
       router.push(`/chats/people/${personId}`);
     },

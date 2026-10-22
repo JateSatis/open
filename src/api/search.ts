@@ -168,10 +168,13 @@ export async function searchMessages(
 
 /** Что из сохранённых «Недавних» ещё можно показать — по ответу сервера. */
 export type RecentRecheck = {
-  /** Люди, которые по-прежнему пускают меня в поиск. */
-  people: Set<string>;
-  /** Живые и находимые мне сообщения: id → время глазами меня сейчас. */
-  messages: Map<string, string | null>;
+  /**
+   * Люди, которые по-прежнему пускают меня в поиск, — какими они видны мне
+   * сейчас: скрывший имя — псевдонимом, без username и фото.
+   */
+  people: Map<string, { title: string; username: string | null; avatarUrl: string | null }>;
+  /** Живые и находимые мне сообщения: id → время и автор глазами меня сейчас. */
+  messages: Map<string, { createdAt: string | null; authorName: string }>;
 };
 
 /**
@@ -183,7 +186,7 @@ export async function recheckRecentSearches(
   personIds: string[],
   messageIds: string[],
 ): Promise<RecentRecheck> {
-  const result: RecentRecheck = { people: new Set(), messages: new Map() };
+  const result: RecentRecheck = { people: new Map(), messages: new Map() };
 
   if (personIds.length === 0 && messageIds.length === 0) return result;
 
@@ -194,9 +197,20 @@ export async function recheckRecentSearches(
 
   if (error) throw error;
 
+  // Колонки результата rpc генератор типов не размечает как nullable.
   for (const row of data ?? []) {
-    if (row.kind === 'person') result.people.add(row.id);
-    else result.messages.set(row.id, row.created_at ?? null);
+    if (row.kind === 'person') {
+      result.people.set(row.id, {
+        title: row.display_name ?? 'Без имени',
+        username: row.username ?? null,
+        avatarUrl: row.avatar_url ?? null,
+      });
+    } else {
+      result.messages.set(row.id, {
+        createdAt: row.created_at ?? null,
+        authorName: row.display_name ?? 'Без имени',
+      });
+    }
   }
 
   return result;

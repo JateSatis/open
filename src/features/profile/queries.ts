@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { isOpaquePersonId } from '@/api/opaquePeople';
 import {
   getMyProfile,
   getProfile,
@@ -22,7 +23,8 @@ export function useProfile(userId: string | undefined) {
   return useQuery({
     queryKey: profileKeys.byId(userId ?? ''),
     queryFn: () => getProfile(userId as string),
-    enabled: Boolean(userId),
+    // Непрозрачный id подменённого в диалоге — профиля за ним нет.
+    enabled: Boolean(userId) && !isOpaquePersonId(userId),
   });
 }
 

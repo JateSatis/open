@@ -24,7 +24,7 @@ export function useRingingRecheck(
     const check = async () => {
       try {
         const since = new Date(Date.now() - RING_MS).toISOString();
-        const streams = await listRingingStreams(currentUserId, since);
+        const streams = await listRingingStreams(since);
 
         for (const stream of streams) {
           ring({

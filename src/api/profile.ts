@@ -1,16 +1,14 @@
-// Строки приходят типизированными от клиента: их форму задаёт
-// `src/api/types.gen.ts`, сгенерированный из миграций. Здесь описан только
-// доменный `Profile` — то, чем профилем пользуется остальное приложение.
+// Профиль глазами смотрящего: имя, username, фото, «О себе» и статус
+// таблица `profiles` клиенту не отдаёт — их отдаёт `profile_cards`, которая
+// применяет настройки идентичности (миграция
+// `20261101100000_identity_aliases.sql`). Тот, от кого человек скрыт, видит
+// псевдоним без username, «О себе» и статуса. Свой профиль — всегда настоящий.
 
 import { ProfileUnavailableError } from '@/api/profileErrors';
 import { supabase } from '@/api/supabase';
-import type { Tables, TablesUpdate } from '@/api/types.gen';
+import type { Database, TablesUpdate } from '@/api/types.gen';
 
-/** Ровно те колонки, что перечислены в `COLUMNS` ниже. */
-type ProfileRow = Pick<
-  Tables<'profiles'>,
-  'id' | 'username' | 'display_name' | 'avatar_url' | 'bio' | 'status'
->;
+type ProfileRow = Database['public']['Functions']['profile_cards']['Returns'][number];
 
 export type Profile = {
   id: string;
@@ -22,6 +20,11 @@ export type Profile = {
   bio: string | null;
   /** Короткая строка под именем: «в отпуске до понедельника». */
   status: string | null;
+  /**
+   * Имя скрыто от меня настройкой человека: `displayName` — его псевдоним,
+   * username, «О себе» и статуса нет. У своего профиля — `false`.
+   */
+  masked?: boolean;
 };
 
 export type ProfileUpdateInput = Partial<
@@ -36,9 +39,6 @@ export class UsernameTakenError extends Error {
   }
 }
 
-/** Код PostgREST «.single() не нашёл строку». */
-const NO_ROW_CODE = 'PGRST116';
-
 export { ProfileUnavailableError };
 
 export class NotAuthenticatedError extends Error {
@@ -48,16 +48,16 @@ export class NotAuthenticatedError extends Error {
   }
 }
 
-const COLUMNS = 'id, username, display_name, avatar_url, bio, status';
-
+// Колонки результата rpc генератор типов не размечает как nullable.
 function toProfile(row: ProfileRow): Profile {
   return {
     id: row.id,
-    username: row.username,
-    displayName: row.display_name,
-    avatarUrl: row.avatar_url,
-    bio: row.bio,
-    status: row.status,
+    username: row.username ?? null,
+    displayName: row.display_name ?? null,
+    avatarUrl: row.avatar_url ?? null,
+    bio: row.bio ?? null,
+    status: row.status ?? null,
+    masked: row.masked === true,
   };
 }
 
@@ -77,19 +77,24 @@ async function requireUserId(): Promise<string> {
   return userId;
 }
 
+/** Люди глазами смотрящего вне диалогов — не больше 200 за раз. Удалённых и заблокировавших меня нет. */
+export async function getProfiles(userIds: string[]): Promise<Profile[]> {
+  if (userIds.length === 0) return [];
+
+  const { data, error } = await supabase.rpc('profile_cards', { ids: userIds });
+
+  if (error) throw error;
+
+  return (data ?? []).map(toProfile);
+}
+
 export async function getProfile(userId: string): Promise<Profile> {
-  const { data, error } = await supabase
-    .from('profiles')
-    .select(COLUMNS)
-    .eq('id', userId)
-    .is('deleted_at', null)
-    .single();
+  const [profile] = await getProfiles([userId]);
 
-  if (error) {
-    throw error.code === NO_ROW_CODE ? new ProfileUnavailableError() : error;
-  }
+  // Аккаунт удалён или его владелец меня заблокировал.
+  if (!profile) throw new ProfileUnavailableError();
 
-  return toProfile(data);
+  return profile;
 }
 
 export async function getMyProfile(): Promise<Profile> {
@@ -117,12 +122,9 @@ export async function updateMyProfile(input: ProfileUpdateInput): Promise<Profil
     patch.status = input.status ?? null;
   }
 
-  const { data, error } = await supabase
-    .from('profiles')
-    .update(patch)
-    .eq('id', userId)
-    .select(COLUMNS)
-    .single();
+  // Обновлённую строку таблица не отдаёт — имя читается только через
+  // `profile_cards`, и свой профиль она отдаёт настоящим.
+  const { error } = await supabase.from('profiles').update(patch).eq('id', userId);
 
   if (error) {
     // 23505 is Postgres unique_violation. The only unique key a profile
@@ -134,5 +136,5 @@ export async function updateMyProfile(input: ProfileUpdateInput): Promise<Profil
     throw error;
   }
 
-  return toProfile(data);
+  return getProfile(userId);
 }

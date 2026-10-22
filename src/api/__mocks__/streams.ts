@@ -16,4 +16,4 @@ export const listRingingStreams = jest.fn(() => Promise.resolve([]));
 export const startCall = jest.fn(() => Promise.resolve({ streamId: 'stream-1', created: true }));
 export const requestStreamToken = jest.fn();
 export const syncStream = jest.fn(() => Promise.resolve());
-export const listCallProfiles = jest.fn(() => Promise.resolve([]));
+export const listCallPeople = jest.fn(() => Promise.resolve([]));

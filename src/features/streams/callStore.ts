@@ -6,8 +6,9 @@ import type { StreamRole } from '@/api/streams';
 export type CallConnection = 'connecting' | 'connected' | 'reconnecting';
 
 export type CallSpeaker = {
-  /** id пользователя — он же identity в комнате LiveKit. */
+  /** Identity в комнате LiveKit — не id человека: кто это, говорит база (`listCallPeople`). */
   id: string;
+  /** Имени в комнате нет — его подставляет экран звонка из базы. */
   name: string;
   isLocal: boolean;
   speaking: boolean;
