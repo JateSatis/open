@@ -19,14 +19,18 @@ export type AvatarBucket = {
 };
 
 /**
- * Удаление файлов аватара профиля. Единственная папка, которую удаление
- * аккаунта чистит в бакете, — `{id}/avatar/`. Фото групп (`group-avatar/`) и
- * аватарки каналов остаются: группа общая, и её фото не должно пропасть
- * оттого, что ушёл тот, кто его поставил.
+ * Удаление файлов аватара профиля. Аватар человека живёт в закрытом бакете
+ * `avatars` в папке `{id}/` (`avatarFolder` по умолчанию); в публичном
+ * `media` — только прежняя папка `{id}/avatar/` до переноса. Фото групп
+ * (`group-avatar/`) и аватарки каналов остаются: группа общая, и её фото не
+ * должно пропасть оттого, что ушёл тот, кто его поставил.
  */
-export function createRemoveAvatarFiles(bucket: AvatarBucket) {
+export function createRemoveAvatarFiles(
+  bucket: AvatarBucket,
+  avatarFolder: (userId: string) => string = (userId) => `${userId}/avatar`,
+) {
   return async (userId: string): Promise<void> => {
-    const folder = `${userId}/avatar`;
+    const folder = avatarFolder(userId);
     const { data, error } = await bucket.list(folder, { limit: 100 });
 
     if (error) throw error;

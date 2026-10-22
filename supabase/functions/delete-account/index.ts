@@ -8,6 +8,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 import { createDeleteAccountHandler, createRemoveAvatarFiles } from './handler.ts';
 
 const MEDIA_BUCKET = 'media';
+const AVATARS_BUCKET = 'avatars';
 
 const admin = createClient(
   Deno.env.get('SUPABASE_URL') ?? '',
@@ -25,7 +26,12 @@ const handler = createDeleteAccountHandler({
 
     return data.user.id;
   },
-  removeAvatarFiles: createRemoveAvatarFiles(admin.storage.from(MEDIA_BUCKET)),
+  removeAvatarFiles: async (userId) => {
+    // Нынешний аватар — в закрытом `avatars`; прежняя папка в `media` — на
+    // случай файлов, не перенесённых при переезде.
+    await createRemoveAvatarFiles(admin.storage.from(AVATARS_BUCKET), (id) => id)(userId);
+    await createRemoveAvatarFiles(admin.storage.from(MEDIA_BUCKET))(userId);
+  },
   deleteUser: async (userId) => {
     const { error } = await admin.auth.admin.deleteUser(userId);
 

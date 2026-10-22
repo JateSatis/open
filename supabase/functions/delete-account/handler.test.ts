@@ -152,3 +152,19 @@ Deno.test('чистится только папка аватара профил�
   assertEquals(listed, [`${ALICE}/avatar`]);
   assertEquals(removed, [`${ALICE}/avatar/me.jpg`]);
 });
+
+Deno.test('аватар в закрытом бакете — вся папка человека', async () => {
+  const files: Record<string, string[]> = { [ALICE]: ['a.jpg', 'b.jpg'] };
+  const removed: string[] = [];
+  const bucket: AvatarBucket = {
+    list: (folder) => Promise.resolve({ data: (files[folder] ?? []).map((name) => ({ name })), error: null }),
+    remove: (paths) => {
+      removed.push(...paths);
+      return Promise.resolve({ error: null });
+    },
+  };
+
+  await createRemoveAvatarFiles(bucket, (id) => id)(ALICE);
+
+  assertEquals(removed, [`${ALICE}/a.jpg`, `${ALICE}/b.jpg`]);
+});
