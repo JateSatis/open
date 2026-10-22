@@ -1,7 +1,9 @@
 import {
+  AliasLimitError,
   BirthDateInFutureError,
   BirthDateTooYoungError,
   getMyPrivacySettings,
+  regenerateIdentityAlias,
   setBirthDate,
   setPrivacySetting,
 } from './privacy';
@@ -50,19 +52,38 @@ describe('privacy api', () => {
 
   it('мои настройки; запись из одних null — строки нет', async () => {
     mockedRpc.mockResolvedValueOnce({
-      data: { id: 's-1', birth_date: null, friends_list_visibility: 'nobody' },
+      data: {
+        id: 's-1',
+        birth_date: null,
+        friends_list_visibility: 'nobody',
+        profile_identity_masking: 'friends',
+        identity_alias: 'Илья Муромцев',
+      },
       error: null,
     });
     await expect(getMyPrivacySettings()).resolves.toEqual({
       birthDate: null,
       friendsListVisibility: 'nobody',
+      identityVisibility: 'friends',
+      identityAlias: 'Илья Муромцев',
       // Чего сервер не прислал — защитное «никто».
       activityStatusVisibility: 'nobody',
       messageTimeVisibility: 'nobody',
       searchVisibility: 'nobody',
+      dialogueNameVisibility: 'nobody',
+      avatarVisibility: 'nobody',
     });
 
     mockedRpc.mockResolvedValueOnce({ data: { id: null }, error: null });
     await expect(getMyPrivacySettings()).resolves.toBeNull();
+  });
+
+  it('другой псевдоним — новый от сервера; лимит за сутки (OPN13) — своя ошибка', async () => {
+    mockedRpc.mockResolvedValueOnce({ data: 'Вера Соколова', error: null });
+    await expect(regenerateIdentityAlias()).resolves.toBe('Вера Соколова');
+    expect(mockedRpc).toHaveBeenCalledWith('regenerate_identity_alias');
+
+    mockedRpc.mockResolvedValueOnce({ data: null, error: { code: 'OPN13', message: 'raw' } });
+    await expect(regenerateIdentityAlias()).rejects.toBeInstanceOf(AliasLimitError);
   });
 });
