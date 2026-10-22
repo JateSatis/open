@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import {
   chatMediaEntry,
@@ -31,17 +31,33 @@ export function useMediaUri(value: string | null | undefined): string | null {
   return useMediaSource(value)?.uri ?? null;
 }
 
+/** Держать ссылку плеера не дольше этого: подпись живёт 15 минут. */
+const HOLD_MS = 12 * 60_000;
+
 /**
- * Адрес для плеера видео: первая полученная ссылка держится, пока жив
- * экран. Переподпись дала бы новый адрес, и плеер начал бы ролик заново;
- * ролик до пяти минут дочитывается задолго до конца срока ссылки.
+ * Адрес для плеера видео: полученная ссылка держится, пока не подходит её
+ * срок. Переподпись даёт новый адрес, и плеер начал бы ролик заново, — поэтому
+ * свежая ссылка берётся только когда прежняя вот-вот истечёт (иначе плеер,
+ * дочитывая файл после паузы, упёрся бы в мёртвую ссылку).
  */
 export function useStableMediaUri(value: string | null | undefined): string | null {
   const uri = useMediaUri(value);
-  const [held, setHeld] = useState<{ value: typeof value; uri: string } | null>(null);
+  // Номер срока: раз в HOLD_MS удержанная ссылка разрешает смениться.
+  const [epoch, setEpoch] = useState(0);
+  const [held, setHeld] = useState<{ value: typeof value; uri: string; epoch: number } | null>(
+    null,
+  );
 
-  if (uri && (!held || held.value !== value)) {
-    setHeld({ value, uri });
+  useEffect(() => {
+    const timer = setTimeout(() => setEpoch((current) => current + 1), HOLD_MS);
+
+    return () => clearTimeout(timer);
+  }, [epoch, value]);
+
+  const fresh = !held || held.value !== value || held.epoch !== epoch;
+
+  if (uri && fresh && uri !== held?.uri) {
+    setHeld({ value, uri, epoch });
     return uri;
   }
 

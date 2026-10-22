@@ -142,6 +142,22 @@ const handler = createSanitizeHandler({
   remove: async (bucket, paths) => {
     await admin.storage.from(bucket).remove(paths);
   },
+  move: async (bucket, from, to) => {
+    const { error } = await admin.storage.from(bucket).move(from, to);
+
+    if (error) throw error;
+  },
+  listStale: async (bucket, folder, olderThanMs) => {
+    const { data, error } = await admin.storage.from(bucket).list(folder, { limit: 100 });
+
+    if (error) throw error;
+
+    const before = Date.now() - olderThanMs;
+
+    return (data ?? [])
+      .filter((file) => file.id && file.created_at && Date.parse(file.created_at) < before)
+      .map((file) => `${folder}/${file.name}`);
+  },
   publicUrl: (bucket, path) => admin.storage.from(bucket).getPublicUrl(path).data.publicUrl,
   newName: () => crypto.randomUUID(),
   log: (message, detail) => console.error(message, detail),

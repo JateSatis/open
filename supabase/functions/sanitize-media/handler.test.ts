@@ -47,6 +47,13 @@ function setup(overrides: Partial<SanitizeDeps> = {}) {
     remove: async (b, paths) => {
       paths.forEach((p) => bucket(b).delete(p));
     },
+    move: async (b, from, to) => {
+      const stored = bucket(b).get(from) as Stored;
+
+      bucket(b).delete(from);
+      bucket(b).set(to, stored);
+    },
+    listStale: async () => [],
     publicUrl: (b, p) => `https://example.supabase.co/storage/v1/object/public/${b}/${p}`,
     newName: () => 'fixed-name',
     log: (_message, detail) => logged.push(detail),
@@ -178,4 +185,38 @@ Deno.test('the log gets only the error name', async () => {
   await call({ path: `${ALICE}/a.jpg`, kind: 'photo' });
 
   assertEquals(logged, ['Error']);
+});
+
+Deno.test('the staged file is moved out of the client folder before it is read', async () => {
+  const reads: string[] = [];
+  const { bucket, call } = setup({
+    readAll: async (b, p) => {
+      reads.push(p);
+      return (bucket(b).get(p) as Stored).bytes.slice();
+    },
+  });
+
+  bucket('uploads').set(`${ALICE}/a.jpg`, { bytes: await fixture('plain.jpg') });
+  await call({ path: `${ALICE}/a.jpg`, kind: 'photo' });
+
+  // Клиент пишет только в свою папку — подменить рабочую копию ему негде.
+  assertEquals(reads.length, 1);
+  assert(reads[0].startsWith('_work/'));
+  assertEquals(bucket('uploads').size, 0);
+});
+
+Deno.test('abandoned staged uploads of the caller are swept', async () => {
+  const removed: string[][] = [];
+  const { bucket, call } = setup({
+    listStale: async (_b, folder) => [`${folder}/old.jpg`],
+    remove: async (b, paths) => {
+      removed.push(paths);
+      paths.forEach((p) => bucket(b).delete(p));
+    },
+  });
+
+  bucket('uploads').set(`${ALICE}/a.jpg`, { bytes: await fixture('plain.jpg') });
+  await call({ path: `${ALICE}/a.jpg`, kind: 'photo' });
+
+  assert(removed.some((paths) => paths.includes(`${ALICE}/old.jpg`)));
 });

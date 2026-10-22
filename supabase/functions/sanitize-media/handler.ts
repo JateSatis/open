@@ -41,6 +41,12 @@ export const AVATARS_BUCKET = 'avatars';
  */
 export const MAX_AV_BYTES = 300 * 1024 * 1024;
 
+/** Папка рабочих копий в `uploads`: не uuid, поэтому клиенту в неё не писать. */
+const WORK_FOLDER = '_work';
+
+/** Временный файл старше этого брошен: очистка идёт секунды. */
+const STALE_UPLOAD_MS = 60 * 60_000;
+
 export type MediaKind =
   | 'photo'
   | 'poster'
@@ -103,6 +109,10 @@ export type SanitizeDeps = {
     size_bytes: number;
   }) => Promise<void>;
   remove: (bucket: string, paths: string[]) => Promise<void>;
+  /** Перенести объект внутри бакета (без копирования байтов). */
+  move: (bucket: string, from: string, to: string) => Promise<void>;
+  /** Временные файлы человека старше `olderThanMs` — подчистить брошенные. */
+  listStale: (bucket: string, folder: string, olderThanMs: number) => Promise<string[]>;
   publicUrl: (bucket: string, path: string) => string;
   /** Имя файла на постоянном месте — случайное, не от клиента. */
   newName: () => string;
@@ -170,11 +180,18 @@ export function createSanitizeHandler(deps: SanitizeDeps) {
     const staged = path as string;
     const destination = DESTINATIONS[kind];
     const extension = match[2];
+    // Рабочая копия — в папке, куда клиент писать не может: иначе между
+    // планом очистки и потоком он подменил бы файл другим той же длины.
+    const work = `${WORK_FOLDER}/${deps.newName()}.${extension}`;
+    let moved = false;
 
     try {
       const size = await deps.size(STAGING_BUCKET, staged);
 
       if (size === null) return json(404, { error: 'not_found' });
+
+      await deps.move(STAGING_BUCKET, staged, work);
+      moved = true;
 
       let target: string;
       let contentType: string;
@@ -183,7 +200,7 @@ export function createSanitizeHandler(deps: SanitizeDeps) {
       if (destination.format === 'jpeg') {
         if (size > MAX_IMAGE_BYTES) return json(413, { error: 'too_large' });
 
-        const clean = sanitizeJpeg(await deps.readAll(STAGING_BUCKET, staged));
+        const clean = sanitizeJpeg(await deps.readAll(STAGING_BUCKET, work));
 
         target = targetPath(userId, destination, deps.newName(), 'jpg');
         contentType = 'image/jpeg';
@@ -195,9 +212,9 @@ export function createSanitizeHandler(deps: SanitizeDeps) {
         const ext = kind === 'voice' ? 'm4a' : extension === 'mov' ? 'mov' : 'mp4';
         const plan = await planIsoBmff({
           size,
-          read: (offset, length) => deps.read(STAGING_BUCKET, staged, offset, length),
+          read: (offset, length) => deps.read(STAGING_BUCKET, work, offset, length),
         });
-        const source = await deps.stream(STAGING_BUCKET, staged);
+        const source = await deps.stream(STAGING_BUCKET, work);
 
         target = targetPath(userId, destination, deps.newName(), ext);
         contentType = BMFF_EXTENSIONS[ext];
@@ -231,7 +248,13 @@ export function createSanitizeHandler(deps: SanitizeDeps) {
       log('sanitize failed', errorName(error));
       return json(500, { error: 'sanitize_failed' });
     } finally {
-      await deps.remove(STAGING_BUCKET, [staged]).catch(() => undefined);
+      await deps.remove(STAGING_BUCKET, [moved ? work : staged]).catch(() => undefined);
+      // Брошенные загрузки (приложение закрыли до очистки) — неочищенные
+      // оригиналы: при каждом вызове уходят прежние файлы этого человека.
+      await deps
+        .listStale(STAGING_BUCKET, userId, STALE_UPLOAD_MS)
+        .then((old) => (old.length > 0 ? deps.remove(STAGING_BUCKET, old) : undefined))
+        .catch(() => undefined);
     }
   };
 }

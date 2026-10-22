@@ -10,7 +10,9 @@
 //   * каждый чистый файл отмечается в `media_objects`;
 //   * прежние файлы медиа сообщений и комментариев в `media` (и все
 //     несостоявшиеся отправки в папках photo/video/voice/video_note)
-//     удаляются: это неочищенные оригиналы.
+//     удаляются: это неочищенные оригиналы. Файл, который перенести не
+//     удалось (автор удалён, не очищается), остаётся, пока на него ссылается
+//     строка, — он в списке «не удалось».
 // Повторный запуск безопасен: перенесённое (путь без адреса, файл в реестре)
 // пропускается.
 //
@@ -44,6 +46,8 @@ const PUBLIC_MARKER = '/storage/v1/object/public/media/';
 const PAGE = 1000;
 
 const stats = { cleaned: 0, skipped: 0, failed: [], removed: 0 };
+/** Файлы, на которые всё ещё ссылаются неперенесённые строки: их не удалять. */
+const stillUsed = new Set();
 /** Прежние объекты, которые надо удалить после переноса: бакет → пути. */
 const stale = { media: new Set(), avatars: new Set() };
 
@@ -192,6 +196,7 @@ async function migrateAttachments(table, parent, parentTable) {
 
       if (!source || !owner) {
         stats.failed.push(`${label}.${column}: ${owner ? 'адрес не из media' : 'автор удалён'}`);
+        if (source) stillUsed.add(source);
         continue;
       }
 
@@ -217,6 +222,8 @@ async function migrateAttachments(table, parent, parentTable) {
       if (path) {
         patch[column] = path;
         stale.media.add(source);
+      } else {
+        stillUsed.add(source);
       }
     }
 
@@ -290,6 +297,15 @@ async function migrateGroupPhotos(table, folder, kind) {
     }
 
     const owner = source.split('/')[0];
+    // Фото поставил удалённый аккаунт — в реестре ему не быть владельцем.
+    const { data: profile } = await admin.from('profiles').select('id').eq('id', owner).maybeSingle();
+
+    if (!profile) {
+      stats.failed.push(`${table} ${row.id}: поставивший фото удалён`);
+      stillUsed.add(source);
+      continue;
+    }
+
     const path = await cleanCopy(
       { bucket: 'media', path: source },
       { bucket: 'media', owner, folder, kind, format: 'jpeg', ext: 'jpg', contentType: 'image/jpeg' },
@@ -366,7 +382,7 @@ async function collectChatLeftovers() {
       const { data: files } = await admin.storage.from('media').list(prefix, { limit: 1000 });
 
       for (const file of files ?? []) {
-        if (file.id) stale.media.add(`${prefix}/${file.name}`);
+        if (file.id && !stillUsed.has(`${prefix}/${file.name}`)) stale.media.add(`${prefix}/${file.name}`);
       }
     }
   }
