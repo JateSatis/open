@@ -72,6 +72,7 @@ describe('privacy api', () => {
       searchVisibility: 'nobody',
       dialogueNameVisibility: 'nobody',
       avatarVisibility: 'nobody',
+      mediaVisibility: 'nobody',
     });
 
     mockedRpc.mockResolvedValueOnce({ data: { id: null }, error: null });

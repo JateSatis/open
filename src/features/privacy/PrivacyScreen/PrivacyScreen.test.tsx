@@ -39,6 +39,7 @@ function settings(overrides: Partial<PrivacySettings> = {}): PrivacySettings {
     identityVisibility: 'friends',
     dialogueNameVisibility: 'friends',
     avatarVisibility: 'friends',
+    mediaVisibility: 'friends',
     identityAlias: 'Илья Муромцев',
     ...overrides,
   };
@@ -110,4 +111,39 @@ it('К4.2 при лимите — понятный текст, псевдони�
 
   expect(await screen.findByText(/не больше 5 раз в сутки/)).toBeTruthy();
   expect(screen.getByText('Для тех, от кого скрыто имя, вы — Илья Муромцев')).toBeTruthy();
+});
+
+it('К3.1 у подростка медиа — «Только друзья»; переключателя очистки нет', async () => {
+  mockedSettings.mockResolvedValue(settings());
+  await renderWithQuery(<PrivacyScreen />);
+
+  expect(await screen.findByText('Контент и данные')).toBeTruthy();
+  expect(
+    screen.getByLabelText('Кто видит мои фото, видео и голосовые: Только друзья, выбрано'),
+  ).toBeTruthy();
+  expect(screen.getByText(/Участники чата, куда вы отправили, видят всегда/)).toBeTruthy();
+  expect(screen.getByText(/Кто уже открыл файл, мог его сохранить/)).toBeTruthy();
+  // Строка про очистку — без переключателя и без обещаний про содержимое кадра.
+  expect(screen.getByTestId('privacy-metadata-note')).toHaveTextContent(
+    'Из фото и видео перед отправкой удаляются геометка, модель телефона и дата съёмки.',
+  );
+  expect(screen.queryByRole('switch')).toBeNull();
+});
+
+it('К3.1 у взрослого медиа — «Все»', async () => {
+  mockedSettings.mockResolvedValue(settings({ mediaVisibility: 'everyone' }));
+  await renderWithQuery(<PrivacyScreen />);
+
+  expect(
+    await screen.findByLabelText('Кто видит мои фото, видео и голосовые: Все, выбрано'),
+  ).toBeTruthy();
+});
+
+it('смена настройки медиа уходит на сервер своим ключом', async () => {
+  mockedSettings.mockResolvedValue(settings());
+  await renderWithQuery(<PrivacyScreen />);
+
+  await fireEvent.press(await screen.findByLabelText('Кто видит мои фото, видео и голосовые: Никто'));
+
+  expect(mockedSet).toHaveBeenCalledWith('dialogue_media_visibility', 'nobody');
 });
