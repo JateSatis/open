@@ -55,6 +55,8 @@ export type ChatMediaItem = {
   width: number | null;
   height: number | null;
   durationMs: number | null;
+  /** Автор скрыл медиа: пути и постера нет, клетка — «скрыто автором». */
+  hidden: boolean;
 };
 
 export type ChatMediaPage = { items: ChatMediaItem[]; next: MessageCursor | null };
@@ -82,12 +84,13 @@ export async function listChatMedia(
     seq: row.seq,
     // Колонки результата rpc генератор типов не размечает как nullable.
     createdAt: row.created_at ?? null,
-    url: row.url,
+    url: row.url ?? '',
     posterUrl: row.poster_url,
     mimeType: row.mime_type,
     width: row.width,
     height: row.height,
     durationMs: row.duration_ms,
+    hidden: row.media_hidden === true,
   }));
   const messages = new Set(items.map((item) => item.messageId)).size;
   const last = items[items.length - 1];
@@ -115,6 +118,8 @@ export type ChatVoiceItem = {
   mimeType: string | null;
   durationMs: number;
   waveform: number[] | null;
+  /** Автор скрыл медиа: пути и волны нет, только длительность. */
+  hidden: boolean;
 };
 
 export type ChatVoicePage = { items: ChatVoiceItem[]; next: MessageCursor | null };
@@ -139,11 +144,12 @@ export async function listChatVoices(
     authorId: row.author_id,
     authorName: row.author_name,
     attachmentId: row.attachment_id,
-    url: row.url,
+    url: row.url ?? '',
     posterUrl: row.poster_url,
     mimeType: row.mime_type,
     durationMs: row.duration_ms ?? 0,
     waveform: row.waveform,
+    hidden: row.media_hidden === true,
   }));
   const last = items[items.length - 1];
 

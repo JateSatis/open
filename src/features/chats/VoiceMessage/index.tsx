@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 
 import type { MessageAttachment } from '@/api/chats';
+import { HiddenVoiceRow } from '@/features/chats/HiddenVoiceRow';
 import { noteVoiceOwner } from '@/features/recs/journal/voiceJournal';
 import { VoicePlayer } from '@/features/media';
 import { useTheme } from '@/hooks/use-theme';
@@ -23,8 +24,17 @@ export function VoiceMessage({ attachment, localUri, isOwn, messageId }: VoiceMe
   const uri = localUri ?? attachment.url;
 
   useEffect(() => {
-    if (messageId) noteVoiceOwner(uri, messageId);
-  }, [messageId, uri]);
+    if (messageId && !attachment.hidden) noteVoiceOwner(uri, messageId);
+  }, [attachment.hidden, messageId, uri]);
+
+  if (attachment.hidden && !localUri) {
+    return (
+      <HiddenVoiceRow
+        durationMs={attachment.durationMs}
+        color={isOwn ? 'primaryText' : 'textSecondary'}
+      />
+    );
+  }
 
   return (
     <VoicePlayer

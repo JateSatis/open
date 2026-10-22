@@ -1,4 +1,3 @@
-import { Image } from 'expo-image';
 import { memo } from 'react';
 import { Pressable, View } from 'react-native';
 
@@ -7,6 +6,7 @@ import { styles } from './styles';
 import type { QuotedMessage } from '@/api/chats';
 import { Text } from '@/components/Text';
 import { DELETED_ACCOUNT, describePreview } from '@/features/chats/messageQuote';
+import { MediaThumb } from '@/features/chats/MediaThumb';
 import { useTheme } from '@/hooks/use-theme';
 
 export type ReplyQuoteProps = {
@@ -54,8 +54,8 @@ const QuoteLine = memo(function QuoteLine({ quote, isOwn, onPress }: QuoteLinePr
       <View style={[styles.accent, { backgroundColor: accentColor }]} />
 
       {thumbnailUrl ? (
-        <Image
-          source={{ uri: thumbnailUrl }}
+        <MediaThumb
+          uri={thumbnailUrl}
           style={[styles.thumbnail, { backgroundColor: theme.backgroundSelected }]}
           contentFit="cover"
           accessibilityIgnoresInvertColors

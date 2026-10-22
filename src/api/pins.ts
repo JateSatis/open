@@ -32,13 +32,13 @@ const pinsSelect = () =>
   supabase
     .from('message_pins')
     .select(
-      'message_id, forward_id, message:message_rows!message_pins_message_fkey(id, seq, kind, text, attachments(url, poster_url, mime_type, position, pop:pops(poster_url))), forward:message_rows!message_pins_forward_fkey(seq)',
+      'message_id, forward_id, message:message_rows!message_pins_message_fkey(id, seq, kind, text, attachments:attachment_rows(url, poster_url, mime_type, position, pop:pops(poster_url))), forward:message_rows!message_pins_forward_fkey(seq)',
     );
 
 type PinRow = QueryData<ReturnType<typeof pinsSelect>>[number];
 
 function thumbnailOf(row: NonNullable<PinRow['message']>): string | null {
-  const [first] = [...(row.attachments ?? [])].sort((a, b) => a.position - b.position);
+  const [first] = [...(row.attachments ?? [])].sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
 
   if (!first) return null;
   // Ссылка на поп: своего файла нет, обложка — постер попа.

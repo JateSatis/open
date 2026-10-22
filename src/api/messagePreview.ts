@@ -27,7 +27,7 @@ export type PreviewAttachment = {
   poster_url: string | null;
   mime_type: string | null;
   duration_ms: number | null;
-  position?: number;
+  position?: number | null;
   pop_id?: string | null;
   /** Поп вложения-ссылки; `null` — поп удалён. */
   pop?: { poster_url: string; duration_ms: number } | null;

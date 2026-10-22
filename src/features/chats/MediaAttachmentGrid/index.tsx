@@ -4,6 +4,7 @@ import { Pressable, View } from 'react-native';
 import { styles } from './styles';
 
 import type { MessageAttachment } from '@/api/chats';
+import { HiddenMediaTile, hiddenMediaKind } from '@/features/chats/HiddenMediaTile';
 import type { MosaicLayout } from '@/features/chats/lib/mosaicLayout';
 import { MediaTile } from '@/features/chats/MediaTile';
 import { Text } from '@/components/Text';
@@ -112,6 +113,21 @@ export function MediaAttachmentGrid({
                 recyclingKey={attachment.id}
               />
             </Pressable>
+          );
+        }
+
+        // Автор скрыл файл от меня — плитка с подписью на том же месте,
+        // сетка альбома не меняется.
+        if (attachment.hidden) {
+          return (
+            <HiddenMediaTile
+              key={index}
+              kind={hiddenMediaKind(attachment.mimeType)}
+              style={[
+                styles.tile,
+                { left: tile.x, top: tile.y, width: tile.width, height: tile.height },
+              ]}
+            />
           );
         }
 

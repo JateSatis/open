@@ -12,6 +12,7 @@ import type { MediaViewerItem } from './types';
 
 import { fitRect, flightTransform } from '@/features/media/MediaPreview/previewGeometry';
 import type { Rect } from '@/features/media/tileRegistry';
+import { useMediaSource, useStableMediaUri } from '@/hooks/use-media-source';
 
 export type MediaViewerPageProps = {
   item: MediaViewerItem;
@@ -124,6 +125,9 @@ export const MediaViewerPage = memo(function MediaViewerPage({
 
   // Картинка плитки — ровно её размером, растянутая трансформом до рамки:
   // тот же размер с тем же источником `expo-image` берёт из памяти сразу.
+  // Файлы сообщений — пути в закрытом бакете: по подписанной ссылке, кеш по пути.
+  const thumbSource = useMediaSource(item.thumbUrl);
+  const photoSource = useMediaSource(isVideo ? null : item.url);
   const thumbBox = useMemo(() => {
     if (!sourceTile || !item.thumbUrl) return null;
 
@@ -158,7 +162,7 @@ export const MediaViewerPage = memo(function MediaViewerPage({
           {thumbBox && item.thumbUrl ? (
             <View style={[styles.thumb, thumbBox]}>
               <Image
-                source={{ uri: item.thumbUrl }}
+                source={thumbSource}
                 style={StyleSheet.absoluteFill}
                 contentFit="contain"
                 onDisplay={onSourceShown}
@@ -172,7 +176,7 @@ export const MediaViewerPage = memo(function MediaViewerPage({
             <>
               {poster && !thumbBox ? (
                 <Image
-                  source={{ uri: poster }}
+                  source={thumbSource}
                   style={StyleSheet.absoluteFill}
                   contentFit="contain"
                   accessibilityIgnoresInvertColors
@@ -187,7 +191,7 @@ export const MediaViewerPage = memo(function MediaViewerPage({
           ) : (
             <Image
               testID="media-viewer-photo"
-              source={{ uri: item.url }}
+              source={photoSource}
               style={StyleSheet.absoluteFill}
               contentFit="contain"
               accessibilityIgnoresInvertColors
@@ -213,7 +217,10 @@ type ViewerVideoProps = {
 function ViewerVideo({ item, index, onToggleReady }: ViewerVideoProps) {
   const [isPlaying, setIsPlaying] = useState(true);
   const [rendered, setRendered] = useState(false);
-  const player = useVideoPlayer(item.url, (instance) => {
+  // Первая подписанная ссылка держится весь просмотр: переподпись не
+  // перезапускает ролик.
+  const uri = useStableMediaUri(item.url);
+  const player = useVideoPlayer(uri, (instance) => {
     instance.loop = true;
     instance.play();
   });

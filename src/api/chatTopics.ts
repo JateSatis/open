@@ -55,6 +55,8 @@ export type ChatTopicListener = {
    * перечитать.
    */
   onPeopleChanged?: () => void;
+  /** Кто-то из участников сменил, кому видно его медиа: вложения — глазами меня заново. */
+  onMediaChanged?: () => void;
   /** Из островка этого чата убрали сообщения. */
   onForwardChanged?: (forwardId: string) => void;
   onTyping?: (userId: string, activity: ChatActivity) => void;
@@ -186,6 +188,7 @@ function open(chatId: string): Entry {
       each((l) => l.onTimeVisibilityChanged?.()),
     )
     .on('broadcast', { event: 'people_changed' }, () => each((l) => l.onPeopleChanged?.()))
+    .on('broadcast', { event: 'media_changed' }, () => each((l) => l.onMediaChanged?.()))
     .on('broadcast', { event: 'typing' }, ({ payload }) => {
       const typing = typingFrom(payload);
 

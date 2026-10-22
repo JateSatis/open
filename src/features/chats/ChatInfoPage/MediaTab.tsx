@@ -11,6 +11,7 @@ import type { ChatMediaItem } from '@/api/chatInfo';
 import { AnchoredMenu, type MenuAnchor } from '@/components/AnchoredMenu';
 import { InfoTabList, useInfoTabsViewport } from '@/components/InfoPage';
 import { Text } from '@/components/Text';
+import { HiddenMediaTile, hiddenMediaKind } from '@/features/chats/HiddenMediaTile';
 import { formatDuration, MediaViewer, type MediaViewerItem } from '@/features/media';
 import {
   createTileRegistry,
@@ -22,6 +23,7 @@ import {
 } from '@/features/media/tileRegistry';
 import { useArmedViewer } from '@/features/media/MediaViewer/useArmedViewer';
 import { useTileTap } from '@/features/media/useTileTap';
+import { useMediaSource } from '@/hooks/use-media-source';
 import { useTheme } from '@/hooks/use-theme';
 import { InfoPageSizes, Radii, Spacing } from '@/theme';
 
@@ -93,9 +95,11 @@ export function MediaTab({ tab, chatId, onShowInChat }: MediaTabProps) {
     }
   }, [chatId, fetchNextPage, query.data, queryClient]);
 
+  // Скрытое автором в просмотр не попадает: файла у приложения нет.
+  const shown = useMemo(() => items.filter((item) => !item.hidden), [items]);
   const viewerItems = useMemo<MediaViewerItem[]>(
     () =>
-      items.map((item) => ({
+      shown.map((item) => ({
         id: item.id,
         kind: isVideo(item) ? 'video' : 'photo',
         url: item.url,
@@ -103,19 +107,19 @@ export function MediaTab({ tab, chatId, onShowInChat }: MediaTabProps) {
         width: item.width,
         height: item.height,
       })),
-    [items],
+    [shown],
   );
 
   const onViewerIndex = useCallback(
     (index: number) => {
-      if (index >= items.length - VIEWER_PREFETCH) loadMore();
+      if (index >= shown.length - VIEWER_PREFETCH) loadMore();
     },
-    [items.length, loadMore],
+    [shown.length, loadMore],
   );
 
   const indexOf = useCallback(
-    (item: ChatMediaItem) => items.findIndex((entry) => entry.id === item.id),
-    [items],
+    (item: ChatMediaItem) => shown.findIndex((entry) => entry.id === item.id),
+    [shown],
   );
   const open = useCallback(
     (item: ChatMediaItem, origin: TileRect | null) => {
@@ -231,6 +235,16 @@ const MediaCell = memo(function MediaCell({
     return <View style={[box, { backgroundColor: theme.backgroundElement }]} />;
   }
 
+  if (cell.item.hidden) {
+    return (
+      <HiddenMediaTile
+        testID="info-media-hidden"
+        kind={hiddenMediaKind(cell.item.mimeType)}
+        style={box}
+      />
+    );
+  }
+
   return (
     <MediaCellContent
       item={cell.item}
@@ -266,6 +280,7 @@ function MediaCellContent({
   const ref = useRef<View>(null);
   const video = isVideo(item);
   const hidden = useTileHidden(tiles, item.id);
+  const source = useMediaSource(cellImageUri(item));
 
   // Клетку переиспользуют под другие медиа — запись в таблице меняется вместе с ним.
   useEffect(() => {
@@ -302,7 +317,7 @@ function MediaCellContent({
         style={[box, { backgroundColor: theme.backgroundElement }]}
       >
         <Image
-          source={{ uri: cellImageUri(item) }}
+          source={source}
           style={[styles.fill, hidden && styles.hidden]}
           contentFit="cover"
           transition={CELL_FADE_MS}
