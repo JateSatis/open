@@ -82,3 +82,28 @@ describe('avatar paths', () => {
     expect(createSignedUrls).toHaveBeenCalledTimes(2);
   });
 });
+
+describe('signed links on demand (общий механизм подписи)', () => {
+  it('sign() waits for the batch and gives the link; a refusal gives null', async () => {
+    const { createSignedUrlStore } = jest.requireActual('@/api/signedUrls') as typeof import('@/api/signedUrls');
+    const store = createSignedUrlStore('chat-media', { ttlS: 900, refreshBeforeMs: 0, retryAfterMs: 60_000 });
+
+    createSignedUrls.mockResolvedValue({
+      data: [
+        { path: 'u1/voice/a.m4a', signedUrl: 'https://signed/a', error: null },
+        { path: 'u2/voice/b.m4a', signedUrl: null, error: 'Object not found' },
+      ],
+      error: null,
+    });
+
+    const [shown, hidden] = await Promise.all([store.sign('u1/voice/a.m4a'), store.sign('u2/voice/b.m4a')]);
+
+    expect(storageFrom).toHaveBeenCalledWith('chat-media');
+    expect(createSignedUrls).toHaveBeenCalledWith(['u1/voice/a.m4a', 'u2/voice/b.m4a'], 900);
+    expect(shown).toBe('https://signed/a');
+    expect(hidden).toBeNull();
+    // Живая ссылка — без нового запроса.
+    await expect(store.sign('u1/voice/a.m4a')).resolves.toBe('https://signed/a');
+    expect(createSignedUrls).toHaveBeenCalledTimes(1);
+  });
+});

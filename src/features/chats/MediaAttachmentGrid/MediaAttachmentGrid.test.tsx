@@ -43,6 +43,39 @@ describe('MediaAttachmentGrid', () => {
     expect(onPress).toHaveBeenCalledWith(1, null);
   });
 
+  it('К2.1 скрытое автором видео — плитка «Видео скрыто автором» тех же размеров, без открытия', async () => {
+    const onPress = jest.fn();
+
+    await render(
+      <MediaAttachmentGrid
+        attachments={[photo, { ...video, url: '', posterUrl: null, hidden: true }]}
+        layout={layout}
+        onPress={onPress}
+      />,
+    );
+
+    const tile = screen.getByLabelText('Видео скрыто автором');
+
+    expect(tile).toHaveStyle({ width: layout.tiles[1].width, height: layout.tiles[1].height });
+    expect(screen.queryByLabelText('Открыть видео')).toBeNull();
+    expect(screen.queryByText('▶')).toBeNull();
+  });
+
+  it('файл из закрытого бакета показывается по подписанной ссылке с кешем по пути', async () => {
+    await render(
+      <MediaAttachmentGrid
+        attachments={[{ ...photo, url: 'user-2/photo/a.jpg' }]}
+        layout={computeMosaicLayout([photo], mosaicBounds(328), 3)}
+        onPress={jest.fn()}
+      />,
+    );
+
+    // expo-image в тестах отдаёт источник списком.
+    expect(screen.getByTestId('media-tile-image').props.source).toEqual([
+      { uri: 'https://signed.test/user-2/photo/a.jpg', cacheKey: 'user-2/photo/a.jpg' },
+    ]);
+  });
+
   it('marks a video tile with its duration and a play mark', async () => {
     await render(
       <MediaAttachmentGrid attachments={[photo, video]} layout={layout} onPress={jest.fn()} />,

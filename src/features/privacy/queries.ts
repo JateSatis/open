@@ -22,6 +22,7 @@ const SETTING_FIELDS: Record<EditablePrivacySetting, keyof Omit<PrivacySettings,
   profile_identity_masking: 'identityVisibility',
   dialogue_participant_name_masking: 'dialogueNameVisibility',
   avatar_visibility: 'avatarVisibility',
+  dialogue_media_visibility: 'mediaVisibility',
 };
 
 import { isBirthDateKnown, rememberBirthDateKnown } from './birthDateKnown';

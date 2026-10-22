@@ -5,7 +5,7 @@ import { styles } from './styles';
 
 import { Text } from '@/components/Text';
 import { hiddenMediaLabel } from '@/features/chats/HiddenMediaTile';
-import { voiceDurationLabel } from '@/features/media';
+import { formatDuration } from '@/features/media/lib/formatDuration';
 import { useTheme } from '@/hooks/use-theme';
 import { Sizes, type ThemeColor } from '@/theme';
 
@@ -23,12 +23,14 @@ export type HiddenVoiceRowProps = {
 export function HiddenVoiceRow({ durationMs, color = 'textSecondary', style }: HiddenVoiceRowProps) {
   const theme = useTheme();
   const label = hiddenMediaLabel('voice');
+  // Как у плеера (`voiceDurationLabel`): не меньше секунды, «0:00» выглядит поломкой.
+  const duration = formatDuration(Math.max(1000, durationMs ?? 0));
 
   return (
     <View
       testID="hidden-voice"
       accessible
-      accessibilityLabel={`${label}, ${voiceDurationLabel(durationMs ?? 0)}`}
+      accessibilityLabel={`${label}, ${duration}`}
       style={[styles.row, style]}
     >
       <SymbolView
@@ -40,7 +42,7 @@ export function HiddenVoiceRow({ durationMs, color = 'textSecondary', style }: H
         {label}
       </Text>
       <Text variant="caption" color={color}>
-        {voiceDurationLabel(durationMs ?? 0)}
+        {duration}
       </Text>
     </View>
   );

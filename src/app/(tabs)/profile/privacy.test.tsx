@@ -37,6 +37,7 @@ const TEEN: PrivacySettings = {
   identityVisibility: 'friends',
   dialogueNameVisibility: 'friends',
   avatarVisibility: 'friends',
+  mediaVisibility: 'friends',
   identityAlias: 'Илья Муромцев',
 };
 
@@ -49,6 +50,7 @@ const ADULT: PrivacySettings = {
   identityVisibility: 'everyone',
   dialogueNameVisibility: 'everyone',
   avatarVisibility: 'everyone',
+  mediaVisibility: 'everyone',
   identityAlias: 'Вера Соколова',
 };
 
@@ -87,8 +89,8 @@ describe('Конфиденциальность и безопасность', () 
     expect(await screen.findByText('Активность')).toBeTruthy();
     expect(screen.getByText('Поиск и контакты')).toBeTruthy();
     expect(screen.getByLabelText(`${TITLES.friends}: Никто, выбрано`)).toBeTruthy();
-    // «Контент и данные» появится, когда сервер начнёт их применять.
-    expect(screen.queryByText(/Контент и данные/i)).toBeNull();
+    // Этап 5: сервер применяет настройку медиа — группа на месте.
+    expect(screen.getByText('Контент и данные')).toBeTruthy();
   });
 
   it.each([
