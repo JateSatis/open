@@ -28,6 +28,7 @@ type NullableMessageColumns =
   | 'read_at'
   | 'deleted_at'
   | 'stream_id'
+  | 'stream_host_id'
   | 'system_event'
   | 'system_user_id'
   | 'system_user_name'

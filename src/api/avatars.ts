@@ -24,7 +24,8 @@ export function isAvatarPath(value: string | null | undefined): value is string 
   return !!value && !/^[a-z][a-z0-9+.-]*:/i.test(value);
 }
 
-type Entry = { url: string | null; expiresAt: number };
+export type AvatarEntry = { url: string | null; expiresAt: number };
+type Entry = AvatarEntry;
 
 const entries = new Map<string, Entry>();
 const listeners = new Set<() => void>();
@@ -105,6 +106,26 @@ export function signedAvatarUrl(path: string): string | null {
   const entry = entries.get(path);
 
   return entry?.url && entry.expiresAt > Date.now() ? entry.url : null;
+}
+
+/**
+ * Состояние подписи пути — новый объект после каждой подписи или отказа, по
+ * нему экран понимает, что пора перерисоваться.
+ */
+export function avatarEntry(path: string): Readonly<Entry> | undefined {
+  return entries.get(path);
+}
+
+/**
+ * Через сколько спросить подпись снова: живую — чуть раньше её срока,
+ * отказ — после паузы. 0 — уже пора.
+ */
+export function avatarRefreshDelay(entry: Readonly<Entry> | undefined): number {
+  if (!entry) return 0;
+
+  const due = entry.url ? entry.expiresAt - REFRESH_BEFORE_MS : entry.expiresAt;
+
+  return Math.max(due - Date.now(), 0);
 }
 
 export function subscribeAvatarUrls(listener: () => void): () => void {

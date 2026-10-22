@@ -58,6 +58,8 @@ jest.mock('@/api/avatars', () => ({
   isAvatarPath: (value) => !!value && !/^[a-z][a-z0-9+.-]*:/i.test(value),
   requestAvatarUrl: jest.fn(),
   signedAvatarUrl: jest.fn(() => null),
+  avatarEntry: jest.fn(() => undefined),
+  avatarRefreshDelay: jest.fn(() => 0),
   subscribeAvatarUrls: jest.fn(() => () => undefined),
   forgetAvatarUrls: jest.fn(),
 }));

@@ -4,6 +4,7 @@ import { isOpaquePersonId } from '@/api/opaquePeople';
 import {
   getMyProfile,
   getProfile,
+  ProfileUnavailableError,
   updateMyProfile,
   type Profile,
   type ProfileUpdateInput,
@@ -22,9 +23,13 @@ export function useMyProfile() {
 export function useProfile(userId: string | undefined) {
   return useQuery({
     queryKey: profileKeys.byId(userId ?? ''),
-    queryFn: () => getProfile(userId as string),
-    // Непрозрачный id подменённого в диалоге — профиля за ним нет.
-    enabled: Boolean(userId) && !isOpaquePersonId(userId),
+    // Непрозрачный id подменённого в диалоге: профиля за ним нет — сразу
+    // «недоступен», без запроса (и без вечной загрузки).
+    queryFn: () =>
+      isOpaquePersonId(userId)
+        ? Promise.reject(new ProfileUnavailableError())
+        : getProfile(userId as string),
+    enabled: Boolean(userId),
   });
 }
 

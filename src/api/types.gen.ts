@@ -3887,6 +3887,7 @@ export type Database = {
           reads_visible: boolean | null
           seq: number | null
           source_chat_id: string | null
+          stream_host_id: string | null
           stream_id: string | null
           system_event: string | null
           system_user_id: string | null
@@ -4569,6 +4570,7 @@ export type Database = {
           reads_visible: boolean | null
           seq: number | null
           source_chat_id: string | null
+          stream_host_id: string | null
           stream_id: string | null
           system_event: string | null
           system_user_id: string | null
@@ -4949,6 +4951,7 @@ export type Database = {
         Args: { target_chat: string; target_message: string; via: string }
         Returns: boolean
       }
+      message_stream_host: { Args: { p_message: string }; Returns: string }
       message_tombstones: {
         Args: { message_ids: string[] }
         Returns: {
@@ -5467,9 +5470,14 @@ export type Database = {
       }
       rec_text: { Args: { j: Json; key: string }; Returns: string }
       recheck_recent_searches: {
-        Args: { message_ids: string[]; person_ids: string[] }
+        Args: {
+          chat_ids?: string[]
+          message_ids: string[]
+          person_ids: string[]
+        }
         Returns: {
           avatar_url: string
+          chat_title: string
           created_at: string
           display_name: string
           id: string

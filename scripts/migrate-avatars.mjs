@@ -20,9 +20,23 @@ if (!url || !key) {
 
 const admin = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
 
-const { data: profiles, error } = await admin.from("profiles").select("id, avatar_url");
+// Страницами: PostgREST отдаёт не больше 1000 строк за раз.
+const PAGE = 1000;
+const profiles = [];
 
-if (error) throw error;
+for (let from = 0; ; from += PAGE) {
+  const { data, error } = await admin
+    .from("profiles")
+    .select("id, avatar_url")
+    .order("id")
+    .range(from, from + PAGE - 1);
+
+  if (error) throw error;
+
+  profiles.push(...data);
+
+  if (data.length < PAGE) break;
+}
 
 let copied = 0;
 let removed = 0;

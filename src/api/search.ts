@@ -78,10 +78,7 @@ function toEntityKind(value: string): SearchEntityKind | null {
 // хотя половина из них бывает пустой у части видов. Отсюда `?? null`.
 
 /** Оба блока сущностей, каждый уже упорядочен базой. */
-export async function searchEntities(
-  query: string,
-  signal?: AbortSignal,
-): Promise<SearchEntity[]> {
+export async function searchEntities(query: string, signal?: AbortSignal): Promise<SearchEntity[]> {
   let request = supabase.rpc('search_entities', {
     query,
     mine_limit: SEARCH_MINE_LIMIT,
@@ -173,8 +170,13 @@ export type RecentRecheck = {
    * сейчас: скрывший имя — псевдонимом, без username и фото.
    */
   people: Map<string, { title: string; username: string | null; avatarUrl: string | null }>;
-  /** Живые и находимые мне сообщения: id → время и автор глазами меня сейчас. */
-  messages: Map<string, { createdAt: string | null; authorName: string }>;
+  /** Живые и находимые мне сообщения: id → время, автор и чат глазами меня сейчас. */
+  messages: Map<string, { createdAt: string | null; authorName: string; chatTitle: string | null }>;
+  /**
+   * Мои чаты и подписки: id чата → название и лицо глазами меня сейчас (у
+   * лички это собеседник — он мог скрыть имя или фото).
+   */
+  chats: Map<string, { title: string; username: string | null; avatarUrl: string | null }>;
 };
 
 /**
@@ -185,14 +187,16 @@ export type RecentRecheck = {
 export async function recheckRecentSearches(
   personIds: string[],
   messageIds: string[],
+  chatIds: string[] = [],
 ): Promise<RecentRecheck> {
-  const result: RecentRecheck = { people: new Map(), messages: new Map() };
+  const result: RecentRecheck = { people: new Map(), messages: new Map(), chats: new Map() };
 
-  if (personIds.length === 0 && messageIds.length === 0) return result;
+  if (personIds.length === 0 && messageIds.length === 0 && chatIds.length === 0) return result;
 
   const { data, error } = await supabase.rpc('recheck_recent_searches', {
     person_ids: personIds,
     message_ids: messageIds,
+    chat_ids: chatIds,
   });
 
   if (error) throw error;
@@ -205,10 +209,17 @@ export async function recheckRecentSearches(
         username: row.username ?? null,
         avatarUrl: row.avatar_url ?? null,
       });
+    } else if (row.kind === 'chat') {
+      result.chats.set(row.id, {
+        title: row.display_name ?? 'Чат',
+        username: row.username ?? null,
+        avatarUrl: row.avatar_url ?? null,
+      });
     } else {
       result.messages.set(row.id, {
         createdAt: row.created_at ?? null,
         authorName: row.display_name ?? 'Без имени',
+        chatTitle: row.chat_title ?? null,
       });
     }
   }

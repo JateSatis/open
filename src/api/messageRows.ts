@@ -312,7 +312,7 @@ const FORWARDED_COMMENT_COLUMNS =
 // реакции и комментарии — той же выборкой. Своя реакция — вычисляемой связью
 // `my_reaction`, и у оригинала тоже.
 export const MESSAGE_COLUMNS =
-  `id, chat_id, author_id, kind, text, seq, created_at, edited_at, edited, edit_mark, attachments(${MESSAGE_ATTACHMENT_COLUMNS}), ${REPLY_COLUMNS}, ${REACTION_AND_COMMENT_COLUMNS}, stream_id, system_event, system_user_id, author_name, author_avatar_url, author_opaque, system_user_name, system_user_opaque, stream:streams!messages_stream_id_fkey(started_at, ended_at), my_call:my_stream_participation(id), source_chat:chat_rows!messages_source_chat_id_fkey(id, chat_display_name), items:forward_items!forward_items_forward_fkey(id, position, message_id, original:message_rows!forward_items_message_fkey(${ORIGINAL_COLUMNS})), ${FORWARDED_COMMENT_COLUMNS}` as const;
+  `id, chat_id, author_id, kind, text, seq, created_at, edited_at, edited, edit_mark, attachments(${MESSAGE_ATTACHMENT_COLUMNS}), ${REPLY_COLUMNS}, ${REACTION_AND_COMMENT_COLUMNS}, stream_id, stream_host_id, system_event, system_user_id, author_name, author_avatar_url, author_opaque, system_user_name, system_user_opaque, stream:streams!messages_stream_id_fkey(started_at, ended_at), my_call:my_stream_participation(id), source_chat:chat_rows!messages_source_chat_id_fkey(id, chat_display_name), items:forward_items!forward_items_forward_fkey(id, position, message_id, original:message_rows!forward_items_message_fkey(${ORIGINAL_COLUMNS})), ${FORWARDED_COMMENT_COLUMNS}` as const;
 
 // Мозаика в облачке должна собираться в порядке выбора файлов, а PostgREST
 // не гарантирует порядок вложенной выборки сам по себе — нужен явный order
@@ -422,8 +422,8 @@ function toCallMark(row: MessageRow): CallMark | null {
   return {
     streamId: row.stream_id,
     event: row.system_event,
-    // Системную строку звонка пишет от своего имени тот, кто его начал.
-    hostId: row.author_id,
+    // Начавший — глазами смотрящего: строку «Звонок завершён» база пишет без автора.
+    hostId: row.stream_host_id,
     startedAt: row.stream.started_at,
     endedAt: row.stream.ended_at,
     joinedByMe: row.my_call !== null && row.my_call !== undefined,
