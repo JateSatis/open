@@ -15,6 +15,83 @@
 
 begin;
 
+-- Этап 5: вложения, попсы и фото принимаются только очищенными файлами
+-- (`media_objects`, проверяет privacy_media_access.sql). Этот тест не про
+-- очистку: файлы его фикстур отмечаются очищенными до проверки. Функция и
+-- триггеры живут только в этой транзакции.
+create function public.test_mark_sanitized() returns trigger
+language plpgsql security definer set search_path = public as $fixture$
+declare
+  owner uuid;
+begin
+  if tg_table_name = 'objects' then
+    if new.bucket_id = 'media' and (storage.foldername(new.name))[2] in ('group-avatar', 'channel-avatar') then
+      insert into public.media_objects (bucket, path, owner_id, kind, mime_type, size_bytes)
+      select 'media', new.name, p.id,
+        case (storage.foldername(new.name))[2] when 'group-avatar' then 'group_avatar' else 'channel_avatar' end,
+        'image/jpeg', 0
+      from public.profiles p where p.id = public.uuid_or_null((storage.foldername(new.name))[1])
+      on conflict do nothing;
+    end if;
+    return new;
+  end if;
+
+  if tg_table_name = 'profiles' then
+    if new.avatar_url is not null then
+      insert into public.media_objects (bucket, path, owner_id, kind, mime_type, size_bytes)
+      values ('avatars', new.avatar_url, new.id, 'avatar', 'image/jpeg', 0)
+      on conflict do nothing;
+    end if;
+    return new;
+  end if;
+
+  if tg_table_name = 'pops' then
+    insert into public.media_objects (bucket, path, owner_id, kind, mime_type, size_bytes)
+    select 'media', v.p, new.author_id, v.k, 'video/mp4', 0
+    from (values (public.public_media_path(new.url), 'pop_video'),
+                 (public.public_media_path(new.poster_url), 'pop_poster')) v(p, k)
+    where v.p is not null and new.author_id is not null
+    on conflict do nothing;
+    return new;
+  end if;
+
+  if tg_table_name = 'attachments' then
+    if new.pop_id is not null then
+      return new;
+    end if;
+
+    select m.author_id into owner from public.messages m where m.id = new.message_id;
+  else
+    select c.author_id into owner from public.comments c where c.id = new.comment_id;
+  end if;
+
+  insert into public.media_objects (bucket, path, owner_id, kind, mime_type, size_bytes)
+  select 'chat-media', v.p, owner, v.k, coalesce(new.mime_type, ''), 0
+  from (values
+    (new.url, case
+      when new.mime_type like 'image/%' then 'photo'
+      when new.mime_type like 'audio/%' then 'voice'
+      else 'video' end),
+    (new.poster_url, 'poster')
+  ) v(p, k)
+  where v.p is not null and owner is not null
+  on conflict do nothing;
+
+  return new;
+end;
+$fixture$;
+
+create trigger attachments_aa_test_sanitized before insert or update of url, poster_url
+  on public.attachments for each row execute function public.test_mark_sanitized();
+create trigger comment_attachments_aa_test_sanitized before insert or update of url, poster_url
+  on public.comment_attachments for each row execute function public.test_mark_sanitized();
+create trigger pops_aa_test_sanitized before insert or update of url, poster_url
+  on public.pops for each row execute function public.test_mark_sanitized();
+create trigger profiles_aa_test_sanitized before update of avatar_url
+  on public.profiles for each row execute function public.test_mark_sanitized();
+create trigger aa_test_sanitized before insert
+  on storage.objects for each row execute function public.test_mark_sanitized();
+
 create temp table results (n serial, name text, ok boolean, detail text);
 grant all on results to authenticated, anon;
 grant all on results_n_seq to authenticated, anon;
@@ -63,7 +140,7 @@ $$;
 -- Вложения сообщения одной строкой: вид вложения и адрес, по порядку.
 create function pg_temp.files(msg uuid) returns text language sql as $$
   select coalesce(string_agg(message_kind || ':' || url, ',' order by position), '')
-  from public.attachments where message_id = msg
+  from public.attachment_rows where message_id = msg
 $$;
 
 -- Тестовые аккаунты рождаются с защитными настройками приватности
@@ -413,7 +490,7 @@ begin
     perform pg_temp.check('альбом больше 50 файлов не сохраняется', sqlstate = '23514', sqlstate || ' ' || sqlerrm);
   end;
 
-  select id into kept_id from public.attachments where message_id = voice;
+  select id into kept_id from public.attachment_rows where message_id = voice;
 
   begin
     perform public.edit_message(album, null, jsonb_build_array(jsonb_build_object('attachment_id', kept_id)), null);
@@ -422,7 +499,7 @@ begin
     perform pg_temp.check('чужое вложение в свою правку не взять', sqlstate = 'P0002', sqlstate || ' ' || sqlerrm);
   end;
 
-  select id into kept_id from public.attachments where message_id = album and position = 0;
+  select id into kept_id from public.attachment_rows where message_id = album and position = 0;
 
   begin
     perform public.edit_message(
@@ -467,8 +544,8 @@ begin
   -- ================================================= смена вида
   -- Альбом: убрать первый, оставить третий и второй (в новом порядке нельзя —
   -- порядок не меняется в интерфейсе, но база принимает любой), добавить новый.
-  select id into kept_id from public.attachments where message_id = album and position = 1;
-  select id into second_id from public.attachments where message_id = album and position = 2;
+  select id into kept_id from public.attachment_rows where message_id = album and position = 1;
+  select id into second_id from public.attachment_rows where message_id = album and position = 2;
 
   perform public.edit_message(
     album,
@@ -490,7 +567,7 @@ begin
     s
   );
 
-  select count(*) into n from public.attachments
+  select count(*) into n from public.attachment_rows
   where message_id = album and id = kept_id and poster_url = 'https://x/2p.jpg' and duration_ms = 5000;
   perform pg_temp.check('оставленное вложение сохранило id и поля', n = 1, n::text);
 
@@ -535,7 +612,7 @@ begin
   from public.message_rows where id = older;
   perform pg_temp.check('альбом → голосовое', s = 'voice|∅|voice:https://x/v3.m4a', s);
 
-  select waveform::text into s from public.attachments where message_id = older;
+  select waveform::text into s from public.attachment_rows where message_id = older;
   perform pg_temp.check('волна нового голосового сохранена', s = '{3,2,1}', s);
 
   -- Голосовое → текст.
@@ -547,7 +624,7 @@ begin
 
   -- Текст → голосовое через оставленный файл невозможно (файла нет), а
   -- голосовое с тем же файлом — возможно: оставить запись и ничего не менять.
-  select id into kept_id from public.attachments where message_id = older;
+  select id into kept_id from public.attachment_rows where message_id = older;
   perform public.edit_message(older, null, '[]'::jsonb, jsonb_build_object('attachment_id', kept_id));
   perform pg_temp.as_service();
   select count(*) into n from public.message_revisions where message_id = older;

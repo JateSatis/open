@@ -12,6 +12,83 @@
 
 begin;
 
+-- Этап 5: вложения, попсы и фото принимаются только очищенными файлами
+-- (`media_objects`, проверяет privacy_media_access.sql). Этот тест не про
+-- очистку: файлы его фикстур отмечаются очищенными до проверки. Функция и
+-- триггеры живут только в этой транзакции.
+create function public.test_mark_sanitized() returns trigger
+language plpgsql security definer set search_path = public as $fixture$
+declare
+  owner uuid;
+begin
+  if tg_table_name = 'objects' then
+    if new.bucket_id = 'media' and (storage.foldername(new.name))[2] in ('group-avatar', 'channel-avatar') then
+      insert into public.media_objects (bucket, path, owner_id, kind, mime_type, size_bytes)
+      select 'media', new.name, p.id,
+        case (storage.foldername(new.name))[2] when 'group-avatar' then 'group_avatar' else 'channel_avatar' end,
+        'image/jpeg', 0
+      from public.profiles p where p.id = public.uuid_or_null((storage.foldername(new.name))[1])
+      on conflict do nothing;
+    end if;
+    return new;
+  end if;
+
+  if tg_table_name = 'profiles' then
+    if new.avatar_url is not null then
+      insert into public.media_objects (bucket, path, owner_id, kind, mime_type, size_bytes)
+      values ('avatars', new.avatar_url, new.id, 'avatar', 'image/jpeg', 0)
+      on conflict do nothing;
+    end if;
+    return new;
+  end if;
+
+  if tg_table_name = 'pops' then
+    insert into public.media_objects (bucket, path, owner_id, kind, mime_type, size_bytes)
+    select 'media', v.p, new.author_id, v.k, 'video/mp4', 0
+    from (values (public.public_media_path(new.url), 'pop_video'),
+                 (public.public_media_path(new.poster_url), 'pop_poster')) v(p, k)
+    where v.p is not null and new.author_id is not null
+    on conflict do nothing;
+    return new;
+  end if;
+
+  if tg_table_name = 'attachments' then
+    if new.pop_id is not null then
+      return new;
+    end if;
+
+    select m.author_id into owner from public.messages m where m.id = new.message_id;
+  else
+    select c.author_id into owner from public.comments c where c.id = new.comment_id;
+  end if;
+
+  insert into public.media_objects (bucket, path, owner_id, kind, mime_type, size_bytes)
+  select 'chat-media', v.p, owner, v.k, coalesce(new.mime_type, ''), 0
+  from (values
+    (new.url, case
+      when new.mime_type like 'image/%' then 'photo'
+      when new.mime_type like 'audio/%' then 'voice'
+      else 'video' end),
+    (new.poster_url, 'poster')
+  ) v(p, k)
+  where v.p is not null and owner is not null
+  on conflict do nothing;
+
+  return new;
+end;
+$fixture$;
+
+create trigger attachments_aa_test_sanitized before insert or update of url, poster_url
+  on public.attachments for each row execute function public.test_mark_sanitized();
+create trigger comment_attachments_aa_test_sanitized before insert or update of url, poster_url
+  on public.comment_attachments for each row execute function public.test_mark_sanitized();
+create trigger pops_aa_test_sanitized before insert or update of url, poster_url
+  on public.pops for each row execute function public.test_mark_sanitized();
+create trigger profiles_aa_test_sanitized before update of avatar_url
+  on public.profiles for each row execute function public.test_mark_sanitized();
+create trigger aa_test_sanitized before insert
+  on storage.objects for each row execute function public.test_mark_sanitized();
+
 create temp table results (n serial, name text, ok boolean, detail text);
 grant all on results to authenticated;
 grant all on results_n_seq to authenticated;
@@ -68,13 +145,13 @@ begin
   set constraints all immediate;
   set constraints all deferred;
 
-  select count(*) into n from public.attachments where message_id = msg;
+  select count(*) into n from public.attachment_rows where message_id = msg;
   perform pg_temp.check('участник отправляет голосовое', n = 1);
 
   select kind into s from public.messages where id = msg;
   perform pg_temp.check('вид сообщения — voice', s = 'voice', s);
 
-  select waveform into bars from public.attachments where message_id = msg;
+  select waveform into bars from public.attachment_rows where message_id = msg;
   perform pg_temp.check('волна сохранена по порядку', bars = array[0, 5, 31, 12]::smallint[], bars::text);
 
   select public.last_message_preview(ch) into s from public.chat_rows ch where ch.id = chat_ab;
@@ -83,7 +160,7 @@ begin
   msg := public.send_voice_message(chat_ab, pg_temp.voice(duration_ms => 800, waveform => 'null'));
   set constraints all immediate;
   set constraints all deferred;
-  select waveform into bars from public.attachments where message_id = msg;
+  select waveform into bars from public.attachment_rows where message_id = msg;
   perform pg_temp.check('голосовое без волны допустимо', bars is null);
   select public.last_message_preview(ch) into s from public.chat_rows ch where ch.id = chat_ab;
   perform pg_temp.check('короче секунды — «0:01», не «0:00»', s = '🎤 Голосовое сообщение (0:01)', s);
@@ -97,7 +174,7 @@ begin
   -- ----------------------------------------------------------- посторонний
   perform pg_temp.act_as(d);
 
-  select count(*) into n from public.attachments where message_id = msg;
+  select count(*) into n from public.attachment_rows where message_id = msg;
   perform pg_temp.check('посторонний видит голосовое', n = 1);
 
   begin

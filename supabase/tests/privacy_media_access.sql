@@ -211,7 +211,9 @@ begin
   perform pg_temp.check('К2.2 S не открывает ни файл, ни постер, ни голосовое',
     not public.chat_media_object_readable(a_photo) and not public.chat_media_object_readable(a_video)
       and not public.chat_media_object_readable(a_poster) and not public.chat_media_object_readable(a_voice));
-  select count(*) into n from storage.objects where bucket_id = 'chat-media';
+  -- В облаке есть и чужие настоящие файлы — считаются только папки A и B.
+  select count(*) into n from storage.objects
+  where bucket_id = 'chat-media' and (storage.foldername(name))[1] in (a::text, b::text);
   perform pg_temp.check('К2.2 S не листает и не читает chat-media (видно только открытое)', n = 1, n::text);
   perform pg_temp.check('К2.2 S не читает attachments и comment_attachments напрямую',
     pg_temp.code_of('select url from public.attachments limit 1') = '42501'

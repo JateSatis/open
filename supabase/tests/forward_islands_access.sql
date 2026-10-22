@@ -126,7 +126,7 @@ begin
   from public.forward_items where forward_id = island1;
   perform pg_temp.check('островок: ссылки на оригиналы по порядку', ok, null);
 
-  select count(*) into n from public.attachments where message_id = island1;
+  select count(*) into n from public.attachment_rows where message_id = island1;
   perform pg_temp.check('островок ничего не копирует', n = 0, n::text);
 
   select public.last_message_preview(ch) into s from public.chat_rows ch where ch.id = chat_hate;
