@@ -54,6 +54,7 @@ import { clustersKeyOf } from '@/features/chats/fragments/clusterKeys';
 import { fragmentsKey } from '@/features/chats/fragments/useMessageFragments';
 
 import {
+  mediaRejectionText,
   removeUploadedMedia,
   storedPaths,
   type LocalMedia,
@@ -238,6 +239,10 @@ function explainRejection(cause: unknown, subject: CommentSubject) {
       'error',
     );
   }
+
+  const media = mediaRejectionText(cause);
+
+  if (media) showNotice(media, 'error');
 }
 
 /**

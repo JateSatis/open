@@ -42,7 +42,7 @@ jest.mock('@/components/ConfirmDialog/store', () => ({ confirm: jest.fn() }));
 
 jest.mock('@/features/media', () => ({
   uploadChannelAvatar: jest.fn(),
-  removeUploadedMedia: jest.fn(),
+  removePublicMedia: jest.fn(),
   removeOwnChannelAvatar: jest.fn(),
 }));
 

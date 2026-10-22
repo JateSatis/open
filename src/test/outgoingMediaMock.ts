@@ -23,4 +23,6 @@ export const outgoingMediaMock = {
 
     return media.libraryAssetToLocalMedia(await media.resolveLibraryAsset(asset));
   },
+  // Отказ с файлом — текст для человека; в моках отказы не про файл.
+  mediaRejectionText: () => null,
 };

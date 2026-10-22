@@ -8,7 +8,7 @@ import type { QueryClient } from '@tanstack/react-query';
 import { NO_POP_REACTIONS, publishPop, type Pop } from '@/api/pops';
 import { chatsQueryKey } from '@/features/chats/useChats';
 import { reportRequestFailed } from '@/features/connection/connectionStore';
-import { MediaUploadError, removeUploadedMedia, storedPaths } from '@/features/media';
+import { MediaUploadError, mediaRejectionText, removePublicMedia, storedPaths } from '@/features/media';
 import { showNotice } from '@/features/notifications/alertsStore';
 import { popsQueryKey, type PopsPages } from '@/features/pops/queries';
 import { DeadlineError, withDeadline } from '@/lib/deadline';
@@ -28,7 +28,11 @@ const running = new Set<string>();
 
 /** Отказ, который повтор сам не исправит, — человеческим текстом. Обрыв связи виден и так. */
 function explain(cause: unknown) {
-  if (cause instanceof PopPosterError) {
+  const media = mediaRejectionText(cause);
+
+  if (media) {
+    showNotice(media, 'error');
+  } else if (cause instanceof PopPosterError) {
     showNotice('Не удалось снять обложку видео. Повторите или выберите другое.', 'error');
   } else if (cause instanceof MediaUploadError) {
     showNotice('Не удалось загрузить видео. Попробуйте ещё раз.', 'error');
@@ -58,7 +62,7 @@ async function run(queryClient: QueryClient, userId: string, channelId: string, 
         uploadPop(pending.media, userId),
         PUBLISH_DEADLINE_MS,
         (late) => {
-          void removeUploadedMedia(storedPaths(late));
+          void removePublicMedia(storedPaths(late));
         },
       );
       patch(channelId, localId, { uploaded });
@@ -123,7 +127,7 @@ async function run(queryClient: QueryClient, userId: string, channelId: string, 
     // База отказала — файлы ничьи. Не дождались ответа или не достучались —
     // файлы остаются для повтора с тем же id, и дублей в Storage нет.
     if (uploaded && !unanswered && !unreached) {
-      void removeUploadedMedia(storedPaths(uploaded));
+      void removePublicMedia(storedPaths(uploaded));
       uploaded = null;
     }
 
@@ -177,7 +181,7 @@ export function discardPop(channelId: string, localId: string) {
   if (!pending || running.has(localId)) return;
 
   if (pending.uploaded && !pending.uncertain) {
-    void removeUploadedMedia(storedPaths(pending.uploaded));
+    void removePublicMedia(storedPaths(pending.uploaded));
   }
 
   setChannel(channelId, (pops) => pops.filter((pop) => pop.localId !== localId));
