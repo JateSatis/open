@@ -1,9 +1,9 @@
-import { Image } from 'expo-image';
 import { Pressable, View } from 'react-native';
 
 import { styles } from './styles';
 
 import { Text } from '@/components/Text';
+import { MediaThumb } from '@/features/chats/MediaThumb';
 import { useTheme } from '@/hooks/use-theme';
 import { Spacing } from '@/theme';
 
@@ -37,8 +37,8 @@ export function ComposerPlate({
       <View style={[styles.accent, { backgroundColor: theme.primary }]} />
 
       {thumbnailUrl ? (
-        <Image
-          source={{ uri: thumbnailUrl }}
+        <MediaThumb
+          uri={thumbnailUrl}
           style={[styles.thumbnail, { backgroundColor: theme.backgroundSelected }]}
           contentFit="cover"
           accessibilityIgnoresInvertColors

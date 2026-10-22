@@ -1,4 +1,3 @@
-import { Image } from 'expo-image';
 import { Pressable, ScrollView, View } from 'react-native';
 
 import { styles } from './styles';
@@ -8,6 +7,7 @@ import { Text } from '@/components/Text';
 import type { EditVoice } from '@/features/chats/messages/types';
 import { VoiceMessage } from '@/features/chats/VoiceMessage';
 import { PopAttachmentChip } from '@/features/chats/PopAttachmentChip';
+import { MediaThumb } from '@/features/chats/MediaThumb';
 import { useTheme } from '@/hooks/use-theme';
 import { Spacing } from '@/theme';
 
@@ -118,8 +118,8 @@ export function EditAttachments({
             style={[styles.thumbnail, { backgroundColor: theme.backgroundSelected }]}
           >
             {thumbnail ? (
-              <Image
-                source={{ uri: thumbnail }}
+              <MediaThumb
+                uri={thumbnail}
                 style={styles.image}
                 contentFit="cover"
                 accessibilityIgnoresInvertColors

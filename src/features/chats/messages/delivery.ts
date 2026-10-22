@@ -37,8 +37,10 @@ import type {
 import { chatsQueryKey } from '@/features/chats/useChats';
 import { reportRequestFailed } from '@/features/connection/connectionStore';
 import {
+  mediaRejectionText,
   outgoingLocalMedia,
   outgoingPreview,
+  removePublicMedia,
   removeUploadedMedia,
   storedPaths,
   uploadAllMedia,
@@ -331,6 +333,10 @@ function explainRejection(outgoing: Outgoing, cause: unknown) {
     showNotice('Не удалось снять обложку видео. Повторите или выберите другое.', 'error');
   }
 
+  const media = mediaRejectionText(cause);
+
+  if (media) showNotice(media, 'error');
+
   if (code === '42501' && outgoing.type === 'pop_post') {
     showNotice('Публиковать в канале может только его автор', 'error');
   }
@@ -406,7 +412,10 @@ export async function deliver(
     const unanswered = isNetworkError(cause);
 
     if (!saved && uploaded.length > 0 && !unanswered) {
-      void Promise.all(uploaded.map((item) => removeUploadedMedia(storedPaths(item))));
+      // Видео нового попа — в публичном `media`, медиа сообщения — в `chat-media`.
+      const remove = outgoing.type === 'pop_post' ? removePublicMedia : removeUploadedMedia;
+
+      void Promise.all(uploaded.map((item) => remove(storedPaths(item))));
 
       if (outgoing.type === 'pop_post' && outgoing.pop.type === 'new') {
         uploadedPops.delete(outgoing.pop.popId);

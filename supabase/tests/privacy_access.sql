@@ -112,7 +112,6 @@ begin
     pg_temp.settings_of(a) = minor
       and minor ->> 'avatar_visibility' = 'friends'
       and minor ->> 'friends_list_visibility' = 'nobody'
-      and (minor ->> 'uploaded_media_metadata_stripping')::boolean
       and minor ->> 'incoming_dialogue_requests' = 'requests_only'
       and minor ->> 'dialogue_hidden_text_visibility' = 'enabled'
       and minor ->> 'public_message_visibility_delay' = 'random_delay',
@@ -128,7 +127,6 @@ begin
     pg_temp.settings_of(b) = adult
       and adult ->> 'profile_identity_masking' = 'everyone'
       and adult ->> 'friends_list_visibility' = 'everyone'
-      and not (adult ->> 'uploaded_media_metadata_stripping')::boolean
       and adult ->> 'incoming_dialogue_requests' = 'off'
       and adult ->> 'dialogue_hidden_text_visibility' = 'disabled'
       and adult ->> 'public_message_visibility_delay' = 'off',
@@ -246,18 +244,18 @@ begin
   exception when others then perform pg_temp.check('К1.6 дата не меняется через настройку', sqlstate = '22023', sqlstate);
   end;
 
+  -- Очистка метаданных — правило для всех (этап 5), настройки больше нет.
   begin
-    perform public.set_privacy_setting('uploaded_media_metadata_stripping', 'maybe');
-    perform pg_temp.check('булева настройка не берёт мусор', false, 'прошло');
-  exception when others then perform pg_temp.check('булева настройка не берёт мусор', sqlstate = '22023', sqlstate);
+    perform public.set_privacy_setting('uploaded_media_metadata_stripping', 'false');
+    perform pg_temp.check('очистку метаданных не выключить', false, 'прошло');
+  exception when others then perform pg_temp.check('очистку метаданных не выключить', sqlstate = '22023', sqlstate);
   end;
 
-  perform public.set_privacy_setting('uploaded_media_metadata_stripping', 'false');
   perform public.set_privacy_setting('friends_list_visibility', 'everyone');
   perform pg_temp.act_as_postgres();
   perform pg_temp.check(
     'своя настройка меняется функцией',
-    (select friends_list_visibility = 'everyone' and not uploaded_media_metadata_stripping
+    (select friends_list_visibility = 'everyone'
      from public.privacy_settings where user_id = c)
   );
   perform pg_temp.check(

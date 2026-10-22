@@ -385,6 +385,63 @@ describe('MessageBubble', () => {
     expect(screen.getByText('Вложение')).toBeTruthy();
   });
 
+  it('К2.1 скрытое автором — плитка с подписью на месте файла, в просмотр не открывается', async () => {
+    const shown = mediaMessage().attachments[0];
+
+    await render(
+      <MessageBubble
+        message={mediaMessage({
+          text: 'подпись видна',
+          attachments: [
+            { ...shown, id: 'att-hidden', url: '', hidden: true },
+            { ...shown, id: 'att-2', url: 'user-2/photo/b.jpg' },
+          ],
+        })}
+        {...baseProps}
+      />,
+    );
+
+    expect(screen.getByLabelText('Фото скрыто автором')).toBeTruthy();
+    expect(screen.getByText('подпись видна')).toBeTruthy();
+    // Нажимается только открытое фото.
+    expect(screen.getAllByLabelText('Открыть фото')).toHaveLength(1);
+
+    const user = userEvent.setup();
+    await user.press(screen.getByLabelText('Фото скрыто автором'));
+    expect(screen.queryByText('Просмотр открыт')).toBeNull();
+
+    await user.press(screen.getByLabelText('Открыть фото'));
+    expect(screen.getByText('Просмотр открыт')).toBeTruthy();
+  });
+
+  it('К2.1 скрытое голосовое — длительность без волны и без плеера', async () => {
+    await render(
+      <MessageBubble
+        message={textMessage({
+          kind: 'voice',
+          text: null,
+          attachments: [
+            {
+              id: 'v1',
+              url: '',
+              posterUrl: null,
+              mimeType: 'audio/mp4',
+              width: null,
+              height: null,
+              durationMs: 7000,
+              waveform: null,
+              hidden: true,
+            },
+          ],
+        })}
+        {...baseProps}
+      />,
+    );
+
+    expect(screen.getByLabelText('Голосовое скрыто автором, 0:07')).toBeTruthy();
+    expect(screen.queryByText(/^плеер/)).toBeNull();
+  });
+
   it('renders the mosaic in the very first render and opens the viewer on tap', async () => {
     await render(<MessageBubble message={mediaMessage()} {...baseProps} />);
 

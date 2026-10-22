@@ -1,7 +1,5 @@
 import { extensionFromMime } from './mime';
 
-import type { MediaKind } from '@/features/media/types';
-
 /**
  * Not a security token — it only has to avoid collisions inside one user's
  * prefix. Using `expo-crypto` for this would add a native dependency to
@@ -14,24 +12,19 @@ function randomId(): string {
 }
 
 /**
- * The leading `{userId}/` is what the Storage policy matches on: reads are
- * public because the content is, writes are confined to the owner's prefix.
+ * Путь во временном бакете `uploads`: запись туда разрешена только в свою
+ * папку `{userId}/`. Постоянный путь строит `sanitize-media` сама.
  */
-export function buildObjectPath(userId: string, kind: MediaKind, mimeType: string): string {
-  return `${userId}/${kind}/${randomId()}.${extensionFromMime(mimeType)}`;
+export function buildStagingPath(userId: string, mimeType: string): string {
+  return `${userId}/${randomId()}.${extensionFromMime(mimeType)}`;
 }
 
 /**
  * Прежняя папка аватаров в публичном бакете `media`. Новые аватары лежат в
- * закрытом бакете `avatars` (`buildAvatarPath`) — её помнят только для
+ * закрытом бакете `avatars` в папке `{userId}/` — её помнят только для
  * удаления старых файлов.
  */
 export const AVATAR_FOLDER = 'avatar';
-
-/** Путь аватара в закрытом бакете `avatars`: папка — сам пользователь. */
-export function buildAvatarPath(userId: string): string {
-  return `${userId}/${randomId()}.jpg`;
-}
 
 /** Свой аватар в бакете `avatars` — по пути из профиля; адрес или чужой путь — null. */
 export function ownAvatarPath(value: string, userId: string): string | null {
@@ -40,38 +33,17 @@ export function ownAvatarPath(value: string, userId: string): string | null {
 
 /**
  * Аватарки каналов — отдельно от аватара человека: удаление прежнего аватара
- * профиля не должно задевать каналы. Лежат в префиксе владельца, потому что
- * запись в бакет разрешена только туда.
+ * профиля не должно задевать каналы. Лежат в префиксе владельца (путь строит
+ * `sanitize-media`).
  */
 export const CHANNEL_AVATAR_FOLDER = 'channel-avatar';
 
-export function buildChannelAvatarPath(userId: string): string {
-  return `${userId}/${CHANNEL_AVATAR_FOLDER}/${randomId()}.jpg`;
-}
-
 /**
- * Аватарки групп. Лежат в префиксе того, кто поставил фото: запись в бакет
- * разрешена только туда, и другой участник, сменив фото, чужой файл не удалит.
- * `delete-account` эту папку не чистит — фото группы переживает аккаунт.
+ * Аватарки групп. Лежат в префиксе того, кто поставил фото: другой участник,
+ * сменив фото, чужой файл не удалит. `delete-account` эту папку не чистит —
+ * фото группы переживает аккаунт.
  */
 export const GROUP_AVATAR_FOLDER = 'group-avatar';
-
-export function buildGroupAvatarPath(userId: string): string {
-  return `${userId}/${GROUP_AVATAR_FOLDER}/${randomId()}.jpg`;
-}
-
-/**
- * Попсы канала — своя папка: у попа своя жизнь (сетка канала, просмотр,
- * удаление попа), и чистить или переносить их удобнее отдельно от вложений
- * переписки. Видео и постер — одно имя, разные расширения.
- */
-export const POPS_FOLDER = 'pops';
-
-export function buildPopPaths(userId: string, mimeType: string): { video: string; poster: string } {
-  const base = `${userId}/${POPS_FOLDER}/${randomId()}`;
-
-  return { video: `${base}.${extensionFromMime(mimeType)}`, poster: `${base}.jpg` };
-}
 
 /**
  * Путь файла в бакете по его публичному URL — только если он лежит в папке

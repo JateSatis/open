@@ -30,10 +30,11 @@ jest.mock('@/api/pops', () => ({
 }));
 jest.mock('@/features/media', () => ({
   MediaUploadError: class MediaUploadError extends Error {},
+  mediaRejectionText: () => null,
   prepareForUpload: jest.fn((media) =>
     Promise.resolve({ ...media, posterUri: 'file:///poster.jpg' }),
   ),
-  removeUploadedMedia: jest.fn(() => Promise.resolve(true)),
+  removePublicMedia: jest.fn(() => Promise.resolve(true)),
   storedPaths: (media: { path: string }) => [media.path],
   uploadPopMedia: jest.fn((media) =>
     Promise.resolve({

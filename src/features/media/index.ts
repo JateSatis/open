@@ -33,6 +33,7 @@ export {
   removeOwnAvatar,
   removeOwnChannelAvatar,
   removeOwnGroupAvatar,
+  removePublicMedia,
   removeUploadedMedia,
   storedPaths,
   uploadAvatar,
@@ -41,6 +42,8 @@ export {
   uploadMedia,
   uploadPopMedia,
 } from './storage';
+export { VideoPrepareError } from './lib/compressVideo';
+export { mediaRejectionText, MEDIA_NOT_SANITIZED_CODE } from './rejection';
 export { readVideoFrame, type VideoFrame } from './lib/videoFrame';
 export { prepareAvatar, type PreparedAvatar } from './lib/prepareAvatar';
 export { useVoiceRecorder, type VoiceRecorder as VoiceRecorderApi } from './useVoiceRecorder';

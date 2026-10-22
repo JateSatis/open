@@ -27,11 +27,16 @@ export type PrivacySettings = {
   dialogueNameVisibility: Visibility;
   /** Кто видит мою фотографию. */
   avatarVisibility: Visibility;
+  /**
+   * Кто видит мои фото, видео и голосовые вне чатов, куда я их отправил:
+   * участники этих чатов видят всегда.
+   */
+  mediaVisibility: Visibility;
   /** Мой псевдоним для тех, от кого скрыто имя. */
   identityAlias: string;
 };
 
-/** Настройки, которые клиент уже умеет менять. Остальные ждут этапов 5–6. */
+/** Настройки, которые клиент уже умеет менять. Остальные ждут этапа 6. */
 export type EditablePrivacySetting =
   | 'friends_list_visibility'
   | 'activity_status_visibility'
@@ -39,7 +44,8 @@ export type EditablePrivacySetting =
   | 'account_search_visibility'
   | 'profile_identity_masking'
   | 'dialogue_participant_name_masking'
-  | 'avatar_visibility';
+  | 'avatar_visibility'
+  | 'dialogue_media_visibility';
 
 /** Будущая дата. */
 export const BIRTH_DATE_IN_FUTURE_CODE = 'OPN03';
@@ -83,6 +89,7 @@ function toSettings(row: PrivacyRow): PrivacySettings {
     identityVisibility: toVisibility(row.profile_identity_masking),
     dialogueNameVisibility: toVisibility(row.dialogue_participant_name_masking),
     avatarVisibility: toVisibility(row.avatar_visibility),
+    mediaVisibility: toVisibility(row.dialogue_media_visibility),
     identityAlias: row.identity_alias,
   };
 }

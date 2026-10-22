@@ -12,6 +12,83 @@
 
 begin;
 
+-- Этап 5: вложения, попсы и фото принимаются только очищенными файлами
+-- (`media_objects`, проверяет privacy_media_access.sql). Этот тест не про
+-- очистку: файлы его фикстур отмечаются очищенными до проверки. Функция и
+-- триггеры живут только в этой транзакции.
+create function public.test_mark_sanitized() returns trigger
+language plpgsql security definer set search_path = public as $fixture$
+declare
+  owner uuid;
+begin
+  if tg_table_name = 'objects' then
+    if new.bucket_id = 'media' and (storage.foldername(new.name))[2] in ('group-avatar', 'channel-avatar') then
+      insert into public.media_objects (bucket, path, owner_id, kind, mime_type, size_bytes)
+      select 'media', new.name, p.id,
+        case (storage.foldername(new.name))[2] when 'group-avatar' then 'group_avatar' else 'channel_avatar' end,
+        'image/jpeg', 0
+      from public.profiles p where p.id = public.uuid_or_null((storage.foldername(new.name))[1])
+      on conflict do nothing;
+    end if;
+    return new;
+  end if;
+
+  if tg_table_name = 'profiles' then
+    if new.avatar_url is not null then
+      insert into public.media_objects (bucket, path, owner_id, kind, mime_type, size_bytes)
+      values ('avatars', new.avatar_url, new.id, 'avatar', 'image/jpeg', 0)
+      on conflict do nothing;
+    end if;
+    return new;
+  end if;
+
+  if tg_table_name = 'pops' then
+    insert into public.media_objects (bucket, path, owner_id, kind, mime_type, size_bytes)
+    select 'media', v.p, new.author_id, v.k, 'video/mp4', 0
+    from (values (public.public_media_path(new.url), 'pop_video'),
+                 (public.public_media_path(new.poster_url), 'pop_poster')) v(p, k)
+    where v.p is not null and new.author_id is not null
+    on conflict do nothing;
+    return new;
+  end if;
+
+  if tg_table_name = 'attachments' then
+    if new.pop_id is not null then
+      return new;
+    end if;
+
+    select m.author_id into owner from public.messages m where m.id = new.message_id;
+  else
+    select c.author_id into owner from public.comments c where c.id = new.comment_id;
+  end if;
+
+  insert into public.media_objects (bucket, path, owner_id, kind, mime_type, size_bytes)
+  select 'chat-media', v.p, owner, v.k, coalesce(new.mime_type, ''), 0
+  from (values
+    (new.url, case
+      when new.mime_type like 'image/%' then 'photo'
+      when new.mime_type like 'audio/%' then 'voice'
+      else 'video' end),
+    (new.poster_url, 'poster')
+  ) v(p, k)
+  where v.p is not null and owner is not null
+  on conflict do nothing;
+
+  return new;
+end;
+$fixture$;
+
+create trigger attachments_aa_test_sanitized before insert or update of url, poster_url
+  on public.attachments for each row execute function public.test_mark_sanitized();
+create trigger comment_attachments_aa_test_sanitized before insert or update of url, poster_url
+  on public.comment_attachments for each row execute function public.test_mark_sanitized();
+create trigger pops_aa_test_sanitized before insert or update of url, poster_url
+  on public.pops for each row execute function public.test_mark_sanitized();
+create trigger profiles_aa_test_sanitized before update of avatar_url
+  on public.profiles for each row execute function public.test_mark_sanitized();
+create trigger aa_test_sanitized before insert
+  on storage.objects for each row execute function public.test_mark_sanitized();
+
 create temp table results (n serial, name text, ok boolean, detail text);
 grant all on results to authenticated, anon;
 grant all on results_n_seq to authenticated, anon;
@@ -148,7 +225,7 @@ begin
       {"url":"https://x/2.mp4","poster_url":"https://x/2p.jpg","mime_type":"video/mp4","width":640,"height":360,"duration_ms":5000}]'::jsonb
   );
   select string_agg(comment_kind || ':' || url, ',' order by position) into s
-  from public.comment_attachments where comment_id = cd_media;
+  from public.comment_attachment_rows where comment_id = cd_media;
   perform pg_temp.check(
     'посетитель оставляет комментарий с медиа',
     s = 'media:https://x/1.jpg,media:https://x/2.mp4',
@@ -159,7 +236,7 @@ begin
     ma,
     '{"url":"https://x/v.m4a","mime_type":"audio/mp4","duration_ms":4200,"size_bytes":1000,"waveform":[1,5,31]}'::jsonb
   );
-  select kind || '|' || (select duration_ms || '|' || waveform::text from public.comment_attachments where comment_id = cd_voice)
+  select kind || '|' || (select duration_ms || '|' || waveform::text from public.comment_attachment_rows where comment_id = cd_voice)
   into s from public.comments where id = cd_voice;
   perform pg_temp.check('посетитель оставляет голосовой комментарий', s = 'voice|4200|{1,5,31}', s);
 
@@ -410,7 +487,7 @@ begin
   set constraints all deferred;
   select c.kind || '|' || coalesce(c.text, '') || '|' || string_agg(a.comment_kind || ':' || a.url, ',')
   into s
-  from public.comments c join public.comment_attachments a on a.comment_id = c.id
+  from public.comments c join public.comment_attachment_rows a on a.comment_id = c.id
   where c.id = cd_media
   group by c.kind, c.text;
   perform pg_temp.check('правка меняет альбом на голосовое', s = 'voice||voice:https://x/new.m4a', s);

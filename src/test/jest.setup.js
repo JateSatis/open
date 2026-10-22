@@ -64,6 +64,31 @@ jest.mock('@/api/avatars', () => ({
   forgetAvatarUrls: jest.fn(),
 }));
 
+// Медиа сообщений — тоже подписанные ссылки: путь в `chat-media` в тестах
+// «подписан» сразу, адресом `https://signed.test/<путь>`. Механизм подписи
+// общий с аватарами и проверяется там же.
+jest.mock('@/api/chatMedia', () => {
+  const entries = new Map();
+  const entry = (path) => {
+    if (!entries.has(path)) {
+      entries.set(path, { url: `https://signed.test/${path}`, expiresAt: Number.MAX_SAFE_INTEGER });
+    }
+
+    return entries.get(path);
+  };
+
+  return {
+    CHAT_MEDIA_BUCKET: 'chat-media',
+    isChatMediaPath: (value) => !!value && !/^[a-z][a-z0-9+.-]*:/i.test(value),
+    requestChatMediaUrl: jest.fn(),
+    chatMediaEntry: entry,
+    chatMediaRefreshDelay: () => 60_000,
+    subscribeChatMediaUrls: () => () => undefined,
+    signChatMediaUrl: jest.fn(async (path) => entry(path).url),
+    forgetChatMediaUrls: jest.fn(),
+  };
+});
+
 // Топики комментариев — Realtime: в тестах сети нет. Экраны чата слушают
 // ветки пересланных комментариев, панель — свою ветку; подписка — пустышка.
 jest.mock('@/api/commentTopics', () => ({

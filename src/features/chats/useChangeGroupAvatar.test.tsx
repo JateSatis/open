@@ -5,13 +5,13 @@ import type { ReactNode } from 'react';
 import { useChangeGroupAvatar } from './useChangeGroupAvatar';
 
 import { setChatAvatar } from '@/api/chats';
-import { removeOwnGroupAvatar, removeUploadedMedia, uploadGroupAvatar } from '@/features/media';
+import { removeOwnGroupAvatar, removePublicMedia, uploadGroupAvatar } from '@/features/media';
 import { DeadlineError } from '@/lib/deadline';
 
 jest.mock('@/api/chats', () => ({ setChatAvatar: jest.fn() }));
 jest.mock('@/features/media', () => ({
   uploadGroupAvatar: jest.fn(),
-  removeUploadedMedia: jest.fn(),
+  removePublicMedia: jest.fn(),
   removeOwnGroupAvatar: jest.fn(),
 }));
 
@@ -46,7 +46,7 @@ describe('useChangeGroupAvatar', () => {
     expect(mockedUpload).toHaveBeenCalledWith('file:///g.jpg', 'me');
     expect(mockedSet).toHaveBeenCalledWith('group-1', NEW.url);
     expect(removeOwnGroupAvatar).toHaveBeenCalledWith(REPLACED, 'me');
-    expect(removeUploadedMedia).not.toHaveBeenCalled();
+    expect(removePublicMedia).not.toHaveBeenCalled();
   });
 
   it('removing the photo deletes the replaced file, if it is mine', async () => {
@@ -61,7 +61,7 @@ describe('useChangeGroupAvatar', () => {
 
     await expect(run({ kind: 'set', uri: 'file:///g.jpg' })).rejects.toThrow();
 
-    expect(removeUploadedMedia).toHaveBeenCalledWith(NEW.path);
+    expect(removePublicMedia).toHaveBeenCalledWith(NEW.path);
     expect(removeOwnGroupAvatar).not.toHaveBeenCalled();
   });
 
@@ -70,7 +70,7 @@ describe('useChangeGroupAvatar', () => {
 
     await expect(run({ kind: 'set', uri: 'file:///g.jpg' })).rejects.toBeInstanceOf(DeadlineError);
 
-    expect(removeUploadedMedia).not.toHaveBeenCalled();
+    expect(removePublicMedia).not.toHaveBeenCalled();
     expect(removeOwnGroupAvatar).not.toHaveBeenCalled();
   });
 });

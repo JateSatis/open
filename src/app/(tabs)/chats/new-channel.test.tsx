@@ -6,7 +6,7 @@ import NewChannelScreen from './new-channel';
 import { ChannelUsernameTakenError, createChannel } from '@/api/channels';
 import { isUsernameAvailable } from '@/api/usernames';
 import { useSession } from '@/features/auth/useSession';
-import { removeUploadedMedia, uploadChannelAvatar } from '@/features/media';
+import { removePublicMedia, uploadChannelAvatar } from '@/features/media';
 import { renderWithQuery } from '@/test/renderWithQuery';
 
 const mockReplace = jest.fn();
@@ -38,7 +38,7 @@ jest.mock('@/api/usernames', () => ({ isUsernameAvailable: jest.fn() }));
 
 jest.mock('@/features/media', () => ({
   uploadChannelAvatar: jest.fn(),
-  removeUploadedMedia: jest.fn(),
+  removePublicMedia: jest.fn(),
 }));
 
 // Выбор фото — свой тест шита; здесь круг сразу отдаёт готовый квадрат.
@@ -57,7 +57,7 @@ jest.mock('@/features/chats/AvatarPicker', () => ({
 const mockedCreate = createChannel as jest.MockedFunction<typeof createChannel>;
 const mockedAvailable = isUsernameAvailable as jest.MockedFunction<typeof isUsernameAvailable>;
 const mockedUpload = uploadChannelAvatar as jest.MockedFunction<typeof uploadChannelAvatar>;
-const mockedRemove = removeUploadedMedia as jest.MockedFunction<typeof removeUploadedMedia>;
+const mockedRemove = removePublicMedia as jest.MockedFunction<typeof removePublicMedia>;
 
 beforeEach(() => {
   jest.clearAllMocks();

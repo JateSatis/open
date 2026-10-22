@@ -10,7 +10,7 @@ import { isUsernameAvailable } from '@/api/usernames';
 import { openMediaSheet } from '@/features/chats/MediaPickerSheet';
 import {
   removeOwnGroupAvatar,
-  removeUploadedMedia,
+  removePublicMedia,
   uploadGroupAvatar,
   type PreparedAvatar,
 } from '@/features/media';
@@ -39,7 +39,7 @@ jest.mock('@/api/groups', () => ({ setChatDescription: jest.fn() }));
 
 jest.mock('@/features/media', () => ({
   uploadGroupAvatar: jest.fn(),
-  removeUploadedMedia: jest.fn(),
+  removePublicMedia: jest.fn(),
   removeOwnGroupAvatar: jest.fn(),
 }));
 
@@ -295,7 +295,7 @@ describe('ChatEditScreen', () => {
       expect(
         await screen.findByText('Нет связи. Проверьте интернет и попробуйте ещё раз.'),
       ).toBeTruthy();
-      expect(removeUploadedMedia).toHaveBeenCalledWith('me/group-avatar/new.jpg');
+      expect(removePublicMedia).toHaveBeenCalledWith('me/group-avatar/new.jpg');
       expect(mockBack).not.toHaveBeenCalled();
     });
   });

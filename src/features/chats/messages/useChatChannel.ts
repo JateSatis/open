@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { forgetAvatarUrls } from '@/api/avatars';
+import { forgetChatMediaUrls } from '@/api/chatMedia';
 import {
   getTypingAudience,
   subscribeToChat,
@@ -197,6 +198,15 @@ export function useChatChannel(chatId: string, currentUserId: string | null): Ch
         // подписанные ссылки на фото могли стать чужими.
         forgetAvatarUrls();
         refreshChatTimes(queryClient, chatId).catch(() => undefined);
+        void queryClient.invalidateQueries({ queryKey: chatQueryKey(chatId) });
+      },
+      onMediaChanged: () => {
+        // Участник сменил, кому видно его медиа: пути и плитки «скрыто
+        // автором» у загруженных сообщений и во вкладках — глазами меня
+        // заново, прежние подписанные ссылки могли стать чужими.
+        forgetChatMediaUrls();
+        refreshChatTimes(queryClient, chatId).catch(() => undefined);
+        // Ключ чата — префикс и вкладок «Медиа» и «Голосовые».
         void queryClient.invalidateQueries({ queryKey: chatQueryKey(chatId) });
       },
       onPinsChanged: () => {

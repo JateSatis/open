@@ -68,5 +68,12 @@ export const MediaLimits = {
   },
 } as const;
 
-/** Single public bucket; write access is scoped by the `{userId}/` prefix. */
+/**
+ * Публичный бакет контента каналов и групп: попсы, фото групп и каналов.
+ * Медиа сообщений и комментариев — в закрытом `chat-media`, фото людей — в
+ * закрытом `avatars`. Пишет в них только `sanitize-media`.
+ */
 export const MEDIA_BUCKET = 'media';
+
+/** Временный закрытый бакет: сюда клиент кладёт файл до очистки, `{userId}/…`. */
+export const STAGING_BUCKET = 'uploads';

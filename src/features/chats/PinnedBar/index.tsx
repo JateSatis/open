@@ -1,10 +1,10 @@
-import { Image } from 'expo-image';
 import { Pressable, View } from 'react-native';
 
 import { styles } from './styles';
 
 import type { PinnedMessage } from '@/api/pins';
 import { Text } from '@/components/Text';
+import { MediaThumb } from '@/features/chats/MediaThumb';
 import { useTheme } from '@/hooks/use-theme';
 
 export type PinnedBarProps = {
@@ -49,8 +49,8 @@ export function PinnedBar({ pins, index, onPress }: PinnedBarProps) {
       <View style={[styles.accent, { backgroundColor: theme.primary }]} />
 
       {pin.thumbnailUrl ? (
-        <Image
-          source={{ uri: pin.thumbnailUrl }}
+        <MediaThumb
+          uri={pin.thumbnailUrl}
           style={[styles.thumbnail, { backgroundColor: theme.backgroundSelected }]}
           contentFit="cover"
           accessibilityIgnoresInvertColors

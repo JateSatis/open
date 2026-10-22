@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { setChatAvatar, type ChatSummary } from '@/api/chats';
 import { chatsQueryKey } from '@/features/chats/chatsKey';
 import { chatQueryKey } from '@/features/chats/useChat';
-import { removeOwnGroupAvatar, removeUploadedMedia, uploadGroupAvatar } from '@/features/media';
+import { removeOwnGroupAvatar, removePublicMedia, uploadGroupAvatar } from '@/features/media';
 import { DeadlineError, withDeadline } from '@/lib/deadline';
 
 /** Дольше этого смену фото не ждём — дальше это потеря связи. */
@@ -43,7 +43,7 @@ export function useChangeGroupAvatar(chatId: string, userId: string | null) {
         uploadGroupAvatar(change.uri, userId),
         GROUP_AVATAR_DEADLINE_MS,
         (late) => {
-          void removeUploadedMedia(late.path);
+          void removePublicMedia(late.path);
         },
       );
       let replaced: string | null;
@@ -56,7 +56,7 @@ export function useChangeGroupAvatar(chatId: string, userId: string | null) {
       } catch (error) {
         // База фото не приняла — файл никому не нужен. Кроме запроса,
         // оборванного по сроку: он мог дойти, и файл тогда — фото группы.
-        if (!(error instanceof DeadlineError)) void removeUploadedMedia(uploaded.path);
+        if (!(error instanceof DeadlineError)) void removePublicMedia(uploaded.path);
         throw error;
       }
 

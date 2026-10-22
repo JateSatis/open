@@ -1,5 +1,7 @@
 import { Directory, File, Paths } from 'expo-file-system';
 
+import { isChatMediaPath, signChatMediaUrl } from '@/api/chatMedia';
+
 /**
  * Голосовые, скачанные один раз, лежат в кеше приложения и при повторном
  * прослушивании берутся оттуда: трафик публичного мессенджера — базовое
@@ -49,6 +51,10 @@ export function cachedVoiceUri(url: string): string | null {
  * Локальный путь к голосовому: из кеша или после загрузки. Скачивается во
  * временное имя и переименовывается по готовности, чтобы оборванная загрузка
  * не выдавалась потом за готовый файл.
+ *
+ * `url` — путь в закрытом `chat-media` (кеш — по пути, скачивается по
+ * подписанной ссылке) или адрес. Ссылку не дали — голосовое скрыто или нет
+ * сети: ошибка, плеер покажет «не удалось».
  */
 export async function resolveVoiceUri(url: string): Promise<string> {
   const cached = cachedVoiceUri(url);
@@ -66,7 +72,11 @@ export async function resolveVoiceUri(url: string): Promise<string> {
 
     const target = cacheFileFor(url);
     const partial = new File(directory, `${target.name}.part`);
-    const downloaded = await File.downloadFileAsync(url, partial, { idempotent: true });
+    const source = isChatMediaPath(url) ? await signChatMediaUrl(url) : url;
+
+    if (!source) throw new Error('Voice is not available');
+
+    const downloaded = await File.downloadFileAsync(source, partial, { idempotent: true });
 
     downloaded.move(target);
 

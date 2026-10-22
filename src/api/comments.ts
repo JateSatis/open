@@ -32,6 +32,7 @@ import {
   type SendVoiceInput,
 } from '@/api/chats';
 import { acquireCommentTopic, type CommentTopicListener } from '@/api/commentTopics';
+import { attachmentFromRow } from '@/api/messageRows';
 import {
   REACTION_COLUMNS,
   toAudience,
@@ -135,7 +136,7 @@ export type CommentTarget =
 // Комментарии — из `comment_rows`: автор глазами смотрящего (имя, фото,
 // непрозрачный id считает база), профили клиенту не читаются.
 const COMMENT_COLUMNS =
-  `id, target_id, chat_id, author_id, author_name, author_avatar_url, author_opaque, kind, text, audience, created_at, edited_at, deleted_at, thread_root_id, fragment_id, replies_count, rank, ${FRAGMENT_QUOTE_COLUMNS}, comment_attachments(id, url, poster_url, mime_type, width, height, duration_ms, waveform), ${REACTION_COLUMNS}, replies:comment_replies!comment_replies_comment_fkey(position, quoted_id, quoted:comment_rows!comment_replies_quoted_fkey(id, author_id, author_name, author_opaque, kind, text, created_at, edited_at, comment_attachments(url, poster_url, mime_type, duration_ms, position)))` as const;
+  `id, target_id, chat_id, author_id, author_name, author_avatar_url, author_opaque, kind, text, audience, created_at, edited_at, deleted_at, thread_root_id, fragment_id, replies_count, rank, ${FRAGMENT_QUOTE_COLUMNS}, comment_attachments:comment_attachment_rows(id, url, poster_url, mime_type, width, height, duration_ms, waveform, media_hidden), ${REACTION_COLUMNS}, replies:comment_replies!comment_replies_comment_fkey(position, quoted_id, quoted:comment_rows!comment_replies_quoted_fkey(id, author_id, author_name, author_opaque, kind, text, created_at, edited_at, comment_attachments:comment_attachment_rows(url, poster_url, mime_type, duration_ms, position)))` as const;
 
 // Мозаика собирается в порядке выбора файлов, а PostgREST не гарантирует
 // порядок вложенной выборки без явного order.
@@ -209,7 +210,7 @@ function toQuotedComment(row: CommentReplyRow): QuotedMessage {
   if (!quoted) return { messageId: row.quoted_id, state: 'deleted' };
 
   const attachments = [...(quoted.comment_attachments ?? [])].sort(
-    (a, b) => a.position - b.position,
+    (a, b) => (a.position ?? 0) - (b.position ?? 0),
   );
 
   return {
@@ -249,16 +250,7 @@ export function toComment(row: CommentRow): Comment {
     text: row.text,
     createdAt: row.created_at,
     editedAt: row.edited_at,
-    attachments: (row.comment_attachments ?? []).map((attachment) => ({
-      id: attachment.id,
-      url: attachment.url,
-      posterUrl: attachment.poster_url,
-      mimeType: attachment.mime_type,
-      width: attachment.width,
-      height: attachment.height,
-      durationMs: attachment.duration_ms,
-      waveform: attachment.waveform,
-    })),
+    attachments: (row.comment_attachments ?? []).map(attachmentFromRow),
     reactions: toReactions(row),
     replies: [...(row.replies ?? [])].sort((a, b) => a.position - b.position).map(toQuotedComment),
     threadRootId: row.thread_root_id,

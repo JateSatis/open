@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { ChannelUsernameTakenError, createChannel, type CreatedChannel } from '@/api/channels';
 import { chatsQueryKey } from '@/features/chats/useChats';
-import { removeUploadedMedia, uploadChannelAvatar } from '@/features/media';
+import { removePublicMedia, uploadChannelAvatar } from '@/features/media';
 import { usernameAvailabilityKey } from '@/features/profile/useUsernameAvailability';
 import { DeadlineError, withDeadline } from '@/lib/deadline';
 import { isNetworkError } from '@/lib/network';
@@ -30,7 +30,7 @@ async function createWithAvatar(input: NewChannel, userId: string): Promise<Crea
         uploadChannelAvatar(input.avatarUri, userId),
         CREATE_DEADLINE_MS,
         (late) => {
-          void removeUploadedMedia(late.path);
+          void removePublicMedia(late.path);
         },
       )
     : null;
@@ -51,7 +51,7 @@ async function createWithAvatar(input: NewChannel, userId: string): Promise<Crea
     // Оборванный по сроку запрос мог дойти до базы: канал тогда есть и
     // ссылается на файл. Удалять его нельзя — лишний файл дешевле битой аватарки.
     if (abort.signal.aborted) throw new DeadlineError();
-    if (avatar) await removeUploadedMedia(avatar.path);
+    if (avatar) await removePublicMedia(avatar.path);
     throw error;
   } finally {
     clearTimeout(timer);

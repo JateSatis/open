@@ -11,7 +11,7 @@ import {
 } from '@/api/channels';
 import { channelQueryKey } from '@/features/channels/keys';
 import { chatsQueryKey } from '@/features/chats/chatsKey';
-import { removeOwnChannelAvatar, removeUploadedMedia, uploadChannelAvatar } from '@/features/media';
+import { removeOwnChannelAvatar, removePublicMedia, uploadChannelAvatar } from '@/features/media';
 import { usernameAvailabilityKey } from '@/features/profile/useUsernameAvailability';
 import { searchQueryKey } from '@/features/search/useSearch';
 import { DeadlineError, withDeadline } from '@/lib/deadline';
@@ -129,7 +129,7 @@ async function savePhoto(
     uploadChannelAvatar(photo.uri, userId),
     PHOTO_DEADLINE_MS,
     (late) => {
-      void removeUploadedMedia(late.path);
+      void removePublicMedia(late.path);
     },
   );
   let replaced: string | null;
@@ -139,7 +139,7 @@ async function savePhoto(
   } catch (error) {
     // База фото не приняла — файл никому не нужен. Кроме запроса, оборванного
     // по сроку: он мог дойти, и файл тогда — фото канала.
-    if (!(error instanceof DeadlineError)) void removeUploadedMedia(uploaded.path);
+    if (!(error instanceof DeadlineError)) void removePublicMedia(uploaded.path);
     throw error;
   }
 

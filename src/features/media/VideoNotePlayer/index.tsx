@@ -6,6 +6,7 @@ import { styles } from './styles';
 
 import { Text } from '@/components/Text';
 import { formatDuration } from '@/features/media/lib/formatDuration';
+import { useStableMediaUri } from '@/hooks/use-media-source';
 
 export type VideoNotePlayerProps = {
   /** Public URL from `attachments.url`, or a local `file://` URI before send. */
@@ -33,7 +34,9 @@ export function VideoNotePlayer({
 }: VideoNotePlayerProps) {
   const [isPlaying, setIsPlaying] = useState(autoPlay);
 
-  const player = useVideoPlayer(uri, (instance) => {
+  // Путь в закрытом бакете — по подписанной ссылке; первая держится весь показ.
+  const source = useStableMediaUri(uri);
+  const player = useVideoPlayer(source, (instance) => {
     // A video note is short and read like a message, so it repeats until the
     // viewer stops it, the way Telegram plays them.
     instance.loop = true;

@@ -90,7 +90,7 @@
     "build:android": "eas build --profile development --platform android",
     "build:ios": "eas build --profile development --platform ios",
     "postinstall": "patch-package",
-    "test:functions": "npx -y deno@2 test --allow-env --node-modules-dir=none supabase/functions"
+    "test:functions": "npx -y deno@2 test --allow-env --allow-read --node-modules-dir=none supabase/functions"
   },
   "private": true,
   "jest": {

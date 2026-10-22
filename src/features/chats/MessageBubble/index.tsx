@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import { PixelRatio, Pressable, View, type StyleProp, type TextStyle } from 'react-native';
 
 import { BubbleFooter } from './BubbleFooter';
@@ -37,7 +37,7 @@ import {
 import { hasReactions } from '@/features/interactions/reactionState';
 import { MediaViewer, type MediaViewerItem } from '@/features/media';
 import { useArmedViewer } from '@/features/media/MediaViewer/useArmedViewer';
-import { createTileRegistry } from '@/features/media/tileRegistry';
+import { createTileRegistry, type TileRect } from '@/features/media/tileRegistry';
 import { openPopViewer } from '@/features/pops/openPopViewer';
 import { useTheme } from '@/hooks/use-theme';
 import { Spacing } from '@/theme';
@@ -202,14 +202,36 @@ export function MessageBubble({
     [isMediaMessage, isPopPost, message.attachments, mediaBounds],
   );
 
-  const viewerItems: MediaViewerItem[] = message.attachments.map((attachment) => ({
-    id: attachment.id,
-    kind: attachment.mimeType?.startsWith('video/') ? 'video' : 'photo',
-    url: attachment.url,
-    thumbUrl: tileImageUri(attachment),
-    width: attachment.width,
-    height: attachment.height,
-  }));
+  // Скрытое автором в просмотр не попадает: файла у приложения нет. Номер
+  // плитки в мозаике переводится в номер в просмотре.
+  const { viewerItems, viewerIndex } = useMemo(() => {
+    const shown = message.attachments.filter((attachment) => !attachment.hidden);
+    const indexes = message.attachments.map((attachment) =>
+      attachment.hidden ? -1 : shown.indexOf(attachment),
+    );
+    const items: MediaViewerItem[] = shown.map((attachment) => ({
+      id: attachment.id,
+      kind: attachment.mimeType?.startsWith('video/') ? 'video' : 'photo',
+      url: attachment.url,
+      thumbUrl: tileImageUri(attachment),
+      width: attachment.width,
+      height: attachment.height,
+    }));
+
+    return { viewerItems: items, viewerIndex: indexes };
+  }, [message.attachments]);
+  const openShown = useCallback(
+    (index: number, origin: TileRect | null) => {
+      if ((viewerIndex[index] ?? -1) >= 0) openViewer(viewerIndex[index], origin);
+    },
+    [openViewer, viewerIndex],
+  );
+  const armShown = useCallback(
+    (index: number, origin: TileRect | null) => {
+      if ((viewerIndex[index] ?? -1) >= 0) armViewer(viewerIndex[index], origin);
+    },
+    [armViewer, viewerIndex],
+  );
 
   useMediaViewJournal(
     isMediaMessage && !isPopPost ? viewer : null,
@@ -397,10 +419,10 @@ export function MessageBubble({
               attachments={message.attachments}
               layout={layout}
               localPreviews={message.localPreviews}
-              onPress={isPopPost ? openPop : openViewer}
+              onPress={isPopPost ? openPop : openShown}
               tiles={tiles}
               edges={mosaicEdges}
-              onArm={isPopPost ? undefined : armViewer}
+              onArm={isPopPost ? undefined : armShown}
               onDisarm={isPopPost ? undefined : disarmViewer}
             >
               {metaOnMedia ? (

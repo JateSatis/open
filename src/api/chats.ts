@@ -1097,6 +1097,8 @@ export type ChatChannelHandlers = {
   onTimeVisibilityChanged?: () => void;
   /** Участник сменил, кому видны его имя и фото: людей перечитать. */
   onPeopleChanged?: () => void;
+  /** Участник сменил, кому видно его медиа: вложения — глазами меня заново. */
+  onMediaChanged?: () => void;
   /** Из островка этого чата убрали сообщения. Payload — подсказка, какой островок. */
   onForwardChanged?: (forwardId: string) => void;
   /**

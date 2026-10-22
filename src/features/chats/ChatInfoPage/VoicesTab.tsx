@@ -12,9 +12,11 @@ import type { ChatVoiceItem } from '@/api/chatInfo';
 import { AnchoredMenu, type MenuAnchor } from '@/components/AnchoredMenu';
 import { InfoTabList } from '@/components/InfoPage';
 import { Text } from '@/components/Text';
+import { hiddenMediaLabel } from '@/features/chats/HiddenMediaTile';
 import { DELETED_ACCOUNT } from '@/features/chats/messageQuote';
 import { formatDuration, stopVoice, VideoNotePlayer } from '@/features/media';
 import { toggleVoice, useVoicePlayback } from '@/features/media/voicePlayback';
+import { useMediaSource } from '@/hooks/use-media-source';
 import { useTheme } from '@/hooks/use-theme';
 import { formatDateTime } from '@/lib/dates';
 import { InfoPageSizes, Radii, Sizes, Spacing } from '@/theme';
@@ -150,7 +152,12 @@ const VoiceRow = memo(function VoiceRow({
   const progress =
     playback.isActive && playback.durationMs > 0 ? playback.positionMs / playback.durationMs : 0;
 
+  const poster = useMediaSource(item.posterUrl);
+
   const press = () => {
+    // Автор скрыл запись от меня — файла нет, играть нечего.
+    if (item.hidden) return;
+
     if (isNote) {
       onToggleNote(item);
       return;
@@ -164,7 +171,13 @@ const VoiceRow = memo(function VoiceRow({
       ref={ref}
       testID="info-voice-row"
       accessibilityRole="button"
-      accessibilityLabel={isNote ? 'Видеосообщение' : 'Голосовое сообщение'}
+      accessibilityLabel={
+        item.hidden
+          ? hiddenMediaLabel(isNote ? 'video' : 'voice')
+          : isNote
+            ? 'Видеосообщение'
+            : 'Голосовое сообщение'
+      }
       onPress={press}
       onLongPress={() =>
         ref.current?.measureInWindow((x, y, width, height) =>
@@ -174,11 +187,20 @@ const VoiceRow = memo(function VoiceRow({
       style={({ pressed }) => [pressed && { backgroundColor: theme.backgroundElement }]}
     >
       <View style={styles.row}>
-        {isNote ? (
+        {item.hidden ? (
+          <View
+            testID="info-voice-hidden"
+            style={[styles.circle, styles.centered, { backgroundColor: theme.backgroundSelected }]}
+          >
+            <SymbolView
+              name={{ ios: 'eye.slash', android: 'visibility_off', web: 'visibility_off' }}
+              size={Sizes.callIcon}
+              tintColor={theme.textSecondary}
+            />
+          </View>
+        ) : isNote ? (
           <View style={[styles.circle, { backgroundColor: theme.backgroundElement }]}>
-            {item.posterUrl ? (
-              <Image source={{ uri: item.posterUrl }} style={styles.fill} contentFit="cover" />
-            ) : null}
+            {poster ? <Image source={poster} style={styles.fill} contentFit="cover" /> : null}
             <View style={[StyleSheet.absoluteFill, styles.centered]}>
               <SymbolView
                 name={{ ios: 'play.fill', android: 'play_arrow', web: 'play_arrow' }}
@@ -214,7 +236,9 @@ const VoiceRow = memo(function VoiceRow({
                 : 'Голосовое'}
           </Text>
           <Text variant="small" color="textSecondary" numberOfLines={1}>
-            {`${author} • ${formatDuration(playback.isActive ? playback.positionMs : item.durationMs)}`}
+            {item.hidden
+              ? `${author} • ${hiddenMediaLabel(isNote ? 'video' : 'voice')} • ${formatDuration(item.durationMs)}`
+              : `${author} • ${formatDuration(playback.isActive ? playback.positionMs : item.durationMs)}`}
           </Text>
           {playback.isActive ? (
             <View style={[styles.track, { backgroundColor: theme.backgroundSelected }]}>

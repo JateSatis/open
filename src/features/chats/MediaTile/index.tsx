@@ -6,6 +6,7 @@ import { GestureDetector } from 'react-native-gesture-handler';
 import { styles } from './styles';
 
 import type { MessageAttachment } from '@/api/chats';
+import { isChatMediaPath } from '@/api/chatMedia';
 import { Text } from '@/components/Text';
 import type { MosaicTile } from '@/features/chats/lib/mosaicLayout';
 import { formatDuration } from '@/features/media/lib/formatDuration';
@@ -17,6 +18,7 @@ import {
   type TileRegistry,
 } from '@/features/media/tileRegistry';
 import { useTileTap } from '@/features/media/useTileTap';
+import { useMediaSource } from '@/hooks/use-media-source';
 import { useTheme } from '@/hooks/use-theme';
 
 export type MediaTileProps = {
@@ -57,7 +59,8 @@ export function tileImageUri(attachment: MessageAttachment): string | null {
   if (!isVideo(attachment)) return attachment.url;
   if (attachment.posterUrl) return attachment.posterUrl;
 
-  return attachment.url.startsWith('http') ? null : attachment.url;
+  // Загруженное видео — путь в бакете или адрес попа: картинкой его не открыть.
+  return attachment.url.startsWith('http') || isChatMediaPath(attachment.url) ? null : attachment.url;
 }
 
 /**
@@ -79,7 +82,9 @@ export function MediaTile({
 }: MediaTileProps) {
   const theme = useTheme();
   const video = isVideo(attachment);
-  const uri = tileImageUri(attachment);
+  // Путь в закрытом бакете — по подписанной ссылке, с кешем по пути.
+  const source = useMediaSource(tileImageUri(attachment));
+  const uri = source?.uri ?? null;
   const hidden = useTileHidden(tiles, attachment.id);
   const ref = useRef<View>(null);
 
@@ -126,7 +131,7 @@ export function MediaTile({
         {uri ? (
           <Image
             testID="media-tile-image"
-            source={{ uri }}
+            source={source}
             placeholder={localPreview && localPreview !== uri ? { uri: localPreview } : undefined}
             placeholderContentFit="cover"
             style={[styles.image, hidden && styles.hidden]}

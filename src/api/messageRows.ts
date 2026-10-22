@@ -47,6 +47,12 @@ export type MessageAttachment = {
   popChannelId?: string | null;
   /** Поп удалён: база его не отдаёт, на месте обложки — плашка. */
   popDeleted?: boolean;
+  /**
+   * Автор скрыл своё медиа от смотрящего («Кто видит мои фото, видео и
+   * голосовые»): `url`, постера и волны нет, на месте файла — плитка
+   * «скрыто автором» тех же пропорций.
+   */
+  hidden?: boolean;
 };
 
 /** Где в этом чате стоит сообщение из другого чата: островок, который его держит. */
@@ -286,8 +292,10 @@ export type Message = {
   hidden?: boolean;
 };
 
+// `media_hidden` — автор скрыл медиа от смотрящего: пути, постера и волны нет,
+// вид, размеры и длительность — для плитки «скрыто автором».
 const ATTACHMENT_COLUMNS =
-  'id, url, poster_url, mime_type, width, height, duration_ms, waveform, position';
+  'id, url, poster_url, mime_type, width, height, duration_ms, waveform, position, media_hidden';
 // Вложение сообщения бывает ссылкой на поп: файл тогда — попа.
 const MESSAGE_ATTACHMENT_COLUMNS =
   `${ATTACHMENT_COLUMNS}, pop_id, pop:pops(channel_id, url, poster_url, mime_type, width, height, duration_ms)` as const;
@@ -299,20 +307,20 @@ const MESSAGE_ATTACHMENT_COLUMNS =
 // фото и признак непрозрачного id считает база, профили клиенту не читаются.
 // Чаты — из `chat_rows`, комментарии — из `comment_rows`.
 const REPLY_COLUMNS =
-  `replies:message_replies!message_replies_message_fkey(position, quoted_id, via:message_rows!message_replies_quoted_forward_fkey(id, seq), quoted:message_rows!message_replies_quoted_fkey(id, author_id, author_name, author_opaque, kind, text, seq, created_at, edit_mark, attachments(${PREVIEW_ATTACHMENT_COLUMNS})))` as const;
+  `replies:message_replies!message_replies_message_fkey(position, quoted_id, via:message_rows!message_replies_quoted_forward_fkey(id, seq), quoted:message_rows!message_replies_quoted_fkey(id, author_id, author_name, author_opaque, kind, text, seq, created_at, edit_mark, attachments:attachment_rows(${PREVIEW_ATTACHMENT_COLUMNS})))` as const;
 const REACTION_AND_COMMENT_COLUMNS =
   `${REACTION_COLUMNS}, comments_count, clusters_count, views_count, read_at, reads_visible, hidden` as const;
 const ORIGINAL_COLUMNS =
-  `id, chat_id, author_id, kind, text, seq, created_at, edited_at, edited, edit_mark, attachments(${MESSAGE_ATTACHMENT_COLUMNS}), ${REPLY_COLUMNS}, ${REACTION_AND_COMMENT_COLUMNS}, author_name, author_avatar_url, author_opaque, chat:chat_rows!messages_chat_id_fkey(id, kind, chat_display_name, chat_read_up_to, chat_am_member)` as const;
+  `id, chat_id, author_id, kind, text, seq, created_at, edited_at, edited, edit_mark, attachments:attachment_rows(${MESSAGE_ATTACHMENT_COLUMNS}), ${REPLY_COLUMNS}, ${REACTION_AND_COMMENT_COLUMNS}, author_name, author_avatar_url, author_opaque, chat:chat_rows!messages_chat_id_fkey(id, kind, chat_display_name, chat_read_up_to, chat_am_member)` as const;
 
 const FORWARDED_COMMENT_COLUMNS =
-  `forwarded_comment_id, forwarded:comment_rows!messages_forwarded_comment_fkey(id, message_id, pop_id, chat_id, thread_root_id, fragment_id, ${FRAGMENT_QUOTE_COLUMNS}, author_id, author_name, author_avatar_url, author_opaque, kind, text, created_at, edited_at, ${REACTION_COLUMNS}, comment_attachments(${ATTACHMENT_COLUMNS}), chat:chat_rows!comments_chat_id_fkey(id, chat_display_name, chat_am_member), target:message_rows!comments_message_fkey(id, author_id, author_name, author_opaque, kind, text, seq, attachments(${PREVIEW_ATTACHMENT_COLUMNS})), pop:pops!comments_pop_id_fkey(id, channel_id, poster_url, caption))` as const;
+  `forwarded_comment_id, forwarded:comment_rows!messages_forwarded_comment_fkey(id, message_id, pop_id, chat_id, thread_root_id, fragment_id, ${FRAGMENT_QUOTE_COLUMNS}, author_id, author_name, author_avatar_url, author_opaque, kind, text, created_at, edited_at, ${REACTION_COLUMNS}, comment_attachments:comment_attachment_rows(${ATTACHMENT_COLUMNS}), chat:chat_rows!comments_chat_id_fkey(id, chat_display_name, chat_am_member), target:message_rows!comments_message_fkey(id, author_id, author_name, author_opaque, kind, text, seq, attachments:attachment_rows(${PREVIEW_ATTACHMENT_COLUMNS})), pop:pops!comments_pop_id_fkey(id, channel_id, poster_url, caption))` as const;
 
 // Островок приходит сразу с оригиналами: их текст, файлы, автор, чат,
 // реакции и комментарии — той же выборкой. Своя реакция — вычисляемой связью
 // `my_reaction`, и у оригинала тоже.
 export const MESSAGE_COLUMNS =
-  `id, chat_id, author_id, kind, text, seq, created_at, edited_at, edited, edit_mark, attachments(${MESSAGE_ATTACHMENT_COLUMNS}), ${REPLY_COLUMNS}, ${REACTION_AND_COMMENT_COLUMNS}, stream_id, stream_host_id, system_event, system_user_id, author_name, author_avatar_url, author_opaque, system_user_name, system_user_opaque, stream:streams!messages_stream_id_fkey(started_at, ended_at), my_call:my_stream_participation(id), source_chat:chat_rows!messages_source_chat_id_fkey(id, chat_display_name), items:forward_items!forward_items_forward_fkey(id, position, message_id, original:message_rows!forward_items_message_fkey(${ORIGINAL_COLUMNS})), ${FORWARDED_COMMENT_COLUMNS}` as const;
+  `id, chat_id, author_id, kind, text, seq, created_at, edited_at, edited, edit_mark, attachments:attachment_rows(${MESSAGE_ATTACHMENT_COLUMNS}), ${REPLY_COLUMNS}, ${REACTION_AND_COMMENT_COLUMNS}, stream_id, stream_host_id, system_event, system_user_id, author_name, author_avatar_url, author_opaque, system_user_name, system_user_opaque, stream:streams!messages_stream_id_fkey(started_at, ended_at), my_call:my_stream_participation(id), source_chat:chat_rows!messages_source_chat_id_fkey(id, chat_display_name), items:forward_items!forward_items_forward_fkey(id, position, message_id, original:message_rows!forward_items_message_fkey(${ORIGINAL_COLUMNS})), ${FORWARDED_COMMENT_COLUMNS}` as const;
 
 // Мозаика в облачке должна собираться в порядке выбора файлов, а PostgREST
 // не гарантирует порядок вложенной выборки сам по себе — нужен явный order
@@ -356,18 +364,44 @@ export function toMessageKind(kind: string): MessageKind {
   return MESSAGE_KINDS.has(kind) ? (kind as MessageKind) : 'system';
 }
 
+/** Своё вложение строки (не ссылка на поп) — как его показывает приложение. */
+export function attachmentFromRow(attachment: {
+  id: string | null;
+  url: string | null;
+  poster_url: string | null;
+  mime_type: string | null;
+  width: number | null;
+  height: number | null;
+  duration_ms: number | null;
+  waveform: number[] | null;
+  media_hidden?: boolean | null;
+}): MessageAttachment {
+  return {
+    // Колонки представления генератор типов пишет nullable; id у строки есть всегда.
+    id: attachment.id ?? '',
+    url: attachment.url ?? '',
+    posterUrl: attachment.poster_url,
+    mimeType: attachment.mime_type,
+    width: attachment.width,
+    height: attachment.height,
+    durationMs: attachment.duration_ms,
+    waveform: attachment.waveform,
+    hidden: attachment.media_hidden === true,
+  };
+}
+
 function toAttachments(
   rows: (AttachmentRow | CommentAttachmentRow)[] | null | undefined,
 ): MessageAttachment[] {
   return [...(rows ?? [])]
-    .sort((a, b) => a.position - b.position)
+    .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
     .map((attachment) => {
       if ('pop_id' in attachment && attachment.pop_id) {
         // Ссылка на поп: файл — попа. Поп удалён — обложки нет, место остаётся.
         const pop = attachment.pop;
 
         return {
-          id: attachment.id,
+          id: attachment.id ?? '',
           url: pop?.url ?? '',
           posterUrl: pop?.poster_url ?? null,
           mimeType: pop?.mime_type ?? null,
@@ -381,16 +415,7 @@ function toAttachments(
         };
       }
 
-      return {
-        id: attachment.id,
-        url: attachment.url ?? '',
-        posterUrl: attachment.poster_url,
-        mimeType: attachment.mime_type,
-        width: attachment.width,
-        height: attachment.height,
-        durationMs: attachment.duration_ms,
-        waveform: attachment.waveform,
-      };
+      return attachmentFromRow(attachment);
     });
 }
 

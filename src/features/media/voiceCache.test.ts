@@ -77,3 +77,33 @@ describe('voiceCache', () => {
     expect(download).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('voice from the closed chat-media bucket', () => {
+  it('downloads a bucket path by its signed link and caches it by the path', async () => {
+    const download = File.downloadFileAsync as jest.Mock;
+
+    download.mockClear();
+
+    const local = await resolveVoiceUri('user-1/voice/a.m4a');
+
+    expect(download).toHaveBeenCalledWith(
+      'https://signed.test/user-1/voice/a.m4a',
+      expect.anything(),
+      expect.anything(),
+    );
+    expect(cachedVoiceUri('user-1/voice/a.m4a')).toBe(local);
+  });
+
+  it('a hidden voice is not downloaded at all', async () => {
+    const { signChatMediaUrl } = jest.requireMock('@/api/chatMedia') as {
+      signChatMediaUrl: jest.Mock;
+    };
+    const download = File.downloadFileAsync as jest.Mock;
+
+    download.mockClear();
+    signChatMediaUrl.mockResolvedValueOnce(null);
+
+    await expect(resolveVoiceUri('user-2/voice/b.m4a')).rejects.toThrow();
+    expect(download).not.toHaveBeenCalled();
+  });
+});

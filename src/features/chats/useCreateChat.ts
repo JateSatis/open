@@ -7,7 +7,7 @@ import { chatsQueryKey } from '@/features/chats/useChats';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
 import { invitesQueryKey } from '@/features/chats/useInvites';
 import { GROUP_AVATAR_DEADLINE_MS } from '@/features/chats/useChangeGroupAvatar';
-import { removeUploadedMedia, uploadGroupAvatar } from '@/features/media';
+import { removePublicMedia, uploadGroupAvatar } from '@/features/media';
 import { DeadlineError, withDeadline } from '@/lib/deadline';
 import { describeLoadError } from '@/lib/network';
 
@@ -49,7 +49,7 @@ async function createWithAvatar(input: NewChat, userId: string | null): Promise<
     uploadGroupAvatar(avatarUri, userId),
     GROUP_AVATAR_DEADLINE_MS,
     (late) => {
-      void removeUploadedMedia(late.path);
+      void removePublicMedia(late.path);
     },
   );
   let result: CreateChatResult;
@@ -63,11 +63,11 @@ async function createWithAvatar(input: NewChat, userId: string | null): Promise<
   } catch (error) {
     // Запрос, оборванный по сроку, мог дойти до базы, и файл тогда — фото
     // группы. Лишний файл дешевле битой аватарки.
-    if (!(error instanceof DeadlineError)) void removeUploadedMedia(avatar.path);
+    if (!(error instanceof DeadlineError)) void removePublicMedia(avatar.path);
     throw error;
   }
 
-  if (result.outcome !== 'created') void removeUploadedMedia(avatar.path);
+  if (result.outcome !== 'created') void removePublicMedia(avatar.path);
   return result;
 }
 

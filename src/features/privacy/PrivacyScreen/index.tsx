@@ -107,6 +107,29 @@ export function PrivacyScreen() {
               />
             </SettingsSection>
           </View>
+
+          <View style={styles.group}>
+            <Text variant="bodyBold" style={styles.groupTitle}>
+              Контент и данные
+            </Text>
+            <VisibilityChoice
+              testID="privacy-media"
+              title="Кто видит мои фото, видео и голосовые"
+              footer="Участники чата, куда вы отправили, видят всегда. Остальные — по этой настройке. Кто уже открыл файл, мог его сохранить."
+              value={data.mediaVisibility}
+              onChange={set('dialogue_media_visibility')}
+            />
+            {/* Правило для всех, а не настройка: переключателя нет. Про
+                содержимое кадра ничего не обещает. */}
+            <Text
+              testID="privacy-metadata-note"
+              variant="small"
+              color="textSecondary"
+              style={styles.message}
+            >
+              Из фото и видео перед отправкой удаляются геометка, модель телефона и дата съёмки.
+            </Text>
+          </View>
         </>
       ) : null}
 

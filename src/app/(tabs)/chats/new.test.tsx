@@ -8,7 +8,7 @@ import { createChat, DuplicateChatError } from '@/api/invites';
 import { useSession } from '@/features/auth/useSession';
 import { openMediaSheet } from '@/features/chats/MediaPickerSheet';
 import { reportRealtimeJoined, resetConnectionState } from '@/features/connection/connectionStore';
-import { removeUploadedMedia, uploadGroupAvatar, type PreparedAvatar } from '@/features/media';
+import { removePublicMedia, uploadGroupAvatar, type PreparedAvatar } from '@/features/media';
 import { renderWithQuery } from '@/test/renderWithQuery';
 
 const mockReplace = jest.fn();
@@ -54,7 +54,7 @@ jest.mock('@/api/invites', () => {
 
 jest.mock('@/features/media', () => ({
   uploadGroupAvatar: jest.fn(),
-  removeUploadedMedia: jest.fn(),
+  removePublicMedia: jest.fn(),
 }));
 
 // Шит аватарки — свой тест; «Готово» шита — кнопка мока.
@@ -268,7 +268,7 @@ describe('NewChatScreen', () => {
         title: '',
         avatarUrl: 'https://x/g.jpg',
       });
-      expect(removeUploadedMedia).not.toHaveBeenCalled();
+      expect(removePublicMedia).not.toHaveBeenCalled();
       expect(mockReplace).toHaveBeenCalledWith('/chats/chat-new');
     });
 
@@ -314,7 +314,7 @@ describe('NewChatScreen', () => {
       await user.press(screen.getByText('Позвать в группу (2)'));
 
       expect(await screen.findByText(/Вы уже позвали этих людей/)).toBeTruthy();
-      expect(removeUploadedMedia).toHaveBeenCalledWith('user-1/group-avatar/g.jpg');
+      expect(removePublicMedia).toHaveBeenCalledWith('user-1/group-avatar/g.jpg');
     });
 
     it('an invite from the same people opens their chat and removes the unused photo', async () => {
@@ -328,7 +328,7 @@ describe('NewChatScreen', () => {
       await user.press(screen.getByText('Позвать в группу (2)'));
 
       expect(mockReplace).toHaveBeenCalledWith('/chats/chat-theirs');
-      expect(removeUploadedMedia).toHaveBeenCalledWith('user-1/group-avatar/g.jpg');
+      expect(removePublicMedia).toHaveBeenCalledWith('user-1/group-avatar/g.jpg');
     });
   });
 
