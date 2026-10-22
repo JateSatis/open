@@ -333,6 +333,13 @@ begin
     r.user_id = id_x and r.display_name = alias_x and r.opaque, coalesce(r.display_name, 'нет'));
   perform pg_temp.check('звонок: начавший у S — не настоящий id',
     (select host_id from public.chat_live_stream(x)) = e);
+  perform pg_temp.check('звонок: начавший в строке звонка — глазами смотрящего',
+    (select stream_host_id from public.message_rows where stream_id = stream and system_event = 'call_started') = e);
+
+  -- Обёртки представлений напрямую не отдают того, чего не отдаёт представление.
+  perform pg_temp.check('обёртки: удалённое и чужая заявка — пусто',
+    (select author_id from public.message_people(gen_random_uuid())) is null
+      and (select owner_id from public.chat_row_people(gen_random_uuid())) is null);
 
   -- ------------------------------------------------- К1.4, К1.5
   perform pg_temp.act_as(a);
