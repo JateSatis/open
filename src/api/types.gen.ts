@@ -1653,6 +1653,50 @@ export type Database = {
           },
         ]
       }
+      media_objects: {
+        Row: {
+          bucket: string
+          created_at: string
+          id: string
+          kind: string
+          mime_type: string
+          owner_id: string
+          path: string
+          sanitized_at: string
+          size_bytes: number
+        }
+        Insert: {
+          bucket: string
+          created_at?: string
+          id?: string
+          kind: string
+          mime_type: string
+          owner_id: string
+          path: string
+          sanitized_at?: string
+          size_bytes: number
+        }
+        Update: {
+          bucket?: string
+          created_at?: string
+          id?: string
+          kind?: string
+          mime_type?: string
+          owner_id?: string
+          path?: string
+          sanitized_at?: string
+          size_bytes?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "media_objects_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       message_fragments: {
         Row: {
           anchor_state: string
@@ -2351,7 +2395,6 @@ export type Database = {
           profile_identity_masking: string
           public_message_visibility_delay: string
           updated_at: string
-          uploaded_media_metadata_stripping: boolean
           user_id: string
         }
         Insert: {
@@ -2373,7 +2416,6 @@ export type Database = {
           profile_identity_masking: string
           public_message_visibility_delay: string
           updated_at?: string
-          uploaded_media_metadata_stripping: boolean
           user_id: string
         }
         Update: {
@@ -2395,7 +2437,6 @@ export type Database = {
           profile_identity_masking?: string
           public_message_visibility_delay?: string
           updated_at?: string
-          uploaded_media_metadata_stripping?: boolean
           user_id?: string
         }
         Relationships: [
@@ -3702,6 +3743,47 @@ export type Database = {
       }
     }
     Views: {
+      attachment_rows: {
+        Row: {
+          duration_ms: number | null
+          height: number | null
+          id: string | null
+          media_hidden: boolean | null
+          message_id: string | null
+          message_kind: string | null
+          mime_type: string | null
+          pop_id: string | null
+          position: number | null
+          poster_url: string | null
+          size_bytes: number | null
+          url: string | null
+          waveform: number[] | null
+          width: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "attachments_message_id_message_kind_fkey"
+            columns: ["message_id", "message_kind"]
+            isOneToOne: false
+            referencedRelation: "message_rows"
+            referencedColumns: ["id", "kind"]
+          },
+          {
+            foreignKeyName: "attachments_message_id_message_kind_fkey"
+            columns: ["message_id", "message_kind"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id", "kind"]
+          },
+          {
+            foreignKeyName: "attachments_pop_id_fkey"
+            columns: ["pop_id"]
+            isOneToOne: false
+            referencedRelation: "pops"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       chat_rows: {
         Row: {
           avatar_url: string | null
@@ -3750,6 +3832,39 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "chats"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      comment_attachment_rows: {
+        Row: {
+          comment_id: string | null
+          comment_kind: string | null
+          duration_ms: number | null
+          height: number | null
+          id: string | null
+          media_hidden: boolean | null
+          mime_type: string | null
+          position: number | null
+          poster_url: string | null
+          size_bytes: number | null
+          url: string | null
+          waveform: number[] | null
+          width: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comment_attachments_comment_fkey"
+            columns: ["comment_id", "comment_kind"]
+            isOneToOne: false
+            referencedRelation: "comment_rows"
+            referencedColumns: ["id", "kind"]
+          },
+          {
+            foreignKeyName: "comment_attachments_comment_fkey"
+            columns: ["comment_id", "comment_kind"]
+            isOneToOne: false
+            referencedRelation: "comments"
+            referencedColumns: ["id", "kind"]
           },
         ]
       }
@@ -4054,6 +4169,13 @@ export type Database = {
         Returns: string[]
       }
       attach_fragment: { Args: { fragment: string }; Returns: string }
+      attachment_access: {
+        Args: { p_message: string }
+        Returns: {
+          shown: boolean
+          visible: boolean
+        }[]
+      }
       avatar_object_readable: { Args: { p_name: string }; Returns: boolean }
       block_user: { Args: { p_user: string }; Returns: undefined }
       blocked_pair: { Args: { p_a: string; p_b: string }; Returns: boolean }
@@ -4147,6 +4269,7 @@ export type Database = {
           started_at: string
         }[]
       }
+      chat_media_object_readable: { Args: { p_name: string }; Returns: boolean }
       chat_opaque_id: {
         Args: { p_chat: string; p_person: string }
         Returns: string
@@ -4227,6 +4350,13 @@ export type Database = {
       cluster_dominant_reaction: {
         Args: { member: Json; previous: string; visitor: Json }
         Returns: string
+      }
+      comment_attachment_access: {
+        Args: { p_comment: string }
+        Returns: {
+          shown: boolean
+          visible: boolean
+        }[]
       }
       comment_people: {
         Args: { p_comment: string }
@@ -4632,6 +4762,7 @@ export type Database = {
           created_at: string
           duration_ms: number
           height: number
+          media_hidden: boolean
           message_id: string
           mime_type: string
           position: number
@@ -4667,6 +4798,7 @@ export type Database = {
           created_at: string
           duration_ms: number
           kind: string
+          media_hidden: boolean
           message_id: string
           mime_type: string
           poster_url: string
@@ -4903,6 +5035,19 @@ export type Database = {
         Returns: undefined
       }
       mark_seen: { Args: { online?: boolean }; Returns: undefined }
+      media_object_owned: {
+        Args: {
+          p_bucket: string
+          p_kinds: string[]
+          p_owner: string
+          p_path: string
+        }
+        Returns: boolean
+      }
+      media_visible: {
+        Args: { p_author: string; p_channel: boolean; p_chat: string }
+        Returns: boolean
+      }
       member_event_text: {
         Args: { actor_name: string; event: string; subject_name: string }
         Returns: string
@@ -5002,7 +5147,6 @@ export type Database = {
           profile_identity_masking: string
           public_message_visibility_delay: string
           updated_at: string
-          uploaded_media_metadata_stripping: boolean
           user_id: string
         }
         SetofOptions: {
@@ -5288,7 +5432,6 @@ export type Database = {
           profile_identity_masking: string
           public_message_visibility_delay: string
           updated_at: string
-          uploaded_media_metadata_stripping: boolean
           user_id: string
         }
         SetofOptions: {
@@ -5310,6 +5453,7 @@ export type Database = {
           username: string
         }[]
       }
+      public_media_path: { Args: { p_url: string }; Returns: string }
       publish_pop: {
         Args: {
           also_post?: boolean
