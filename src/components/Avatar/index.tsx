@@ -5,10 +5,12 @@ import { styles } from './styles';
 
 import { Text } from '@/components/Text';
 import { initialOf } from '@/lib/initialOf';
+import { useAvatarSource } from '@/hooks/use-avatar-source';
 import { useTheme } from '@/hooks/use-theme';
 import { Sizes } from '@/theme';
 
 export type AvatarProps = {
+  /** Адрес фото или путь аватара человека в закрытом бакете. */
   uri?: string | null;
   /** Full display name, used to derive the fallback initial when there is no image. */
   name: string;
@@ -21,10 +23,11 @@ function largeLetter(size: number) {
 
 export function Avatar({ uri, name, size = 40 }: AvatarProps) {
   const theme = useTheme();
+  const source = useAvatarSource(uri);
   const dimension = { width: size, height: size, borderRadius: size / 2 };
 
-  if (uri) {
-    return <Image source={{ uri }} accessibilityLabel={name} style={[styles.image, dimension]} />;
+  if (source) {
+    return <Image source={source} accessibilityLabel={name} style={[styles.image, dimension]} />;
   }
 
   return (

@@ -213,10 +213,10 @@ describe('EditProfileScreen', () => {
     expect(queryByText('Снять фото')).toBeNull();
   });
 
-  it('says that the profile photo is public', async () => {
+  it('points to where the photo visibility is set, not promising it is public', async () => {
     const { findByText } = await renderWithQuery(<EditProfileScreen />);
 
-    expect(await findByText('Фото профиля видно всем')).toBeTruthy();
+    expect(await findByText('Кому видно фото — в «Конфиденциальности»')).toBeTruthy();
   });
 
   it('uploads the photo from the sheet, points the profile at it and drops the old file', async () => {

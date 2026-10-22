@@ -9,6 +9,7 @@ import type { InfoAction, InfoAvatar } from './types';
 import type { AvatarPairPerson } from '@/components/AvatarPair';
 import { Text } from '@/components/Text';
 import { initialOf } from '@/lib/initialOf';
+import { useAvatarSource } from '@/hooks/use-avatar-source';
 import { useTheme } from '@/hooks/use-theme';
 import { InfoPageOpacity, InfoPageSizes, Opacity, Radii, Spacing } from '@/theme';
 
@@ -125,12 +126,13 @@ function PersonFace({
   testID?: string;
 }) {
   const theme = useTheme();
+  const source = useAvatarSource(person.uri);
 
-  if (person.uri) {
+  if (source) {
     return (
       <Image
         testID={testID}
-        source={{ uri: person.uri }}
+        source={source}
         style={styles.face}
         contentFit="cover"
         accessibilityLabel={person.name}

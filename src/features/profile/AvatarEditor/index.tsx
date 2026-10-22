@@ -90,7 +90,7 @@ export function AvatarEditor({ profile }: { profile: Profile }) {
       ) : null}
 
       <Text variant="caption" color="textSecondary" style={styles.note}>
-        Фото профиля видно всем
+        Кому видно фото — в «Конфиденциальности»
       </Text>
 
       {errorText ? (

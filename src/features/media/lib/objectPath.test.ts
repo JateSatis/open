@@ -2,6 +2,7 @@ import {
   buildAvatarPath,
   buildGroupAvatarPath,
   buildObjectPath,
+  ownAvatarPath,
   ownAvatarPathFromUrl,
   ownPathFromUrl,
 } from './objectPath';
@@ -24,8 +25,14 @@ describe('buildObjectPath', () => {
 describe('avatar paths', () => {
   const base = 'https://x.supabase.co/storage/v1/object/public/media/';
 
-  it('puts avatars into the owner avatar folder', () => {
-    expect(buildAvatarPath('user-1')).toMatch(/^user-1\/avatar\/[a-z0-9-]+\.jpg$/);
+  it('puts avatars into the owner folder of the private bucket', () => {
+    expect(buildAvatarPath('user-1')).toMatch(/^user-1\/[a-z0-9-]+\.jpg$/);
+  });
+
+  it('recognises only the own avatar path, never an address', () => {
+    expect(ownAvatarPath('user-1/a.jpg', 'user-1')).toBe('user-1/a.jpg');
+    expect(ownAvatarPath('user-2/a.jpg', 'user-1')).toBeNull();
+    expect(ownAvatarPath(`${base}user-1/avatar/a.jpg`, 'user-1')).toBeNull();
   });
 
   it('recognises only the owner avatar', () => {
