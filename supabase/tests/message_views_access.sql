@@ -68,12 +68,15 @@ $$;
 
 -- Тестовые аккаунты рождаются с защитными настройками приватности
 -- (20261029100000_privacy_settings.sql). Здесь проверяется не она: время,
--- «в сети» и поиск открыты всем — их скрытие проверяет
+-- «в сети», поиск и имя открыты всем — их скрытие проверяет
 -- privacy_activity_search_access.sql.
 update public.privacy_settings set
   message_activity_metadata_visibility = 'everyone',
   activity_status_visibility = 'everyone',
-  account_search_visibility = 'everyone'
+  account_search_visibility = 'everyone',
+  profile_identity_masking = 'everyone',
+  dialogue_participant_name_masking = 'everyone',
+  avatar_visibility = 'everyone'
 where user_id in (select id from auth.users where email like '%@test.local');
 
 do $$

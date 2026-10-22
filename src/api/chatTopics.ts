@@ -49,6 +49,12 @@ export type ChatTopicListener = {
    * этом чате пора перечитать.
    */
   onTimeVisibilityChanged?: () => void;
+  /**
+   * Участник сменил, кому видны его имя, фото или имя в диалогах, или взял
+   * другой псевдоним: людей у загруженных сообщений и в участниках пора
+   * перечитать.
+   */
+  onPeopleChanged?: () => void;
   /** Из островка этого чата убрали сообщения. */
   onForwardChanged?: (forwardId: string) => void;
   onTyping?: (userId: string, activity: ChatActivity) => void;
@@ -179,6 +185,7 @@ function open(chatId: string): Entry {
     .on('broadcast', { event: 'time_visibility_changed' }, () =>
       each((l) => l.onTimeVisibilityChanged?.()),
     )
+    .on('broadcast', { event: 'people_changed' }, () => each((l) => l.onPeopleChanged?.()))
     .on('broadcast', { event: 'typing' }, ({ payload }) => {
       const typing = typingFrom(payload);
 

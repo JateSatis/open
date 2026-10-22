@@ -252,7 +252,7 @@ begin
   -- B удаляет свой комментарий — у фрагмента не осталось ничего.
   perform pg_temp.act_as(b);
   perform public.delete_comment(
-    (select c.id from public.comments c where c.fragment_id = frag and c.author_id = b)
+    (select c.id from public.comment_rows c where c.fragment_id = frag and c.author_id = b)
   );
   perform pg_temp.act_as(d);
   select count(*) into n from public.message_fragments where id = frag;

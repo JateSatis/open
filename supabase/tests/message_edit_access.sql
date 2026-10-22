@@ -68,12 +68,15 @@ $$;
 
 -- Тестовые аккаунты рождаются с защитными настройками приватности
 -- (20261029100000_privacy_settings.sql). Здесь проверяется не она: время,
--- «в сети» и поиск открыты всем — их скрытие проверяет
+-- «в сети», поиск и имя открыты всем — их скрытие проверяет
 -- privacy_activity_search_access.sql.
 update public.privacy_settings set
   message_activity_metadata_visibility = 'everyone',
   activity_status_visibility = 'everyone',
-  account_search_visibility = 'everyone'
+  account_search_visibility = 'everyone',
+  profile_identity_masking = 'everyone',
+  dialogue_participant_name_masking = 'everyone',
+  avatar_visibility = 'everyone'
 where user_id in (select id from auth.users where email like '%@test.local');
 
 do $$
@@ -179,7 +182,7 @@ begin
     perform pg_temp.check('автор не меняет вид прямым UPDATE', sqlstate = '42501', sqlstate || ' ' || sqlerrm);
   end;
 
-  select text into s from public.messages where id = plain;
+  select text into s from public.message_rows where id = plain;
   perform pg_temp.check('текст после попыток прежний', s = 'было', s);
 
   begin
@@ -309,7 +312,7 @@ begin
   end;
 
   perform pg_temp.act_as(a);
-  select text into s from public.messages where id = plain;
+  select text into s from public.message_rows where id = plain;
   perform pg_temp.check('после чужих попыток текст автора', s = 'стало', s);
 
   -- ======================================= что не правится вообще
@@ -510,7 +513,7 @@ begin
   );
   set constraints all immediate;
   set constraints all deferred;
-  select kind || '|' || text || '|' || pg_temp.files(older) into s from public.messages where id = older;
+  select kind || '|' || text || '|' || pg_temp.files(older) into s from public.message_rows where id = older;
   perform pg_temp.check(
     'текст → альбом',
     s = 'media|теперь с фото|media:https://x/5.jpg,media:https://x/6.mp4',
@@ -529,7 +532,7 @@ begin
   set constraints all immediate;
   set constraints all deferred;
   select kind || '|' || coalesce(text, '∅') || '|' || pg_temp.files(older) into s
-  from public.messages where id = older;
+  from public.message_rows where id = older;
   perform pg_temp.check('альбом → голосовое', s = 'voice|∅|voice:https://x/v3.m4a', s);
 
   select waveform::text into s from public.attachments where message_id = older;
@@ -539,7 +542,7 @@ begin
   perform public.edit_message(voice, 'расшифровка');
   set constraints all immediate;
   set constraints all deferred;
-  select kind || '|' || text || '|' || pg_temp.files(voice) into s from public.messages where id = voice;
+  select kind || '|' || text || '|' || pg_temp.files(voice) into s from public.message_rows where id = voice;
   perform pg_temp.check('голосовое → текст', s = 'text|расшифровка|', s);
 
   -- Текст → голосовое через оставленный файл невозможно (файла нет), а
@@ -565,19 +568,19 @@ begin
   update public.chats set last_message_text = 'последнее' where id = chat_ab;
   perform pg_temp.act_as(a);
 
-  select last_message_text into s from public.chats where id = chat_ab;
+  select public.last_message_preview(ch) into s from public.chat_rows ch where ch.id = chat_ab;
   perform pg_temp.check('правка не последнего не трогает превью', s = 'последнее', s);
 
-  select public.last_message_at(ch) into ts from public.chats ch where ch.id = chat_ab;
+  select public.last_message_at(ch) into ts from public.chat_rows ch where ch.id = chat_ab;
   perform public.edit_message(latest, 'последнее, поправленное');
-  select last_message_text into s from public.chats where id = chat_ab;
+  select public.last_message_preview(ch) into s from public.chat_rows ch where ch.id = chat_ab;
   perform pg_temp.check('правка последнего меняет превью', s = 'последнее, поправленное', s);
 
   perform pg_temp.check('правка не поднимает чат в списке',
-    (select public.last_message_at(ch) from public.chats ch where ch.id = chat_ab) = ts, ts::text);
+    (select public.last_message_at(ch) from public.chat_rows ch where ch.id = chat_ab) = ts, ts::text);
 
   perform public.edit_message(latest, null, '[{"url":"https://x/7.jpg","mime_type":"image/jpeg"}]'::jsonb, null);
-  select last_message_text into s from public.chats where id = chat_ab;
+  select public.last_message_preview(ch) into s from public.chat_rows ch where ch.id = chat_ab;
   perform pg_temp.check('превью последнего, ставшего фото', s = '📷 Медиа', s);
 
   -- ============================================ дочитывание правок

@@ -21,11 +21,21 @@ export function buildObjectPath(userId: string, kind: MediaKind, mimeType: strin
   return `${userId}/${kind}/${randomId()}.${extensionFromMime(mimeType)}`;
 }
 
-/** Папка аватаров внутри префикса пользователя. Файлы в ней — не часть переписки. */
+/**
+ * Прежняя папка аватаров в публичном бакете `media`. Новые аватары лежат в
+ * закрытом бакете `avatars` (`buildAvatarPath`) — её помнят только для
+ * удаления старых файлов.
+ */
 export const AVATAR_FOLDER = 'avatar';
 
+/** Путь аватара в закрытом бакете `avatars`: папка — сам пользователь. */
 export function buildAvatarPath(userId: string): string {
-  return `${userId}/${AVATAR_FOLDER}/${randomId()}.jpg`;
+  return `${userId}/${randomId()}.jpg`;
+}
+
+/** Свой аватар в бакете `avatars` — по пути из профиля; адрес или чужой путь — null. */
+export function ownAvatarPath(value: string, userId: string): string | null {
+  return !/^[a-z][a-z0-9+.-]*:/i.test(value) && value.startsWith(`${userId}/`) ? value : null;
 }
 
 /**

@@ -19,6 +19,7 @@ import { getMyChatSubscription, subscribeToChat, unsubscribeFromChat } from '@/a
 import { useInAppAlert } from '@/features/notifications/alertsStore';
 import { useProfile } from '@/features/profile/queries';
 import { renderWithQuery } from '@/test/renderWithQuery';
+import { rememberPersonId } from '@/api/opaquePeople';
 
 jest.mock('@/api/supabase', () => ({ supabase: {} }));
 
@@ -350,6 +351,29 @@ describe('ChatInfoPage', () => {
       expect(mockPush).toHaveBeenCalledWith({
         pathname: '/chats/people/[userId]',
         params: { userId: 'boris' },
+      });
+    });
+
+    it('К2.3 does not open a profile for a person hidden in this dialog', async () => {
+      // Участник подменён для меня в этом диалоге: база отдала непрозрачный id.
+      rememberPersonId('opaque-boris', true);
+      const hidden: ChatSummary = {
+        ...dialog,
+        participants: [
+          person('anna', 'Анна'),
+          { ...person('opaque-boris', 'Илья Муромцев'), opaque: true },
+        ],
+      };
+      await renderWithQuery(<Page chat={hidden} />);
+
+      expect(screen.getByTestId('info-title')).toHaveTextContent('Анна и Илья Муромцев');
+      await fireEvent.press(screen.getByTestId('info-person-opaque-boris'));
+      expect(mockPush).not.toHaveBeenCalled();
+
+      await fireEvent.press(screen.getByTestId('info-person-anna'));
+      expect(mockPush).toHaveBeenCalledWith({
+        pathname: '/chats/people/[userId]',
+        params: { userId: 'anna' },
       });
     });
 

@@ -56,7 +56,7 @@ $$;
 -- Счётчики сообщения одной строкой: «участники | посетители | всего».
 create function pg_temp.counts(msg uuid) returns text language sql as $$
   select member_reactions::text || ' | ' || visitor_reactions::text || ' | ' || reactions_count
-  from public.messages where id = msg
+  from public.message_rows where id = msg
 $$;
 
 -- Счётчики, пересчитанные заново из таблицы реакций, — в той же форме.
@@ -86,12 +86,15 @@ $$;
 
 -- Тестовые аккаунты рождаются с защитными настройками приватности
 -- (20261029100000_privacy_settings.sql). Здесь проверяется не она: время,
--- «в сети» и поиск открыты всем — их скрытие проверяет
+-- «в сети», поиск и имя открыты всем — их скрытие проверяет
 -- privacy_activity_search_access.sql.
 update public.privacy_settings set
   message_activity_metadata_visibility = 'everyone',
   activity_status_visibility = 'everyone',
-  account_search_visibility = 'everyone'
+  account_search_visibility = 'everyone',
+  profile_identity_masking = 'everyone',
+  dialogue_participant_name_masking = 'everyone',
+  avatar_visibility = 'everyone'
 where user_id in (select id from auth.users where email like '%@test.local');
 
 do $$
@@ -374,8 +377,12 @@ begin
 
   -- ================================================ чтение
   perform pg_temp.act_as(d);
-  select count(*) into n from public.reactions where target_id = ma;
+  -- Кто поставил — глазами смотрящего (`reactor_rows`); строки реакций
+  -- клиенту отдаются только свои.
+  select count(*) into n from public.reactor_rows where target_id = ma;
   perform pg_temp.check('реакции видны всем', n = 4, n::text);
+  select count(*) into n from public.reactions where target_id = ma and user_id <> d;
+  perform pg_temp.check('чужие строки реакций напрямую не читаются', n = 0, n::text);
 
   s := pg_temp.mine(ma);
   perform pg_temp.check('моя реакция — только моя', s = 'visitor:🔥', s);

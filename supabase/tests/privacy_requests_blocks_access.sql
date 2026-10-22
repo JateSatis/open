@@ -115,7 +115,10 @@ begin
   update public.privacy_settings set
     activity_status_visibility = 'everyone',
     message_activity_metadata_visibility = 'everyone',
-    account_search_visibility = 'everyone'
+    account_search_visibility = 'everyone',
+    profile_identity_masking = 'everyone',
+    dialogue_participant_name_masking = 'everyone',
+    avatar_visibility = 'everyone'
   where user_id in (a, a2, b, v, f, d, e, t, q, u) or user_id = any (ks);
 
   insert into public.friendships (requester_id, addressee_id, status, accepted_at)
@@ -156,7 +159,7 @@ begin
   res := public.create_chat(array[b]);
   perform pg_temp.check('К1.1 без текста не-другу — request_needed, чат не создан',
     res ->> 'outcome' = 'request_needed'
-      and not exists (select 1 from public.chats where created_by = a and kind = 'direct'),
+      and not exists (select 1 from public.chat_rows where created_by = a and kind = 'direct'),
     res::text);
 
   res := public.create_chat(array[b], null, null, 'Привет, это заявка');
@@ -386,10 +389,10 @@ begin
   set constraints all immediate;
   set constraints all deferred;
   perform pg_temp.act_as(a);
-  select public.last_message_preview(c) into got from public.chats c where c.id = grp_g;
+  select public.last_message_preview(c) into got from public.chat_rows c where c.id = grp_g;
   perform pg_temp.check('К2.5 превью G для A — заглушка', got = 'Сообщение скрыто', got);
   perform pg_temp.act_as(v);
-  select public.last_message_preview(c) into got from public.chats c where c.id = grp_g;
+  select public.last_message_preview(c) into got from public.chat_rows c where c.id = grp_g;
   perform pg_temp.check('К2.5 превью G для V — текст', got = 'Борис последним', got);
   perform pg_temp.act_as(a);
 

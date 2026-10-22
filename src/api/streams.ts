@@ -6,6 +6,7 @@
 
 import { FunctionsHttpError } from '@supabase/supabase-js';
 
+import { opaqueFlag } from '@/api/opaquePeople';
 import { supabase } from '@/api/supabase';
 
 export type StreamRole = 'host' | 'speaker' | 'listener';
@@ -41,8 +42,6 @@ export class StreamJoinError extends Error {
   }
 }
 
-const STREAM_COLUMNS = 'id, chat_id, host_id, started_at, speakers_count, listeners_count';
-
 type StreamRow = {
   id: string;
   chat_id: string;
@@ -52,29 +51,30 @@ type StreamRow = {
   listeners_count: number;
 };
 
+// Колонки результата rpc генератор типов не размечает как nullable.
 function toLiveStream(row: StreamRow): LiveStream {
   return {
     id: row.id,
     chatId: row.chat_id,
-    hostId: row.host_id,
+    hostId: row.host_id ?? null,
     startedAt: row.started_at,
     speakersCount: row.speakers_count,
     listenersCount: row.listeners_count,
   };
 }
 
-/** Идущий звонок чата или null. Живой в чате не больше одного — это инвариант базы. */
+/**
+ * Идущий звонок чата или null. Живой в чате не больше одного — это инвариант
+ * базы. Начавший — глазами смотрящего: подменённому в диалоге — непрозрачный id.
+ */
 export async function fetchLiveStream(chatId: string): Promise<LiveStream | null> {
-  const { data, error } = await supabase
-    .from('streams')
-    .select(STREAM_COLUMNS)
-    .eq('chat_id', chatId)
-    .eq('status', 'live')
-    .maybeSingle();
+  const { data, error } = await supabase.rpc('chat_live_stream', { target_chat: chatId });
 
   if (error) throw error;
 
-  return data ? toLiveStream(data) : null;
+  const [row] = data ?? [];
+
+  return row ? toLiveStream(row) : null;
 }
 
 export async function fetchStreamStatus(streamId: string): Promise<StreamStatus | null> {
@@ -99,32 +99,12 @@ export async function fetchStreamStatus(streamId: string): Promise<StreamStatus 
  * участник, не раньше `since` и без моего входа. Нужны, когда входящий
  * пролетел мимо — приложение было в фоне или канал переподключался.
  */
-export async function listRingingStreams(userId: string, since: string): Promise<LiveStream[]> {
-  const { data: memberships, error: membershipError } = await supabase
-    .from('chat_members')
-    .select('chat_id')
-    .eq('user_id', userId);
-
-  if (membershipError) throw membershipError;
-
-  const chatIds = (memberships ?? []).map((row) => row.chat_id);
-
-  if (chatIds.length === 0) return [];
-
-  const { data, error } = await supabase
-    .from('streams')
-    .select(`${STREAM_COLUMNS}, stream_participants(user_id)`)
-    .in('chat_id', chatIds)
-    .eq('status', 'live')
-    .neq('host_id', userId)
-    .gte('started_at', since)
-    .eq('stream_participants.user_id', userId);
+export async function listRingingStreams(since: string): Promise<LiveStream[]> {
+  const { data, error } = await supabase.rpc('my_ringing_streams', { since });
 
   if (error) throw error;
 
-  return (data ?? [])
-    .filter((row) => (row.stream_participants ?? []).length === 0)
-    .map(toLiveStream);
+  return (data ?? []).map(toLiveStream);
 }
 
 /**
@@ -203,22 +183,31 @@ export async function syncStream(streamId: string): Promise<void> {
   await supabase.functions.invoke('livekit-sync', { body: { stream_id: streamId } });
 }
 
-export type CallProfile = { id: string; displayName: string; avatarUrl: string | null };
+/**
+ * Человек в звонке. `identity` — как его знает комната LiveKit: не id
+ * человека, а непрозрачный id этого звонка, имени в комнате нет вовсе.
+ */
+export type CallPerson = {
+  identity: string;
+  /** Id глазами смотрящего; `opaque` — непрозрачный, профиля за ним нет. */
+  userId: string;
+  opaque: boolean;
+  displayName: string;
+  avatarUrl: string | null;
+};
 
-/** Имена и аватары тех, кто говорит в звонке. */
-export async function listCallProfiles(userIds: string[]): Promise<CallProfile[]> {
-  if (userIds.length === 0) return [];
-
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('id, display_name, avatar_url')
-    .in('id', userIds);
+/** Кто сейчас в звонке — глазами смотрящего, в контексте чата звонка. */
+export async function listCallPeople(streamId: string): Promise<CallPerson[]> {
+  const { data, error } = await supabase.rpc('stream_people', { target_stream: streamId });
 
   if (error) throw error;
 
+  // Колонки результата rpc генератор типов не размечает как nullable.
   return (data ?? []).map((row) => ({
-    id: row.id,
+    identity: row.identity,
+    userId: row.user_id,
+    opaque: opaqueFlag(row.user_id, row.opaque),
     displayName: row.display_name ?? 'Без имени',
-    avatarUrl: row.avatar_url,
+    avatarUrl: row.avatar_url ?? null,
   }));
 }

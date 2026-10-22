@@ -145,9 +145,18 @@ beforeEach(() => {
   mockedEntities.mockResolvedValue([]);
   mockedMessages.mockResolvedValue({ items: [], nextCursor: null });
   // Сервер подтверждает всё сохранённое; что он скрыл — свой тест.
+  // Сервер подтверждает всех — такими, какими их нашли: Ёлкин имени не скрывал.
   mockedRecheck.mockImplementation(async (people, messages) => ({
-    people: new Set(people),
-    messages: new Map(messages.map((id) => [id, '2026-10-12T10:00:00Z'])),
+    people: new Map(
+      people.map((id) => [id, { title: 'Ёлкин', username: 'elkin', avatarUrl: null }]),
+    ),
+    messages: new Map(
+      messages.map((id) => [
+        id,
+        { createdAt: '2026-10-12T10:00:00Z', authorName: 'Анна', chatTitle: null },
+      ]),
+    ),
+    chats: new Map(),
   }));
   resetConnectionState();
   reportRealtimeJoined();
@@ -318,12 +327,41 @@ it('К3.4 forgets a person in «Недавние» once the server no longer let
   await type('елк');
   // Человек закрыл от меня поиск после того, как я его нашёл: сохранённую
   // строку сервер больше не подтверждает.
-  mockedRecheck.mockResolvedValue({ people: new Set(), messages: new Map() });
+  mockedRecheck.mockResolvedValue({ people: new Map(), messages: new Map(), chats: new Map() });
   await fireEvent.press(await screen.findByRole('button', { name: 'Ёлкин' }));
   await type('');
 
-  await waitFor(() => expect(mockedRecheck).toHaveBeenCalledWith(['p1'], []));
+  await waitFor(() => expect(mockedRecheck).toHaveBeenCalledWith(['p1'], [], []));
   await waitFor(() => expect(screen.queryByRole('button', { name: 'Ёлкин' })).toBeNull());
+});
+
+it('shows a person in «Недавние» as I see them now: hidden name — alias, without @username', async () => {
+  mockedEntities.mockResolvedValue([
+    entity({
+      section: 'global',
+      kind: 'person',
+      id: 'p1',
+      personId: 'p1',
+      title: 'Ёлкин',
+      username: 'elkin',
+      chatId: null,
+      channelId: null,
+    }),
+  ]);
+  await openSearch();
+  await type('елк');
+  // Нашёл по имени, а человек потом скрыл его от меня: в «Недавних» — псевдоним.
+  mockedRecheck.mockResolvedValue({
+    people: new Map([['p1', { title: 'Илья Муромцев', username: null, avatarUrl: null }]]),
+    messages: new Map(),
+    chats: new Map(),
+  });
+  await fireEvent.press(await screen.findByRole('button', { name: 'Ёлкин' }));
+  await type('');
+
+  expect(await screen.findByRole('button', { name: 'Илья Муромцев' })).toBeTruthy();
+  expect(screen.queryByText('Ёлкин')).toBeNull();
+  expect(screen.queryByText(/elkin/)).toBeNull();
 });
 
 it('opens a message of a group chat in that chat, with a new jump key every time', async () => {

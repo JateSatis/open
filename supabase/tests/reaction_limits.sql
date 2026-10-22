@@ -105,7 +105,7 @@ begin
   insert into results
   select 8, 'reactors сообщения — участники при ≤2 поставивших',
     bool_and(audience = 'member') and count(*) = 21, count(*)::text
-  from public.reactors((select m from public.messages m where id = msg));
+  from public.reactors((select m from public.message_rows m where id = msg));
 
   -- К1.4: комментарий — 20 разных суммарно по обоим рядам.
   insert into public.comments (message_id, chat_id, author_id, kind, text)
@@ -133,7 +133,7 @@ begin
   values ('comment', com, (select id from people where n = 11), emojis[23]);
   insert into results
   select 10, 'reactors комментария — оба ряда', count(*) = 21, count(*)::text
-  from public.reactors((select c from public.comments c where id = com));
+  from public.reactors((select c from public.comment_rows c where id = com));
 end;
 $$;
 

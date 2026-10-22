@@ -50,6 +50,20 @@ jest.mock('react-native-keyboard-controller', () =>
   require('react-native-keyboard-controller/jest'),
 );
 
+// Фото людей — подписанные ссылки Storage: в тестах сети нет. Аватар,
+// заданный путём в закрытом бакете, рисуется заглушкой; адрес — как есть.
+// Сам механизм подписи проверяет `src/api/avatars.test.ts` (снимает мок).
+jest.mock('@/api/avatars', () => ({
+  AVATARS_BUCKET: 'avatars',
+  isAvatarPath: (value) => !!value && !/^[a-z][a-z0-9+.-]*:/i.test(value),
+  requestAvatarUrl: jest.fn(),
+  signedAvatarUrl: jest.fn(() => null),
+  avatarEntry: jest.fn(() => undefined),
+  avatarRefreshDelay: jest.fn(() => 0),
+  subscribeAvatarUrls: jest.fn(() => () => undefined),
+  forgetAvatarUrls: jest.fn(),
+}));
+
 // Топики комментариев — Realtime: в тестах сети нет. Экраны чата слушают
 // ветки пересланных комментариев, панель — свою ветку; подписка — пустышка.
 jest.mock('@/api/commentTopics', () => ({

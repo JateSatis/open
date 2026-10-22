@@ -200,7 +200,7 @@ begin
 
   -- Галочки прочтения — только по участникам (К3.8)
   perform pg_temp.check('прочтение подписчика не трогает отметки участников',
-    (select count(*) from public.chat_members where chat_id = chat) = 1);
+    (select count(*) from public.chat_people(array[chat])) = 1);
 
   -- События читателю. Оба триггера рассылки отложены до фиксации — здесь
   -- их срабатывание вызывается сразу.

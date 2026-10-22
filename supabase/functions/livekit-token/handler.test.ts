@@ -22,6 +22,11 @@ const tokens: Record<string, string> = { member: MEMBER, invited: INVITED, visit
 // — её ответы для участника, приглашённого-но-не-принявшего и постороннего.
 const roles: Record<string, StreamRole> = { [MEMBER]: 'speaker', [INVITED]: 'listener', [VISITOR]: 'listener' };
 
+/** Identity звонка от базы (`stream_join_info`) — не id человека. */
+function identityOf(userId: string): string {
+  return `opaque-${userId.slice(-4)}`;
+}
+
 function info(userId: string, overrides: Partial<Extract<JoinInfo, { found: true }>> = {}): JoinInfo {
   return {
     found: true,
@@ -32,7 +37,7 @@ function info(userId: string, overrides: Partial<Extract<JoinInfo, { found: true
     chat_alive: true,
     profile_alive: true,
     role: roles[userId],
-    display_name: 'Имя',
+    identity: identityOf(userId),
     speakers_count: 1,
     started_at: new Date(NOW - 5_000).toISOString(),
     speakers_changed_at: new Date(NOW - 5_000).toISOString(),
@@ -73,6 +78,7 @@ function request(init: { token?: string | null; body?: unknown; method?: string 
 
 type Claims = {
   sub: string;
+  name?: string;
   metadata: string;
   video: { room: string; roomJoin: boolean; canPublish?: boolean; canSubscribe?: boolean; canPublishData?: boolean; canPublishSources?: string[] };
 };
@@ -93,7 +99,7 @@ Deno.test('участник чата получает токен говорящ�
   assertEquals(response.status, 200);
   assertEquals(body.role, 'speaker');
   assertEquals(body.url, LIVEKIT.url);
-  assertEquals(claims.sub, MEMBER);
+  assertEquals(claims.sub, identityOf(MEMBER));
   assertEquals(claims.video.room, `stream-${STREAM}`);
   assertEquals(claims.video.canPublish, true);
   assertEquals(claims.video.canPublishSources, ['microphone']);
@@ -110,12 +116,30 @@ Deno.test('посетитель получает токен слушателя: 
 
   assertEquals(response.status, 200);
   assertEquals(body.role, 'listener');
-  assertEquals(claims.sub, VISITOR);
+  assertEquals(claims.sub, identityOf(VISITOR));
   assertEquals(claims.video.canPublish, false);
   assertEquals(claims.video.canPublishSources, undefined);
   assertEquals(claims.video.canSubscribe, true);
   assertEquals(claims.video.canPublishData, false);
   assertEquals(JSON.parse(claims.metadata).role, 'listener');
+});
+
+Deno.test('в токене нет ни id человека, ни имени: комнату видят все слушатели', async () => {
+  const { handler } = setup();
+
+  const body = await (await handler(request({ token: 'member' }))).json();
+  const claims = claimsOf(body.token);
+
+  assertFalse(JSON.stringify(claims).includes(MEMBER));
+  assertFalse(Boolean(claims.name));
+});
+
+Deno.test('без identity от базы — отказ', async () => {
+  const { handler } = setup({}, { identity: null });
+
+  const response = await handler(request({ token: 'member' }));
+
+  assertEquals(response.status, 401);
 });
 
 Deno.test('приглашённый, но не принявший заявку — слушатель', async () => {

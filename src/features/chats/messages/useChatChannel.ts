@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { forgetAvatarUrls } from '@/api/avatars';
 import {
   getTypingAudience,
   subscribeToChat,
@@ -187,6 +188,14 @@ export function useChatChannel(chatId: string, currentUserId: string | null): Ch
       onTimeVisibilityChanged: () => {
         // Участник сменил, кому видно время: время, даты и прочтение у
         // загруженных сообщений и у участников — перечитать на месте.
+        refreshChatTimes(queryClient, chatId).catch(() => undefined);
+        void queryClient.invalidateQueries({ queryKey: chatQueryKey(chatId) });
+      },
+      onPeopleChanged: () => {
+        // Кто-то сменил, кому виден он сам: имена, фото и id авторов у
+        // загруженных сообщений и участники — глазами меня заново. Прежние
+        // подписанные ссылки на фото могли стать чужими.
+        forgetAvatarUrls();
         refreshChatTimes(queryClient, chatId).catch(() => undefined);
         void queryClient.invalidateQueries({ queryKey: chatQueryKey(chatId) });
       },

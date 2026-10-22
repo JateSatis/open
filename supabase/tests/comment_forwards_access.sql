@@ -139,7 +139,7 @@ begin
   set constraints all immediate;
   set constraints all deferred;
 
-  select count(*) into n from public.messages
+  select count(*) into n from public.message_rows
   where id = any (fwd) and kind = 'comment_forward' and forwarded_comment_id = live and author_id = a;
   perform pg_temp.check('участник: forward_comments создаёт пересланный', n = 1, n::text);
 

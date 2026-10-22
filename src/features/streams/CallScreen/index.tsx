@@ -9,13 +9,16 @@ import { CallControl } from './CallControl';
 import { SpeakerTile } from './SpeakerTile';
 import { styles } from './styles';
 
-import { listCallProfiles } from '@/api/streams';
+import { listCallPeople } from '@/api/streams';
 import { Text } from '@/components/Text';
 import { leaveCall, toggleMic, toggleSpeaker } from '@/features/streams/callSession';
-import { useActiveCall } from '@/features/streams/callStore';
+import { speakerOrder, useActiveCall } from '@/features/streams/callStore';
 import { formatCallTimer, listenersLabel, onAirLabel } from '@/features/streams/callText';
 import { useTheme } from '@/hooks/use-theme';
 import { Sizes, Spacing } from '@/theme';
+
+/** Как часто переспрашивать людей звонка, пока кого-то нет в ответе базы. */
+const PEOPLE_RETRY_MS = 2_000;
 
 function useNow(): number {
   const [now, setNow] = useState(() => Date.now());
@@ -42,20 +45,40 @@ export function CallScreen() {
   const now = useNow();
   const hadCall = useRef(false);
 
+  const streamId = call?.streamId;
   const speakerIds = useMemo(
     () => (call?.speakers ?? []).map((speaker) => speaker.id).sort(),
     [call?.speakers],
   );
-  const { data: profiles } = useQuery({
-    queryKey: ['streams', 'profiles', speakerIds],
-    queryFn: () => listCallProfiles(speakerIds),
-    enabled: speakerIds.length > 0,
+  // В комнате LiveKit нет ни id людей, ни имён — только identity звонка.
+  // Кто за ней стоит, говорит база, глазами смотрящего.
+  const { data: people } = useQuery({
+    queryKey: ['streams', 'people', streamId, speakerIds],
+    queryFn: () => listCallPeople(streamId as string),
+    enabled: Boolean(streamId) && speakerIds.length > 0,
     staleTime: 60_000,
+    // Вошедшего комната показывает раньше, чем вебхук LiveKit запишет его в
+    // базу: пока кого-то нет в ответе, переспрашиваем.
+    refetchInterval: (query) => {
+      const known = new Set((query.state.data ?? []).map((person) => person.identity));
+
+      return speakerIds.some((id) => !known.has(id)) ? PEOPLE_RETRY_MS : false;
+    },
   });
-  const avatars = useMemo(
-    () => new Map((profiles ?? []).map((profile) => [profile.id, profile.avatarUrl])),
-    [profiles],
-  );
+  const speakers = useMemo(() => {
+    const byIdentity = new Map((people ?? []).map((person) => [person.identity, person]));
+
+    return (call?.speakers ?? [])
+      .map((speaker) => {
+        const person = byIdentity.get(speaker.id);
+
+        return {
+          speaker: person ? { ...speaker, name: person.displayName } : speaker,
+          avatarUrl: person?.avatarUrl ?? null,
+        };
+      })
+      .sort((a, b) => speakerOrder(a.speaker, b.speaker));
+  }, [call?.speakers, people]);
 
   // Звонок кончился, пока экран открыт (вышли все, связь не вернулась), —
   // экран закрывается сам; почему — скажет карточка из `callSession`.
@@ -168,12 +191,8 @@ export function CallScreen() {
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.grid}
       >
-        {call.speakers.map((speaker) => (
-          <SpeakerTile
-            key={speaker.id}
-            speaker={speaker}
-            avatarUrl={avatars.get(speaker.id) ?? null}
-          />
+        {speakers.map(({ speaker, avatarUrl }) => (
+          <SpeakerTile key={speaker.id} speaker={speaker} avatarUrl={avatarUrl} />
         ))}
       </ScrollView>
 

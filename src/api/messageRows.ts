@@ -8,6 +8,7 @@ import type { QueryData } from '@supabase/supabase-js';
 import { PREVIEW_ATTACHMENT_COLUMNS, toPreview, type MessagePreview } from '@/api/messagePreview';
 import { FRAGMENT_QUOTE_COLUMNS, toFragmentQuote, type FragmentQuote } from '@/api/fragmentQuote';
 import { REACTION_COLUMNS, toReactions, type MessageReactions } from '@/api/reactionCounts';
+import { opaqueFlag } from '@/api/opaquePeople';
 import { supabase } from '@/api/supabase';
 
 export type MessageKind =
@@ -67,6 +68,8 @@ export type QuotedMessage =
       authorId: string | null;
       /** `null` — аккаунт автора удалён. */
       authorName: string | null;
+      /** Автор подменён в диалоге: `authorId` непрозрачный, профиля за ним нет. */
+      authorOpaque?: boolean;
       /** Номер оригинала — до него догружается история при переходе к цитате. */
       seq: number;
       /** `null` — время чата оригинала скрыто от меня. */
@@ -96,17 +99,21 @@ export type MemberEvent =
   'member_invited' | 'member_joined' | 'member_left' | 'member_removed' | 'owner_changed';
 
 /**
- * Системная строка состава. Имена — нынешние, из профилей: переименовался —
- * строка показывает новое имя. `null` — аккаунт удалён.
+ * Системная строка состава. Имена — нынешние, глазами смотрящего:
+ * переименовался — строка показывает новое имя, скрыт от меня — псевдоним.
+ * `null` — аккаунт удалён.
  */
 export type MemberMark = {
   event: MemberEvent;
   /** Кто пригласил, вступил, ушёл, удалил. У «Владельцем стал(а)» — нет. */
   actorId: string | null;
   actorName: string | null;
+  /** Id непрозрачный: человек подменён в диалоге, профиля нет. */
+  actorOpaque?: boolean;
   /** Кого пригласили, удалили, кто стал владельцем. */
   subjectId: string | null;
   subjectName: string | null;
+  subjectOpaque?: boolean;
 };
 
 /** Чат, как его называют чужому глазу: заданное название или люди. */
@@ -174,6 +181,8 @@ export type ForwardedComment = {
   /** `null` — аккаунт автора удалён. */
   authorName: string | null;
   authorAvatarUrl: string | null;
+  /** Автор подменён в диалоге: `authorId` непрозрачный, профиля за ним нет. */
+  authorOpaque?: boolean;
   kind: 'text' | 'media' | 'voice';
   text: string | null;
   createdAt: string;
@@ -189,6 +198,7 @@ export type ForwardedComment = {
     authorId: string | null;
     /** `null` — аккаунт автора удалён. */
     authorName: string | null;
+    authorOpaque?: boolean;
     preview: MessagePreview;
   } | null;
   /** Поп под комментарием; `null` — удалён или комментарий к сообщению. */
@@ -207,7 +217,14 @@ export type CommentForward = { commentId: string | null; comment: ForwardedComme
 export type Message = {
   id: string;
   chatId: string;
+  /**
+   * Автор глазами смотрящего: настоящий id или, если автор подменён для меня
+   * в этом диалоге, непрозрачный id чата (`authorOpaque`) — пузыри по нему
+   * группируются, но профиля за ним нет. `null` — аккаунт удалён.
+   */
   authorId: string | null;
+  /** `authorId` непрозрачный: не открывать по нему профиль. */
+  authorOpaque?: boolean;
   kind: MessageKind;
   text: string | null;
   /**
@@ -255,8 +272,8 @@ export type Message = {
   /** Событие состава группы у системного сообщения; нет — это не оно. */
   member?: MemberMark | null;
   /**
-   * Автор, как его знает профиль, — для тех, кого уже нет среди участников
-   * (ушёл или удалён из группы). `null` — аккаунт удалён.
+   * Автор глазами смотрящего — для тех, кого уже нет среди участников (ушёл
+   * или удалён из группы). `null` — аккаунт удалён.
    */
   author?: { displayName: string; avatarUrl: string | null } | null;
   /** Пересланный комментарий (вид `comment_forward`). У остальных нет. */
@@ -274,25 +291,28 @@ const ATTACHMENT_COLUMNS =
 // Вложение сообщения бывает ссылкой на поп: файл тогда — попа.
 const MESSAGE_ATTACHMENT_COLUMNS =
   `${ATTACHMENT_COLUMNS}, pop_id, pop:pops(channel_id, url, poster_url, mime_type, width, height, duration_ms)` as const;
-// Подсказки внешних ключей нужны, потому что `messages` связана с `profiles`,
-// `chats` и сама с собой через несколько таблиц сразу.
+// Подсказки внешних ключей нужны, потому что `messages` связана с `chats` и
+// сама с собой через несколько таблиц сразу.
 // Сообщения читаются из представления `message_rows`: время в нём — null,
-// если оно скрыто от смотрящего (миграция `20261030110000_privacy_message_time.sql`).
+// если оно скрыто от смотрящего (миграция `20261030110000_privacy_message_time.sql`),
+// а автор — глазами смотрящего (`20261101110000_identity_rows.sql`): имя,
+// фото и признак непрозрачного id считает база, профили клиенту не читаются.
+// Чаты — из `chat_rows`, комментарии — из `comment_rows`.
 const REPLY_COLUMNS =
-  `replies:message_replies!message_replies_message_fkey(position, quoted_id, via:message_rows!message_replies_quoted_forward_fkey(id, seq), quoted:message_rows!message_replies_quoted_fkey(id, author_id, kind, text, seq, created_at, edit_mark, author:profiles!messages_author_id_fkey(display_name), attachments(${PREVIEW_ATTACHMENT_COLUMNS})))` as const;
+  `replies:message_replies!message_replies_message_fkey(position, quoted_id, via:message_rows!message_replies_quoted_forward_fkey(id, seq), quoted:message_rows!message_replies_quoted_fkey(id, author_id, author_name, author_opaque, kind, text, seq, created_at, edit_mark, attachments(${PREVIEW_ATTACHMENT_COLUMNS})))` as const;
 const REACTION_AND_COMMENT_COLUMNS =
   `${REACTION_COLUMNS}, comments_count, clusters_count, views_count, read_at, reads_visible, hidden` as const;
 const ORIGINAL_COLUMNS =
-  `id, chat_id, author_id, kind, text, seq, created_at, edited_at, edited, edit_mark, attachments(${MESSAGE_ATTACHMENT_COLUMNS}), ${REPLY_COLUMNS}, ${REACTION_AND_COMMENT_COLUMNS}, author:profiles!messages_author_id_fkey(display_name, avatar_url), chat:chats!messages_chat_id_fkey(id, kind, chat_display_name, chat_read_up_to, chat_am_member)` as const;
+  `id, chat_id, author_id, kind, text, seq, created_at, edited_at, edited, edit_mark, attachments(${MESSAGE_ATTACHMENT_COLUMNS}), ${REPLY_COLUMNS}, ${REACTION_AND_COMMENT_COLUMNS}, author_name, author_avatar_url, author_opaque, chat:chat_rows!messages_chat_id_fkey(id, kind, chat_display_name, chat_read_up_to, chat_am_member)` as const;
 
 const FORWARDED_COMMENT_COLUMNS =
-  `forwarded_comment_id, forwarded:comments!messages_forwarded_comment_fkey(id, message_id, pop_id, chat_id, thread_root_id, fragment_id, ${FRAGMENT_QUOTE_COLUMNS}, author_id, kind, text, created_at, edited_at, ${REACTION_COLUMNS}, author:profiles(display_name, avatar_url), comment_attachments(${ATTACHMENT_COLUMNS}), chat:chats!comments_chat_id_fkey(id, chat_display_name, chat_am_member), target:message_rows!comments_message_fkey(id, author_id, kind, text, seq, author:profiles!messages_author_id_fkey(display_name), attachments(${PREVIEW_ATTACHMENT_COLUMNS})), pop:pops!comments_pop_id_fkey(id, channel_id, poster_url, caption))` as const;
+  `forwarded_comment_id, forwarded:comment_rows!messages_forwarded_comment_fkey(id, message_id, pop_id, chat_id, thread_root_id, fragment_id, ${FRAGMENT_QUOTE_COLUMNS}, author_id, author_name, author_avatar_url, author_opaque, kind, text, created_at, edited_at, ${REACTION_COLUMNS}, comment_attachments(${ATTACHMENT_COLUMNS}), chat:chat_rows!comments_chat_id_fkey(id, chat_display_name, chat_am_member), target:message_rows!comments_message_fkey(id, author_id, author_name, author_opaque, kind, text, seq, attachments(${PREVIEW_ATTACHMENT_COLUMNS})), pop:pops!comments_pop_id_fkey(id, channel_id, poster_url, caption))` as const;
 
 // Островок приходит сразу с оригиналами: их текст, файлы, автор, чат,
 // реакции и комментарии — той же выборкой. Своя реакция — вычисляемой связью
 // `my_reaction`, и у оригинала тоже.
 export const MESSAGE_COLUMNS =
-  `id, chat_id, author_id, kind, text, seq, created_at, edited_at, edited, edit_mark, attachments(${MESSAGE_ATTACHMENT_COLUMNS}), ${REPLY_COLUMNS}, ${REACTION_AND_COMMENT_COLUMNS}, stream_id, system_event, system_user_id, author:profiles!messages_author_id_fkey(display_name, avatar_url), subject:profiles!messages_system_user_id_fkey(display_name), stream:streams!messages_stream_id_fkey(host_id, started_at, ended_at), my_call:my_stream_participation(id), source_chat:chats!messages_source_chat_id_fkey(id, chat_display_name), items:forward_items!forward_items_forward_fkey(id, position, message_id, original:message_rows!forward_items_message_fkey(${ORIGINAL_COLUMNS})), ${FORWARDED_COMMENT_COLUMNS}` as const;
+  `id, chat_id, author_id, kind, text, seq, created_at, edited_at, edited, edit_mark, attachments(${MESSAGE_ATTACHMENT_COLUMNS}), ${REPLY_COLUMNS}, ${REACTION_AND_COMMENT_COLUMNS}, stream_id, stream_host_id, system_event, system_user_id, author_name, author_avatar_url, author_opaque, system_user_name, system_user_opaque, stream:streams!messages_stream_id_fkey(started_at, ended_at), my_call:my_stream_participation(id), source_chat:chat_rows!messages_source_chat_id_fkey(id, chat_display_name), items:forward_items!forward_items_forward_fkey(id, position, message_id, original:message_rows!forward_items_message_fkey(${ORIGINAL_COLUMNS})), ${FORWARDED_COMMENT_COLUMNS}` as const;
 
 // Мозаика в облачке должна собираться в порядке выбора файлов, а PostgREST
 // не гарантирует порядок вложенной выборки сам по себе — нужен явный order
@@ -385,7 +405,8 @@ function toQuoted(row: ReplyRow): QuotedMessage {
     messageId: quoted.id,
     state: 'live',
     authorId: quoted.author_id,
-    authorName: quoted.author_id ? (quoted.author?.display_name ?? 'Без имени') : null,
+    authorName: quoted.author_id ? (quoted.author_name ?? 'Без имени') : null,
+    authorOpaque: opaqueFlag(quoted.author_id, quoted.author_opaque),
     seq: quoted.seq,
     createdAt: quoted.created_at,
     editMark: quoted.edit_mark,
@@ -401,7 +422,8 @@ function toCallMark(row: MessageRow): CallMark | null {
   return {
     streamId: row.stream_id,
     event: row.system_event,
-    hostId: row.stream.host_id,
+    // Начавший — глазами смотрящего: строку «Звонок завершён» база пишет без автора.
+    hostId: row.stream_host_id,
     startedAt: row.stream.started_at,
     endedAt: row.stream.ended_at,
     joinedByMe: row.my_call !== null && row.my_call !== undefined,
@@ -424,10 +446,12 @@ function toMemberMark(row: MessageRow): MemberMark | null {
   return {
     event: row.system_event as MemberEvent,
     actorId: row.author_id,
-    // Профиль удалён — ссылка обнулилась, и связь пустая.
-    actorName: row.author_id ? (row.author?.display_name ?? 'Без имени') : null,
+    // Аккаунт удалён — ссылка обнулилась, имени нет.
+    actorName: row.author_id ? (row.author_name ?? 'Без имени') : null,
+    actorOpaque: opaqueFlag(row.author_id, row.author_opaque),
     subjectId: row.system_user_id,
-    subjectName: row.system_user_id ? (row.subject?.display_name ?? 'Без имени') : null,
+    subjectName: row.system_user_id ? (row.system_user_name ?? 'Без имени') : null,
+    subjectOpaque: opaqueFlag(row.system_user_id, row.system_user_opaque),
   };
 }
 
@@ -436,6 +460,7 @@ type ContentRow = Pick<
   | 'id'
   | 'chat_id'
   | 'author_id'
+  | 'author_opaque'
   | 'kind'
   | 'text'
   | 'seq'
@@ -462,6 +487,7 @@ function toContent(row: ContentRow): Message {
     id: row.id,
     chatId: row.chat_id,
     authorId: row.author_id,
+    authorOpaque: opaqueFlag(row.author_id, row.author_opaque),
     kind: toMessageKind(row.kind),
     text: row.text,
     seq: row.seq,
@@ -504,9 +530,9 @@ function withoutHidden<T extends Message>(message: T): T {
 function toOriginal(row: OriginalRow): IslandOriginal {
   return withoutHidden({
     ...toContent(row),
-    // Аккаунт удалён — ссылка обнулилась; скрытый профиль база тоже не отдаёт.
-    authorName: row.author_id && row.author ? (row.author.display_name ?? 'Без имени') : null,
-    authorAvatarUrl: row.author?.avatar_url ?? null,
+    // Аккаунт удалён — ссылка обнулилась, имени нет.
+    authorName: row.author_id ? (row.author_name ?? 'Без имени') : null,
+    authorAvatarUrl: row.author_avatar_url,
     chat: row.chat
       ? {
           id: row.chat.id,
@@ -550,8 +576,9 @@ function toForwardedComment(row: ForwardedRow): ForwardedComment {
     chatId: row.chat_id,
     threadRootId: row.thread_root_id,
     authorId: row.author_id,
-    authorName: row.author_id && row.author ? (row.author.display_name ?? 'Без имени') : null,
-    authorAvatarUrl: row.author?.avatar_url ?? null,
+    authorName: row.author_id ? (row.author_name ?? 'Без имени') : null,
+    authorAvatarUrl: row.author_avatar_url,
+    authorOpaque: opaqueFlag(row.author_id, row.author_opaque),
     kind: row.kind === 'media' || row.kind === 'voice' ? row.kind : 'text',
     text: row.text,
     createdAt: row.created_at,
@@ -564,7 +591,8 @@ function toForwardedComment(row: ForwardedRow): ForwardedComment {
           id: target.id,
           seq: target.seq,
           authorId: target.author_id,
-          authorName: target.author_id ? (target.author?.display_name ?? 'Без имени') : null,
+          authorName: target.author_id ? (target.author_name ?? 'Без имени') : null,
+          authorOpaque: opaqueFlag(target.author_id, target.author_opaque),
           preview: toPreview(toMessageKind(target.kind), target.text, target.attachments ?? []),
         }
       : null,
@@ -605,8 +633,8 @@ export function toMessage(row: MessageRow): Message {
     forward: toIsland(row),
     call: toCallMark(row),
     member: toMemberMark(row),
-    author: row.author
-      ? { displayName: row.author.display_name ?? 'Без имени', avatarUrl: row.author.avatar_url }
+    author: row.author_id
+      ? { displayName: row.author_name ?? 'Без имени', avatarUrl: row.author_avatar_url }
       : null,
     commentForward: toCommentForward(row),
   });

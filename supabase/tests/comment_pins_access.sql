@@ -244,7 +244,7 @@ begin
     (select count(*) from public.messages
      where id = any (fwd) and kind = 'comment_forward' and forwarded_comment_id = any (array[pc1, pc2, preply])) = 3);
   perform pg_temp.check('превью — текст комментария',
-    (select last_message_text from public.chats where id = dm) like '💬 %');
+    (select public.last_message_preview(ch) from public.chat_rows ch where ch.id = dm) like '💬 %');
 
   perform pg_temp.act_as(b);
   begin

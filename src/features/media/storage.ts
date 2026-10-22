@@ -9,11 +9,13 @@ import {
   GROUP_AVATAR_FOLDER,
   buildObjectPath,
   buildPopPaths,
+  ownAvatarPath,
   ownAvatarPathFromUrl,
   ownPathFromUrl,
 } from './lib/objectPath';
 import type { LocalMedia, UploadedMedia } from './types';
 
+import { AVATARS_BUCKET } from '@/api/avatars';
 import { supabase } from '@/api/supabase';
 
 /**
@@ -153,9 +155,29 @@ export async function removeUploadedMedia(path: string | string[]): Promise<bool
   return !error;
 }
 
-/** Загружает подготовленный аватар (`prepareAvatar`) и отдаёт его публичный URL. */
+/**
+ * Загружает подготовленный аватар (`prepareAvatar`) в закрытый бакет
+ * `avatars` и отдаёт путь — его и пишут в профиль. Публичной ссылки у файла
+ * нет: показывают его по подписанной (`src/api/avatars.ts`) тем, кому фото
+ * открыто.
+ */
 export async function uploadAvatar(uri: string, userId: string): Promise<string> {
-  return (await uploadJpeg(uri, buildAvatarPath(userId))).url;
+  const path = buildAvatarPath(userId);
+  const file = new File(uri);
+
+  if (!file.exists) {
+    throw new MediaUploadError(`Avatar file no longer exists: ${uri}`);
+  }
+
+  const { error } = await supabase.storage
+    .from(AVATARS_BUCKET)
+    .upload(path, await file.arrayBuffer(), { contentType: 'image/jpeg', upsert: false });
+
+  if (error) {
+    throw new MediaUploadError(`Failed to upload avatar: ${error.message}`, error);
+  }
+
+  return path;
 }
 
 /**
@@ -204,9 +226,19 @@ async function uploadJpeg(uri: string, path: string): Promise<{ url: string; pat
  * новый аватар уже на месте, лишний файл лишь занимает место.
  */
 export async function removeOwnAvatar(url: string | null, userId: string): Promise<void> {
-  const path = url ? ownAvatarPathFromUrl(url, MEDIA_BUCKET, userId) : null;
+  if (!url) return;
 
-  if (path) await removeUploadedMedia(path);
+  const own = ownAvatarPath(url, userId);
+
+  if (own) {
+    await supabase.storage.from(AVATARS_BUCKET).remove([own]);
+    return;
+  }
+
+  // Аватар, поставленный до переезда в закрытый бакет.
+  const legacy = ownAvatarPathFromUrl(url, MEDIA_BUCKET, userId);
+
+  if (legacy) await removeUploadedMedia(legacy);
 }
 
 /**

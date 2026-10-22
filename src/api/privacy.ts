@@ -21,19 +21,39 @@ export type PrivacySettings = {
   messageTimeVisibility: Visibility;
   /** Кто может найти меня в поиске. */
   searchVisibility: Visibility;
+  /** Кто видит моё имя и username; остальным — псевдоним. */
+  identityVisibility: Visibility;
+  /** Кто видит моё имя в диалогах, где я участник, не будучи их участником. */
+  dialogueNameVisibility: Visibility;
+  /** Кто видит мою фотографию. */
+  avatarVisibility: Visibility;
+  /** Мой псевдоним для тех, от кого скрыто имя. */
+  identityAlias: string;
 };
 
-/** Настройки, которые клиент уже умеет менять. Остальные ждут этапов 3–6. */
+/** Настройки, которые клиент уже умеет менять. Остальные ждут этапов 5–6. */
 export type EditablePrivacySetting =
   | 'friends_list_visibility'
   | 'activity_status_visibility'
   | 'message_activity_metadata_visibility'
-  | 'account_search_visibility';
+  | 'account_search_visibility'
+  | 'profile_identity_masking'
+  | 'dialogue_participant_name_masking'
+  | 'avatar_visibility';
 
 /** Будущая дата. */
 export const BIRTH_DATE_IN_FUTURE_CODE = 'OPN03';
 /** Младше 13. */
 export const BIRTH_DATE_TOO_YOUNG_CODE = 'OPN04';
+/** Псевдоним сменили слишком часто за сутки. */
+export const ALIAS_LIMIT_CODE = 'OPN13';
+
+export class AliasLimitError extends Error {
+  constructor() {
+    super('Псевдоним можно сменить не больше 5 раз в сутки');
+    this.name = 'AliasLimitError';
+  }
+}
 
 export class BirthDateTooYoungError extends Error {
   constructor() {
@@ -60,6 +80,10 @@ function toSettings(row: PrivacyRow): PrivacySettings {
     activityStatusVisibility: toVisibility(row.activity_status_visibility),
     messageTimeVisibility: toVisibility(row.message_activity_metadata_visibility),
     searchVisibility: toVisibility(row.account_search_visibility),
+    identityVisibility: toVisibility(row.profile_identity_masking),
+    dialogueNameVisibility: toVisibility(row.dialogue_participant_name_masking),
+    avatarVisibility: toVisibility(row.avatar_visibility),
+    identityAlias: row.identity_alias,
   };
 }
 
@@ -94,4 +118,19 @@ export async function setPrivacySetting(
   const { error } = await supabase.rpc('set_privacy_setting', { p_key: key, p_value: value });
 
   if (error) throw error;
+}
+
+/**
+ * Случайный новый псевдоним — свой не вводится. Старый перестаёт находиться
+ * сразу. Не больше 5 смен за сутки — дальше `AliasLimitError`.
+ */
+export async function regenerateIdentityAlias(): Promise<string> {
+  const { data, error } = await supabase.rpc('regenerate_identity_alias');
+
+  if (error) {
+    if (error.code === ALIAS_LIMIT_CODE) throw new AliasLimitError();
+    throw error;
+  }
+
+  return data;
 }

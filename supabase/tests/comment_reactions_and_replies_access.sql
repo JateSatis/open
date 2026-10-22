@@ -117,7 +117,7 @@ begin
   perform pg_temp.check('снятая реакция уходит из счётчика', s = '{}|1', s);
 
   perform pg_temp.act_as(d);
-  select emoji into s from public.my_reaction((select c from public.comments c where c.id = cd));
+  select emoji into s from public.my_reaction((select c from public.comment_rows c where c.id = cd));
   perform pg_temp.check('моя реакция на комментарий читается выборкой', s = '👍', coalesce(s, 'null'));
 
   perform pg_temp.act_as(b);

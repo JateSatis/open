@@ -71,6 +71,7 @@ $$;
 
 create function pg_temp.settings_of(uid uuid) returns jsonb language sql as $$
   select to_jsonb(s) - 'id' - 'user_id' - 'birth_date' - 'initialized_at' - 'created_at' - 'updated_at'
+    - 'identity_alias' - 'alias_window_started_at' - 'alias_window_changes'
   from public.privacy_settings s where s.user_id = uid
 $$;
 

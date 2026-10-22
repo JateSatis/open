@@ -6,6 +6,7 @@ import { InfoCard, InfoPage, InfoTextRow, type SlideBack } from '@/components/In
 import { MediaViewer } from '@/features/media';
 import { showNotice } from '@/features/notifications/alertsStore';
 import { displayNameOf, formatUsername } from '@/features/profile/username';
+import { useAvatarSource } from '@/hooks/use-avatar-source';
 import { Spacing } from '@/theme';
 
 const NO_TABS: never[] = [];
@@ -46,6 +47,8 @@ export function ProfilePage({
   const username = formatUsername(profile.username);
   const onCopied = useCallback(() => showNotice('Скопировано'), []);
   const photoUri = profile.avatarUrl;
+  // Фото человека — по подписанной ссылке: просмотр открывается, когда она есть.
+  const photo = useAvatarSource(photoUri);
 
   return (
     <>
@@ -57,7 +60,7 @@ export function ProfilePage({
         avatar={{ kind: 'single', uri: photoUri, name }}
         barRight={barRight}
         tabs={NO_TABS}
-        onOpenPhoto={photoUri ? () => setPhotoOpen(true) : undefined}
+        onOpenPhoto={photo ? () => setPhotoOpen(true) : undefined}
         cards={
           <View style={{ paddingBottom: bottomInset + Spacing.three }}>
             {lead ? <View style={styles.lead}>{lead}</View> : null}
@@ -84,10 +87,10 @@ export function ProfilePage({
           </View>
         }
       />
-      {photoUri ? (
+      {photo ? (
         <MediaViewer
           visible={photoOpen}
-          items={[{ id: 'avatar', kind: 'photo', url: photoUri }]}
+          items={[{ id: 'avatar', kind: 'photo', url: photo.uri }]}
           initialIndex={0}
           onClose={() => setPhotoOpen(false)}
         />

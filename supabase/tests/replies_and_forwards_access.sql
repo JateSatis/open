@@ -279,7 +279,7 @@ begin
   end;
 
   perform public.edit_message(reply, 'поправил');
-  select text into s from public.messages where id = reply;
+  select text into s from public.message_rows where id = reply;
   perform pg_temp.check('обычное своё сообщение правится функцией', s = 'поправил', s);
 end;
 $$;

@@ -7,6 +7,7 @@ import {
   setChatUsername,
 } from './chats';
 
+import { isOpaquePersonId } from '@/api/opaquePeople';
 import { supabase } from '@/api/supabase';
 
 jest.mock('@/api/supabase', () => ({
@@ -94,6 +95,54 @@ function messageRow(id: string, createdAt: string) {
 beforeEach(() => {
   jest.clearAllMocks();
   mockedGetUser.mockResolvedValue({ data: { user: { id: 'user-1' } }, error: null });
+});
+
+describe('people seen by the viewer', () => {
+  it('takes author and system names from the row, never from profiles', async () => {
+    const builder = new QueryBuilderMock({
+      data: [
+        {
+          ...messageRow('m1', '2026-09-16T10:00:00Z'),
+          author_id: 'opaque-x-1',
+          author_name: 'Илья Муромцев',
+          author_avatar_url: null,
+          author_opaque: true,
+        },
+        {
+          ...messageRow('m2', '2026-09-16T10:01:00Z'),
+          kind: 'system',
+          system_event: 'member_invited',
+          author_id: 'user-1',
+          author_name: 'Анна',
+          author_opaque: false,
+          system_user_id: 'opaque-x-2',
+          system_user_name: 'Вера Соколова',
+          system_user_opaque: true,
+        },
+      ],
+      error: null,
+    });
+    mockedFrom.mockReturnValue(builder);
+
+    const page = await listMessages('chat-1');
+
+    expect(builder.argsOf('select')[0]).not.toContain('profiles');
+    expect(page.items[0]).toMatchObject({
+      authorId: 'opaque-x-1',
+      authorOpaque: true,
+      author: { displayName: 'Илья Муромцев', avatarUrl: null },
+    });
+    expect(page.items[1].member).toMatchObject({
+      actorName: 'Анна',
+      actorOpaque: false,
+      subjectName: 'Вера Соколова',
+      subjectOpaque: true,
+    });
+    // По непрозрачному id профиль не открывается; по настоящему — как раньше.
+    expect(isOpaquePersonId('opaque-x-1')).toBe(true);
+    expect(isOpaquePersonId('opaque-x-2')).toBe(true);
+    expect(isOpaquePersonId('user-1')).toBe(false);
+  });
 });
 
 describe('listMessages', () => {

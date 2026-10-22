@@ -61,12 +61,15 @@ $$;
 
 -- Тестовые аккаунты рождаются с защитными настройками приватности
 -- (20261029100000_privacy_settings.sql). Здесь проверяется не она: время,
--- «в сети» и поиск открыты всем — их скрытие проверяет
+-- «в сети», поиск и имя открыты всем — их скрытие проверяет
 -- privacy_activity_search_access.sql.
 update public.privacy_settings set
   message_activity_metadata_visibility = 'everyone',
   activity_status_visibility = 'everyone',
-  account_search_visibility = 'everyone'
+  account_search_visibility = 'everyone',
+  profile_identity_masking = 'everyone',
+  dialogue_participant_name_masking = 'everyone',
+  avatar_visibility = 'everyone'
 where user_id in (select id from auth.users where email like '%@test.local');
 
 do $$
@@ -82,6 +85,7 @@ declare
   r jsonb;
   s text;
   n int;
+  i int;
   m uuid;
   t0 timestamptz := now();
 begin
@@ -157,13 +161,13 @@ begin
 
   -- ============================================ сообщение и входящие
   select id, author_id::text || '/' || text into m, s
-  from public.messages where stream_id = st and system_event = 'call_started';
+  from public.message_rows where stream_id = st and system_event = 'call_started';
   perform pg_temp.check('в переписке «Звонок начат» от начавшего', s = a::text || '/Звонок начат', s);
 
   -- Превью пишет рассылка нового сообщения — отложенный триггер: запускаем.
   set constraints all immediate;
   set constraints all deferred;
-  select last_message_text into s from public.chats where id = chat;
+  select public.last_message_preview(ch) into s from public.chat_rows ch where ch.id = chat;
   perform pg_temp.check('превью чата — «📞 Звонок»', s = '📞 Звонок', s);
 
   perform pg_temp.check('входящий приходит участнику B', pg_temp.events('user:' || b, 'incoming_call') = 1);
@@ -264,7 +268,7 @@ begin
   select count(*) into n from public.stream_participants where stream_id = st and left_at is null;
   perform pg_temp.check('после конца в звонке никого', n = 0, n::text);
 
-  select text into s from public.messages where stream_id = st and system_event = 'call_ended';
+  select text into s from public.message_rows where stream_id = st and system_event = 'call_ended';
   perform pg_temp.check('в переписке «Звонок завершён · …»', s like 'Звонок завершён · %', s);
 
   perform pg_temp.check('участникам чата — сигнал о конце звонка',
@@ -283,11 +287,16 @@ begin
   perform pg_temp.check('неизвестная комната — ended', s = 'ended', s);
 
   select status into s from public.streams where id = st;
+  select count(*) into i from public.stream_participants where stream_id = st and left_at is null;
   perform pg_temp.act_as(d);
   select count(*) into n from public.streams where id = st;
   perform pg_temp.check('посторонний видит звонок (эфир публичен)', n = 1, n::text);
-  select count(*) into n from public.stream_participants where stream_id = st;
-  perform pg_temp.check('посторонний видит состав эфира', n = 4, n::text);
+  -- Состав — глазами смотрящего (`stream_people`); строки участников с id
+  -- людей посторонним не читаются.
+  select count(*) into n from public.stream_people(st);
+  perform pg_temp.check('посторонний видит состав эфира', n = i, n::text || ' из ' || i::text);
+  select count(*) into n from public.stream_participants where stream_id = st and user_id <> d;
+  perform pg_temp.check('строки участников звонка посторонним не читаются', n = 0, n::text);
 
   perform pg_temp.act_as(b);
   select count(*) into n from public.message_rows m2, lateral public.my_stream_participation(m2) p

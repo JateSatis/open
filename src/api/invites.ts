@@ -80,15 +80,24 @@ export class DuplicateChatError extends Error {
 /** Код, которым `create_chat` отвергает повтор набора людей. */
 const DUPLICATE_CHAT_CODE = 'OPN01';
 
-const INVITE_COLUMNS =
-  'chat_id, status, created_at, inviter:profiles!chat_invites_inviter_id_fkey(id, display_name, avatar_url)';
+// Позвавший — глазами позванного (вычисляемые поля, профили клиенту не
+// читаются): скрыл имя — псевдоним, скрыл фото — без фото.
+const INVITE_COLUMNS = 'chat_id, status, created_at, inviter_id, inviter_name, inviter_avatar_url';
 
-type InviterRow = { id: string; display_name: string | null; avatar_url: string | null } | null;
+type InviterRow = {
+  inviter_id: string | null;
+  inviter_name: string | null;
+  inviter_avatar_url: string | null;
+};
 
 function toPerson(row: InviterRow): Person | null {
-  if (!row) return null;
+  if (!row.inviter_id) return null;
 
-  return { id: row.id, displayName: row.display_name ?? 'Без имени', avatarUrl: row.avatar_url };
+  return {
+    id: row.inviter_id,
+    displayName: row.inviter_name ?? 'Без имени',
+    avatarUrl: row.inviter_avatar_url,
+  };
 }
 
 function toResult(data: unknown): CreateChatResult {
@@ -200,7 +209,7 @@ export async function listInvites(): Promise<ChatInvite[]> {
         chatId: invite.chat_id,
         status: invite.status === 'declined' ? 'declined' : 'pending',
         invitedAt: invite.created_at,
-        inviter: toPerson(invite.inviter),
+        inviter: toPerson(invite),
         chat: toSummary(chat, peopleByChat.get(chat.id) ?? { members: [], waiting: [] }, userId),
         recentMessages: messagesByChat.get(chat.id) ?? [],
       },
@@ -225,7 +234,7 @@ export async function getMyInvite(chatId: string): Promise<MyInvite | null> {
   const status =
     data.status === 'accepted' ? 'accepted' : data.status === 'declined' ? 'declined' : 'pending';
 
-  return { status, inviter: toPerson(data.inviter) };
+  return { status, inviter: toPerson(data) };
 }
 
 /** Принять можно и входящую, и отклонённую заявку. */

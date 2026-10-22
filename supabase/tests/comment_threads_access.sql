@@ -210,10 +210,10 @@ begin
   perform pg_temp.check('порядок пересланных — как в панели', s = r3::text || ',' || r2::text, s);
 
   select string_agg(kind || '|' || coalesce(text, '∅') || '|' || author_id::text, ',') into s
-  from public.messages where id = fwd[1];
+  from public.message_rows where id = fwd[1];
   perform pg_temp.check('пересланный — ссылка, без копии текста, от переславшего', s = 'comment_forward|∅|' || d::text, s);
 
-  select last_message_text into s from public.chats where id = chat_d;
+  select public.last_message_preview(ch) into s from public.chat_rows ch where ch.id = chat_d;
   perform pg_temp.check('превью в списке чатов — текст комментария', s = '💬 ответ на ответ', s);
 
   perform pg_temp.act_as(a);

@@ -1,5 +1,6 @@
 import { useRouter } from 'expo-router';
 
+import { isOpaquePersonId } from '@/api/opaquePeople';
 import type { Subscription } from '@/api/subscriptions';
 import { confirm } from '@/components/ConfirmDialog/store';
 import { HeaderMenu } from '@/components/HeaderMenu';
@@ -137,7 +138,7 @@ export function ChatInfoMenu({
         router.push({ pathname: '/chats/chat-subscribers/[chatId]', params: { chatId } });
         return;
       case 'profile':
-        if (counterpartId) {
+        if (counterpartId && !isOpaquePersonId(counterpartId)) {
           router.push({ pathname: '/chats/people/[userId]', params: { userId: counterpartId } });
         }
         return;

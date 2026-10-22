@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 
 import {
   getMyPrivacySettings,
+  regenerateIdentityAlias,
   setBirthDate,
   setPrivacySetting,
   type EditablePrivacySetting,
@@ -13,11 +14,14 @@ import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
 import { friendKeys } from '@/features/friends/queries';
 
 /** Поле состояния экрана у каждой настройки, которую клиент меняет. */
-const SETTING_FIELDS: Record<EditablePrivacySetting, keyof Omit<PrivacySettings, 'birthDate'>> = {
+const SETTING_FIELDS: Record<EditablePrivacySetting, keyof Omit<PrivacySettings, 'birthDate' | 'identityAlias'>> = {
   friends_list_visibility: 'friendsListVisibility',
   activity_status_visibility: 'activityStatusVisibility',
   message_activity_metadata_visibility: 'messageTimeVisibility',
   account_search_visibility: 'searchVisibility',
+  profile_identity_masking: 'identityVisibility',
+  dialogue_participant_name_masking: 'dialogueNameVisibility',
+  avatar_visibility: 'avatarVisibility',
 };
 
 import { isBirthDateKnown, rememberBirthDateKnown } from './birthDateKnown';
@@ -91,6 +95,27 @@ export function useSetPrivacySetting() {
       if (setting === 'message_activity_metadata_visibility') {
         void queryClient.invalidateQueries({ queryKey: ['chat'] });
       }
+      // Имя в диалогах решает, куда слать «печатает»: всем или только участникам.
+      if (setting === 'dialogue_participant_name_masking') {
+        void queryClient.invalidateQueries({ queryKey: ['typingAudience'] });
+      }
+    },
+  });
+}
+
+/** «Другой псевдоним»: новый сразу в строке настроек. */
+export function useRegenerateIdentityAlias() {
+  const queryClient = useQueryClient();
+  const userId = useCurrentUserId();
+  const key = privacyKeys.mine(userId);
+
+  return useMutation<string, Error, void>({
+    mutationFn: regenerateIdentityAlias,
+    networkMode: 'always',
+    onSuccess: (alias) => {
+      const previous = queryClient.getQueryData<PrivacySettings | null>(key);
+
+      if (previous) queryClient.setQueryData<PrivacySettings>(key, { ...previous, identityAlias: alias });
     },
   });
 }

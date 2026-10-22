@@ -2,6 +2,7 @@ import { act, fireEvent, screen } from '@testing-library/react-native';
 
 import { CallScreen } from './index';
 
+import { listCallPeople } from '@/api/streams';
 import { leaveCall, toggleMic, toggleSpeaker } from '@/features/streams/callSession';
 import { setCall, type ActiveCall } from '@/features/streams/callStore';
 import { renderWithQuery } from '@/test/renderWithQuery';
@@ -29,9 +30,9 @@ function call(overrides: Partial<ActiveCall> = {}): ActiveCall {
     micOn: true,
     speakerOn: true,
     speakers: [
-      { id: 'user-1', name: 'Я', isLocal: true, speaking: false, micOn: true },
-      { id: 'user-2', name: 'Марина', isLocal: false, speaking: true, micOn: true },
-      { id: 'user-3', name: 'Пётр', isLocal: false, speaking: false, micOn: false },
+      { id: 'user-1', name: 'Я', host: true, isLocal: true, speaking: false, micOn: true },
+      { id: 'user-2', name: 'Марина', host: false, isLocal: false, speaking: true, micOn: true },
+      { id: 'user-3', name: 'Пётр', host: false, isLocal: false, speaking: false, micOn: false },
     ],
     listeners: 12,
     joinedAt: Date.now(),
@@ -70,6 +71,30 @@ describe('экран звонка у говорящего', () => {
     expect(screen.getByLabelText('Марина, говорит')).toBeTruthy();
     expect(screen.getByLabelText('Пётр, микрофон выключен')).toBeTruthy();
     expect(screen.getByText('Вы')).toBeTruthy();
+  });
+
+  it('имена говорящих — из базы глазами смотрящего: в комнате ни id, ни имён', async () => {
+    jest.mocked(listCallPeople).mockResolvedValue([
+      {
+        identity: 'room-3',
+        userId: 'opaque-3',
+        opaque: true,
+        displayName: 'Илья Муромцев',
+        avatarUrl: null,
+      },
+    ]);
+    setCall(
+      call({
+        speakers: [
+          { id: 'room-3', name: '', host: false, isLocal: false, speaking: false, micOn: false },
+        ],
+      }),
+    );
+
+    await renderWithQuery(<CallScreen />);
+
+    expect(await screen.findByLabelText('Илья Муромцев, микрофон выключен')).toBeTruthy();
+    expect(listCallPeople).toHaveBeenCalledWith('stream-1');
   });
 
   it('микрофон, динамик и выход', async () => {

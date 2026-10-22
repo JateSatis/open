@@ -33,12 +33,15 @@ $$;
 
 -- Тестовые аккаунты рождаются с защитными настройками приватности
 -- (20261029100000_privacy_settings.sql). Здесь проверяется не она: время,
--- «в сети» и поиск открыты всем — их скрытие проверяет
+-- «в сети», поиск и имя открыты всем — их скрытие проверяет
 -- privacy_activity_search_access.sql.
 update public.privacy_settings set
   message_activity_metadata_visibility = 'everyone',
   activity_status_visibility = 'everyone',
-  account_search_visibility = 'everyone'
+  account_search_visibility = 'everyone',
+  profile_identity_masking = 'everyone',
+  dialogue_participant_name_masking = 'everyone',
+  avatar_visibility = 'everyone'
 where user_id in (select id from auth.users where email like '%@test.local');
 
 do $$
@@ -192,6 +195,9 @@ begin
   pending_dialog := (public.create_chat(array[d], null, null, 'Привет, это заявка') ->> 'chat_id')::uuid;
   untitled_group := (public.create_chat(array[d, e], null) ->> 'chat_id')::uuid;
   perform set_config('role', 'postgres', true);
+  -- Глазами постороннего: смотрящий — не участник (рассылка подписчику зовёт
+  -- название с ним самим).
+  perform set_config('request.jwt.claims', '', true);
   perform pg_temp.check('название: диалог с ещё не принявшим — оба',
     public.outsider_chat_title(pending_dialog) = 'Аня и Посторонний D',
     public.outsider_chat_title(pending_dialog));

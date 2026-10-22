@@ -213,7 +213,9 @@ describe('getCommentTarget', () => {
     const select = calls.find((call) => call.method === 'select')?.args[0] as string;
     const embeds = topLevelEmbeds(select);
 
-    expect(embeds).toContain('author');
+    // Автор — колонками глазами смотрящего, а не связью с профилями.
+    expect(select).toContain('author_name');
+    expect(embeds).not.toContain('author');
     expect(new Set(embeds).size).toBe(embeds.length);
   });
 });

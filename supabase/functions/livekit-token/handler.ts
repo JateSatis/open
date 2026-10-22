@@ -24,7 +24,12 @@ export type JoinInfo =
       chat_alive: boolean;
       profile_alive: boolean;
       role: StreamRole;
-      display_name: string | null;
+      /**
+       * Identity в комнате: непрозрачный id этого звонка, не id человека.
+       * Комнату видят все слушатели — ни id, ни имени в ней нет; кто стоит за
+       * identity, клиент спрашивает у базы (`stream_people`).
+       */
+      identity: string | null;
       speakers_count: number;
       started_at: string;
       speakers_changed_at: string;
@@ -83,7 +88,7 @@ export function createTokenHandler(deps: TokenDeps) {
     }
 
     if (!info.found) return json(404, { error: 'not_found' });
-    if (!info.profile_alive) return json(401, { error: 'unauthorized' });
+    if (!info.profile_alive || !info.identity) return json(401, { error: 'unauthorized' });
     if (info.status !== 'live' || !info.chat_alive) return json(410, { error: 'ended' });
 
     const quietSince = Date.parse(info.speakers_changed_at);
@@ -101,8 +106,8 @@ export function createTokenHandler(deps: TokenDeps) {
 
     try {
       token = await deps.signToken({
-        identity: userId,
-        name: info.display_name ?? 'Без имени',
+        identity: info.identity,
+        name: '',
         room: info.room_name,
         role: info.role,
       });

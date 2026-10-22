@@ -2,6 +2,7 @@
 // сообщения. Без обращений к сети — как и `messagePreview.ts`: этим пользуются
 // кеш истории и оптимистичные сообщения, которым клиент базы ни к чему.
 
+import { opaqueFlag } from '@/api/opaquePeople';
 import type { Json } from '@/api/types.gen';
 
 /** Ряд реакции: участник чата или посетитель. */
@@ -12,12 +13,16 @@ export type ReactionCounts = Readonly<Record<string, number>>;
 
 export type MyReaction = { emoji: string; audience: ReactionAudience };
 
-/** Кто поставил реакцию. `userId` null — аккаунт удалён. */
+/**
+ * Кто поставил реакцию — глазами смотрящего. `userId` null — аккаунт удалён;
+ * `opaque` — человек подменён в диалоге, id непрозрачный, профиля нет.
+ */
 export type Reactor = {
   userId: string | null;
   audience: ReactionAudience;
   name: string | null;
   avatarUrl: string | null;
+  opaque?: boolean;
 };
 
 /** Реакция → поставившие в порядке постановки. */
@@ -45,7 +50,7 @@ export const NO_REACTIONS: MessageReactions = {
 
 /** Колонки реакций в выборке сообщения или комментария. */
 export const REACTION_COLUMNS =
-  'member_reactions, visitor_reactions, my_reaction(emoji, audience), reactors(emoji, user_id, audience, updated_at, profile:profiles(display_name, avatar_url))';
+  'member_reactions, visitor_reactions, my_reaction(emoji, audience), reactors(emoji, user_id, audience, updated_at, display_name, avatar_url, opaque)';
 
 /** Больше двух поставивших под реакцией не рисуется — там число. */
 export const MAX_REACTORS = 2;
@@ -72,7 +77,9 @@ type ReactorRow = {
   user_id: string | null;
   audience: string;
   updated_at: string;
-  profile: { display_name: string | null; avatar_url: string | null } | null;
+  display_name: string | null;
+  avatar_url: string | null;
+  opaque: boolean | null;
 };
 
 /** Порядок постановки — по времени, а не по порядку строк в ответе: его PostgREST не обещает. */
@@ -89,8 +96,9 @@ function toReactors(rows: readonly ReactorRow[] | null | undefined): ReactorsByE
       list.push({
         userId: row.user_id,
         audience: toAudience(row.audience),
-        name: row.profile?.display_name ?? null,
-        avatarUrl: row.profile?.avatar_url ?? null,
+        name: row.display_name ?? null,
+        avatarUrl: row.avatar_url ?? null,
+        opaque: opaqueFlag(row.user_id, row.opaque),
       });
     }
   }

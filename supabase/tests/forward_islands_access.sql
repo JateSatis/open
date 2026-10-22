@@ -119,7 +119,7 @@ begin
 
   select kind || '|' || (author_id = h1) || '|' || (chat_id = chat_hate) || '|' || (source_chat_id = chat_js)
     || '|' || coalesce(text, '-')
-  into s from public.messages where id = island1;
+  into s from public.message_rows where id = island1;
   perform pg_temp.check('островок: вид, автор, чат, заголовок, без текста', s = 'forward|true|true|true|-', s);
 
   select string_agg(message_id::text, ',' order by position) = m1::text || ',' || m2::text into ok
@@ -129,7 +129,7 @@ begin
   select count(*) into n from public.attachments where message_id = island1;
   perform pg_temp.check('островок ничего не копирует', n = 0, n::text);
 
-  select last_message_text into s from public.chats where id = chat_hate;
+  select public.last_message_preview(ch) into s from public.chat_rows ch where ch.id = chat_hate;
   perform pg_temp.check('превью: «Переслано: 2 сообщения»', s = 'Переслано: 2 сообщения', s);
 
   perform pg_temp.act_as(h2);
@@ -148,7 +148,7 @@ begin
   select source_chat_id = chat_hate into ok from public.messages where id = island2;
   perform pg_temp.check('заголовок — чат, откуда пересылали', ok, null);
 
-  select last_message_text into s from public.chats where id = chat_vs;
+  select public.last_message_preview(ch) into s from public.chat_rows ch where ch.id = chat_vs;
   perform pg_temp.check('превью: «Переслано: 3 сообщения»', s = 'Переслано: 3 сообщения', s);
 
   -- Повторы отсекаются, первое вхождение остаётся.
@@ -391,7 +391,7 @@ begin
   perform public.edit_message(m1, 'Самойлова, ты дура! (изм.)');
   perform pg_temp.act_as(sv);
   select o.text into s
-  from public.forward_items i join public.messages o on o.id = i.message_id
+  from public.forward_items i join public.message_rows o on o.id = i.message_id
   where i.forward_id = island2 and i.position = 0;
   perform pg_temp.check('правка оригинала видна в островке', s = 'Самойлова, ты дура! (изм.)', s);
 

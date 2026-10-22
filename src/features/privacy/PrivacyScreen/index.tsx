@@ -9,6 +9,7 @@ import { Screen } from '@/components/Screen';
 import { SettingsRow } from '@/components/SettingsRow';
 import { SettingsSection } from '@/components/SettingsSection';
 import { Text } from '@/components/Text';
+import { IdentitySection } from '@/features/privacy/IdentitySection';
 import { useMyPrivacySettings, useSetPrivacySetting } from '@/features/privacy/queries';
 import { VisibilityChoice } from '@/features/privacy/VisibilityChoice';
 import { useTheme } from '@/hooks/use-theme';
@@ -18,8 +19,7 @@ import { Sizes } from '@/theme';
 /**
  * «Конфиденциальность и безопасность». Здесь только настройки, которые уже
  * работают на сервере; остальные хранятся с верными значениями и появятся
- * в группах «Идентичность», «Контент и данные» по мере того, как сервер
- * начнёт их применять. Пояснения говорят, что именно скрыто и от кого, — и
+ * в группе «Контент и данные» по мере того, как сервер начнёт их применять. Пояснения говорят, что именно скрыто и от кого, — и
  * не обещают анонимности: переписка в Open публична.
  */
 export function PrivacyScreen() {
@@ -42,6 +42,8 @@ export function PrivacyScreen() {
 
       {data ? (
         <>
+          <IdentitySection settings={data} onChange={set} />
+
           <View style={styles.group}>
             <Text variant="bodyBold" style={styles.groupTitle}>
               Активность
@@ -72,6 +74,13 @@ export function PrivacyScreen() {
               footer="Тот, кому не видно, не найдёт вас ни по имени, ни по @username, а ваши сообщения — в поиске по чатам, где он не участник. Диалоги и профиль по-прежнему открываются по ссылке."
               value={data.searchVisibility}
               onChange={set('account_search_visibility')}
+            />
+            <VisibilityChoice
+              testID="privacy-avatar"
+              title="Кто видит мою фотографию"
+              footer="Остальные видят вместо фото букву имени — в профиле, чатах, комментариях и звонках. Фото, которое кто-то уже сохранил, так не отозвать."
+              value={data.avatarVisibility}
+              onChange={set('avatar_visibility')}
             />
             <VisibilityChoice
               testID="privacy-friends-list"

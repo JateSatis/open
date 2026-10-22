@@ -6,9 +6,12 @@ import type { StreamRole } from '@/api/streams';
 export type CallConnection = 'connecting' | 'connected' | 'reconnecting';
 
 export type CallSpeaker = {
-  /** id пользователя — он же identity в комнате LiveKit. */
+  /** Identity в комнате LiveKit — не id человека: кто это, говорит база (`listCallPeople`). */
   id: string;
+  /** Имени в комнате нет — его подставляет экран звонка из базы. */
   name: string;
+  /** Начавший звонок — первым в списке. */
+  host: boolean;
   isLocal: boolean;
   speaking: boolean;
   micOn: boolean;
@@ -82,11 +85,11 @@ export function roleOf(metadata: string | undefined): StreamRole | null {
 /**
  * Кто говорит и сколько слушают — по составу комнаты. Роль берётся из
  * метаданных токена, которые подписал сервер, — подделать её участник не
- * может. Начавший звонок — первым, дальше по имени: список не прыгает, когда
- * кто-то начинает говорить.
+ * может. Начавший звонок — первым, дальше по имени (`speakerOrder`): список
+ * не прыгает, когда кто-то начинает говорить.
  */
 export function toRoster(members: RoomMember[]): { speakers: CallSpeaker[]; listeners: number } {
-  const speakers: (CallSpeaker & { isHost: boolean })[] = [];
+  const speakers: CallSpeaker[] = [];
   let listeners = 0;
 
   for (const member of members) {
@@ -104,15 +107,20 @@ export function toRoster(members: RoomMember[]): { speakers: CallSpeaker[]; list
       isLocal: member.isLocal,
       speaking: member.isSpeaking && member.isMicrophoneEnabled,
       micOn: member.isMicrophoneEnabled,
-      isHost: role === 'host',
+      host: role === 'host',
     });
   }
 
-  speakers.sort((a, b) => {
-    if (a.isHost !== b.isHost) return a.isHost ? -1 : 1;
+  return { speakers: speakers.sort(speakerOrder), listeners };
+}
 
-    return a.name.localeCompare(b.name, 'ru');
-  });
+/**
+ * Порядок говорящих: начавший первым, дальше по имени, при равных — по
+ * identity. Имена в комнате пустые — экран звонка сортирует заново, получив
+ * их из базы.
+ */
+export function speakerOrder(a: CallSpeaker, b: CallSpeaker): number {
+  if (a.host !== b.host) return a.host ? -1 : 1;
 
-  return { speakers: speakers.map(({ isHost: _host, ...speaker }) => speaker), listeners };
+  return a.name.localeCompare(b.name, 'ru') || a.id.localeCompare(b.id);
 }
