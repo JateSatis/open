@@ -36,6 +36,7 @@ import {
 } from '@/features/media';
 import { showNotice } from '@/features/notifications/alertsStore';
 import { isNetworkError } from '@/lib/network';
+import { trimWithRanges } from '@/features/chats/hiddenText';
 
 type EditContext = { queryClient: QueryClient; chatId: string; currentUserId: string | null };
 
@@ -47,6 +48,7 @@ export function optimisticEdit(original: ChatMessage, result: EditResult): ChatM
     ...original,
     kind,
     text: kind === 'voice' ? null : text,
+    hiddenRanges: kind === 'voice' ? [] : trimWithRanges(result.text, result.hidden ?? []).ranges,
     // Скрытое время чата не появляется и у правки: «изменено» — без часов.
     editedAt: original.createdAt === null ? null : new Date().toISOString(),
     edited: true,
@@ -115,7 +117,15 @@ export function toEditInput(result: EditResult, uploaded: UploadedMedia[]) {
         ...uploaded.map(toSendMedia),
       ];
 
-  return { text: result.voice ? '' : result.text, media, voice };
+  // Без скрытого — без поля: `editMessage` тогда снимает прежнее.
+  const hidden = result.voice ? [] : (result.hidden ?? []);
+
+  return {
+    text: result.voice ? '' : result.text,
+    ...(hidden.length > 0 ? { hidden } : {}),
+    media,
+    voice,
+  };
 }
 
 /**

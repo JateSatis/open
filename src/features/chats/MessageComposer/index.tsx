@@ -1,8 +1,9 @@
 import { SymbolView } from 'expo-symbols';
-import { useEffect, useRef, type ReactNode, type RefObject } from 'react';
-import { Pressable, TextInput, View } from 'react-native';
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { Pressable, Text as RNText, TextInput, View } from 'react-native';
 
 import { ComposerButton } from './ComposerButton';
+import { HideSelectionChip } from './HideSelectionChip';
 import { styles } from './styles';
 
 import { Text } from '@/components/Text';
@@ -15,12 +16,23 @@ import {
   useEmojiPanel,
   type Selection,
 } from '@/features/chats/EmojiPanel';
+import { HiddenTextSpans } from '@/features/chats/HiddenTextSpans';
+import {
+  addRange,
+  coveredByHidden,
+  normalizeRanges,
+  removeRange,
+  selectionToRange,
+  type HiddenRange,
+} from '@/features/chats/hiddenText';
 import { HoldToRecordRow } from '@/features/media/HoldToRecordRow';
 import { perfMark, perfMarkStart } from '@/features/media/perf';
 import { useSelectionCount } from '@/features/media/selectionStore';
 import type { LocalMedia } from '@/features/media/types';
+import { PersonalDataHint } from '@/features/privacy/PersonalDataHint';
+import { usePersonalDataGuard } from '@/features/privacy/usePersonalDataGuard';
 import { useTheme } from '@/hooks/use-theme';
-import { ComposerSizes, Spacing } from '@/theme';
+import { ComposerSizes, Spacing, Typography } from '@/theme';
 
 export type MessageComposerProps = {
   text: string;
@@ -86,6 +98,14 @@ export type MessageComposerProps = {
     attachDisabled: boolean;
     recordDisabled: boolean;
   };
+  /**
+   * Скрытое от зрителей в тексте — code points. Есть — над выделенным в поле
+   * встаёт «Скрыть от зрителей», а в листе о личных данных — «Скрыть
+   * найденное». Нет (комментарий, заявка) — скрывать нечем.
+   */
+  hidden?: { ranges: HiddenRange[]; onChange: (ranges: HiddenRange[]) => void };
+  /** Кто увидит отправленное — для подсказки и листа о личных данных. */
+  audience?: string;
 };
 
 const SEND_ICON = { ios: 'arrow.up', android: 'send', web: 'send' } as const;
@@ -116,6 +136,8 @@ export function MessageComposer({
   canSendEmpty = false,
   placeholder = 'Сообщение',
   edit,
+  hidden,
+  audience = 'Это сообщение увидят все, кто откроет чат.',
 }: MessageComposerProps) {
   const theme = useTheme();
   // Счётчик берётся из стора выбора, а не приходит пропом: иначе выбор файла
@@ -128,6 +150,9 @@ export function MessageComposer({
   const pendingSelection = useRef<Selection | null>(null);
   /** Текст, который поле уже видело: сменили сверху — курсор в конец. */
   const seenText = useRef(text);
+  /** Выделенный кусок поля, если он не пустой: над ним — «Скрыть от зрителей». */
+  const [selected, setSelected] = useState<HiddenRange | null>(null);
+  const guard = usePersonalDataGuard({ audience, canHide: Boolean(hidden) });
 
   // Текст из панели эмодзи пришёл сверху — курсор туда, где вставили, а не в конец.
   // Сменили текст снаружи (правка, черновик) — курсор в конце нового текста,
@@ -163,7 +188,30 @@ export function MessageComposer({
   const submit = () => {
     if (isEmpty) return;
 
-    onSend();
+    // Похоже на адрес, школу, геолокацию — сначала лист: поправить, скрыть
+    // найденное или отправить как есть.
+    guard.check(textLocked ? '' : text, ({ hide }) => {
+      if (hide && hidden) {
+        hidden.onChange(
+          normalizeRanges([...hidden.ranges, ...hide.map(({ start, end }) => ({ start, end }))]),
+        );
+      }
+
+      onSend();
+    });
+  };
+
+  const hiddenRanges = hidden?.ranges ?? [];
+  const selectionCovered = selected
+    ? coveredByHidden(hiddenRanges, selected.start, selected.end)
+    : false;
+
+  const toggleSelectedHidden = () => {
+    if (!hidden || !selected) return;
+
+    hidden.onChange(
+      selectionCovered ? removeRange(hidden.ranges, selected) : addRange(hidden.ranges, selected),
+    );
   };
 
   const applyEdit = (next: { text: string; selection: Selection } | null) => {
@@ -240,7 +288,8 @@ export function MessageComposer({
           accessibilityLabel={placeholder}
           placeholder={textLocked ? 'Без подписи' : placeholder}
           placeholderTextColor={theme.textSecondary}
-          value={text}
+          // Со скрытым — текст кусками: скрытое с пометкой, как его увидят участники.
+          value={hiddenRanges.length > 0 ? undefined : text}
           editable={!textLocked}
           multiline
           // Пока открыта панель эмодзи, поле в фокусе, но без клавиатуры.
@@ -251,7 +300,14 @@ export function MessageComposer({
           }}
           onFocus={onFieldActivate}
           onSelectionChange={(event) => {
-            selection.current = event.nativeEvent.selection;
+            const next = event.nativeEvent.selection;
+
+            selection.current = next;
+            setSelected(
+              hidden && next.start !== next.end
+                ? selectionToRange(text, next.start, next.end)
+                : null,
+            );
           }}
           onChangeText={(value) => {
             seenText.current = value;
@@ -259,7 +315,14 @@ export function MessageComposer({
             onTyping();
           }}
           style={[styles.field, { color: theme.text }]}
-        />
+        >
+          {/* Внутри поля — один текст, куски в нём: голые строки поле не принимает. */}
+          {hiddenRanges.length > 0 ? (
+            <RNText style={[Typography.body, { color: theme.text }]}>
+              <HiddenTextSpans text={text} ranges={hiddenRanges} />
+            </RNText>
+          ) : null}
+        </TextInput>
       </View>
     </>
   );
@@ -267,6 +330,10 @@ export function MessageComposer({
   return (
     <View style={[styles.container, { borderTopColor: theme.border }]}>
       {plate}
+      {textLocked ? null : <PersonalDataHint text={text} />}
+      {hidden && selected && !textLocked ? (
+        <HideSelectionChip covered={selectionCovered} onPress={toggleSelectedHidden} />
+      ) : null}
       {onSendVoice ? (
         <HoldToRecordRow
           style={styles.row}
@@ -294,6 +361,7 @@ export function MessageComposer({
           owner={keyboardOwner}
         />
       ) : null}
+      {guard.sheet}
     </View>
   );
 }

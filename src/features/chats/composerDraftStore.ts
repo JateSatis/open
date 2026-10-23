@@ -8,6 +8,7 @@ import { create } from 'zustand';
 
 import type { ChatRef, ForwardedComment, MessageAttachment } from '@/api/chats';
 import type { Pop } from '@/api/pops';
+import { shiftRanges, type HiddenRange } from '@/features/chats/hiddenText';
 import { forwardPickerClosed, forwardPickerOpened } from '@/features/recs/journal/chatJournal';
 import type {
   ChatMessage,
@@ -62,6 +63,11 @@ export type DraftPop =
 
 export type ChatDraft = {
   text: string;
+  /**
+   * Куски текста, скрытые от зрителей, — code points. Едут за текстом при
+   * каждой его смене (`shiftRanges`).
+   */
+  hidden?: HiddenRange[];
   mode: ComposerMode | null;
   /** Поп поста — только в чате постов канала. */
   pop?: DraftPop | null;
@@ -109,7 +115,20 @@ export function readChatDraft(chatId: string): ChatDraft {
 }
 
 export function setDraftText(chatId: string, text: string) {
-  update(chatId, (draft) => (draft.text === text ? draft : { ...draft, text }));
+  update(chatId, (draft) =>
+    draft.text === text
+      ? draft
+      : {
+          ...draft,
+          text,
+          hidden: draft.hidden?.length ? shiftRanges(draft.text, text, draft.hidden) : draft.hidden,
+        },
+  );
+}
+
+/** Скрытое от зрителей в черновике — целиком, новым набором. */
+export function setDraftHidden(chatId: string, hidden: HiddenRange[]) {
+  update(chatId, (draft) => ({ ...draft, hidden }));
 }
 
 export function setDraftMode(chatId: string, mode: ComposerMode | null) {
@@ -133,6 +152,8 @@ export function startEditDraft(chatId: string, message: ChatMessage) {
 
     return {
       text: message.kind === 'voice' ? '' : (message.text ?? ''),
+      // Своё сообщение участнику приходит оригиналом — диапазоны к нему и относятся.
+      hidden: message.kind === 'voice' ? [] : (message.hiddenRanges ?? []),
       mode: {
         type: 'edit',
         message,

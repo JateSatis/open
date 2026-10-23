@@ -20,6 +20,7 @@ import type { ChatMessage, EditResult } from '@/features/chats/messages/types';
 import type { ComposerDraft } from '@/features/chats/useComposerDraft';
 import { selectedAssets, setSelectionLimit, type LocalMedia } from '@/features/media';
 import { focusWithKeyboard } from '@/lib/windowFocus';
+import type { HiddenRange } from '@/features/chats/hiddenText';
 
 type Options = {
   chatId: string;
@@ -57,9 +58,15 @@ export type MessageEdit = {
   composer: EditComposerState | undefined;
 };
 
-function resultOf(text: string, mode: EditMode, withSelection: boolean): EditResult {
+function resultOf(
+  text: string,
+  mode: EditMode,
+  withSelection: boolean,
+  hidden: HiddenRange[] = [],
+): EditResult {
   return {
     text: mode.voice ? '' : text,
+    hidden: mode.voice ? [] : hidden,
     kept: mode.kept,
     added: withSelection ? selectedAssets() : [],
     voice: mode.voice,
@@ -112,12 +119,16 @@ export function useMessageEdit({
       claimKeyboardForChat();
       // Меню закрывается в этом же кадре — поле успевает стать видимым,
       // прежде чем получить фокус. Курсор — в конец текста.
-      focusWithKeyboard(composerRef, (input) => {
-        const end = readChatDraft(chatId).text.length;
+      focusWithKeyboard(
+        composerRef,
+        (input) => {
+          const end = readChatDraft(chatId).text.length;
 
-        // Не у каждой реализации поля есть `setSelection` — в тестовом окружении его нет.
-        input.setSelection?.(end, end);
-      }, ownWindow);
+          // Не у каждой реализации поля есть `setSelection` — в тестовом окружении его нет.
+          input.setSelection?.(end, end);
+        },
+        ownWindow,
+      );
     },
     [chatId, clearMedia, composerRef, ownWindow],
   );
@@ -127,7 +138,7 @@ export function useMessageEdit({
 
     if (current.mode?.type !== 'edit') return true;
 
-    const result = resultOf(current.text, current.mode, true);
+    const result = resultOf(current.text, current.mode, true, current.hidden);
 
     if (!isEditUnchanged(current.mode.message, result)) {
       const confirmed = await confirm({
@@ -152,7 +163,7 @@ export function useMessageEdit({
 
     if (current.mode?.type !== 'edit') return;
 
-    const result = resultOf(current.text, current.mode, true);
+    const result = resultOf(current.text, current.mode, true, current.hidden);
 
     if (isEditEmpty(result)) return;
 
@@ -163,7 +174,8 @@ export function useMessageEdit({
   }, [chatId, clearMedia, saveEdit]);
 
   const recorded = useCallback(
-    (voice: LocalMedia) => updateEditDraft(chatId, () => ({ kept: [], voice: { type: 'new', voice } })),
+    (voice: LocalMedia) =>
+      updateEditDraft(chatId, () => ({ kept: [], voice: { type: 'new', voice } })),
     [chatId],
   );
 
@@ -184,7 +196,7 @@ export function useMessageEdit({
   const composer = useMemo(() => {
     if (!mode) return undefined;
 
-    const result = resultOf(text, mode, false);
+    const result = resultOf(text, mode, false, draft.hidden);
     const hasPop = mode.kept.some((attachment) => attachment.popId);
 
     return {
@@ -194,7 +206,7 @@ export function useMessageEdit({
       attachDisabled: editMediaRoom(mode) === 0 || hasPop,
       recordDisabled: !canRecordInEdit(result) || hasPop,
     };
-  }, [mode, text]);
+  }, [draft.hidden, mode, text]);
 
   return { mode, start, leave, save, recorded, removeAttachment, removeVoice, composer };
 }

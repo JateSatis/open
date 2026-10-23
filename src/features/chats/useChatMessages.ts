@@ -45,6 +45,7 @@ import { useConnectionStatus } from '@/features/connection/useConnectionStatus';
 import { usePendingReactionMap } from '@/features/interactions/pendingReactions';
 import { withMyReaction } from '@/features/interactions/reactionState';
 import type { LocalMedia, OutgoingMedia } from '@/features/media';
+import type { HiddenRange } from '@/features/chats/hiddenText';
 
 export type {
   ChatMessage,
@@ -198,8 +199,12 @@ export function useChatMessages(chatId: string, currentUserId: string | null): C
   }, [chatId, connection, currentUserId, queryClient]);
 
   const send = useCallback(
-    (text: string, media: OutgoingMedia[] = [], replies: LiveQuote[] = []) =>
-      sendPost(context, text, media, replies),
+    (
+      text: string,
+      media: OutgoingMedia[] = [],
+      replies: LiveQuote[] = [],
+      hidden: HiddenRange[] = [],
+    ) => sendPost(context, text, media, replies, hidden),
     [context],
   );
 

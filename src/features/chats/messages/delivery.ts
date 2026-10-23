@@ -54,6 +54,7 @@ import { PopPosterError, toPopMedia, uploadPop } from '@/features/pops/uploadPop
 import type { DraftPop } from '@/features/chats/composerDraftStore';
 import { isNetworkError } from '@/lib/network';
 import { NO_REACTIONS } from '@/api/reactionCounts';
+import { trimWithRanges, type HiddenRange } from '@/features/chats/hiddenText';
 
 let localIdCounter = 0;
 let pendingSeqCounter = 0;
@@ -132,7 +133,9 @@ export function outgoingOf(message: ChatMessage): Outgoing | null {
   const text = message.text ?? '';
   const media = message.pendingMedia ?? [];
 
-  return text || media.length > 0 ? { type: 'post', text, media, replyTo } : null;
+  return text || media.length > 0
+    ? { type: 'post', text, media, replyTo, hidden: message.hiddenRanges }
+    : null;
 }
 
 export function toSendMedia(item: UploadedMedia): SendMessageMedia {
@@ -262,6 +265,7 @@ async function insert(
     text: outgoing.text || undefined,
     media: uploaded.length > 0 ? uploaded.map(toSendMedia) : undefined,
     replyTo: outgoing.replyTo.length > 0 ? outgoing.replyTo : undefined,
+    hidden: outgoing.hidden?.length ? outgoing.hidden : undefined,
   });
 }
 
@@ -456,6 +460,7 @@ function textDraft(
   text: string,
   at: number,
   replies: LiveQuote[] = [],
+  hidden: HiddenRange[] = [],
 ): ChatMessage {
   const localId = nextLocalId();
 
@@ -466,6 +471,7 @@ function textDraft(
     authorId: currentUserId,
     kind: 'text',
     text,
+    hiddenRanges: hidden,
     seq: nextPendingSeq(),
     createdAt: new Date(at).toISOString(),
     editedAt: null,
@@ -487,9 +493,11 @@ export function sendPost(
   text: string,
   media: OutgoingMedia[] = [],
   replies: LiveQuote[] = [],
+  hidden: HiddenRange[] = [],
 ) {
   const { queryClient, chatId, currentUserId } = context;
-  const trimmed = text.trim();
+  // Скрытое — в смещениях обрезанного текста: так его сохранит база.
+  const { text: trimmed, ranges } = trimWithRanges(text, hidden);
 
   if (!trimmed && media.length === 0) return;
 
@@ -499,8 +507,12 @@ export function sendPost(
   const now = Date.now();
   const drafts: ChatMessage[] = parts.map((part, index) => {
     const partReplies = index === 0 ? replies : [];
+    // Подпись — у первой части, и скрытое в ней тоже.
+    const partHidden = index === 0 && part.text ? ranges : [];
 
-    if (part.media.length === 0) return textDraft(context, part.text, now + index, partReplies);
+    if (part.media.length === 0) {
+      return textDraft(context, part.text, now + index, partReplies, partHidden);
+    }
 
     const localId = nextLocalId();
     const attachments = part.media.map(toLocalAttachment);
@@ -512,6 +524,7 @@ export function sendPost(
       authorId: currentUserId,
       kind: 'media',
       text: part.text || null,
+      hiddenRanges: partHidden,
       // Миллисекунда между частями держит их порядок в списке.
       seq: nextPendingSeq(),
       createdAt: new Date(now + index).toISOString(),

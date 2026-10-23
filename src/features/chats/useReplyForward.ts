@@ -3,7 +3,7 @@ import { useCallback, type RefObject } from 'react';
 import type { TextInput } from 'react-native';
 
 import type { ChatRef, ForwardedComment, IslandOriginal } from '@/api/chats';
-import { startForwardPick } from '@/features/chats/composerDraftStore';
+import { readChatDraft, startForwardPick } from '@/features/chats/composerDraftStore';
 import { claimKeyboardForChat } from '@/features/chats/composerKeyboard';
 import { anchorOf, contentOf, type BubbleRow } from '@/features/chats/islands/rows';
 import { quoteOf } from '@/features/chats/messageQuote';
@@ -13,6 +13,7 @@ import type { ComposerDraft } from '@/features/chats/useComposerDraft';
 import type { LocalMedia, OutgoingMedia } from '@/features/media';
 import { showNotice } from '@/features/notifications/alertsStore';
 import { focusWithKeyboard } from '@/lib/windowFocus';
+import type { HiddenRange } from '@/features/chats/hiddenText';
 
 type Options = {
   chatId: string;
@@ -23,7 +24,12 @@ type Options = {
   /** Облачко как оригинал для островка: с автором и чатом. Заглушка — `null`. */
   originalOf: (row: BubbleRow) => IslandOriginal | null;
   composerRef: RefObject<TextInput | null>;
-  send: (text: string, media?: OutgoingMedia[], replies?: LiveQuote[]) => void;
+  send: (
+    text: string,
+    media?: OutgoingMedia[],
+    replies?: LiveQuote[],
+    hidden?: HiddenRange[],
+  ) => void;
   sendVoice: (voice: LocalMedia, replies?: LiveQuote[]) => void;
   /** Пост с попом — только в чате постов канала. */
   sendPop?: (text: string, pop: DraftPop, replies?: LiveQuote[]) => void;
@@ -56,11 +62,7 @@ function quoteOfRow(
       : authorName(content.authorId);
   const anchor = anchorOf(row);
 
-  return quoteOf(
-    content,
-    name,
-    anchor ? { forwardId: anchor.id, seq: anchor.seq } : null,
-  );
+  return quoteOf(content, name, anchor ? { forwardId: anchor.id, seq: anchor.seq } : null);
 }
 
 /**
@@ -168,7 +170,14 @@ export function useReplyForward({
       return;
     }
 
-    send(draft.text, media, mode?.type === 'reply' ? mode.quotes : []);
+    // Скрытое — из стора, а не из замыкания: «Скрыть найденное» в листе о
+    // личных данных дописывает его прямо перед отправкой.
+    send(
+      draft.text,
+      media,
+      mode?.type === 'reply' ? mode.quotes : [],
+      readChatDraft(chatId).hidden,
+    );
 
     if (mode?.type === 'forward' || mode?.type === 'forward_comments') {
       draft.setText('');
@@ -177,7 +186,7 @@ export function useReplyForward({
     }
 
     draft.clear();
-  }, [draft, forward, forwardComments, mode, send, sendPop]);
+  }, [chatId, draft, forward, forwardComments, mode, send, sendPop]);
 
   const sendVoice = useCallback(
     (voice: LocalMedia) => {

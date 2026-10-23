@@ -28,12 +28,9 @@ const WINDOW = 'media-picker-window';
 jest.mock('@/features/media/HoldToRecordRow', () => ({
   // Строка ввода как есть; справа — «Отправить», когда она стоит на месте микрофона.
   HoldToRecordRow: ({ children, trailing }: { children: unknown; trailing?: unknown }) =>
-    jest.requireActual('react').createElement(
-      jest.requireActual('react').Fragment,
-      null,
-      children,
-      trailing,
-    ),
+    jest
+      .requireActual('react')
+      .createElement(jest.requireActual('react').Fragment, null, children, trailing),
 }));
 jest.mock('@/features/media', () => {
   const React = require('react');
@@ -63,6 +60,8 @@ function draft(): ComposerDraft {
   return {
     text: '',
     setText: jest.fn(),
+    hidden: [],
+    setHidden: jest.fn(),
     mode: null,
     setMode: jest.fn(),
     pop: null,
