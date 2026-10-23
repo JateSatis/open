@@ -195,14 +195,13 @@ declare
   t timestamptz := now() - interval '1 hour';
 begin
   -- ------------------------------------------------------------- подготовка
+  -- Друзья: личка без заявки, писать можно сразу (этап 3 приватности).
+  perform set_config('role', 'postgres', true);
+  insert into public.friendships (requester_id, addressee_id, status, accepted_at)
+  values (a, b, 'accepted', now()), (a, c, 'accepted', now());
   perform pg_temp.act_as(a);
-  chat_ab := (public.create_chat(array[b], null, null, 'Привет, это заявка') ->> 'chat_id')::uuid;
-  chat_ac := (public.create_chat(array[c], null, null, 'Привет, это заявка') ->> 'chat_id')::uuid;
-  perform pg_temp.act_as(b);
-  perform public.accept_chat_invite(chat_ab);
-  perform pg_temp.act_as(c);
-  perform public.accept_chat_invite(chat_ac);
-
+  chat_ab := (public.create_chat(array[b]) ->> 'chat_id')::uuid;
+  chat_ac := (public.create_chat(array[c]) ->> 'chat_id')::uuid;
   perform pg_temp.act_as(a);
   older := pg_temp.say(chat_ab, a, 'старое', t);
   plain := pg_temp.say(chat_ab, a, 'было', t + interval '1 minute');
@@ -290,10 +289,11 @@ begin
 
   -- Новое сообщение не приходит «уже изменённым».
   -- Время клиенту из таблицы не читается — вставка без returning, чтение из
-  -- представления.
+  -- представления. В соседнем чате: по seq оно стало бы последним в chat_ab
+  -- и подменило бы превью, которое проверяется ниже.
   fresh := gen_random_uuid();
   insert into public.messages (id, chat_id, author_id, kind, text, created_at, edited_at)
-  values (fresh, chat_ab, a, 'text', 'с выдуманной правкой', t + interval '5 minutes', now() - interval '1 day');
+  values (fresh, chat_ac, a, 'text', 'с выдуманной правкой', t + interval '5 minutes', now() - interval '1 day');
   select edited_at into ts from public.message_rows where id = fresh;
   perform pg_temp.check('edited_at при вставке сбрасывает сервер', ts is null, ts::text);
 

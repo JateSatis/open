@@ -177,11 +177,13 @@ declare
   personal_before int;
 begin
   -- ------------------------------------------------------------- подготовка
-  -- A звал B, B принял. D в чат не звали — он посетитель.
+  -- Личка друзей A и B (без заявки, этап 3 приватности). D в чат не звали —
+  -- он посетитель.
+  perform set_config('role', 'postgres', true);
+  insert into public.friendships (requester_id, addressee_id, status, accepted_at)
+  values (a, b, 'accepted', now());
   perform pg_temp.act_as(a);
-  chat := (public.create_chat(array[b], null, null, 'Привет, это заявка') ->> 'chat_id')::uuid;
-  perform pg_temp.act_as(b);
-  perform public.accept_chat_invite(chat);
+  chat := (public.create_chat(array[b]) ->> 'chat_id')::uuid;
 
   perform pg_temp.act_as(a);
   ma := pg_temp.say(chat, a, 'от A');

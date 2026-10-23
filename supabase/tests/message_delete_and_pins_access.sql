@@ -85,14 +85,13 @@ declare
   t timestamptz := now() - interval '1 hour';
 begin
   -- ------------------------------------------------------------- подготовка
+  -- Друзья: личка без заявки, писать можно сразу (этап 3 приватности).
+  perform set_config('role', 'postgres', true);
+  insert into public.friendships (requester_id, addressee_id, status, accepted_at)
+  values (a, b, 'accepted', now()), (a, c, 'accepted', now());
   perform pg_temp.act_as(a);
-  chat_ab := (public.create_chat(array[b], null, null, 'Привет, это заявка') ->> 'chat_id')::uuid;
-  chat_ac := (public.create_chat(array[c], null, null, 'Привет, это заявка') ->> 'chat_id')::uuid;
-
-  perform pg_temp.act_as(b);
-  perform public.accept_chat_invite(chat_ab);
-  perform pg_temp.act_as(c);
-  perform public.accept_chat_invite(chat_ac);
+  chat_ab := (public.create_chat(array[b]) ->> 'chat_id')::uuid;
+  chat_ac := (public.create_chat(array[c]) ->> 'chat_id')::uuid;
 
   perform pg_temp.act_as(a);
   m1 := pg_temp.say(chat_ab, a, 'первое A', t);

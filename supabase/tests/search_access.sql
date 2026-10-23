@@ -194,8 +194,10 @@ begin
 
   got := pg_temp.block('ежиков', 'global');
   perform pg_temp.check('К3.4 чужая группа по названию', got = array['group:Группа ёжиков'], got::text);
+  -- Живые группы облака с похожим @именем (например, «group») законно
+  -- попадают в нечёткий поиск — проверяется порядок и вид, а не весь список.
   got := pg_temp.block('@zqgroup.di', 'global');
-  perform pg_temp.check('К3.4 чужая группа по @имя.di', got = array['group:Группа ёжиков'], got::text);
+  perform pg_temp.check('К3.4 чужая группа по @имя.di', got[1] = 'group:Группа ёжиков', got::text);
   got := pg_temp.block('тайнозэ', 'global') || pg_temp.block('тайнозэ', 'mine');
   perform pg_temp.check('К3.4 группа без @имени глобально не находится', got = '{}', got::text);
 
@@ -210,7 +212,8 @@ begin
   perform pg_temp.check('К3.8 .ch — только каналы', got <> '{}' and not exists (
     select 1 from unnest(got) x where x not like 'channel:%'), got::text);
   got := pg_temp.block('zqgroup.di', 'global');
-  perform pg_temp.check('К3.8 .di — только группы', got = array['group:Группа ёжиков'], got::text);
+  perform pg_temp.check('К3.8 .di — только группы', got[1] = 'group:Группа ёжиков' and not exists (
+    select 1 from unnest(got) x where x not like 'group:%'), got::text);
   got := pg_temp.block('zqmax', 'global');
   perform pg_temp.check('К3.8 без суффикса — все виды',
     got @> array['person:Максимилиан', 'channel:Zqmax news'], got::text);

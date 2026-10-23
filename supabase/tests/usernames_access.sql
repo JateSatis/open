@@ -73,6 +73,11 @@ begin
 
   -- Группа: A создатель, B и C зовутся; B принимает, C — нет.
   grp := (public.create_chat(array[b, c], 'Группа') ->> 'chat_id')::uuid;
+  -- Друзья: личка без заявки (этап 3 приватности).
+  perform set_config('role', 'postgres', true);
+  insert into public.friendships (requester_id, addressee_id, status, accepted_at)
+  values (a, d, 'accepted', now());
+  perform pg_temp.act_as(a);
   dm := (public.create_chat(array[d]) ->> 'chat_id')::uuid;
 
   perform pg_temp.act_as(b);
