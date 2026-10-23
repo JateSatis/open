@@ -112,7 +112,6 @@ begin
     pg_temp.settings_of(a) = minor
       and minor ->> 'avatar_visibility' = 'friends'
       and minor ->> 'friends_list_visibility' = 'nobody'
-      and minor ->> 'incoming_dialogue_requests' = 'requests_only'
       and minor ->> 'public_message_visibility_delay' = 'random_delay',
     pg_temp.settings_of(a)::text
   );
@@ -126,7 +125,6 @@ begin
     pg_temp.settings_of(b) = adult
       and adult ->> 'profile_identity_masking' = 'everyone'
       and adult ->> 'friends_list_visibility' = 'everyone'
-      and adult ->> 'incoming_dialogue_requests' = 'off'
       and adult ->> 'public_message_visibility_delay' = 'off',
     pg_temp.settings_of(b)::text
   );
@@ -476,6 +474,74 @@ begin
   delete from auth.users where id = c;
   perform pg_temp.check('дружбы удалённого уходят каскадом', not exists (
     select 1 from public.friendships where requester_id = c or addressee_id = c));
+end;
+$$;
+
+-- Сигнал friends_changed в личный топик — только стороне, у которой
+-- изменилось видимое ей состояние; отказ отправителю не раскрывается.
+insert into auth.users (id, email, raw_user_meta_data, aud, role, created_at) values
+  ('00000000-0000-4000-8000-0000000001a2', 'sa@test.local', '{"full_name":"Сигнал A"}', 'authenticated', 'authenticated', now()),
+  ('00000000-0000-4000-8000-0000000001b2', 'sb@test.local', '{"full_name":"Сигнал B"}', 'authenticated', 'authenticated', now());
+
+create function pg_temp.signals(uid uuid) returns int language sql as $$
+  select count(*)::int from realtime.messages
+  where topic = 'user:' || uid::text and event = 'friends_changed'
+$$;
+
+do $$
+declare
+  a uuid := '00000000-0000-4000-8000-0000000001a2';
+  b uuid := '00000000-0000-4000-8000-0000000001b2';
+  sa int;
+  sb int;
+begin
+  perform pg_temp.act_as_postgres();
+  sa := pg_temp.signals(a); sb := pg_temp.signals(b);
+
+  perform pg_temp.act_as(a);
+  perform public.send_friend_request(b);
+  perform pg_temp.act_as_postgres();
+  perform pg_temp.check('заявка в друзья — сигнал обеим сторонам',
+    pg_temp.signals(a) = sa + 1 and pg_temp.signals(b) = sb + 1,
+    format('%s %s', pg_temp.signals(a) - sa, pg_temp.signals(b) - sb));
+  perform pg_temp.check('в сигнале нет людей', not exists (
+    select 1 from realtime.messages
+    where event = 'friends_changed' and topic in ('user:' || a::text, 'user:' || b::text)
+      and payload - 'id' <> '{}'::jsonb), (
+    select string_agg(payload::text, ' ') from realtime.messages
+    where event = 'friends_changed' and topic = 'user:' || b::text));
+  sa := pg_temp.signals(a); sb := pg_temp.signals(b);
+
+  perform pg_temp.act_as(b);
+  perform public.decline_friend_request(a);
+  perform pg_temp.act_as_postgres();
+  perform pg_temp.check('отказ — сигнал только отказавшему, отправителю нет',
+    pg_temp.signals(a) = sa and pg_temp.signals(b) = sb + 1,
+    format('%s %s', pg_temp.signals(a) - sa, pg_temp.signals(b) - sb));
+  sa := pg_temp.signals(a); sb := pg_temp.signals(b);
+
+  perform pg_temp.act_as(a);
+  perform public.cancel_friend_request(b);
+  perform public.send_friend_request(b);
+  perform pg_temp.act_as_postgres();
+  perform pg_temp.check('отмена и повтор после отказа получателя не тревожат',
+    pg_temp.signals(b) = sb, (pg_temp.signals(b) - sb)::text);
+  sa := pg_temp.signals(a); sb := pg_temp.signals(b);
+
+  perform pg_temp.act_as(b);
+  perform public.accept_friend_request(a);
+  perform pg_temp.act_as_postgres();
+  perform pg_temp.check('принятие — сигнал обеим сторонам',
+    pg_temp.signals(a) = sa + 1 and pg_temp.signals(b) = sb + 1,
+    format('%s %s', pg_temp.signals(a) - sa, pg_temp.signals(b) - sb));
+  sa := pg_temp.signals(a); sb := pg_temp.signals(b);
+
+  perform pg_temp.act_as(a);
+  perform public.remove_friend(b);
+  perform pg_temp.act_as_postgres();
+  perform pg_temp.check('удаление из друзей — сигнал обеим сторонам',
+    pg_temp.signals(a) = sa + 1 and pg_temp.signals(b) = sb + 1,
+    format('%s %s', pg_temp.signals(a) - sa, pg_temp.signals(b) - sb));
 end;
 $$;
 
