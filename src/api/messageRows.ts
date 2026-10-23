@@ -6,6 +6,7 @@
 import type { QueryData } from '@supabase/supabase-js';
 
 import { PREVIEW_ATTACHMENT_COLUMNS, toPreview, type MessagePreview } from '@/api/messagePreview';
+import { parseHiddenRanges, type HiddenRange } from '@/features/chats/hiddenText';
 import { FRAGMENT_QUOTE_COLUMNS, toFragmentQuote, type FragmentQuote } from '@/api/fragmentQuote';
 import { REACTION_COLUMNS, toReactions, type MessageReactions } from '@/api/reactionCounts';
 import { opaqueFlag } from '@/api/opaquePeople';
@@ -234,6 +235,12 @@ export type Message = {
   kind: MessageKind;
   text: string | null;
   /**
+   * Куски текста, скрытые автором от зрителей, — code points. Участнику
+   * `text` — оригинал, зрителю — с «•» на месте скрытого (`hiddenText.ts`).
+   * Не путать с `hidden` — заглушкой сообщения заблокировавшего.
+   */
+  hiddenRanges?: HiddenRange[];
+  /**
    * Порядок в переписке: монотонный номер сервера. Курсор страниц, догрузки
    * и перехода к сообщению — он, а не время: время бывает скрыто.
    */
@@ -311,7 +318,7 @@ const REPLY_COLUMNS =
 const REACTION_AND_COMMENT_COLUMNS =
   `${REACTION_COLUMNS}, comments_count, clusters_count, views_count, read_at, reads_visible, hidden` as const;
 const ORIGINAL_COLUMNS =
-  `id, chat_id, author_id, kind, text, seq, created_at, edited_at, edited, edit_mark, attachments:attachment_rows(${MESSAGE_ATTACHMENT_COLUMNS}), ${REPLY_COLUMNS}, ${REACTION_AND_COMMENT_COLUMNS}, author_name, author_avatar_url, author_opaque, chat:chat_rows!messages_chat_id_fkey(id, kind, chat_display_name, chat_read_up_to, chat_am_member)` as const;
+  `id, chat_id, author_id, kind, text, hidden_ranges, seq, created_at, edited_at, edited, edit_mark, attachments:attachment_rows(${MESSAGE_ATTACHMENT_COLUMNS}), ${REPLY_COLUMNS}, ${REACTION_AND_COMMENT_COLUMNS}, author_name, author_avatar_url, author_opaque, chat:chat_rows!messages_chat_id_fkey(id, kind, chat_display_name, chat_read_up_to, chat_am_member)` as const;
 
 const FORWARDED_COMMENT_COLUMNS =
   `forwarded_comment_id, forwarded:comment_rows!messages_forwarded_comment_fkey(id, message_id, pop_id, chat_id, thread_root_id, fragment_id, ${FRAGMENT_QUOTE_COLUMNS}, author_id, author_name, author_avatar_url, author_opaque, kind, text, created_at, edited_at, ${REACTION_COLUMNS}, comment_attachments:comment_attachment_rows(${ATTACHMENT_COLUMNS}), chat:chat_rows!comments_chat_id_fkey(id, chat_display_name, chat_am_member), target:message_rows!comments_message_fkey(id, author_id, author_name, author_opaque, kind, text, seq, attachments:attachment_rows(${PREVIEW_ATTACHMENT_COLUMNS})), pop:pops!comments_pop_id_fkey(id, channel_id, poster_url, caption))` as const;
@@ -320,7 +327,7 @@ const FORWARDED_COMMENT_COLUMNS =
 // реакции и комментарии — той же выборкой. Своя реакция — вычисляемой связью
 // `my_reaction`, и у оригинала тоже.
 export const MESSAGE_COLUMNS =
-  `id, chat_id, author_id, kind, text, seq, created_at, edited_at, edited, edit_mark, attachments:attachment_rows(${MESSAGE_ATTACHMENT_COLUMNS}), ${REPLY_COLUMNS}, ${REACTION_AND_COMMENT_COLUMNS}, stream_id, stream_host_id, system_event, system_user_id, author_name, author_avatar_url, author_opaque, system_user_name, system_user_opaque, stream:streams!messages_stream_id_fkey(started_at, ended_at), my_call:my_stream_participation(id), source_chat:chat_rows!messages_source_chat_id_fkey(id, chat_display_name), items:forward_items!forward_items_forward_fkey(id, position, message_id, original:message_rows!forward_items_message_fkey(${ORIGINAL_COLUMNS})), ${FORWARDED_COMMENT_COLUMNS}` as const;
+  `id, chat_id, author_id, kind, text, hidden_ranges, seq, created_at, edited_at, edited, edit_mark, attachments:attachment_rows(${MESSAGE_ATTACHMENT_COLUMNS}), ${REPLY_COLUMNS}, ${REACTION_AND_COMMENT_COLUMNS}, stream_id, stream_host_id, system_event, system_user_id, author_name, author_avatar_url, author_opaque, system_user_name, system_user_opaque, stream:streams!messages_stream_id_fkey(started_at, ended_at), my_call:my_stream_participation(id), source_chat:chat_rows!messages_source_chat_id_fkey(id, chat_display_name), items:forward_items!forward_items_forward_fkey(id, position, message_id, original:message_rows!forward_items_message_fkey(${ORIGINAL_COLUMNS})), ${FORWARDED_COMMENT_COLUMNS}` as const;
 
 // Мозаика в облачке должна собираться в порядке выбора файлов, а PostgREST
 // не гарантирует порядок вложенной выборки сам по себе — нужен явный order
@@ -488,6 +495,7 @@ type ContentRow = Pick<
   | 'author_opaque'
   | 'kind'
   | 'text'
+  | 'hidden_ranges'
   | 'seq'
   | 'created_at'
   | 'edited_at'
@@ -515,6 +523,7 @@ function toContent(row: ContentRow): Message {
     authorOpaque: opaqueFlag(row.author_id, row.author_opaque),
     kind: toMessageKind(row.kind),
     text: row.text,
+    hiddenRanges: parseHiddenRanges(row.hidden_ranges),
     seq: row.seq,
     createdAt: row.created_at,
     editedAt: row.edited_at,

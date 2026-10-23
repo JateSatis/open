@@ -20,6 +20,13 @@ import { byChatListOrder } from '@/api/chatListOrder';
 import { opaqueFlag } from '@/api/opaquePeople';
 import { supabase } from '@/api/supabase';
 import { randomUuid } from '@/lib/uuid';
+import {
+  hiddenRangesJson,
+  hiddenRangesLiteral,
+  parseHiddenRanges,
+  trimWithRanges,
+  type HiddenRange,
+} from '@/features/chats/hiddenText';
 
 export { toPreview, type MessagePreview } from '@/api/messagePreview';
 export {
@@ -177,6 +184,8 @@ export type SendMessageInput = {
   media?: SendMessageMedia[];
   /** Ответ: id сообщений того же чата, по порядку. */
   replyTo?: string[];
+  /** Куски текста, скрытые от зрителей, — code points в `text` как он есть. */
+  hidden?: HiddenRange[];
 };
 
 /** Загруженное голосовое: файл, длительность и форма волны. */
@@ -198,6 +207,8 @@ export type EditVoiceItem = { attachmentId: string } | SendVoiceInput;
  */
 export type EditMessageInput = {
   text: string;
+  /** Скрытое от зрителей в новом тексте (code points в `text` как он есть). */
+  hidden?: HiddenRange[];
   media: EditMediaItem[];
   voice: EditVoiceItem | null;
 };
@@ -458,7 +469,11 @@ export async function listChats(): Promise<ChatSummary[]> {
   const entryByChat = new Map<string, ChatListEntry>(
     (list.data ?? []).map((row) => [
       row.chat_id,
-      { enteredAt: row.entered_at ?? null, position: row.position, hasUnread: row.has_unread === true },
+      {
+        enteredAt: row.entered_at ?? null,
+        position: row.position,
+        hasUnread: row.has_unread === true,
+      },
     ]),
   );
   const chatIds = [...new Set([...entryByChat.keys(), ...subscriptionByChat.keys()])];
@@ -672,15 +687,25 @@ export async function listMessagesSince(chatId: string, sinceSeq: number): Promi
  * insert policy on `messages` is the authority and a rejection surfaces as a
  * failed send in the UI.
  */
-async function sendTextMessage(chatId: string, text: string): Promise<Message> {
+async function sendTextMessage(
+  chatId: string,
+  text: string,
+  hidden: HiddenRange[],
+): Promise<Message> {
   const authorId = await getCurrentUserId();
   // Id выбирает клиент: вставка не возвращает строку — время сообщения
   // клиенту из таблицы не читается, — а читать её из представления нужно по id.
   const id = randomUuid();
 
-  const { error } = await supabase
-    .from('messages')
-    .insert({ id, chat_id: chatId, author_id: authorId, kind: 'text', text });
+  const { error } = await supabase.from('messages').insert({
+    id,
+    chat_id: chatId,
+    author_id: authorId,
+    kind: 'text',
+    text,
+    // Скрытое — той же строкой: рассылка нового сообщения уже видит его.
+    ...(hidden.length > 0 ? { hidden_ranges: hiddenRangesLiteral(hidden) } : {}),
+  });
 
   if (error) throw error;
 
@@ -703,6 +728,7 @@ async function sendMediaMessage(
   text: string | null,
   media: SendMessageMedia[],
   replyTo: string[],
+  hidden: HiddenRange[],
 ): Promise<Message> {
   const { data: newMessageId, error } = await supabase.rpc('send_media_message', {
     target_chat: chatId,
@@ -719,6 +745,7 @@ async function sendMediaMessage(
       size_bytes: item.sizeBytes,
     })),
     reply_to: replyTo.length > 0 ? replyTo : undefined,
+    hidden: hidden.length > 0 ? hiddenRangesJson(hidden) : undefined,
   });
 
   if (error) throw error;
@@ -732,7 +759,9 @@ async function sendMediaMessage(
 }
 
 export async function sendMessage(chatId: string, input: SendMessageInput): Promise<Message> {
-  const text = input.text?.trim() || null;
+  const trimmed = trimWithRanges(input.text ?? '', input.hidden ?? []);
+  const text = trimmed.text || null;
+  const hidden = text ? trimmed.ranges : [];
   const media = input.media ?? [];
   const replyTo = input.replyTo ?? [];
 
@@ -741,8 +770,8 @@ export async function sendMessage(chatId: string, input: SendMessageInput): Prom
   // Ответ идёт через функцию и у текста: цитаты база принимает только в той
   // же транзакции, что и само сообщение (см. политику `message_replies`).
   return media.length === 0 && replyTo.length === 0
-    ? sendTextMessage(chatId, text!)
-    : sendMediaMessage(chatId, text, media, replyTo);
+    ? sendTextMessage(chatId, text!, hidden)
+    : sendMediaMessage(chatId, text, media, replyTo, hidden);
 }
 
 /**
@@ -858,9 +887,12 @@ function isKept(item: EditMediaItem | EditVoiceItem): item is { attachmentId: st
  * же. Отдаёт сообщение, каким оно стало.
  */
 export async function editMessage(messageId: string, input: EditMessageInput): Promise<Message> {
+  const trimmed = trimWithRanges(input.text, input.hidden ?? []);
   const { error } = await supabase.rpc('edit_message', {
     target_message: messageId,
-    message_text: input.text.trim(),
+    message_text: trimmed.text,
+    // Скрытое — заново вместе с текстом: сдвинул его клиент по ходу правки.
+    hidden: hiddenRangesJson(trimmed.text ? trimmed.ranges : []),
     media: input.media.map((item) =>
       isKept(item)
         ? { attachment_id: item.attachmentId }
@@ -1125,7 +1157,10 @@ function toIncoming(payload: unknown): IncomingMessage | null {
     chatId: row.chat_id,
     authorId: typeof row.author_id === 'string' ? row.author_id : null,
     authorName: typeof row.author_name === 'string' ? row.author_name : 'Без имени',
-    authorOpaque: opaqueFlag(typeof row.author_id === 'string' ? row.author_id : null, row.author_opaque === true),
+    authorOpaque: opaqueFlag(
+      typeof row.author_id === 'string' ? row.author_id : null,
+      row.author_opaque === true,
+    ),
     messageKind: typeof row.kind === 'string' ? row.kind : null,
     text: typeof row.text === 'string' ? row.text : null,
     channel: toIncomingChannel(row),
@@ -1469,4 +1504,26 @@ export async function countChatSearch(
   if (error) throw error;
 
   return data ?? 0;
+}
+
+/**
+ * Скрыть кусок своего сообщения от зрителей или показать снова — функцией
+ * `set_message_hidden`: что сообщение моё и кусок внутри текста, решает база.
+ * Это не правка: ни ревизии, ни «изменено». Отдаёт скрытое после изменения.
+ */
+export async function setMessageHidden(
+  messageId: string,
+  range: HiddenRange,
+  hide: boolean,
+): Promise<HiddenRange[]> {
+  const { data, error } = await supabase.rpc('set_message_hidden', {
+    target_message: messageId,
+    range_start: range.start,
+    range_end: range.end,
+    hide,
+  });
+
+  if (error) throw error;
+
+  return parseHiddenRanges(data);
 }

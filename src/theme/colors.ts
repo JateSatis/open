@@ -65,6 +65,17 @@ export const Colors = {
      */
     fragmentHighlightOnPrimary: 'rgba(0, 28, 110, 0.42)',
     /**
+     * Кусок, скрытый автором от зрителей, — у участника: тихая пометка под
+     * текстом, текст читается.
+     */
+    hiddenTextMark: 'rgba(96, 100, 108, 0.16)',
+    /** То же в своём облачке, на синем. */
+    hiddenTextMarkOnPrimary: 'rgba(255, 255, 255, 0.24)',
+    /** «Замазка» скрытого у зрителя — сплошная, глифов под ней не видно. */
+    hiddenTextSpoiler: '#B9BBC2',
+    /** То же в своём облачке. */
+    hiddenTextSpoilerOnPrimary: '#8DB6F9',
+    /**
      * Кластер фрагментов на тексте в режиме фрагментов — в чужом облачке.
      * Нейтральный серо-голубой: тише синего выделения и не тёплый, как кусок
      * по цитате.
@@ -153,6 +164,10 @@ export const Colors = {
     textSelectionOnPrimary: 'rgba(255, 255, 255, 0.34)',
     fragmentHighlight: 'rgba(255, 190, 0, 0.3)',
     fragmentHighlightOnPrimary: 'rgba(0, 20, 80, 0.5)',
+    hiddenTextMark: 'rgba(176, 180, 186, 0.18)',
+    hiddenTextMarkOnPrimary: 'rgba(255, 255, 255, 0.2)',
+    hiddenTextSpoiler: '#4A4D53',
+    hiddenTextSpoilerOnPrimary: '#6E9EEA',
     clusterHighlight: 'rgba(150, 172, 205, 0.24)',
     clusterHighlightOnPrimary: 'rgba(214, 226, 245, 0.24)',
     bubbleGlow: 'rgba(90, 155, 255, 0.7)',

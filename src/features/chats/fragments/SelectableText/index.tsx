@@ -14,6 +14,8 @@ import {
 } from '@/features/chats/fragments/fragmentStore';
 import { registerSelectableText } from '@/features/chats/fragments/selectableTexts';
 import { caretAt, rangeRects } from '@/features/chats/fragments/textGeometry';
+import { HiddenTextSpans } from '@/features/chats/HiddenTextSpans';
+import type { HiddenRange } from '@/features/chats/hiddenText';
 import { useTheme } from '@/hooks/use-theme';
 import { Sizes, Typography } from '@/theme';
 
@@ -31,7 +33,13 @@ export type SelectableTextProps = {
   amMember: boolean;
   /** Показываемых кластеров у сообщения: есть — в режиме они подсвечиваются. */
   clustersCount?: number;
+  /** Скрытое автором от зрителей — code points. */
+  hiddenRanges?: HiddenRange[];
+  /** Сообщение моё: в меню выделения — «Скрыть от зрителей». */
+  canHide?: boolean;
 };
+
+const NO_RANGES: HiddenRange[] = [];
 
 /**
  * Текст облачка, в котором можно выделить кусок. Выделение — своё, не
@@ -47,6 +55,8 @@ export function SelectableText({
   chatId,
   amMember,
   clustersCount = 0,
+  hiddenRanges = NO_RANGES,
+  canHide = false,
 }: SelectableTextProps) {
   const theme = useTheme();
   const ref = useRef<RNText>(null);
@@ -59,8 +69,16 @@ export function SelectableText({
   useEffect(() => {
     if (!rowKey) return;
 
-    return registerSelectableText(rowKey, { ref, text, messageId, chatId, amMember });
-  }, [amMember, chatId, messageId, rowKey, text]);
+    return registerSelectableText(rowKey, {
+      ref,
+      text,
+      messageId,
+      chatId,
+      amMember,
+      hiddenRanges,
+      canHide,
+    });
+  }, [amMember, canHide, chatId, hiddenRanges, messageId, rowKey, text]);
 
   const content = (
     <>
@@ -79,7 +97,11 @@ export function SelectableText({
         ref={ref}
         style={[Typography.body, { color: isOwn ? theme.primaryText : theme.text }]}
       >
-        {text}
+        {hiddenRanges.length > 0 ? (
+          <HiddenTextSpans text={text} ranges={hiddenRanges} isOwn={isOwn} />
+        ) : (
+          text
+        )}
       </RNText>
       {/* Пока выделение тянут словами, ручек нет: они появятся, когда палец отпустят. */}
       {selection && selection.dragging !== 'words' ? (
