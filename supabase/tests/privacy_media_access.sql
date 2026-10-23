@@ -57,6 +57,10 @@ insert into auth.users (id, email, raw_user_meta_data, aud, role) values
   ('00000000-0000-4000-8000-0000000005e1', 'p5e@test.local', '{"full_name":"Мед Эльза"}', 'authenticated', 'authenticated'),
   ('00000000-0000-4000-8000-0000000005e2', 'p5q@test.local', '{"full_name":"Мед Кира"}', 'authenticated', 'authenticated');
 
+-- Задержка публикации для зрителей (этап 6) у защитных настроек включена — здесь проверяется не она.
+update public.privacy_settings set public_message_visibility_delay = 'off'
+where user_id in (select id from auth.users where email like '%@test.local');
+
 do $$
 declare
   a uuid := '00000000-0000-4000-8000-0000000005a1';

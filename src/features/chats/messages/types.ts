@@ -7,6 +7,7 @@ import type {
 } from '@/api/chats';
 import type { DraftPop } from '@/features/chats/composerDraftStore';
 import type { LocalMedia, OutgoingMedia } from '@/features/media';
+import type { HiddenRange } from '@/features/chats/hiddenText';
 
 export type DeliveryStatus = 'sending' | 'sent' | 'failed';
 
@@ -43,6 +44,8 @@ export type EditVoice =
 /** Итог правки до загрузки новых файлов. */
 export type EditResult = {
   text: string;
+  /** Скрытое от зрителей в новом тексте — code points. */
+  hidden?: HiddenRange[];
   /** Оставленные фото и видео — по порядку. */
   kept: MessageAttachment[];
   /** Добавленные из шита медиа — в конец альбома. */
@@ -61,7 +64,14 @@ export type ForwardItem = { original: IslandOriginal };
 
 /** Что уходит на сервер одной отправкой: текст с альбомом, голосовое или пересылка. */
 export type Outgoing =
-  | { type: 'post'; text: string; media: OutgoingMedia[]; replyTo: string[] }
+  | {
+      type: 'post';
+      text: string;
+      media: OutgoingMedia[];
+      replyTo: string[];
+      /** Скрытое от зрителей в `text` — code points. */
+      hidden?: HiddenRange[];
+    }
   | { type: 'voice'; voice: LocalMedia; replyTo: string[] }
   /** Пост канала с попом; новый поп публикуется той же транзакцией. */
   | { type: 'pop_post'; text: string; replyTo: string[]; channelId: string; pop: DraftPop }

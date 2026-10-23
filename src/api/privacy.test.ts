@@ -66,7 +66,8 @@ describe('privacy api', () => {
       friendsListVisibility: 'nobody',
       identityVisibility: 'friends',
       identityAlias: 'Илья Муромцев',
-      // Чего сервер не прислал — защитное «никто».
+      // Чего сервер не прислал — защитное «никто» и задержка.
+      publicDelay: 'random_delay',
       activityStatusVisibility: 'nobody',
       messageTimeVisibility: 'nobody',
       searchVisibility: 'nobody',

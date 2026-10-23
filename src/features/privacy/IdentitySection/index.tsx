@@ -2,7 +2,12 @@ import { ActivityIndicator, View } from 'react-native';
 
 import { styles } from './styles';
 
-import { AliasLimitError, type EditablePrivacySetting, type PrivacySettings, type Visibility } from '@/api/privacy';
+import {
+  AliasLimitError,
+  type VisibilitySetting,
+  type PrivacySettings,
+  type Visibility,
+} from '@/api/privacy';
 import { SettingsRow } from '@/components/SettingsRow';
 import { SettingsSection } from '@/components/SettingsSection';
 import { Text } from '@/components/Text';
@@ -12,7 +17,7 @@ import { useTheme } from '@/hooks/use-theme';
 
 export type IdentitySectionProps = {
   settings: PrivacySettings;
-  onChange: (setting: EditablePrivacySetting) => (value: Visibility) => void;
+  onChange: (setting: VisibilitySetting) => (value: Visibility) => void;
 };
 
 /**

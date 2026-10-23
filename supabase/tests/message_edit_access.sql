@@ -128,12 +128,18 @@ language sql as $$ insert into results (name, ok, detail) values (name, ok, deta
 create function pg_temp.say(chat uuid, author uuid, body text, at timestamptz) returns uuid
 language plpgsql as $$
 declare
-  id uuid;
+  new_id uuid;
+  was text := current_setting('role');
 begin
   insert into public.messages (chat_id, author_id, kind, text, created_at)
   values (chat, author, 'text', body, at)
-  returning messages.id into id;
-  return id;
+  returning messages.id into new_id;
+  -- Время задано задним числом: зрители видят сообщение с того же момента
+  -- (этап 6 — время публикации ставит триггер, по часам вставки).
+  perform set_config('role', 'postgres', true);
+  update public.messages m set public_at = at where m.id = new_id;
+  perform set_config('role', was, true);
+  return new_id;
 end;
 $$;
 
@@ -154,6 +160,10 @@ update public.privacy_settings set
   profile_identity_masking = 'everyone',
   dialogue_participant_name_masking = 'everyone',
   avatar_visibility = 'everyone'
+where user_id in (select id from auth.users where email like '%@test.local');
+
+-- Задержка публикации для зрителей (этап 6) у защитных настроек включена — здесь проверяется не она.
+update public.privacy_settings set public_message_visibility_delay = 'off'
 where user_id in (select id from auth.users where email like '%@test.local');
 
 do $$

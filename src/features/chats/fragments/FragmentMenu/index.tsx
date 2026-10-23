@@ -9,12 +9,14 @@ import { styles } from './styles';
 
 import type { Fragment } from '@/api/fragments';
 import type { MessageReactions } from '@/api/reactionCounts';
+import { Text } from '@/components/Text';
 import { sendFragmentReaction } from '@/features/chats/fragments/fragmentReactions';
 import {
   clearTextSelection,
   useTextSelection,
   type TextSelection,
 } from '@/features/chats/fragments/fragmentStore';
+import { hiddenActionFor, toggleHiddenSelection } from '@/features/chats/fragments/hideSelection';
 import { boundsOf, rangeRects } from '@/features/chats/fragments/textGeometry';
 import { toServerRange } from '@/features/chats/fragments/textOffsets';
 import { myFragmentOn, useMessageFragments } from '@/features/chats/fragments/useMessageFragments';
@@ -97,7 +99,9 @@ function MenuBody({
     void Promise.all([
       new Promise<AnchorRect | null>((resolve) =>
         hostRef.current
-          ? hostRef.current.measureInWindow((x, y, width, height) => resolve({ x, y, width, height }))
+          ? hostRef.current.measureInWindow((x, y, width, height) =>
+              resolve({ x, y, width, height }),
+            )
           : resolve(null),
       ),
       measureViewport(),
@@ -128,7 +132,20 @@ function MenuBody({
     clearTextSelection();
   };
 
-  const width = geometry.width + Spacing.two + Sizes.fragmentCommentButton;
+  // Скрытие — по реестру текста, на момент открытия меню.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const hiddenAction = useMemo(() => hiddenActionFor(selection), []);
+  const canToggleHidden = hiddenAction === 'hide' || hiddenAction === 'show';
+  const width =
+    geometry.width +
+    Spacing.two +
+    Sizes.fragmentCommentButton +
+    (canToggleHidden ? Spacing.two + Sizes.fragmentCommentButton : 0);
+
+  const toggleHidden = () => {
+    clearTextSelection();
+    void toggleHiddenSelection(queryClient, selection, hiddenAction === 'hide');
+  };
   const place =
     frame && bounds
       ? fragmentMenuLayout({
@@ -155,7 +172,10 @@ function MenuBody({
         left: selection.textInWindow.x - frame.host.x - Sizes.selectionHandleHit,
         top: selection.textInWindow.y - frame.host.y - Sizes.selectionHandleHit,
         right:
-          selection.textInWindow.x - frame.host.x + selection.geometry.width + Sizes.selectionHandleHit,
+          selection.textInWindow.x -
+          frame.host.x +
+          selection.geometry.width +
+          Sizes.selectionHandleHit,
         bottom:
           selection.textInWindow.y -
           frame.host.y +
@@ -171,7 +191,12 @@ function MenuBody({
         ? [
             { left: 0, right: 0, top: 0, height: Math.max(0, hole.top) },
             { left: 0, right: 0, top: hole.bottom, bottom: 0 },
-            { left: 0, width: Math.max(0, hole.left), top: hole.top, height: hole.bottom - hole.top },
+            {
+              left: 0,
+              width: Math.max(0, hole.left),
+              top: hole.top,
+              height: hole.bottom - hole.top,
+            },
             { left: hole.right, right: 0, top: hole.top, height: hole.bottom - hole.top },
           ].map((area, index) => (
             <Pressable
@@ -195,31 +220,74 @@ function MenuBody({
             { left: place.left - frame.host.x, top: place.top - frame.host.y, width },
           ]}
         >
-          <ReactionPicker
-            geometry={geometry}
-            selected={mine?.mine ?? null}
-            expanded={expanded}
-            maxHeight={frame.viewport.y + frame.viewport.height - place.top}
-            onToggleExpanded={() => setExpanded((open) => !open)}
-            onSelect={select}
-            style={[styles.picker, { backgroundColor: theme.backgroundElement }]}
-          />
-          <Pressable
-            testID="fragment-comment"
-            accessibilityRole="button"
-            accessibilityLabel="Добавить комментарий"
-            onPress={() => onComment(selection)}
-            style={({ pressed }) => [
-              styles.comment,
-              { backgroundColor: pressed ? theme.backgroundSelected : theme.backgroundElement },
-            ]}
-          >
-            <SymbolView
-              name={{ ios: 'bubble.left', android: 'chat_bubble_outline', web: 'chat_bubble_outline' }}
-              size={Spacing.four}
-              tintColor={theme.text}
-            />
-          </Pressable>
+          {hiddenAction === 'blocked' ? (
+            <View
+              testID="fragment-hidden-blocked"
+              style={[styles.blocked, { backgroundColor: theme.backgroundElement }]}
+            >
+              <Text variant="small" color="textSecondary" numberOfLines={1}>
+                Скрыто автором от зрителей
+              </Text>
+            </View>
+          ) : (
+            <>
+              <ReactionPicker
+                geometry={geometry}
+                selected={mine?.mine ?? null}
+                expanded={expanded}
+                maxHeight={frame.viewport.y + frame.viewport.height - place.top}
+                onToggleExpanded={() => setExpanded((open) => !open)}
+                onSelect={select}
+                style={[styles.picker, { backgroundColor: theme.backgroundElement }]}
+              />
+              <Pressable
+                testID="fragment-comment"
+                accessibilityRole="button"
+                accessibilityLabel="Добавить комментарий"
+                onPress={() => onComment(selection)}
+                style={({ pressed }) => [
+                  styles.comment,
+                  { backgroundColor: pressed ? theme.backgroundSelected : theme.backgroundElement },
+                ]}
+              >
+                <SymbolView
+                  name={{
+                    ios: 'bubble.left',
+                    android: 'chat_bubble_outline',
+                    web: 'chat_bubble_outline',
+                  }}
+                  size={Spacing.four}
+                  tintColor={theme.text}
+                />
+              </Pressable>
+              {canToggleHidden ? (
+                <Pressable
+                  testID="fragment-hide"
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    hiddenAction === 'hide' ? 'Скрыть от зрителей' : 'Показать зрителям'
+                  }
+                  onPress={toggleHidden}
+                  style={({ pressed }) => [
+                    styles.hide,
+                    {
+                      backgroundColor: pressed ? theme.backgroundSelected : theme.backgroundElement,
+                    },
+                  ]}
+                >
+                  <SymbolView
+                    name={
+                      hiddenAction === 'hide'
+                        ? { ios: 'eye.slash', android: 'visibility_off', web: 'visibility_off' }
+                        : { ios: 'eye', android: 'visibility', web: 'visibility' }
+                    }
+                    size={Spacing.four}
+                    tintColor={theme.text}
+                  />
+                </Pressable>
+              ) : null}
+            </>
+          )}
         </Animated.View>
       ) : null}
     </View>

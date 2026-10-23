@@ -11,6 +11,9 @@ type PrivacyRow = Database['public']['Functions']['my_privacy_settings']['Return
 /** Видимость: всем, только друзьям, никому. */
 export type Visibility = 'everyone' | 'friends' | 'nobody';
 
+/** Задержка публикации для зрителей: нет или случайная, 1–30 минут. */
+export type PublicDelay = 'off' | 'random_delay';
+
 export type PrivacySettings = {
   /** `YYYY-MM-DD`; null — дату ещё не указали. */
   birthDate: string | null;
@@ -32,12 +35,17 @@ export type PrivacySettings = {
    * участники этих чатов видят всегда.
    */
   mediaVisibility: Visibility;
+  /**
+   * Зрители (не участники чата) видят мои сообщения и всё, что написано в
+   * чате после них, с задержкой. Участники — сразу.
+   */
+  publicDelay: PublicDelay;
   /** Мой псевдоним для тех, от кого скрыто имя. */
   identityAlias: string;
 };
 
-/** Настройки, которые клиент уже умеет менять. Остальные ждут этапа 6. */
-export type EditablePrivacySetting =
+/** Настройки видимости — три состояния. */
+export type VisibilitySetting =
   | 'friends_list_visibility'
   | 'activity_status_visibility'
   | 'message_activity_metadata_visibility'
@@ -46,6 +54,13 @@ export type EditablePrivacySetting =
   | 'dialogue_participant_name_masking'
   | 'avatar_visibility'
   | 'dialogue_media_visibility';
+
+/** Настройки, которые клиент умеет менять, и их значения. */
+export type PrivacySettingValues = { [K in VisibilitySetting]: Visibility } & {
+  public_message_visibility_delay: PublicDelay;
+};
+
+export type EditablePrivacySetting = keyof PrivacySettingValues;
 
 /** Будущая дата. */
 export const BIRTH_DATE_IN_FUTURE_CODE = 'OPN03';
@@ -90,6 +105,8 @@ function toSettings(row: PrivacyRow): PrivacySettings {
     dialogueNameVisibility: toVisibility(row.dialogue_participant_name_masking),
     avatarVisibility: toVisibility(row.avatar_visibility),
     mediaVisibility: toVisibility(row.dialogue_media_visibility),
+    // Неизвестное значение — защитное: задержка включена.
+    publicDelay: row.public_message_visibility_delay === 'off' ? 'off' : 'random_delay',
     identityAlias: row.identity_alias,
   };
 }
@@ -118,9 +135,9 @@ export async function setBirthDate(birthDate: string): Promise<void> {
   throw error;
 }
 
-export async function setPrivacySetting(
-  key: EditablePrivacySetting,
-  value: Visibility,
+export async function setPrivacySetting<K extends EditablePrivacySetting>(
+  key: K,
+  value: PrivacySettingValues[K],
 ): Promise<void> {
   const { error } = await supabase.rpc('set_privacy_setting', { p_key: key, p_value: value });
 

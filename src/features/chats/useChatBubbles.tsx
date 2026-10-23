@@ -248,7 +248,14 @@ export function useChatBubbles({
           // Выделять можно только в самой строке, не в её копии под меню.
           selectableText={
             interactive
-              ? { rowKey, messageId: item.id, chatId: item.chatId, amMember: isMember }
+              ? {
+                  rowKey,
+                  messageId: item.id,
+                  chatId: item.chatId,
+                  amMember: isMember,
+                  // Скрыть от зрителей можно только своё; в канале — некому.
+                  canHide: !isPost && item.authorId === currentUserId,
+                }
               : undefined
           }
         />
@@ -326,6 +333,7 @@ export function useChatBubbles({
                   messageId: original.id,
                   chatId: original.chatId,
                   amMember: home.amMember,
+                  canHide: authorId === currentUserId && !original.chat?.isChannelPosts,
                 }
               : undefined
           }

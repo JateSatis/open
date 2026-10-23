@@ -88,6 +88,8 @@ export type ChatFooterProps = {
     inputRef: RefObject<TextInput | null>;
     /** Экран чата на виду: под открытым поверх экраном панель эмодзи не держится. */
     screenFocused?: boolean;
+    /** Скрытое от зрителей в тексте черновика; в канале — нет. */
+    hidden?: MessageComposerProps['hidden'];
     /** Поп, прикреплённый к посту канала. С ним пост уходит и без текста. */
     pop?: Pick<PopAttachmentChipProps, 'posterUri' | 'onRemove'> | null;
   } | null;
@@ -149,6 +151,7 @@ export function ChatFooter({
               </>
             }
             edit={composer.edit?.state}
+            hidden={composer.hidden}
             inputRef={composer.inputRef}
             screenFocused={composer.screenFocused}
             onSend={composer.onSend}

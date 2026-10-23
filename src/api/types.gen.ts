@@ -383,6 +383,7 @@ export type Database = {
           last_message_author_id: string | null
           last_message_text: string | null
           owner_id: string | null
+          public_hold_seq: number | null
           request_pending: boolean
           subscribers_count: number
           time_restricted: boolean
@@ -406,6 +407,7 @@ export type Database = {
           last_message_author_id?: string | null
           last_message_text?: string | null
           owner_id?: string | null
+          public_hold_seq?: number | null
           request_pending?: boolean
           subscribers_count?: number
           time_restricted?: boolean
@@ -424,6 +426,7 @@ export type Database = {
           last_message_author_id?: string | null
           last_message_text?: string | null
           owner_id?: string | null
+          public_hold_seq?: number | null
           request_pending?: boolean
           subscribers_count?: number
           time_restricted?: boolean
@@ -792,6 +795,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "chats"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comments_fragment_fkey"
+            columns: ["fragment_id", "message_id"]
+            isOneToOne: false
+            referencedRelation: "fragment_rows"
+            referencedColumns: ["id", "message_id"]
           },
           {
             foreignKeyName: "comments_fragment_fkey"
@@ -1199,6 +1209,13 @@ export type Database = {
             columns: ["decision_id"]
             isOneToOne: false
             referencedRelation: "fragment_cluster_decisions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fragment_cluster_events_fragment_id_fkey"
+            columns: ["fragment_id"]
+            isOneToOne: false
+            referencedRelation: "fragment_rows"
             referencedColumns: ["id"]
           },
           {
@@ -2099,15 +2116,19 @@ export type Database = {
           clusters_count: number
           comments_count: number
           created_at: string
+          delayed_until: string | null
           deleted_at: string | null
           edited_at: string | null
           forwarded_comment_id: string | null
           fragments_count: number
+          hidden_ranges: unknown
           id: string
           kind: string
           member_reactions: Json
           member_unique_views_count: number
           member_views_count: number
+          public_at: string
+          public_text: string | null
           reactions_count: number
           read_at: string | null
           seq: number
@@ -2126,15 +2147,19 @@ export type Database = {
           clusters_count?: number
           comments_count?: number
           created_at?: string
+          delayed_until?: string | null
           deleted_at?: string | null
           edited_at?: string | null
           forwarded_comment_id?: string | null
           fragments_count?: number
+          hidden_ranges?: unknown
           id?: string
           kind: string
           member_reactions?: Json
           member_unique_views_count?: number
           member_views_count?: number
+          public_at?: string
+          public_text?: string | null
           reactions_count?: number
           read_at?: string | null
           seq?: never
@@ -2153,15 +2178,19 @@ export type Database = {
           clusters_count?: number
           comments_count?: number
           created_at?: string
+          delayed_until?: string | null
           deleted_at?: string | null
           edited_at?: string | null
           forwarded_comment_id?: string | null
           fragments_count?: number
+          hidden_ranges?: unknown
           id?: string
           kind?: string
           member_reactions?: Json
           member_unique_views_count?: number
           member_views_count?: number
+          public_at?: string
+          public_text?: string | null
           reactions_count?: number
           read_at?: string | null
           seq?: never
@@ -2384,7 +2413,6 @@ export type Database = {
           avatar_visibility: string
           birth_date: string | null
           created_at: string
-          dialogue_hidden_text_visibility: string
           dialogue_media_visibility: string
           dialogue_participant_name_masking: string
           friends_list_visibility: string
@@ -2405,7 +2433,6 @@ export type Database = {
           avatar_visibility: string
           birth_date?: string | null
           created_at?: string
-          dialogue_hidden_text_visibility: string
           dialogue_media_visibility: string
           dialogue_participant_name_masking: string
           friends_list_visibility: string
@@ -2426,7 +2453,6 @@ export type Database = {
           avatar_visibility?: string
           birth_date?: string | null
           created_at?: string
-          dialogue_hidden_text_visibility?: string
           dialogue_media_visibility?: string
           dialogue_participant_name_masking?: string
           friends_list_visibility?: string
@@ -3937,6 +3963,13 @@ export type Database = {
             foreignKeyName: "comments_fragment_fkey"
             columns: ["fragment_id", "message_id"]
             isOneToOne: false
+            referencedRelation: "fragment_rows"
+            referencedColumns: ["id", "message_id"]
+          },
+          {
+            foreignKeyName: "comments_fragment_fkey"
+            columns: ["fragment_id", "message_id"]
+            isOneToOne: false
             referencedRelation: "message_fragments"
             referencedColumns: ["id", "message_id"]
           },
@@ -3977,6 +4010,54 @@ export type Database = {
           },
         ]
       }
+      fragment_rows: {
+        Row: {
+          anchor_state: string | null
+          chat_id: string | null
+          created_at: string | null
+          end_offset: number | null
+          exact_text: string | null
+          id: string | null
+          message_id: string | null
+          start_offset: number | null
+        }
+        Insert: {
+          anchor_state?: string | null
+          chat_id?: string | null
+          created_at?: string | null
+          end_offset?: number | null
+          exact_text?: never
+          id?: string | null
+          message_id?: string | null
+          start_offset?: number | null
+        }
+        Update: {
+          anchor_state?: string | null
+          chat_id?: string | null
+          created_at?: string | null
+          end_offset?: number | null
+          exact_text?: never
+          id?: string | null
+          message_id?: string | null
+          start_offset?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "message_fragments_message_fkey"
+            columns: ["message_id", "chat_id"]
+            isOneToOne: false
+            referencedRelation: "message_rows"
+            referencedColumns: ["id", "chat_id"]
+          },
+          {
+            foreignKeyName: "message_fragments_message_fkey"
+            columns: ["message_id", "chat_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id", "chat_id"]
+          },
+        ]
+      }
       message_rows: {
         Row: {
           author_avatar_url: string | null
@@ -3994,6 +4075,7 @@ export type Database = {
           forwarded_comment_id: string | null
           fragments_count: number | null
           hidden: boolean | null
+          hidden_ranges: Json | null
           id: string | null
           kind: string | null
           member_reactions: Json | null
@@ -4159,6 +4241,13 @@ export type Database = {
       alias_random: { Args: never; Returns: string }
       alias_surnames: { Args: never; Returns: string[] }
       am_chat_member: { Args: { p_chat: string }; Returns: boolean }
+      apply_message_hidden: {
+        Args: {
+          m: Database["public"]["Tables"]["messages"]["Row"]
+          ranges: unknown
+        }
+        Returns: undefined
+      }
       apply_privacy_defaults: {
         Args: { p_minor: boolean; p_user: string }
         Returns: undefined
@@ -4258,6 +4347,50 @@ export type Database = {
           voices: number
         }[]
       }
+      chat_last_message_time: {
+        Args: { p_chat: string; p_viewer: string }
+        Returns: string
+      }
+      chat_last_seen_message: {
+        Args: { p_chat: string; p_viewer: string }
+        Returns: {
+          author_id: string | null
+          chat_id: string
+          clusters_count: number
+          comments_count: number
+          created_at: string
+          delayed_until: string | null
+          deleted_at: string | null
+          edited_at: string | null
+          forwarded_comment_id: string | null
+          fragments_count: number
+          hidden_ranges: unknown
+          id: string
+          kind: string
+          member_reactions: Json
+          member_unique_views_count: number
+          member_views_count: number
+          public_at: string
+          public_text: string | null
+          reactions_count: number
+          read_at: string | null
+          seq: number
+          source_chat_id: string | null
+          stream_id: string | null
+          system_event: string | null
+          system_user_id: string | null
+          text: string | null
+          unique_views_count: number
+          views_count: number
+          visitor_reactions: Json
+        }
+        SetofOptions: {
+          from: "*"
+          to: "messages"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       chat_live_stream: {
         Args: { target_chat: string }
         Returns: {
@@ -4296,6 +4429,7 @@ export type Database = {
         Args: { p_chat: string; p_viewer: string }
         Returns: string
       }
+      chat_public_hold: { Args: { p_chat: string }; Returns: number }
       chat_read_up_to:
         | {
             Args: { "": Database["public"]["Views"]["chat_rows"]["Row"] }
@@ -4319,6 +4453,14 @@ export type Database = {
           owner_id: string
         }[]
       }
+      chat_seen: {
+        Args: { p_chat: string; p_viewer: string }
+        Returns: {
+          hold: number
+          member: boolean
+        }[]
+      }
+      chat_signal_topic: { Args: { p_chat: string }; Returns: string }
       chat_time_restricted_now: { Args: { p_chat: string }; Returns: boolean }
       chat_time_visible: { Args: { p_chat: string }; Returns: boolean }
       chat_title_for: {
@@ -4431,6 +4573,7 @@ export type Database = {
       }
       edit_message: {
         Args: {
+          hidden?: Json
           media?: Json
           message_text: string
           target_message: string
@@ -4551,6 +4694,7 @@ export type Database = {
         Args: { fragment: Json; target_message: string }
         Returns: string
       }
+      fragment_seen_text: { Args: { p_fragment: string }; Returns: string }
       fragment_set_ids: {
         Args: {
           area_end: number
@@ -4590,6 +4734,8 @@ export type Database = {
         Args: { p_other: string; p_viewer: string }
         Returns: string
       }
+      hidden_ranges_from_json: { Args: { value: Json }; Returns: unknown }
+      hidden_ranges_json: { Args: { ranges: unknown }; Returns: Json }
       identity_allows: {
         Args: { p_person: string; p_value: string; p_viewer: string }
         Returns: boolean
@@ -4692,6 +4838,7 @@ export type Database = {
           forwarded_comment_id: string | null
           fragments_count: number | null
           hidden: boolean | null
+          hidden_ranges: Json | null
           id: string | null
           kind: string | null
           member_reactions: Json | null
@@ -5035,6 +5182,10 @@ export type Database = {
         Returns: undefined
       }
       mark_seen: { Args: { online?: boolean }; Returns: undefined }
+      mask_hidden_text: {
+        Args: { body: string; ranges: unknown }
+        Returns: string
+      }
       media_object_owned: {
         Args: {
           p_bucket: string
@@ -5084,17 +5235,44 @@ export type Database = {
           subject_opaque: boolean
         }[]
       }
-      message_preview_text: {
-        Args: { m: Database["public"]["Tables"]["messages"]["Row"] }
+      message_preview_text:
+        | {
+            Args: { m: Database["public"]["Tables"]["messages"]["Row"] }
+            Returns: string
+          }
+        | {
+            Args: {
+              m: Database["public"]["Tables"]["messages"]["Row"]
+              p_member: boolean
+            }
+            Returns: string
+          }
+      message_seen: {
+        Args: { p_message: string }
+        Returns: {
+          member: boolean
+          seen: boolean
+        }[]
+      }
+      message_seen_text: {
+        Args: { body: string; p_member: boolean; public_body: string }
         Returns: string
       }
       message_sent_now: {
         Args: { p_chat?: string; p_message: string }
         Returns: boolean
       }
+      message_seq_seen: {
+        Args: { p_chat: string; p_seq: number; p_viewer: string }
+        Returns: boolean
+      }
       message_shown_in_chat: {
         Args: { target_chat: string; target_message: string; via: string }
         Returns: boolean
+      }
+      message_signal_topic: {
+        Args: { p_chat: string; p_seq: number }
+        Returns: string
       }
       message_stream_host: { Args: { p_message: string }; Returns: string }
       message_tombstones: {
@@ -5136,7 +5314,6 @@ export type Database = {
           avatar_visibility: string
           birth_date: string | null
           created_at: string
-          dialogue_hidden_text_visibility: string
           dialogue_media_visibility: string
           dialogue_participant_name_masking: string
           friends_list_visibility: string
@@ -5421,7 +5598,6 @@ export type Database = {
           avatar_visibility: string
           birth_date: string | null
           created_at: string
-          dialogue_hidden_text_visibility: string
           dialogue_media_visibility: string
           dialogue_participant_name_masking: string
           friends_list_visibility: string
@@ -5454,6 +5630,13 @@ export type Database = {
         }[]
       }
       public_media_path: { Args: { p_url: string }; Returns: string }
+      publish_message_to_viewers: {
+        Args: {
+          m: Database["public"]["Tables"]["messages"]["Row"]
+          signal_chat: boolean
+        }
+        Returns: undefined
+      }
       publish_pop: {
         Args: {
           also_post?: boolean
@@ -5471,6 +5654,7 @@ export type Database = {
       purge_friend_request_log: { Args: never; Returns: number }
       purge_search_request_log: { Args: never; Returns: undefined }
       purge_user_presence: { Args: never; Returns: undefined }
+      random_publish_delay_seconds: { Args: never; Returns: number }
       reaction_counts_add: {
         Args: { counts: Json; delta: number; emoji: string }
         Returns: Json
@@ -5503,6 +5687,7 @@ export type Database = {
           target_kind: string
         }[]
       }
+      reaction_target_seen: { Args: { p_reaction: string }; Returns: boolean }
       reactors:
         | {
             Args: { "": Database["public"]["Views"]["comment_rows"]["Row"] }
@@ -5665,6 +5850,8 @@ export type Database = {
         }
         Returns: string
       }
+      release_chat_messages: { Args: { p_chat: string }; Returns: undefined }
+      release_public_messages: { Args: never; Returns: undefined }
       remember_installation: {
         Args: { p_installation: string; p_user: string }
         Returns: undefined
@@ -5873,6 +6060,7 @@ export type Database = {
       send_friend_request: { Args: { p_user: string }; Returns: string }
       send_media_message: {
         Args: {
+          hidden?: Json
           media: Json
           message_text: string
           reply_to?: string[]
@@ -5985,6 +6173,15 @@ export type Database = {
           fragment_id: string
         }[]
       }
+      set_message_hidden: {
+        Args: {
+          hide: boolean
+          range_end: number
+          range_start: number
+          target_message: string
+        }
+        Returns: Json
+      }
       set_pop_not_interested: {
         Args: { target_pop: string; value: boolean }
         Returns: undefined
@@ -6053,6 +6250,7 @@ export type Database = {
         Args: { since: string; target_channel: string; viewer: string }
         Returns: number
       }
+      target_seen: { Args: { p_target: string }; Returns: boolean }
       touch_device: { Args: { p_installation_id: string }; Returns: boolean }
       unblock_user: { Args: { p_user: string }; Returns: undefined }
       unpin_comment: { Args: { target: string }; Returns: undefined }

@@ -107,6 +107,9 @@ export function DialogueRequestScreen({ userId }: { userId: string }) {
           onChangeText={(value) => setText(value.slice(0, DIALOGUE_REQUEST_MAX_LENGTH))}
           canSend
           placeholder="Текст заявки"
+          // Заявку видят двое, но после принятия она — первое сообщение публичного диалога.
+          audience="Когда заявку примут, это сообщение увидят все, кто откроет чат."
+          hintAudience="увидят все, когда заявку примут"
           // Второе нажатие, пока первое в пути, создало бы ту же заявку дважды.
           onSend={() => {
             if (!send.isPending) send.mutate(text);

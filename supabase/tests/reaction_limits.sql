@@ -13,6 +13,10 @@ begin;
 create temp table results (step int, name text, ok boolean, detail text);
 create temp table people (n int, id uuid);
 
+-- Задержка публикации для зрителей (этап 6) у защитных настроек включена — здесь проверяется не она.
+update public.privacy_settings set public_message_visibility_delay = 'off'
+where user_id in (select id from auth.users where email like '%@test.local');
+
 do $$
 declare
   u uuid;
@@ -31,6 +35,10 @@ begin
             jsonb_build_object('full_name', 'Тест ' || i));
     insert into people values (i, u);
   end loop;
+
+  -- Задержка публикации (этап 6) у защитных настроек включена — здесь не она.
+  update public.privacy_settings set public_message_visibility_delay = 'off'
+  where user_id in (select id from people);
 
   insert into public.chats (id, kind) values (chat, 'group');
   -- 1..22 — участники, 23..32 — посетители.

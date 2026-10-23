@@ -39,6 +39,7 @@ const TEEN: PrivacySettings = {
   avatarVisibility: 'friends',
   mediaVisibility: 'friends',
   identityAlias: 'Илья Муромцев',
+  publicDelay: 'random_delay',
 };
 
 const ADULT: PrivacySettings = {
@@ -52,6 +53,7 @@ const ADULT: PrivacySettings = {
   avatarVisibility: 'everyone',
   mediaVisibility: 'everyone',
   identityAlias: 'Вера Соколова',
+  publicDelay: 'off',
 };
 
 const TITLES = {
@@ -105,7 +107,9 @@ describe('Конфиденциальность и безопасность', () 
       current = {
         ...current,
         ...(setting === 'activity_status_visibility' ? { activityStatusVisibility: value } : {}),
-        ...(setting === 'message_activity_metadata_visibility' ? { messageTimeVisibility: value } : {}),
+        ...(setting === 'message_activity_metadata_visibility'
+          ? { messageTimeVisibility: value }
+          : {}),
         ...(setting === 'account_search_visibility' ? { searchVisibility: value } : {}),
         ...(setting === 'friends_list_visibility' ? { friendsListVisibility: value } : {}),
       } as PrivacySettings;
@@ -145,7 +149,9 @@ describe('Конфиденциальность и безопасность', () 
     await renderWithQuery(<PrivacyRoute />);
 
     expect(await screen.findByText(/во всех диалогах, где вы участвуете/)).toBeTruthy();
-    expect(screen.getByText(/Вы тоже не увидите прочтение у тех, от кого скрыли время/)).toBeTruthy();
+    expect(
+      screen.getByText(/Вы тоже не увидите прочтение у тех, от кого скрыли время/),
+    ).toBeTruthy();
     expect(screen.getByText(/Сам текст переписки остаётся публичным/)).toBeTruthy();
     expect(screen.getByText(/Звонки остаются публичными/)).toBeTruthy();
     expect(screen.queryByText(/никогда|анонимн|гарант/i)).toBeNull();

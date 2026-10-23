@@ -10,7 +10,7 @@ import {
   type EditVoiceItem,
   type MessageAttachment,
 } from '@/api/chats';
-import { editResultKind } from '@/features/chats/editRules';
+import { editResultKind, isEditUnchanged } from '@/features/chats/editRules';
 import {
   errorCode,
   toLocalAttachment,
@@ -36,20 +36,28 @@ import {
 } from '@/features/media';
 import { showNotice } from '@/features/notifications/alertsStore';
 import { isNetworkError } from '@/lib/network';
+import { trimWithRanges } from '@/features/chats/hiddenText';
 
 type EditContext = { queryClient: QueryClient; chatId: string; currentUserId: string | null };
 
 /** Новая версия облачка до ответа сервера — с локальными превью новых файлов. */
 export function optimisticEdit(original: ChatMessage, result: EditResult): ChatMessage {
   const kind = editResultKind(result);
+  const contentChanged = !isEditUnchanged(original, { ...result, hidden: original.hiddenRanges });
   const text = result.text.trim() || null;
   const base = {
     ...original,
     kind,
     text: kind === 'voice' ? null : text,
+    hiddenRanges: kind === 'voice' ? [] : trimWithRanges(result.text, result.hidden ?? []).ranges,
     // Скрытое время чата не появляется и у правки: «изменено» — без часов.
-    editedAt: original.createdAt === null ? null : new Date().toISOString(),
-    edited: true,
+    // Сменилось только скрытое — это не правка: ни «изменено», ни нового времени.
+    editedAt: !contentChanged
+      ? original.editedAt
+      : original.createdAt === null
+        ? null
+        : new Date().toISOString(),
+    edited: contentChanged || original.edited,
     editStatus: 'saving' as const,
   };
 
@@ -115,7 +123,15 @@ export function toEditInput(result: EditResult, uploaded: UploadedMedia[]) {
         ...uploaded.map(toSendMedia),
       ];
 
-  return { text: result.voice ? '' : result.text, media, voice };
+  // Без скрытого — без поля: `editMessage` тогда снимает прежнее.
+  const hidden = result.voice ? [] : (result.hidden ?? []);
+
+  return {
+    text: result.voice ? '' : result.text,
+    ...(hidden.length > 0 ? { hidden } : {}),
+    media,
+    voice,
+  };
 }
 
 /**

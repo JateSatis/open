@@ -185,6 +185,35 @@ describe('EditProfileScreen', () => {
     expect(await findByDisplayValue('maxim')).toBeTruthy();
   });
 
+  it('К3.5 «О себе» с адресом — сначала лист «Это увидят все», «Изменить» не сохраняет', async () => {
+    const { findByPlaceholderText, getByText, findByText, queryByText } = await renderWithQuery(
+      <EditProfileScreen />,
+    );
+
+    await fireEvent.changeText(
+      await findByPlaceholderText('Пара строк о себе'),
+      'живу на Ленина 5, кв 12',
+    );
+    await fireEvent.press(getByText('Сохранить'));
+
+    expect(await findByText('Это увидят все')).toBeTruthy();
+    expect(getByText('Ленина 5, кв 12')).toBeTruthy();
+    // У «О себе» скрытого текста нет — только поправить или сохранить как есть.
+    expect(queryByText('Скрыть найденное от зрителей')).toBeNull();
+
+    await fireEvent.press(getByText('Изменить'));
+    expect(updateMyProfileMock).not.toHaveBeenCalled();
+
+    await fireEvent.press(getByText('Сохранить'));
+    await fireEvent.press(await findByText('Сохранить как есть'));
+
+    await waitFor(() =>
+      expect(updateMyProfileMock.mock.calls[0]?.[0]).toMatchObject({
+        bio: 'живу на Ленина 5, кв 12',
+      }),
+    );
+  });
+
   it('saves the status typed into its field', async () => {
     const { findByPlaceholderText, getByText } = await renderWithQuery(<EditProfileScreen />);
 

@@ -1,6 +1,6 @@
 import { QueryClient } from '@tanstack/react-query';
 
-import { saveEdit } from './editing';
+import { optimisticEdit, saveEdit } from './editing';
 import { messagesQueryKey, type ChatHistory } from './historyCache';
 import { resetPendingEdits, usePendingEdits } from './pendingEdits';
 
@@ -215,5 +215,43 @@ describe('saveEdit', () => {
       text: 'Связь вернулась, но изменения не сохранены',
       action: { label: 'Повторить' },
     });
+  });
+});
+
+describe('optimisticEdit: только скрытое', () => {
+  it('сменилось только скрытое — облачко не помечается «изменено»', () => {
+    const original = {
+      id: 'm1',
+      chatId: 'c1',
+      authorId: 'me',
+      kind: 'text',
+      text: 'учусь: школа 57',
+      hiddenRanges: [],
+      seq: 1,
+      createdAt: '2026-10-23T10:00:00.000Z',
+      editedAt: null,
+      edited: false,
+      editMark: null,
+      attachments: [],
+      replies: [],
+      forward: null,
+      reactions: { members: {}, visitors: {}, mine: null },
+      commentsCount: 0,
+      viewsCount: 0,
+      readAt: null,
+      status: 'sent',
+    } as unknown as Parameters<typeof optimisticEdit>[0];
+
+    const next = optimisticEdit(original, {
+      text: 'учусь: школа 57',
+      hidden: [{ start: 7, end: 15 }],
+      kept: [],
+      added: [],
+      voice: null,
+    });
+
+    expect(next.edited).toBe(false);
+    expect(next.editedAt).toBeNull();
+    expect(next.hiddenRanges).toEqual([{ start: 7, end: 15 }]);
   });
 });

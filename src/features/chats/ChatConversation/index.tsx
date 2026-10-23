@@ -1088,6 +1088,10 @@ export function ChatConversation({
                     // Экран ушёл под другой — панель эмодзи закрывается вместе с ним.
                     screenFocused: isFocused,
                     pop: isEditing ? null : popChip,
+                    // Скрывать от зрителей в посте канала некому: его читают все.
+                    hidden: isPosts
+                      ? undefined
+                      : { ranges: draft.hidden, onChange: draft.setHidden },
                   }
             }
           />

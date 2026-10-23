@@ -4,11 +4,12 @@ import { ActivityIndicator, View } from 'react-native';
 
 import { styles } from './styles';
 
-import type { EditablePrivacySetting, Visibility } from '@/api/privacy';
+import type { VisibilitySetting, Visibility } from '@/api/privacy';
 import { Screen } from '@/components/Screen';
 import { SettingsRow } from '@/components/SettingsRow';
 import { SettingsSection } from '@/components/SettingsSection';
 import { Text } from '@/components/Text';
+import { DelayChoice } from '@/features/privacy/DelayChoice';
 import { IdentitySection } from '@/features/privacy/IdentitySection';
 import { useMyPrivacySettings, useSetPrivacySetting } from '@/features/privacy/queries';
 import { VisibilityChoice } from '@/features/privacy/VisibilityChoice';
@@ -28,7 +29,7 @@ export function PrivacyScreen() {
   const { data, isPending, error } = useMyPrivacySettings();
   const change = useSetPrivacySetting();
   const loadError = describeLoadError(error, 'Не удалось загрузить настройки');
-  const set = (setting: EditablePrivacySetting) => (value: Visibility) =>
+  const set = (setting: VisibilitySetting) => (value: Visibility) =>
     change.mutate({ setting, value });
 
   return (
@@ -61,6 +62,12 @@ export function PrivacyScreen() {
               footer="Время, даты и отметки прочтения скрываются во всех диалогах, где вы участвуете, — у всех их сообщений, не только ваших. Сам текст переписки остаётся публичным. Вы тоже не увидите прочтение у тех, от кого скрыли время."
               value={data.messageTimeVisibility}
               onChange={set('message_activity_metadata_visibility')}
+            />
+            <DelayChoice
+              value={data.publicDelay}
+              onChange={(value) =>
+                change.mutate({ setting: 'public_message_visibility_delay', value })
+              }
             />
           </View>
 
@@ -128,6 +135,17 @@ export function PrivacyScreen() {
               style={styles.message}
             >
               Из фото и видео перед отправкой удаляются геометка, модель телефона и дата съёмки.
+            </Text>
+            {/* Скрытый текст — правило для всех, не настройка: строка без
+                переключателя. */}
+            <Text
+              testID="privacy-hidden-text-note"
+              variant="small"
+              color="textSecondary"
+              style={styles.message}
+            >
+              Часть своего сообщения можно скрыть от зрителей: выделите текст → «Скрыть от
+              зрителей». Участники видят всё.
             </Text>
           </View>
         </>

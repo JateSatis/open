@@ -6,6 +6,7 @@
 import type { MessageKind } from '@/api/chats';
 import { MAX_ALBUM_SIZE } from '@/features/chats/lib/mosaicLayout';
 import type { ChatMessage, EditResult } from '@/features/chats/messages/types';
+import { sameRanges, trimWithRanges } from '@/features/chats/hiddenText';
 
 /** Правка без содержимого — в ней нечего сохранять. */
 export function isEditEmpty(result: EditResult): boolean {
@@ -25,6 +26,14 @@ export function editResultKind(result: EditResult): MessageKind {
 /** Ничего не изменилось — «О» просто выходит из правки. */
 export function isEditUnchanged(original: ChatMessage, result: EditResult): boolean {
   if (result.text.trim() !== (original.text ?? '').trim()) return false;
+  if (
+    !sameRanges(
+      trimWithRanges(result.text, result.hidden ?? []).ranges,
+      original.hiddenRanges ?? [],
+    )
+  ) {
+    return false;
+  }
   if (result.added.length > 0) return false;
 
   if (original.kind === 'voice') {

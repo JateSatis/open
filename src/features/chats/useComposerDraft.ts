@@ -3,17 +3,22 @@ import { useCallback, useEffect, useMemo } from 'react';
 import {
   clearDraft,
   setDraftMode,
+  setDraftHidden,
   setDraftPop,
   setDraftText,
   useChatDraft,
   type ComposerMode,
   type DraftPop,
 } from '@/features/chats/composerDraftStore';
+import type { HiddenRange } from '@/features/chats/hiddenText';
 import { selectedAssets, useMediaSelection, type OutgoingMedia } from '@/features/media';
 
 export type ComposerDraft = {
   text: string;
   setText: (text: string) => void;
+  /** Скрытое от зрителей — code points в `text`. */
+  hidden: HiddenRange[];
+  setHidden: (hidden: HiddenRange[]) => void;
   /** Ответ или пересылка — плашка над полем. */
   mode: ComposerMode | null;
   setMode: (mode: ComposerMode | null) => void;
@@ -33,6 +38,8 @@ export type ComposerDraft = {
   clearMedia: () => void;
 };
 
+const NO_HIDDEN: HiddenRange[] = [];
+
 /**
  * Черновик сообщения — текст, режим (ответ, пересылка) и выбранные фото и
  * видео — общий и для строки ввода под чатом, и для такой же строки внутри
@@ -45,7 +52,7 @@ export type ComposerDraft = {
  * с экраном и уходит.
  */
 export function useComposerDraft(chatId: string): ComposerDraft {
-  const { text, mode, pop = null } = useChatDraft(chatId);
+  const { text, mode, pop = null, hidden = NO_HIDDEN } = useChatDraft(chatId);
   const clearSelection = useMediaSelection((state) => state.clear);
 
   // Выбор живёт в сторе, то есть вне жизненного цикла этого экрана, и
@@ -57,6 +64,7 @@ export function useComposerDraft(chatId: string): ComposerDraft {
   }, [chatId, clearSelection]);
 
   const setText = useCallback((value: string) => setDraftText(chatId, value), [chatId]);
+  const setHidden = useCallback((value: HiddenRange[]) => setDraftHidden(chatId, value), [chatId]);
   const setMode = useCallback(
     (value: ComposerMode | null) => setDraftMode(chatId, value),
     [chatId],
@@ -73,6 +81,8 @@ export function useComposerDraft(chatId: string): ComposerDraft {
     () => ({
       text,
       setText,
+      hidden,
+      setHidden,
       mode,
       setMode,
       pop,
@@ -81,6 +91,6 @@ export function useComposerDraft(chatId: string): ComposerDraft {
       clear,
       clearMedia: clearSelection,
     }),
-    [clear, clearSelection, mode, pop, setMode, setPop, setText, text],
+    [clear, clearSelection, hidden, mode, pop, setHidden, setMode, setPop, setText, text],
   );
 }

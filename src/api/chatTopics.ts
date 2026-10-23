@@ -13,7 +13,10 @@
 // У чата два топика: `chat:<id>` слушает любой, `chat-members:<id>` — только
 // участники (политики `realtime.messages`). Во второй уходит «печатает» того,
 // кто показывает активность только друзьям и пишет в чате, где все остальные
-// — его друзья (`my_typing_audience`).
+// — его друзья, или в чате с задержкой публикации (`my_typing_audience`), и
+// все сигналы о сообщениях, которые зрители ещё не видят: новое, реакции,
+// правки, удаления, закрепы — до публикации их получают только участники.
+// События у топиков одни и те же.
 
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
@@ -120,29 +123,17 @@ function typingFrom(payload: unknown): { userId: string; activity: ChatActivity 
 function openMembers(chatId: string, entry: Entry): RealtimeChannel {
   const channel = supabase.channel(`chat-members:${chatId}`, { config: { private: true } });
 
-  channel
-    .on('broadcast', { event: 'typing' }, ({ payload }) => {
-      const typing = typingFrom(payload);
-
-      if (typing) [...entry.listeners].forEach((l) => l.onTyping?.(typing.userId, typing.activity));
-    })
-    .subscribe();
+  bindSignals(channel, (call) => [...entry.listeners].forEach(call)).subscribe();
 
   return channel;
 }
 
-function open(chatId: string): Entry {
-  // Private channels carry the user's token, which is what the policies on
-  // realtime.messages check; without this the subscription is rejected.
-  void supabase.realtime.setAuth();
-
-  const channel = supabase.channel(`chat:${chatId}`, { config: { private: true } });
-  const entry: Entry = { channel, members: null, listeners: new Set(), closing: null };
-  const each = (call: (listener: ChatTopicListener) => void) =>
-    [...entry.listeners].forEach(call);
-  let joinedBefore = false;
-
-  channel
+/** События чата — одни и те же у общего топика и у топика участников. */
+function bindSignals(
+  channel: RealtimeChannel,
+  each: (call: (listener: ChatTopicListener) => void) => void,
+): RealtimeChannel {
+  return channel
     .on('broadcast', { event: 'new_message' }, () => each((l) => l.onMessage?.()))
     .on('broadcast', { event: 'read' }, () => each((l) => l.onRead?.()))
     .on('broadcast', { event: 'member_joined' }, () => each((l) => l.onMembersChanged?.()))
@@ -193,18 +184,30 @@ function open(chatId: string): Entry {
       const typing = typingFrom(payload);
 
       if (typing) each((l) => l.onTyping?.(typing.userId, typing.activity));
-    })
-    .subscribe((status) => {
-      // Первая подписка — не переподключение: историю в этот момент грузит
-      // сам экран, и дочитывать нечего. Любая следующая — после обрыва, и
-      // флаг при ошибке не сбрасывается: иначе повторное подключение
-      // выглядело бы первым и пропущенное так и осталось бы пропущенным.
-      if (status !== 'SUBSCRIBED') return;
-
-      if (joinedBefore) each((l) => l.onReconnected?.());
-
-      joinedBefore = true;
     });
+}
+
+function open(chatId: string): Entry {
+  // Private channels carry the user's token, which is what the policies on
+  // realtime.messages check; without this the subscription is rejected.
+  void supabase.realtime.setAuth();
+
+  const channel = supabase.channel(`chat:${chatId}`, { config: { private: true } });
+  const entry: Entry = { channel, members: null, listeners: new Set(), closing: null };
+  const each = (call: (listener: ChatTopicListener) => void) => [...entry.listeners].forEach(call);
+  let joinedBefore = false;
+
+  bindSignals(channel, each).subscribe((status) => {
+    // Первая подписка — не переподключение: историю в этот момент грузит
+    // сам экран, и дочитывать нечего. Любая следующая — после обрыва, и
+    // флаг при ошибке не сбрасывается: иначе повторное подключение
+    // выглядело бы первым и пропущенное так и осталось бы пропущенным.
+    if (status !== 'SUBSCRIBED') return;
+
+    if (joinedBefore) each((l) => l.onReconnected?.());
+
+    joinedBefore = true;
+  });
 
   return entry;
 }
@@ -244,7 +247,9 @@ export function acquireChatTopic(
       if (audience === 'none') return;
 
       const target =
-        audience === 'members' ? (current.members ??= openMembers(chatId, current)) : current.channel;
+        audience === 'members'
+          ? (current.members ??= openMembers(chatId, current))
+          : current.channel;
 
       void target.send({
         type: 'broadcast',
@@ -273,4 +278,3 @@ export function acquireChatTopic(
     },
   };
 }
-

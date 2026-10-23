@@ -18,6 +18,8 @@ import {
 } from '@/features/profile/username';
 import { UsernameField } from '@/features/profile/UsernameField';
 import { useUsernameAvailability } from '@/features/profile/useUsernameAvailability';
+import { PersonalDataHint } from '@/features/privacy/PersonalDataHint';
+import { usePersonalDataGuard } from '@/features/privacy/usePersonalDataGuard';
 import { Spacing } from '@/theme';
 
 const styles = StyleSheet.create({
@@ -59,13 +61,18 @@ function EditProfileForm({ initial }: { initial: FormValues }) {
     current: initial.username,
   });
   const update = useUpdateMyProfile();
+  // «О себе» видит каждый, кто откроет профиль: адрес или школа — сначала лист.
+  const guard = usePersonalDataGuard({
+    audience: '«О себе» увидят все, кто откроет ваш профиль.',
+    sendAsIsLabel: 'Сохранить как есть',
+  });
 
   const setField = (field: keyof FormValues) => (value: string) => {
     if (field === 'username') setUsernameError(null);
     setValues((current) => ({ ...current, [field]: value }));
   };
 
-  const onSave = () => {
+  const save = () => {
     const username = values.username.trim();
     const invalid = validateUsername(username);
 
@@ -98,12 +105,15 @@ function EditProfileForm({ initial }: { initial: FormValues }) {
     );
   };
 
+  const onSave = () => guard.check(values.bio, save);
+
   const failedForOtherReason = update.error && !(update.error instanceof UsernameTakenError);
 
   return (
     <KeyboardAvoidingView
       style={styles.form}
-      behavior={Platform.select({ ios: 'padding', default: undefined })}>
+      behavior={Platform.select({ ios: 'padding', default: undefined })}
+    >
       <UsernameField
         testID="profile-username"
         kind="profile"
@@ -139,6 +149,7 @@ function EditProfileForm({ initial }: { initial: FormValues }) {
         style={styles.bio}
         placeholder="Пара строк о себе"
       />
+      <PersonalDataHint text={values.bio} audience="увидят все, кто откроет ваш профиль" />
 
       {failedForOtherReason ? (
         <Text variant="small" color="danger">
@@ -147,6 +158,7 @@ function EditProfileForm({ initial }: { initial: FormValues }) {
       ) : null}
 
       <Button label="Сохранить" loading={update.isPending} onPress={onSave} />
+      {guard.sheet}
     </KeyboardAvoidingView>
   );
 }
