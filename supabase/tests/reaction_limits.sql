@@ -36,6 +36,10 @@ begin
     insert into people values (i, u);
   end loop;
 
+  -- Задержка публикации (этап 6) у защитных настроек включена — здесь не она.
+  update public.privacy_settings set public_message_visibility_delay = 'off'
+  where user_id in (select id from people);
+
   insert into public.chats (id, kind) values (chat, 'group');
   -- 1..22 — участники, 23..32 — посетители.
   insert into public.chat_members (chat_id, user_id) select chat, id from people where n <= 22;
