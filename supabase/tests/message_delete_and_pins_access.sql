@@ -63,6 +63,10 @@ update public.privacy_settings set
   avatar_visibility = 'everyone'
 where user_id in (select id from auth.users where email like '%@test.local');
 
+-- Задержка публикации для зрителей (этап 6) у защитных настроек включена — здесь проверяется не она.
+update public.privacy_settings set public_message_visibility_delay = 'off'
+where user_id in (select id from auth.users where email like '%@test.local');
+
 do $$
 declare
   a uuid := '00000000-0000-4000-8000-0000000000a1';

@@ -131,6 +131,10 @@ insert into auth.users (id, email, raw_user_meta_data, aud, role) values
   ('00000000-0000-4000-8000-0000000004d1', 'p4m@test.local', '{"full_name":"Идн Марк"}', 'authenticated', 'authenticated'),
   ('00000000-0000-4000-8000-0000000004e1', 'p4e@test.local', '{"full_name":"Идн Эльза"}', 'authenticated', 'authenticated');
 
+-- Задержка публикации для зрителей (этап 6) у защитных настроек включена — здесь проверяется не она.
+update public.privacy_settings set public_message_visibility_delay = 'off'
+where user_id in (select id from auth.users where email like '%@test.local');
+
 do $$
 declare
   a uuid := '00000000-0000-4000-8000-0000000004a1';

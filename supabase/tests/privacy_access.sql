@@ -113,7 +113,6 @@ begin
       and minor ->> 'avatar_visibility' = 'friends'
       and minor ->> 'friends_list_visibility' = 'nobody'
       and minor ->> 'incoming_dialogue_requests' = 'requests_only'
-      and minor ->> 'dialogue_hidden_text_visibility' = 'enabled'
       and minor ->> 'public_message_visibility_delay' = 'random_delay',
     pg_temp.settings_of(a)::text
   );
@@ -128,7 +127,6 @@ begin
       and adult ->> 'profile_identity_masking' = 'everyone'
       and adult ->> 'friends_list_visibility' = 'everyone'
       and adult ->> 'incoming_dialogue_requests' = 'off'
-      and adult ->> 'dialogue_hidden_text_visibility' = 'disabled'
       and adult ->> 'public_message_visibility_delay' = 'off',
     pg_temp.settings_of(b)::text
   );
