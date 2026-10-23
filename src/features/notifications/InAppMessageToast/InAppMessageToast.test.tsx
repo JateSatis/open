@@ -290,9 +290,10 @@ describe('InAppMessageToast', () => {
     await waitFor(() => expect(screen.queryByText('Изменения не сохранены')).toBeNull());
   });
 
-  it('refreshes friends and requests when a friendship changes, without a card', async () => {
+  it('refreshes friends, requests and people when a friendship changes, without a card', async () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { gcTime: Infinity } } });
     queryClient.setQueryData(friendKeys.summary('user-1'), { friendsCount: 0, incomingCount: 0 });
+    queryClient.setQueryData<Partial<ChatSummary>[]>(chatsQueryKey, []);
     await render(
       <QueryClientProvider client={queryClient}>
         <InAppMessageToast />
@@ -302,6 +303,8 @@ describe('InAppMessageToast', () => {
     await act(async () => handlers?.onFriendsChanged?.());
 
     expect(queryClient.getQueryState(friendKeys.summary('user-1'))?.isInvalidated).toBe(true);
+    // Имена в списке чатов: другу видно настоящее, бывшему — псевдоним.
+    expect(queryClient.getQueryState(chatsQueryKey)?.isInvalidated).toBe(true);
     expect(screen.queryByText('Марина')).toBeNull();
     queryClient.clear();
   });
