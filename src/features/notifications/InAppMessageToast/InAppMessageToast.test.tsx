@@ -14,6 +14,7 @@ import {
 } from '@/api/chats';
 import { useSession } from '@/features/auth/useSession';
 import { chatsQueryKey } from '@/features/chats/chatsKey';
+import { friendKeys } from '@/features/friends/keys';
 import { showNotice } from '@/features/notifications/alertsStore';
 import { setActiveChatId } from '@/store/activeChat';
 import { renderWithQuery } from '@/test/renderWithQuery';
@@ -287,6 +288,22 @@ describe('InAppMessageToast', () => {
 
     expect(retry).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(screen.queryByText('Изменения не сохранены')).toBeNull());
+  });
+
+  it('refreshes friends and requests when a friendship changes, without a card', async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { gcTime: Infinity } } });
+    queryClient.setQueryData(friendKeys.summary('user-1'), { friendsCount: 0, incomingCount: 0 });
+    await render(
+      <QueryClientProvider client={queryClient}>
+        <InAppMessageToast />
+      </QueryClientProvider>,
+    );
+
+    await act(async () => handlers?.onFriendsChanged?.());
+
+    expect(queryClient.getQueryState(friendKeys.summary('user-1'))?.isInvalidated).toBe(true);
+    expect(screen.queryByText('Марина')).toBeNull();
+    queryClient.clear();
   });
 
   it('leaves no channel behind on unmount', async () => {

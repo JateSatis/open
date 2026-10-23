@@ -8,6 +8,7 @@ import { chatsQueryKey } from '@/features/chats/useChats';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
 import { invitesQueryKey } from '@/features/chats/useInvites';
 import { myInviteQueryKey } from '@/features/chats/useMyInvite';
+import { friendKeys } from '@/features/friends/keys';
 import { popsQueryKey } from '@/features/pops/keys';
 import {
   dismissAlert,
@@ -123,11 +124,17 @@ export function useInAppAlerts(): InAppAlertsState {
         // в её звонке я больше не вправе.
         if (getCall()?.chatId === chatId) void leaveCall();
       },
+      // Вкладка «Профиль» не размонтируется: без сигнала счётчик заявок на
+      // строке «Друзья» не узнал бы о новой до перезапуска.
+      onFriendsChanged: () => {
+        void queryClient.invalidateQueries({ queryKey: friendKeys.all });
+      },
       onReconnected: () => {
         // Канал возвращается после обрыва: сообщения и заявки, пришедшие за
         // это время, мимо него прошли, и списки о них не знают.
         void queryClient.invalidateQueries({ queryKey: chatsQueryKey });
         void queryClient.invalidateQueries({ queryKey: invitesQueryKey });
+        void queryClient.invalidateQueries({ queryKey: friendKeys.all });
       },
     });
 

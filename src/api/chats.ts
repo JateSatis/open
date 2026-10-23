@@ -1263,6 +1263,11 @@ export type UserChannelHandlers = {
   onIncomingCall?: (call: IncomingCall) => void;
   /** Звонок в чате, где я участник, завершился — входящий пора погасить. */
   onStreamEnded?: (streamId: string, chatId: string) => void;
+  /**
+   * Изменилась моя дружба с кем-то: заявка, принятие, удаление. Кто — не
+   * сообщается, списки и счётчики перечитываются.
+   */
+  onFriendsChanged?: () => void;
   onReconnected?: () => void;
 };
 
@@ -1360,6 +1365,9 @@ export function subscribeToUserEvents(userId: string, handlers: UserChannelHandl
       const streamId = (payload as { stream_id?: unknown } | undefined)?.stream_id;
 
       if (chatId && typeof streamId === 'string') handlers.onStreamEnded?.(streamId, chatId);
+    })
+    .on('broadcast', { event: 'friends_changed' }, () => {
+      handlers.onFriendsChanged?.();
     })
     .subscribe((status) => {
       if (status === 'SUBSCRIBED') {
