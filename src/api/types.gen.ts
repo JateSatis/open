@@ -5687,6 +5687,7 @@ export type Database = {
           target_kind: string
         }[]
       }
+      reaction_target_seen: { Args: { p_reaction: string }; Returns: boolean }
       reactors:
         | {
             Args: { "": Database["public"]["Views"]["comment_rows"]["Row"] }
@@ -6249,6 +6250,7 @@ export type Database = {
         Args: { since: string; target_channel: string; viewer: string }
         Returns: number
       }
+      target_seen: { Args: { p_target: string }; Returns: boolean }
       touch_device: { Args: { p_installation_id: string }; Returns: boolean }
       unblock_user: { Args: { p_user: string }; Returns: undefined }
       unpin_comment: { Args: { target: string }; Returns: undefined }
