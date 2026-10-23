@@ -376,6 +376,18 @@ begin
   perform pg_temp.check('К2.5 закреп-полоса у зрителя не меняется',
     not exists (select 1 from public.message_pins p where p.chat_id = grp));
 
+  -- К2.5: комментарий участника к неопубликованному и цитата — тоже только участникам
+  perform pg_temp.act_as(b);
+  perform public.send_comment(delayed, 'комментарий к неопубликованному');
+  perform pg_temp.act_as(v);
+  perform pg_temp.check('К2.5 комментарий к неопубликованному зрителю не виден (таблица и comment_rows)',
+    not exists (select 1 from public.comments c where c.message_id = delayed)
+    and not exists (select 1 from public.comment_rows c where c.message_id = delayed));
+  perform pg_temp.check('К2.5 реакция на неопубликованное зрителю не видна (reactor_rows)',
+    not exists (select 1 from public.reactor_rows r where r.target_id = delayed));
+  perform pg_temp.check('К2.2 цитаты ответа на неопубликованное зрителю не видны',
+    not exists (select 1 from public.message_replies r where r.quoted_id = delayed or r.message_id = delayed));
+
   -- К2.6
   perform pg_temp.act_as(b);
   t := public.my_typing_audience(grp);
@@ -470,6 +482,16 @@ begin
   perform pg_temp.check('К2.4 подписчик не получил удалённое',
     pg_temp.signals('user:' || s, 'new_message', doomed) = 0
     and pg_temp.signals('user:' || s, 'new_message', after_doomed) = 1);
+
+  -- Заявка на диалог от владельца с задержкой не задерживается: её видят двое
+  perform pg_temp.act_as(a);
+  j := public.create_chat(array[v], null, null, 'заявка с задержкой');
+  set constraints all immediate;
+  set constraints all deferred;
+  perform pg_temp.act_as(v);
+  perform pg_temp.check('заявка на диалог не задерживается — получатель видит её сразу',
+    exists (select 1 from public.message_rows r where r.chat_id = (j ->> 'chat_id')::uuid and r.text = 'заявка с задержкой'),
+    j::text);
 
   -- К2.9: чат без задержки
   perform pg_temp.act_as(b);
