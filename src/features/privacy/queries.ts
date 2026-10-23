@@ -7,14 +7,17 @@ import {
   setBirthDate,
   setPrivacySetting,
   type EditablePrivacySetting,
+  type PrivacySettingValues,
   type PrivacySettings,
-  type Visibility,
 } from '@/api/privacy';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
 import { friendKeys } from '@/features/friends/queries';
 
 /** Поле состояния экрана у каждой настройки, которую клиент меняет. */
-const SETTING_FIELDS: Record<EditablePrivacySetting, keyof Omit<PrivacySettings, 'birthDate' | 'identityAlias'>> = {
+const SETTING_FIELDS: Record<
+  EditablePrivacySetting,
+  keyof Omit<PrivacySettings, 'birthDate' | 'identityAlias'>
+> = {
   friends_list_visibility: 'friendsListVisibility',
   activity_status_visibility: 'activityStatusVisibility',
   message_activity_metadata_visibility: 'messageTimeVisibility',
@@ -23,6 +26,7 @@ const SETTING_FIELDS: Record<EditablePrivacySetting, keyof Omit<PrivacySettings,
   dialogue_participant_name_masking: 'dialogueNameVisibility',
   avatar_visibility: 'avatarVisibility',
   dialogue_media_visibility: 'mediaVisibility',
+  public_message_visibility_delay: 'publicDelay',
 };
 
 import { isBirthDateKnown, rememberBirthDateKnown } from './birthDateKnown';
@@ -63,17 +67,21 @@ export function useSetPrivacySetting() {
   return useMutation<
     void,
     Error,
-    { setting: EditablePrivacySetting; value: Visibility },
+    { setting: EditablePrivacySetting; value: PrivacySettingValues[EditablePrivacySetting] },
     { previous: PrivacySettings | null | undefined }
   >({
-    mutationFn: ({ setting, value }) => setPrivacySetting(setting, value),
+    mutationFn: ({ setting, value }) =>
+      setPrivacySetting(setting, value as PrivacySettingValues[typeof setting]),
     networkMode: 'always',
     onMutate: async ({ setting, value }) => {
       await queryClient.cancelQueries({ queryKey: key });
       const previous = queryClient.getQueryData<PrivacySettings | null>(key);
 
       if (previous) {
-        queryClient.setQueryData<PrivacySettings>(key, { ...previous, [SETTING_FIELDS[setting]]: value });
+        queryClient.setQueryData<PrivacySettings>(key, {
+          ...previous,
+          [SETTING_FIELDS[setting]]: value,
+        });
       }
 
       return { previous };
@@ -97,7 +105,11 @@ export function useSetPrivacySetting() {
         void queryClient.invalidateQueries({ queryKey: ['chat'] });
       }
       // Имя в диалогах решает, куда слать «печатает»: всем или только участникам.
-      if (setting === 'dialogue_participant_name_masking') {
+      if (
+        setting === 'dialogue_participant_name_masking' ||
+        // Задержка решает и «печатает»: в чате с ней — только участникам.
+        setting === 'public_message_visibility_delay'
+      ) {
         void queryClient.invalidateQueries({ queryKey: ['typingAudience'] });
       }
     },
@@ -116,7 +128,8 @@ export function useRegenerateIdentityAlias() {
     onSuccess: (alias) => {
       const previous = queryClient.getQueryData<PrivacySettings | null>(key);
 
-      if (previous) queryClient.setQueryData<PrivacySettings>(key, { ...previous, identityAlias: alias });
+      if (previous)
+        queryClient.setQueryData<PrivacySettings>(key, { ...previous, identityAlias: alias });
     },
   });
 }

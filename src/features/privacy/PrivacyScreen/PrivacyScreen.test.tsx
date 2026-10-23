@@ -41,6 +41,7 @@ function settings(overrides: Partial<PrivacySettings> = {}): PrivacySettings {
     avatarVisibility: 'friends',
     mediaVisibility: 'friends',
     identityAlias: 'Илья Муромцев',
+    publicDelay: 'random_delay',
     ...overrides,
   };
 }
@@ -66,7 +67,11 @@ it('К4.1 у подростка три настройки идентичност
 
 it('К4.1 у взрослого — «Все»', async () => {
   mockedSettings.mockResolvedValue(
-    settings({ identityVisibility: 'everyone', dialogueNameVisibility: 'everyone', avatarVisibility: 'everyone' }),
+    settings({
+      identityVisibility: 'everyone',
+      dialogueNameVisibility: 'everyone',
+      avatarVisibility: 'everyone',
+    }),
   );
   await renderWithQuery(<PrivacyScreen />);
 
@@ -143,7 +148,51 @@ it('смена настройки медиа уходит на сервер св
   mockedSettings.mockResolvedValue(settings());
   await renderWithQuery(<PrivacyScreen />);
 
-  await fireEvent.press(await screen.findByLabelText('Кто видит мои фото, видео и голосовые: Никто'));
+  await fireEvent.press(
+    await screen.findByLabelText('Кто видит мои фото, видео и голосовые: Никто'),
+  );
 
   expect(mockedSet).toHaveBeenCalledWith('dialogue_media_visibility', 'nobody');
+});
+
+describe('этап 6: задержка и скрытый текст', () => {
+  const TITLE = 'Задержка публикации для зрителей';
+
+  it('К4.1 у подростка задержка включена', async () => {
+    mockedSettings.mockResolvedValue(settings());
+    await renderWithQuery(<PrivacyScreen />);
+
+    expect(await screen.findByLabelText(`${TITLE}: Случайная, 1–30 минут, выбрано`)).toBeTruthy();
+    expect(
+      screen.getByText(
+        'Участники чата видят ваши сообщения сразу, остальные — позже. Задерживается и то, что написано в чате после вас.',
+      ),
+    ).toBeTruthy();
+  });
+
+  it('К4.1 у взрослого задержка выключена', async () => {
+    mockedSettings.mockResolvedValue(settings({ publicDelay: 'off' }));
+    await renderWithQuery(<PrivacyScreen />);
+
+    expect(await screen.findByLabelText(`${TITLE}: Выкл, выбрано`)).toBeTruthy();
+  });
+
+  it('выбор задержки уходит настройкой public_message_visibility_delay', async () => {
+    mockedSettings.mockResolvedValue(settings({ publicDelay: 'off' }));
+    await renderWithQuery(<PrivacyScreen />);
+
+    await fireEvent.press(await screen.findByLabelText(`${TITLE}: Случайная, 1–30 минут`));
+
+    expect(mockedSet).toHaveBeenCalledWith('public_message_visibility_delay', 'random_delay');
+  });
+
+  it('скрытый текст — строка без переключателя', async () => {
+    mockedSettings.mockResolvedValue(settings());
+    await renderWithQuery(<PrivacyScreen />);
+
+    expect(await screen.findByTestId('privacy-hidden-text-note')).toHaveTextContent(
+      'Часть своего сообщения можно скрыть от зрителей: выделите текст → «Скрыть от зрителей». Участники видят всё.',
+    );
+    expect(screen.queryByText('Скрытый текст')).toBeNull();
+  });
 });
