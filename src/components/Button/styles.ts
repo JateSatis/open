@@ -26,4 +26,9 @@ export const styles = StyleSheet.create({
   disabled: {
     opacity: 0.5,
   },
+  /** Длинная подпись при крупном шрифте переносится — по центру, как и в строку. */
+  label: {
+    flexShrink: 1,
+    textAlign: 'center',
+  },
 });

@@ -64,7 +64,11 @@ export function Button({
       {loading ? (
         <ActivityIndicator color={textColor} />
       ) : (
-        <Text variant="bodyBold" style={{ color: textColor }} onTextLayout={onLabelLayout}>
+        <Text
+          variant="bodyBold"
+          style={[styles.label, { color: textColor }]}
+          onTextLayout={onLabelLayout}
+        >
           {label}
         </Text>
       )}
