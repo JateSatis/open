@@ -3,6 +3,7 @@ import {
   Pressable,
   type PressableProps,
   type StyleProp,
+  type TextProps,
   type ViewStyle,
 } from 'react-native';
 
@@ -20,6 +21,8 @@ export type ButtonProps = Omit<PressableProps, 'style'> & {
   size?: ButtonSize;
   loading?: boolean;
   style?: StyleProp<ViewStyle>;
+  /** Раскладка подписи: по ней родитель узнаёт, что подпись не влезла в строку. */
+  onLabelLayout?: TextProps['onTextLayout'];
 };
 
 export function Button({
@@ -29,6 +32,7 @@ export function Button({
   loading = false,
   disabled = false,
   style,
+  onLabelLayout,
   ...rest
 }: ButtonProps) {
   const theme = useTheme();
@@ -60,7 +64,7 @@ export function Button({
       {loading ? (
         <ActivityIndicator color={textColor} />
       ) : (
-        <Text variant="bodyBold" style={{ color: textColor }}>
+        <Text variant="bodyBold" style={{ color: textColor }} onTextLayout={onLabelLayout}>
           {label}
         </Text>
       )}

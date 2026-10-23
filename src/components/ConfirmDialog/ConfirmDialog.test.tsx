@@ -1,4 +1,4 @@
-import { render, screen, userEvent } from '@testing-library/react-native';
+import { fireEvent, render, screen, userEvent } from '@testing-library/react-native';
 
 import { ConfirmDialogHost, confirm } from '.';
 import { resetConfirmDialogQueue } from './store';
@@ -86,5 +86,28 @@ describe('ConfirmDialog', () => {
 
     await user.press(screen.getByText('Нет'));
     expect(await second).toBe(false);
+  });
+});
+
+describe('ConfirmDialog buttons', () => {
+  it('stacks the buttons when a label does not fit on one line, so the word is not torn', async () => {
+    await render(<ConfirmDialogHost />);
+
+    void confirm({
+      title: 'Заблокировать?',
+      confirmLabel: 'Заблокировать',
+      cancelLabel: 'Отмена',
+      destructive: true,
+    });
+
+    const label = await screen.findByText('Заблокировать');
+    expect(screen.getByTestId('confirm-dialog-actions')).toHaveStyle({ flexDirection: 'row' });
+
+    await fireEvent(label, 'textLayout', { nativeEvent: { lines: [{}, {}] } });
+
+    expect(screen.getByTestId('confirm-dialog-actions')).toHaveStyle({
+      flexDirection: 'column-reverse',
+    });
+    expect(screen.getByText('Отмена')).toBeTruthy();
   });
 });

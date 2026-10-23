@@ -9,7 +9,7 @@ export type ConfirmDialogOptions = {
   destructive?: boolean;
 };
 
-type ConfirmDialogRequest = ConfirmDialogOptions & {
+export type ConfirmDialogRequest = ConfirmDialogOptions & {
   id: number;
   resolve: (confirmed: boolean) => void;
 };

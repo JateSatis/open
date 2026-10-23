@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Modal, Pressable, View } from 'react-native';
+import { Modal, Pressable, View, type TextLayoutEvent } from 'react-native';
 
 import { styles } from './styles';
 import {
@@ -9,6 +9,7 @@ import {
   resolveConfirmDialog,
   useConfirmDialogRequest,
   useIsTopConfirmDialogHost,
+  type ConfirmDialogRequest,
 } from './store';
 
 import { Button } from '@/components/Button';
@@ -24,10 +25,23 @@ export { confirm, type ConfirmDialogOptions } from './store';
  * `ConfirmDialogSurface`).
  */
 function ConfirmDialogCard() {
-  const theme = useTheme();
   const request = useConfirmDialogRequest();
 
   if (!request) return null;
+
+  // Ключ — новый вопрос раскладывает кнопки заново.
+  return <ConfirmDialogContent key={request.id} request={request} />;
+}
+
+function ConfirmDialogContent({ request }: { request: ConfirmDialogRequest }) {
+  const theme = useTheme();
+  // Кнопки — в ряд, а если подпись не влезла в одну строку — столбиком, как
+  // в системных диалогах: иначе при крупном шрифте Android рвёт слово
+  // посередине («Заблокир/овать»).
+  const [stacked, setStacked] = useState(false);
+  const onLabelLayout = (event: TextLayoutEvent) => {
+    if (event.nativeEvent.lines.length > 1) setStacked(true);
+  };
 
   const { id, title, message, confirmLabel, cancelLabel, destructive } = request;
 
@@ -54,17 +68,22 @@ function ConfirmDialogCard() {
             </Text>
           ) : null}
 
-          <View style={styles.actions}>
+          <View
+            testID="confirm-dialog-actions"
+            style={stacked ? styles.actionsStacked : styles.actions}
+          >
             <Button
               label={cancelLabel}
               variant="secondary"
-              style={styles.action}
+              style={stacked ? styles.actionStacked : styles.action}
+              onLabelLayout={onLabelLayout}
               onPress={() => respond(false)}
             />
             <Button
               label={confirmLabel}
               variant={destructive ? 'danger' : 'primary'}
-              style={styles.action}
+              style={stacked ? styles.actionStacked : styles.action}
+              onLabelLayout={onLabelLayout}
               onPress={() => respond(true)}
             />
           </View>
