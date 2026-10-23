@@ -7,7 +7,7 @@ env:
   CHAT: Plany
 ---
 - runFlow: subflows/open-app.yaml
-- tapOn: ${CHAT}
+- runFlow: subflows/open-chat.yaml
 - assertVisible:
     id: "page-back"
 # Короткий сдвиг — страница пружинит обратно, переписка на месте.

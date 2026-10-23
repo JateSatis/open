@@ -89,7 +89,13 @@ begin
 
   for job in select * from jsonb_array_elements(fragment_reaction_jobs) loop
     perform set_config('request.jwt.claims', jsonb_build_object('sub', job.value->>'author', 'role', 'authenticated')::text, true);
-    perform public.set_reaction('fragment', (job.value->>'id')::uuid, null);
+    -- Фрагмент мог уйти вместе с удалённым выше тестовым сообщением: снимать
+    -- уже нечего, а отказ откатил бы всю уборку.
+    begin
+      perform public.set_reaction('fragment', (job.value->>'id')::uuid, null);
+    exception
+      when sqlstate 'P0002' then null;
+    end;
   end loop;
 
   raise notice 'e2e-reset: messages %, comments %, pop reactions %',

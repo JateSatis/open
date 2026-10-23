@@ -8,7 +8,10 @@ env:
   CHAT: Plany
 ---
 - runFlow: subflows/open-app.yaml
-- tapOn: ${CHANNEL}
+- runFlow:
+    file: subflows/open-chat.yaml
+    env:
+      CHAT: ${CHANNEL}
 - evalScript: ${output.post = 'maestro-' + Date.now()}
 - tapOn: "Сообщение"
 - inputText: ${output.post}
@@ -34,13 +37,16 @@ env:
 - assertVisible:
     id: "chat-list-item"
 # Уборка: пост удаляется в канале, островок — из диалога.
-- tapOn: ${CHAT}
+- runFlow: subflows/open-chat.yaml
 - longPressOn: ${output.post}
 - tapOn: "Убрать из пересылки"
 - tapOn: "Убрать"
 - assertNotVisible: ${output.post}
 - back
-- tapOn: ${CHANNEL}
+- runFlow:
+    file: subflows/open-chat.yaml
+    env:
+      CHAT: ${CHANNEL}
 - longPressOn: ${output.post}
 - tapOn: "Удалить"
 - tapOn: "Удалить"

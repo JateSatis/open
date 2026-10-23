@@ -6,7 +6,7 @@ env:
   CHAT: Plany
 ---
 - runFlow: subflows/open-app.yaml
-- tapOn: ${CHAT}
+- runFlow: subflows/open-chat.yaml
 # Счётчик просмотров здесь не проверяется: он есть, только если сообщение
 # кто-то уже посмотрел, а это зависит от того, что лежит внизу чата.
 # Показ и скрытие счётчика — в MessageBubble.test.tsx.
