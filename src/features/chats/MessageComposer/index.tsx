@@ -104,8 +104,10 @@ export type MessageComposerProps = {
    * найденное». Нет (комментарий, заявка) — скрывать нечем.
    */
   hidden?: { ranges: HiddenRange[]; onChange: (ranges: HiddenRange[]) => void };
-  /** Кто увидит отправленное — для подсказки и листа о личных данных. */
+  /** Кто увидит отправленное — лист о личных данных: «Это сообщение увидят все, кто откроет чат.» */
   audience?: string;
+  /** То же для подсказки над полем — продолжение «Телефон — это …». */
+  hintAudience?: string;
 };
 
 const SEND_ICON = { ios: 'arrow.up', android: 'send', web: 'send' } as const;
@@ -138,6 +140,7 @@ export function MessageComposer({
   edit,
   hidden,
   audience = 'Это сообщение увидят все, кто откроет чат.',
+  hintAudience,
 }: MessageComposerProps) {
   const theme = useTheme();
   // Счётчик берётся из стора выбора, а не приходит пропом: иначе выбор файла
@@ -330,7 +333,7 @@ export function MessageComposer({
   return (
     <View style={[styles.container, { borderTopColor: theme.border }]}>
       {plate}
-      {textLocked ? null : <PersonalDataHint text={text} />}
+      {textLocked ? null : <PersonalDataHint text={text} audience={hintAudience} />}
       {hidden && selected && !textLocked ? (
         <HideSelectionChip covered={selectionCovered} onPress={toggleSelectedHidden} />
       ) : null}

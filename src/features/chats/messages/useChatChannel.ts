@@ -155,97 +155,103 @@ export function useChatChannel(chatId: string, currentUserId: string | null): Ch
       }, REACTIONS_BATCH_MS);
     };
 
-    const channel = subscribeToChat(chatId, {
-      onMessage: () => {
-        void onNewMessage();
-      },
-      onReconnected: catchUp,
-      onMembersChanged: () => {
-        // Кто-то принял заявку: состав и «ещё не ответил» живут в чате.
-        void queryClient.invalidateQueries({ queryKey: chatQueryKey(chatId) });
-      },
-      onChatChanged: () => {
-        // Название, описание, состав, заявки — или чат удалили.
-        void queryClient.invalidateQueries({ queryKey: chatQueryKey(chatId) });
-      },
-      onRead: () => {
-        // Отметка собеседника живёт в участниках чата, а не в сообщениях —
-        // перечитываем именно чат, история при этом не дёргается.
-        void queryClient.invalidateQueries({ queryKey: chatQueryKey(chatId) });
-      },
-      onMessagesDeleted: (messageIds) => {
-        // Не вышло сверить — сверим при следующем событии или переподключении.
-        dropDeletedMessages(queryClient, messageIds).catch(() => undefined);
-      },
-      onMessageEdited: (messageId) => {
-        refreshEditedMessages(queryClient, [messageId]).catch(() => undefined);
-        // Правленое могло быть закреплено — полоса показывает его текст.
-        void queryClient.invalidateQueries({ queryKey: pinsQueryKey(chatId) });
-      },
-      onStreamChanged: () => {
-        // Числа и сам факт звонка — из базы; payload только будит.
-        void queryClient.invalidateQueries({ queryKey: liveStreamQueryKey(chatId) });
-      },
-      onTimeVisibilityChanged: () => {
-        // Участник сменил, кому видно время: время, даты и прочтение у
-        // загруженных сообщений и у участников — перечитать на месте.
-        refreshChatTimes(queryClient, chatId).catch(() => undefined);
-        void queryClient.invalidateQueries({ queryKey: chatQueryKey(chatId) });
-      },
-      onPeopleChanged: () => {
-        // Кто-то сменил, кому виден он сам: имена, фото и id авторов у
-        // загруженных сообщений и участники — глазами меня заново. Прежние
-        // подписанные ссылки на фото могли стать чужими.
-        forgetAvatarUrls();
-        refreshChatTimes(queryClient, chatId).catch(() => undefined);
-        void queryClient.invalidateQueries({ queryKey: chatQueryKey(chatId) });
-      },
-      onMediaChanged: () => {
-        // Участник сменил, кому видно его медиа: пути и плитки «скрыто
-        // автором» у загруженных сообщений и во вкладках — глазами меня
-        // заново, прежние подписанные ссылки могли стать чужими.
-        forgetChatMediaUrls();
-        refreshChatTimes(queryClient, chatId).catch(() => undefined);
-        // Ключ чата — префикс и вкладок «Медиа» и «Голосовые».
-        void queryClient.invalidateQueries({ queryKey: chatQueryKey(chatId) });
-      },
-      onPinsChanged: () => {
-        void queryClient.invalidateQueries({ queryKey: pinsQueryKey(chatId) });
-      },
-      onForwardChanged: (forwardId) => {
-        refreshIsland(queryClient, chatId, forwardId).catch(() => undefined);
-        // Закреп убранного облачка база уже сняла.
-        void queryClient.invalidateQueries({ queryKey: pinsQueryKey(chatId) });
-      },
-      onReactionsChanged: (messageId) => collect(reactionBatch, refreshReactions, messageId),
-      onCommentsChanged: (messageId) => collect(commentBatch, refreshCommentCounts, messageId),
-      onClustersChanged: (messageId) => collect(clusterBatch, refreshClusterCounts, messageId),
-      onViewsChanged: (messageIds) =>
-        messageIds.forEach((messageId) => collect(viewBatch, refreshViews, messageId)),
-      onTyping: (userId, activity) => {
-        if (userId === currentUserId) return;
+    const channel = subscribeToChat(
+      chatId,
+      {
+        onMessage: () => {
+          void onNewMessage();
+        },
+        onReconnected: catchUp,
+        onMembersChanged: () => {
+          // Кто-то принял заявку: состав и «ещё не ответил» живут в чате.
+          void queryClient.invalidateQueries({ queryKey: chatQueryKey(chatId) });
+        },
+        onChatChanged: () => {
+          // Название, описание, состав, заявки — или чат удалили. Или участник
+          // включил задержку публикации: «печатает» тогда — только участникам.
+          void queryClient.invalidateQueries({ queryKey: chatQueryKey(chatId) });
+          void queryClient.invalidateQueries({ queryKey: typingAudienceKey(chatId) });
+        },
+        onRead: () => {
+          // Отметка собеседника живёт в участниках чата, а не в сообщениях —
+          // перечитываем именно чат, история при этом не дёргается.
+          void queryClient.invalidateQueries({ queryKey: chatQueryKey(chatId) });
+        },
+        onMessagesDeleted: (messageIds) => {
+          // Не вышло сверить — сверим при следующем событии или переподключении.
+          dropDeletedMessages(queryClient, messageIds).catch(() => undefined);
+        },
+        onMessageEdited: (messageId) => {
+          refreshEditedMessages(queryClient, [messageId]).catch(() => undefined);
+          // Правленое могло быть закреплено — полоса показывает его текст.
+          void queryClient.invalidateQueries({ queryKey: pinsQueryKey(chatId) });
+        },
+        onStreamChanged: () => {
+          // Числа и сам факт звонка — из базы; payload только будит.
+          void queryClient.invalidateQueries({ queryKey: liveStreamQueryKey(chatId) });
+        },
+        onTimeVisibilityChanged: () => {
+          // Участник сменил, кому видно время: время, даты и прочтение у
+          // загруженных сообщений и у участников — перечитать на месте.
+          refreshChatTimes(queryClient, chatId).catch(() => undefined);
+          void queryClient.invalidateQueries({ queryKey: chatQueryKey(chatId) });
+        },
+        onPeopleChanged: () => {
+          // Кто-то сменил, кому виден он сам: имена, фото и id авторов у
+          // загруженных сообщений и участники — глазами меня заново. Прежние
+          // подписанные ссылки на фото могли стать чужими.
+          forgetAvatarUrls();
+          refreshChatTimes(queryClient, chatId).catch(() => undefined);
+          void queryClient.invalidateQueries({ queryKey: chatQueryKey(chatId) });
+        },
+        onMediaChanged: () => {
+          // Участник сменил, кому видно его медиа: пути и плитки «скрыто
+          // автором» у загруженных сообщений и во вкладках — глазами меня
+          // заново, прежние подписанные ссылки могли стать чужими.
+          forgetChatMediaUrls();
+          refreshChatTimes(queryClient, chatId).catch(() => undefined);
+          // Ключ чата — префикс и вкладок «Медиа» и «Голосовые».
+          void queryClient.invalidateQueries({ queryKey: chatQueryKey(chatId) });
+        },
+        onPinsChanged: () => {
+          void queryClient.invalidateQueries({ queryKey: pinsQueryKey(chatId) });
+        },
+        onForwardChanged: (forwardId) => {
+          refreshIsland(queryClient, chatId, forwardId).catch(() => undefined);
+          // Закреп убранного облачка база уже сняла.
+          void queryClient.invalidateQueries({ queryKey: pinsQueryKey(chatId) });
+        },
+        onReactionsChanged: (messageId) => collect(reactionBatch, refreshReactions, messageId),
+        onCommentsChanged: (messageId) => collect(commentBatch, refreshCommentCounts, messageId),
+        onClustersChanged: (messageId) => collect(clusterBatch, refreshClusterCounts, messageId),
+        onViewsChanged: (messageIds) =>
+          messageIds.forEach((messageId) => collect(viewBatch, refreshViews, messageId)),
+        onTyping: (userId, activity) => {
+          if (userId === currentUserId) return;
 
-        setActivities((current) => {
-          const existing = current.find((entry) => entry.userId === userId);
+          setActivities((current) => {
+            const existing = current.find((entry) => entry.userId === userId);
 
-          if (existing?.activity === activity) return current;
+            if (existing?.activity === activity) return current;
 
-          return [...current.filter((entry) => entry.userId !== userId), { userId, activity }];
-        });
+            return [...current.filter((entry) => entry.userId !== userId), { userId, activity }];
+          });
 
-        const running = timers.get(userId);
+          const running = timers.get(userId);
 
-        if (running) clearTimeout(running);
+          if (running) clearTimeout(running);
 
-        timers.set(
-          userId,
-          setTimeout(() => {
-            timers.delete(userId);
-            setActivities((current) => current.filter((entry) => entry.userId !== userId));
-          }, TYPING_TIMEOUT_MS),
-        );
+          timers.set(
+            userId,
+            setTimeout(() => {
+              timers.delete(userId);
+              setActivities((current) => current.filter((entry) => entry.userId !== userId));
+            }, TYPING_TIMEOUT_MS),
+          );
+        },
       },
-    }, isMember);
+      isMember,
+    );
 
     channelRef.current = channel;
 
