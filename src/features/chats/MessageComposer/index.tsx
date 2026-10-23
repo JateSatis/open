@@ -201,7 +201,7 @@ export function MessageComposer({
       }
 
       onSend();
-    });
+    }, hidden?.ranges);
   };
 
   const hiddenRanges = hidden?.ranges ?? [];
@@ -333,7 +333,7 @@ export function MessageComposer({
   return (
     <View style={[styles.container, { borderTopColor: theme.border }]}>
       {plate}
-      {textLocked ? null : <PersonalDataHint text={text} audience={hintAudience} />}
+      {textLocked ? null : <PersonalDataHint text={text} audience={hintAudience} hidden={hidden?.ranges} />}
       {hidden && selected && !textLocked ? (
         <HideSelectionChip covered={selectionCovered} onPress={toggleSelectedHidden} />
       ) : null}

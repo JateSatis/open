@@ -12,6 +12,7 @@
 // читаться.
 
 import { toCodePointOffset } from '@/features/chats/fragments/textOffsets';
+import { coveredByHidden, type HiddenRange } from '@/features/chats/hiddenText';
 
 export type PersonalDataKind =
   'phone' | 'email' | 'address' | 'school' | 'geo' | 'schedule' | 'social';
@@ -360,11 +361,24 @@ function merge(text: string, matches: Match[]): Match[] {
   return merged;
 }
 
-/** Признаки личных данных в тексте и общий уровень риска. */
-export function scanPersonalData(text: string): PersonalDataScan {
+/**
+ * Признаки личных данных в тексте и общий уровень риска. `hidden` — уже
+ * скрытое автором от зрителей (code points): что закрыто целиком, зрители не
+ * увидят, и предупреждать о нём незачем.
+ */
+export function scanPersonalData(
+  text: string,
+  hidden: readonly HiddenRange[] = [],
+): PersonalDataScan {
   if (!text.trim()) return { findings: [], risk: 'none' };
 
-  const matches = findAll(text);
+  const matches = findAll(text)
+    .map((m) => ({
+      ...m,
+      cpStart: toCodePointOffset(text, m.start),
+      cpEnd: toCodePointOffset(text, m.end),
+    }))
+    .filter((m) => !coveredByHidden(hidden, m.cpStart, m.cpEnd));
 
   if (matches.length === 0) return { findings: [], risk: 'none' };
 
@@ -375,8 +389,8 @@ export function scanPersonalData(text: string): PersonalDataScan {
     risk,
     findings: matches.map((m) => ({
       kind: m.kind,
-      start: toCodePointOffset(text, m.start),
-      end: toCodePointOffset(text, m.end),
+      start: m.cpStart,
+      end: m.cpEnd,
       text: text.slice(m.start, m.end),
     })),
   };

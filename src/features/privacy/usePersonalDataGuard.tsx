@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState, type ReactNode } from 'react';
 
 import { PersonalDataSheet } from '@/features/privacy/PersonalDataSheet';
+import type { HiddenRange } from '@/features/chats/hiddenText';
 import { scanPersonalData, type PersonalDataFinding } from '@/features/privacy/personalData';
 
 /** Как продолжить публикацию: с найденным скрытым (`hide`) или как есть. */
@@ -11,7 +12,11 @@ export type PersonalDataGuard = {
    * Перед публикацией: высокий риск — лист, остальное — сразу `proceed`.
    * «Изменить» не зовёт ничего: текст остаётся в поле.
    */
-  check: (text: string, proceed: (decision: PersonalDataDecision) => void) => void;
+  check: (
+    text: string,
+    proceed: (decision: PersonalDataDecision) => void,
+    hidden?: readonly HiddenRange[],
+  ) => void;
   /** Лист — смонтировать рядом с полем. */
   sheet: ReactNode;
 };
@@ -36,8 +41,8 @@ export function usePersonalDataGuard({
   const [findings, setFindings] = useState<PersonalDataFinding[] | null>(null);
   const pending = useRef<((decision: PersonalDataDecision) => void) | null>(null);
 
-  const check = useCallback((text: string, proceed: (decision: PersonalDataDecision) => void) => {
-    const scan = scanPersonalData(text);
+  const check = useCallback<PersonalDataGuard['check']>((text, proceed, hidden) => {
+    const scan = scanPersonalData(text, hidden);
 
     if (scan.risk !== 'high') {
       proceed({ hide: null });

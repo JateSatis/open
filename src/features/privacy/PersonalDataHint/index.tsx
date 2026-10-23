@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { Text } from '@/components/Text';
+import type { HiddenRange } from '@/features/chats/hiddenText';
 import { useDebounced } from '@/lib/useDebounced';
 import { PERSONAL_DATA_LABELS, scanPersonalData } from '@/features/privacy/personalData';
 import { Spacing } from '@/theme';
@@ -13,6 +14,8 @@ export type PersonalDataHintProps = {
   text: string;
   /** Кто увидит — продолжение строки: «увидят все, кто откроет чат». */
   audience?: string;
+  /** Уже скрытое от зрителей: о нём строка не говорит. */
+  hidden?: readonly HiddenRange[];
 };
 
 /**
@@ -22,9 +25,10 @@ export type PersonalDataHintProps = {
 export function PersonalDataHint({
   text,
   audience = 'увидят все, кто откроет чат',
+  hidden,
 }: PersonalDataHintProps) {
   const settled = useDebounced(text, SCAN_DELAY_MS);
-  const scan = useMemo(() => scanPersonalData(settled), [settled]);
+  const scan = useMemo(() => scanPersonalData(settled, hidden), [settled, hidden]);
 
   if (scan.risk === 'none' || !text.trim()) return null;
 
