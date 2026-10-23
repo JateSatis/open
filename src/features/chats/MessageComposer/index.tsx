@@ -334,9 +334,6 @@ export function MessageComposer({
     <View style={[styles.container, { borderTopColor: theme.border }]}>
       {plate}
       {textLocked ? null : <PersonalDataHint text={text} audience={hintAudience} hidden={hidden?.ranges} />}
-      {hidden && selected && !textLocked ? (
-        <HideSelectionChip covered={selectionCovered} onPress={toggleSelectedHidden} />
-      ) : null}
       {onSendVoice ? (
         <HoldToRecordRow
           style={styles.row}
@@ -353,6 +350,11 @@ export function MessageComposer({
           {sendButton}
         </View>
       )}
+      {/* Под полем, а не над ним: системное меню выделения (вырезать,
+          копировать) встаёт над выделенным текстом и закрывало плашку. */}
+      {hidden && selected && !textLocked ? (
+        <HideSelectionChip covered={selectionCovered} onPress={toggleSelectedHidden} />
+      ) : null}
 
       {panel.mounted ? (
         <EmojiPanel
