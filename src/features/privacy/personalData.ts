@@ -12,7 +12,7 @@
 // читаться.
 
 import { toCodePointOffset } from '@/features/chats/fragments/textOffsets';
-import { coveredByHidden, type HiddenRange } from '@/features/chats/hiddenText';
+import { normalizeRanges, type HiddenRange } from '@/features/chats/hiddenText';
 
 export type PersonalDataKind =
   'phone' | 'email' | 'address' | 'school' | 'geo' | 'schedule' | 'social';
@@ -372,13 +372,14 @@ export function scanPersonalData(
 ): PersonalDataScan {
   if (!text.trim()) return { findings: [], risk: 'none' };
 
+  const covered = normalizeRanges(hidden);
   const matches = findAll(text)
     .map((m) => ({
       ...m,
       cpStart: toCodePointOffset(text, m.start),
       cpEnd: toCodePointOffset(text, m.end),
     }))
-    .filter((m) => !coveredByHidden(hidden, m.cpStart, m.cpEnd));
+    .filter((m) => !covered.some((r) => r.start <= m.cpStart && r.end >= m.cpEnd));
 
   if (matches.length === 0) return { findings: [], risk: 'none' };
 

@@ -1,9 +1,8 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { Text } from '@/components/Text';
 import type { HiddenRange } from '@/features/chats/hiddenText';
-import { useDebounced } from '@/lib/useDebounced';
 import { PERSONAL_DATA_LABELS, scanPersonalData } from '@/features/privacy/personalData';
 import { Spacing } from '@/theme';
 
@@ -27,8 +26,20 @@ export function PersonalDataHint({
   audience = 'увидят все, кто откроет чат',
   hidden,
 }: PersonalDataHintProps) {
-  const settled = useDebounced(text, SCAN_DELAY_MS);
-  const scan = useMemo(() => scanPersonalData(settled, hidden), [settled, hidden]);
+  // Текст и скрытое — одной парой после паузы: скрытое сдвигается вместе с
+  // текстом сразу, и старый текст со свежими диапазонами не совпал бы по
+  // позициям. Пустое поле — сразу.
+  const [settled, setSettled] = useState({ text, hidden });
+
+  useEffect(() => {
+    const timer = setTimeout(() => setSettled({ text, hidden }), text === '' ? 0 : SCAN_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [text, hidden]);
+
+  const scan = useMemo(
+    () => scanPersonalData(settled.text, settled.hidden),
+    [settled],
+  );
 
   if (scan.risk === 'none' || !text.trim()) return null;
 

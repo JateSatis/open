@@ -294,6 +294,7 @@ describe('InAppMessageToast', () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { gcTime: Infinity } } });
     queryClient.setQueryData(friendKeys.summary('user-1'), { friendsCount: 0, incomingCount: 0 });
     queryClient.setQueryData<Partial<ChatSummary>[]>(chatsQueryKey, []);
+    queryClient.setQueryData(['messages', 'chat-1'], { pages: [], pageParams: [] });
     await render(
       <QueryClientProvider client={queryClient}>
         <InAppMessageToast />
@@ -305,7 +306,9 @@ describe('InAppMessageToast', () => {
     expect(queryClient.getQueryState(friendKeys.summary('user-1'))?.isInvalidated).toBe(true);
     // Имена в списке чатов: другу видно настоящее, бывшему — псевдоним.
     expect(queryClient.getQueryState(chatsQueryKey)?.isInvalidated).toBe(true);
-    expect(screen.queryByText('Марина')).toBeNull();
+    // Переписка тоже устарела, но перечитается при открытии, а не сейчас.
+    expect(queryClient.getQueryState(['messages', 'chat-1'])?.isInvalidated).toBe(true);
+    expect(screen.toJSON()).toBeNull();
     queryClient.clear();
   });
 
