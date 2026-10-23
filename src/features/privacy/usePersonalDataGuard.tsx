@@ -27,9 +27,11 @@ export type PersonalDataGuard = {
 export function usePersonalDataGuard({
   audience,
   canHide = false,
+  sendAsIsLabel,
 }: {
   audience: string;
   canHide?: boolean;
+  sendAsIsLabel?: string;
 }): PersonalDataGuard {
   const [findings, setFindings] = useState<PersonalDataFinding[] | null>(null);
   const pending = useRef<((decision: PersonalDataDecision) => void) | null>(null);
@@ -61,6 +63,7 @@ export function usePersonalDataGuard({
       audience={audience}
       onHide={canHide ? () => finish({ hide: findings }) : undefined}
       onSendAsIs={() => finish({ hide: null })}
+      sendAsIsLabel={sendAsIsLabel}
       onEdit={() => finish(null)}
     />
   );

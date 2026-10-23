@@ -104,7 +104,13 @@ describe('scanPersonalData', () => {
     });
 
     it('школа без номера и «в 5» — ничего', () => {
-      for (const text of ['в школе сегодня тест', 'школа надоела', 'встретимся в 5', '5 в ряд', 'класс!']) {
+      for (const text of [
+        'в школе сегодня тест',
+        'школа надоела',
+        'встретимся в 5',
+        '5 в ряд',
+        'класс!',
+      ]) {
         expect(kinds(text)).toEqual([]);
       }
     });
@@ -142,13 +148,21 @@ describe('scanPersonalData', () => {
   });
 
   describe('соцсети', () => {
-    it.each(['мой инст @masha_01', 'тг: max99', 'vk.com/id12345', 'пиши в телеге @lena'])('%s', (text) => {
-      expect(kinds(text)).toEqual(['social']);
-      expect(scanPersonalData(text).risk).toBe('low');
-    });
+    it.each(['мой инст @masha_01', 'тг: max99', 'vk.com/id12345', 'пиши в телеге @lena'])(
+      '%s',
+      (text) => {
+        expect(kinds(text)).toEqual(['social']);
+        expect(scanPersonalData(text).risk).toBe('low');
+      },
+    );
 
     it('упоминание сети без ника — ничего', () => {
-      for (const text of ['инста скучная', 'в тг сегодня тихо', 'insta account is fun', 'видел в тиктоке']) {
+      for (const text of [
+        'инста скучная',
+        'в тг сегодня тихо',
+        'insta account is fun',
+        'видел в тиктоке',
+      ]) {
         expect(kinds(text)).toEqual([]);
       }
     });

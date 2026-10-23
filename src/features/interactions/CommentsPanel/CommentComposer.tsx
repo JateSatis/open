@@ -105,6 +105,7 @@ export function CommentComposer({
         onChangeText={draft.setText}
         canSend
         placeholder={placeholder}
+        audience="Этот комментарий увидят все, кто откроет обсуждение."
         plate={plate}
         edit={editPlate?.state}
         inputRef={inputRef}

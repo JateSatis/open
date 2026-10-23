@@ -19,7 +19,10 @@ export type PersonalDataHintProps = {
  * Тихая строка над полем ввода, когда в тексте похоже на личные данные.
  * Отправку не блокирует: при высоком риске перед отправкой спросит лист.
  */
-export function PersonalDataHint({ text, audience = 'увидят все, кто откроет чат' }: PersonalDataHintProps) {
+export function PersonalDataHint({
+  text,
+  audience = 'увидят все, кто откроет чат',
+}: PersonalDataHintProps) {
   const settled = useDebounced(text, SCAN_DELAY_MS);
   const scan = useMemo(() => scanPersonalData(settled), [settled]);
 

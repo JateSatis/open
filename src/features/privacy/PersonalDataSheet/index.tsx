@@ -17,6 +17,8 @@ export type PersonalDataSheetProps = {
   /** Скрыть найденное от зрителей — только там, где есть скрытый текст. */
   onHide?: () => void;
   onSendAsIs: () => void;
+  /** Подпись «как есть»: «Отправить как есть», в профиле — «Сохранить как есть». */
+  sendAsIsLabel?: string;
   /** «Изменить»: лист закрывается, текст остаётся в поле. */
   onEdit: () => void;
 };
@@ -32,6 +34,7 @@ export function PersonalDataSheet({
   audience,
   onHide,
   onSendAsIs,
+  sendAsIsLabel = 'Отправить как есть',
   onEdit,
 }: PersonalDataSheetProps) {
   const theme = useTheme();
@@ -60,7 +63,12 @@ export function PersonalDataSheet({
             {findings.map((finding) => (
               <View key={`${finding.start}-${finding.end}`} style={styles.finding}>
                 <Text variant="smallBold">{PERSONAL_DATA_LABELS[finding.kind]}</Text>
-                <Text variant="small" color="textSecondary" style={styles.findingText} numberOfLines={2}>
+                <Text
+                  variant="small"
+                  color="textSecondary"
+                  style={styles.findingText}
+                  numberOfLines={2}
+                >
                   {finding.text}
                 </Text>
               </View>
@@ -69,7 +77,7 @@ export function PersonalDataSheet({
 
           <View style={styles.actions}>
             {onHide ? <Button label="Скрыть найденное от зрителей" onPress={onHide} /> : null}
-            <Button label="Отправить как есть" variant="secondary" onPress={onSendAsIs} />
+            <Button label={sendAsIsLabel} variant="secondary" onPress={onSendAsIs} />
             <Button label="Изменить" variant="ghost" onPress={onEdit} />
           </View>
         </Pressable>

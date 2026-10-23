@@ -14,13 +14,7 @@
 import { toCodePointOffset } from '@/features/chats/fragments/textOffsets';
 
 export type PersonalDataKind =
-  | 'phone'
-  | 'email'
-  | 'address'
-  | 'school'
-  | 'geo'
-  | 'schedule'
-  | 'social';
+  'phone' | 'email' | 'address' | 'school' | 'geo' | 'schedule' | 'social';
 
 export type PersonalDataFinding = {
   kind: PersonalDataKind;
@@ -63,9 +57,16 @@ function word(body: string): string {
 
 type Match = { kind: PersonalDataKind; start: number; end: number; strong: boolean };
 
-function scanAll(text: string, pattern: RegExp, visit: (m: RegExpExecArray) => Match | null): Match[] {
+function scanAll(
+  text: string,
+  pattern: RegExp,
+  visit: (m: RegExpExecArray) => Match | null,
+): Match[] {
   const found: Match[] = [];
-  const re = new RegExp(pattern.source, pattern.flags.includes('g') ? pattern.flags : `${pattern.flags}g`);
+  const re = new RegExp(
+    pattern.source,
+    pattern.flags.includes('g') ? pattern.flags : `${pattern.flags}g`,
+  );
   let m: RegExpExecArray | null;
 
   while ((m = re.exec(text)) !== null) {
@@ -83,13 +84,21 @@ function scanAll(text: string, pattern: RegExp, visit: (m: RegExpExecArray) => M
 }
 
 function plain(kind: PersonalDataKind, strong: boolean) {
-  return (m: RegExpExecArray): Match => ({ kind, start: m.index, end: m.index + m[0].length, strong });
+  return (m: RegExpExecArray): Match => ({
+    kind,
+    start: m.index,
+    end: m.index + m[0].length,
+    strong,
+  });
 }
 
 // --- Телефон ---------------------------------------------------------------
 
 /** Цифры с разделителями, начинается с «+» или цифры, кончается цифрой. */
-const PHONE = new RegExp(`(?<![\\p{L}\\p{N}_.:/])\\+?\\d[\\d\\s\\-().]{8,20}\\d(?![\\p{N}.:/])`, 'u');
+const PHONE = new RegExp(
+  `(?<![\\p{L}\\p{N}_.:/])\\+?\\d[\\d\\s\\-().]{8,20}\\d(?![\\p{N}.:/])`,
+  'u',
+);
 
 function phones(text: string): Match[] {
   return scanAll(text, PHONE, (m) => {
@@ -110,7 +119,8 @@ function phones(text: string): Match[] {
 
 // --- Почта -----------------------------------------------------------------
 
-const EMAIL = /(?<![\p{L}\p{N}_.+-])[\p{L}\p{N}._%+-]+@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)*\.\p{L}{2,}(?![\p{L}\p{N}])/u;
+const EMAIL =
+  /(?<![\p{L}\p{N}_.+-])[\p{L}\p{N}._%+-]+@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)*\.\p{L}{2,}(?![\p{L}\p{N}])/u;
 
 // --- Геолокация ------------------------------------------------------------
 
@@ -153,7 +163,8 @@ const STREET_TYPE = [
 ].join('|');
 
 /** Название улицы: одно-два слова, первое с заглавной или числительное («3-я»). */
-const STREET_NAME = "(?:\\d{1,2}-?(?:я|й|ая|ий|ой)\\s+)?[\\p{Lu}][\\p{L}'’\\-]+(?:\\s+[\\p{Lu}][\\p{L}'’\\-]+)?";
+const STREET_NAME =
+  "(?:\\d{1,2}-?(?:я|й|ая|ий|ой)\\s+)?[\\p{Lu}][\\p{L}'’\\-]+(?:\\s+[\\p{Lu}][\\p{L}'’\\-]+)?";
 
 /** Номер дома: «5», «5а», «5/2», «д. 5», «5 к2», «5 корп. 1», «5 стр 3». */
 const HOUSE =
@@ -172,7 +183,10 @@ const STREET_AFTER_HOME_WORD = new RegExp(
 );
 
 /** Номер дома словом: «дом 5», «д. 12» — без номера («дома скучно») ничего. */
-const HOUSE_WORD = new RegExp(word('(?:дом|д\\.)\\s*№?\\s*\\d{1,4}(?:\\s?[а-я](?![\\p{L}]))?'), 'iu');
+const HOUSE_WORD = new RegExp(
+  word('(?:дом|д\\.)\\s*№?\\s*\\d{1,4}(?:\\s?[а-я](?![\\p{L}]))?'),
+  'iu',
+);
 
 const APARTMENT = new RegExp(
   word('(?:кв\\.?|квартир[аеуы]|apt\\.?|apartment)\\s*№?\\s*\\d{1,4}'),
@@ -185,7 +199,9 @@ const ENTRANCE = new RegExp(
 );
 
 const EN_STREET = new RegExp(
-  word('\\d{1,5}\\s+(?:[A-Z][a-z]+\\s+){1,2}(?:Street|St\\.?|Avenue|Ave\\.?|Road|Rd\\.?|Lane|Ln\\.?|Boulevard|Blvd\\.?|Drive|Dr\\.?|Court|Ct\\.?|Place|Pl\\.?)'),
+  word(
+    '\\d{1,5}\\s+(?:[A-Z][a-z]+\\s+){1,2}(?:Street|St\\.?|Avenue|Ave\\.?|Road|Rd\\.?|Lane|Ln\\.?|Boulevard|Blvd\\.?|Drive|Dr\\.?|Court|Ct\\.?|Place|Pl\\.?)',
+  ),
   'u',
 );
 
@@ -227,7 +243,8 @@ const DAY =
 
 const EVERY = 'каждый|каждую|каждое|каждые|каждого|ежедневно|every|по';
 
-const TIME = '(?:в|к|с|до|at|from)?\\s*(?:[01]?\\d|2[0-3])[:.][0-5]\\d|(?:в|к|с|at)\\s+(?:[01]?\\d|2[0-3])(?:\\s*(?:ч(?:ас(?:а|ов)?)?\\.?|утра|вечера|дня|am|pm))?';
+const TIME =
+  '(?:в|к|с|до|at|from)?\\s*(?:[01]?\\d|2[0-3])[:.][0-5]\\d|(?:в|к|с|at)\\s+(?:[01]?\\d|2[0-3])(?:\\s*(?:ч(?:ас(?:а|ов)?)?\\.?|утра|вечера|дня|am|pm))?';
 
 /** Место: предлог места + слово, или «в/на» + узнаваемое место. */
 const PLACE =
@@ -298,7 +315,15 @@ function findAll(text: string): Match[] {
 }
 
 /** Сильнее — тот, что важнее показать в списке, если куски пересеклись. */
-const PRIORITY: PersonalDataKind[] = ['geo', 'address', 'school', 'phone', 'email', 'schedule', 'social'];
+const PRIORITY: PersonalDataKind[] = [
+  'geo',
+  'address',
+  'school',
+  'phone',
+  'email',
+  'schedule',
+  'social',
+];
 
 /**
  * Пересекающиеся куски — один. Соседние части адреса через запятую или
