@@ -485,34 +485,50 @@ begin
 end;
 $$;
 
--- Позванный в чат видит людей чата как участник: тем же именем, что и
--- пригласившего, а не псевдонимом чата. Отклонивший — снова посторонний.
+-- Позванному без подмены виден только позвавший (он раскрыт карточкой
+-- приглашения); остальные скрывшие себя — под псевдонимом чата, пока он не
+-- вступил. Отклонивший — снова посторонний.
 do $$
 declare
   a uuid := '00000000-0000-4000-8000-0000000004a1';
   s uuid := '00000000-0000-4000-8000-0000000004c1';
+  m uuid := '00000000-0000-4000-8000-0000000004d1';
   x uuid;
   alias text;
   seen text;
+  opaque boolean;
 begin
   perform pg_temp.as_owner();
   select id into x from public.chats where title = 'Идн X';
   select identity_alias into alias from public.privacy_settings where user_id = a;
   delete from public.chat_invites where chat_id = x and invitee_id = s;
-  insert into public.chat_invites (chat_id, inviter_id, invitee_id) values (x, a, s);
 
+  -- Позвал M: скрывшая себя A для позванного по-прежнему под псевдонимом чата.
+  insert into public.chat_invites (chat_id, inviter_id, invitee_id) values (x, m, s);
   perform pg_temp.act_as(s);
-  select author_name into seen from public.message_rows where chat_id = x and author_id = a limit 1;
-  perform pg_temp.check('позванный видит участника под общим псевдонимом, как пригласившего',
+  select author_name, author_opaque into seen, opaque
+  from public.message_rows where chat_id = x and text = 'Привет из X';
+  perform pg_temp.check('позванному другие скрывшие себя — под псевдонимом чата',
+    opaque and seen <> alias, seen);
+  perform pg_temp.check('позванному в составе — непрозрачный id не позвавшего',
+    not exists (select 1 from public.chat_people(array[x]) p where p.user_id = a), null);
+
+  -- Позвала A: в составе и сообщениях — то же имя, что в карточке приглашения.
+  perform pg_temp.as_owner();
+  delete from public.chat_invites where chat_id = x and invitee_id = s;
+  insert into public.chat_invites (chat_id, inviter_id, invitee_id) values (x, a, s);
+  perform pg_temp.act_as(s);
+  select author_name into seen from public.message_rows where chat_id = x and text = 'Привет из X';
+  perform pg_temp.check('позвавший для позванного — тем же именем, что в карточке',
     seen = alias and seen = (select inviter_name(i) from public.chat_invites i where i.chat_id = x and i.invitee_id = s),
     seen);
-  perform pg_temp.check('позванному в составе — тот же id, что у пригласившего',
+  perform pg_temp.check('позвавший в составе — настоящим id',
     exists (select 1 from public.chat_people(array[x]) p where p.user_id = a), null);
 
   perform pg_temp.as_owner();
   update public.chat_invites set status = 'declined', declined_at = now() where chat_id = x and invitee_id = s;
   perform pg_temp.act_as(s);
-  select author_name into seen from public.message_rows where chat_id = x and author_opaque limit 1;
+  select author_name into seen from public.message_rows where chat_id = x and text = 'Привет из X';
   perform pg_temp.check('отклонивший снова видит псевдоним чата', seen is not null and seen <> alias, seen);
   perform pg_temp.as_owner();
 end;
