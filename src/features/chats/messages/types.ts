@@ -4,6 +4,8 @@ import type {
   Message,
   MessageAttachment,
   QuotedMessage,
+  SendMessageMedia,
+  SendVoiceInput,
 } from '@/api/chats';
 import type { DraftPop } from '@/features/chats/composerDraftStore';
 import type { LocalMedia, OutgoingMedia } from '@/features/media';
@@ -26,6 +28,11 @@ export type ChatMessage = Message & {
   pendingForward?: { sourceChatId: string; messageIds: string[] };
   /** Пост с попом до ответа сервера: канал и поп — уже опубликованный или новый. */
   pendingPop?: { channelId: string; pop: DraftPop };
+  /**
+   * Заметка из «Сохранённых» до ответа сервера: её файлы уже в Storage и
+   * очищены — повтор отправляет их же, не загружая заново.
+   */
+  pendingFiles?: Extract<Outgoing, { type: 'files' }>;
   /**
    * Локальные превью вложений своего только что отправленного сообщения, по
    * позициям. Переживают ответ сервера: плитка держит локальную картинку,
@@ -77,6 +84,8 @@ export type Outgoing =
   | { type: 'pop_post'; text: string; replyTo: string[]; channelId: string; pop: DraftPop }
   | { type: 'forward'; sourceChatId: string; messageIds: string[] }
   /** Пересланный комментарий — по сообщению на комментарий. */
-  | { type: 'forward_comment'; commentId: string };
+  | { type: 'forward_comment'; commentId: string }
+  /** Заметка из «Сохранённых» — обычным сообщением, её готовыми файлами. */
+  | { type: 'files'; text: string; media: SendMessageMedia[]; voice: SendVoiceInput | null };
 
 export type UserActivity = { userId: string; activity: ChatActivity };

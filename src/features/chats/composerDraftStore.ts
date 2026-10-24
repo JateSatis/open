@@ -71,9 +71,25 @@ export type ChatDraft = {
   pop?: DraftPop | null;
 };
 
-/** Одна пачка пересылки: оригиналы одного чата по порядку на экране — или комментарии. */
+/**
+ * Своя заметка из «Сохранённых», уходящая в чат обычным сообщением от меня:
+ * текст и уже загруженные, очищенные файлы — без повторной загрузки.
+ */
+export type NoteForward = {
+  savedId: string;
+  kind: 'post' | 'voice';
+  text: string | null;
+  attachments: MessageAttachment[];
+};
+
+/**
+ * Одна пачка пересылки: оригиналы одного чата по порядку на экране,
+ * комментарии — или свои заметки, по сообщению на каждую.
+ */
 export type ForwardBatch =
-  { sourceChat: ChatRef; items: ForwardItem[] } | { comments: ForwardedComment[] };
+  | { sourceChat: ChatRef; items: ForwardItem[] }
+  | { comments: ForwardedComment[] }
+  | { notes: NoteForward[] };
 
 /**
  * Что пересылается, пока выбирают, куда: из чата — одна пачка (откуда и
@@ -90,7 +106,10 @@ export function forwardBatches(pick: ForwardPick): ForwardBatch[] {
 
 /** Сколько сообщений или комментариев в пачке. */
 export function batchSize(batch: ForwardBatch): number {
-  return 'comments' in batch ? batch.comments.length : batch.items.length;
+  if ('comments' in batch) return batch.comments.length;
+  if ('notes' in batch) return batch.notes.length;
+
+  return batch.items.length;
 }
 
 type DraftsState = {
@@ -206,11 +225,14 @@ export function clearDraft(chatId: string) {
 export function startForwardPick(pick: ForwardPick) {
   const batches = forwardBatches(pick);
   const lead = batches[0];
-  const first = lead
-    ? 'comments' in lead
-      ? lead.comments[0]
-      : lead.items[0]?.original
-    : undefined;
+  // Заметки — не сообщения и не комментарии: журналу рекомендаций в них
+  // интересоваться нечем.
+  const first =
+    !lead || 'notes' in lead
+      ? undefined
+      : 'comments' in lead
+        ? lead.comments[0]
+        : lead.items[0]?.original;
 
   if (lead && first) {
     forwardPickerOpened(

@@ -51,7 +51,7 @@ import {
 import { showNotice } from '@/features/notifications/alertsStore';
 import { popsQueryKey } from '@/features/pops/keys';
 import { PopPosterError, toPopMedia, uploadPop } from '@/features/pops/uploadPop';
-import type { DraftPop } from '@/features/chats/composerDraftStore';
+import type { DraftPop, NoteForward } from '@/features/chats/composerDraftStore';
 import { isNetworkError } from '@/lib/network';
 import { NO_REACTIONS } from '@/api/reactionCounts';
 import { trimWithRanges, type HiddenRange } from '@/features/chats/hiddenText';
@@ -118,6 +118,8 @@ export function outgoingOf(message: ChatMessage): Outgoing | null {
 
   if (message.pendingForward) return { type: 'forward', ...message.pendingForward };
 
+  if (message.pendingFiles) return message.pendingFiles;
+
   if (message.kind === 'comment_forward') {
     const commentId = message.commentForward?.commentId;
 
@@ -181,7 +183,13 @@ export async function uploadOutgoing(
   outgoing: Outgoing,
   currentUserId: string,
 ): Promise<UploadedMedia[]> {
-  if (outgoing.type === 'forward' || outgoing.type === 'forward_comment') return [];
+  if (
+    outgoing.type === 'forward' ||
+    outgoing.type === 'forward_comment' ||
+    outgoing.type === 'files'
+  ) {
+    return [];
+  }
   if (outgoing.type === 'pop_post') {
     if (outgoing.pop.type === 'existing') return [];
 
@@ -243,6 +251,15 @@ async function insert(
     const [message] = await forwardComments(chatId, [outgoing.commentId]);
 
     return message;
+  }
+
+  if (outgoing.type === 'files') {
+    return outgoing.voice
+      ? sendVoiceMessage(chatId, outgoing.voice)
+      : sendMessage(chatId, {
+          text: outgoing.text || undefined,
+          media: outgoing.media.length > 0 ? outgoing.media : undefined,
+        });
   }
 
   if (outgoing.type === 'voice') {
@@ -749,6 +766,92 @@ export function sendCommentForward(
         type: 'forward_comment',
         commentId: draft.commentForward!.commentId!,
       });
+    }
+  })();
+
+  return { delivered };
+}
+
+/** Файл заметки как вложение сообщения: путь тот же, размер не хранится. */
+function noteFile(attachment: MessageAttachment): SendMessageMedia {
+  return {
+    url: attachment.url,
+    posterUrl: attachment.posterUrl,
+    mimeType: attachment.mimeType ?? 'application/octet-stream',
+    width: attachment.width,
+    height: attachment.height,
+    durationMs: attachment.durationMs,
+    sizeBytes: null,
+  };
+}
+
+function noteOutgoing(note: NoteForward): Extract<Outgoing, { type: 'files' }> {
+  const [voice] = note.attachments;
+
+  return note.kind === 'voice' && voice
+    ? {
+        type: 'files',
+        text: '',
+        media: [],
+        voice: {
+          url: voice.url,
+          mimeType: voice.mimeType ?? 'audio/mp4',
+          durationMs: voice.durationMs ?? 0,
+          sizeBytes: null,
+          waveform: voice.waveform,
+        },
+      }
+    : { type: 'files', text: note.text ?? '', media: note.attachments.map(noteFile), voice: null };
+}
+
+/**
+ * Свои заметки из «Сохранённых» — в чат обычными сообщениями от меня, без
+ * пометки «переслано» и без цитат: текст, альбом или голосовое. Файлы уже в
+ * Storage и очищены — уходят те же пути. Подпись листа, если есть, — первой,
+ * затем по сообщению на заметку, по порядку.
+ */
+export function sendNoteForward(
+  context: SendContext,
+  text: string,
+  notes: NoteForward[],
+  /** Уходит на сервер только после этого: пачки пересылки — по порядку. */
+  after: Promise<void> = Promise.resolve(),
+): Delivery {
+  const { queryClient, chatId, currentUserId } = context;
+
+  if (notes.length === 0) return { delivered: after };
+
+  const trimmed = text.trim();
+  const now = Date.now();
+  const lead = trimmed ? textDraft(context, trimmed, now) : null;
+  const drafts = notes.map((note, index): ChatMessage => {
+    const outgoing = noteOutgoing(note);
+
+    return {
+      ...textDraft(context, note.text ?? '', now + 1 + index),
+      kind: outgoing.voice ? 'voice' : note.attachments.length > 0 ? 'media' : 'text',
+      text: outgoing.voice ? null : note.text,
+      attachments: note.attachments,
+      pendingFiles: outgoing,
+    };
+  });
+
+  addToOutbox(chatId, [...drafts].reverse().concat(lead ? [lead] : []));
+
+  const delivered = (async () => {
+    await after;
+
+    if (lead) {
+      await deliver(queryClient, chatId, currentUserId, lead.localId!, {
+        type: 'post',
+        text: trimmed,
+        media: [],
+        replyTo: [],
+      });
+    }
+
+    for (const draft of drafts) {
+      await deliver(queryClient, chatId, currentUserId, draft.localId!, draft.pendingFiles!);
     }
   })();
 

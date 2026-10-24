@@ -15,13 +15,18 @@ export type ReplyQuoteProps = {
   isOwn: boolean;
   /** Тап по цитате — прыжок к её оригиналу. Нет обработчика — цитаты не нажимаются. */
   onPress?: (quote: QuotedMessage) => void;
+  /** Подпись удалённого оригинала; по умолчанию — «Сообщение удалено». */
+  deletedText?: string;
 };
 
 type QuoteLineProps = {
   quote: QuotedMessage;
   isOwn: boolean;
   onPress?: (quote: QuotedMessage) => void;
+  deletedText: string;
 };
+
+const DELETED_TEXT = 'Сообщение удалено';
 
 /**
  * Одна цитата: полоска, автор и фрагмент оригинала. Высота всегда одна — две
@@ -29,13 +34,18 @@ type QuoteLineProps = {
  * фото или удалённым сообщением. Мемо — у ответа их бывает до сотни, а
  * облачко перерисовывается от каждой реакции.
  */
-const QuoteLine = memo(function QuoteLine({ quote, isOwn, onPress }: QuoteLineProps) {
+const QuoteLine = memo(function QuoteLine({
+  quote,
+  isOwn,
+  onPress,
+  deletedText,
+}: QuoteLineProps) {
   const theme = useTheme();
   const accentColor = isOwn ? theme.primaryText : theme.primary;
   const textColor = isOwn ? 'primaryText' : 'text';
   const live = quote.state === 'live' ? quote : null;
   const author = live ? (live.authorName ?? DELETED_ACCOUNT) : null;
-  const snippet = live ? describePreview(live.preview) : 'Сообщение удалено';
+  const snippet = live ? describePreview(live.preview) : deletedText;
   const thumbnailUrl = live?.preview.thumbnailUrl ?? null;
 
   return (
@@ -86,7 +96,12 @@ const QuoteLine = memo(function QuoteLine({ quote, isOwn, onPress }: QuoteLinePr
  * несколько сообщений видно всё, на что он отвечает, и тап по цитате ведёт
  * к её оригиналу.
  */
-export function ReplyQuote({ quotes, isOwn, onPress }: ReplyQuoteProps) {
+export function ReplyQuote({
+  quotes,
+  isOwn,
+  onPress,
+  deletedText = DELETED_TEXT,
+}: ReplyQuoteProps) {
   if (quotes.length === 0) return null;
 
   return (
@@ -99,6 +114,7 @@ export function ReplyQuote({ quotes, isOwn, onPress }: ReplyQuoteProps) {
           quote={quote}
           isOwn={isOwn}
           onPress={onPress}
+          deletedText={deletedText}
         />
       ))}
     </View>

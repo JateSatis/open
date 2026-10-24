@@ -4,10 +4,20 @@ import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
 import { ForwardSheet } from './index';
 
 import { listChats, type ChatSummary, type ForwardedComment } from '@/api/chats';
-import { createSavedTag, listSavedTags, saveComments, saveMessages } from '@/api/saved';
+import {
+  copySavedNotes,
+  createSavedTag,
+  listSavedTags,
+  saveComments,
+  saveMessages,
+} from '@/api/saved';
 import { useSession } from '@/features/auth/useSession';
 import type { ForwardPick } from '@/features/chats/composerDraftStore';
-import { sendCommentForward, sendForward } from '@/features/chats/messages/delivery';
+import {
+  sendCommentForward,
+  sendForward,
+  sendNoteForward,
+} from '@/features/chats/messages/delivery';
 import { useInAppAlert } from '@/features/notifications/alertsStore';
 import { original } from '@/test/islands';
 import { renderWithQuery } from '@/test/renderWithQuery';
@@ -19,10 +29,12 @@ jest.mock('@/api/saved', () => ({
   createSavedTag: jest.fn(),
   saveMessages: jest.fn(),
   saveComments: jest.fn(),
+  copySavedNotes: jest.fn(() => Promise.resolve([])),
 }));
 jest.mock('@/features/chats/messages/delivery', () => ({
   sendForward: jest.fn(() => ({ delivered: Promise.resolve() })),
   sendCommentForward: jest.fn(() => ({ delivered: Promise.resolve() })),
+  sendNoteForward: jest.fn(() => ({ delivered: Promise.resolve() })),
 }));
 
 const mockedListChats = listChats as jest.MockedFunction<typeof listChats>;
@@ -320,5 +332,33 @@ describe('ForwardSheet', () => {
       expect.any(Promise),
     );
     expect(noticeText()).toBe('Переслано 3 из 5: оригиналы двух удалены');
+  });
+
+  it('sends my notes as my own messages between islands, and «Сохранённые» copies them as notes', async () => {
+    const notes = [{ savedId: 'n-1', kind: 'post' as const, text: 'мысль', attachments: [] }];
+    const island = { sourceChat: SOURCE, items: [{ original: original({ id: 'm-1' }) }] };
+
+    await renderSheet({ batches: [{ notes }, island], skipped: 0 });
+
+    await fireEvent.press(screen.getByRole('checkbox', { name: 'Альфа' }));
+    await fireEvent.press(screen.getByRole('checkbox', { name: 'Сохранённые сообщения' }));
+    await send();
+
+    expect(sendNoteForward).toHaveBeenCalledWith(
+      expect.objectContaining({ chatId: 'chat-a' }),
+      '',
+      notes,
+      expect.any(Promise),
+    );
+    expect(mockedSendForward).toHaveBeenCalledWith(
+      expect.objectContaining({ chatId: 'chat-a' }),
+      '',
+      SOURCE,
+      island.items,
+      expect.any(Promise),
+    );
+    await waitFor(() =>
+      expect(copySavedNotes).toHaveBeenCalledWith(['n-1'], { tagIds: [], watchLater: false }),
+    );
   });
 });
