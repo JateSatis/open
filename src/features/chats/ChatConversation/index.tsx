@@ -454,8 +454,6 @@ export function ChatConversation({
     send: chatMessages.send,
     sendVoice: chatMessages.sendVoice,
     sendPop,
-    forward: chatMessages.forward,
-    forwardComments: chatMessages.forwardComments,
   });
   const edit = useMessageEdit({ chatId, draft, composerRef, saveEdit: chatMessages.saveEdit });
   const { leave: leaveEdit, start: beginEdit } = edit;

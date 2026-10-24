@@ -1,6 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactElement } from 'react';
 import { ActivityIndicator, FlatList, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { styles } from './styles';
 
@@ -12,19 +11,22 @@ import { useChats } from '@/features/chats/useChats';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
 
 export type ForwardChatPickerProps = {
-  onPick: (chatId: string) => void;
+  /** Отмеченные чаты. Поиск их не сбрасывает: выбор живёт выше списка. */
+  selectedIds: ReadonlySet<string>;
+  onToggle: (chatId: string) => void;
+  /** Первая строка над чатами и над результатами поиска — «Сохранённые». */
+  header?: ReactElement;
 };
 
 /**
  * Куда переслать: чаты, где я участник, в том же порядке, что на вкладке
- * «Чаты», и поиск по названию и участникам. Без «в сети»: канал присутствия
+ * «Чаты», и поиск по названию и участникам. Тап отмечает чат, повторный —
+ * снимает; адресатов может быть несколько. Без «в сети»: канал присутствия
  * уже держит список чатов под этим экраном, второй подписчик на него ломает
- * первого. Чатов, куда я только позван,
- * здесь нет — писать туда я не могу, и список их не отдаёт.
+ * первого. Чатов, куда я только позван, здесь нет — писать туда я не могу, и
+ * список их не отдаёт.
  */
-export function ForwardChatPicker({ onPick }: ForwardChatPickerProps) {
-  // Список доходит до края окна: панели вкладок под экраном нет.
-  const insets = useSafeAreaInsets();
+export function ForwardChatPicker({ selectedIds, onToggle, header }: ForwardChatPickerProps) {
   const currentUserId = useCurrentUserId();
   const { chats, isLoading, error } = useChats();
   const [query, setQuery] = useState('');
@@ -60,14 +62,25 @@ export function ForwardChatPicker({ onPick }: ForwardChatPickerProps) {
         <ActivityIndicator accessibilityLabel="Загрузка чатов" />
       ) : (
         <FlatList
+          testID="forward-chat-list"
+          style={styles.screen}
           showsVerticalScrollIndicator={false}
           showsHorizontalScrollIndicator={false}
           data={found}
           keyExtractor={(chat) => chat.id}
+          // Тап по строке при открытой клавиатуре — сразу выбор, а не только
+          // закрытие клавиатуры: подпись набирают, пока выбирают.
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={[styles.list, { paddingBottom: insets.bottom }]}
+          contentContainerStyle={styles.list}
+          ListHeaderComponent={header}
+          extraData={selectedIds}
           renderItem={({ item }) => (
-            <ChatListItem chat={item} currentUserId={currentUserId} onPress={onPick} />
+            <ChatListItem
+              chat={item}
+              currentUserId={currentUserId}
+              onPress={onToggle}
+              selected={selectedIds.has(item.id)}
+            />
           )}
           ListEmptyComponent={
             <Text color="textSecondary" style={styles.message}>

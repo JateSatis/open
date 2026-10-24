@@ -2,12 +2,12 @@ import { useRouter } from 'expo-router';
 import { useCallback, type RefObject } from 'react';
 import type { TextInput } from 'react-native';
 
-import type { ChatRef, ForwardedComment, IslandOriginal } from '@/api/chats';
+import type { ChatRef, IslandOriginal } from '@/api/chats';
 import { readChatDraft, startForwardPick } from '@/features/chats/composerDraftStore';
 import { claimKeyboardForChat } from '@/features/chats/composerKeyboard';
 import { anchorOf, contentOf, type BubbleRow } from '@/features/chats/islands/rows';
 import { quoteOf } from '@/features/chats/messageQuote';
-import type { ChatMessage, ForwardItem, LiveQuote } from '@/features/chats/messages/types';
+import type { ChatMessage, LiveQuote } from '@/features/chats/messages/types';
 import type { DraftPop } from '@/features/chats/composerDraftStore';
 import type { ComposerDraft } from '@/features/chats/useComposerDraft';
 import type { LocalMedia, OutgoingMedia } from '@/features/media';
@@ -33,16 +33,14 @@ type Options = {
   sendVoice: (voice: LocalMedia, replies?: LiveQuote[]) => void;
   /** Пост с попом — только в чате постов канала. */
   sendPop?: (text: string, pop: DraftPop, replies?: LiveQuote[]) => void;
-  forward: (text: string, sourceChat: ChatRef, items: ForwardItem[]) => void;
-  forwardComments: (text: string, comments: ForwardedComment[]) => void;
 };
 
 export type ReplyForward = {
   /** «Ответить»: облачка встают в плашку, фокус — в поле. */
   startReply: (rows: BubbleRow[]) => void;
-  /** «Переслать»: дальше — экран выбора чата. */
+  /** «Переслать»: дальше — лист «Кому переслать», отправка — оттуда. */
   startForward: (rows: BubbleRow[]) => void;
-  /** «О»: текст, альбом, ответ или пересылка — смотря что в черновике. */
+  /** «О»: текст, альбом или ответ — смотря что в черновике. */
   submit: () => void;
   sendVoice: (voice: LocalMedia) => void;
 };
@@ -66,8 +64,8 @@ function quoteOfRow(
 }
 
 /**
- * Ответ и пересылка поверх черновика поля ввода. Режим черновика решает,
- * чем станет нажатие «О»: ответом с цитатами или пересылкой.
+ * Ответ поверх черновика поля ввода и начало пересылки. Режим черновика
+ * решает, станет ли нажатие «О» ответом с цитатами.
  */
 export function useReplyForward({
   chatId,
@@ -79,8 +77,6 @@ export function useReplyForward({
   send,
   sendVoice: sendVoiceMessage,
   sendPop,
-  forward,
-  forwardComments,
 }: Options): ReplyForward {
   const router = useRouter();
   const { mode, setMode } = draft;
@@ -146,26 +142,6 @@ export function useReplyForward({
     if (pop && sendPop) {
       sendPop(draft.text, pop, mode?.type === 'reply' ? mode.quotes : []);
       draft.setPop(null);
-
-      if (mode?.type === 'forward' || mode?.type === 'forward_comments') {
-        draft.setText('');
-        return;
-      }
-
-      draft.clear();
-      return;
-    }
-
-    // Пересылка с подписью. Альбом из шита медиа при этом уходит обычным
-    // сообщением, а пересылка ждёт своей очереди в плашке.
-    if (mode?.type === 'forward' && media.length === 0) {
-      forward(draft.text, mode.sourceChat, mode.items);
-      draft.clear();
-      return;
-    }
-
-    if (mode?.type === 'forward_comments' && media.length === 0) {
-      forwardComments(draft.text, mode.comments);
       draft.clear();
       return;
     }
@@ -178,15 +154,8 @@ export function useReplyForward({
       mode?.type === 'reply' ? mode.quotes : [],
       readChatDraft(chatId).hidden,
     );
-
-    if (mode?.type === 'forward' || mode?.type === 'forward_comments') {
-      draft.setText('');
-      draft.clearMedia();
-      return;
-    }
-
     draft.clear();
-  }, [chatId, draft, forward, forwardComments, mode, send, sendPop]);
+  }, [chatId, draft, mode, send, sendPop]);
 
   const sendVoice = useCallback(
     (voice: LocalMedia) => {

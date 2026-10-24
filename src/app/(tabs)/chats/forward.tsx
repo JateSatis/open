@@ -1,40 +1,39 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useEffect } from 'react';
-import { View } from 'react-native';
+import { useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
 
-import { cancelForwardPick, finishForwardPick } from '@/features/chats/composerDraftStore';
-import { ForwardChatPicker } from '@/features/chats/ForwardChatPicker';
-import { useTheme } from '@/hooks/use-theme';
+import {
+  cancelForwardPick,
+  completeForwardPick,
+  readForwardPick,
+} from '@/features/chats/composerDraftStore';
+import { ForwardSheet } from '@/features/chats/ForwardSheet';
 
 /**
- * «Переслать» → выбор чата. Выбранный чат открывается с плашкой пересылки
- * над полем ввода; отправка — уже там, как в Telegram.
+ * «Переслать» → лист «Кому переслать»: чаты и «Сохранённые» мультивыбором,
+ * отправка — отсюда же. После отправки лист закрывается, человек остаётся в
+ * переписке, откуда пересылал.
  */
 export default function ForwardScreen() {
   const router = useRouter();
-  const theme = useTheme();
-  const { from } = useLocalSearchParams<{ from?: string }>();
+  // Что пересылать — снимком на открытие: после отправки стор очищается.
+  const [pick] = useState(readForwardPick);
 
-  // Ушёл без выбора — пересылать нечего.
+  // Ушёл без отправки — пересылать нечего.
   useEffect(() => () => cancelForwardPick(), []);
 
-  const pick = useCallback(
-    (chatId: string) => {
-      if (!finishForwardPick(chatId) || chatId === from) {
-        // Пересылка в тот же чат: он уже под этим экраном.
-        router.back();
-        return;
-      }
+  useEffect(() => {
+    if (!pick) router.back();
+  }, [pick, router]);
 
-      // replace: «назад» из целевого чата ведёт туда, откуда пересылали.
-      router.replace(`/chats/${chatId}`);
-    },
-    [from, router],
-  );
+  if (!pick) return null;
 
   return (
-    <View style={{ flex: 1, backgroundColor: theme.background }}>
-      <ForwardChatPicker onPick={pick} />
-    </View>
+    <ForwardSheet
+      pick={pick}
+      onSent={() => {
+        completeForwardPick();
+        router.back();
+      }}
+    />
   );
 }

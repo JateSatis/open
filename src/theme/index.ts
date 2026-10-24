@@ -11,3 +11,4 @@ export * from './infoPage';
 export * from './tabBar';
 export * from './clusterLook';
 export * from './composer';
+export * from './savedTags';

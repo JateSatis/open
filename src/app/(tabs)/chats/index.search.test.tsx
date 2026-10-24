@@ -50,6 +50,9 @@ jest.mock('@/features/auth/useSession', () => ({ useSession: jest.fn() }));
 jest.mock('@/api/chats', () => ({ listChats: jest.fn() }));
 jest.mock('@/api/chatInfo', () => ({ getLastSeen: jest.fn(() => Promise.resolve(new Map())) }));
 jest.mock('@/api/invites', () => ({ listInvites: jest.fn() }));
+jest.mock('@/api/saved', () => ({
+  getSavedSummary: jest.fn(() => Promise.resolve({ watchLaterPending: 0 })),
+}));
 jest.mock('@/api/search', () => ({
   searchEntities: jest.fn(),
   searchMessages: jest.fn(),

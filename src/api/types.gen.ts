@@ -3469,6 +3469,327 @@ export type Database = {
         }
         Relationships: []
       }
+      saved_message_attachments: {
+        Row: {
+          created_at: string
+          duration_ms: number | null
+          height: number | null
+          id: string
+          media_hidden: boolean
+          mime_type: string | null
+          owner_id: string
+          pop_channel_id: string | null
+          pop_id: string | null
+          pop_title: string | null
+          position: number
+          poster_url: string | null
+          saved_id: string
+          url: string | null
+          waveform: number[] | null
+          width: number | null
+        }
+        Insert: {
+          created_at?: string
+          duration_ms?: number | null
+          height?: number | null
+          id?: string
+          media_hidden?: boolean
+          mime_type?: string | null
+          owner_id: string
+          pop_channel_id?: string | null
+          pop_id?: string | null
+          pop_title?: string | null
+          position: number
+          poster_url?: string | null
+          saved_id: string
+          url?: string | null
+          waveform?: number[] | null
+          width?: number | null
+        }
+        Update: {
+          created_at?: string
+          duration_ms?: number | null
+          height?: number | null
+          id?: string
+          media_hidden?: boolean
+          mime_type?: string | null
+          owner_id?: string
+          pop_channel_id?: string | null
+          pop_id?: string | null
+          pop_title?: string | null
+          position?: number
+          poster_url?: string | null
+          saved_id?: string
+          url?: string | null
+          waveform?: number[] | null
+          width?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "saved_message_attachments_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "saved_message_attachments_pop_channel_id_fkey"
+            columns: ["pop_channel_id"]
+            isOneToOne: false
+            referencedRelation: "channels"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "saved_message_attachments_pop_id_fkey"
+            columns: ["pop_id"]
+            isOneToOne: false
+            referencedRelation: "pops"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "saved_message_attachments_saved_fkey"
+            columns: ["saved_id", "owner_id"]
+            isOneToOne: false
+            referencedRelation: "saved_messages"
+            referencedColumns: ["id", "owner_id"]
+          },
+        ]
+      }
+      saved_message_tags: {
+        Row: {
+          created_at: string
+          owner_id: string
+          saved_id: string
+          tag_id: string
+        }
+        Insert: {
+          created_at?: string
+          owner_id: string
+          saved_id: string
+          tag_id: string
+        }
+        Update: {
+          created_at?: string
+          owner_id?: string
+          saved_id?: string
+          tag_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "saved_message_tags_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "saved_message_tags_saved_fkey"
+            columns: ["saved_id", "owner_id"]
+            isOneToOne: false
+            referencedRelation: "saved_messages"
+            referencedColumns: ["id", "owner_id"]
+          },
+          {
+            foreignKeyName: "saved_message_tags_tag_fkey"
+            columns: ["tag_id", "owner_id"]
+            isOneToOne: false
+            referencedRelation: "saved_tags"
+            referencedColumns: ["id", "owner_id"]
+          },
+        ]
+      }
+      saved_messages: {
+        Row: {
+          author_id: string | null
+          author_name: string | null
+          author_opaque: boolean
+          comment_message_id: string | null
+          comment_pop_id: string | null
+          created_at: string
+          id: string
+          kind: string
+          original_at: string | null
+          owner_id: string
+          pop_id: string | null
+          seq: number
+          source_category: string
+          source_chat_id: string | null
+          source_comment_id: string | null
+          source_message_id: string | null
+          source_seq: number | null
+          source_type: string
+          text: string | null
+          watch_done_at: string | null
+          watch_later_at: string | null
+        }
+        Insert: {
+          author_id?: string | null
+          author_name?: string | null
+          author_opaque?: boolean
+          comment_message_id?: string | null
+          comment_pop_id?: string | null
+          created_at?: string
+          id?: string
+          kind: string
+          original_at?: string | null
+          owner_id: string
+          pop_id?: string | null
+          seq?: never
+          source_category: string
+          source_chat_id?: string | null
+          source_comment_id?: string | null
+          source_message_id?: string | null
+          source_seq?: number | null
+          source_type: string
+          text?: string | null
+          watch_done_at?: string | null
+          watch_later_at?: string | null
+        }
+        Update: {
+          author_id?: string | null
+          author_name?: string | null
+          author_opaque?: boolean
+          comment_message_id?: string | null
+          comment_pop_id?: string | null
+          created_at?: string
+          id?: string
+          kind?: string
+          original_at?: string | null
+          owner_id?: string
+          pop_id?: string | null
+          seq?: never
+          source_category?: string
+          source_chat_id?: string | null
+          source_comment_id?: string | null
+          source_message_id?: string | null
+          source_seq?: number | null
+          source_type?: string
+          text?: string | null
+          watch_done_at?: string | null
+          watch_later_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "saved_messages_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "saved_messages_comment_message_id_fkey"
+            columns: ["comment_message_id"]
+            isOneToOne: false
+            referencedRelation: "message_rows"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "saved_messages_comment_message_id_fkey"
+            columns: ["comment_message_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "saved_messages_comment_pop_id_fkey"
+            columns: ["comment_pop_id"]
+            isOneToOne: false
+            referencedRelation: "pops"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "saved_messages_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "saved_messages_pop_id_fkey"
+            columns: ["pop_id"]
+            isOneToOne: false
+            referencedRelation: "pops"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "saved_messages_source_chat_id_fkey"
+            columns: ["source_chat_id"]
+            isOneToOne: false
+            referencedRelation: "chat_rows"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "saved_messages_source_chat_id_fkey"
+            columns: ["source_chat_id"]
+            isOneToOne: false
+            referencedRelation: "chats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "saved_messages_source_comment_id_fkey"
+            columns: ["source_comment_id"]
+            isOneToOne: false
+            referencedRelation: "comment_rows"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "saved_messages_source_comment_id_fkey"
+            columns: ["source_comment_id"]
+            isOneToOne: false
+            referencedRelation: "comments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "saved_messages_source_message_id_fkey"
+            columns: ["source_message_id"]
+            isOneToOne: false
+            referencedRelation: "message_rows"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "saved_messages_source_message_id_fkey"
+            columns: ["source_message_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      saved_tags: {
+        Row: {
+          color: number
+          created_at: string
+          id: string
+          name: string
+          owner_id: string
+          uses_count: number
+        }
+        Insert: {
+          color: number
+          created_at?: string
+          id?: string
+          name: string
+          owner_id: string
+          uses_count?: number
+        }
+        Update: {
+          color?: number
+          created_at?: string
+          id?: string
+          name?: string
+          owner_id?: string
+          uses_count?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "saved_tags_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       search_request_log: {
         Row: {
           created_at: string
@@ -4550,6 +4871,15 @@ export type Database = {
         }
         Returns: Json
       }
+      create_saved_tag: {
+        Args: { p_name: string }
+        Returns: {
+          color: number
+          id: string
+          name: string
+          uses_count: number
+        }[]
+      }
       current_session_id: { Args: never; Returns: string }
       decline_chat_invite: { Args: { target_chat: string }; Returns: undefined }
       decline_friend_request: { Args: { p_user: string }; Returns: string }
@@ -5116,6 +5446,34 @@ export type Database = {
           isOneToOne: false
           isSetofReturn: true
         }
+      }
+      list_saved_messages: {
+        Args: { p_before_seq?: number; p_limit?: number }
+        Returns: {
+          attachments: Json
+          author_avatar_url: string
+          author_id: string
+          author_name: string
+          author_opaque: boolean
+          comment_message_id: string
+          comment_pop_id: string
+          created_at: string
+          id: string
+          kind: string
+          original_at: string
+          pop_id: string
+          seq: number
+          source_category: string
+          source_chat_id: string
+          source_comment_id: string
+          source_message_id: string
+          source_seq: number
+          source_type: string
+          tag_ids: string[]
+          text: string
+          watch_done_at: string
+          watch_later_at: string
+        }[]
       }
       list_thread_roots: {
         Args: {
@@ -5906,6 +6264,78 @@ export type Database = {
       }
       safety_int: { Args: { p_key: string }; Returns: number }
       safety_settings: { Args: never; Returns: Json }
+      save_comments: {
+        Args: {
+          p_comment_ids: string[]
+          p_tag_ids?: string[]
+          p_watch_later?: boolean
+        }
+        Returns: string[]
+      }
+      save_messages: {
+        Args: {
+          p_message_ids: string[]
+          p_source_chat: string
+          p_tag_ids?: string[]
+          p_watch_later?: boolean
+        }
+        Returns: string[]
+      }
+      saved_category: {
+        Args: { p_chat: string; p_viewer: string }
+        Returns: string
+      }
+      saved_finish: {
+        Args: {
+          p_owner: string
+          p_saved: string
+          p_subject: string
+          p_subject_type: string
+          p_tags: string[]
+        }
+        Returns: undefined
+      }
+      saved_insert_comment: {
+        Args: {
+          p_comment: string
+          p_owner: string
+          p_tags: string[]
+          p_watch: boolean
+        }
+        Returns: string
+      }
+      saved_insert_message: {
+        Args: {
+          p_message: string
+          p_owner: string
+          p_tags: string[]
+          p_watch: boolean
+        }
+        Returns: string
+      }
+      saved_source: {
+        Args: { p_saved: string }
+        Returns: {
+          channel_id: string
+          chat_id: string
+          comment_id: string
+          message_id: string
+          pop_channel_id: string
+          pop_id: string
+          seq: number
+          state: string
+        }[]
+      }
+      saved_summary: {
+        Args: never
+        Returns: {
+          watch_later_pending: number
+        }[]
+      }
+      saved_tags_checked: {
+        Args: { p_owner: string; p_tag_ids: string[] }
+        Returns: string[]
+      }
       search_channels: {
         Args: { max_count?: number; query: string }
         Returns: {

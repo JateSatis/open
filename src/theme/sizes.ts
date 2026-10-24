@@ -283,4 +283,17 @@ export const Sizes = {
   cropTickCenter: 20,
   /** Кегль числа угла над линейкой. */
   cropAngleFont: 13,
+  /** Круглая отметка выбора: в списке — во весь рост строки, на облачке — маленькая. */
+  selectionCheck: 24,
+  selectionCheckSmall: 16,
+  selectionCheckBorder: 2,
+  /** Галочка внутри отметки. */
+  selectionCheckGlyph: 16,
+  selectionCheckGlyphSmall: 11,
+  /** Обводка поля имени нового тега в ряду чипов. */
+  savedTagInputBorder: 1,
+  /** Звезда у строки «Сохранённые сообщения». */
+  savedStarIcon: 22,
+  /** Строка «Чат · Автор» у сохранённого: короткий текст не сужает облачко так, что её не прочесть. */
+  savedLeadMinWidth: 220,
 } as const;

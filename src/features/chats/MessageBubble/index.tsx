@@ -123,6 +123,13 @@ export type MessageBubbleProps = {
     amMember: boolean;
     canHide?: boolean;
   };
+  /** Правый нижний угол вместо просмотров: у сохранённого — отметка «Посмотреть позже». */
+  corner?: ReactNode;
+  /**
+   * Облачко — не сообщение переписки (копия в «Сохранённых»): просмотры
+   * медиа и голосового в журнал не пишутся, id у него не сообщения.
+   */
+  untracked?: boolean;
 };
 
 const noop = () => undefined;
@@ -152,6 +159,8 @@ export function MessageBubble({
   wide = false,
   lead,
   selectableText,
+  corner,
+  untracked = false,
 }: MessageBubbleProps) {
   const theme = useTheme();
   const fragmentMode = useFragmentModeActive(selectableText?.rowKey);
@@ -167,6 +176,7 @@ export function MessageBubble({
   const voice = message.kind === 'voice' ? message.attachments[0] : undefined;
   // Облачко комментария — тот же компонент; журнал пишет только сообщения.
   const isComment = 'targetId' in message;
+  const journalId = isComment || untracked ? undefined : message.id;
   // Кружки пока не подключены к облачку — это отдельная задача; здесь только
   // заглушка, чтобы сообщение не было пустым.
   const hasUnhandledAttachment = !isMediaMessage && !voice && message.kind !== 'text';
@@ -241,7 +251,7 @@ export function MessageBubble({
 
   useMediaViewJournal(
     isMediaMessage && !isPopPost ? viewer : null,
-    isComment ? undefined : message.id,
+    journalId,
     viewerItems.map((item) => item.kind),
   );
 
@@ -304,9 +314,10 @@ export function MessageBubble({
 
   // Пока сообщение едет или его никто не видел, счётчика нет.
   const views = (tone: ViewsCountTone) =>
-    showViews && message.status === 'sent' && message.viewsCount > 0 ? (
+    corner ??
+    (showViews && message.status === 'sent' && message.viewsCount > 0 ? (
       <ViewsCount count={message.viewsCount} tone={tone} />
-    ) : null;
+    ) : null);
 
   const footer = (
     <BubbleFooter
@@ -474,7 +485,7 @@ export function MessageBubble({
                 attachment={voice}
                 localUri={message.localPreviews?.[0]}
                 isOwn={isOwn}
-                messageId={isComment ? undefined : message.id}
+                messageId={journalId}
               />
             ) : null}
 

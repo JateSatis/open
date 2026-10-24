@@ -35,6 +35,7 @@ const FULL_RUN_STALE_DAYS = 7;
 const AREAS = [
   [/^src\/(features\/chats|app\/\(tabs\)\/chats)\//, ["chats"]],
   [/^src\/features\/interactions\//, ["comments"]],
+  [/^src\/features\/saved\//, ["chats", "saved"]],
   [/^src\/features\/channels\//, ["channels", "subscriptions"]],
   [/^src\/(features\/pops|app\/pops|app\/pop-editor)\//, ["pops"]],
   [/^src\/features\/media\//, ["media"]],

@@ -18,8 +18,7 @@ import {
 } from '@/api/comments';
 import { useSession } from '@/features/auth/useSession';
 import {
-  finishForwardPick,
-  readChatDraft,
+  readForwardPick,
   resetComposerDrafts,
 } from '@/features/chats/composerDraftStore';
 import { reportRealtimeJoined, resetConnectionState } from '@/features/connection/connectionStore';
@@ -241,10 +240,8 @@ describe('comments of a pop', () => {
     expect(mockedPush).toHaveBeenCalledWith(
       expect.objectContaining({ pathname: '/chats/forward' }),
     );
-    expect(finishForwardPick('chat-dest')).toBe(true);
-
-    const mode = readChatDraft('chat-dest').mode;
-    const [forwarded] = mode?.type === 'forward_comments' ? mode.comments : [];
+    const pick = readForwardPick();
+    const [forwarded] = pick && 'comments' in pick ? pick.comments : [];
 
     expect(forwarded).toMatchObject({
       id: 'c2',
@@ -266,11 +263,9 @@ describe('comments of a pop', () => {
     });
     await fireEvent.press(screen.getByLabelText('Переслать'));
 
-    expect(finishForwardPick('chat-dest')).toBe(true);
+    const pick = readForwardPick();
 
-    const mode = readChatDraft('chat-dest').mode;
-
-    expect(mode?.type === 'forward_comments' ? mode.comments.map((c) => c.id).sort() : []).toEqual([
+    expect(pick && 'comments' in pick ? pick.comments.map((c) => c.id).sort() : []).toEqual([
       'c1',
       'c2',
     ]);

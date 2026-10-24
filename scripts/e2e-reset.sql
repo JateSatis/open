@@ -111,6 +111,12 @@ reset role;
 -- участника, а уборка идёт владельцем схемы — колонка без истории, счётчиков у неё нет.
 update public.chats set username = null where username like 'maestro\_%';
 
+-- saved-messages сохраняет своё тестовое сообщение. Удаление из сохранённого — физическое
+-- (личная закладка, не публичный контент), функции для него пока нет — владельцем схемы.
+delete from public.saved_messages
+ where text like 'maestro-%'
+   and owner_id in (select id from public.profiles where username in ('shy_guy', 'jatesatis', 'tanya_bomba'));
+
 -- Итог одной строкой: обёртка печатает его в отчёт прогона (видно только последний SELECT).
 select
   (select count(*) from public.messages where text like 'maestro-%' and deleted_at is null) as messages_left,

@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 
@@ -11,6 +11,7 @@ import {
   reportRealtimeJoined,
   resetConnectionState,
 } from '@/features/connection/connectionStore';
+import { sendForward } from '@/features/chats/messages/delivery';
 import { resetOutbox } from '@/features/chats/messages/outbox';
 import { removeUploadedMedia, uploadAllMedia } from '@/features/media';
 import { island, original } from '@/test/islands';
@@ -857,21 +858,21 @@ describe('useChatMessages replies and forwards', () => {
       });
     });
 
-    const { result } = await renderHook(() => useChatMessages('chat-1', 'user-1'), { wrapper });
+    const { result } = await renderHook(() => ({ chat: useChatMessages('chat-1', 'user-1'), queryClient: useQueryClient() }), { wrapper });
 
-    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    await waitFor(() => expect(result.current.chat.isLoading).toBe(false));
 
     // Порядок — как облачка стояли на экране исходного чата, а не по времени
     // оригиналов: «late» стоял выше, хоть и написан позже.
     await act(() =>
-      result.current.forward('смотри', SOURCE, [
+      sendForward({ queryClient: result.current.queryClient, chatId: 'chat-1', currentUserId: 'user-1' }, 'смотри', SOURCE, [
         { original: original({ id: 'late', seq: Date.parse('2026-09-29T09:05:00Z'), createdAt: '2026-09-29T09:05:00Z' }) },
         { original: original({ id: 'early', seq: Date.parse('2026-09-29T09:01:00Z'), createdAt: '2026-09-29T09:01:00Z' }) },
       ]),
     );
 
     // Сразу: подпись снизу, над ней островок — с заголовком и оригиналами.
-    const shown = [...result.current.messages].reverse();
+    const shown = [...result.current.chat.messages].reverse();
 
     expect(shown.map((message) => message.kind)).toEqual(['text', 'forward']);
     expect(shown[1].forward?.sourceChat).toEqual(SOURCE);
@@ -880,9 +881,9 @@ describe('useChatMessages replies and forwards', () => {
 
     await act(async () => openServer());
 
-    await waitFor(() => expect(result.current.messages.every((m) => m.status === 'sent')).toBe(true));
+    await waitFor(() => expect(result.current.chat.messages.every((m) => m.status === 'sent')).toBe(true));
     expect(calls).toEqual(['text:смотри', 'forward:chat-src:late,early']);
-    expect(result.current.messages[0].id).toBe('isl-1');
+    expect(result.current.chat.messages[0].id).toBe('isl-1');
   });
 
   it('forwards without text when the field is empty and retries the island as one call', async () => {
@@ -893,22 +894,22 @@ describe('useChatMessages replies and forwards', () => {
       }),
     );
 
-    const { result } = await renderHook(() => useChatMessages('chat-1', 'user-1'), { wrapper });
+    const { result } = await renderHook(() => ({ chat: useChatMessages('chat-1', 'user-1'), queryClient: useQueryClient() }), { wrapper });
 
-    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    await waitFor(() => expect(result.current.chat.isLoading).toBe(false));
     await act(() =>
-      result.current.forward('  ', SOURCE, [
+      sendForward({ queryClient: result.current.queryClient, chatId: 'chat-1', currentUserId: 'user-1' }, '  ', SOURCE, [
         { original: original({ id: 'a' }) },
         { original: original({ id: 'b' }) },
       ]),
     );
 
-    await waitFor(() => expect(result.current.messages.map((m) => m.status)).toEqual(['failed']));
+    await waitFor(() => expect(result.current.chat.messages.map((m) => m.status)).toEqual(['failed']));
     expect(mockedSendMessage).not.toHaveBeenCalled();
 
-    await act(() => result.current.retry(result.current.messages[0].localId!));
+    await act(() => result.current.chat.retry(result.current.chat.messages[0].localId!));
 
-    await waitFor(() => expect(result.current.messages.map((m) => m.status)).toEqual(['sent']));
+    await waitFor(() => expect(result.current.chat.messages.map((m) => m.status)).toEqual(['sent']));
     expect(mockedForward).toHaveBeenCalledTimes(2);
     expect(mockedForward).toHaveBeenLastCalledWith('chat-1', 'chat-src', ['a', 'b']);
   });

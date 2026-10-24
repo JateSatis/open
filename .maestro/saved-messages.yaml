@@ -1,0 +1,65 @@
+appId: com.openger.app
+name: Сохранение через «Переслать» — строка в «Чатах», копия в «Сохранённых»
+tags:
+  - chats
+  - saved
+env:
+  CHAT: Plany
+---
+- runFlow: subflows/open-app.yaml
+- assertVisible:
+    id: "saved-entry"
+- runFlow: subflows/open-chat.yaml
+- evalScript: ${output.msg = 'maestro-' + Date.now()}
+- tapOn: "Сообщение"
+- inputText: ${output.msg}
+- tapOn: "Отправить"
+- assertVisible: ${output.msg}
+# Лист «Кому переслать»: «Сохранённые» — первой строкой; «Посмотреть позже» сам отмечает их.
+- longPressOn:
+    text: ${output.msg}
+    childOf:
+      id: "messages-list"
+- tapOn: "Переслать"
+- assertVisible:
+    id: "forward-saved-row"
+- tapOn:
+    id: "forward-saved-configure"
+- tapOn:
+    id: "forward-saved-watch-later"
+- assertVisible:
+    id: "forward-saved-row"
+    checked: true
+- tapOn:
+    id: "forward-send"
+# Лист закрылся — снова в переписке (уведомление «Сохранено» короче шага Maestro).
+- assertVisible: ${output.msg}
+- back
+- tapOn:
+    id: "saved-entry"
+- assertVisible:
+    id: "saved-list"
+- assertVisible: ${output.msg}
+- assertVisible:
+    id: "saved-watch-later"
+# Уборка: сообщение удаляется в чате, копия в «Сохранённых» остаётся — её убирает
+# e2e-reset.sql (удаления из сохранённого в приложении пока нет).
+- back
+- runFlow: subflows/open-chat.yaml
+# Переписка догружается и сдвигается: долгое нажатие — когда она встала.
+- waitForAnimationToEnd:
+    timeout: 5000
+- longPressOn:
+    text: ${output.msg}
+    childOf:
+      id: "messages-list"
+- tapOn: "Удалить"
+- assertVisible: "Удалить сообщение?"
+- tapOn: "Удалить"
+# Текст держится и в превью «Чатов» под прозрачной страницей, пока список не перечитан.
+- extendedWaitUntil:
+    notVisible:
+      text: ${output.msg}
+      childOf:
+        id: "messages-list"
+    timeout: 15000

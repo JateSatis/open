@@ -7,6 +7,7 @@ import { styles } from './styles';
 import type { ChatSummary } from '@/api/chats';
 import { Avatar } from '@/components/Avatar';
 import { AvatarPair } from '@/components/AvatarPair';
+import { SelectionCheck } from '@/components/SelectionCheck';
 import { Text } from '@/components/Text';
 import {
   chatAvatarUrl,
@@ -28,6 +29,11 @@ export type ChatListItemProps = {
   onPress: (chatId: string) => void;
   /** Долгое нажатие; нет — строка его не ловит. */
   onLongPress?: (chat: ChatSummary, rect: RowRect) => void;
+  /**
+   * Строка — пункт выбора (лист «Кому переслать»): справа отметка, нажатие
+   * отмечает и снимает. Нет — обычная строка «Чатов».
+   */
+  selected?: boolean;
 };
 
 export function ChatListItem({
@@ -36,6 +42,7 @@ export function ChatListItem({
   isOnline,
   onPress,
   onLongPress,
+  selected,
 }: ChatListItemProps) {
   const theme = useTheme();
   const rowRef = useRef<View>(null);
@@ -60,8 +67,9 @@ export function ChatListItem({
 
   return (
     <Pressable
-      accessibilityRole="button"
+      accessibilityRole={selected === undefined ? 'button' : 'checkbox'}
       accessibilityLabel={title}
+      accessibilityState={selected === undefined ? undefined : { checked: selected }}
       testID="chat-list-item"
       ref={rowRef}
       onPress={() => onPress(chat.id)}
@@ -125,7 +133,9 @@ export function ChatListItem({
         ) : null}
       </View>
 
-      {chat.hasUnread ? (
+      {selected !== undefined ? (
+        <SelectionCheck checked={selected} />
+      ) : chat.hasUnread ? (
         <View
           accessibilityLabel="Есть непрочитанные сообщения"
           style={[styles.unreadDot, { backgroundColor: theme.primary }]}
