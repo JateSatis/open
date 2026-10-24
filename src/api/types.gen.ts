@@ -3610,6 +3610,7 @@ export type Database = {
           kind: string
           original_at: string | null
           owner_id: string
+          pinned_at: string | null
           pop_id: string | null
           seq: number
           source_category: string
@@ -3633,6 +3634,7 @@ export type Database = {
           kind: string
           original_at?: string | null
           owner_id: string
+          pinned_at?: string | null
           pop_id?: string | null
           seq?: never
           source_category: string
@@ -3656,6 +3658,7 @@ export type Database = {
           kind?: string
           original_at?: string | null
           owner_id?: string
+          pinned_at?: string | null
           pop_id?: string | null
           seq?: never
           source_category?: string
@@ -4887,6 +4890,7 @@ export type Database = {
       delete_comment: { Args: { target_comment: string }; Returns: undefined }
       delete_direct_chat: { Args: { target_chat: string }; Returns: undefined }
       delete_messages: { Args: { message_ids: string[] }; Returns: undefined }
+      delete_saved_messages: { Args: { p_ids: string[] }; Returns: number }
       device_person: { Args: { p_user: string }; Returns: string }
       dialogue_masked: {
         Args: { p_chat: string; p_person: string; p_viewer: string }
@@ -5448,7 +5452,7 @@ export type Database = {
         }
       }
       list_saved_messages: {
-        Args: { p_before_seq?: number; p_limit?: number }
+        Args: { p_after_seq?: number; p_before_seq?: number; p_limit?: number }
         Returns: {
           attachments: Json
           author_avatar_url: string
@@ -5461,6 +5465,52 @@ export type Database = {
           id: string
           kind: string
           original_at: string
+          pinned_at: string
+          pop_id: string
+          seq: number
+          source_category: string
+          source_chat_id: string
+          source_comment_id: string
+          source_message_id: string
+          source_seq: number
+          source_type: string
+          tag_ids: string[]
+          text: string
+          watch_done_at: string
+          watch_later_at: string
+        }[]
+      }
+      list_saved_pins: {
+        Args: never
+        Returns: {
+          id: string
+          kind: string
+          pinned_at: string
+          seq: number
+          text: string
+          thumbnail_url: string
+        }[]
+      }
+      list_saved_watch_later: {
+        Args: {
+          p_after_at?: string
+          p_after_done?: boolean
+          p_after_seq?: number
+          p_limit?: number
+        }
+        Returns: {
+          attachments: Json
+          author_avatar_url: string
+          author_id: string
+          author_name: string
+          author_opaque: boolean
+          comment_message_id: string
+          comment_pop_id: string
+          created_at: string
+          id: string
+          kind: string
+          original_at: string
+          pinned_at: string
           pop_id: string
           seq: number
           source_category: string
@@ -6262,6 +6312,10 @@ export type Database = {
         }
         Returns: string
       }
+      restore_saved_watch_later: {
+        Args: { p_done_at?: string; p_later_at: string; p_saved: string }
+        Returns: undefined
+      }
       safety_int: { Args: { p_key: string }; Returns: number }
       safety_settings: { Args: never; Returns: Json }
       save_comments: {
@@ -6281,6 +6335,7 @@ export type Database = {
         }
         Returns: string[]
       }
+      saved_caller: { Args: never; Returns: string }
       saved_category: {
         Args: { p_chat: string; p_viewer: string }
         Returns: string
@@ -6294,6 +6349,16 @@ export type Database = {
           p_tags: string[]
         }
         Returns: undefined
+      }
+      saved_forwardable: {
+        Args: { p_ids: string[] }
+        Returns: {
+          chat_id: string
+          comment_id: string
+          live: boolean
+          message_id: string
+          saved_id: string
+        }[]
       }
       saved_insert_comment: {
         Args: {
@@ -6312,6 +6377,39 @@ export type Database = {
           p_watch: boolean
         }
         Returns: string
+      }
+      saved_owned: {
+        Args: { p_ids: string[]; p_owner: string }
+        Returns: string[]
+      }
+      saved_rows: {
+        Args: { p_ids: string[] }
+        Returns: {
+          attachments: Json
+          author_avatar_url: string
+          author_id: string
+          author_name: string
+          author_opaque: boolean
+          comment_message_id: string
+          comment_pop_id: string
+          created_at: string
+          id: string
+          kind: string
+          original_at: string
+          pinned_at: string
+          pop_id: string
+          seq: number
+          source_category: string
+          source_chat_id: string
+          source_comment_id: string
+          source_message_id: string
+          source_seq: number
+          source_type: string
+          tag_ids: string[]
+          text: string
+          watch_done_at: string
+          watch_later_at: string
+        }[]
       }
       saved_source: {
         Args: { p_saved: string }
@@ -6633,6 +6731,18 @@ export type Database = {
           audience: string
           emoji: string
         }[]
+      }
+      set_saved_pinned: {
+        Args: { p_ids: string[]; p_pinned: boolean }
+        Returns: undefined
+      }
+      set_saved_tag: {
+        Args: { p_on: boolean; p_saved: string; p_tag: string }
+        Returns: undefined
+      }
+      set_saved_watch_later: {
+        Args: { p_ids: string[]; p_state: string }
+        Returns: undefined
       }
       signal_time_visibility: { Args: { p_chat: string }; Returns: undefined }
       start_call: { Args: { target_chat: string }; Returns: Json }
