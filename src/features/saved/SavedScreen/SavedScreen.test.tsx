@@ -17,7 +17,11 @@ import { renderWithQuery } from '@/test/renderWithQuery';
 
 const mockPush = jest.fn();
 
-jest.mock('expo-router', () => ({ useRouter: () => ({ push: mockPush }) }));
+jest.mock('expo-router', () => ({
+  useRouter: () => ({ push: mockPush }),
+  useNavigation: () => ({ setOptions: jest.fn() }),
+  useIsFocused: () => true,
+}));
 jest.mock('@/api/supabase', () => ({ supabase: {} }));
 jest.mock('@/features/media', () => ({
   MediaViewer: () => null,
@@ -30,6 +34,9 @@ jest.mock('@/api/saved', () => ({
   listSavedTags: jest.fn(),
   getSavedSource: jest.fn(),
   getSavedSummary: jest.fn(() => Promise.resolve({ watchLaterPending: 0 })),
+  listSavedPins: jest.fn(() => Promise.resolve([])),
+  listSavedAround: jest.fn(),
+  listWatchLater: jest.fn(() => Promise.resolve({ items: [], nextCursor: null })),
 }));
 
 const mockedList = listSavedMessages as jest.MockedFunction<typeof listSavedMessages>;
@@ -85,6 +92,7 @@ function saved(id: string, overrides: Partial<SavedMessage> = {}): SavedMessage 
     originalAt: '2026-10-19T08:30:00Z',
     watchLaterAt: null,
     watchDoneAt: null,
+    pinnedAt: null,
     attachments: [],
     tagIds: [],
     ...overrides,
@@ -110,7 +118,7 @@ beforeEach(() => {
 
 describe('SavedScreen', () => {
   it('explains how to save when nothing is saved yet', async () => {
-    mockedList.mockResolvedValue({ items: [], nextCursor: null });
+    mockedList.mockResolvedValue({ items: [], nextCursor: null, prevCursor: null });
 
     await renderWithQuery(<SavedScreen />);
 
@@ -130,15 +138,16 @@ describe('SavedScreen', () => {
         saved('c', { sourceChatId: null }),
       ],
       nextCursor: null,
+      prevCursor: null,
     });
 
     await renderWithQuery(<SavedScreen />);
 
     expect(await screen.findByText('текст a')).toBeTruthy();
     await waitFor(() =>
-      expect(within(screen.getByTestId('saved-row-a')).getByTestId('saved-source')).toHaveTextContent(
-        'Группа · Анна',
-      ),
+      expect(
+        within(screen.getByTestId('saved-row-a')).getByTestId('saved-source'),
+      ).toHaveTextContent('Группа · Анна'),
     );
     expect(within(screen.getByTestId('saved-row-b')).getByTestId('saved-source')).toHaveTextContent(
       'Типичная Москва',
@@ -156,6 +165,7 @@ describe('SavedScreen', () => {
         saved('b', { originalAt: null }),
       ],
       nextCursor: null,
+      prevCursor: null,
     });
 
     await renderWithQuery(<SavedScreen />);
@@ -175,7 +185,7 @@ describe('SavedScreen', () => {
   });
 
   it('opens the original scrolled to it, and only says so when it is gone', async () => {
-    mockedList.mockResolvedValue({ items: [saved('a')], nextCursor: null });
+    mockedList.mockResolvedValue({ items: [saved('a')], nextCursor: null, prevCursor: null });
     mockedSource.mockResolvedValueOnce({
       state: 'live',
       chatId: 'chat-g',
@@ -197,7 +207,11 @@ describe('SavedScreen', () => {
       }),
     );
 
-    mockedSource.mockResolvedValueOnce({ state: 'original_gone', chatId: 'chat-g', channelId: null });
+    mockedSource.mockResolvedValueOnce({
+      state: 'original_gone',
+      chatId: 'chat-g',
+      channelId: null,
+    });
     await fireEvent.press(screen.getByTestId('saved-source'));
 
     await waitFor(() =>
@@ -213,6 +227,7 @@ describe('SavedScreen', () => {
     mockedList.mockResolvedValue({
       items: [saved('a', { sourceType: 'comment', sourceCommentId: 'com-1' })],
       nextCursor: null,
+      prevCursor: null,
     });
     mockedSource.mockResolvedValueOnce({
       state: 'live',
@@ -231,7 +246,11 @@ describe('SavedScreen', () => {
     await waitFor(() =>
       expect(mockPush).toHaveBeenCalledWith({
         pathname: '/chats/[chatId]',
-        params: expect.objectContaining({ comments: 'msg-under', comment: 'com-1', jumpTo: 'msg-under' }),
+        params: expect.objectContaining({
+          comments: 'msg-under',
+          comment: 'com-1',
+          jumpTo: 'msg-under',
+        }),
       }),
     );
   });

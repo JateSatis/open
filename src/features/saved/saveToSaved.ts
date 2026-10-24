@@ -25,7 +25,10 @@ function refresh(queryClient: QueryClient) {
   void queryClient.invalidateQueries({ queryKey: savedQueryKey });
 }
 
-export async function saveToSaved(queryClient: QueryClient, request: SaveRequest): Promise<boolean> {
+export async function saveToSaved(
+  queryClient: QueryClient,
+  request: SaveRequest,
+): Promise<boolean> {
   const run =
     request.type === 'messages'
       ? saveMessages(request.sourceChatId, request.messageIds, request.options)

@@ -2,6 +2,7 @@ import type { ChatSummary } from '@/api/chats';
 import { NO_REACTIONS } from '@/api/reactionCounts';
 import type { SavedMessage } from '@/api/saved';
 import { chatAvatarUrl, chatTitle } from '@/features/chats/chatDisplay';
+import { formatMessagesForCopy } from '@/features/chats/copyMessages';
 import { DELETED_ACCOUNT } from '@/features/chats/messageQuote';
 import type { ChatMessage } from '@/features/chats/messages/types';
 
@@ -58,7 +59,42 @@ export function savedSourceLabel(
   return {
     source,
     author,
-    avatarUrl: channelPost ? (chat ? chatAvatarUrl(chat, currentUserId) : null) : saved.authorAvatarUrl,
+    avatarUrl: channelPost
+      ? chat
+        ? chatAvatarUrl(chat, currentUserId)
+        : null
+      : saved.authorAvatarUrl,
     avatarName: author ?? source,
   };
+}
+
+/**
+ * Тексты выбранного одним блоком, как в чате (`formatMessagesForCopy`): у
+ * каждой — автор и время оригинала, если оно было видно. Автор у копии —
+ * снимок, не участник чата: формат спрашивает имя по id, поэтому id здесь —
+ * id записи, а имя берётся из её подписи.
+ */
+export function formatSavedForCopy(
+  items: readonly SavedMessage[],
+  chats: ReadonlyMap<string, ChatSummary>,
+  currentUserId: string | null,
+): string {
+  const byId = new Map(items.map((saved) => [saved.id, saved]));
+
+  return formatMessagesForCopy(
+    items.map((saved) => ({ ...toBubbleMessage(saved), authorId: saved.id })),
+    (id) => {
+      const saved = id ? byId.get(id) : undefined;
+
+      if (!saved) return DELETED_ACCOUNT;
+
+      const label = savedSourceLabel(
+        saved,
+        saved.sourceChatId ? chats.get(saved.sourceChatId) : undefined,
+        currentUserId,
+      );
+
+      return label.author ?? label.source;
+    },
+  );
 }

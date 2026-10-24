@@ -57,11 +57,54 @@ export type SavedMessage = {
   originalAt: string | null;
   watchLaterAt: string | null;
   watchDoneAt: string | null;
+  /** Закреплено в «Сохранённых»; `null` — нет. Порядок закрепов — по этому времени. */
+  pinnedAt: string | null;
   attachments: MessageAttachment[];
   tagIds: string[];
 };
 
-export type SavedPage = { items: SavedMessage[]; nextCursor: number | null };
+/**
+ * Страница «Все», новыми вперёд. `nextCursor` — к более старым, `prevCursor`
+ * — к более новым (есть, только когда страница — окно вокруг записи, а не
+ * самые новые).
+ */
+export type SavedPage = {
+  items: SavedMessage[];
+  nextCursor: number | null;
+  prevCursor: number | null;
+};
+
+/** Где страница начинается: самые новые, старше записи или новее неё. */
+export type SavedPageParam = { before: number | null } | { after: number };
+
+/** Курсор «Посмотреть позже» — последняя строка прошлой страницы. */
+export type WatchLaterCursor = { done: boolean; at: string; seq: number };
+
+export type WatchLaterPage = { items: SavedMessage[]; nextCursor: WatchLaterCursor | null };
+
+/** Что делает пункт «Посмотреть позже»: добавить, отметить, снять отметку, убрать из вкладки. */
+export type WatchLaterState = 'later' | 'done' | 'undone' | 'off';
+
+/** Закреп для полосы под переключателем. */
+export type SavedPin = {
+  id: string;
+  seq: number;
+  kind: MessageKind;
+  text: string | null;
+  /** Фото или постер видео первого вложения; путь в бакете. */
+  thumbnailUrl: string | null;
+};
+
+/** Можно ли переслать запись: оригинал жив и виден мне сейчас. */
+export type SavedForwardable =
+  | {
+      savedId: string;
+      live: true;
+      chatId: string;
+      messageId: string | null;
+      commentId: string | null;
+    }
+  | { savedId: string; live: false };
 
 /** Что ставится каждой сохраняемой копии. */
 export type SaveOptions = { tagIds: string[]; watchLater: boolean };
@@ -136,6 +179,7 @@ type SavedRow = {
   original_at: string | null;
   watch_later_at: string | null;
   watch_done_at: string | null;
+  pinned_at: string | null;
   attachments: unknown;
   tag_ids: string[] | null;
 };
@@ -167,15 +211,77 @@ export function toSavedMessage(row: SavedRow): SavedMessage {
     originalAt: row.original_at ?? null,
     watchLaterAt: row.watch_later_at ?? null,
     watchDoneAt: row.watch_done_at ?? null,
+    pinnedAt: row.pinned_at ?? null,
     attachments: toAttachments(row.attachments),
     tagIds: row.tag_ids ?? [],
   };
 }
 
-/** Страница сохранённого, новыми вперёд; `beforeSeq` — курсор к более старым. */
-export async function listSavedMessages(beforeSeq: number | null): Promise<SavedPage> {
+/**
+ * Страница «Все», новыми вперёд: самые новые, старше записи (`before`) или
+ * ближайшие новее неё (`after`). Окно вокруг записи — `before: seq + 1` и
+ * `after: seq` (см. `listSavedAround`).
+ */
+export async function listSavedMessages(
+  param: SavedPageParam,
+  limit = SAVED_PAGE_SIZE,
+): Promise<SavedPage> {
   const { data, error } = await supabase.rpc('list_saved_messages', {
-    p_before_seq: beforeSeq ?? undefined,
+    p_before_seq: 'before' in param ? (param.before ?? undefined) : undefined,
+    p_after_seq: 'after' in param ? param.after : undefined,
+    p_limit: limit,
+  });
+
+  if (error) throw error;
+
+  const items = (data ?? []).map((row) => toSavedMessage(row));
+  const full = items.length === limit;
+  const first = items[0];
+  const last = items[items.length - 1];
+
+  if ('after' in param) {
+    // Новее курсора — до самых новых: есть ли ещё, знает только полная страница.
+    return { items, nextCursor: null, prevCursor: full && first ? first.seq : null };
+  }
+
+  return { items, nextCursor: full && last ? last.seq : null, prevCursor: null };
+}
+
+/**
+ * Окно вокруг записи с номером `seq`: она сама и старше — половина, новее —
+ * другая. Одна страница с курсорами в обе стороны.
+ */
+export async function listSavedAround(seq: number): Promise<SavedPage> {
+  const half = Math.ceil(SAVED_PAGE_SIZE / 2);
+  const [older, newer] = await Promise.all([
+    listSavedMessages({ before: seq + 1 }, half),
+    listSavedMessages({ after: seq }, half),
+  ]);
+  const top = newer.items[0];
+
+  return {
+    items: [...newer.items, ...older.items],
+    nextCursor: older.nextCursor,
+    // Новее окна ещё есть, если вторая половина полна.
+    prevCursor: newer.items.length === half && top ? top.seq : null,
+  };
+}
+
+function watchCursorOf(item: SavedMessage): WatchLaterCursor | null {
+  const at = item.watchDoneAt ?? item.watchLaterAt;
+
+  return at ? { done: item.watchDoneAt !== null, at, seq: item.seq } : null;
+}
+
+/**
+ * Страница «Посмотреть позже»: активные новыми вперёд, затем выполненные —
+ * последнее отмеченное первым.
+ */
+export async function listWatchLater(cursor: WatchLaterCursor | null): Promise<WatchLaterPage> {
+  const { data, error } = await supabase.rpc('list_saved_watch_later', {
+    p_after_done: cursor?.done,
+    p_after_at: cursor?.at,
+    p_after_seq: cursor?.seq,
     p_limit: SAVED_PAGE_SIZE,
   });
 
@@ -184,7 +290,10 @@ export async function listSavedMessages(beforeSeq: number | null): Promise<Saved
   const items = (data ?? []).map((row) => toSavedMessage(row));
   const last = items[items.length - 1];
 
-  return { items, nextCursor: items.length === SAVED_PAGE_SIZE && last ? last.seq : null };
+  return {
+    items,
+    nextCursor: items.length === SAVED_PAGE_SIZE && last ? watchCursorOf(last) : null,
+  };
 }
 
 /**
@@ -318,4 +427,89 @@ export async function fetchSourceChats(chatIds: string[]): Promise<Map<string, C
   }
 
   return byId;
+}
+
+/** Поставить или снять тег у записи. */
+export async function setSavedTag(savedId: string, tagId: string, on: boolean): Promise<void> {
+  const { error } = await supabase.rpc('set_saved_tag', {
+    p_saved: savedId,
+    p_tag: tagId,
+    p_on: on,
+  });
+
+  if (error) throw error;
+}
+
+export async function setSavedWatchLater(
+  savedIds: string[],
+  state: WatchLaterState,
+): Promise<void> {
+  const { error } = await supabase.rpc('set_saved_watch_later', {
+    p_ids: savedIds,
+    p_state: state,
+  });
+
+  if (error) throw error;
+}
+
+/** «Вернуть» после свайпа: прежние время добавления и отметка. */
+export async function restoreSavedWatchLater(
+  savedId: string,
+  watchLaterAt: string,
+  watchDoneAt: string | null,
+): Promise<void> {
+  const { error } = await supabase.rpc('restore_saved_watch_later', {
+    p_saved: savedId,
+    p_later_at: watchLaterAt,
+    p_done_at: watchDoneAt ?? undefined,
+  });
+
+  if (error) throw error;
+}
+
+export async function setSavedPinned(savedIds: string[], pinned: boolean): Promise<void> {
+  const { error } = await supabase.rpc('set_saved_pinned', { p_ids: savedIds, p_pinned: pinned });
+
+  if (error) throw error;
+}
+
+/** Удаление из сохранённого — физическое: копия, теги, отметка и закреп. */
+export async function deleteSavedMessages(savedIds: string[]): Promise<void> {
+  const { error } = await supabase.rpc('delete_saved_messages', { p_ids: savedIds });
+
+  if (error) throw error;
+}
+
+/** Закрепы по времени закрепления: от первого к последнему. */
+export async function listSavedPins(): Promise<SavedPin[]> {
+  const { data, error } = await supabase.rpc('list_saved_pins');
+
+  if (error) throw error;
+
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    seq: row.seq,
+    kind: toMessageKind(row.kind),
+    text: row.text ?? null,
+    thumbnailUrl: row.thumbnail_url ?? null,
+  }));
+}
+
+/** Что из выбранного можно переслать и откуда — решает база, по порядку `seq`. */
+export async function listSavedForwardable(savedIds: string[]): Promise<SavedForwardable[]> {
+  const { data, error } = await supabase.rpc('saved_forwardable', { p_ids: savedIds });
+
+  if (error) throw error;
+
+  return (data ?? []).map((row): SavedForwardable =>
+    row.live && row.chat_id
+      ? {
+          savedId: row.saved_id,
+          live: true,
+          chatId: row.chat_id,
+          messageId: row.message_id ?? null,
+          commentId: row.comment_id ?? null,
+        }
+      : { savedId: row.saved_id, live: false },
+  );
 }

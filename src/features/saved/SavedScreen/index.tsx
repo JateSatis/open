@@ -1,92 +1,83 @@
-import { useCallback, useMemo } from 'react';
-import { ActivityIndicator, FlatList, View, useWindowDimensions } from 'react-native';
+import { useMemo, useState } from 'react';
+import { View, useWindowDimensions } from 'react-native';
+import { useSharedValue, withTiming } from 'react-native-reanimated';
 
 import { styles } from './styles';
 
-import type { SavedMessage } from '@/api/saved';
-import { LoadFailed } from '@/components/LoadFailed';
-import { Text } from '@/components/Text';
+import { SegmentedControl } from '@/components/SegmentedControl';
 import { mosaicBounds } from '@/features/chats/lib/mosaicLayout';
 import { bubbleAsideWidth } from '@/features/chats/MessageBubble/layout';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
-import { SavedBubble } from '@/features/saved/SavedBubble';
-import { useOpenSavedSource } from '@/features/saved/useOpenSavedSource';
-import { useSavedMessages } from '@/features/saved/useSavedMessages';
+import { SavedAllTab } from '@/features/saved/SavedAllTab';
+import { SavedWatchLaterTab } from '@/features/saved/SavedWatchLaterTab';
 import { useSavedTags } from '@/features/saved/useSavedTags';
 import { useTheme } from '@/hooks/use-theme';
-import { Spacing } from '@/theme';
+import { Motion, Spacing } from '@/theme';
 
-/** Догрузка старых начинается, когда до верха осталось столько экранов. */
-const HISTORY_EDGE = 1;
+const TABS = ['Все', 'Посмотреть позже'] as const;
 
 /**
- * «Сохранённые сообщения», вкладка «Все»: сохранённое — как переписка, все
- * пузыри слева, новые внизу, экран открывается в самом низу, старые
- * догружаются прокруткой вверх. Над списком — место под переключатель
- * «Все | Посмотреть позже», поиск и фильтры (следующие этапы).
+ * «Сохранённые сообщения»: под шапкой — переключатель «Все | Посмотреть
+ * позже». Обе вкладки живут, пока открыт экран, а неактивная лишь
+ * невидима: переключение не теряет прокрутку другой. «Посмотреть позже»
+ * грузится при первом заходе на неё.
  */
 export function SavedScreen() {
   const theme = useTheme();
   const currentUserId = useCurrentUserId();
   const { width: windowWidth } = useWindowDimensions();
-  const saved = useSavedMessages();
   const { tags } = useSavedTags();
-  const openSource = useOpenSavedSource();
   const tagsById = useMemo(() => new Map(tags.map((tag) => [tag.id, tag])), [tags]);
   const mediaBounds = useMemo(
     () => mosaicBounds(windowWidth - Spacing.three * 2, false, bubbleAsideWidth(true)),
     [windowWidth],
   );
+  const [tab, setTab] = useState(0);
+  const [laterOpened, setLaterOpened] = useState(false);
+  const position = useSharedValue(0);
 
-  const renderItem = useCallback(
-    ({ item }: { item: SavedMessage }) => (
-      <SavedBubble
-        saved={item}
-        chat={item.sourceChatId ? saved.chats.get(item.sourceChatId) : undefined}
-        currentUserId={currentUserId}
-        tagsById={tagsById}
-        mediaBounds={mediaBounds}
-        onOpenSource={openSource}
-      />
-    ),
-    [currentUserId, mediaBounds, openSource, saved.chats, tagsById],
-  );
+  const select = (index: number) => {
+    setTab(index);
+    if (index === 1) setLaterOpened(true);
+    position.set(withTiming(index, { duration: Motion.segmentMs }));
+  };
+
+  const shared = { currentUserId, tags, tagsById };
 
   return (
     <View testID="saved-screen" style={[styles.screen, { backgroundColor: theme.background }]}>
-      {saved.failed ? (
-        <LoadFailed message="Не удалось загрузить сохранённое" onRetry={saved.reload} />
-      ) : saved.isLoading ? (
-        <View style={styles.centered}>
-          <ActivityIndicator accessibilityLabel="Загрузка сохранённого" />
-        </View>
-      ) : saved.items.length === 0 ? (
-        <View testID="saved-empty" style={styles.centered}>
-          <Text variant="bodyBold">Здесь пока пусто</Text>
-          <Text color="textSecondary" style={styles.hint}>
-            Чтобы сохранить сообщение или комментарий, нажмите «Переслать» и выберите «★
-            Сохранённые сообщения». Сохранённое видите только вы.
-          </Text>
-        </View>
-      ) : (
-        <FlatList
-          testID="saved-list"
-          inverted
-          data={saved.items}
-          keyExtractor={(item) => item.id}
-          renderItem={renderItem}
-          extraData={saved.chats}
-          showsVerticalScrollIndicator={false}
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.list}
-          // Список перевёрнут: его «конец» — верх экрана, там старое.
-          onEndReached={saved.hasMore ? saved.loadMore : undefined}
-          onEndReachedThreshold={HISTORY_EDGE}
-          ListFooterComponent={
-            saved.isLoadingMore ? <ActivityIndicator accessibilityLabel="Загрузка" /> : null
-          }
+      <View style={styles.tabs}>
+        <SegmentedControl
+          segments={TABS}
+          position={position}
+          selectedIndex={tab}
+          onSelect={select}
         />
-      )}
+      </View>
+
+      <View style={styles.pages}>
+        <View
+          testID="saved-tab-all"
+          pointerEvents={tab === 0 ? 'auto' : 'none'}
+          importantForAccessibility={tab === 0 ? 'auto' : 'no-hide-descendants'}
+          accessibilityElementsHidden={tab !== 0}
+          style={[styles.page, tab !== 0 && styles.hidden]}
+        >
+          <SavedAllTab {...shared} mediaBounds={mediaBounds} />
+        </View>
+
+        {laterOpened ? (
+          <View
+            testID="saved-tab-later"
+            pointerEvents={tab === 1 ? 'auto' : 'none'}
+            importantForAccessibility={tab === 1 ? 'auto' : 'no-hide-descendants'}
+            accessibilityElementsHidden={tab !== 1}
+            style={[styles.page, tab !== 1 && styles.hidden]}
+          >
+            <SavedWatchLaterTab {...shared} active={tab === 1} />
+          </View>
+        ) : null}
+      </View>
     </View>
   );
 }

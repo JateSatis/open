@@ -6,4 +6,6 @@ export const Motion = {
   pageSpring: { damping: 26, stiffness: 260, overshootClamping: true },
   /** Полоска состояния связи раскрывается и сворачивается, сдвигая экран плавно. */
   connectionBannerMs: 200,
+  /** Бегунок переключателя вкладок без пейджера доезжает до выбранной. */
+  segmentMs: 200,
 } as const;

@@ -18,6 +18,8 @@ export type SavedBubbleProps = {
   tagsById: ReadonlyMap<string, SavedTag>;
   mediaBounds: MosaicBounds;
   onOpenSource: (saved: SavedMessage) => void;
+  /** Без кружка «Посмотреть позже» в углу: на своей вкладке у строки свой чекбокс. */
+  hideWatchLater?: boolean;
 };
 
 /**
@@ -32,11 +34,12 @@ export const SavedBubble = memo(function SavedBubble({
   tagsById,
   mediaBounds,
   onOpenSource,
+  hideWatchLater = false,
 }: SavedBubbleProps) {
   const message = useMemo(() => toBubbleMessage(saved), [saved]);
   const label = savedSourceLabel(saved, chat, currentUserId);
   const tags = saved.tagIds.flatMap((id) => tagsById.get(id) ?? []);
-  const watchLater = saved.watchLaterAt !== null;
+  const watchLater = saved.watchLaterAt !== null && !hideWatchLater;
 
   return (
     <View testID={`saved-row-${saved.id}`} style={styles.row}>
