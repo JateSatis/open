@@ -6,7 +6,7 @@ env:
   CHAT: Plany
 ---
 - runFlow: subflows/open-app.yaml
-- tapOn: ${CHAT}
+- runFlow: subflows/open-chat.yaml
 # Время в облачке — часть строки, в отличие от фото и цитат.
 - longPressOn:
     id: "message-time"

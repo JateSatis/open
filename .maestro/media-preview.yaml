@@ -7,7 +7,7 @@ env:
   CHAT: Plany
 ---
 - runFlow: subflows/open-app.yaml
-- tapOn: ${CHAT}
+- runFlow: subflows/open-chat.yaml
 - assertVisible:
     id: "messages-list"
 - tapOn: "Фото и видео"

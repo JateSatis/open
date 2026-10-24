@@ -6,7 +6,7 @@ env:
   CHAT: Plany
 ---
 - runFlow: subflows/open-app.yaml
-- tapOn: ${CHAT}
+- runFlow: subflows/open-chat.yaml
 - swipe:
     from:
       id: "message-bubble"

@@ -51,4 +51,13 @@ export const styles = StyleSheet.create({
   action: {
     flex: 1,
   },
+  /** Подпись не влезла в ряд: главное действие сверху, отмена под ним. */
+  actionsStacked: {
+    flexDirection: 'column-reverse',
+    gap: Spacing.two,
+    marginTop: Spacing.two,
+  },
+  actionStacked: {
+    alignSelf: 'stretch',
+  },
 });

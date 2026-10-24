@@ -65,14 +65,17 @@ declare
   untitled_group uuid;
 begin
   -- Диалог Ани и Петра, группа Ани с Петром и E (E ещё не принял)
+  -- Друзья: личка без заявки, писать можно сразу (этап 3 приватности).
+  perform set_config('role', 'postgres', true);
+  insert into public.friendships (requester_id, addressee_id, status, accepted_at)
+  values (a, b, 'accepted', now());
   perform pg_temp.act_as(a);
-  dialog := (public.create_chat(array[b], null, null, 'Привет, это заявка') ->> 'chat_id')::uuid;
+  dialog := (public.create_chat(array[b]) ->> 'chat_id')::uuid;
   grp := (public.create_chat(array[b, e], 'Группа') ->> 'chat_id')::uuid;
   r := public.create_channel('Канал', 'chat_subs_chan_zz', null, null);
   posts_chat := (r ->> 'chat_id')::uuid;
   chan := (r ->> 'channel_id')::uuid;
   perform pg_temp.act_as(b);
-  perform public.accept_chat_invite(dialog);
   perform public.accept_chat_invite(grp);
 
   -- К0.2: участник на свой чат не подписывается

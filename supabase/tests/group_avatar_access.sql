@@ -148,6 +148,10 @@ declare
   posts uuid;
   result jsonb;
 begin
+  -- Друзья: личка без заявки (этап 3 приватности).
+  perform set_config('role', 'postgres', true);
+  insert into public.friendships (requester_id, addressee_id, status, accepted_at)
+  values (a, c, 'accepted', now()), (a, d, 'accepted', now());
   perform pg_temp.act_as(a);
 
   -- create_chat: группа сразу с фото, диалог — без.

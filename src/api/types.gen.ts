@@ -4729,6 +4729,13 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      friendship_seen_as: {
+        Args: {
+          f: Database["public"]["Tables"]["friendships"]["Row"]
+          p_viewer: string
+        }
+        Returns: string
+      }
       friendship_status: { Args: { p_user: string }; Returns: string }
       friendship_status_for: {
         Args: { p_other: string; p_viewer: string }

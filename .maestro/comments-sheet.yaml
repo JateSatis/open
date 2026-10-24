@@ -8,7 +8,7 @@ env:
   CHAT: Plany
 ---
 - runFlow: subflows/open-app.yaml
-- tapOn: ${CHAT}
+- runFlow: subflows/open-chat.yaml
 # Участник: у сообщения без комментариев круга нет — первый пишут из меню.
 - longPressOn:
     id: "message-time"

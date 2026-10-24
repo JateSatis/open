@@ -9,12 +9,9 @@ import {
   type Profile,
   type ProfileUpdateInput,
 } from '@/api/profile';
+import { profileKeys } from '@/features/profile/keys';
 
-export const profileKeys = {
-  all: ['profile'] as const,
-  me: () => [...profileKeys.all, 'me'] as const,
-  byId: (userId: string) => [...profileKeys.all, 'byId', userId] as const,
-};
+export { profileKeys };
 
 export function useMyProfile() {
   return useQuery({ queryKey: profileKeys.me(), queryFn: getMyProfile });

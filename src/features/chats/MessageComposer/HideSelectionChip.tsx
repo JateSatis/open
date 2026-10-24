@@ -12,7 +12,7 @@ export type HideSelectionChipProps = {
 };
 
 /**
- * Над полем ввода, пока в нём выделен текст: «Скрыть от зрителей» или, если
+ * Под полем ввода, пока в нём выделен текст: «Скрыть от зрителей» или, если
  * выделенное уже скрыто, «Показать зрителям». Участники чата видят всё.
  */
 export function HideSelectionChip({ covered, onPress }: HideSelectionChipProps) {
@@ -49,7 +49,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.one,
     marginLeft: Spacing.two,
-    marginTop: Spacing.two,
+    marginBottom: Spacing.two,
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.one,
     borderRadius: Radii.full,

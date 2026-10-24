@@ -14,14 +14,9 @@ import {
   type FriendshipStatus,
 } from '@/api/friends';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
+import { friendKeys } from '@/features/friends/keys';
 
-export const friendKeys = {
-  all: ['friends'] as const,
-  status: (userId: string) => [...friendKeys.all, 'status', userId] as const,
-  summary: (userId: string) => [...friendKeys.all, 'summary', userId] as const,
-  list: (userId: string) => [...friendKeys.all, 'list', userId] as const,
-  incoming: () => [...friendKeys.all, 'incoming'] as const,
-};
+export { friendKeys };
 
 export function useFriendshipStatus(userId: string, enabled = true) {
   return useQuery({

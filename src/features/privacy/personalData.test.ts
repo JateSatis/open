@@ -183,3 +183,35 @@ describe('scanPersonalData', () => {
     expect(scanPersonalData('   ')).toEqual({ findings: [], risk: 'none' });
   });
 });
+
+describe('scanPersonalData with hidden ranges', () => {
+  it('ignores what the author already hid from viewers and lowers the risk', () => {
+    const text = 'школа 57, 7Б, каждый вторник в 15:00 у входа';
+    const all = scanPersonalData(text);
+    const school = all.findings.find((f) => f.text === 'школа 57');
+
+    expect(all.risk).toBe('high');
+    expect(school).toBeDefined();
+
+    const rest = scanPersonalData(text, [{ start: school!.start, end: school!.end }]);
+
+    expect(rest.findings.map((f) => f.text)).not.toContain('школа 57');
+    expect(rest.findings.length).toBe(all.findings.length - 1);
+  });
+
+  it('says nothing once every finding is hidden', () => {
+    const text = 'my school 57 is near home';
+    const [finding] = scanPersonalData(text).findings;
+
+    expect(scanPersonalData(text, [{ start: finding.start, end: finding.end }])).toEqual({
+      findings: [],
+      risk: 'none',
+    });
+  });
+
+  it('still warns about a finding hidden only in part', () => {
+    const text = 'живу на Ленина 5, кв 12';
+
+    expect(scanPersonalData(text, [{ start: 8, end: 14 }]).risk).toBe('high');
+  });
+});

@@ -8,6 +8,8 @@ import { chatsQueryKey } from '@/features/chats/useChats';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
 import { invitesQueryKey } from '@/features/chats/useInvites';
 import { myInviteQueryKey } from '@/features/chats/useMyInvite';
+import { friendKeys } from '@/features/friends/keys';
+import { profileKeys } from '@/features/profile/keys';
 import { popsQueryKey } from '@/features/pops/keys';
 import {
   dismissAlert,
@@ -123,11 +125,24 @@ export function useInAppAlerts(): InAppAlertsState {
         // в её звонке я больше не вправе.
         if (getCall()?.chatId === chatId) void leaveCall();
       },
+      // От дружбы зависит, что я вижу о человеке везде: имя или псевдоним,
+      // фото, «в сети», время сообщений, медиа. Сразу перечитывается то, что
+      // скорее всего на экране: друзья и заявки (вкладка «Профиль» не
+      // размонтируется), профили и список чатов. Остальное — переписки,
+      // ленты — только помечается устаревшим и перечитается при открытии:
+      // перечитывать сейчас все загруженные страницы всех лент незачем.
+      onFriendsChanged: () => {
+        void queryClient.invalidateQueries({ refetchType: 'none' });
+        void queryClient.invalidateQueries({ queryKey: friendKeys.all });
+        void queryClient.invalidateQueries({ queryKey: profileKeys.all });
+        void queryClient.invalidateQueries({ queryKey: chatsQueryKey });
+      },
       onReconnected: () => {
         // Канал возвращается после обрыва: сообщения и заявки, пришедшие за
         // это время, мимо него прошли, и списки о них не знают.
         void queryClient.invalidateQueries({ queryKey: chatsQueryKey });
         void queryClient.invalidateQueries({ queryKey: invitesQueryKey });
+        void queryClient.invalidateQueries({ queryKey: friendKeys.all });
       },
     });
 

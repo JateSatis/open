@@ -7,7 +7,7 @@ env:
   CHAT: Plany
 ---
 - runFlow: subflows/open-app.yaml
-- tapOn: ${CHAT}
+- runFlow: subflows/open-chat.yaml
 - evalScript: ${output.msg = 'maestro-' + Date.now()}
 - tapOn: "Сообщение"
 - inputText: ${output.msg}

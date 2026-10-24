@@ -7,7 +7,7 @@ tags:
 - runFlow: subflows/open-app.yaml
 - tapOn: "Профиль"
 - tapOn: "Редактировать профиль"
-- assertVisible: "Фото профиля видно всем"
+- assertVisible: "Кому видно фото — в «Конфиденциальности»"
 # Тап по аватарке — сразу шит, без меню выбора источника.
 - tapOn:
     id: "profile-avatar-edit"
@@ -47,4 +47,4 @@ tags:
 - back
 - assertNotVisible: "Выберите фото"
 - assertNotVisible: "Отменить выбор файлов?"
-- assertVisible: "Фото профиля видно всем"
+- assertVisible: "Кому видно фото — в «Конфиденциальности»"
