@@ -1,9 +1,10 @@
 import { StyleSheet } from 'react-native';
 
-import { Radii, Spacing } from '@/theme';
+import { Radii, Sizes, Spacing } from '@/theme';
 
 export const styles = StyleSheet.create({
   lead: {
+    minWidth: Sizes.savedLeadMinWidth,
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: Spacing.two,
