@@ -21,8 +21,8 @@ jest.mock('@/api/saved', () => ({
   saveComments: jest.fn(),
 }));
 jest.mock('@/features/chats/messages/delivery', () => ({
-  sendForward: jest.fn(),
-  sendCommentForward: jest.fn(),
+  sendForward: jest.fn(() => ({ delivered: Promise.resolve() })),
+  sendCommentForward: jest.fn(() => ({ delivered: Promise.resolve() })),
 }));
 
 const mockedListChats = listChats as jest.MockedFunction<typeof listChats>;
@@ -131,6 +131,7 @@ describe('ForwardSheet', () => {
         'смотри',
         SOURCE,
         messagesPick.items,
+        expect.any(Promise),
       );
     }
     expect(mockedSaveMessages).not.toHaveBeenCalled();
@@ -258,6 +259,7 @@ describe('ForwardSheet', () => {
       expect.objectContaining({ chatId: 'chat-a' }),
       '',
       [comment],
+      expect.any(Promise),
     );
     await waitFor(() =>
       expect(mockedSaveComments).toHaveBeenCalledWith(['c-1'], { tagIds: [], watchLater: false }),
@@ -301,6 +303,7 @@ describe('ForwardSheet', () => {
       'смотри',
       SOURCE,
       first.items,
+      expect.any(Promise),
     );
     expect(mockedSendForward).toHaveBeenNthCalledWith(
       2,
@@ -308,11 +311,13 @@ describe('ForwardSheet', () => {
       '',
       other,
       second.items,
+      expect.any(Promise),
     );
     expect(mockedSendComments).toHaveBeenCalledWith(
       expect.objectContaining({ chatId: 'chat-a' }),
       '',
       [comment],
+      expect.any(Promise),
     );
     expect(noticeText()).toBe('Переслано 3 из 5: оригиналы двух удалены');
   });

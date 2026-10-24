@@ -607,15 +607,20 @@ export function sendVoice(
  * их видно в исходном чате, — и уходит на сервер одним вызовом. Порядок
  * облачков — порядок `items`: как сообщения стояли на экране.
  */
+/** Отправка, уходящая на сервер не сразу: `delivered` — когда ушла (удачно или нет). */
+export type Delivery = { delivered: Promise<void> };
+
 export function sendForward(
   context: SendContext,
   text: string,
   sourceChat: ChatRef,
   items: ForwardItem[],
-) {
+  /** Уходит на сервер только после этого: пачки пересылки — по порядку. */
+  after: Promise<void> = Promise.resolve(),
+): Delivery {
   const { queryClient, chatId, currentUserId } = context;
 
-  if (items.length === 0) return;
+  if (items.length === 0) return { delivered: after };
 
   const trimmed = text.trim();
   const now = Date.now();
@@ -655,7 +660,9 @@ export function sendForward(
 
   addToOutbox(chatId, lead ? [island, lead] : [island]);
 
-  void (async () => {
+  const delivered = (async () => {
+    await after;
+
     if (lead) {
       await deliver(queryClient, chatId, currentUserId, lead.localId!, {
         type: 'post',
@@ -671,6 +678,8 @@ export function sendForward(
       messageIds,
     });
   })();
+
+  return { delivered };
 }
 
 /**
@@ -683,10 +692,12 @@ export function sendCommentForward(
   context: SendContext,
   text: string,
   comments: ForwardedComment[],
-) {
+  /** Уходит на сервер только после этого: пачки пересылки — по порядку. */
+  after: Promise<void> = Promise.resolve(),
+): Delivery {
   const { queryClient, chatId, currentUserId } = context;
 
-  if (comments.length === 0) return;
+  if (comments.length === 0) return { delivered: after };
 
   const trimmed = text.trim();
   const now = Date.now();
@@ -721,7 +732,9 @@ export function sendCommentForward(
   // Список новыми вперёд: последний пересланный — сверху.
   addToOutbox(chatId, [...drafts].reverse().concat(lead ? [lead] : []));
 
-  void (async () => {
+  const delivered = (async () => {
+    await after;
+
     if (lead) {
       await deliver(queryClient, chatId, currentUserId, lead.localId!, {
         type: 'post',
@@ -738,6 +751,8 @@ export function sendCommentForward(
       });
     }
   })();
+
+  return { delivered };
 }
 
 /**

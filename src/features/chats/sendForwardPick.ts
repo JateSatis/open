@@ -6,6 +6,7 @@ import type { QueryClient } from '@tanstack/react-query';
 
 import type { SaveOptions } from '@/api/saved';
 import {
+  batchSize,
   forwardBatches,
   type ForwardBatch,
   type ForwardPick,
@@ -55,10 +56,6 @@ function saveRequestOf(batch: ForwardBatch, options: SaveOptions): SaveRequest {
       };
 }
 
-function batchSize(batch: ForwardBatch): number {
-  return 'comments' in batch ? batch.comments.length : batch.items.length;
-}
-
 /**
  * Подпись уходит в каждый чат отдельным сообщением перед пересланным — один
  * раз, перед первой пачкой; в «Сохранённые» — нет. Пачки — по порядку: по
@@ -76,11 +73,18 @@ export function sendForwardPick(
   for (const chatId of targets.chatIds) {
     const context = { queryClient, chatId, currentUserId };
 
+    // Облачка всех пачек встают сразу, а на сервер пачки уходят по очереди:
+    // номер в переписке выдаётся по приходу, и подпись осталась бы не первой.
+    let previous: Promise<void> = Promise.resolve();
+
     batches.forEach((batch, index) => {
       const caption = index === 0 ? text : '';
 
-      if ('comments' in batch) sendCommentForward(context, caption, batch.comments);
-      else sendForward(context, caption, batch.sourceChat, batch.items);
+      previous = (
+        'comments' in batch
+          ? sendCommentForward(context, caption, batch.comments, previous)
+          : sendForward(context, caption, batch.sourceChat, batch.items, previous)
+      ).delivered;
     });
   }
 

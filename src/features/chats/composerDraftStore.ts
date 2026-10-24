@@ -88,7 +88,8 @@ export function forwardBatches(pick: ForwardPick): ForwardBatch[] {
   return 'batches' in pick ? pick.batches : [pick];
 }
 
-function batchSize(batch: ForwardBatch): number {
+/** Сколько сообщений или комментариев в пачке. */
+export function batchSize(batch: ForwardBatch): number {
   return 'comments' in batch ? batch.comments.length : batch.items.length;
 }
 
