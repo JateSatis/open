@@ -1,11 +1,12 @@
 import { SymbolView } from 'expo-symbols';
-import { View, useColorScheme } from 'react-native';
+import { View } from 'react-native';
 
 import { styles } from './styles';
 
 import type { SavedTag } from '@/api/saved';
 import { Text } from '@/components/Text';
 import type { SavedSourceLabel } from '@/features/saved/savedCopy';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useTheme } from '@/hooks/use-theme';
 import { Sizes, savedTagTone } from '@/theme';
 

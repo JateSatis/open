@@ -50,7 +50,7 @@ export function SelectionCheck({
       {checked ? (
         <SymbolView
           name={{ ios: 'checkmark', android: 'check', web: 'check' }}
-          size={side * 0.7}
+          size={size === 'small' ? Sizes.selectionCheckGlyphSmall : Sizes.selectionCheckGlyph}
           weight="bold"
           tintColor={onPrimary ? theme.primary : theme.primaryText}
         />

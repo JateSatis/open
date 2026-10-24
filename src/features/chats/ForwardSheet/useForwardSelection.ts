@@ -58,19 +58,18 @@ export function useForwardSelection() {
   const createTag = useCallback(
     async (name: string) => {
       try {
+        // Имя уже было — база отдаёт тот тег; он тоже встаёт первым, чтобы
+        // выбор не спрятался за «Показать все».
         const tag = await createSavedTag(name);
 
-        if (!known.some((item) => item.id === tag.id)) {
-          setCreated((list) => [tag, ...list.filter((item) => item.id !== tag.id)]);
-        }
-
+        setCreated((list) => [tag, ...list.filter((item) => item.id !== tag.id)]);
         setTagIds((set) => new Set(set).add(tag.id));
         setSaved(true);
       } catch {
         showNotice('Не удалось создать тег', 'error');
       }
     },
-    [known],
+    [],
   );
 
   const targets: ForwardTargets = useMemo(

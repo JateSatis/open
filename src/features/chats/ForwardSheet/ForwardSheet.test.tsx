@@ -138,6 +138,18 @@ describe('ForwardSheet', () => {
     expect(onSent).toHaveBeenCalled();
   });
 
+  it('sends once, even when «Отправить» is tapped twice before the sheet goes away', async () => {
+    await renderSheet();
+
+    await fireEvent.press(screen.getByRole('checkbox', { name: 'Альфа' }));
+    await fireEvent.press(screen.getByTestId('forward-saved-row'));
+    await send();
+    await send();
+
+    expect(mockedSendForward).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(mockedSaveMessages).toHaveBeenCalledTimes(1));
+  });
+
   it('keeps the picked chats when the search is cleared', async () => {
     await renderSheet();
 

@@ -52,8 +52,13 @@ export function ForwardSheet({ pick, onSent }: ForwardSheetProps) {
   }));
 
   const { targets } = selection;
+  // Лист уезжает не сразу: второй тап по «Отправить» не должен переслать дважды.
+  const sent = useRef(false);
   const send = useCallback(
     (text: string) => {
+      if (sent.current) return;
+
+      sent.current = true;
       sendForwardPick(queryClient, currentUserId, pick, targets, text);
       onSent();
     },

@@ -30,10 +30,16 @@ export async function saveToSaved(queryClient: QueryClient, request: SaveRequest
     request.type === 'messages'
       ? saveMessages(request.sourceChatId, request.messageIds, request.options)
       : saveComments(request.commentIds, request.options);
+  // Срок вышел, а сохранение всё же прошло: «Повторить» тогда сохранил бы
+  // вторые копии — он больше ничего не делает, а уведомление говорит правду.
+  let lateSaved = false;
 
   try {
-    // Ответ после срока: сохранено всё же, список это покажет.
-    await withDeadline(run, SAVE_DEADLINE_MS, () => refresh(queryClient));
+    await withDeadline(run, SAVE_DEADLINE_MS, () => {
+      lateSaved = true;
+      refresh(queryClient);
+      showNotice('Сохранено');
+    });
     refresh(queryClient);
     return true;
   } catch (cause) {
@@ -41,7 +47,9 @@ export async function saveToSaved(queryClient: QueryClient, request: SaveRequest
 
     showNotice('Не удалось сохранить', 'error', {
       label: 'Повторить',
-      run: () => void saveToSaved(queryClient, request),
+      run: () => {
+        if (!lateSaved) void saveToSaved(queryClient, request);
+      },
     });
     return false;
   }

@@ -286,6 +286,12 @@ export const Sizes = {
   /** Круглая отметка выбора: в списке — во весь рост строки, на облачке — маленькая. */
   selectionCheck: 24,
   selectionCheckSmall: 16,
+  selectionCheckBorder: 2,
+  /** Галочка внутри отметки. */
+  selectionCheckGlyph: 16,
+  selectionCheckGlyphSmall: 11,
+  /** Обводка поля имени нового тега в ряду чипов. */
+  savedTagInputBorder: 1,
   /** Звезда у строки «Сохранённые сообщения». */
   savedStarIcon: 22,
   /** Метка тега на облачке сохранённого — мелкая, чтобы не спорить с текстом. */

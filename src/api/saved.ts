@@ -17,6 +17,7 @@ import { opaqueFlag } from '@/api/opaquePeople';
 import { supabase } from '@/api/supabase';
 
 export const SAVED_PAGE_SIZE = 30;
+const SOURCE_CHATS_BATCH = 100;
 
 export type SavedTag = {
   id: string;
@@ -295,11 +296,21 @@ export async function fetchSourceChats(chatIds: string[]): Promise<Map<string, C
   if (chatIds.length === 0) return byId;
 
   const userId = await getCurrentUserId();
-  const { data, error } = await chatsSelect().in('id', chatIds).is('deleted_at', null);
+  // Фильтр едет в адресе запроса: сотни id разом его переполнили бы.
+  const batches: string[][] = [];
 
-  if (error) throw error;
+  for (let start = 0; start < chatIds.length; start += SOURCE_CHATS_BATCH) {
+    batches.push(chatIds.slice(start, start + SOURCE_CHATS_BATCH));
+  }
 
-  const chats = data ?? [];
+  const results = await Promise.all(
+    batches.map((ids) => chatsSelect().in('id', ids).is('deleted_at', null)),
+  );
+  const failed = results.find((result) => result.error);
+
+  if (failed?.error) throw failed.error;
+
+  const chats = results.flatMap((result) => result.data ?? []);
   const people = await fetchChatPeople(chats.map((chat) => chat.id));
 
   for (const chat of chats) {

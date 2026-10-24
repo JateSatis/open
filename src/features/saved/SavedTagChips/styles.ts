@@ -1,6 +1,6 @@
 import { StyleSheet } from 'react-native';
 
-import { Radii, Spacing } from '@/theme';
+import { Radii, Sizes, Spacing } from '@/theme';
 
 export const styles = StyleSheet.create({
   row: {
@@ -21,7 +21,7 @@ export const styles = StyleSheet.create({
     paddingVertical: 0,
     paddingHorizontal: Spacing.three,
     borderRadius: Radii.full,
-    borderWidth: 1,
+    borderWidth: Sizes.savedTagInputBorder,
   },
   more: {
     minHeight: Spacing.five,

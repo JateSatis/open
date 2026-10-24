@@ -1,11 +1,12 @@
 import { useRef, useState } from 'react';
-import { Pressable, TextInput, View, useColorScheme } from 'react-native';
+import { Pressable, TextInput, View } from 'react-native';
 
 import { styles } from './styles';
 
 import type { SavedTag } from '@/api/saved';
 import { Text } from '@/components/Text';
 import { SAVED_TAG_NAME_MAX, SAVED_TOP_TAGS } from '@/features/saved/limits';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useTheme } from '@/hooks/use-theme';
 import { Typography, savedTagTone } from '@/theme';
 
@@ -27,16 +28,22 @@ export function SavedTagChips({ tags, selectedIds, onToggle, onCreate }: SavedTa
   const theme = useTheme();
   const scheme = useColorScheme() === 'dark' ? 'dark' : 'light';
   const [expanded, setExpanded] = useState(false);
-  const [draft, setDraft] = useState<string | null>(null);
+  const [draft, setDraftState] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
-  // «Готово» и потеря фокуса приходят оба — тег создаётся один раз.
+  // «Готово» и потеря фокуса приходят оба, потеря фокуса — и при уходе поля
+  // со старым замыканием: имя читается из ссылки, тег создаётся один раз.
+  const draftRef = useRef<string | null>(null);
   const finishing = useRef(false);
+  const setDraft = (value: string | null) => {
+    draftRef.current = value;
+    setDraftState(value);
+  };
   const shown = expanded ? tags : tags.slice(0, SAVED_TOP_TAGS);
 
   const finish = () => {
-    if (finishing.current) return;
+    if (finishing.current || draftRef.current === null) return;
 
-    const name = draft?.trim() ?? '';
+    const name = draftRef.current.trim();
 
     // Пустое имя — передумал: поле уходит, ничего не создаётся.
     if (!name) {
