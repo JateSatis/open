@@ -4,11 +4,13 @@ import { useCallback, useEffect, useMemo } from 'react';
 import {
   listSavedAround,
   listSavedMessages,
+  type SavedFilterInput,
   type SavedMessage,
   type SavedPage,
   type SavedPageParam,
 } from '@/api/saved';
 import {
+  savedMessagesKey,
   savedMessagesQueryKey,
   savedSummaryQueryKey,
   savedTagsQueryKey,
@@ -18,14 +20,18 @@ import { useSavedSourceChats } from '@/features/saved/useSavedSourceChats';
 /** С чего начинается страница: обычная или окно вокруг записи (переход к закрепу). */
 type PageParam = SavedPageParam | { around: number };
 
+type Filter = { input: SavedFilterInput | null; key: string | null };
+
 /**
  * Сохранённое новыми вперёд (список перевёрнут: новые внизу), страницами по
- * `seq`. Обычно — от самых новых к старым; после перехода к записи, которой
- * не было среди загруженного, — окно вокруг неё, догружаемое в обе стороны.
- * Чаты-источники — живые, одним запросом на загруженное.
+ * `seq`, под фильтром — только подходящее. Обычно — от самых новых к старым;
+ * после перехода к записи, которой не было среди загруженного, — окно
+ * вокруг неё, догружаемое в обе стороны. Чаты-источники — живые, одним
+ * запросом на загруженное.
  */
-export function useSavedMessages() {
+export function useSavedMessages({ input, key }: Filter) {
   const queryClient = useQueryClient();
+  const queryKey = savedMessagesKey(key);
 
   // Вход на экран — и счётчик «Посмотреть позже» в «Чатах», и теги свежие:
   // сохраняли, может быть, с другого устройства.
@@ -35,9 +41,11 @@ export function useSavedMessages() {
   }, [queryClient]);
 
   const query = useInfiniteQuery({
-    queryKey: savedMessagesQueryKey,
+    queryKey,
     queryFn: ({ pageParam }: { pageParam: PageParam }) =>
-      'around' in pageParam ? listSavedAround(pageParam.around) : listSavedMessages(pageParam),
+      'around' in pageParam
+        ? listSavedAround(pageParam.around, input)
+        : listSavedMessages(pageParam, undefined, input),
     initialPageParam: { before: null } as PageParam,
     getNextPageParam: (page): PageParam | null =>
       page.nextCursor !== null ? { before: page.nextCursor } : null,
@@ -48,7 +56,8 @@ export function useSavedMessages() {
   });
 
   // Окно вокруг закрепа — только пока открыт экран: следующий вход снова с
-  // самых новых, а не перечитыванием старого окна.
+  // самых новых, а не перечитыванием старого окна. Списки под фильтрами
+  // уходят целиком: фильтры с экраном не живут.
   useEffect(
     () => () => {
       const data =
@@ -57,6 +66,11 @@ export function useSavedMessages() {
       if (data?.pageParams.some((param) => 'around' in param || 'after' in param)) {
         queryClient.removeQueries({ queryKey: savedMessagesQueryKey, exact: true });
       }
+
+      queryClient.removeQueries({
+        queryKey: savedMessagesQueryKey,
+        predicate: (cached) => cached.queryKey.length > savedMessagesQueryKey.length,
+      });
     },
     [queryClient],
   );
@@ -72,29 +86,31 @@ export function useSavedMessages() {
 
   /**
    * Загружено ли место записи `seq`; нет — список заменяется окном вокруг
-   * неё. Отвечает, есть ли запись теперь в списке.
+   * неё. Отвечает, есть ли запись теперь в списке (под фильтром — подходит ли).
    */
   const loadAround = useCallback(
     async (seq: number): Promise<boolean> => {
-      const data =
-        queryClient.getQueryData<InfiniteData<SavedPage, PageParam>>(savedMessagesQueryKey);
+      const current = savedMessagesKey(key);
+      const data = queryClient.getQueryData<InfiniteData<SavedPage, PageParam>>(current);
       const loaded = data?.pages.flatMap((page) => page.items) ?? [];
 
       if (loaded.some((item) => item.seq === seq)) return true;
 
       // Догрузка, начатая до перехода, иначе записала бы поверх окна старые страницы.
-      await queryClient.cancelQueries({ queryKey: savedMessagesQueryKey, exact: true });
+      await queryClient.cancelQueries({ queryKey: current, exact: true });
 
-      const page = await listSavedAround(seq);
+      const page = await listSavedAround(seq, input);
 
-      queryClient.setQueryData<InfiniteData<SavedPage, PageParam>>(savedMessagesQueryKey, {
+      if (!page.items.some((item) => item.seq === seq)) return false;
+
+      queryClient.setQueryData<InfiniteData<SavedPage, PageParam>>(current, {
         pages: [page],
         pageParams: [{ around: seq }],
       });
 
-      return page.items.some((item) => item.seq === seq);
+      return true;
     },
-    [queryClient],
+    [input, key, queryClient],
   );
 
   return {

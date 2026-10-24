@@ -1,15 +1,18 @@
 import { useQuery } from '@tanstack/react-query';
 
-import { listSavedPins, type SavedPin } from '@/api/saved';
-import { savedPinsQueryKey } from '@/features/saved/keys';
+import { listSavedPins, type SavedFilterInput, type SavedPin } from '@/api/saved';
+import { savedPinsKey } from '@/features/saved/keys';
 
 const NO_PINS: SavedPin[] = [];
 
-/** Закрепы «Сохранённых» по времени закрепления: последний — в конце. */
-export function useSavedPins(): SavedPin[] {
+/**
+ * Закрепы по времени закрепления: последний — в конце. Под фильтром —
+ * только подходящие: полоса не ведёт к скрытой записи.
+ */
+export function useSavedPins({ input, key }: { input: SavedFilterInput | null; key: string | null }) {
   const query = useQuery({
-    queryKey: savedPinsQueryKey,
-    queryFn: listSavedPins,
+    queryKey: savedPinsKey(key),
+    queryFn: () => listSavedPins(input),
     refetchOnMount: 'always',
   });
 

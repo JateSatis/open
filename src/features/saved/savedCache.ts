@@ -1,16 +1,28 @@
 // Оптимистичные правки сохранённого: одна запись лежит сразу в нескольких
 // кешах — страницы «Все», «Посмотреть позже», закрепы и счётчик в «Чатах», —
-// и меняется во всех разом, чтобы вкладки не расходились.
+// и меняется во всех разом, чтобы вкладки не расходились. Каждый список
+// бывает и без фильтра, и под фильтром (ключ фильтра — третьим элементом):
+// правка идёт во все. Запись, переставшая подходить под фильтр (сняли тег),
+// из отфильтрованного списка уходит; попавшую в него впервые подбирает
+// перечитывание: подходит ли она, решает база.
 
-import type { InfiniteData, QueryClient } from '@tanstack/react-query';
+import type { InfiniteData, QueryClient, QueryKey } from '@tanstack/react-query';
 
-import type { SavedMessage, SavedPage, SavedPin, SavedQuote, WatchLaterPage } from '@/api/saved';
+import type {
+  SavedFilterInput,
+  SavedMessage,
+  SavedPage,
+  SavedPin,
+  SavedQuote,
+  WatchLaterPage,
+} from '@/api/saved';
 import {
   savedMessagesQueryKey,
   savedPinsQueryKey,
   savedSummaryQueryKey,
   savedWatchLaterQueryKey,
 } from '@/features/saved/keys';
+import { filterOfKey, tagsStillMatch } from '@/features/saved/savedFilters';
 
 type AllData = InfiniteData<SavedPage, unknown>;
 type LaterData = InfiniteData<WatchLaterPage, unknown>;
@@ -20,6 +32,28 @@ export type SavedPatch = (saved: SavedMessage) => SavedMessage | null;
 
 function isPending(saved: SavedMessage | null | undefined): boolean {
   return Boolean(saved && saved.watchLaterAt !== null && saved.watchDoneAt === null);
+}
+
+/**
+ * Каждый загруженный кеш списка: без фильтра и под каждым фильтром. `filter`
+ * — `null` у списка без фильтра.
+ */
+function eachList<T>(
+  queryClient: QueryClient,
+  prefix: QueryKey,
+  update: (data: T, filter: SavedFilterInput | null, key: QueryKey) => T,
+) {
+  for (const [key, data] of queryClient.getQueriesData<T>({ queryKey: prefix })) {
+    if (data === undefined) continue;
+
+    const filter = key.length > prefix.length ? filterOfKey(key[prefix.length]) : null;
+
+    queryClient.setQueryData<T>(key, update(data, filter, key));
+  }
+}
+
+function refetchLater(queryClient: QueryClient, key: QueryKey) {
+  void queryClient.invalidateQueries({ queryKey: key, exact: true });
 }
 
 /**
@@ -69,7 +103,7 @@ export function patchSaved(
   const before = new Map<string, SavedMessage>();
   const after = new Map<string, SavedMessage | null>();
 
-  // Каждая запись правится один раз, даже если она в двух кешах.
+  // Каждая запись правится один раз, даже если она в нескольких кешах.
   const apply = (saved: SavedMessage): SavedMessage | null => {
     if (!wanted.has(saved.id)) return saved;
     if (after.has(saved.id)) return after.get(saved.id) ?? null;
@@ -80,22 +114,25 @@ export function patchSaved(
     after.set(saved.id, next);
     return next;
   };
+  const kept = (saved: SavedMessage | null, filter: SavedFilterInput | null) =>
+    saved !== null && tagsStillMatch(saved.tagIds, filter) ? [saved] : [];
 
-  queryClient.setQueryData<AllData>(savedMessagesQueryKey, (data) =>
-    data
-      ? {
-          ...data,
-          pages: data.pages.map((page) => ({
-            ...page,
-            items: page.items.flatMap((saved) => apply(saved) ?? []),
-          })),
-        }
-      : data,
-  );
+  eachList<AllData>(queryClient, savedMessagesQueryKey, (data, filter) => ({
+    ...data,
+    pages: data.pages.map((page) => ({
+      ...page,
+      items: page.items.flatMap((saved) => kept(apply(saved), filter)),
+    })),
+  }));
 
-  queryClient.setQueryData<LaterData>(savedWatchLaterQueryKey, (data) => {
-    if (!data) return data;
+  // Только что попавшие в список дел — их ищем после правки всех кешей «Все».
+  const laterQueries = queryClient.getQueriesData<LaterData>({ queryKey: savedWatchLaterQueryKey });
 
+  // Записи, которых нет ни в одном «Все» (вкладка «Посмотреть позже» до них
+  // догружена дальше), правятся здесь же.
+  for (const [, data] of laterQueries) data?.pages.forEach((page) => page.items.forEach(apply));
+
+  eachList<LaterData>(queryClient, savedWatchLaterQueryKey, (data, filter, key) => {
     const present = new Set<string>();
     const pages = data.pages.map((page) => ({
       ...page,
@@ -103,35 +140,46 @@ export function patchSaved(
         present.add(saved.id);
         const next = apply(saved);
 
-        return next && next.watchLaterAt !== null ? [next] : [];
+        return next && next.watchLaterAt !== null ? kept(next, filter) : [];
       }),
     }));
-    // Только что попавшие в список дел — в первую страницу: место им наведёт
-    // порядок вкладки.
     const added = [...after.values()].filter(
       (saved): saved is SavedMessage =>
         saved !== null && saved.watchLaterAt !== null && !present.has(saved.id),
     );
 
-    if (added.length > 0 && pages[0])
-      pages[0] = { ...pages[0], items: [...added, ...pages[0].items] };
+    if (added.length === 0) return { ...data, pages };
+
+    // Подходит ли под фильтр новая запись вкладки, знает база.
+    if (filter) {
+      refetchLater(queryClient, key);
+      return { ...data, pages };
+    }
+
+    // В первую страницу: место им наведёт порядок вкладки.
+    if (pages[0]) pages[0] = { ...pages[0], items: [...added, ...pages[0].items] };
 
     return { ...data, pages };
   });
 
-  queryClient.setQueryData<SavedPin[]>(savedPinsQueryKey, (pins) => {
-    if (!pins) return pins;
-
+  eachList<SavedPin[]>(queryClient, savedPinsQueryKey, (pins, filter, key) => {
     const kept = pins.filter((pin) => {
       if (!after.has(pin.id)) return true;
 
-      return after.get(pin.id)?.pinnedAt != null;
+      const next = after.get(pin.id);
+
+      return next?.pinnedAt != null && tagsStillMatch(next.tagIds, filter);
     });
     // Новый закреп — последним: порядок по времени закрепления.
     const fresh = [...after.values()].filter(
       (saved): saved is SavedMessage =>
         saved !== null && saved.pinnedAt !== null && !pins.some((pin) => pin.id === saved.id),
     );
+
+    if (fresh.length > 0 && filter) {
+      refetchLater(queryClient, key);
+      return kept;
+    }
 
     return [...kept, ...fresh.map(pinOf)];
   });
@@ -160,9 +208,13 @@ export function bumpPending(queryClient: QueryClient, delta: number) {
  * если «Все» до неё не догружены («Вернуть» после свайпа).
  */
 export function putInWatchLater(queryClient: QueryClient, saved: SavedMessage) {
-  queryClient.setQueryData<LaterData>(savedWatchLaterQueryKey, (data) => {
-    if (!data || data.pages.some((page) => page.items.some((item) => item.id === saved.id)))
+  eachList<LaterData>(queryClient, savedWatchLaterQueryKey, (data, filter, key) => {
+    if (data.pages.some((page) => page.items.some((item) => item.id === saved.id))) return data;
+
+    if (filter) {
+      refetchLater(queryClient, key);
       return data;
+    }
 
     const [first, ...rest] = data.pages;
 
@@ -204,26 +256,28 @@ export function patchQuotes(
 
     return changed ? { ...saved, replies } : saved;
   };
-  const pages = <P extends { items: SavedMessage[] }>(
-    data: InfiniteData<P, unknown> | undefined,
-  ) =>
-    data
-      ? { ...data, pages: data.pages.map((page) => ({ ...page, items: page.items.map(apply) })) }
-      : data;
+  const pages = <P extends { items: SavedMessage[] }>(data: InfiniteData<P, unknown>) => ({
+    ...data,
+    pages: data.pages.map((page) => ({ ...page, items: page.items.map(apply) })),
+  });
 
-  queryClient.setQueryData<AllData>(savedMessagesQueryKey, pages);
-  queryClient.setQueryData<LaterData>(savedWatchLaterQueryKey, pages);
+  eachList<AllData>(queryClient, savedMessagesQueryKey, pages);
+  eachList<LaterData>(queryClient, savedWatchLaterQueryKey, pages);
 }
 
 /** Запись из любого загруженного списка. */
 export function findSaved(queryClient: QueryClient, id: string): SavedMessage | undefined {
-  const all = queryClient.getQueryData<AllData>(savedMessagesQueryKey);
-  const later = queryClient.getQueryData<LaterData>(savedWatchLaterQueryKey);
+  const lists = [
+    ...queryClient.getQueriesData<AllData>({ queryKey: savedMessagesQueryKey }),
+    ...queryClient.getQueriesData<LaterData>({ queryKey: savedWatchLaterQueryKey }),
+  ];
 
-  for (const page of [...(all?.pages ?? []), ...(later?.pages ?? [])]) {
-    const found = page.items.find((saved) => saved.id === id);
+  for (const [, data] of lists) {
+    for (const page of data?.pages ?? []) {
+      const found = page.items.find((saved) => saved.id === id);
 
-    if (found) return found;
+      if (found) return found;
+    }
   }
 
   return undefined;

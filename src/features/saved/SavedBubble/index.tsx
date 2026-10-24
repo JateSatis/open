@@ -31,6 +31,8 @@ export type SavedBubbleProps = {
   onRetry?: (localId: string) => void;
   /** Без кружка «Посмотреть позже» в углу: на своей вкладке у строки свой чекбокс. */
   hideWatchLater?: boolean;
+  /** Тап по маленькому тегу — отфильтровать по нему. Нет — теги не нажимаются. */
+  onTagPress?: (tagId: string, saved: SavedMessage) => void;
 };
 
 const QUOTE_DELETED = 'Запись удалена';
@@ -51,6 +53,7 @@ export const SavedBubble = memo(function SavedBubble({
   onQuotePress,
   onRetry,
   hideWatchLater = false,
+  onTagPress,
 }: SavedBubbleProps) {
   const chat = saved.sourceChatId ? chats.get(saved.sourceChatId) : undefined;
   const message = useMemo(
@@ -89,6 +92,7 @@ export const SavedBubble = memo(function SavedBubble({
             isComment={saved.sourceType === 'comment'}
             tags={tags}
             onOpenSource={note ? undefined : () => onOpenSource(saved)}
+            onTagPress={onTagPress ? (tagId) => onTagPress(tagId, saved) : undefined}
           />
         }
         corner={

@@ -28,6 +28,7 @@ function search(patch: Partial<ChatSearch> = {}): ChatSearch {
     older: jest.fn(),
     newer: jest.fn(),
     select: jest.fn(),
+    reset: jest.fn(),
     close: jest.fn(),
     ...patch,
   };

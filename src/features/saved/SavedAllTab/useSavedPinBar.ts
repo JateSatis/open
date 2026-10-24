@@ -1,16 +1,21 @@
 import { useCallback, useMemo } from 'react';
 
 import type { PinnedMessage } from '@/api/pins';
+import type { SavedFilterInput } from '@/api/saved';
 import { showNotice } from '@/features/notifications/alertsStore';
 import { usePinnedCursor } from '@/features/chats/usePinnedCursor';
 import { useSavedPins } from '@/features/saved/useSavedPins';
 
 /**
  * Полоса закрепов «Все» — та же, что в чате: последний закреп первым, тап
- * ведёт к записи и переключает полосу на предыдущий.
+ * ведёт к записи и переключает полосу на предыдущий. Под фильтром — только
+ * подходящие закрепы.
  */
-export function useSavedPinBar(jump: (id: string, seq: number) => Promise<boolean>) {
-  const saved = useSavedPins();
+export function useSavedPinBar(
+  jump: (id: string, seq: number) => Promise<boolean>,
+  filter: { input: SavedFilterInput | null; key: string | null },
+) {
+  const saved = useSavedPins(filter);
   const pins: PinnedMessage[] = useMemo(
     () =>
       saved.map((pin) => ({

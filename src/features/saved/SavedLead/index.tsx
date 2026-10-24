@@ -1,5 +1,5 @@
 import { SymbolView } from 'expo-symbols';
-import { View } from 'react-native';
+import { Pressable, View } from 'react-native';
 
 import { styles } from './styles';
 
@@ -8,7 +8,7 @@ import { Text } from '@/components/Text';
 import type { SavedSourceLabel } from '@/features/saved/savedCopy';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useTheme } from '@/hooks/use-theme';
-import { Sizes, savedTagTone } from '@/theme';
+import { Sizes, Spacing, savedTagTone } from '@/theme';
 
 export type SavedLeadProps = {
   label: SavedSourceLabel;
@@ -17,6 +17,8 @@ export type SavedLeadProps = {
   tags: SavedTag[];
   /** Тап по источнику — к оригиналу. Нет (своя заметка) — подпись не ссылка. */
   onOpenSource?: () => void;
+  /** Тап по тегу — фильтр по нему. Нет — теги только подписи. */
+  onTagPress?: (tagId: string) => void;
 };
 
 /**
@@ -24,7 +26,7 @@ export type SavedLeadProps = {
  * канал, у своей заметки — «Вы»), тап — к оригиналу; справа — маленькие
  * цветные теги.
  */
-export function SavedLead({ label, isComment, tags, onOpenSource }: SavedLeadProps) {
+export function SavedLead({ label, isComment, tags, onOpenSource, onTagPress }: SavedLeadProps) {
   const theme = useTheme();
   const scheme = useColorScheme() === 'dark' ? 'dark' : 'light';
 
@@ -67,11 +69,21 @@ export function SavedLead({ label, isComment, tags, onOpenSource }: SavedLeadPro
             const tone = savedTagTone(scheme, tag.color);
 
             return (
-              <View key={tag.id} style={[styles.tag, { backgroundColor: tone.fill }]}>
+              <Pressable
+                key={tag.id}
+                testID={`saved-bubble-tag-${tag.name}`}
+                accessibilityRole={onTagPress ? 'button' : 'text'}
+                accessibilityLabel={onTagPress ? `Фильтр по тегу ${tag.name}` : tag.name}
+                disabled={!onTagPress}
+                onPress={() => onTagPress?.(tag.id)}
+                // Тег маленький: касание шире самого чипа, до рекомендованного.
+                hitSlop={Spacing.two}
+                style={[styles.tag, { backgroundColor: tone.fill }]}
+              >
                 <Text variant="meta" numberOfLines={1} style={{ color: tone.text }}>
                   {tag.name}
                 </Text>
-              </View>
+              </Pressable>
             );
           })}
         </View>

@@ -1,5 +1,5 @@
 import { useIsFocused, useNavigation } from 'expo-router';
-import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from 'react';
 import { BackHandler, Pressable } from 'react-native';
 
 import type { SavedMessage } from '@/api/saved';
@@ -13,8 +13,17 @@ const TITLE = 'Сохранённые сообщения';
  * снятие последней отметки выключает выбор. Шапка в выборе — «Выбрано: N» и
  * «Отмена», системный «назад» снимает выбор, а не уводит с экрана.
  */
-/** `active` — вкладка видна: ушли на другую — выбор снимается, шапка и «назад» были бы про невидимое. */
-export function useSavedSelection(items: readonly SavedMessage[], active = true) {
+/**
+ * `active` — вкладка видна: ушли на другую — выбор снимается, шапка и «назад»
+ * были бы про невидимое. `idleHeaderRight` — что справа в шапке вне выбора
+ * (поиск и фильтры экрана): шапкой владеет этот хук, иначе выбор и экран
+ * перебивали бы друг друга.
+ */
+export function useSavedSelection(
+  items: readonly SavedMessage[],
+  active = true,
+  idleHeaderRight?: () => ReactNode,
+) {
   const [ids, setIds] = useState<ReadonlySet<string>>(() => new Set());
   const [wasActive, setWasActive] = useState(active);
 
@@ -69,9 +78,14 @@ export function useSavedSelection(items: readonly SavedMessage[], active = true)
               </Pressable>
             ),
           }
-        : { title: TITLE, headerBackVisible: true, gestureEnabled: true, headerRight: undefined },
+        : {
+            title: TITLE,
+            headerBackVisible: true,
+            gestureEnabled: true,
+            headerRight: idleHeaderRight,
+          },
     );
-  }, [clear, navigation, selected.length, selecting]);
+  }, [clear, idleHeaderRight, navigation, selected.length, selecting]);
 
   useEffect(() => {
     if (!selecting || !focused) return;

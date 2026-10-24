@@ -1,7 +1,7 @@
 import { SymbolView } from 'expo-symbols';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
-import type { ChatSearch } from './useChatSearch';
+import type { MatchSearch } from './useMatchSearch';
 
 import { Text } from '@/components/Text';
 import { CHAT_SEARCH_COUNT_CAP } from '@/features/chats/limits';
@@ -9,7 +9,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { InfoPageSizes, Sizes, Spacing } from '@/theme';
 
 /** «3 из 12», «Ничего не найдено» или пусто, пока запроса нет. */
-export function searchCounterText(search: ChatSearch): string {
+export function searchCounterText(search: MatchSearch): string {
   if (search.searched === '') return '';
   if (search.hits.length === 0) return search.isSearching ? '' : 'Ничего не найдено';
 
@@ -20,7 +20,7 @@ export function searchCounterText(search: ChatSearch): string {
 }
 
 export type ChatSearchPlateProps = {
-  search: ChatSearch;
+  search: MatchSearch;
   showingList: boolean;
   onToggleList: () => void;
 };
