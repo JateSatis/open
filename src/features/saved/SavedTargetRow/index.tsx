@@ -68,14 +68,15 @@ export function SavedTargetRow({
         <Pressable
           testID="forward-saved-configure"
           accessibilityRole="button"
-          accessibilityLabel={open ? 'Свернуть настройки' : 'Настроить'}
+          accessibilityLabel="Настроить"
           accessibilityState={{ expanded: open }}
           onPress={onToggleOpen}
           hitSlop={Spacing.two}
           style={styles.configure}
         >
-          <Text variant="small" color="primary">
-            {open ? 'Свернуть' : 'Настроить'}
+          {/* Раскрыто — та же подпись жирнее: «Свернуть» уже есть у тегов. */}
+          <Text variant={open ? 'smallBold' : 'small'} color="primary">
+            Настроить
           </Text>
         </Pressable>
 

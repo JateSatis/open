@@ -15,6 +15,7 @@ export default function ChatsLayout() {
       <Stack.Screen name="new-channel" options={{ title: 'Новый канал' }} />
       <Stack.Screen name="invites" options={{ title: 'Заявки' }} />
       <Stack.Screen name="forward" options={{ title: 'Кому переслать' }} />
+      <Stack.Screen name="saved" options={{ title: 'Сохранённые сообщения' }} />
       {/* Переписка, канал и чужой профиль — страницы: рисуют свою шапку, сами
           въезжают и уезжают за пальцем, прозрачные поверх предыдущего экрана,
           чтобы тот был виден, пока страницу тянут (см. `SlidePage`). */}

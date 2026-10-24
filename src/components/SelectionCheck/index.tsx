@@ -13,6 +13,11 @@ export type SelectionCheckProps = {
   /** Цвета на синем облачке: обводка и заливка — белые. */
   onPrimary?: boolean;
   testID?: string;
+  /**
+   * Отметка сама по себе, не внутри строки-пункта: тогда она — флажок для
+   * экранного диктора с этой подписью. Внутри строки подпись не нужна.
+   */
+  accessibilityLabel?: string;
 };
 
 /** Круглая отметка: пустой кружок или заливка с галочкой. Нажатия — у строки вокруг. */
@@ -21,6 +26,7 @@ export function SelectionCheck({
   size = 'regular',
   onPrimary = false,
   testID,
+  accessibilityLabel,
 }: SelectionCheckProps) {
   const theme = useTheme();
   const side = size === 'small' ? Sizes.selectionCheckSmall : Sizes.selectionCheck;
@@ -29,6 +35,9 @@ export function SelectionCheck({
   return (
     <View
       testID={testID}
+      accessible={accessibilityLabel !== undefined}
+      accessibilityRole={accessibilityLabel !== undefined ? 'checkbox' : undefined}
+      accessibilityLabel={accessibilityLabel}
       accessibilityState={{ checked }}
       style={[
         styles.check,

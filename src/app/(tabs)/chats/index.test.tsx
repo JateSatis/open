@@ -8,6 +8,7 @@ import type { ChatSummary } from '@/api/chats';
 import { getLastSeen } from '@/api/chatInfo';
 import { listChats } from '@/api/chats';
 import { listInvites, type ChatInvite } from '@/api/invites';
+import { getSavedSummary } from '@/api/saved';
 import {
   markChannelRead,
   markChatSubscriptionRead,
@@ -51,10 +52,13 @@ jest.mock('@/api/invites', () => ({
   listInvites: jest.fn(),
 }));
 
+jest.mock('@/api/saved', () => ({ getSavedSummary: jest.fn() }));
+
 const mockedListChats = listChats as jest.MockedFunction<typeof listChats>;
 const mockedInvites = listInvites as jest.MockedFunction<typeof listInvites>;
 const mockedStatuses = getLastSeen as jest.MockedFunction<typeof getLastSeen>;
 const mockedSession = useSession as jest.MockedFunction<typeof useSession>;
+const mockedSummary = getSavedSummary as jest.MockedFunction<typeof getSavedSummary>;
 
 function signedInAs(userId: string) {
   mockedSession.mockReturnValue({
@@ -110,6 +114,7 @@ beforeEach(() => {
   mockedStatuses.mockResolvedValue(new Map());
   mockedListChats.mockResolvedValue([]);
   mockedInvites.mockResolvedValue([]);
+  mockedSummary.mockResolvedValue({ watchLaterPending: 0 });
   // Плашка о сбое загрузки появляется только при живой связи: об обрыве
   // говорит шапка, и дублировать её красным текстом незачем.
   resetConnectionState();
@@ -117,6 +122,27 @@ beforeEach(() => {
 });
 
 describe('ChatsScreen', () => {
+  it('always pins «Сохранённые сообщения» on top, without a counter when nothing waits', async () => {
+    await renderWithQuery(<ChatsScreen />);
+
+    expect(await screen.findByTestId('saved-entry')).toBeTruthy();
+    expect(screen.queryByTestId('saved-entry-count')).toBeNull();
+
+    fireEvent.press(screen.getByTestId('saved-entry'));
+    expect(mockPush).toHaveBeenCalledWith('/chats/saved');
+  });
+
+  it('counts unfinished «Посмотреть позже» on the saved row, above the invites', async () => {
+    mockedSummary.mockResolvedValue({ watchLaterPending: 2 });
+    mockedInvites.mockResolvedValue([invite('chat-9', 'pending')]);
+
+    await renderWithQuery(<ChatsScreen />);
+
+    expect(await screen.findByText('2')).toBeTruthy();
+    expect(screen.getByLabelText('Сохранённые сообщения, посмотреть позже: 2')).toBeTruthy();
+    expect(await screen.findByText('Заявки')).toBeTruthy();
+  });
+
   it('shows the other side of a direct chat with its last message', async () => {
     mockedListChats.mockResolvedValue([chat]);
 

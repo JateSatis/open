@@ -21,6 +21,8 @@ import { useInvites } from '@/features/chats/useInvites';
 import type { ChatSummary } from '@/api/chats';
 import { useOnlineUsers } from '@/features/chats/useOnlineUsers';
 import { ConnectionBanner } from '@/features/connection/ConnectionBanner';
+import { SavedEntry } from '@/features/saved/SavedEntry';
+import { useSavedSummary } from '@/features/saved/useSavedSummary';
 import { SearchBar } from '@/features/search/SearchBar';
 import { SearchPanel } from '@/features/search/SearchPanel';
 import { useSearchMode } from '@/features/search/useSearchMode';
@@ -42,6 +44,7 @@ export default function ChatsScreen() {
   );
   const onlineIds = useOnlineUsers(peerIds);
   const { incoming, declined, error: invitesError, refresh: refreshInvites } = useInvites();
+  const watchLaterCount = useSavedSummary();
 
   const [rowMenu, setRowMenu] = useState<SubscriptionRowTarget | null>(null);
   const search = useSearchMode();
@@ -135,13 +138,21 @@ export default function ChatsScreen() {
           keyExtractor={(chat) => chat.id}
           showsVerticalScrollIndicator={false}
           refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={refreshAll} />}
+          // «Сохранённые» — всегда первой строкой, на одном месте; заявки
+          // появляются и пропадают под ней, её не сдвигая.
           ListHeaderComponent={
-            hasInvites ? (
-              <InvitesEntry
-                incomingCount={incoming.length}
-                onPress={() => router.push('/chats/invites')}
+            <>
+              <SavedEntry
+                watchLaterCount={watchLaterCount}
+                onPress={() => router.push('/chats/saved')}
               />
-            ) : null
+              {hasInvites ? (
+                <InvitesEntry
+                  incomingCount={incoming.length}
+                  onPress={() => router.push('/chats/invites')}
+                />
+              ) : null}
+            </>
           }
           renderItem={({ item }) => (
             <ChatListItem
