@@ -12,6 +12,7 @@ import {
   type MessageAttachment,
   type MessageKind,
 } from '@/api/chats';
+import type { PreviewAttachment } from '@/api/messagePreview';
 import { toMessageKind } from '@/api/messageRows';
 import { opaqueFlag } from '@/api/opaquePeople';
 import { supabase } from '@/api/supabase';
@@ -27,15 +28,36 @@ export type SavedTag = {
   usesCount: number;
 };
 
-/** Откуда сохранено, на момент сохранения: канал, свой чат, чужой. */
-export type SavedCategory = 'channel' | 'member' | 'visitor';
+/** Откуда сохранено, на момент сохранения: канал, свой чат, чужой; `note` — своя заметка. */
+export type SavedCategory = 'channel' | 'member' | 'visitor' | 'note';
+
+/** Копия сообщения, копия комментария или своя заметка. */
+export type SavedSourceType = 'message' | 'comment' | 'note';
+
+/**
+ * Цитата ответа заметки — запись «Сохранённых» как она есть сейчас;
+ * `savedId: null` — её удалили: заглушка «Запись удалена».
+ */
+export type SavedQuote =
+  | { savedId: null }
+  | {
+      savedId: string;
+      seq: number;
+      sourceType: SavedSourceType;
+      sourceChatId: string | null;
+      category: SavedCategory;
+      kind: MessageKind;
+      text: string | null;
+      /** Файлы для превью: вид, миниатюра, длительность. */
+      attachments: PreviewAttachment[];
+    };
 
 export type SavedMessage = {
   id: string;
   /** Порядок и курсор страниц. */
   seq: number;
   savedAt: string;
-  sourceType: 'message' | 'comment';
+  sourceType: SavedSourceType;
   category: SavedCategory;
   /** Чат оригинала (у комментария к попу — чат постов канала); `null` — удалён. */
   sourceChatId: string | null;
@@ -61,6 +83,10 @@ export type SavedMessage = {
   pinnedAt: string | null;
   attachments: MessageAttachment[];
   tagIds: string[];
+  /** Заметку правили. У копий — никогда: копия не меняется. */
+  edited: boolean;
+  /** Цитаты ответа заметки по порядку; у копий — пусто. */
+  replies: SavedQuote[];
 };
 
 /**
@@ -182,10 +208,46 @@ type SavedRow = {
   pinned_at: string | null;
   attachments: unknown;
   tag_ids: string[] | null;
+  edited?: boolean | null;
+  replies?: unknown;
 };
 
-function toCategory(value: string): SavedCategory {
-  return value === 'channel' || value === 'member' ? value : 'visitor';
+function toCategory(value: string | null | undefined): SavedCategory {
+  return value === 'channel' || value === 'member' || value === 'note' ? value : 'visitor';
+}
+
+function toSourceType(value: string | null | undefined): SavedSourceType {
+  return value === 'comment' || value === 'note' ? value : 'message';
+}
+
+type QuoteJson = {
+  saved_id?: string | null;
+  seq?: number | null;
+  source_type?: string | null;
+  source_category?: string | null;
+  source_chat_id?: string | null;
+  kind?: string | null;
+  text?: string | null;
+  attachments?: PreviewAttachment[] | null;
+};
+
+function toQuotes(value: unknown): SavedQuote[] {
+  if (!Array.isArray(value)) return [];
+
+  return (value as QuoteJson[]).map((item): SavedQuote =>
+    item.saved_id
+      ? {
+          savedId: item.saved_id,
+          seq: item.seq ?? 0,
+          sourceType: toSourceType(item.source_type),
+          sourceChatId: item.source_chat_id ?? null,
+          category: toCategory(item.source_category),
+          kind: toMessageKind(item.kind ?? 'text'),
+          text: item.text ?? null,
+          attachments: Array.isArray(item.attachments) ? item.attachments : [],
+        }
+      : { savedId: null },
+  );
 }
 
 export function toSavedMessage(row: SavedRow): SavedMessage {
@@ -193,7 +255,7 @@ export function toSavedMessage(row: SavedRow): SavedMessage {
     id: row.id,
     seq: row.seq,
     savedAt: row.created_at,
-    sourceType: row.source_type === 'comment' ? 'comment' : 'message',
+    sourceType: toSourceType(row.source_type),
     category: toCategory(row.source_category),
     sourceChatId: row.source_chat_id ?? null,
     sourceMessageId: row.source_message_id ?? null,
@@ -214,6 +276,8 @@ export function toSavedMessage(row: SavedRow): SavedMessage {
     pinnedAt: row.pinned_at ?? null,
     attachments: toAttachments(row.attachments),
     tagIds: row.tag_ids ?? [],
+    edited: row.edited ?? false,
+    replies: toQuotes(row.replies),
   };
 }
 
@@ -512,4 +576,108 @@ export async function listSavedForwardable(savedIds: string[]): Promise<SavedFor
         }
       : { savedId: row.saved_id, live: false },
   );
+}
+
+/** Файл заметки — уже очищенный, свой: путь в `chat-media` и что о нём знает вложение. */
+export type SavedNoteFile = {
+  url: string;
+  posterUrl: string | null;
+  mimeType: string;
+  width: number | null;
+  height: number | null;
+  durationMs: number | null;
+  waveform: number[] | null;
+};
+
+export type SavedNoteInput = {
+  /** Ключ повтора: та же отправка не создаёт вторую заметку. */
+  clientId: string;
+  text: string | null;
+  files: SavedNoteFile[];
+  /** Цитаты — свои записи, по порядку. */
+  replyTo: string[];
+  /** Голосовое — один файл без подписи; иначе вид по файлам. */
+  kind: 'post' | 'voice';
+};
+
+/**
+ * Новая заметка; отвечает её id. Строку читает `getSavedMessage` отдельно:
+ * заметка уже записана, даже если чтение потом не удалось.
+ */
+export async function sendSavedNote(input: SavedNoteInput): Promise<string> {
+  const { data: id, error } = await supabase.rpc('send_saved_note', {
+    p_client_id: input.clientId,
+    p_text: input.text ?? undefined,
+    p_media: input.files.map((file) => ({
+      url: file.url,
+      poster_url: file.posterUrl,
+      mime_type: file.mimeType,
+      width: file.width,
+      height: file.height,
+      duration_ms: file.durationMs === null ? null : Math.round(file.durationMs),
+      waveform: file.waveform,
+    })),
+    p_reply_to: input.replyTo,
+    p_kind: input.kind === 'voice' ? 'voice' : undefined,
+  });
+
+  if (error) throw error;
+  if (typeof id !== 'string') throw new Error('send_saved_note returned nothing');
+
+  return id;
+}
+
+/**
+ * Неотправленную заметку убрали, а ответ сервера на неё не дошёл: она могла
+ * создаться. Удаляет её по ключу повтора; нет такой — ничего.
+ */
+export async function deleteSavedNoteByClient(clientId: string): Promise<void> {
+  const { error } = await supabase.rpc('delete_saved_note_by_client', { p_client_id: clientId });
+
+  if (error) throw error;
+}
+
+/** Одна запись по id — как её отдают страницы «Все». */
+export async function getSavedMessage(id: string): Promise<SavedMessage | null> {
+  // Окно из одной записи: до её номера включительно — её не знаем, поэтому
+  // через страницу «Посмотреть позже» нельзя; берём по seq из таблицы.
+  const { data: row, error } = await supabase
+    .from('saved_messages')
+    .select('seq')
+    .eq('id', id)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!row) return null;
+
+  const page = await listSavedMessages({ before: row.seq + 1 }, 1);
+
+  return page.items.find((item) => item.id === id) ?? null;
+}
+
+/**
+ * Правка своей заметки: текст и какие вложения оставить, по порядку.
+ * Копию сообщения база не правит.
+ */
+export async function editSavedNote(savedId: string, text: string, keep: string[]): Promise<void> {
+  const { error } = await supabase.rpc('edit_saved_note', {
+    p_saved: savedId,
+    p_text: text,
+    p_keep: keep,
+  });
+
+  if (error) throw error;
+}
+
+/** Копии заметок — новыми заметками с теми же файлами («★ Сохранённые» в листе пересылки). */
+export async function copySavedNotes(savedIds: string[], options: SaveOptions): Promise<string[]> {
+  const { data, error } = await supabase.rpc('copy_saved_notes', {
+    p_ids: savedIds,
+    p_tag_ids: options.tagIds,
+    p_watch_later: options.watchLater,
+  });
+
+  if (error) throw error;
+
+  return data ?? [];
 }

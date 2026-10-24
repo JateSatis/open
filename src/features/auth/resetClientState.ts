@@ -9,6 +9,7 @@ import { closeComments } from '@/features/interactions/comments/commentsPanelSto
 import { resetPendingReactions } from '@/features/interactions/pendingReactions';
 import { useMediaSelection } from '@/features/media/selectionStore';
 import { resetPendingPops } from '@/features/pops/pendingPops';
+import { resetNotesOutbox } from '@/features/saved/notesStore';
 import { resetRecentSearches } from '@/features/search/recentSearches';
 import { setActiveChatId } from '@/store/activeChat';
 
@@ -33,6 +34,7 @@ export function resetClientState(queryClient: QueryClient) {
   resetPendingEdits();
   resetPendingReactions();
   resetCommentOutbox();
+  resetNotesOutbox();
   resetPendingPops();
   closeComments();
   resetComposerDrafts();

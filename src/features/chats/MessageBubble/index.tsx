@@ -63,6 +63,8 @@ export type MessageBubbleProps = {
   onAuthorPress?: () => void;
   /** Тап по цитате ответа — к её оригиналу. */
   onQuotePress?: (quote: QuotedMessage) => void;
+  /** Подпись удалённой цитаты: у заметки в «Сохранённых» — «Запись удалена». */
+  quoteDeletedText?: string;
   /**
    * Облачко островка, чей оригинал из другого чата, чем заголовок островка:
    * над текстом — «<автор> из <чат>». Тап по чату — туда, к этому сообщению.
@@ -145,6 +147,7 @@ export function MessageBubble({
   onRetry,
   onAuthorPress,
   onQuotePress,
+  quoteDeletedText,
   sourceChat,
   reactionAudience,
   onReactionToggle,
@@ -263,7 +266,12 @@ export function MessageBubble({
     <>
       {lead}
       {message.replies.length > 0 ? (
-        <ReplyQuote quotes={message.replies} isOwn={isOwn} onPress={onQuotePress} />
+        <ReplyQuote
+          quotes={message.replies}
+          isOwn={isOwn}
+          onPress={onQuotePress}
+          deletedText={quoteDeletedText}
+        />
       ) : null}
     </>
   ) : null;

@@ -1,6 +1,6 @@
 import { useMemo, type ReactNode } from 'react';
 
-import type { SavedMessage, SavedTag } from '@/api/saved';
+import type { SavedTag } from '@/api/saved';
 import {
   MessageContextMenu,
   type AnchorRect,
@@ -8,6 +8,7 @@ import {
   type MenuAnchor,
 } from '@/features/chats/MessageContextMenu';
 import { savedMenuActions, type SavedActionId, type SavedTab } from '@/features/saved/savedActions';
+import { isPendingNote, type SavedItem } from '@/features/saved/savedCopy';
 import { SavedTagBlock, TAG_BLOCK_HEIGHT } from '@/features/saved/SavedTagBlock';
 import type { SavedActions } from '@/features/saved/useSavedActions';
 
@@ -17,7 +18,7 @@ export type SavedMenuTarget = { savedId: string; anchor: MenuAnchor; tab: SavedT
 export type SavedMenuProps = {
   target: SavedMenuTarget | null;
   /** Запись — свежая, из кеша: теги и отметки меняются, пока меню открыто. */
-  saved: SavedMessage | null;
+  saved: SavedItem | null;
   viewport: AnchorRect | null;
   /** Копия строки над затемнением. */
   preview: ReactNode;
@@ -25,7 +26,7 @@ export type SavedMenuProps = {
   previewGrowth: 'up' | 'down';
   tags: SavedTag[];
   actions: Pick<SavedActions, 'toggleTag' | 'createTag'>;
-  onAction: (id: SavedActionId, saved: SavedMessage) => void;
+  onAction: (id: SavedActionId, saved: SavedItem) => void;
   onClose: () => void;
 };
 
@@ -52,7 +53,8 @@ export function SavedMenu({
 
   const accessory = useMemo<MenuAccessory | null>(
     () =>
-      saved
+      // Неотправленной заметки сервер ещё не знает — тегов у неё нет.
+      saved && !isPendingNote(saved)
         ? {
             collapsedHeight: TAG_BLOCK_HEIGHT,
             render: (props) => (

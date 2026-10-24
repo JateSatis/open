@@ -1,28 +1,58 @@
 // Что можно сделать с сохранённым — меню и панель выбора. Своё, а не
-// `MESSAGE_ACTIONS`: реакций, правки, комментариев и ответа здесь нет, а
-// «Посмотреть позже», закреп и удаление — личные, свои.
+// `MESSAGE_ACTIONS`: реакций и комментариев здесь нет, а «Посмотреть позже»,
+// закреп и удаление — личные, свои. Одно место для копий и своих заметок:
+// у заметки есть ещё «Изменить», у неотправленной — только «Повторить» и
+// «Удалить».
 
 import type { SavedMessage } from '@/api/saved';
 import type { ContextMenuAction } from '@/features/chats/MessageContextMenu';
 import type { SelectionAction } from '@/features/chats/messageActions';
-import { MAX_FORWARD } from '@/features/chats/messageQuote';
+import { MAX_FORWARD, MAX_QUOTES } from '@/features/chats/messageQuote';
+import { isNote, isPendingNote, type SavedItem } from '@/features/saved/savedCopy';
 
 /** Вкладка, где открыто меню: на «Посмотреть позже» — без механики «Все». */
 export type SavedTab = 'all' | 'later';
 
 export type SavedActionId =
-  'watch_later' | 'watch_toggle' | 'copy' | 'select' | 'pin' | 'unpin' | 'forward' | 'delete';
+  | 'reply'
+  | 'watch_later'
+  | 'watch_toggle'
+  | 'copy'
+  | 'edit'
+  | 'select'
+  | 'pin'
+  | 'unpin'
+  | 'forward'
+  | 'retry'
+  | 'delete';
 
 function hasText(saved: SavedMessage): boolean {
   return Boolean(saved.text?.trim());
 }
 
+/**
+ * Свою заметку можно исправить, как своё сообщение: текст и убрать файлы.
+ * Голосовое правкой не перезаписывается — у него править нечего.
+ */
+export function canEditSaved(saved: SavedItem): boolean {
+  return (
+    isNote(saved) && !isPendingNote(saved) && (saved.kind === 'text' || saved.kind === 'media')
+  );
+}
+
 /** Пункты меню записи сверху вниз. */
 export function savedMenuActions(
-  saved: SavedMessage,
+  saved: SavedItem,
   tab: SavedTab,
 ): ContextMenuAction<SavedActionId>[] {
-  const actions: ContextMenuAction<SavedActionId>[] = [];
+  if (isPendingNote(saved)) {
+    return [
+      ...(saved.status === 'failed' ? [{ id: 'retry' as const, label: 'Повторить' }] : []),
+      { id: 'delete', label: 'Удалить', destructive: true },
+    ];
+  }
+
+  const actions: ContextMenuAction<SavedActionId>[] = [{ id: 'reply', label: 'Ответить' }];
   const all = tab === 'all';
 
   if (all && saved.watchLaterAt === null) {
@@ -38,6 +68,7 @@ export function savedMenuActions(
   }
 
   if (hasText(saved)) actions.push({ id: 'copy', label: 'Копировать' });
+  if (canEditSaved(saved)) actions.push({ id: 'edit', label: 'Изменить' });
 
   if (all) {
     actions.push({ id: 'select', label: 'Выбрать' });
@@ -62,6 +93,11 @@ export type SavedSelectionContext = { selected: SavedMessage[] };
  * часть оригиналов удалена: их пропустит пересылка, скажет уведомление.
  */
 export const SAVED_SELECTION_ACTIONS: readonly SelectionAction<SavedSelectionContext>[] = [
+  {
+    id: 'reply',
+    label: 'Ответить',
+    isEnabled: ({ selected }) => selected.length > 0 && selected.length <= MAX_QUOTES,
+  },
   {
     id: 'forward',
     label: 'Переслать',

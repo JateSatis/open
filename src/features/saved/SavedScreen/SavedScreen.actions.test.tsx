@@ -39,7 +39,14 @@ jest.mock('expo-router', () => ({
 }));
 jest.mock('expo-clipboard', () => ({ setStringAsync: jest.fn(() => Promise.resolve(true)) }));
 jest.mock('@/api/supabase', () => ({ supabase: {} }));
-jest.mock('@/features/media', () => ({ MediaViewer: () => null, VoicePlayer: () => null }));
+// Поле заметок — своими тестами (SavedScreen.notes.test.tsx).
+jest.mock('@/features/saved/SavedComposer', () => ({ SavedComposer: () => null }));
+jest.mock('@/features/profile/queries', () => ({ useMyProfile: () => ({ data: undefined }) }));
+jest.mock('@/features/media', () => ({
+  ...jest.requireActual('@/features/media/selectionStore'),
+  MediaViewer: () => null,
+  VoicePlayer: () => null,
+}));
 jest.mock('@/features/auth/useSession', () => ({ useSession: jest.fn() }));
 jest.mock('@/components/ConfirmDialog/store', () => ({ confirm: jest.fn() }));
 jest.mock('@/api/messageRows', () => ({
@@ -92,6 +99,8 @@ function saved(id: string, seq: number, overrides: Partial<SavedMessage> = {}): 
     pinnedAt: null,
     attachments: [],
     tagIds: [],
+    edited: false,
+    replies: [],
     ...overrides,
   };
 }
@@ -139,6 +148,7 @@ describe('SavedScreen — меню записи', () => {
       .map((item) => item.props.accessibilityLabel);
 
     expect(names).toEqual([
+      'Ответить',
       'Посмотреть позже',
       'Копировать',
       'Выбрать',

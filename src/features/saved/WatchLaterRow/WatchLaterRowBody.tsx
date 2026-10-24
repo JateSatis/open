@@ -14,13 +14,14 @@ import { chatAvatarUrl } from '@/features/chats/chatDisplay';
 import type { MosaicBounds } from '@/features/chats/lib/mosaicLayout';
 import { describePreview, previewOf } from '@/features/chats/messageQuote';
 import { SavedBubble } from '@/features/saved/SavedBubble';
-import { savedSourceLabel, toBubbleMessage } from '@/features/saved/savedCopy';
+import { isNote, savedSourceLabel, toBubbleMessage } from '@/features/saved/savedCopy';
 import { formatDayMonth } from '@/lib/dates';
 import { Opacity, Sizes } from '@/theme';
 
 export type WatchLaterRowBodyProps = {
   saved: SavedMessage;
-  chat: ChatSummary | undefined;
+  /** Чаты-источники — для подписи записи и её цитат. */
+  chats: ReadonlyMap<string, ChatSummary>;
   currentUserId: string | null;
   tagsById: ReadonlyMap<string, SavedTag>;
   mediaBounds: MosaicBounds;
@@ -44,7 +45,7 @@ export const WatchLaterRowBody = forwardRef<View, WatchLaterRowBodyProps>(
   function WatchLaterRowBody(
     {
       saved,
-      chat,
+      chats,
       currentUserId,
       tagsById,
       mediaBounds,
@@ -57,7 +58,9 @@ export const WatchLaterRowBody = forwardRef<View, WatchLaterRowBodyProps>(
     },
     ref,
   ) {
+    const chat = saved.sourceChatId ? chats.get(saved.sourceChatId) : undefined;
     const label = savedSourceLabel(saved, chat, currentUserId);
+    const note = isNote(saved);
     const done = saved.watchDoneAt !== null;
     const { bubbleRef, checkStyle, onBubbleLayout } = useStickyCheck(sticky, expanded);
     const preview = describePreview(previewOf(toBubbleMessage(saved)));
@@ -93,8 +96,8 @@ export const WatchLaterRowBody = forwardRef<View, WatchLaterRowBodyProps>(
             {saved.watchLaterAt ? formatDayMonth(saved.watchLaterAt) : ''}
           </Text>
           <Avatar
-            uri={chat ? chatAvatarUrl(chat, currentUserId) : null}
-            name={label.source}
+            uri={note ? label.avatarUrl : chat ? chatAvatarUrl(chat, currentUserId) : null}
+            name={note ? label.avatarName : label.source}
             size={Sizes.chatListAvatar}
           />
           <View style={styles.titles}>
@@ -113,14 +116,14 @@ export const WatchLaterRowBody = forwardRef<View, WatchLaterRowBodyProps>(
         {expanded ? (
           <Animated.View entering={FadeIn} style={styles.details}>
             <Text variant="caption" color="textSecondary">
-              {`сохранено ${formatDayMonth(saved.savedAt)}`}
+              {`${note ? 'написано' : 'сохранено'} ${formatDayMonth(saved.savedAt)}`}
             </Text>
             <View style={styles.expandedRow}>
               <Animated.View ref={bubbleRef} onLayout={onBubbleLayout} style={styles.bubble}>
                 {wrapBubble(
                   <SavedBubble
                     saved={saved}
-                    chat={chat}
+                    chats={chats}
                     currentUserId={currentUserId}
                     tagsById={tagsById}
                     mediaBounds={mediaBounds}

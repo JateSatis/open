@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { View, useWindowDimensions } from 'react-native';
 import { useSharedValue, withTiming } from 'react-native-reanimated';
 
@@ -10,6 +10,7 @@ import { bubbleAsideWidth } from '@/features/chats/MessageBubble/layout';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
 import { SavedAllTab } from '@/features/saved/SavedAllTab';
 import { SavedWatchLaterTab } from '@/features/saved/SavedWatchLaterTab';
+import { useSavedComposer } from '@/features/saved/useSavedComposer';
 import { useSavedTags } from '@/features/saved/useSavedTags';
 import { useTheme } from '@/hooks/use-theme';
 import { Motion, Spacing } from '@/theme';
@@ -20,7 +21,8 @@ const TABS = ['Все', 'Посмотреть позже'] as const;
  * «Сохранённые сообщения»: под шапкой — переключатель «Все | Посмотреть
  * позже». Обе вкладки живут, пока открыт экран, а неактивная лишь
  * невидима: переключение не теряет прокрутку другой. «Посмотреть позже»
- * грузится при первом заходе на неё.
+ * грузится при первом заходе на неё. Поле заметок — у экрана: «Ответить» и
+ * «Изменить» с «Посмотреть позже» переключают на «Все» с плашкой над полем.
  */
 export function SavedScreen() {
   const theme = useTheme();
@@ -35,12 +37,31 @@ export function SavedScreen() {
   const [tab, setTab] = useState(0);
   const [laterOpened, setLaterOpened] = useState(false);
   const position = useSharedValue(0);
+  const composer = useSavedComposer(currentUserId);
+  const { startReply, startEdit } = composer;
 
-  const select = (index: number) => {
-    setTab(index);
-    if (index === 1) setLaterOpened(true);
-    position.set(withTiming(index, { duration: Motion.segmentMs }));
-  };
+  const select = useCallback(
+    (index: number) => {
+      setTab(index);
+      if (index === 1) setLaterOpened(true);
+      position.set(withTiming(index, { duration: Motion.segmentMs }));
+    },
+    [position],
+  );
+  const replyFromLater = useCallback(
+    (...args: Parameters<typeof startReply>) => {
+      select(0);
+      startReply(...args);
+    },
+    [select, startReply],
+  );
+  const editFromLater = useCallback(
+    (...args: Parameters<typeof startEdit>) => {
+      select(0);
+      startEdit(...args);
+    },
+    [select, startEdit],
+  );
 
   const shared = { currentUserId, tags, tagsById };
 
@@ -63,7 +84,12 @@ export function SavedScreen() {
           accessibilityElementsHidden={tab !== 0}
           style={[styles.page, tab !== 0 && styles.hidden]}
         >
-          <SavedAllTab {...shared} mediaBounds={mediaBounds} active={tab === 0} />
+          <SavedAllTab
+            {...shared}
+            mediaBounds={mediaBounds}
+            active={tab === 0}
+            composer={composer}
+          />
         </View>
 
         {laterOpened ? (
@@ -74,7 +100,12 @@ export function SavedScreen() {
             accessibilityElementsHidden={tab !== 1}
             style={[styles.page, tab !== 1 && styles.hidden]}
           >
-            <SavedWatchLaterTab {...shared} active={tab === 1} />
+            <SavedWatchLaterTab
+              {...shared}
+              active={tab === 1}
+              onReply={replyFromLater}
+              onEdit={editFromLater}
+            />
           </View>
         ) : null}
       </View>

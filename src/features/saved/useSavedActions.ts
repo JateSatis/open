@@ -9,6 +9,7 @@ import { useMemo } from 'react';
 import {
   createSavedTag,
   deleteSavedMessages,
+  editSavedNote,
   restoreSavedWatchLater,
   setSavedPinned,
   setSavedTag,
@@ -23,11 +24,13 @@ import { savedQueryKey, savedTagsQueryKey, savedWatchLaterQueryKey } from '@/fea
 import {
   bumpPending,
   findSaved,
+  patchQuotes,
   patchSaved,
   putInWatchLater,
   rollbackSaved,
   type SavedPatch,
 } from '@/features/saved/savedCache';
+import type { SavedItem } from '@/features/saved/savedCopy';
 import { withDeadline } from '@/lib/deadline';
 import { isNetworkError } from '@/lib/network';
 
@@ -109,6 +112,11 @@ export type SavedActions = {
   setPinned: (ids: readonly string[], pinned: boolean) => void;
   /** Без подтверждения: диалог спрашивает тот, кто зовёт. */
   remove: (ids: readonly string[]) => void;
+  /**
+   * Правка своей заметки: новый текст и какие вложения оставить, по порядку.
+   * Облачко сразу показывает новую версию с часиками; отказ — прежняя.
+   */
+  editNote: (saved: SavedMessage, text: string, keep: readonly string[]) => void;
 };
 
 export function useSavedActions(): SavedActions {
@@ -188,8 +196,55 @@ export function useSavedActions(): SavedActions {
           pinned ? 'Не удалось закрепить' : 'Не удалось открепить',
         );
       },
+      editNote: (saved, text, keep) => {
+        const trimmed = text.trim();
+        const attachments = keep.flatMap(
+          (id) => saved.attachments.find((attachment) => attachment.id === id) ?? [],
+        );
+
+        void optimistic(
+          queryClient,
+          [saved.id],
+          (item): SavedItem => ({
+            ...item,
+            text: trimmed || null,
+            attachments,
+            kind: item.kind === 'media' && attachments.length === 0 ? 'text' : item.kind,
+            edited: true,
+            editStatus: 'saving',
+          }),
+          () => editSavedNote(saved.id, trimmed, [...keep]),
+          'Изменения не сохранены',
+        ).then((ok) => {
+          if (!ok) return;
+
+          patchSaved(queryClient, [saved.id], ({ editStatus: _done, ...item }: SavedItem) => item);
+          // Ответы на неё показывают её новую версию.
+          patchQuotes(queryClient, (quote) =>
+            quote.savedId === saved.id
+              ? {
+                  ...quote,
+                  text: trimmed || null,
+                  kind: quote.kind === 'media' && attachments.length === 0 ? 'text' : quote.kind,
+                  attachments: attachments.map((attachment, position) => ({
+                    url: attachment.url,
+                    poster_url: attachment.posterUrl,
+                    mime_type: attachment.mimeType,
+                    duration_ms: attachment.durationMs,
+                    position,
+                    pop_id: attachment.popId ?? null,
+                  })),
+                }
+              : quote,
+          );
+        });
+      },
       remove: (ids) => {
+        const gone = new Set(ids);
+
         patchSaved(queryClient, ids, () => null);
+        // Ответы на удалённое — с заглушкой «Запись удалена», как их отдаст база.
+        patchQuotes(queryClient, (quote) => (gone.has(quote.savedId) ? { savedId: null } : quote));
 
         void withDeadline(deleteSavedMessages([...ids]), SAVED_DEADLINE_MS)
           .then(() => {

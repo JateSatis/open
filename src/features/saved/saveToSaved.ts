@@ -6,17 +6,18 @@
 
 import type { QueryClient } from '@tanstack/react-query';
 
-import { saveComments, saveMessages, type SaveOptions } from '@/api/saved';
+import { copySavedNotes, saveComments, saveMessages, type SaveOptions } from '@/api/saved';
 import { reportRequestFailed } from '@/features/connection/connectionStore';
 import { showNotice } from '@/features/notifications/alertsStore';
 import { savedQueryKey } from '@/features/saved/keys';
 import { withDeadline } from '@/lib/deadline';
 import { isNetworkError } from '@/lib/network';
 
-/** Что сохранить: сообщения, как их видно в чате, или комментарии. */
+/** Что сохранить: сообщения, как их видно в чате, комментарии или копии своих заметок. */
 export type SaveRequest =
   | { type: 'messages'; sourceChatId: string; messageIds: string[]; options: SaveOptions }
-  | { type: 'comments'; commentIds: string[]; options: SaveOptions };
+  | { type: 'comments'; commentIds: string[]; options: SaveOptions }
+  | { type: 'notes'; savedIds: string[]; options: SaveOptions };
 
 const SAVE_DEADLINE_MS = 15_000;
 
@@ -32,7 +33,9 @@ export async function saveToSaved(
   const run =
     request.type === 'messages'
       ? saveMessages(request.sourceChatId, request.messageIds, request.options)
-      : saveComments(request.commentIds, request.options);
+      : request.type === 'notes'
+        ? copySavedNotes(request.savedIds, request.options)
+        : saveComments(request.commentIds, request.options);
   // Срок вышел, а сохранение всё же прошло: «Повторить» тогда сохранил бы
   // вторые копии — он больше ничего не делает, а уведомление говорит правду.
   let lateSaved = false;

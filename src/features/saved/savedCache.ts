@@ -4,7 +4,7 @@
 
 import type { InfiniteData, QueryClient } from '@tanstack/react-query';
 
-import type { SavedMessage, SavedPage, SavedPin, WatchLaterPage } from '@/api/saved';
+import type { SavedMessage, SavedPage, SavedPin, SavedQuote, WatchLaterPage } from '@/api/saved';
 import {
   savedMessagesQueryKey,
   savedPinsQueryKey,
@@ -175,6 +175,44 @@ export function putInWatchLater(queryClient: QueryClient, saved: SavedMessage) {
 /** Возвращает прежние версии записей после неудачной правки. */
 export function rollbackSaved(queryClient: QueryClient, before: Map<string, SavedMessage>) {
   patchSaved(queryClient, [...before.keys()], (saved) => before.get(saved.id) ?? saved);
+}
+
+/** Живая цитата заметки — запись, как её видно в ответе. */
+export type LiveSavedQuote = Extract<SavedQuote, { savedId: string }>;
+
+/**
+ * Цитаты заметок во всех списках — заново: цитируемую удалили или
+ * исправили. `change` отвечает новой цитатой или той же.
+ */
+export function patchQuotes(
+  queryClient: QueryClient,
+  change: (quote: LiveSavedQuote) => SavedQuote,
+) {
+  const apply = (saved: SavedMessage): SavedMessage => {
+    if (saved.replies.length === 0) return saved;
+
+    let changed = false;
+    const replies = saved.replies.map((quote) => {
+      if (quote.savedId === null) return quote;
+
+      const next = change(quote);
+
+      if (next !== quote) changed = true;
+
+      return next;
+    });
+
+    return changed ? { ...saved, replies } : saved;
+  };
+  const pages = <P extends { items: SavedMessage[] }>(
+    data: InfiniteData<P, unknown> | undefined,
+  ) =>
+    data
+      ? { ...data, pages: data.pages.map((page) => ({ ...page, items: page.items.map(apply) })) }
+      : data;
+
+  queryClient.setQueryData<AllData>(savedMessagesQueryKey, pages);
+  queryClient.setQueryData<LaterData>(savedWatchLaterQueryKey, pages);
 }
 
 /** Запись из любого загруженного списка. */

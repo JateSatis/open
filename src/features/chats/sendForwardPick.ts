@@ -11,7 +11,11 @@ import {
   type ForwardBatch,
   type ForwardPick,
 } from '@/features/chats/composerDraftStore';
-import { sendCommentForward, sendForward } from '@/features/chats/messages/delivery';
+import {
+  sendCommentForward,
+  sendForward,
+  sendNoteForward,
+} from '@/features/chats/messages/delivery';
 import { showNotice } from '@/features/notifications/alertsStore';
 import { saveToSaved, type SaveRequest } from '@/features/saved/saveToSaved';
 
@@ -45,6 +49,11 @@ export function forwardNotice(chats: number, saved: boolean, skipped = 0, total 
 }
 
 function saveRequestOf(batch: ForwardBatch, options: SaveOptions): SaveRequest {
+  // Заметка в «Сохранённые» — копией заметки: оригинала в чате у неё нет.
+  if ('notes' in batch) {
+    return { type: 'notes', savedIds: batch.notes.map((note) => note.savedId), options };
+  }
+
   return 'comments' in batch
     ? { type: 'comments', commentIds: batch.comments.map((comment) => comment.id), options }
     : {
@@ -59,7 +68,7 @@ function saveRequestOf(batch: ForwardBatch, options: SaveOptions): SaveRequest {
 /**
  * Подпись уходит в каждый чат отдельным сообщением перед пересланным — один
  * раз, перед первой пачкой; в «Сохранённые» — нет. Пачки — по порядку: по
- * островку на чат-источник и пересланные комментарии.
+ * островку на чат-источник, пересланные комментарии и свои заметки.
  */
 export function sendForwardPick(
   queryClient: QueryClient,
@@ -83,7 +92,9 @@ export function sendForwardPick(
       previous = (
         'comments' in batch
           ? sendCommentForward(context, caption, batch.comments, previous)
-          : sendForward(context, caption, batch.sourceChat, batch.items, previous)
+          : 'notes' in batch
+            ? sendNoteForward(context, caption, batch.notes, previous)
+            : sendForward(context, caption, batch.sourceChat, batch.items, previous)
       ).delivered;
     });
   }

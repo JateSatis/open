@@ -108,6 +108,11 @@ export type MessageComposerProps = {
   audience?: string;
   /** То же для подсказки над полем — продолжение «Телефон — это …». */
   hintAudience?: string;
+  /**
+   * Личная запись (заметка в «Сохранённых»): её никто, кроме автора, не
+   * увидит — ни подсказки о личных данных, ни листа перед отправкой.
+   */
+  isPrivate?: boolean;
 };
 
 const SEND_ICON = { ios: 'arrow.up', android: 'send', web: 'send' } as const;
@@ -141,6 +146,7 @@ export function MessageComposer({
   hidden,
   audience = 'Это сообщение увидят все, кто откроет чат.',
   hintAudience,
+  isPrivate = false,
 }: MessageComposerProps) {
   const theme = useTheme();
   // Счётчик берётся из стора выбора, а не приходит пропом: иначе выбор файла
@@ -191,17 +197,26 @@ export function MessageComposer({
   const submit = () => {
     if (isEmpty) return;
 
+    if (isPrivate) {
+      onSend();
+      return;
+    }
+
     // Похоже на адрес, школу, геолокацию — сначала лист: поправить, скрыть
     // найденное или отправить как есть.
-    guard.check(textLocked ? '' : text, ({ hide }) => {
-      if (hide && hidden) {
-        hidden.onChange(
-          normalizeRanges([...hidden.ranges, ...hide.map(({ start, end }) => ({ start, end }))]),
-        );
-      }
+    guard.check(
+      textLocked ? '' : text,
+      ({ hide }) => {
+        if (hide && hidden) {
+          hidden.onChange(
+            normalizeRanges([...hidden.ranges, ...hide.map(({ start, end }) => ({ start, end }))]),
+          );
+        }
 
-      onSend();
-    }, hidden?.ranges);
+        onSend();
+      },
+      hidden?.ranges,
+    );
   };
 
   const hiddenRanges = hidden?.ranges ?? [];
@@ -333,7 +348,9 @@ export function MessageComposer({
   return (
     <View style={[styles.container, { borderTopColor: theme.border }]}>
       {plate}
-      {textLocked ? null : <PersonalDataHint text={text} audience={hintAudience} hidden={hidden?.ranges} />}
+      {textLocked || isPrivate ? null : (
+        <PersonalDataHint text={text} audience={hintAudience} hidden={hidden?.ranges} />
+      )}
       {onSendVoice ? (
         <HoldToRecordRow
           style={styles.row}

@@ -104,6 +104,8 @@ type SheetComposerProps = {
   editing?: boolean;
   /** Подсказка в поле шита — как у поля, которое его открыло. */
   placeholder?: string;
+  /** Личная запись — как у поля, которое его открыло (`MessageComposer`). */
+  isPrivate?: boolean;
   /** Имя чата — в шапке предпросмотра файлов. */
   title?: string;
   onTyping: () => void;
@@ -112,7 +114,7 @@ type SheetComposerProps = {
 
 export type MediaPickerSheetProps = SheetComposerProps & {
   /** Чьё поле открывает этот экземпляр: показывается он только для своего хозяина. */
-  owner?: 'chat' | 'comments';
+  owner?: 'chat' | 'comments' | 'saved';
   /**
    * Разделы шита — вкладки внизу. Набор задаёт хозяин по виду чата; при одном
    * разделе вкладок нет. По умолчанию — только галерея.
@@ -576,6 +578,7 @@ function SheetWindow({ phase, composer, pick: pickProp, avatar, sections }: Shee
                 plate={composer.plate}
                 edit={composer.editing ? SHEET_EDIT : undefined}
                 placeholder={composer.placeholder}
+                isPrivate={composer.isPrivate}
                 canSend
               />
             ) : null}

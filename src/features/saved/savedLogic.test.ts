@@ -10,6 +10,7 @@ import {
   savedWatchLaterQueryKey,
 } from '@/features/saved/keys';
 import { savedMenuActions } from '@/features/saved/savedActions';
+import { savedQuotesOf, savedSourceLabel } from '@/features/saved/savedCopy';
 import { patchSaved, rollbackSaved, watchLaterOrder } from '@/features/saved/savedCache';
 import { savedForwardBatches } from '@/features/saved/savedForward';
 import { formatDayMonth } from '@/lib/dates';
@@ -43,6 +44,8 @@ function saved(id: string, seq: number, overrides: Partial<SavedMessage> = {}): 
     pinnedAt: null,
     attachments: [],
     tagIds: [],
+    edited: false,
+    replies: [],
     ...overrides,
   };
 }
@@ -143,11 +146,13 @@ describe('savedMenuActions', () => {
     const item = saved('a', 1, { watchLaterAt: '2026-10-21T00:00:00Z' });
 
     expect(savedMenuActions(item, 'later').map((action) => action.id)).toEqual([
+      'reply',
       'copy',
       'forward',
       'delete',
     ]);
     expect(savedMenuActions(item, 'all').map((action) => action.id)).toEqual([
+      'reply',
       'watch_toggle',
       'copy',
       'select',
@@ -164,8 +169,8 @@ describe('savedMenuActions', () => {
     });
     const pending = saved('b', 1, { watchLaterAt: '2026-10-21T00:00:00Z' });
 
-    expect(savedMenuActions(done, 'all')[0]).toMatchObject({ label: 'Просмотрено', checked: true });
-    expect(savedMenuActions(pending, 'all')[0]).toMatchObject({
+    expect(savedMenuActions(done, 'all')[1]).toMatchObject({ label: 'Просмотрено', checked: true });
+    expect(savedMenuActions(pending, 'all')[1]).toMatchObject({
       label: 'Не просмотрено',
       checked: false,
     });
@@ -182,7 +187,101 @@ describe('savedMenuActions', () => {
   });
 });
 
+describe('notes in the menu', () => {
+  const note = (overrides: Partial<SavedMessage> = {}) =>
+    saved('n', 1, {
+      sourceType: 'note',
+      category: 'note',
+      sourceChatId: null,
+      sourceMessageId: null,
+      ...overrides,
+    });
+
+  it('a note has «Изменить»; a saved copy never does', () => {
+    expect(savedMenuActions(note(), 'all').map((action) => action.id)).toEqual([
+      'reply',
+      'watch_later',
+      'copy',
+      'edit',
+      'select',
+      'pin',
+      'forward',
+      'delete',
+    ]);
+    expect(savedMenuActions(saved('a', 1), 'all').map((action) => action.id)).not.toContain('edit');
+    expect(
+      savedMenuActions(note({ kind: 'voice', text: null }), 'all').map((a) => a.id),
+    ).not.toContain('edit');
+  });
+
+  it('an unsent note offers only «Повторить» (when failed) and «Удалить»', () => {
+    const failed = { ...note(), localId: 'local-1', status: 'failed' as const };
+    const sending = { ...note(), localId: 'local-2', status: 'sending' as const };
+
+    expect(savedMenuActions(failed, 'all').map((action) => action.id)).toEqual(['retry', 'delete']);
+    expect(savedMenuActions(sending, 'all').map((action) => action.id)).toEqual(['delete']);
+  });
+
+  it('a note is signed «Вы» with my avatar', () => {
+    expect(
+      savedSourceLabel(note({ authorName: 'Я', authorAvatarUrl: 'me/a.jpg' }), undefined, 'me'),
+    ).toEqual({ source: 'Вы', author: null, avatarUrl: 'me/a.jpg', avatarName: 'Я' });
+  });
+
+  it('quotes: a deleted one becomes a stub, a live one is signed by its source', () => {
+    const quotes = savedQuotesOf(
+      note({
+        replies: [
+          { savedId: null },
+          {
+            savedId: 'q',
+            seq: 7,
+            sourceType: 'note',
+            sourceChatId: null,
+            category: 'note',
+            kind: 'text',
+            text: 'старое',
+            attachments: [],
+          },
+        ],
+      }),
+      new Map(),
+      'me',
+    );
+
+    expect(quotes[0]).toMatchObject({ state: 'deleted' });
+    expect(quotes[1]).toMatchObject({ state: 'live', messageId: 'q', seq: 7, authorName: 'Вы' });
+  });
+});
+
 describe('savedForwardBatches', () => {
+  it('notes go as my messages in screen order, between islands', () => {
+    const fromG = original({
+      id: 'm-1',
+      chat: { id: 'chat-g', name: 'Группа', readUpTo: null, amMember: true, isChannelPosts: false },
+    });
+    const asNote = (id: string, seq: number) =>
+      saved(id, seq, { sourceType: 'note', category: 'note', sourceChatId: null, text: id });
+
+    expect(
+      savedForwardBatches(
+        [asNote('n1', 1), saved('s1', 2), asNote('n2', 3), asNote('n3', 4)],
+        new Map([['s1', { messageId: 'm-1', commentId: null }]]),
+        new Map([[fromG.id, fromG]]),
+        new Map(),
+      ),
+    ).toEqual([
+      { notes: [{ savedId: 'n1', kind: 'post', text: 'n1', attachments: [] }] },
+      { sourceChat: { id: 'chat-g', name: 'Группа' }, items: [{ original: fromG }] },
+      {
+        notes: [
+          { savedId: 'n2', kind: 'post', text: 'n2', attachments: [] },
+          { savedId: 'n3', kind: 'post', text: 'n3', attachments: [] },
+        ],
+      },
+    ]);
+  });
+
   it('one island per source chat where it first appears on screen, in chat order inside, comments as one batch, gone ones skipped', () => {
     const fromG1 = original({
       id: 'm-1',
