@@ -320,8 +320,11 @@ const REACTION_AND_COMMENT_COLUMNS =
 const ORIGINAL_COLUMNS =
   `id, chat_id, author_id, kind, text, hidden_ranges, seq, created_at, edited_at, edited, edit_mark, attachments:attachment_rows(${MESSAGE_ATTACHMENT_COLUMNS}), ${REPLY_COLUMNS}, ${REACTION_AND_COMMENT_COLUMNS}, author_name, author_avatar_url, author_opaque, chat:chat_rows!messages_chat_id_fkey(id, kind, chat_display_name, chat_read_up_to, chat_am_member)` as const;
 
+// Пересланный комментарий — та же выборка у сообщения и сама по себе.
+const FORWARDED_COMMENT_FIELDS =
+  `id, message_id, pop_id, chat_id, thread_root_id, fragment_id, ${FRAGMENT_QUOTE_COLUMNS}, author_id, author_name, author_avatar_url, author_opaque, kind, text, created_at, edited_at, ${REACTION_COLUMNS}, comment_attachments:comment_attachment_rows(${ATTACHMENT_COLUMNS}), chat:chat_rows!comments_chat_id_fkey(id, chat_display_name, chat_am_member), target:message_rows!comments_message_fkey(id, author_id, author_name, author_opaque, kind, text, seq, attachments:attachment_rows(${PREVIEW_ATTACHMENT_COLUMNS})), pop:pops!comments_pop_id_fkey(id, channel_id, poster_url, caption)` as const;
 const FORWARDED_COMMENT_COLUMNS =
-  `forwarded_comment_id, forwarded:comment_rows!messages_forwarded_comment_fkey(id, message_id, pop_id, chat_id, thread_root_id, fragment_id, ${FRAGMENT_QUOTE_COLUMNS}, author_id, author_name, author_avatar_url, author_opaque, kind, text, created_at, edited_at, ${REACTION_COLUMNS}, comment_attachments:comment_attachment_rows(${ATTACHMENT_COLUMNS}), chat:chat_rows!comments_chat_id_fkey(id, chat_display_name, chat_am_member), target:message_rows!comments_message_fkey(id, author_id, author_name, author_opaque, kind, text, seq, attachments:attachment_rows(${PREVIEW_ATTACHMENT_COLUMNS})), pop:pops!comments_pop_id_fkey(id, channel_id, poster_url, caption))` as const;
+  `forwarded_comment_id, forwarded:comment_rows!messages_forwarded_comment_fkey(${FORWARDED_COMMENT_FIELDS})` as const;
 
 // Островок приходит сразу с оригиналами: их текст, файлы, автор, чат,
 // реакции и комментарии — той же выборкой. Своя реакция — вычисляемой связью
@@ -672,4 +675,37 @@ export function toMessage(row: MessageRow): Message {
       : null,
     commentForward: toCommentForward(row),
   });
+}
+
+/**
+ * Оригиналы по id — как их держит островок: с автором и чатом. Удалённые и
+ * невидимые база не отдаёт. Для пересылки не из чата (из «Сохранённых»).
+ */
+export async function listIslandOriginals(messageIds: string[]): Promise<IslandOriginal[]> {
+  if (messageIds.length === 0) return [];
+
+  const { data, error } = await supabase
+    .from('message_rows')
+    .select(ORIGINAL_COLUMNS)
+    .in('id', messageIds)
+    .order('position', { referencedTable: 'attachments' });
+
+  if (error) throw error;
+
+  return (data ?? []).map(toOriginal).filter((original) => !original.hidden);
+}
+
+/** Комментарии по id — как их показывает пересылка. Удалённые не отдаются. */
+export async function listForwardedComments(commentIds: string[]): Promise<ForwardedComment[]> {
+  if (commentIds.length === 0) return [];
+
+  const { data, error } = await supabase
+    .from('comment_rows')
+    .select(FORWARDED_COMMENT_FIELDS)
+    .in('id', commentIds)
+    .is('deleted_at', null);
+
+  if (error) throw error;
+
+  return (data ?? []).map(toForwardedComment);
 }
