@@ -139,11 +139,7 @@ export function ChatFooter({
             text={composer.text}
             onChangeText={composer.onChangeText}
             canSend={composer.canSend}
-            canSendEmpty={
-              composer.mode?.type === 'forward' ||
-              composer.mode?.type === 'forward_comments' ||
-              Boolean(composer.pop)
-            }
+            canSendEmpty={Boolean(composer.pop)}
             plate={
               <>
                 {modePlate(composer.mode, composer.onCloseMode, composer.edit)}

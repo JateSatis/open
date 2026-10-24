@@ -114,18 +114,4 @@ describe('describeMode', () => {
       snippet: 'Марина, Я',
     });
   });
-
-  it('names the author of a forwarded original and counts several', () => {
-    const sourceChat = { id: 'chat-1', name: 'Разговор' };
-    const one = { original: original({ id: 'a', text: 'привет', authorName: 'Марина' }) };
-    const other = { original: original({ id: 'b', text: 'ещё', authorName: 'Марина' }) };
-
-    expect(describeMode({ type: 'forward', sourceChat, items: [one] })).toMatchObject({
-      title: 'Переслать: Марина',
-      snippet: 'привет',
-    });
-    expect(describeMode({ type: 'forward', sourceChat, items: [one, other] }).title).toBe(
-      'Переслать 2 сообщения',
-    );
-  });
 });

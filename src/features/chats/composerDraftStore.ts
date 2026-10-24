@@ -1,5 +1,5 @@
 // Черновики поля ввода по чатам: текст и то, что к нему приложено режимом, —
-// ответ, пересылка или правка. Клиентское состояние, поэтому в
+// ответ или правка. Клиентское состояние, поэтому в
 // Zustand; переживает уход из чата и возвращение, как черновик в Telegram.
 // Выбранные файлы сюда не входят: выбор живёт в `selectionStore` и
 // сбрасывается с экраном.
@@ -31,13 +31,11 @@ export type EditMode = {
   restore: ChatDraft;
 };
 
-/** Режим поля ввода — плашка над ним. Режим один: новый заменяет прежний. */
-export type ComposerMode =
-  | { type: 'reply'; quotes: LiveQuote[] }
-  | { type: 'forward'; sourceChat: ChatRef; items: ForwardItem[] }
-  /** Пересылка комментариев — по сообщению на комментарий, в порядке панели. */
-  | { type: 'forward_comments'; comments: ForwardedComment[] }
-  | EditMode;
+/**
+ * Режим поля ввода — плашка над ним. Режим один: новый заменяет прежний.
+ * Пересылки здесь нет: её отправляет лист «Кому переслать».
+ */
+export type ComposerMode = { type: 'reply'; quotes: LiveQuote[] } | EditMode;
 
 /**
  * Поп, прикреплённый к посту канала: уже опубликованный или новый — видео с
@@ -82,7 +80,7 @@ export type ForwardPick =
 
 type DraftsState = {
   byChat: Record<string, ChatDraft>;
-  /** Выбрано «Переслать», но чат, куда, ещё не выбран. */
+  /** Выбрано «Переслать», лист «Кому переслать» открыт. */
   forwardPick: ForwardPick | null;
 };
 
@@ -189,7 +187,7 @@ export function clearDraft(chatId: string) {
   update(chatId, () => EMPTY);
 }
 
-/** Запоминает, что пересылать, пока человек выбирает чат. */
+/** Запоминает, что пересылать, пока человек выбирает, куда. */
 export function startForwardPick(pick: ForwardPick) {
   const first = 'comments' in pick ? pick.comments[0] : pick.items[0]?.original;
 
@@ -203,24 +201,19 @@ export function startForwardPick(pick: ForwardPick) {
   useComposerDrafts.setState({ forwardPick: pick });
 }
 
-/** Чат выбран: пересылка становится черновиком этого чата. */
-export function finishForwardPick(chatId: string): boolean {
+/** Что пересылается сейчас; нечего — `null`. */
+export function readForwardPick(): ForwardPick | null {
   const pick = useComposerDrafts.getState().forwardPick;
 
-  if (!pick || ('comments' in pick ? pick.comments : pick.items).length === 0) return false;
+  if (!pick || ('comments' in pick ? pick.comments : pick.items).length === 0) return null;
 
-  useComposerDrafts.setState({ forwardPick: null });
+  return pick;
+}
+
+/** Отправлено из листа: пересылать больше нечего. */
+export function completeForwardPick() {
   forwardPickerClosed('picked');
-  // Пересылка в чат, где шла правка, правку прерывает: плашка одна.
-  finishEditDraft(chatId);
-  setDraftMode(
-    chatId,
-    'comments' in pick
-      ? { type: 'forward_comments', comments: pick.comments }
-      : { type: 'forward', sourceChat: pick.sourceChat, items: pick.items },
-  );
-
-  return true;
+  useComposerDrafts.setState({ forwardPick: null });
 }
 
 export function cancelForwardPick() {

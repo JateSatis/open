@@ -4,16 +4,12 @@ import { useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   deleteMessages as deleteOnServer,
   removeForwardItems,
-  type ChatRef,
-  type ForwardedComment,
 } from '@/api/chats';
 import { mapOriginals } from '@/features/chats/islands/islandCache';
 import {
   deliver,
   discardLocal,
   outgoingOf,
-  sendCommentForward,
-  sendForward,
   sendPopPost,
   sendPost,
   sendVoice as sendVoiceMessage,
@@ -32,7 +28,6 @@ import { usePendingEditsOf } from '@/features/chats/messages/pendingEdits';
 import type {
   ChatMessage,
   EditResult,
-  ForwardItem,
   LiveQuote,
   UserActivity,
 } from '@/features/chats/messages/types';
@@ -79,10 +74,6 @@ export type ChatMessagesState = {
   sendVoice: (voice: LocalMedia, replies?: LiveQuote[]) => void;
   /** Пост канала `channelId` с попом и необязательным текстом. */
   sendPop: (channelId: string, text: string, pop: DraftPop, replies?: LiveQuote[]) => void;
-  /** Пересылка сюда из `sourceChat`; текст из поля уходит перед островком. */
-  forward: (text: string, sourceChat: ChatRef, items: ForwardItem[]) => void;
-  /** Пересылка комментариев — по облачку на комментарий. */
-  forwardComments: (text: string, comments: ForwardedComment[]) => void;
   retry: (localId: string) => void;
   /** Своё неотправленное или упавшее — убрать. На сервер ничего не уходит. */
   discard: (localId: string) => void;
@@ -219,17 +210,6 @@ export function useChatMessages(chatId: string, currentUserId: string | null): C
     [context],
   );
 
-  const forward = useCallback(
-    (text: string, sourceChat: ChatRef, items: ForwardItem[]) =>
-      sendForward(context, text, sourceChat, items),
-    [context],
-  );
-
-  const forwardComments = useCallback(
-    (text: string, comments: ForwardedComment[]) => sendCommentForward(context, text, comments),
-    [context],
-  );
-
   const retry = useCallback(
     (localId: string) => {
       const failed = outboxMessages(chatId).find((message) => message.localId === localId);
@@ -307,8 +287,6 @@ export function useChatMessages(chatId: string, currentUserId: string | null): C
     send,
     sendVoice,
     sendPop,
-    forward,
-    forwardComments,
     retry,
     discard,
     saveEdit,

@@ -149,55 +149,19 @@ export function describeMode(mode: ComposerMode): {
     };
   }
 
-  if (mode.type === 'reply') {
-    const [first] = mode.quotes;
+  const [first] = mode.quotes;
 
-    return mode.quotes.length === 1
-      ? {
-          title: `В ответ ${first.authorName ?? DELETED_ACCOUNT}`,
-          snippet: describePreview(first.preview),
-          thumbnailUrl: first.preview.thumbnailUrl,
-          closeLabel: 'Отменить ответ',
-        }
-      : {
-          title: `В ответ на ${messagesCount(mode.quotes.length)}`,
-          snippet: authorsOf(mode.quotes.map((quote) => quote.authorName)),
-          thumbnailUrl: null,
-          closeLabel: 'Отменить ответ',
-        };
-  }
-
-  if (mode.type === 'forward_comments') {
-    const [only] = mode.comments;
-
-    return mode.comments.length === 1
-      ? {
-          title: `Переслать комментарий: ${only.authorName ?? DELETED_ACCOUNT}`,
-          snippet: describePreview(commentPreviewOf(only)),
-          thumbnailUrl: commentPreviewOf(only).thumbnailUrl,
-          closeLabel: 'Отменить пересылку',
-        }
-      : {
-          title: `Переслать ${commentsCount(mode.comments.length)}`,
-          snippet: authorsOf(mode.comments.map((comment) => comment.authorName)),
-          thumbnailUrl: null,
-          closeLabel: 'Отменить пересылку',
-        };
-  }
-
-  const [first] = mode.items;
-
-  return mode.items.length === 1
+  return mode.quotes.length === 1
     ? {
-        title: `Переслать: ${first.original.authorName ?? DELETED_ACCOUNT}`,
-        snippet: describePreview(previewOf(first.original)),
-        thumbnailUrl: previewOf(first.original).thumbnailUrl,
-        closeLabel: 'Отменить пересылку',
+        title: `В ответ ${first.authorName ?? DELETED_ACCOUNT}`,
+        snippet: describePreview(first.preview),
+        thumbnailUrl: first.preview.thumbnailUrl,
+        closeLabel: 'Отменить ответ',
       }
     : {
-        title: `Переслать ${messagesCount(mode.items.length)}`,
-        snippet: authorsOf(mode.items.map((item) => item.original.authorName)),
+        title: `В ответ на ${messagesCount(mode.quotes.length)}`,
+        snippet: authorsOf(mode.quotes.map((quote) => quote.authorName)),
         thumbnailUrl: null,
-        closeLabel: 'Отменить пересылку',
+        closeLabel: 'Отменить ответ',
       };
 }
