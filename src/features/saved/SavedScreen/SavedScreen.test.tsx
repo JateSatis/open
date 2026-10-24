@@ -23,7 +23,11 @@ jest.mock('expo-router', () => ({
   useIsFocused: () => true,
 }));
 jest.mock('@/api/supabase', () => ({ supabase: {} }));
+// Поле заметок — своими тестами (SavedScreen.notes.test.tsx).
+jest.mock('@/features/saved/SavedComposer', () => ({ SavedComposer: () => null }));
+jest.mock('@/features/profile/queries', () => ({ useMyProfile: () => ({ data: undefined }) }));
 jest.mock('@/features/media', () => ({
+  ...jest.requireActual('@/features/media/selectionStore'),
   MediaViewer: () => null,
   VoicePlayer: () => null,
 }));
@@ -95,6 +99,8 @@ function saved(id: string, overrides: Partial<SavedMessage> = {}): SavedMessage 
     pinnedAt: null,
     attachments: [],
     tagIds: [],
+    edited: false,
+    replies: [],
     ...overrides,
   };
 }
@@ -123,7 +129,7 @@ describe('SavedScreen', () => {
     await renderWithQuery(<SavedScreen />);
 
     expect(await screen.findByTestId('saved-empty')).toBeTruthy();
-    expect(screen.getByText(/нажмите «Переслать»/)).toBeTruthy();
+    expect(screen.getByText(/Напишите заметку внизу или сохраните сообщение/)).toBeTruthy();
   });
 
   it('labels a group copy «Группа · Анна» and a channel post with the channel only', async () => {

@@ -3,43 +3,69 @@ import { View } from 'react-native';
 
 import { styles } from './styles';
 
-import type { ChatSummary } from '@/api/chats';
+import type { ChatSummary, QuotedMessage } from '@/api/chats';
 import type { SavedMessage, SavedTag } from '@/api/saved';
 import { SelectionCheck } from '@/components/SelectionCheck';
 import type { MosaicBounds } from '@/features/chats/lib/mosaicLayout';
 import { MessageBubble } from '@/features/chats/MessageBubble';
 import { SavedLead } from '@/features/saved/SavedLead';
-import { savedSourceLabel, toBubbleMessage } from '@/features/saved/savedCopy';
+import {
+  isNote,
+  savedQuotesOf,
+  savedSourceLabel,
+  toBubbleMessage,
+  type SavedItem,
+} from '@/features/saved/savedCopy';
 
 export type SavedBubbleProps = {
-  saved: SavedMessage;
-  chat: ChatSummary | undefined;
+  saved: SavedItem;
+  /** Чаты-источники — для подписи записи и её цитат. */
+  chats: ReadonlyMap<string, ChatSummary>;
   currentUserId: string | null;
   tagsById: ReadonlyMap<string, SavedTag>;
   mediaBounds: MosaicBounds;
   onOpenSource: (saved: SavedMessage) => void;
+  /** Тап по цитате заметки — к цитируемой записи. Нет — цитаты не нажимаются. */
+  onQuotePress?: (savedId: string, seq: number) => void;
+  /** Тап по «не отправлено» у своей заметки. */
+  onRetry?: (localId: string) => void;
   /** Без кружка «Посмотреть позже» в углу: на своей вкладке у строки свой чекбокс. */
   hideWatchLater?: boolean;
 };
 
+const QUOTE_DELETED = 'Запись удалена';
+
 /**
  * Сохранённое — облачком переписки, слева, в исходном виде: текст, медиа,
- * голосовое, пост с попом, комментарий. Реакций, комментариев, просмотров и
- * ответа свайпом нет; медиа открывается, голосовое играет.
+ * голосовое, пост с попом, комментарий. Своя заметка — так же, сверху «Вы»,
+ * над текстом — цитаты, на которые она отвечает. Реакций, комментариев и
+ * просмотров нет; медиа открывается, голосовое играет.
  */
 export const SavedBubble = memo(function SavedBubble({
   saved,
-  chat,
+  chats,
   currentUserId,
   tagsById,
   mediaBounds,
   onOpenSource,
+  onQuotePress,
+  onRetry,
   hideWatchLater = false,
 }: SavedBubbleProps) {
-  const message = useMemo(() => toBubbleMessage(saved), [saved]);
+  const chat = saved.sourceChatId ? chats.get(saved.sourceChatId) : undefined;
+  const message = useMemo(
+    () => toBubbleMessage(saved, savedQuotesOf(saved, chats, currentUserId)),
+    [chats, currentUserId, saved],
+  );
   const label = savedSourceLabel(saved, chat, currentUserId);
   const tags = saved.tagIds.flatMap((id) => tagsById.get(id) ?? []);
   const watchLater = saved.watchLaterAt !== null && !hideWatchLater;
+  const note = isNote(saved);
+  const openQuote = onQuotePress
+    ? (quote: QuotedMessage) => {
+        if (quote.state === 'live') onQuotePress(quote.messageId, quote.seq);
+      }
+    : undefined;
 
   return (
     <View testID={`saved-row-${saved.id}`} style={styles.row}>
@@ -54,12 +80,15 @@ export const SavedBubble = memo(function SavedBubble({
         showAuthor={false}
         showViews={false}
         untracked
+        onRetry={onRetry}
+        onQuotePress={openQuote}
+        quoteDeletedText={QUOTE_DELETED}
         lead={
           <SavedLead
             label={label}
             isComment={saved.sourceType === 'comment'}
             tags={tags}
-            onOpenSource={() => onOpenSource(saved)}
+            onOpenSource={note ? undefined : () => onOpenSource(saved)}
           />
         }
         corner={

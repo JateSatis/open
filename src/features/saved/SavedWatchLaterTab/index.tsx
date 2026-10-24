@@ -9,6 +9,7 @@ import Animated, {
 import { styles } from './styles';
 import { useWatchLaterRows } from './useWatchLaterRows';
 
+import type { ChatSummary } from '@/api/chats';
 import type { SavedMessage, SavedTag } from '@/api/saved';
 import { mosaicBounds } from '@/features/chats/lib/mosaicLayout';
 import { bubbleAsideWidth } from '@/features/chats/MessageBubble/layout';
@@ -36,6 +37,10 @@ export type SavedWatchLaterTabProps = {
   tagsById: ReadonlyMap<string, SavedTag>;
   /** Вкладка видна: до первого захода список не грузится. */
   active: boolean;
+  /** «Ответить» — на «Все», с плашкой над полем заметок. */
+  onReply: (items: SavedMessage[], chats: ReadonlyMap<string, ChatSummary>) => void;
+  /** «Изменить» своей заметки — на «Все», с плашкой правки. */
+  onEdit: (saved: SavedMessage) => void;
 };
 
 /**
@@ -47,11 +52,18 @@ export function SavedWatchLaterTab({
   tags,
   tagsById,
   active,
+  onReply,
+  onEdit,
 }: SavedWatchLaterTabProps) {
   const { width: windowWidth } = useWindowDimensions();
   const later = useWatchLater(active);
   const openSource = useOpenSavedSource();
-  const handlers = useSavedItemActions({ chats: later.chats, currentUserId });
+  const handlers = useSavedItemActions({
+    chats: later.chats,
+    currentUserId,
+    onReply: (items) => onReply(items, later.chats),
+    onEdit,
+  });
   const rows = useWatchLaterRows(handlers.actions);
   const {
     frameRef,
@@ -80,7 +92,7 @@ export function SavedWatchLaterTab({
 
   const rowProps = (saved: SavedMessage) => ({
     saved,
-    chat: saved.sourceChatId ? later.chats.get(saved.sourceChatId) : undefined,
+    chats: later.chats,
     currentUserId,
     tagsById,
     mediaBounds,

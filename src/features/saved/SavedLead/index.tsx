@@ -15,12 +15,14 @@ export type SavedLeadProps = {
   /** Копия комментария: пометка «комментарий» перед источником. */
   isComment: boolean;
   tags: SavedTag[];
-  onOpenSource: () => void;
+  /** Тап по источнику — к оригиналу. Нет (своя заметка) — подпись не ссылка. */
+  onOpenSource?: () => void;
 };
 
 /**
  * Верх облачка сохранённого: «Источник · Автор» (у поста канала — только
- * канал), тап — к оригиналу; справа — маленькие цветные теги.
+ * канал, у своей заметки — «Вы»), тап — к оригиналу; справа — маленькие
+ * цветные теги.
  */
 export function SavedLead({ label, isComment, tags, onOpenSource }: SavedLeadProps) {
   const theme = useTheme();
@@ -42,8 +44,8 @@ export function SavedLead({ label, isComment, tags, onOpenSource }: SavedLeadPro
         ) : null}
         <Text
           testID="saved-source"
-          accessibilityRole="link"
-          accessibilityLabel={`К оригиналу: ${label.source}`}
+          accessibilityRole={onOpenSource ? 'link' : 'text'}
+          accessibilityLabel={onOpenSource ? `К оригиналу: ${label.source}` : label.source}
           variant="smallBold"
           numberOfLines={2}
           onPress={onOpenSource}

@@ -1,7 +1,8 @@
 // «Переслать» в «Сохранённых»: в чат уходит не копия, а живой оригинал —
 // островком из чата источника или ссылкой на комментарий. Что из выбранного
 // ещё живо и откуда, решает база (`saved_forwardable`); удалённое
-// пропускается, а целиком удалённое лист не открывает.
+// пропускается, а целиком удалённое лист не открывает. Своя заметка
+// оригинала не имеет — уходит обычным сообщением от меня с её файлами.
 
 import type { useRouter } from 'expo-router';
 
@@ -12,16 +13,30 @@ import {
   batchSize,
   startForwardPick,
   type ForwardBatch,
+  type NoteForward,
 } from '@/features/chats/composerDraftStore';
 import { showNotice } from '@/features/notifications/alertsStore';
+import { isNote } from '@/features/saved/savedCopy';
 
 type Group =
   | { type: 'chat'; chat: ChatRef; originals: IslandOriginal[] }
-  | { type: 'comments'; comments: ForwardedComment[] };
+  | { type: 'comments'; comments: ForwardedComment[] }
+  | { type: 'notes'; notes: NoteForward[] };
+
+/** Заметка — как сообщение, которое уйдёт в чат. */
+export function noteForwardOf(saved: SavedMessage): NoteForward {
+  return {
+    savedId: saved.id,
+    kind: saved.kind === 'voice' ? 'voice' : 'post',
+    text: saved.text,
+    attachments: saved.attachments,
+  };
+}
 
 /**
  * Пачки пересылки по порядку на экране: по островку на чат-источник (там,
- * где встретилась первая запись из него) и комментарии одной пачкой.
+ * где встретилась первая запись из него), комментарии одной пачкой и свои
+ * заметки — подряд идущие одной пачкой, на своём месте.
  */
 export function savedForwardBatches(
   items: readonly SavedMessage[],
@@ -34,6 +49,15 @@ export function savedForwardBatches(
   let commentGroup: Extract<Group, { type: 'comments' }> | null = null;
 
   for (const saved of items) {
+    if (isNote(saved)) {
+      const last = groups[groups.length - 1];
+
+      if (last?.type === 'notes') last.notes.push(noteForwardOf(saved));
+      else groups.push({ type: 'notes', notes: [noteForwardOf(saved)] });
+
+      continue;
+    }
+
     const source = live.get(saved.id);
     const original = source?.messageId ? originals.get(source.messageId) : undefined;
     const comment = source?.commentId ? comments.get(source.commentId) : undefined;
@@ -63,15 +87,17 @@ export function savedForwardBatches(
   }
 
   return groups.map((group) =>
-    group.type === 'chat'
-      ? {
-          sourceChat: group.chat,
-          // Внутри островка — как в исходном чате, а не как сохраняли.
-          items: [...group.originals]
-            .sort((a, b) => a.seq - b.seq)
-            .map((original) => ({ original })),
-        }
-      : { comments: group.comments },
+    group.type === 'notes'
+      ? { notes: group.notes }
+      : group.type === 'chat'
+        ? {
+            sourceChat: group.chat,
+            // Внутри островка — как в исходном чате, а не как сохраняли.
+            items: [...group.originals]
+              .sort((a, b) => a.seq - b.seq)
+              .map((original) => ({ original })),
+          }
+        : { comments: group.comments },
   );
 }
 
@@ -86,7 +112,10 @@ export async function startSavedForward(
   if (items.length === 0) return false;
 
   try {
-    const forwardable = await listSavedForwardable(items.map((saved) => saved.id));
+    // Заметки отправляются своими файлами — спрашивать о них базу незачем.
+    const copies = items.filter((saved) => !isNote(saved));
+    const forwardable =
+      copies.length > 0 ? await listSavedForwardable(copies.map((saved) => saved.id)) : [];
     const live = new Map(
       forwardable.flatMap((row) =>
         row.live

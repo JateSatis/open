@@ -7,12 +7,24 @@ import { savedSourceChatsQueryKey } from '@/features/saved/keys';
 
 const NO_CHATS = new Map<string, ChatSummary>();
 
-/** Чаты-источники загруженного сохранённого — живые, одним запросом. */
+/**
+ * Чаты-источники загруженного сохранённого и того, что цитируют заметки, —
+ * живые, одним запросом.
+ */
 export function useSavedSourceChats(items: SavedMessage[]): ReadonlyMap<string, ChatSummary> {
-  const chatIds = useMemo(
-    () => [...new Set(items.flatMap((item) => (item.sourceChatId ? [item.sourceChatId] : [])))],
-    [items],
-  );
+  const chatIds = useMemo(() => {
+    const ids = new Set<string>();
+
+    for (const item of items) {
+      if (item.sourceChatId) ids.add(item.sourceChatId);
+
+      for (const quote of item.replies) {
+        if (quote.savedId !== null && quote.sourceChatId) ids.add(quote.sourceChatId);
+      }
+    }
+
+    return [...ids];
+  }, [items]);
   const chats = useQuery({
     queryKey: savedSourceChatsQueryKey(chatIds),
     queryFn: () => fetchSourceChats(chatIds),
