@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { useWindowDimensions, View } from 'react-native';
+import { useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, {
   LayoutAnimationConfig,
   useAnimatedStyle,
   useSharedValue,
   withTiming,
+  type AnimatedStyle,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -43,6 +44,33 @@ export type MenuReactions = {
   onSelect: (emoji: string) => void;
 };
 
+/** Что получает свой блок над меню: место, раскрытие и закрытие меню. */
+export type MenuAccessoryProps = {
+  /** Ширина — как у блока реакций. */
+  width: number;
+  expanded: boolean;
+  /** Раскрытый блок не растёт ниже края экрана. */
+  maxHeight: number;
+  /** Верх блока в координатах окна — чтобы поднять его над клавиатурой. */
+  top: number;
+  onToggleExpanded: () => void;
+  /** Закрыть меню; `after` — когда оно закрылось. */
+  close: (after?: () => void) => void;
+  /** Где стоит и как появляется — решает меню. */
+  style: StyleProp<AnimatedStyle<ViewStyle>>;
+};
+
+/**
+ * Свой блок над меню вместо реакций — теги в «Сохранённых». Ставится и
+ * раскрывается так же: свёрнутый — полоса над меню, раскрытый растёт вниз
+ * поверх меню, тап мимо сначала сворачивает.
+ */
+export type MenuAccessory = {
+  /** Высота свёрнутого блока — меню ставится, не измеряя его. */
+  collapsedHeight: number;
+  render: (props: MenuAccessoryProps) => ReactNode;
+};
+
 /** Пункт меню. Меню одно на сообщения и комментарии — пункты у них свои. */
 export type ContextMenuAction<Id extends string = string> = MenuAction<Id>;
 
@@ -57,9 +85,17 @@ export type MessageContextMenuProps<Id extends string = string> = {
   viewport: AnchorRect | null;
   /** Копия облачка над затемнением — на том же месте, что и в переписке. */
   preview: ReactNode;
+  /**
+   * Куда растёт копия, если строка меняется при открытом меню (теги в
+   * «Сохранённых»): `up` — в перевёрнутом списке, где строка растёт вверх,
+   * `down` — в обычном. Нет — копия ровно размером со строку.
+   */
+  previewGrowth?: 'up' | 'down';
   actions: readonly ContextMenuAction<Id>[];
   /** Нет — нет и блока реакций: у неотправленного и у системного сообщения. */
   reactions: MenuReactions | null;
+  /** Свой блок на месте реакций — когда реакций нет. */
+  accessory?: MenuAccessory | null;
   /** Действие выполняется после того, как меню закрылось: диалог подтверждения не ложится поверх меню. */
   onAction: (id: Id) => void;
   onClose: () => void;
@@ -79,8 +115,10 @@ export function MessageContextMenu<Id extends string>({
   anchor,
   viewport,
   preview,
+  previewGrowth,
   actions,
   reactions,
+  accessory = null,
   onAction,
   onClose,
   journalSubject = null,
@@ -136,7 +174,7 @@ export function MessageContextMenu<Id extends string>({
         touchY: anchor.touchY ?? anchor.y + touchOffset,
         touchOffset,
         menuHeight,
-        accessoryHeight: reactions ? picker.collapsedHeight : 0,
+        accessoryHeight: reactions ? picker.collapsedHeight : (accessory?.collapsedHeight ?? 0),
         windowHeight,
         safeTop: insets.top,
         safeBottom: insets.bottom,
@@ -178,7 +216,7 @@ export function MessageContextMenu<Id extends string>({
       progress={progress}
       onRequestClose={() => close(null)}
       backdropTestID="message-menu-backdrop"
-      // Раскрытые реакции тап мимо сворачивает, а не закрывает меню.
+      // Раскрытый блок над меню тап мимо сворачивает, а не закрывает меню.
       onBackdropPress={() => (expanded ? setExpandedFor(null) : close(null))}
     >
       {anchor && layout ? (
@@ -191,12 +229,18 @@ export function MessageContextMenu<Id extends string>({
               testID="message-menu-preview"
               style={[
                 styles.preview,
-                {
-                  top: anchor.y - clipTop,
-                  left: anchor.x,
-                  width: anchor.width,
-                  height: anchor.height,
-                },
+                previewGrowth === 'up'
+                  ? {
+                      bottom: clipBottom - (anchor.y + anchor.height),
+                      left: anchor.x,
+                      width: anchor.width,
+                    }
+                  : {
+                      top: anchor.y - clipTop,
+                      left: anchor.x,
+                      width: anchor.width,
+                      height: previewGrowth === 'down' ? undefined : anchor.height,
+                    },
                 previewStyle,
               ]}
             >
@@ -241,6 +285,20 @@ export function MessageContextMenu<Id extends string>({
                 pickerStyle,
               ]}
             />
+          ) : accessory ? (
+            accessory.render({
+              width: picker.width,
+              expanded,
+              maxHeight: pickerMaxHeight,
+              top: layout.accessoryTop,
+              onToggleExpanded: () => setExpandedFor(expanded ? null : anchor),
+              close: (after) => close(after ?? null),
+              style: [
+                styles.pickerOrigin,
+                { top: layout.accessoryTop, left: pickerLeft },
+                pickerStyle,
+              ],
+            })
           ) : null}
         </>
       ) : null}

@@ -5,6 +5,7 @@ import Animated from 'react-native-reanimated';
 
 import { styles } from './styles';
 
+import { SelectionCheck } from '@/components/SelectionCheck';
 import { Text } from '@/components/Text';
 import { useTheme } from '@/hooks/use-theme';
 import { Sizes, Spacing } from '@/theme';
@@ -17,6 +18,11 @@ export type MenuAction<Id extends string = string> = {
   destructive?: boolean;
   /** Иконка слева от подписи. */
   icon?: SymbolViewProps['name'];
+  /**
+   * Пункт-переключатель: слева круглый флажок — с галочкой или пустой. Нет —
+   * обычный пункт.
+   */
+  checked?: boolean;
 };
 
 export type MenuListProps<Id extends string> = {
@@ -54,6 +60,9 @@ export function MenuList<Id extends string>({
           key={action.id}
           accessibilityRole="menuitem"
           accessibilityLabel={action.label}
+          accessibilityState={
+            action.checked === undefined ? undefined : { checked: action.checked }
+          }
           onPress={() => onSelect(action.id)}
           style={({ pressed }) => [
             styles.item,
@@ -66,6 +75,9 @@ export function MenuList<Id extends string>({
               size={Sizes.menuIcon}
               tintColor={action.destructive ? theme.danger : theme.textSecondary}
             />
+          ) : null}
+          {action.checked !== undefined ? (
+            <SelectionCheck checked={action.checked} size="small" />
           ) : null}
           <Text color={action.destructive ? 'danger' : 'text'} numberOfLines={1}>
             {action.label}

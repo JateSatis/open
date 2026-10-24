@@ -6,18 +6,18 @@ export const styles = StyleSheet.create({
   screen: {
     flex: 1,
   },
-  list: {
+  tabs: {
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.two,
   },
-  centered: {
+  pages: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: Spacing.two,
-    paddingHorizontal: Spacing.four,
   },
-  hint: {
-    textAlign: 'center',
+  /** Обе вкладки — друг на друге: неактивная невидима, но сохраняет прокрутку. */
+  page: {
+    ...StyleSheet.absoluteFill,
+  },
+  hidden: {
+    opacity: 0,
   },
 });

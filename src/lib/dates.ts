@@ -75,3 +75,11 @@ export function formatDateOnly(value: string): string {
 
   return `${day} ${MONTHS_GENITIVE[month - 1]} ${year}`;
 }
+
+/** «06.11», за прошлые годы — «06.11.25». */
+export function formatDayMonth(iso: string, now: Date = new Date()): string {
+  const date = new Date(iso);
+  const day = `${pad(date.getDate())}.${pad(date.getMonth() + 1)}`;
+
+  return date.getFullYear() === now.getFullYear() ? day : `${day}.${pad(date.getFullYear() % 100)}`;
+}

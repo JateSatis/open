@@ -1,14 +1,13 @@
-import { useRef, useState } from 'react';
-import { Pressable, TextInput, View } from 'react-native';
+import { useState } from 'react';
+import { Pressable, View } from 'react-native';
 
 import { styles } from './styles';
 
 import type { SavedTag } from '@/api/saved';
 import { Text } from '@/components/Text';
-import { SAVED_TAG_NAME_MAX, SAVED_TOP_TAGS } from '@/features/saved/limits';
-import { useColorScheme } from '@/hooks/use-color-scheme';
-import { useTheme } from '@/hooks/use-theme';
-import { Typography, savedTagTone } from '@/theme';
+import { SAVED_TOP_TAGS } from '@/features/saved/limits';
+import { NewTagField } from '@/features/saved/NewTagField';
+import { SavedTagChip } from '@/features/saved/SavedTagChip';
 
 export type SavedTagChipsProps = {
   /** В порядке показа: новые этого листа первыми, дальше — самые используемые. */
@@ -25,105 +24,21 @@ export type SavedTagChipsProps = {
  * превращается в поле имени прямо в ряду.
  */
 export function SavedTagChips({ tags, selectedIds, onToggle, onCreate }: SavedTagChipsProps) {
-  const theme = useTheme();
-  const scheme = useColorScheme() === 'dark' ? 'dark' : 'light';
   const [expanded, setExpanded] = useState(false);
-  const [draft, setDraftState] = useState<string | null>(null);
-  const [creating, setCreating] = useState(false);
-  // «Готово» и потеря фокуса приходят оба, потеря фокуса — и при уходе поля
-  // со старым замыканием: имя читается из ссылки, тег создаётся один раз.
-  const draftRef = useRef<string | null>(null);
-  const finishing = useRef(false);
-  const setDraft = (value: string | null) => {
-    draftRef.current = value;
-    setDraftState(value);
-  };
   const shown = expanded ? tags : tags.slice(0, SAVED_TOP_TAGS);
-
-  const finish = () => {
-    if (finishing.current || draftRef.current === null) return;
-
-    const name = draftRef.current.trim();
-
-    // Пустое имя — передумал: поле уходит, ничего не создаётся.
-    if (!name) {
-      setDraft(null);
-      return;
-    }
-
-    finishing.current = true;
-    setCreating(true);
-    void onCreate(name).finally(() => {
-      finishing.current = false;
-      setCreating(false);
-      setDraft(null);
-    });
-  };
 
   return (
     <View style={styles.row}>
-      {draft === null ? (
-        <Pressable
-          testID="saved-tag-add"
-          accessibilityRole="button"
-          accessibilityLabel="Новый тег"
-          onPress={() => setDraft('')}
-          style={[styles.chip, { backgroundColor: theme.backgroundElement }]}
-        >
-          <Text variant="bodyBold" color="textSecondary">
-            +
-          </Text>
-        </Pressable>
-      ) : (
-        <TextInput
-          testID="saved-tag-name"
-          accessibilityLabel="Имя тега"
-          placeholder="Тег"
-          placeholderTextColor={theme.textSecondary}
-          value={draft}
-          onChangeText={setDraft}
-          maxLength={SAVED_TAG_NAME_MAX}
-          autoFocus
-          editable={!creating}
-          returnKeyType="done"
-          submitBehavior="blurAndSubmit"
-          onSubmitEditing={finish}
-          onBlur={finish}
-          style={[
-            styles.input,
-            Typography.small,
-            { color: theme.text, borderColor: theme.primary },
-          ]}
+      <NewTagField onCreate={onCreate} />
+
+      {shown.map((tag) => (
+        <SavedTagChip
+          key={tag.id}
+          tag={tag}
+          selected={selectedIds.has(tag.id)}
+          onPress={() => onToggle(tag.id)}
         />
-      )}
-
-      {shown.map((tag) => {
-        const selected = selectedIds.has(tag.id);
-        const tone = savedTagTone(scheme, tag.color);
-
-        return (
-          <Pressable
-            key={tag.id}
-            testID={`saved-tag-${tag.name}`}
-            accessibilityRole="checkbox"
-            accessibilityLabel={tag.name}
-            accessibilityState={{ checked: selected }}
-            onPress={() => onToggle(tag.id)}
-            style={[
-              styles.chip,
-              { backgroundColor: selected ? tone.fill : theme.backgroundElement },
-            ]}
-          >
-            <Text
-              variant="smallBold"
-              numberOfLines={1}
-              style={{ color: selected ? tone.text : theme.textSecondary }}
-            >
-              {tag.name}
-            </Text>
-          </Pressable>
-        );
-      })}
+      ))}
 
       {tags.length > SAVED_TOP_TAGS ? (
         <Pressable

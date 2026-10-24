@@ -14,11 +14,14 @@ import { useTheme } from '@/hooks/use-theme';
 /** Насколько можно ужать подпись, чтобы она осталась одним словом. */
 const MIN_LABEL_SCALE = 0.8;
 
-export type SelectionActionBarProps = {
-  context: SelectionActionContext;
+export type SelectionActionBarProps<Context = SelectionActionContext> = {
+  context: Context;
   onAction: (id: SelectionActionId) => void;
-  /** Свой набор кнопок — у комментариев нет пересылки. По умолчанию — как у сообщений. */
-  actions?: readonly SelectionAction[];
+  /**
+   * Свой набор кнопок — у комментариев нет пересылки, у «Сохранённых» свой
+   * контекст. По умолчанию — как у сообщений.
+   */
+  actions?: readonly SelectionAction<Context>[];
 };
 
 /**
@@ -27,11 +30,11 @@ export type SelectionActionBarProps = {
  * добавляется туда одной записью. Кнопок четыре на ширину телефона, поэтому
  * они компактнее обычных: подпись в одну строку, не ломается посередине слова.
  */
-export function SelectionActionBar({
+export function SelectionActionBar<Context = SelectionActionContext>({
   context,
   onAction,
-  actions = SELECTION_ACTIONS,
-}: SelectionActionBarProps) {
+  actions = SELECTION_ACTIONS as readonly SelectionAction<unknown>[],
+}: SelectionActionBarProps<Context>) {
   const theme = useTheme();
 
   return (

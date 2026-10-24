@@ -31,7 +31,11 @@ export function SavedLead({ label, isComment, tags, onOpenSource }: SavedLeadPro
       <View style={styles.source}>
         {isComment ? (
           <SymbolView
-            name={{ ios: 'bubble.left', android: 'chat_bubble_outline', web: 'chat_bubble_outline' }}
+            name={{
+              ios: 'bubble.left',
+              android: 'chat_bubble_outline',
+              web: 'chat_bubble_outline',
+            }}
             size={Sizes.commentsIconQuiet}
             tintColor={theme.textSecondary}
           />

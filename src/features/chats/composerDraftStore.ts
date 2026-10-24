@@ -71,12 +71,27 @@ export type ChatDraft = {
   pop?: DraftPop | null;
 };
 
-/**
- * Что пересылается, пока выбирают, куда: откуда и какие оригиналы, по
- * порядку на экране, — или комментарии из панели.
- */
-export type ForwardPick =
+/** Одна пачка пересылки: оригиналы одного чата по порядку на экране — или комментарии. */
+export type ForwardBatch =
   { sourceChat: ChatRef; items: ForwardItem[] } | { comments: ForwardedComment[] };
+
+/**
+ * Что пересылается, пока выбирают, куда: из чата — одна пачка (откуда и
+ * какие оригиналы или комментарии из панели); из «Сохранённых» — несколько:
+ * по островку на чат-источник и комментарии, в порядке на экране. `skipped`
+ * — сколько из выбранного переслать нельзя (оригинал удалён).
+ */
+export type ForwardPick = ForwardBatch | { batches: ForwardBatch[]; skipped: number };
+
+/** Пачки пересылки по порядку — у пересылки из чата она одна. */
+export function forwardBatches(pick: ForwardPick): ForwardBatch[] {
+  return 'batches' in pick ? pick.batches : [pick];
+}
+
+/** Сколько сообщений или комментариев в пачке. */
+export function batchSize(batch: ForwardBatch): number {
+  return 'comments' in batch ? batch.comments.length : batch.items.length;
+}
 
 type DraftsState = {
   byChat: Record<string, ChatDraft>;
@@ -189,12 +204,18 @@ export function clearDraft(chatId: string) {
 
 /** Запоминает, что пересылать, пока человек выбирает, куда. */
 export function startForwardPick(pick: ForwardPick) {
-  const first = 'comments' in pick ? pick.comments[0] : pick.items[0]?.original;
+  const batches = forwardBatches(pick);
+  const lead = batches[0];
+  const first = lead
+    ? 'comments' in lead
+      ? lead.comments[0]
+      : lead.items[0]?.original
+    : undefined;
 
-  if (first) {
+  if (lead && first) {
     forwardPickerOpened(
-      { type: 'comments' in pick ? 'comment' : 'message', id: first.id },
-      'comments' in pick ? pick.comments.length : pick.items.length,
+      { type: 'comments' in lead ? 'comment' : 'message', id: first.id },
+      batches.reduce((sum, batch) => sum + batchSize(batch), 0),
     );
   }
 
@@ -205,7 +226,7 @@ export function startForwardPick(pick: ForwardPick) {
 export function readForwardPick(): ForwardPick | null {
   const pick = useComposerDrafts.getState().forwardPick;
 
-  if (!pick || ('comments' in pick ? pick.comments : pick.items).length === 0) return null;
+  if (!pick || forwardBatches(pick).every((batch) => batchSize(batch) === 0)) return null;
 
   return pick;
 }

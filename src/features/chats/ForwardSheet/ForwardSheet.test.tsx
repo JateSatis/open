@@ -21,8 +21,8 @@ jest.mock('@/api/saved', () => ({
   saveComments: jest.fn(),
 }));
 jest.mock('@/features/chats/messages/delivery', () => ({
-  sendForward: jest.fn(),
-  sendCommentForward: jest.fn(),
+  sendForward: jest.fn(() => ({ delivered: Promise.resolve() })),
+  sendCommentForward: jest.fn(() => ({ delivered: Promise.resolve() })),
 }));
 
 const mockedListChats = listChats as jest.MockedFunction<typeof listChats>;
@@ -131,6 +131,7 @@ describe('ForwardSheet', () => {
         'смотри',
         SOURCE,
         messagesPick.items,
+        expect.any(Promise),
       );
     }
     expect(mockedSaveMessages).not.toHaveBeenCalled();
@@ -258,6 +259,7 @@ describe('ForwardSheet', () => {
       expect.objectContaining({ chatId: 'chat-a' }),
       '',
       [comment],
+      expect.any(Promise),
     );
     await waitFor(() =>
       expect(mockedSaveComments).toHaveBeenCalledWith(['c-1'], { tagIds: [], watchLater: false }),
@@ -279,5 +281,44 @@ describe('ForwardSheet', () => {
       if (alert?.kind === 'notice') alert.action?.run();
     });
     expect(mockedSaveMessages).toHaveBeenCalledTimes(2);
+  });
+  it('sends several batches — an island per source chat and the comments — with the caption once, and names the skipped', async () => {
+    const other = { id: 'chat-other', name: 'Другой' };
+    const comment = { id: 'c-1' } as ForwardedComment;
+    const first = { sourceChat: SOURCE, items: [{ original: original({ id: 'm-1' }) }] };
+    const second = {
+      sourceChat: other,
+      items: [{ original: original({ id: 'm-9', chatId: 'chat-other' }) }],
+    };
+
+    await renderSheet({ batches: [first, second, { comments: [comment] }], skipped: 2 });
+
+    await fireEvent.press(screen.getByRole('checkbox', { name: 'Альфа' }));
+    await fireEvent.changeText(screen.getByTestId('forward-caption'), 'смотри');
+    await send();
+
+    expect(mockedSendForward).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ chatId: 'chat-a' }),
+      'смотри',
+      SOURCE,
+      first.items,
+      expect.any(Promise),
+    );
+    expect(mockedSendForward).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ chatId: 'chat-a' }),
+      '',
+      other,
+      second.items,
+      expect.any(Promise),
+    );
+    expect(mockedSendComments).toHaveBeenCalledWith(
+      expect.objectContaining({ chatId: 'chat-a' }),
+      '',
+      [comment],
+      expect.any(Promise),
+    );
+    expect(noticeText()).toBe('Переслано 3 из 5: оригиналы двух удалены');
   });
 });

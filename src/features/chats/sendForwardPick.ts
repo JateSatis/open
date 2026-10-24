@@ -5,7 +5,12 @@
 import type { QueryClient } from '@tanstack/react-query';
 
 import type { SaveOptions } from '@/api/saved';
-import type { ForwardPick } from '@/features/chats/composerDraftStore';
+import {
+  batchSize,
+  forwardBatches,
+  type ForwardBatch,
+  type ForwardPick,
+} from '@/features/chats/composerDraftStore';
 import { sendCommentForward, sendForward } from '@/features/chats/messages/delivery';
 import { showNotice } from '@/features/notifications/alertsStore';
 import { saveToSaved, type SaveRequest } from '@/features/saved/saveToSaved';
@@ -16,28 +21,45 @@ export type ForwardTargets = {
   saved: SaveOptions | null;
 };
 
-/** Что написать после отправки. */
-export function forwardNotice(chats: number, saved: boolean): string {
+const COUNT_GENITIVE = ['', 'одного', 'двух', 'трёх', 'четырёх'];
+
+/** «оригинал одного удалён», «оригиналы двух удалены». */
+function skippedText(skipped: number): string {
+  const count = COUNT_GENITIVE[skipped] ?? String(skipped);
+
+  return skipped === 1 ? `оригинал ${count} удалён` : `оригиналы ${count} удалены`;
+}
+
+/**
+ * Что написать после отправки. `skipped` — сколько выбранного не переслано
+ * (оригинал удалён), `total` — сколько выбирали.
+ */
+export function forwardNotice(chats: number, saved: boolean, skipped = 0, total = 0): string {
+  if (skipped > 0 && chats > 0) {
+    return `Переслано ${total - skipped} из ${total}: ${skippedText(skipped)}`;
+  }
+
   if (chats > 0 && saved) return 'Переслано и сохранено';
 
   return saved ? 'Сохранено' : 'Переслано';
 }
 
-function saveRequestOf(pick: ForwardPick, options: SaveOptions): SaveRequest {
-  return 'comments' in pick
-    ? { type: 'comments', commentIds: pick.comments.map((comment) => comment.id), options }
+function saveRequestOf(batch: ForwardBatch, options: SaveOptions): SaveRequest {
+  return 'comments' in batch
+    ? { type: 'comments', commentIds: batch.comments.map((comment) => comment.id), options }
     : {
         type: 'messages',
         // Облачко островка сохраняется оригиналом, как его видно в этом чате.
-        sourceChatId: pick.sourceChat.id,
-        messageIds: pick.items.map((item) => item.original.id),
+        sourceChatId: batch.sourceChat.id,
+        messageIds: batch.items.map((item) => item.original.id),
         options,
       };
 }
 
 /**
- * Подпись уходит в каждый чат отдельным сообщением перед пересланным; в
- * «Сохранённые» — нет.
+ * Подпись уходит в каждый чат отдельным сообщением перед пересланным — один
+ * раз, перед первой пачкой; в «Сохранённые» — нет. Пачки — по порядку: по
+ * островку на чат-источник и пересланные комментарии.
  */
 export function sendForwardPick(
   queryClient: QueryClient,
@@ -46,15 +68,35 @@ export function sendForwardPick(
   targets: ForwardTargets,
   text: string,
 ) {
+  const batches = forwardBatches(pick);
+
   for (const chatId of targets.chatIds) {
     const context = { queryClient, chatId, currentUserId };
 
-    if ('comments' in pick) sendCommentForward(context, text, pick.comments);
-    else sendForward(context, text, pick.sourceChat, pick.items);
+    // Облачка всех пачек встают сразу, а на сервер пачки уходят по очереди:
+    // номер в переписке выдаётся по приходу, и подпись осталась бы не первой.
+    let previous: Promise<void> = Promise.resolve();
+
+    batches.forEach((batch, index) => {
+      const caption = index === 0 ? text : '';
+
+      previous = (
+        'comments' in batch
+          ? sendCommentForward(context, caption, batch.comments, previous)
+          : sendForward(context, caption, batch.sourceChat, batch.items, previous)
+      ).delivered;
+    });
   }
 
-  // Неудача сохранения сменит это уведомление на «Не удалось сохранить».
-  showNotice(forwardNotice(targets.chatIds.length, targets.saved !== null));
+  const skipped = 'batches' in pick ? pick.skipped : 0;
+  const total = skipped + batches.reduce((sum, batch) => sum + batchSize(batch), 0);
 
-  if (targets.saved) void saveToSaved(queryClient, saveRequestOf(pick, targets.saved));
+  // Неудача сохранения сменит это уведомление на «Не удалось сохранить».
+  showNotice(forwardNotice(targets.chatIds.length, targets.saved !== null, skipped, total));
+
+  const { saved } = targets;
+
+  if (saved) {
+    for (const batch of batches) void saveToSaved(queryClient, saveRequestOf(batch, saved));
+  }
 }

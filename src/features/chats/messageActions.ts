@@ -233,11 +233,12 @@ export type SelectionActionContext = {
 
 export type SelectionActionId = 'reply' | 'forward' | 'copy' | 'delete';
 
-export type SelectionAction = {
+/** Кнопка панели выбора; контекст — свой у сообщений чата и у «Сохранённых». */
+export type SelectionAction<Context = SelectionActionContext> = {
   id: SelectionActionId;
   label: string;
   destructive?: boolean;
-  isEnabled: (context: SelectionActionContext) => boolean;
+  isEnabled: (context: Context) => boolean;
 };
 
 /** У всех выбранных есть сообщение: заглушку удалённого не процитировать и не переслать. */

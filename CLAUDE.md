@@ -688,10 +688,20 @@ saved_messages       сохранённые человеком копии соо
                      удаление и блокировка оригинала копию не меняют. Источник —
                      чат первоисточника, сообщение или комментарий (set null),
                      категория channel | member | visitor на момент сохранения;
-                     «Посмотреть позже» — watch_later_at / watch_done_at. seq —
-                     курсор страниц. Пишут только save_messages / save_comments
-                     (проверки как у пересылки), куда ведёт источник —
-                     saved_source, счётчик — saved_summary. Удаление из
+                     «Посмотреть позже» — watch_later_at / watch_done_at, закреп —
+                     pinned_at (несколько, по времени закрепления). seq — курсор
+                     страниц. Пишут только функции владельца (чужой id — P0002):
+                     save_messages / save_comments (проверки как у пересылки),
+                     set_saved_tag, set_saved_watch_later (later | done | undone
+                     | off), restore_saved_watch_later («Вернуть» — прежние
+                     времена от клиента, не из будущего), set_saved_pinned,
+                     delete_saved_messages. Страницы: list_saved_messages (до или
+                     после seq — окно вокруг записи для перехода к закрепу),
+                     list_saved_watch_later (активные, затем выполненные;
+                     составной курсор), list_saved_pins; строку собирает одна
+                     saved_rows. Куда ведёт источник — saved_source, можно ли
+                     переслать пачку — saved_forwardable (в чат уходит живой
+                     оригинал, не копия), счётчик — saved_summary. Удаление из
                      сохранённого — физическое (личная закладка)
 saved_message_attachments снимок вложений копии: те же пути в Storage, что у
                      оригинала (файлы не копируются); chat_media_object_readable
