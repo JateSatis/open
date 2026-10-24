@@ -4,7 +4,9 @@ import { act, fireEvent, screen, waitFor, within } from '@testing-library/react-
 import { SavedScreen } from './index';
 
 import {
+  deleteSavedNoteByClient,
   editSavedNote,
+  getSavedMessage,
   listSavedMessages,
   listSavedPins,
   listSavedTags,
@@ -15,7 +17,7 @@ import {
 import { confirm } from '@/components/ConfirmDialog/store';
 import { useSession } from '@/features/auth/useSession';
 import { resetComposerDrafts } from '@/features/chats/composerDraftStore';
-import { resetNotesOutbox } from '@/features/saved/notesStore';
+import { resetNotesOutbox, useNotesOutbox } from '@/features/saved/notesStore';
 import { longPressMessage } from '@/test/messageGestures';
 import { renderWithQuery } from '@/test/renderWithQuery';
 
@@ -58,6 +60,8 @@ jest.mock('@/api/saved', () => ({
   getSavedSource: jest.fn(),
   getSavedSummary: jest.fn(() => Promise.resolve({ watchLaterPending: 0 })),
   sendSavedNote: jest.fn(),
+  getSavedMessage: jest.fn(),
+  deleteSavedNoteByClient: jest.fn(() => Promise.resolve()),
   editSavedNote: jest.fn(() => Promise.resolve()),
   deleteSavedMessages: jest.fn(() => Promise.resolve()),
 }));
@@ -116,6 +120,7 @@ async function renderScreen(items: SavedMessage[]) {
 }
 
 const field = () => screen.getByLabelText('Заметка');
+const pendingId = () => useNotesOutbox.getState().items[0]?.localId ?? '';
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -142,8 +147,9 @@ describe('SavedScreen — заметки', () => {
   });
 
   it('a sent note appears at once with a clock, then as confirmed; one call with a retry key', async () => {
-    let answer: (value: SavedMessage) => void = () => undefined;
+    let answer: (value: string) => void = () => undefined;
     mocked(sendSavedNote).mockReturnValue(new Promise((resolve) => (answer = resolve)));
+    mocked(getSavedMessage).mockResolvedValue(note('n1', 2, { text: 'купить хлеб' }));
     await renderScreen([saved('a', 1)]);
 
     fireEvent.changeText(field(), '  купить хлеб ');
@@ -158,7 +164,7 @@ describe('SavedScreen — заметки', () => {
     );
     expect(mocked(sendSavedNote).mock.calls[0][0].clientId).toEqual(expect.any(String));
 
-    await act(async () => answer(note('n1', 2, { text: 'купить хлеб' })));
+    await act(async () => answer('n1'));
 
     await waitFor(() => expect(screen.queryByLabelText('Отправляется')).toBeNull());
     expect(row).toBeTruthy();
@@ -167,7 +173,8 @@ describe('SavedScreen — заметки', () => {
   it('a failed note offers «Повторить» with the same key, and goes once', async () => {
     mocked(sendSavedNote)
       .mockRejectedValueOnce(new TypeError('Network request failed'))
-      .mockResolvedValueOnce(note('n1', 2, { text: 'офлайн' }));
+      .mockResolvedValueOnce('n1');
+    mocked(getSavedMessage).mockResolvedValue(note('n1', 2, { text: 'офлайн' }));
     await renderScreen([saved('a', 1)]);
 
     fireEvent.changeText(field(), 'офлайн');
@@ -181,7 +188,8 @@ describe('SavedScreen — заметки', () => {
   });
 
   it('«Ответить» puts a plate over the field and the note goes with the quote', async () => {
-    mocked(sendSavedNote).mockResolvedValue(note('n1', 3));
+    mocked(sendSavedNote).mockResolvedValue('n1');
+    mocked(getSavedMessage).mockResolvedValue(note('n1', 3));
     await renderScreen([saved('a', 1)]);
 
     await longPressMessage('a');
@@ -236,5 +244,49 @@ describe('SavedScreen — заметки', () => {
     await waitFor(() => expect(confirm).toHaveBeenCalled());
     expect(mocked(confirm).mock.calls[0][0]).toMatchObject({ title: 'Удалить заметку?' });
     expect(mocked(confirm).mock.calls[0][0].message).toBeUndefined();
+  });
+
+  it('a note whose quoted record is deleted shows «Запись удалена» right away', async () => {
+    mocked(confirm).mockResolvedValue(true);
+    await renderScreen([
+      saved('a', 1),
+      note('n1', 2, {
+        replies: [
+          {
+            savedId: 'a',
+            seq: 1,
+            sourceType: 'message',
+            sourceChatId: 'chat-g',
+            category: 'member',
+            kind: 'text',
+            text: 'текст a',
+            attachments: [],
+          },
+        ],
+      }),
+    ]);
+
+    await longPressMessage('a');
+    fireEvent.press(await screen.findByLabelText('Удалить'));
+
+    expect(await screen.findByText('Запись удалена')).toBeTruthy();
+  });
+
+  it('a failed note removed before the server answered is deleted there by its key', async () => {
+    mocked(sendSavedNote).mockRejectedValue(new TypeError('Network request failed'));
+    await renderScreen([saved('a', 1)]);
+
+    fireEvent.changeText(field(), 'потеряна');
+    fireEvent.press(await screen.findByTestId('composer-send'));
+    await screen.findByLabelText('Не отправлено. Повторить');
+
+    expect(screen.getByText('потеряна')).toBeTruthy();
+    await longPressMessage(pendingId());
+    fireEvent.press(await screen.findByLabelText('Удалить'));
+
+    await waitFor(() => expect(screen.queryByText('потеряна')).toBeNull());
+    expect(deleteSavedNoteByClient).toHaveBeenCalledWith(
+      mocked(sendSavedNote).mock.calls[0][0].clientId,
+    );
   });
 });

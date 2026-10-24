@@ -24,6 +24,7 @@ import { savedQueryKey, savedTagsQueryKey, savedWatchLaterQueryKey } from '@/fea
 import {
   bumpPending,
   findSaved,
+  patchQuotes,
   patchSaved,
   putInWatchLater,
   rollbackSaved,
@@ -215,16 +216,35 @@ export function useSavedActions(): SavedActions {
           () => editSavedNote(saved.id, trimmed, [...keep]),
           'Изменения не сохранены',
         ).then((ok) => {
-          if (ok)
-            patchSaved(
-              queryClient,
-              [saved.id],
-              ({ editStatus: _done, ...item }: SavedItem) => item,
-            );
+          if (!ok) return;
+
+          patchSaved(queryClient, [saved.id], ({ editStatus: _done, ...item }: SavedItem) => item);
+          // Ответы на неё показывают её новую версию.
+          patchQuotes(queryClient, (quote) =>
+            quote.savedId === saved.id
+              ? {
+                  ...quote,
+                  text: trimmed || null,
+                  kind: quote.kind === 'media' && attachments.length === 0 ? 'text' : quote.kind,
+                  attachments: attachments.map((attachment, position) => ({
+                    url: attachment.url,
+                    poster_url: attachment.posterUrl,
+                    mime_type: attachment.mimeType,
+                    duration_ms: attachment.durationMs,
+                    position,
+                    pop_id: attachment.popId ?? null,
+                  })),
+                }
+              : quote,
+          );
         });
       },
       remove: (ids) => {
+        const gone = new Set(ids);
+
         patchSaved(queryClient, ids, () => null);
+        // Ответы на удалённое — с заглушкой «Запись удалена», как их отдаст база.
+        patchQuotes(queryClient, (quote) => (gone.has(quote.savedId) ? { savedId: null } : quote));
 
         void withDeadline(deleteSavedMessages([...ids]), SAVED_DEADLINE_MS)
           .then(() => {

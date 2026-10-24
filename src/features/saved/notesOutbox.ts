@@ -13,6 +13,8 @@ import { notifyManager, type InfiniteData, type QueryClient } from '@tanstack/re
 import { PENDING_SEQ } from '@/api/pendingSeq';
 import {
   deleteSavedMessages,
+  deleteSavedNoteByClient,
+  getSavedMessage,
   sendSavedNote,
   type SavedNoteFile,
   type SavedPage,
@@ -56,6 +58,10 @@ import { randomUuid } from '@/lib/uuid';
 const delivering = new Set<string>();
 // Человек удалил свою неотправленную заметку, пока она ещё ехала.
 const discarded = new Set<string>();
+// Файлы, уже залитые для заметки, по localId: повтор их не грузит заново.
+const uploadedFor = new Map<string, UploadedMedia[]>();
+// Заметки, чья последняя попытка осталась без ответа, — могли создаться.
+const unanswered = new Set<string>();
 
 let pendingSeqCounter = 0;
 
@@ -118,6 +124,13 @@ function explainRejection(cause: unknown) {
   if (media) showNotice(media, 'error');
 }
 
+/** Заметка записана, а её строку прочитать не вышло — перечитать страницы. */
+function settleUnread(queryClient: QueryClient, localId: string) {
+  void queryClient
+    .invalidateQueries({ queryKey: savedMessagesQueryKey })
+    .then(() => removePending(localId));
+}
+
 async function deliver(queryClient: QueryClient, userId: string, localId: string) {
   const note = findPending(localId);
 
@@ -128,42 +141,76 @@ async function deliver(queryClient: QueryClient, userId: string, localId: string
 
   const { payload } = note;
   let uploaded: UploadedMedia[] = [];
-  let saved: SavedItem | null = null;
+  let id: string | null = null;
 
   try {
     const hasFiles = payload.type === 'voice' || payload.media.length > 0;
 
-    uploaded = hasFiles ? await uploadOutgoing(toOutgoing(payload), userId) : [];
+    // Повтор — теми же файлами: они уже очищены, а заметка с этим ключом
+    // могла создаться и ссылаться именно на них.
+    uploaded =
+      uploadedFor.get(localId) ??
+      (hasFiles ? await uploadOutgoing(toOutgoing(payload), userId) : []);
+    uploadedFor.set(localId, uploaded);
 
     if (discarded.has(localId)) throw new Error('Отправка отменена');
 
-    saved = await sendSavedNote({
+    id = await sendSavedNote({
       clientId: note.clientId,
       text: payload.type === 'post' ? payload.text || null : null,
       files: uploaded.map(toNoteFile),
       replyTo: payload.replyTo,
       kind: payload.type,
     });
+    uploadedFor.delete(localId);
+    unanswered.delete(localId);
 
     // Уже в базе, но человек её удалил — удаляем и там.
-    if (discarded.has(localId)) void deleteSavedMessages([saved.id]).catch(() => undefined);
-    else settle(queryClient, localId, saved);
+    if (discarded.has(localId)) {
+      void deleteSavedMessages([id]).catch(() => undefined);
+      return;
+    }
+
+    const saved = await getSavedMessage(id).catch(() => null);
+
+    if (saved) settle(queryClient, localId, saved);
+    else settleUnread(queryClient, localId);
   } catch (cause) {
+    const lost = isNetworkError(cause);
+
     // Сервер ответил отказом — загруженные файлы ничьи. Не ответил вовсе —
     // заметка могла создаться: её файлы не трогаем, повтор найдёт её по ключу.
-    if (!saved && uploaded.length > 0 && !isNetworkError(cause)) {
+    if (!id && uploaded.length > 0 && !lost) {
+      uploadedFor.delete(localId);
       void Promise.all(uploaded.map((item) => removeUploadedMedia(storedPaths(item))));
     }
 
-    if (discarded.has(localId)) return;
+    if (!id && lost) unanswered.add(localId);
 
-    if (isNetworkError(cause)) reportRequestFailed();
+    if (discarded.has(localId)) {
+      forget(localId, note.clientId);
+      return;
+    }
+
+    if (lost) reportRequestFailed();
     else explainRejection(cause);
 
     setStatus(localId, 'failed');
   } finally {
     delivering.delete(localId);
     discarded.delete(localId);
+  }
+}
+
+/**
+ * Неотправленную заметку убрали насовсем. Последняя попытка осталась без
+ * ответа — заметка могла создаться: удалить её и на сервере, по ключу.
+ */
+function forget(localId: string, clientId: string) {
+  uploadedFor.delete(localId);
+
+  if (unanswered.delete(localId)) {
+    void deleteSavedNoteByClient(clientId).catch(() => undefined);
   }
 }
 
@@ -283,7 +330,10 @@ export function retryNote(queryClient: QueryClient, userId: string, localId: str
  * удалят сразу по прибытии.
  */
 export function discardNote(localId: string) {
+  const note = findPending(localId);
+
   if (delivering.has(localId)) discarded.add(localId);
+  else if (note) forget(localId, note.clientId);
 
   removePending(localId);
 }

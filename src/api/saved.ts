@@ -600,8 +600,11 @@ export type SavedNoteInput = {
   kind: 'post' | 'voice';
 };
 
-/** Новая заметка; отвечает её строкой, как её отдают страницы. */
-export async function sendSavedNote(input: SavedNoteInput): Promise<SavedMessage> {
+/**
+ * Новая заметка; отвечает её id. Строку читает `getSavedMessage` отдельно:
+ * заметка уже записана, даже если чтение потом не удалось.
+ */
+export async function sendSavedNote(input: SavedNoteInput): Promise<string> {
   const { data: id, error } = await supabase.rpc('send_saved_note', {
     p_client_id: input.clientId,
     p_text: input.text ?? undefined,
@@ -621,11 +624,17 @@ export async function sendSavedNote(input: SavedNoteInput): Promise<SavedMessage
   if (error) throw error;
   if (typeof id !== 'string') throw new Error('send_saved_note returned nothing');
 
-  const saved = await getSavedMessage(id);
+  return id;
+}
 
-  if (!saved) throw new Error('Заметка не найдена после отправки');
+/**
+ * Неотправленную заметку убрали, а ответ сервера на неё не дошёл: она могла
+ * создаться. Удаляет её по ключу повтора; нет такой — ничего.
+ */
+export async function deleteSavedNoteByClient(clientId: string): Promise<void> {
+  const { error } = await supabase.rpc('delete_saved_note_by_client', { p_client_id: clientId });
 
-  return saved;
+  if (error) throw error;
 }
 
 /** Одна запись по id — как её отдают страницы «Все». */

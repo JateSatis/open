@@ -4951,6 +4951,10 @@ export type Database = {
       delete_direct_chat: { Args: { target_chat: string }; Returns: undefined }
       delete_messages: { Args: { message_ids: string[] }; Returns: undefined }
       delete_saved_messages: { Args: { p_ids: string[] }; Returns: number }
+      delete_saved_note_by_client: {
+        Args: { p_client_id: string }
+        Returns: number
+      }
       device_person: { Args: { p_user: string }; Returns: string }
       dialogue_masked: {
         Args: { p_chat: string; p_person: string; p_viewer: string }

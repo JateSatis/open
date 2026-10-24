@@ -135,7 +135,8 @@ export function SavedAllTab({
           highlightKey={highlight?.id === item.id ? highlight.key : null}
           onOpenMenu={(anchor) => openMenu(item, anchor)}
           onToggle={() => toggle(item.id)}
-          onSwipeReply={pendingNote ? undefined : () => reply([item])}
+          // Во время правки ответ свайпом заменил бы её и потерял отложенный черновик.
+          onSwipeReply={pendingNote || editingId !== null ? undefined : () => reply([item])}
         >
           {bubble(item)}
         </MessageRow>
