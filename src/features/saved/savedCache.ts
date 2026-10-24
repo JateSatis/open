@@ -141,13 +141,18 @@ export function patchSaved(
   for (const [id, previous] of before)
     delta += Number(isPending(after.get(id))) - Number(isPending(previous));
 
-  if (delta !== 0) {
-    queryClient.setQueryData<{ watchLaterPending: number }>(savedSummaryQueryKey, (summary) =>
-      summary ? { watchLaterPending: Math.max(0, summary.watchLaterPending + delta) } : summary,
-    );
-  }
+  bumpPending(queryClient, delta);
 
   return before;
+}
+
+/** Счётчик «Посмотреть позже» в «Чатах» — на `delta`. */
+export function bumpPending(queryClient: QueryClient, delta: number) {
+  if (delta === 0) return;
+
+  queryClient.setQueryData<{ watchLaterPending: number }>(savedSummaryQueryKey, (summary) =>
+    summary ? { watchLaterPending: Math.max(0, summary.watchLaterPending + delta) } : summary,
+  );
 }
 
 /**

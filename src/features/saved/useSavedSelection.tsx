@@ -13,8 +13,15 @@ const TITLE = 'Сохранённые сообщения';
  * снятие последней отметки выключает выбор. Шапка в выборе — «Выбрано: N» и
  * «Отмена», системный «назад» снимает выбор, а не уводит с экрана.
  */
-export function useSavedSelection(items: readonly SavedMessage[]) {
+/** `active` — вкладка видна: ушли на другую — выбор снимается, шапка и «назад» были бы про невидимое. */
+export function useSavedSelection(items: readonly SavedMessage[], active = true) {
   const [ids, setIds] = useState<ReadonlySet<string>>(() => new Set());
+  const [wasActive, setWasActive] = useState(active);
+
+  if (wasActive !== active) {
+    setWasActive(active);
+    if (!active) setIds(new Set());
+  }
   const navigation = useNavigation();
   const focused = useIsFocused();
 
@@ -26,7 +33,7 @@ export function useSavedSelection(items: readonly SavedMessage[]) {
         : items.filter((saved) => ids.has(saved.id)).sort((a, b) => a.seq - b.seq),
     [ids, items],
   );
-  const active = selected.length > 0;
+  const selecting = selected.length > 0;
 
   const start = useCallback((id: string) => setIds(new Set([id])), []);
   const clear = useCallback(() => setIds(new Set()), []);
@@ -46,7 +53,7 @@ export function useSavedSelection(items: readonly SavedMessage[]) {
 
   useLayoutEffect(() => {
     navigation.setOptions(
-      active
+      selecting
         ? {
             title: `Выбрано: ${selected.length}`,
             headerBackVisible: false,
@@ -64,10 +71,10 @@ export function useSavedSelection(items: readonly SavedMessage[]) {
           }
         : { title: TITLE, headerBackVisible: true, gestureEnabled: true, headerRight: undefined },
     );
-  }, [active, clear, navigation, selected.length]);
+  }, [clear, navigation, selected.length, selecting]);
 
   useEffect(() => {
-    if (!active || !focused) return;
+    if (!selecting || !focused) return;
 
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
       clear();
@@ -75,7 +82,7 @@ export function useSavedSelection(items: readonly SavedMessage[]) {
     });
 
     return () => subscription.remove();
-  }, [active, clear, focused]);
+  }, [clear, focused, selecting]);
 
-  return { active, selected, isSelected, start, toggle, clear };
+  return { active: selecting, selected, isSelected, start, toggle, clear };
 }

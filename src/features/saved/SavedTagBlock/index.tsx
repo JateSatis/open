@@ -1,17 +1,11 @@
 import { SymbolView } from 'expo-symbols';
-import { useEffect, useMemo, useState } from 'react';
-import {
-  Pressable,
-  ScrollView,
-  View,
-  useWindowDimensions,
-  type LayoutChangeEvent,
-} from 'react-native';
-import { KeyboardEvents } from 'react-native-keyboard-controller';
-import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useMemo, useState } from 'react';
+import { Pressable, ScrollView, View } from 'react-native';
+import Animated from 'react-native-reanimated';
 
 import { styles, TAG_BLOCK_PADDING } from './styles';
+import { useTagBlockMotion } from './useTagBlockMotion';
+import { useWrappedChips } from './useWrappedChips';
 
 import type { SavedTag } from '@/api/saved';
 import { Text } from '@/components/Text';
@@ -20,8 +14,6 @@ import { NewTagField } from '@/features/saved/NewTagField';
 import { SavedTagChip } from '@/features/saved/SavedTagChip';
 import { useTheme } from '@/hooks/use-theme';
 import { Sizes, Spacing } from '@/theme';
-
-const EXPAND_MS = 220;
 
 /** Свёрнутый блок — одна полоса, ровно как у реакций. */
 export const TAG_BLOCK_HEIGHT = Sizes.reactionCell + TAG_BLOCK_PADDING * 2;
@@ -65,12 +57,16 @@ export function SavedTagBlock({
   style,
 }: SavedTagBlockProps) {
   const theme = useTheme();
-  const insets = useSafeAreaInsets();
-  const { height: windowHeight } = useWindowDimensions();
   const [order, setOrder] = useState(() => orderOf(tags, selectedIds));
-  const [wrapped, setWrapped] = useState<ReadonlySet<string>>(() => new Set());
   const [contentHeight, setContentHeight] = useState(TAG_BLOCK_HEIGHT);
-  const [keyboard, setKeyboard] = useState(0);
+  const chips = useWrappedChips();
+  const motion = useTagBlockMotion({
+    expanded,
+    collapsedHeight: TAG_BLOCK_HEIGHT,
+    contentHeight,
+    maxHeight,
+    top,
+  });
   const byId = useMemo(() => new Map(tags.map((tag) => [tag.id, tag])), [tags]);
   const selected = useMemo(() => new Set(selectedIds), [selectedIds]);
 
@@ -79,71 +75,22 @@ export function SavedTagBlock({
 
   if (missing.length > 0) setOrder([...missing, ...order]);
 
-  // Меню — своё окно: клавиатуру поля имени слушаем отсюда, как панель комментариев.
-  useEffect(() => {
-    const shown = KeyboardEvents.addListener('keyboardDidShow', (event) =>
-      setKeyboard(event.height),
-    );
-    const hidden = KeyboardEvents.addListener('keyboardDidHide', () => setKeyboard(0));
-
-    return () => {
-      shown.remove();
-      hidden.remove();
-    };
-  }, []);
-
   const shownTags = order.flatMap((id) => byId.get(id) ?? []);
   const hiddenSelected = expanded
     ? 0
-    : shownTags.filter((tag) => selected.has(tag.id) && wrapped.has(tag.id)).length;
-  const room = keyboard > 0 ? windowHeight - keyboard - Spacing.two : windowHeight;
-  const tallest = keyboard > 0 ? room - insets.top - Spacing.two : maxHeight;
-  const target = expanded
-    ? Math.max(TAG_BLOCK_HEIGHT, Math.min(contentHeight, tallest))
-    : TAG_BLOCK_HEIGHT;
-  // Блок над клавиатурой: поднимается ровно настолько, чтобы низ был виден.
-  const lift = keyboard > 0 ? Math.max(0, top + target - room) : 0;
-
-  const height = useSharedValue(target);
-  const shift = useSharedValue(lift);
-  const turn = useSharedValue(expanded ? 1 : 0);
-
-  useEffect(() => {
-    height.set(withTiming(target, { duration: EXPAND_MS }));
-    shift.set(withTiming(lift, { duration: EXPAND_MS }));
-    turn.set(withTiming(expanded ? 1 : 0, { duration: EXPAND_MS }));
-  }, [expanded, height, lift, shift, target, turn]);
-
-  const blockStyle = useAnimatedStyle(() => ({
-    height: height.value,
-    marginTop: -shift.value,
-  }));
-  const chevronStyle = useAnimatedStyle(() => ({
-    transform: [{ rotate: `${turn.value * 180}deg` }],
-  }));
-
-  const measureChip = (id: string) => (event: LayoutChangeEvent) => {
-    // Ниже первой строки — не влез в свёрнутую полосу.
-    const below = event.nativeEvent.layout.y > Spacing.five / 2;
-
-    setWrapped((current) => {
-      if (current.has(id) === below) return current;
-
-      const next = new Set(current);
-
-      if (below) next.add(id);
-      else next.delete(id);
-
-      return next;
-    });
-  };
+    : shownTags.filter((tag) => selected.has(tag.id) && chips.wrapped.has(tag.id)).length;
 
   const empty = shownTags.length === 0;
 
   return (
     <Animated.View
       testID="saved-tag-block"
-      style={[styles.block, { width, backgroundColor: theme.backgroundElement }, style, blockStyle]}
+      style={[
+        styles.block,
+        { width, backgroundColor: theme.backgroundElement },
+        style,
+        motion.blockStyle,
+      ]}
     >
       <ScrollView
         scrollEnabled={expanded}
@@ -172,7 +119,7 @@ export function SavedTagBlock({
                 hitSlop={Spacing.one}
                 style={styles.expand}
               >
-                <Animated.View style={chevronStyle}>
+                <Animated.View style={motion.chevronStyle}>
                   <SymbolView
                     name={{ ios: 'chevron.down', android: 'expand_more', web: 'expand_more' }}
                     size={Spacing.four}
@@ -198,7 +145,7 @@ export function SavedTagBlock({
                 tag={tag}
                 selected={selected.has(tag.id)}
                 onPress={() => onToggle(tag.id)}
-                onLayout={measureChip(tag.id)}
+                onLayout={chips.measure(tag.id)}
                 onElement
               />
             ))}

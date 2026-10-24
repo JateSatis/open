@@ -63,7 +63,7 @@ export function SavedScreen() {
           accessibilityElementsHidden={tab !== 0}
           style={[styles.page, tab !== 0 && styles.hidden]}
         >
-          <SavedAllTab {...shared} mediaBounds={mediaBounds} />
+          <SavedAllTab {...shared} mediaBounds={mediaBounds} active={tab === 0} />
         </View>
 
         {laterOpened ? (

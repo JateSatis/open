@@ -286,6 +286,19 @@ describe('SavedScreen — выбор', () => {
     await waitFor(() => expect(deleteSavedMessages).toHaveBeenCalledWith(['c', 'a']));
     await waitFor(() => expect(screen.queryByTestId('selection-action-bar')).toBeNull());
   });
+  it('switching to «Посмотреть позже» drops the selection and its header', async () => {
+    await renderScreen([saved('a', 2), saved('b', 1)]);
+    await longPressMessage('a');
+    await fireEvent.press(await screen.findByRole('menuitem', { name: 'Выбрать' }));
+    await screen.findByTestId('selection-action-bar');
+
+    await fireEvent.press(screen.getByText('Посмотреть позже'));
+
+    await waitFor(() => expect(screen.queryByTestId('selection-action-bar')).toBeNull());
+    expect(mockSetOptions).toHaveBeenLastCalledWith(
+      expect.objectContaining({ title: 'Сохранённые сообщения' }),
+    );
+  });
 });
 
 describe('SavedScreen — «Посмотреть позже»', () => {

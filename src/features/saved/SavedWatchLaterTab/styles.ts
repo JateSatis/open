@@ -9,14 +9,4 @@ export const styles = StyleSheet.create({
   list: {
     paddingBottom: Spacing.four,
   },
-  centered: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: Spacing.two,
-    paddingHorizontal: Spacing.four,
-  },
-  hint: {
-    textAlign: 'center',
-  },
 });

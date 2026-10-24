@@ -8,7 +8,11 @@ import type { useRouter } from 'expo-router';
 import type { ChatRef, ForwardedComment, IslandOriginal } from '@/api/chats';
 import { listForwardedComments, listIslandOriginals } from '@/api/messageRows';
 import { listSavedForwardable, type SavedMessage } from '@/api/saved';
-import { startForwardPick, type ForwardBatch } from '@/features/chats/composerDraftStore';
+import {
+  batchSize,
+  startForwardPick,
+  type ForwardBatch,
+} from '@/features/chats/composerDraftStore';
 import { showNotice } from '@/features/notifications/alertsStore';
 
 type Group =
@@ -60,7 +64,13 @@ export function savedForwardBatches(
 
   return groups.map((group) =>
     group.type === 'chat'
-      ? { sourceChat: group.chat, items: group.originals.map((original) => ({ original })) }
+      ? {
+          sourceChat: group.chat,
+          // Внутри островка — как в исходном чате, а не как сохраняли.
+          items: [...group.originals]
+            .sort((a, b) => a.seq - b.seq)
+            .map((original) => ({ original })),
+        }
       : { comments: group.comments },
   );
 }
@@ -96,10 +106,7 @@ export async function startSavedForward(
       new Map(originals.map((original) => [original.id, original])),
       new Map(comments.map((comment) => [comment.id, comment])),
     );
-    const sent = batches.reduce(
-      (sum, batch) => sum + ('comments' in batch ? batch.comments.length : batch.items.length),
-      0,
-    );
+    const sent = batches.reduce((sum, batch) => sum + batchSize(batch), 0);
 
     if (sent === 0) {
       showNotice(

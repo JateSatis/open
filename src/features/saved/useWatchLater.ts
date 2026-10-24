@@ -21,10 +21,15 @@ export function useWatchLater(enabled: boolean) {
     refetchOnMount: 'always',
   });
 
-  const items: SavedMessage[] = useMemo(
-    () => (query.data?.pages.flatMap((page) => page.items) ?? []).sort(watchLaterOrder),
-    [query.data],
-  );
+  // Запись, вставленная в кеш до своей страницы («Вернуть», отметка на
+  // «Все»), сервер отдаст ещё раз — в списке она одна.
+  const items: SavedMessage[] = useMemo(() => {
+    const seen = new Set<string>();
+
+    return (query.data?.pages.flatMap((page) => page.items) ?? [])
+      .filter((item) => !seen.has(item.id) && Boolean(seen.add(item.id)))
+      .sort(watchLaterOrder);
+  }, [query.data]);
   const chats = useSavedSourceChats(items);
   const { hasNextPage, isFetchingNextPage, fetchNextPage } = query;
 

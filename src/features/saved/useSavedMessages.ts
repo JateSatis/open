@@ -47,6 +47,20 @@ export function useSavedMessages() {
     refetchOnMount: 'always',
   });
 
+  // Окно вокруг закрепа — только пока открыт экран: следующий вход снова с
+  // самых новых, а не перечитыванием старого окна.
+  useEffect(
+    () => () => {
+      const data =
+        queryClient.getQueryData<InfiniteData<SavedPage, PageParam>>(savedMessagesQueryKey);
+
+      if (data?.pageParams.some((param) => 'around' in param || 'after' in param)) {
+        queryClient.removeQueries({ queryKey: savedMessagesQueryKey, exact: true });
+      }
+    },
+    [queryClient],
+  );
+
   const items: SavedMessage[] = useMemo(
     () => query.data?.pages.flatMap((page) => page.items) ?? [],
     [query.data],
@@ -67,6 +81,9 @@ export function useSavedMessages() {
       const loaded = data?.pages.flatMap((page) => page.items) ?? [];
 
       if (loaded.some((item) => item.seq === seq)) return true;
+
+      // Догрузка, начатая до перехода, иначе записала бы поверх окна старые страницы.
+      await queryClient.cancelQueries({ queryKey: savedMessagesQueryKey, exact: true });
 
       const page = await listSavedAround(seq);
 

@@ -183,13 +183,15 @@ describe('savedMenuActions', () => {
 });
 
 describe('savedForwardBatches', () => {
-  it('one island per source chat where it first appears on screen, comments as one batch, gone ones skipped', () => {
+  it('one island per source chat where it first appears on screen, in chat order inside, comments as one batch, gone ones skipped', () => {
     const fromG1 = original({
       id: 'm-1',
+      seq: 20,
       chat: { id: 'chat-g', name: 'Группа', readUpTo: null, amMember: true, isChannelPosts: false },
     });
     const fromG2 = original({
       id: 'm-2',
+      seq: 10,
       chat: { id: 'chat-g', name: 'Группа', readUpTo: null, amMember: true, isChannelPosts: false },
     });
     const fromD = original({
@@ -221,7 +223,8 @@ describe('savedForwardBatches', () => {
     ).toEqual([
       {
         sourceChat: { id: 'chat-g', name: 'Группа' },
-        items: [{ original: fromG1 }, { original: fromG2 }],
+        // Сохраняли #20 раньше #10 — в островке они как в чате.
+        items: [{ original: fromG2 }, { original: fromG1 }],
       },
       { comments: [comment] },
       { sourceChat: { id: 'chat-d', name: 'Личка' }, items: [{ original: fromD }] },

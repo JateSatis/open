@@ -21,6 +21,8 @@ import { reportRequestFailed } from '@/features/connection/connectionStore';
 import { showNotice } from '@/features/notifications/alertsStore';
 import { savedQueryKey, savedTagsQueryKey, savedWatchLaterQueryKey } from '@/features/saved/keys';
 import {
+  bumpPending,
+  findSaved,
   patchSaved,
   putInWatchLater,
   rollbackSaved,
@@ -159,7 +161,13 @@ export function useSavedActions(): SavedActions {
 
         if (!watchLaterAt) return;
 
-        putInWatchLater(queryClient, saved);
+        // Нет ни в одном списке (а «Все» до неё не догружены) — вставить
+        // самому и вернуть её в счётчик: правка такую запись не найдёт.
+        if (!findSaved(queryClient, saved.id)) {
+          putInWatchLater(queryClient, saved);
+          if (!watchDoneAt) bumpPending(queryClient, 1);
+        }
+
         void optimistic(
           queryClient,
           [saved.id],

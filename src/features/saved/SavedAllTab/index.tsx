@@ -1,36 +1,40 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useRef } from 'react';
 import { ActivityIndicator, FlatList, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { styles } from './styles';
+import { SavedSelectionBar } from './SavedSelectionBar';
 import { useSavedPinBar } from './useSavedPinBar';
 
 import type { SavedMessage, SavedTag } from '@/api/saved';
-import { LoadFailed } from '@/components/LoadFailed';
-import { Text } from '@/components/Text';
 import type { MosaicBounds } from '@/features/chats/lib/mosaicLayout';
-import type { AnchorRect, MenuAnchor } from '@/features/chats/MessageContextMenu';
 import { MessageRow } from '@/features/chats/MessageRow';
 import { PinnedBar } from '@/features/chats/PinnedBar';
-import { SelectionActionBar } from '@/features/chats/SelectionActionBar';
-import { SAVED_SELECTION_ACTIONS } from '@/features/saved/savedActions';
 import { SavedBubble } from '@/features/saved/SavedBubble';
-import { SavedMenu, type SavedMenuTarget } from '@/features/saved/SavedMenu';
+import { SavedListState } from '@/features/saved/SavedListState';
+import { SavedMenu } from '@/features/saved/SavedMenu';
 import { useOpenSavedSource } from '@/features/saved/useOpenSavedSource';
 import { useSavedItemActions } from '@/features/saved/useSavedItemActions';
 import { useSavedJump } from '@/features/saved/useSavedJump';
+import { useSavedMenu } from '@/features/saved/useSavedMenu';
 import { useSavedMessages } from '@/features/saved/useSavedMessages';
 import { useSavedSelection } from '@/features/saved/useSavedSelection';
-import { Spacing } from '@/theme';
 
 /** Догрузка начинается, когда до края осталось столько экранов. */
 const HISTORY_EDGE = 1;
+
+const EMPTY = {
+  testID: 'saved-empty',
+  title: 'Здесь пока пусто',
+  hint: 'Чтобы сохранить сообщение или комментарий, нажмите «Переслать» и выберите «★ Сохранённые сообщения». Сохранённое видите только вы.',
+};
 
 export type SavedAllTabProps = {
   currentUserId: string | null;
   tags: SavedTag[];
   tagsById: ReadonlyMap<string, SavedTag>;
   mediaBounds: MosaicBounds;
+  /** Вкладка видна: ушли на другую — выбор снимается. */
+  active: boolean;
 };
 
 /**
@@ -38,34 +42,33 @@ export type SavedAllTabProps = {
  * старые догружаются прокруткой вверх. Под переключателем — полоса
  * закрепов. Долгое нажатие — меню с тегами, «Выбрать» — выбор с панелью.
  */
-export function SavedAllTab({ currentUserId, tags, tagsById, mediaBounds }: SavedAllTabProps) {
-  const insets = useSafeAreaInsets();
+export function SavedAllTab({
+  currentUserId,
+  tags,
+  tagsById,
+  mediaBounds,
+  active,
+}: SavedAllTabProps) {
   const saved = useSavedMessages();
   const openSource = useOpenSavedSource();
   const listRef = useRef<FlatList<SavedMessage> | null>(null);
-  const frameRef = useRef<View | null>(null);
-  const selection = useSavedSelection(saved.items);
+  const selection = useSavedSelection(saved.items, active);
   const jump = useSavedJump(listRef, saved.items, saved.loadAround);
   const pinBar = useSavedPinBar(jump.jump);
+  const {
+    frameRef,
+    target: menuTarget,
+    viewport: menuViewport,
+    saved: menuSaved,
+    open: openMenu,
+    close: closeMenu,
+  } = useSavedMenu(saved.items, 'all');
   const { start: startSelection } = selection;
   const handlers = useSavedItemActions({
     chats: saved.chats,
     currentUserId,
     onSelect: useCallback((item: SavedMessage) => startSelection(item.id), [startSelection]),
   });
-  const [menu, setMenu] = useState<SavedMenuTarget | null>(null);
-  const [viewport, setViewport] = useState<AnchorRect | null>(null);
-  const menuSaved = useMemo(
-    () => (menu ? (saved.items.find((item) => item.id === menu.savedId) ?? null) : null),
-    [menu, saved.items],
-  );
-
-  const openMenu = useCallback((item: SavedMessage, anchor: MenuAnchor) => {
-    frameRef.current?.measureInWindow((x, y, width, height) =>
-      setViewport({ x, y, width, height }),
-    );
-    setMenu({ savedId: item.id, anchor, tab: 'all' });
-  }, []);
 
   const bubble = useCallback(
     (item: SavedMessage) => (
@@ -82,7 +85,7 @@ export function SavedAllTab({ currentUserId, tags, tagsById, mediaBounds }: Save
   );
 
   const { active: selecting, isSelected, toggle } = selection;
-  const highlight = jump.highlight;
+  const { highlight } = jump;
   const renderItem = useCallback(
     ({ item }: { item: SavedMessage }) => (
       <MessageRow
@@ -100,46 +103,18 @@ export function SavedAllTab({ currentUserId, tags, tagsById, mediaBounds }: Save
     [bubble, highlight, isSelected, openMenu, selecting, toggle],
   );
 
-  const runSelection = (id: string) => {
-    const picked = selection.selected;
+  const state = (
+    <SavedListState
+      failed={saved.failed}
+      loading={saved.isLoading}
+      empty={saved.items.length === 0 ? EMPTY : null}
+      onRetry={saved.reload}
+      failText="Не удалось загрузить сохранённое"
+      loadingLabel="Загрузка сохранённого"
+    />
+  );
 
-    if (id === 'copy') {
-      handlers.copy(picked);
-      selection.clear();
-    } else if (id === 'forward') {
-      void handlers.forward(picked).then((opened) => {
-        if (opened) selection.clear();
-      });
-    } else if (id === 'delete') {
-      void handlers.removeConfirmed(picked.map((item) => item.id)).then((removed) => {
-        if (removed) selection.clear();
-      });
-    }
-  };
-
-  if (saved.failed) {
-    return <LoadFailed message="Не удалось загрузить сохранённое" onRetry={saved.reload} />;
-  }
-
-  if (saved.isLoading) {
-    return (
-      <View style={styles.centered}>
-        <ActivityIndicator accessibilityLabel="Загрузка сохранённого" />
-      </View>
-    );
-  }
-
-  if (saved.items.length === 0) {
-    return (
-      <View testID="saved-empty" style={styles.centered}>
-        <Text variant="bodyBold">Здесь пока пусто</Text>
-        <Text color="textSecondary" style={styles.hint}>
-          Чтобы сохранить сообщение или комментарий, нажмите «Переслать» и выберите «★ Сохранённые
-          сообщения». Сохранённое видите только вы.
-        </Text>
-      </View>
-    );
-  }
+  if (saved.failed || saved.isLoading || saved.items.length === 0) return state;
 
   return (
     <View style={styles.flex}>
@@ -172,25 +147,25 @@ export function SavedAllTab({ currentUserId, tags, tagsById, mediaBounds }: Save
       </View>
 
       {selecting ? (
-        <View style={{ paddingBottom: Math.max(insets.bottom, Spacing.two) }}>
-          <SelectionActionBar
-            context={{ selected: selection.selected }}
-            actions={SAVED_SELECTION_ACTIONS}
-            onAction={runSelection}
-          />
-        </View>
+        <SavedSelectionBar
+          selected={selection.selected}
+          onCopy={handlers.copy}
+          onForward={handlers.forward}
+          onDelete={handlers.removeConfirmed}
+          onDone={selection.clear}
+        />
       ) : null}
 
       <SavedMenu
-        target={menu}
+        target={menuTarget}
         saved={menuSaved}
-        viewport={viewport}
+        viewport={menuViewport}
         preview={menuSaved ? bubble(menuSaved) : null}
         previewGrowth="up"
         tags={tags}
         actions={handlers.actions}
         onAction={handlers.run}
-        onClose={() => setMenu(null)}
+        onClose={closeMenu}
       />
     </View>
   );
