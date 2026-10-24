@@ -3603,9 +3603,11 @@ export type Database = {
           author_id: string | null
           author_name: string | null
           author_opaque: boolean
+          client_id: string | null
           comment_message_id: string | null
           comment_pop_id: string | null
           created_at: string
+          edited_at: string | null
           id: string
           kind: string
           original_at: string | null
@@ -3627,9 +3629,11 @@ export type Database = {
           author_id?: string | null
           author_name?: string | null
           author_opaque?: boolean
+          client_id?: string | null
           comment_message_id?: string | null
           comment_pop_id?: string | null
           created_at?: string
+          edited_at?: string | null
           id?: string
           kind: string
           original_at?: string | null
@@ -3651,9 +3655,11 @@ export type Database = {
           author_id?: string | null
           author_name?: string | null
           author_opaque?: boolean
+          client_id?: string | null
           comment_message_id?: string | null
           comment_pop_id?: string | null
           created_at?: string
+          edited_at?: string | null
           id?: string
           kind?: string
           original_at?: string | null
@@ -3755,6 +3761,55 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "messages"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      saved_note_replies: {
+        Row: {
+          created_at: string
+          id: string
+          note_id: string
+          owner_id: string
+          position: number
+          quoted_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          note_id: string
+          owner_id: string
+          position: number
+          quoted_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          note_id?: string
+          owner_id?: string
+          position?: number
+          quoted_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "saved_note_replies_note_fkey"
+            columns: ["note_id", "owner_id"]
+            isOneToOne: false
+            referencedRelation: "saved_messages"
+            referencedColumns: ["id", "owner_id"]
+          },
+          {
+            foreignKeyName: "saved_note_replies_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "saved_note_replies_quoted_fkey"
+            columns: ["quoted_id", "owner_id"]
+            isOneToOne: false
+            referencedRelation: "saved_messages"
+            referencedColumns: ["id", "owner_id"]
           },
         ]
       }
@@ -4808,6 +4863,7 @@ export type Database = {
         Returns: undefined
       }
       check_message_shape: { Args: { target: string }; Returns: undefined }
+      check_saved_note_shape: { Args: { p_saved: string }; Returns: undefined }
       clean_group_avatar_url: { Args: { url: string }; Returns: string }
       clean_own_avatar_url: {
         Args: { folder: string; url: string }
@@ -4852,6 +4908,10 @@ export type Database = {
       common_prefix_length: { Args: { a: string; b: string }; Returns: number }
       common_suffix_length: { Args: { a: string; b: string }; Returns: number }
       contact_restricted: { Args: { p_user: string }; Returns: boolean }
+      copy_saved_notes: {
+        Args: { p_ids: string[]; p_tag_ids?: string[]; p_watch_later?: boolean }
+        Returns: string[]
+      }
       count_chat_search: {
         Args: { query: string; target_chat: string }
         Returns: number
@@ -4913,6 +4973,10 @@ export type Database = {
           target_message: string
           voice?: Json
         }
+        Returns: undefined
+      }
+      edit_saved_note: {
+        Args: { p_keep?: string[]; p_saved: string; p_text: string }
         Returns: undefined
       }
       end_device_session: { Args: { p_device_id: string }; Returns: undefined }
@@ -5462,11 +5526,13 @@ export type Database = {
           comment_message_id: string
           comment_pop_id: string
           created_at: string
+          edited: boolean
           id: string
           kind: string
           original_at: string
           pinned_at: string
           pop_id: string
+          replies: Json
           seq: number
           source_category: string
           source_chat_id: string
@@ -5507,11 +5573,13 @@ export type Database = {
           comment_message_id: string
           comment_pop_id: string
           created_at: string
+          edited: boolean
           id: string
           kind: string
           original_at: string
           pinned_at: string
           pop_id: string
+          replies: Json
           seq: number
           source_category: string
           source_chat_id: string
@@ -6378,6 +6446,10 @@ export type Database = {
         }
         Returns: string
       }
+      saved_note_attach: {
+        Args: { p_media: Json; p_owner: string; p_saved: string }
+        Returns: undefined
+      }
       saved_owned: {
         Args: { p_ids: string[]; p_owner: string }
         Returns: string[]
@@ -6393,11 +6465,13 @@ export type Database = {
           comment_message_id: string
           comment_pop_id: string
           created_at: string
+          edited: boolean
           id: string
           kind: string
           original_at: string
           pinned_at: string
           pop_id: string
+          replies: Json
           seq: number
           source_category: string
           source_chat_id: string
@@ -6619,6 +6693,16 @@ export type Database = {
           pop: string
           reply_to?: string[]
           target_chat: string
+        }
+        Returns: string
+      }
+      send_saved_note: {
+        Args: {
+          p_client_id: string
+          p_kind?: string
+          p_media?: Json
+          p_reply_to?: string[]
+          p_text?: string
         }
         Returns: string
       }

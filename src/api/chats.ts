@@ -176,7 +176,8 @@ export type SendMessageMedia = {
   width: number | null;
   height: number | null;
   durationMs: number | null;
-  sizeBytes: number;
+  /** `null` — неизвестен: файл заметки уже лежит в Storage, его размер не хранится. */
+  sizeBytes: number | null;
 };
 
 export type SendMessageInput = {
@@ -193,7 +194,7 @@ export type SendVoiceInput = {
   url: string;
   mimeType: string;
   durationMs: number;
-  sizeBytes: number;
+  sizeBytes: number | null;
   waveform: number[] | null;
 };
 
