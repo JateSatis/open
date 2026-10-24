@@ -150,8 +150,10 @@ revoke execute on function public.set_saved_watch_later(uuid[], text) from publi
 grant execute on function public.set_saved_watch_later(uuid[], text) to authenticated;
 
 -- «Вернуть» после свайпа: прежние время добавления и отметка. Это личные
--- данные владельца, поэтому значения — от клиента, но правдоподобные: не из
--- будущего и отметка не раньше добавления.
+-- данные владельца, поэтому значения — от клиента, но правдоподобные: явно
+-- из будущего — отказ. Часы телефона могут спешить или отставать на
+-- секунды, а оптимистичные времена в кеше клиента — по ним: такие времена
+-- поджимаются к серверным (не позже now(), отметка не раньше добавления).
 create function public.restore_saved_watch_later(
   p_saved uuid,
   p_later_at timestamptz,
@@ -164,15 +166,18 @@ set search_path = public
 as $$
 declare
   caller uuid := public.saved_caller();
+  later timestamptz := least(p_later_at, now());
 begin
   perform public.saved_owned(caller, array[p_saved]);
 
-  if p_later_at is null or p_later_at > now()
-    or (p_done_at is not null and (p_done_at < p_later_at or p_done_at > now())) then
+  if p_later_at is null or p_later_at > now() + interval '5 minutes'
+    or p_done_at > now() + interval '5 minutes' then
     raise exception 'bad watch later time' using errcode = '22023';
   end if;
 
-  update public.saved_messages set watch_later_at = p_later_at, watch_done_at = p_done_at
+  update public.saved_messages
+  set watch_later_at = later,
+    watch_done_at = case when p_done_at is not null then greatest(least(p_done_at, now()), later) end
   where id = p_saved;
 end;
 $$;

@@ -188,8 +188,9 @@ begin
     (select watch_later_at = t0 and watch_done_at = t0 + interval '1 hour' from public.saved_messages where id = s1));
   perform pg_temp.check('«Вернуть»: время из будущего отвергается',
     pg_temp.code_of(format($q$select public.restore_saved_watch_later(%L, now() + interval '1 hour', null)$q$, s1)) = '22023');
-  perform pg_temp.check('«Вернуть»: отметка раньше добавления отвергается',
-    pg_temp.code_of(format($q$select public.restore_saved_watch_later(%L, now() - interval '1 hour', now() - interval '2 hour')$q$, s1)) = '22023');
+  perform public.restore_saved_watch_later(s1, now() + interval '3 second', now() - interval '1 minute');
+  perform pg_temp.check('«Вернуть»: спешащие часы клиента поджаты к серверным',
+    (select watch_later_at = now() and watch_done_at = now() from public.saved_messages where id = s1));
   perform public.set_saved_watch_later(array[s1], 'off');
 
   perform public.set_saved_pinned(array[s2], true);
