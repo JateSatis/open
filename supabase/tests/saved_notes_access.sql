@@ -218,6 +218,10 @@ begin
   perform pg_temp.check('правка в пустоту — отказ, заметка как была',
     pg_temp.code_of(format($q$select public.edit_saved_note(%L, '  ')$q$, n_album)) = '23514'
       and (select text from public.saved_messages where id = n_album) = 'только текст');
+  perform pg_temp.check('повтор вложения в списке правки — отказ',
+    pg_temp.code_of(format($q$select public.edit_saved_note(%L, null, array[%L, %L]::uuid[])$q$, n_voice,
+      (select id from public.saved_message_attachments where saved_id = n_voice),
+      (select id from public.saved_message_attachments where saved_id = n_voice))) = '22023');
   perform pg_temp.check('правка без списка оставляет вложения',
     pg_temp.code_of(format($q$select public.edit_saved_note(%L, null)$q$, n_voice)) = 'прошло'
       and (select count(*) from public.saved_message_attachments where saved_id = n_voice) = 1);
@@ -244,6 +248,15 @@ begin
       jsonb_build_array(photo2))) = 'прошло'
       and pg_temp.code_of(format($q$select public.send_voice_message(%L, %L::jsonb)$q$, grp,
       jsonb_build_object('url', b || '/voice/4.m4a', 'mime_type', 'audio/mp4', 'duration_ms', 3000))) = 'прошло');
+
+  -- Удалить неотправленную по ключу: только свою и только заметку.
+  perform pg_temp.act_as(z);
+  perform pg_temp.check('чужой ключ: ничего не удалено',
+    public.delete_saved_note_by_client(k) = 0);
+  perform pg_temp.act_as(b);
+  total := public.delete_saved_note_by_client(k);
+  perform pg_temp.check('по ключу повтора заметка удалена',
+    total = 1 and not exists (select 1 from public.saved_messages where id = n_text));
 
   -- ================================================== К1.4 — удаление цитируемой
   perform public.delete_saved_messages(array[s_copy]);
