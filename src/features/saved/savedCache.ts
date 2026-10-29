@@ -4,7 +4,8 @@
 // бывает и без фильтра, и под фильтром (ключ фильтра — третьим элементом):
 // правка идёт во все. Запись, переставшая подходить под фильтр (сняли тег),
 // из отфильтрованного списка уходит; попавшую в него впервые подбирает
-// перечитывание: подходит ли она, решает база.
+// перечитывание после ответа сервера (`refreshFiltered`): подходит ли она,
+// решает база, а раньше ответа она отдала бы прежнее состояние.
 
 import type { InfiniteData, QueryClient, QueryKey } from '@tanstack/react-query';
 
@@ -41,19 +42,35 @@ function isPending(saved: SavedMessage | null | undefined): boolean {
 function eachList<T>(
   queryClient: QueryClient,
   prefix: QueryKey,
-  update: (data: T, filter: SavedFilterInput | null, key: QueryKey) => T,
+  update: (data: T, filter: SavedFilterInput | null) => T,
 ) {
   for (const [key, data] of queryClient.getQueriesData<T>({ queryKey: prefix })) {
     if (data === undefined) continue;
 
     const filter = key.length > prefix.length ? filterOfKey(key[prefix.length]) : null;
 
-    queryClient.setQueryData<T>(key, update(data, filter, key));
+    queryClient.setQueryData<T>(key, update(data, filter));
   }
 }
 
-function refetchLater(queryClient: QueryClient, key: QueryKey) {
-  void queryClient.invalidateQueries({ queryKey: key, exact: true });
+const FILTERED_PREFIXES: readonly QueryKey[] = [
+  savedMessagesQueryKey,
+  savedWatchLaterQueryKey,
+  savedPinsQueryKey,
+];
+
+/**
+ * Перечитать списки под фильтрами — после того как правка дошла до сервера
+ * или откатилась: новую подходящую запись (и не вернувшуюся откатом) знает
+ * только база.
+ */
+export function refreshFiltered(queryClient: QueryClient) {
+  for (const prefix of FILTERED_PREFIXES) {
+    void queryClient.invalidateQueries({
+      queryKey: prefix,
+      predicate: (query) => query.queryKey.length > prefix.length,
+    });
+  }
 }
 
 /**
@@ -132,7 +149,7 @@ export function patchSaved(
   // догружена дальше), правятся здесь же.
   for (const [, data] of laterQueries) data?.pages.forEach((page) => page.items.forEach(apply));
 
-  eachList<LaterData>(queryClient, savedWatchLaterQueryKey, (data, filter, key) => {
+  eachList<LaterData>(queryClient, savedWatchLaterQueryKey, (data, filter) => {
     const present = new Set<string>();
     const pages = data.pages.map((page) => ({
       ...page,
@@ -150,11 +167,8 @@ export function patchSaved(
 
     if (added.length === 0) return { ...data, pages };
 
-    // Подходит ли под фильтр новая запись вкладки, знает база.
-    if (filter) {
-      refetchLater(queryClient, key);
-      return { ...data, pages };
-    }
+    // Подходит ли под фильтр новая запись вкладки, знает база (`refreshFiltered`).
+    if (filter) return { ...data, pages };
 
     // В первую страницу: место им наведёт порядок вкладки.
     if (pages[0]) pages[0] = { ...pages[0], items: [...added, ...pages[0].items] };
@@ -162,7 +176,7 @@ export function patchSaved(
     return { ...data, pages };
   });
 
-  eachList<SavedPin[]>(queryClient, savedPinsQueryKey, (pins, filter, key) => {
+  eachList<SavedPin[]>(queryClient, savedPinsQueryKey, (pins, filter) => {
     const kept = pins.filter((pin) => {
       if (!after.has(pin.id)) return true;
 
@@ -176,10 +190,7 @@ export function patchSaved(
         saved !== null && saved.pinnedAt !== null && !pins.some((pin) => pin.id === saved.id),
     );
 
-    if (fresh.length > 0 && filter) {
-      refetchLater(queryClient, key);
-      return kept;
-    }
+    if (filter) return kept;
 
     return [...kept, ...fresh.map(pinOf)];
   });
@@ -208,13 +219,9 @@ export function bumpPending(queryClient: QueryClient, delta: number) {
  * если «Все» до неё не догружены («Вернуть» после свайпа).
  */
 export function putInWatchLater(queryClient: QueryClient, saved: SavedMessage) {
-  eachList<LaterData>(queryClient, savedWatchLaterQueryKey, (data, filter, key) => {
-    if (data.pages.some((page) => page.items.some((item) => item.id === saved.id))) return data;
-
-    if (filter) {
-      refetchLater(queryClient, key);
+  eachList<LaterData>(queryClient, savedWatchLaterQueryKey, (data, filter) => {
+    if (filter || data.pages.some((page) => page.items.some((item) => item.id === saved.id)))
       return data;
-    }
 
     const [first, ...rest] = data.pages;
 

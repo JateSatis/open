@@ -1,4 +1,5 @@
-import { useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { useCallback, useEffect } from 'react';
 
 import {
   countSavedMessages,
@@ -24,6 +25,14 @@ export function useSavedSearch(
   jump: (id: string, seq: number) => Promise<boolean>,
 ) {
   const { input, key } = filter;
+  const queryClient = useQueryClient();
+  const open = query !== null;
+
+  // Выдача живёт, пока открыт поиск: удалённое и исправленное за это время
+  // следующий поиск того же слова не покажет по-старому.
+  useEffect(() => {
+    if (!open) queryClient.removeQueries({ queryKey: ['savedSearch'] });
+  }, [open, queryClient]);
 
   return useMatchSearch<SavedMessage, number>({
     query: query ?? '',

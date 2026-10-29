@@ -66,8 +66,30 @@ export function SavedScreen() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState('');
   const position = useSharedValue(0);
-  const composer = useSavedComposer(currentUserId);
-  const { startReply, startEdit } = composer;
+  const notes = useSavedComposer(currentUserId);
+  const closeSearch = useCallback(() => {
+    Keyboard.dismiss();
+    setQuery('');
+    setSearchOpen(false);
+  }, []);
+  // Пока открыт поиск, поле заметок спрятано под плашкой: «Ответить» и
+  // «Изменить» закрывают поиск, иначе плашку ответа или правки не видно.
+  const { startReply: replyInField, startEdit: editInField } = notes;
+  const startReply = useCallback(
+    (...args: Parameters<typeof replyInField>) => {
+      closeSearch();
+      replyInField(...args);
+    },
+    [closeSearch, replyInField],
+  );
+  const startEdit = useCallback(
+    (...args: Parameters<typeof editInField>) => {
+      closeSearch();
+      editInField(...args);
+    },
+    [closeSearch, editInField],
+  );
+  const composer = { ...notes, startReply, startEdit };
   const filter = useSavedFilterInput();
   // «Посмотреть позже» сужается по тому же запросу, с той же паузой.
   const laterQuery = useDebounced(searchOpen ? query.trim() : '', MATCH_SEARCH_DEBOUNCE_MS);
@@ -101,12 +123,6 @@ export function SavedScreen() {
     },
     [select, startEdit],
   );
-  const closeSearch = useCallback(() => {
-    Keyboard.dismiss();
-    setQuery('');
-    setSearchOpen(false);
-  }, []);
-
   const headerRight = useCallback(
     () => (
       <SavedHeaderActions

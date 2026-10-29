@@ -105,6 +105,10 @@ export function useMatchSearch<Hit extends MatchHit, Cursor>({
   const index =
     position.query === debounced && position.firstId === firstId ? position.index : 0;
 
+  // Поиск закрыли или ушли с его списка — выдача пуста, и при возврате список
+  // прыгает к самому свежему совпадению: номер — тоже с него.
+  if (!enabled && position.index !== 0) setPosition({ query: '', index: 0 });
+
   const goTo = useCallback(
     (hit: Hit | undefined, at: number) => {
       if (!hit) return;

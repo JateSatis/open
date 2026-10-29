@@ -1,8 +1,10 @@
 import { SymbolView } from 'expo-symbols';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, View } from 'react-native';
+
+import { styles } from './styles';
 
 import { useTheme } from '@/hooks/use-theme';
-import { InfoPageSizes, Radii, Sizes, Spacing } from '@/theme';
+import { InfoPageSizes, Spacing } from '@/theme';
 
 export type SavedHeaderActionsProps = {
   /** Есть фильтры — значок отмечен точкой. */
@@ -56,20 +58,3 @@ export function SavedHeaderActions({ filtered, onSearch, onFilters }: SavedHeade
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.four,
-  },
-  dot: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    width: Sizes.savedFilterDot,
-    height: Sizes.savedFilterDot,
-    borderRadius: Radii.full,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-});

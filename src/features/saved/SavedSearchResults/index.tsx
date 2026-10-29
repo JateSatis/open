@@ -1,5 +1,7 @@
 import { FlatList, Pressable, StyleSheet, View } from 'react-native';
 
+import { styles } from './styles';
+
 import type { ChatSummary } from '@/api/chats';
 import type { SavedMessage } from '@/api/saved';
 import { Text } from '@/components/Text';
@@ -10,7 +12,7 @@ import { savedSearchText } from '@/features/saved/savedSearchText';
 import { HighlightedText } from '@/features/search/HighlightedText';
 import { findMatches, normalizeSearch, snippetAround } from '@/features/search/searchText';
 import { useTheme } from '@/hooks/use-theme';
-import { Spacing } from '@/theme';
+
 
 export type SavedSearchResultsProps = {
   search: MatchSearch<SavedMessage>;
@@ -91,23 +93,3 @@ export function SavedSearchResults({
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  row: {
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
-    gap: Spacing.half,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.two,
-  },
-  source: {
-    flex: 1,
-  },
-  empty: {
-    alignItems: 'center',
-    padding: Spacing.four,
-  },
-});

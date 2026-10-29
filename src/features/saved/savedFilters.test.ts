@@ -8,7 +8,7 @@ import {
   savedSummaryQueryKey,
   savedWatchLaterKey,
 } from '@/features/saved/keys';
-import { patchSaved, putInWatchLater } from '@/features/saved/savedCache';
+import { patchSaved, putInWatchLater, refreshFiltered } from '@/features/saved/savedCache';
 import {
   NO_FILTERS,
   dateChipLabel,
@@ -188,20 +188,34 @@ describe('patchSaved under filters', () => {
     expect(queryClient.getQueryData(savedSummaryQueryKey)).toEqual({ watchLaterPending: 1 });
   });
 
-  it('a record new to a filtered list is left to the server, the plain list takes it at once', () => {
+  it('a record new to a filtered list waits for the server, the plain list takes it at once', () => {
     const queryClient = client();
     const invalidate = jest.spyOn(queryClient, 'invalidateQueries');
 
     patchSaved(queryClient, ['b'], (item) => ({ ...item, ...laterTimes }));
-
-    expect(ids(queryClient, savedWatchLaterKey(null))).toEqual(['b', 'a']);
-    expect(ids(queryClient, savedWatchLaterKey(workKey))).toEqual(['a']);
-    expect(invalidate).toHaveBeenCalledWith({ queryKey: savedWatchLaterKey(workKey), exact: true });
-
-    invalidate.mockClear();
     putInWatchLater(queryClient, saved('c', 3, laterTimes));
 
-    expect(ids(queryClient, savedWatchLaterKey(null))?.[0]).toBe('c');
-    expect(invalidate).toHaveBeenCalledWith({ queryKey: savedWatchLaterKey(workKey), exact: true });
+    expect(ids(queryClient, savedWatchLaterKey(null))).toEqual(['c', 'b', 'a']);
+    expect(ids(queryClient, savedWatchLaterKey(workKey))).toEqual(['a']);
+    // Раньше ответа сервера перечитывание отдало бы прежнее состояние.
+    expect(invalidate).not.toHaveBeenCalled();
+
+    refreshFiltered(queryClient);
+
+    const refreshed = invalidate.mock.calls.flatMap(([filters]) =>
+      queryClient
+        .getQueryCache()
+        .findAll(filters)
+        .map((query) => JSON.stringify(query.queryKey)),
+    );
+
+    expect(refreshed).toEqual(
+      expect.arrayContaining([
+        JSON.stringify(savedMessagesKey(workKey)),
+        JSON.stringify(savedWatchLaterKey(workKey)),
+        JSON.stringify(savedPinsKey(workKey)),
+      ]),
+    );
+    expect(refreshed).not.toContain(JSON.stringify(savedWatchLaterKey(null)));
   });
 });

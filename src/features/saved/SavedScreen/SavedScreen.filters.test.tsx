@@ -206,7 +206,8 @@ describe('SavedScreen — фильтры', () => {
     expect(await view.findByTestId('saved-filter-chip-Работа')).toBeTruthy();
     await waitFor(() => expect(view.queryByText('про ёжика')).toBeNull());
 
-    await fireEvent.press(view.getByTestId('saved-bubble-tag-Работа'));
+    // Список под новым фильтром пришёл — запись с тегом снова на экране.
+    await fireEvent.press(await view.findByTestId('saved-bubble-tag-Работа'));
 
     expect(getSavedFilters().tags).toEqual(['tag-w']);
   });

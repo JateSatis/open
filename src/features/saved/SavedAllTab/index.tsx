@@ -100,6 +100,9 @@ export function SavedAllTab({
   const matches = useSavedSearch(search, active, filter, jump.jump);
   const [resultsShown, setResultsShown] = useState(false);
   const searching = search !== null;
+
+  // Поиск закрыли — следующий откроется с переписки, а не со списка найденного.
+  if (!searching && resultsShown) setResultsShown(false);
   const showResults = searching && resultsShown;
   const filterJumps = useFilterJumps({
     filterKey: filter.key,
