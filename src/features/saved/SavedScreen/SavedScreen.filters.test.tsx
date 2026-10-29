@@ -1,6 +1,6 @@
 import type { Session as SupabaseSession } from '@supabase/supabase-js';
 import { act, fireEvent, waitFor } from '@testing-library/react-native';
-import { useState, type ReactElement } from 'react';
+import { useLayoutEffect, useState, type ReactElement } from 'react';
 
 import { SavedScreen } from './index';
 
@@ -30,7 +30,10 @@ let mockSetHeader: ((render: (() => ReactElement) | undefined) => void) | undefi
 function HeaderHost() {
   const [headerRight, setHeaderRight] = useState<(() => ReactElement) | undefined>();
 
-  mockSetHeader = (next) => setHeaderRight(() => next);
+  // Раньше эффектов экрана: соседи коммитятся по порядку.
+  useLayoutEffect(() => {
+    mockSetHeader = (next) => setHeaderRight(() => next);
+  }, []);
 
   return headerRight ? headerRight() : null;
 }
