@@ -1,0 +1,125 @@
+appId: com.openger.app
+name: «Сохранённые» — фильтры и чипы, тап по тегу, поиск на «Все» и на «Посмотреть позже»
+tags:
+  - saved
+  - search
+---
+- runFlow: subflows/open-app.yaml
+- tapOn:
+    id: "saved-entry"
+- assertVisible:
+    id: "saved-screen"
+# Своя заметка — данные сценария. Метка из одних букв: клавиатура realme портит
+# цифры и дефисы в тексте Maestro; по метке её убирает e2e-reset.sql.
+- evalScript: ${output.mark = 'qxsv' + Date.now().toString(36).replace(/[0-9]/g, function (d) { return 'abcdefghij'[Number(d)]; })}
+- tapOn: "Заметка"
+- inputText: ${output.mark}
+- tapOn: "Отправить"
+- assertVisible: ${output.mark}
+- hideKeyboard
+# В «Посмотреть позже» — для поиска на второй вкладке.
+- longPressOn: ${output.mark}
+- tapOn: "Посмотреть позже"
+
+# Лист фильтров: четыре группы, «Файлы» неактивен.
+- tapOn:
+    id: "saved-filters-open"
+- assertVisible: "Теги"
+- assertVisible: "Источники"
+- assertVisible: "Даты"
+- assertVisible: "Тип сообщения"
+- assertVisible:
+    id: "saved-filter-type-files"
+    enabled: false
+- tapOn:
+    id: "saved-filter-category-note"
+    retryTapIfNoChange: false
+# Тап мимо листа закрывает его; под переключателем — чип источника.
+- tapOn:
+    point: "50%,15%"
+- assertNotVisible:
+    id: "saved-filter-sheet"
+- assertVisible:
+    id: "saved-filter-chip-Мои заметки"
+- assertVisible: ${output.mark}
+
+# «Чужие чаты» вдобавок — «любой из»: заметка на месте; «Голосовое» — «и»: её нет.
+- tapOn:
+    id: "saved-filters-open"
+- tapOn:
+    id: "saved-filter-type-voice"
+    retryTapIfNoChange: false
+- tapOn:
+    point: "50%,15%"
+- assertVisible:
+    id: "saved-filter-chip-Голосовое"
+- assertNotVisible: ${output.mark}
+- tapOn:
+    id: "saved-filter-chip-Голосовое"
+- assertVisible: ${output.mark}
+
+# Те же фильтры — на «Посмотреть позже».
+- tapOn:
+    id: "segment-1"
+- assertVisible:
+    id: "saved-filter-chip-Мои заметки"
+- assertVisible: ${output.mark}
+- tapOn:
+    id: "segment-0"
+- tapOn:
+    id: "saved-filters-reset"
+- assertNotVisible:
+    id: "saved-filter-bar"
+
+# Поиск на «Все»: поле вместо шапки, плашка вместо поля заметок, «1 из 1», «Списком».
+- tapOn:
+    id: "saved-search-open"
+- assertVisible:
+    id: "chat-search-input"
+- inputText: ${output.mark}
+- assertVisible:
+    id: "chat-search-counter"
+    text: "1 из 1"
+- assertNotVisible: "Заметка"
+- tapOn:
+    id: "chat-search-list"
+- assertVisible:
+    id: "saved-search-result"
+- tapOn:
+    id: "saved-search-result"
+- assertNotVisible:
+    id: "saved-search-results"
+
+# Тот же запрос на «Посмотреть позже» сужает список до строки с совпадением.
+- tapOn:
+    id: "segment-1"
+- assertVisible:
+    id: "watch-later-list"
+- assertVisible: ${output.mark}
+- tapOn:
+    id: "chat-search-input-clear"
+- tapOn:
+    id: "chat-search-input"
+- inputText: "qxzzqq"
+- assertVisible:
+    id: "watch-later-nothing-found"
+- tapOn:
+    id: "segment-0"
+- assertVisible:
+    id: "chat-search-counter"
+    text: "Ничего не найдено"
+# «Назад» в поле — шапка и поле заметок вернулись.
+- tapOn:
+    id: "chat-search-input-close"
+- assertVisible:
+    id: "saved-search-open"
+- assertVisible: "Заметка"
+
+# Уборка: удалить заметку с вопросом.
+- longPressOn: ${output.mark}
+- tapOn: "Удалить"
+- assertVisible: "Удалить заметку?"
+- assertVisible:
+    id: "confirm-dialog-actions"
+- tapOn: "Удалить"
+- assertNotVisible: ${output.mark}

@@ -1,0 +1,61 @@
+appId: com.openger.app
+name: «Посмотреть позже» — из меню, раскрытие, отметка чекбоксом, свайп и «Вернуть»
+tags:
+  - saved
+---
+- runFlow: subflows/open-app.yaml
+- tapOn:
+    id: "saved-entry"
+- assertVisible:
+    id: "saved-screen"
+# Метка из одних букв: клавиатура realme портит цифры и дефисы; убирает e2e-reset.sql.
+- evalScript: ${output.mark = 'qxsvw' + Date.now().toString(36).replace(/[0-9]/g, function (d) { return 'abcdefghij'[Number(d)]; })}
+- tapOn: "Заметка"
+- inputText: ${output.mark}
+- tapOn: "Отправить"
+- assertVisible: ${output.mark}
+- hideKeyboard
+
+# Из меню — кружок на пузыре.
+- longPressOn: ${output.mark}
+- tapOn: "Посмотреть позже"
+- assertVisible:
+    id: "saved-watch-later"
+    below: ${output.mark}
+
+# На вкладке — строкой сверху (самая свежая из активных).
+- tapOn:
+    id: "segment-1"
+- assertVisible:
+    id: "watch-later-list"
+- tapOn: ${output.mark}
+# Раскрытая строка — с датой написания и пузырём.
+- assertVisible: "написано .*"
+- tapOn: ${output.mark}
+# Отметка: строка — к выполненным, бледной.
+- tapOn:
+    id: "watch-later-check-.*"
+    index: 0
+    retryTapIfNoChange: false
+- assertVisible:
+    id: "watch-later-check-.*"
+    checked: true
+    rightOf: ${output.mark}
+# Свайп влево — убрана из вкладки, «Вернуть» — на месте.
+- swipe:
+    from:
+      text: ${output.mark}
+    direction: LEFT
+- assertVisible: "Вернуть"
+- tapOn: "Вернуть"
+- assertVisible: ${output.mark}
+
+# Уборка: удалить заметку на «Все».
+- tapOn:
+    id: "segment-0"
+- longPressOn: ${output.mark}
+- tapOn: "Удалить"
+- assertVisible:
+    id: "confirm-dialog-actions"
+- tapOn: "Удалить"
+- assertNotVisible: ${output.mark}
