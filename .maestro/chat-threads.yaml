@@ -3,9 +3,8 @@ name: «Треды» — переключатель, ответ уходит в 
 tags:
   - chats
 env:
-  # Группа на трёх участников с ответами (засев — в отчёте задачи «Треды в чатах»).
+  # Группа на трёх участников («Треды» есть только в группе от трёх).
   CHAT: Threads test
-  ROOT: Последнее обычное сообщение
 ---
 - runFlow: subflows/open-app.yaml
 - runFlow: subflows/open-chat.yaml
@@ -14,13 +13,24 @@ env:
     visible:
       id: "chat-threads-toggle"
     timeout: 30000
+
+# Своё исходное сообщение — внизу переписки, от засева не зависит.
+- evalScript: ${output.root = 'maestro-' + Date.now() + '-root'}
+- tapOn: "Сообщение"
+- inputText: ${output.root}
+- tapOn: "Отправить"
+- assertVisible: ${output.root}
+- hideKeyboard
+
 - tapOn:
     id: "chat-threads-toggle"
-# Лента «Тредов» встала: ответа на старое в ней нет, ответ на островок — есть.
+# Лента «Тредов» встала: кнопка теперь ведёт в обычный вид.
 - extendedWaitUntil:
-    notVisible: "Свежий ответ на старое"
+    visible:
+      id: "chat-threads-toggle"
+      text: "Обычный вид"
     timeout: 20000
-- assertVisible: "Ответ только на островок"
+- assertVisible: ${output.root}
 - waitForAnimationToEnd:
     timeout: 3000
 
@@ -29,7 +39,7 @@ env:
 # Тот же текст есть и в превью списка чатов под экраном — искать в переписке.
 - swipe:
     from:
-      text: ${ROOT}
+      text: ${output.root}
       childOf:
         id: "messages-list"
     direction: LEFT
@@ -54,7 +64,27 @@ env:
 - tapOn: "Отправить"
 - assertVisible: ${output.second}
 
-# «Назад» закрывает клавиатуру и шторку; в обычном виде оба ответа — в переписке.
+# «Ответить» на ответе в шторке — ответ ему: новое сообщение цитирует его, а не
+# исходное. (Свайп в шторке тот же, что в переписке; жест Maestro до порога
+# ответа в окне шторки не дотягивает — он проверен руками.)
+- evalScript: ${output.third = 'maestro-' + Date.now() + '-nested'}
+- hideKeyboard
+- longPressOn:
+    text: ${output.second}
+    childOf:
+      id: "chat-thread-list"
+- tapOn: "Ответить"
+- assertVisible:
+    id: "composer-plate"
+- tapOn: "Ответить в треде"
+- inputText: ${output.third}
+- tapOn: "Отправить"
+- assertVisible: ${output.third}
+- assertVisible:
+    id: "reply-quote"
+    text: ".*${output.second}.*"
+
+# «Назад» закрывает клавиатуру и шторку; в обычном виде ответы — в переписке.
 - hideKeyboard
 - back
 - assertNotVisible:
@@ -64,6 +94,13 @@ env:
 - assertVisible: ${output.second}
 
 # Уборка — свои ответы удаляются.
+- longPressOn:
+    text: ${output.third}
+    childOf:
+      id: "messages-list"
+- tapOn: "Удалить"
+- assertVisible: "Удалить сообщение?"
+- tapOn: "Удалить"
 - longPressOn:
     text: ${output.second}
     childOf:
@@ -79,3 +116,11 @@ env:
 - assertVisible: "Удалить сообщение?"
 - tapOn: "Удалить"
 - assertNotVisible: ${output.reply}
+- longPressOn:
+    text: ${output.root}
+    childOf:
+      id: "messages-list"
+- tapOn: "Удалить"
+- assertVisible: "Удалить сообщение?"
+- tapOn: "Удалить"
+- assertNotVisible: ${output.root}

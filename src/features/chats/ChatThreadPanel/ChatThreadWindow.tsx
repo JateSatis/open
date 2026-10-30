@@ -57,6 +57,8 @@ export type ChatThreadWindowProps = {
 
 const rowKey = (row: ChatThreadPaneRow) => row.key;
 const NO_ROOTS: string[] = [];
+/** Столько ждать `onShow`, прежде чем начать выезд самим. */
+const SHOW_FALLBACK_MS = 300;
 
 /**
  * Шторка треда: справа, на 90% ширины, слева затемнённая переписка. Сверху
@@ -91,6 +93,15 @@ export function ChatThreadWindow({ kit, open }: ChatThreadWindowProps) {
     close,
   });
   const { selection, menu, edit, draft } = actions;
+
+  // Выезд начинается по `onShow` окна. На Android оно приходит не всегда —
+  // особенно если окно открыли посреди перерисовки списка: шторка осталась бы
+  // за краем, а невидимое окно ловило бы касания. Запасной старт — по таймеру.
+  useEffect(() => {
+    const timer = setTimeout(markShown, SHOW_FALLBACK_MS);
+
+    return () => clearTimeout(timer);
+  }, [markShown]);
 
   // Поле чата под шторкой теряет фокус, клавиатура принадлежит шторке.
   useEffect(() => {
