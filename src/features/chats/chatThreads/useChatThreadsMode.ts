@@ -135,6 +135,13 @@ export function useChatThreadsMode({
     [jump, jumpAfterSwitch, rows, view],
   );
 
+  /** «Показать в чате» из шторки: обычный вид, прокрутка и подсветка. */
+  const showInChat = useCallback(
+    (rowKey: string, seq: number) =>
+      void (view === 'all' ? jump(rowKey, seq) : jumpAfterSwitch('all', rowKey, seq, {})),
+    [jump, jumpAfterSwitch, view],
+  );
+
   /** Опорная строка и её высота: доля от низа переписки. */
   const anchorPlace = useCallback(
     async (rowKey: string): Promise<number | undefined> => {
@@ -208,7 +215,7 @@ export function useChatThreadsMode({
     void jumpAfterSwitch(next, target.rowKey, target.seq, { flash: false, viewPosition });
   }, [anchorOf, anchorPlace, jumpAfterSwitch, rows, setView, threadsTargetOf, view]);
 
-  return { toggle, jumpAnywhere, trackViewable };
+  return { toggle, jumpAnywhere, showInChat, trackViewable };
 }
 
 /** «Треды» → обычный: та же строка; у облачка островка — по номеру островка. */

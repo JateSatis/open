@@ -1,0 +1,81 @@
+appId: com.openger.app
+name: «Треды» — переключатель, ответ уходит в тред, шторка и ответ из неё
+tags:
+  - chats
+env:
+  # Группа на трёх участников с ответами (засев — в отчёте задачи «Треды в чатах»).
+  CHAT: Threads test
+  ROOT: Последнее обычное сообщение
+---
+- runFlow: subflows/open-app.yaml
+- runFlow: subflows/open-chat.yaml
+# Переключатель появляется, когда загружен состав группы.
+- extendedWaitUntil:
+    visible:
+      id: "chat-threads-toggle"
+    timeout: 30000
+- tapOn:
+    id: "chat-threads-toggle"
+# Лента «Тредов» встала: ответа на старое в ней нет, ответ на островок — есть.
+- extendedWaitUntil:
+    notVisible: "Свежий ответ на старое"
+    timeout: 20000
+- assertVisible: "Ответ только на островок"
+- waitForAnimationToEnd:
+    timeout: 3000
+
+# Ответ свайпом в «Тредах»: в ленте его нет, плашка у исходного, всплывашка ведёт в тред.
+- evalScript: ${output.reply = 'maestro-' + Date.now()}
+# Тот же текст есть и в превью списка чатов под экраном — искать в переписке.
+- swipe:
+    from:
+      text: ${ROOT}
+      childOf:
+        id: "messages-list"
+    direction: LEFT
+- assertVisible:
+    id: "composer-plate"
+- inputText: ${output.reply}
+- tapOn: "Отправить"
+- assertVisible: "Ответ ушёл в тред"
+- assertNotVisible: ${output.reply}
+- assertVisible:
+    id: "chat-thread-plate-last"
+    text: ".*${output.reply}"
+- tapOn: "Открыть"
+- assertVisible:
+    id: "chat-thread-root"
+- assertVisible: ${output.reply}
+
+# Ответ из поля шторки — тоже в тред, сразу внизу шторки.
+- evalScript: ${output.second = 'maestro-' + Date.now() + '-pane'}
+- tapOn: "Ответить в треде"
+- inputText: ${output.second}
+- tapOn: "Отправить"
+- assertVisible: ${output.second}
+
+# «Назад» закрывает клавиатуру и шторку; в обычном виде оба ответа — в переписке.
+- hideKeyboard
+- back
+- assertNotVisible:
+    id: "chat-thread-root"
+- tapOn:
+    id: "chat-threads-toggle"
+- assertVisible: ${output.second}
+
+# Уборка — свои ответы удаляются.
+- longPressOn:
+    text: ${output.second}
+    childOf:
+      id: "messages-list"
+- tapOn: "Удалить"
+- assertVisible: "Удалить сообщение?"
+- tapOn: "Удалить"
+- longPressOn:
+    text: ${output.reply}
+    childOf:
+      id: "messages-list"
+- tapOn: "Удалить"
+- assertVisible: "Удалить сообщение?"
+- tapOn: "Удалить"
+- assertNotVisible: ${output.reply}

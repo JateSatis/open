@@ -26,6 +26,17 @@ const sheetOpen = makeMutable(false);
  * Ему клавиатура и возвращается, когда шит закрыт.
  */
 const base = makeMutable<'chat' | 'comments'>('chat');
+/**
+ * Окна над чатом, чьё поле владеет клавиатурой как поле комментариев:
+ * панель комментариев и шторка треда. Шторка остаётся под закрывшейся
+ * панелью — клавиатура возвращается её полю, а не чату.
+ */
+const windows = { comments: false, chatThread: false };
+
+function settleBase() {
+  base.value = windows.comments || windows.chatThread ? 'comments' : 'chat';
+  releaseIfHidden();
+}
 
 /**
  * Касание поля в шите. Приходит раньше фокуса, а значит и раньше первого
@@ -74,8 +85,14 @@ export function setSheetKeyboardWindowOpen(open: boolean) {
 
 /** Панель комментариев открылась или закрылась. */
 export function setCommentsKeyboardWindowOpen(open: boolean) {
-  base.value = open ? 'comments' : 'chat';
-  releaseIfHidden();
+  windows.comments = open;
+  settleBase();
+}
+
+/** Шторка треда открылась или закрылась: её поле — тоже «комментарии». */
+export function setChatThreadKeyboardWindowOpen(open: boolean) {
+  windows.chatThread = open;
+  settleBase();
 }
 
 /** Чьё поле сейчас владеет клавиатурой — и для ворклетов панели эмодзи. */

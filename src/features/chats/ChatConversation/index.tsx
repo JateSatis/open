@@ -31,7 +31,12 @@ import { useMarkChannelSectionRead } from '@/features/channels/useMarkChannelSec
 import { subscribersLabel } from '@/features/channels/subscriberText';
 import { ChatFooter, modePlate } from '@/features/chats/ChatFooter';
 import { ChatMenu } from '@/features/chats/ChatMenu';
+import { ChatThreadPanel, type ChatThreadPanelKit } from '@/features/chats/ChatThreadPanel';
 import { ChatThreadsToggle } from '@/features/chats/ChatThreadsToggle';
+import {
+  closeChatThread,
+  openedChatThread,
+} from '@/features/chats/chatThreads/chatThreadPanelStore';
 import { useChatThreadPlates } from '@/features/chats/chatThreads/useChatThreadPlates';
 import { useChatThreadReplies } from '@/features/chats/chatThreads/useChatThreadReplies';
 import {
@@ -871,6 +876,73 @@ export function ChatConversation({
     [advancePin, jumpTo],
   );
 
+  // Шторка треда — те же облачка, меню и отправка, что в переписке.
+  const { discard, deleteMessages, removeFromIsland, saveEdit } = chatMessages;
+  const chatThreadKit = useMemo(
+    (): ChatThreadPanelKit => ({
+      chatId,
+      sourceChat: thisChat,
+      currentUserId,
+      isMember,
+      me: me ? { id: me.userId, name: me.name ?? 'Я', avatarUrl: me.avatarUrl } : null,
+      peopleById,
+      showAvatars: !isPosts && !ownDirect,
+      showAuthors: !ownDirect,
+      navigation,
+      reactions,
+      pins,
+      authorName,
+      originalOf,
+      openPerson,
+      openForwardedComment,
+      send: sendToChat,
+      sendVoice: sendVoiceToChat,
+      retry,
+      discard,
+      saveEdit,
+      deleteMessages,
+      removeFromIsland,
+      notifyTyping,
+      notifyRecordingVoice,
+      showInChat: threadsMode.showInChat,
+    }),
+    [
+      authorName,
+      chatId,
+      currentUserId,
+      deleteMessages,
+      discard,
+      isMember,
+      isPosts,
+      me,
+      navigation,
+      notifyRecordingVoice,
+      notifyTyping,
+      openForwardedComment,
+      openPerson,
+      originalOf,
+      ownDirect,
+      peopleById,
+      pins,
+      reactions,
+      removeFromIsland,
+      retry,
+      saveEdit,
+      sendToChat,
+      sendVoiceToChat,
+      thisChat,
+      threadsMode.showInChat,
+    ],
+  );
+
+  // Ушли из чата — его шторка треда закрывается вместе с ним.
+  useEffect(
+    () => () => {
+      if (openedChatThread()?.chatId === chatId) closeChatThread();
+    },
+    [chatId],
+  );
+
   const typingLabel = activityLabel(
     activities,
     (userId) => participantsById.get(userId)?.displayName ?? 'Кто-то',
@@ -1199,6 +1271,8 @@ export function ChatConversation({
         onClose={menu.close}
         journalSubject={menuContent ? { type: 'message', id: menuContent.id } : null}
       />
+
+      {isFocused ? <ChatThreadPanel kit={chatThreadKit} /> : null}
 
       <CommentsPanel onOpenPerson={openPerson} hostChatId={chatId} />
     </View>
