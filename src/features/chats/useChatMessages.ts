@@ -20,8 +20,12 @@ import {
   removeIslandItems,
   removeMessages,
   restoreMessages,
+  updateChatHistories,
   updateHistory,
+  type HistoryView,
 } from '@/features/chats/messages/historyCache';
+import { isChatThreadReply } from '@/features/chats/chatThreads/replies';
+import { keepDeletedChatThreadRoots } from '@/features/chats/chatThreads/sync';
 import { saveEdit as saveEditOnServer } from '@/features/chats/messages/editing';
 import { outboxMessages, useOutboxMessages } from '@/features/chats/messages/outbox';
 import { usePendingEditsOf } from '@/features/chats/messages/pendingEdits';
@@ -101,11 +105,24 @@ export type ChatMessagesState = {
  * - Realtime и «печатает» — `useChatChannel`;
  * - отправка — `messages/delivery`, вне компонентов, чтобы не обрываться с экраном.
  */
-export function useChatMessages(chatId: string, currentUserId: string | null): ChatMessagesState {
+export function useChatMessages(
+  chatId: string,
+  currentUserId: string | null,
+  view: HistoryView = 'all',
+): ChatMessagesState {
   const queryClient = useQueryClient();
   const connection = useConnectionStatus();
-  const history = useChatHistory(chatId);
-  const outbox = useOutboxMessages(chatId);
+  // Переписка загружена всегда: по ней дочитываются сигналы, и в обычный вид
+  // возвращаются без ожидания. «Треды» — своей историей, пока они открыты.
+  const allHistory = useChatHistory(chatId);
+  const threadsHistory = useChatHistory(chatId, 'chat-threads', view === 'chat-threads');
+  const history = view === 'all' ? allHistory : threadsHistory;
+  const allOutbox = useOutboxMessages(chatId);
+  // Свой неотправленный ответ в «Тредах» в ленте не стоит: он уходит в тред.
+  const outbox = useMemo(
+    () => (view === 'all' ? allOutbox : allOutbox.filter((message) => !isChatThreadReply(message))),
+    [allOutbox, view],
+  );
   const pendingEdits = usePendingEditsOf(chatId);
   const pendingReactions = usePendingReactionMap();
   const { activities, notifyTyping, notifyRecordingVoice } = useChatChannel(chatId, currentUserId);
@@ -232,14 +249,27 @@ export function useChatMessages(chatId: string, currentUserId: string | null): C
   const deleteMessages = useCallback(
     async (messageIds: string[]) => {
       const ids = new Set(messageIds);
-      const removed = readHistory(queryClient, chatId)?.items.filter((m) => ids.has(m.id)) ?? [];
+      const removedFrom = (from: HistoryView) =>
+        readHistory(queryClient, chatId, from)?.items.filter((m) => ids.has(m.id)) ?? [];
+      const removed = removedFrom('all');
+      const removedThreads = removedFrom('chat-threads');
 
-      updateHistory(queryClient, chatId, (current) => removeMessages(current, ids));
+      // Из всех историй чата: переписки, «Тредов» и шторок тредов.
+      updateChatHistories(queryClient, chatId, (current) => removeMessages(current, ids));
+      keepDeletedChatThreadRoots(queryClient, chatId, removedThreads);
 
       try {
         await deleteOnServer(messageIds);
       } catch (cause) {
         updateHistory(queryClient, chatId, (current) => restoreMessages(current, removed));
+        updateHistory(
+          queryClient,
+          chatId,
+          (current) => restoreMessages(current, removedThreads),
+          'chat-threads',
+        );
+        // Шторки треда вернут своё дочитыванием.
+        void queryClient.invalidateQueries({ queryKey: messagesQueryKey(chatId) });
         throw cause;
       }
 

@@ -13,6 +13,7 @@ import {
   type ChatTopicListener,
   type TypingAudience,
 } from '@/api/chatTopics';
+import { MESSAGE_PAGE_SIZE, type MessagePage } from '@/api/messagePage';
 import { messagesSelect, toMessage, type Message } from '@/api/messageRows';
 import { publishPop, type PublishPopInput } from '@/api/pops';
 import { listChatSubscriptions, type Subscription } from '@/api/subscriptions';
@@ -54,8 +55,18 @@ export {
 } from '@/api/messageRows';
 export type { ChatActivity, TypingAudience } from '@/api/chatTopics';
 export { ChatGoneError } from '@/api/chatGone';
-
-export const MESSAGE_PAGE_SIZE = 30;
+export { MESSAGE_PAGE_SIZE, type MessagePage } from '@/api/messagePage';
+export {
+  CHAT_THREAD_PAGE_SIZE,
+  deletedChatThreadRoot,
+  listChatThread,
+  listChatThreadFeed,
+  listChatThreadFeedSince,
+  listChatThreadSummaries,
+  type ChatThreadPage,
+  type ChatThreadPerson,
+  type ChatThreadSummary,
+} from '@/api/chatThreads';
 
 /** `channel` — чат постов канала: пишут в него только те, кого назначил канал. */
 export type ChatKind = 'direct' | 'group' | 'channel';
@@ -631,8 +642,6 @@ export async function markChatRead(chatId: string): Promise<void> {
   if (error) throw error;
 }
 
-/** Страница переписки с курсором — номером самого старого сообщения на ней. */
-export type MessagePage = { items: Message[]; nextCursor: number | null };
 
 /**
  * One page of a chat, newest first. There is deliberately no "load the whole

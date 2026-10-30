@@ -1,15 +1,15 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useRef, useState } from 'react';
 
-import { listMessages } from '@/api/chats';
 import {
   mergeMessages,
   messagesQueryKey,
   readHistory,
   updateHistory,
   type ChatHistory,
+  type HistoryView,
 } from '@/features/chats/messages/historyCache';
-import { loadHistory } from '@/features/chats/messages/sync';
+import { listHistoryPage, loadHistory } from '@/features/chats/messages/sync';
 import type { ChatMessage } from '@/features/chats/messages/types';
 import { loadStateOf } from '@/lib/loadState';
 import { describeLoadError } from '@/lib/network';
@@ -55,14 +55,19 @@ function reached(history: ChatHistory | undefined, seq: number): boolean {
  * История переписки в кеше запросов. Между запросами свежей её держит
  * Realtime (см. `useChatChannel`).
  */
-export function useChatHistory(chatId: string): ChatHistoryState {
+export function useChatHistory(
+  chatId: string,
+  view: HistoryView = 'all',
+  enabled = true,
+): ChatHistoryState {
   const queryClient = useQueryClient();
   const query = useQuery({
-    queryKey: messagesQueryKey(chatId),
+    queryKey: messagesQueryKey(chatId, view),
     // Повторный запрос — дочитывание, а не перезагрузка (см. `loadHistory`):
     // поэтому история спокойно перезапрашивается при каждом входе в чат и
     // после обрыва связи.
-    queryFn: () => loadHistory(queryClient, chatId),
+    queryFn: () => loadHistory(queryClient, chatId, view),
+    enabled,
     // Возвращение связи и так перезапрашивает всё через `useConnectionWatch`.
     refetchOnReconnect: false,
   });
@@ -76,18 +81,23 @@ export function useChatHistory(chatId: string): ChatHistoryState {
   const fetchOlder = useCallback((): Promise<void> => {
     if (loadingMoreRef.current) return loadingMoreRef.current;
 
-    const cursor = readHistory(queryClient, chatId)?.nextCursor ?? null;
+    const cursor = readHistory(queryClient, chatId, view)?.nextCursor ?? null;
 
     if (cursor === null) return Promise.resolve();
 
     setIsLoadingMore(true);
 
-    const loading = listMessages(chatId, { cursor })
+    const loading = listHistoryPage(chatId, view, cursor)
       .then((page) => {
-        updateHistory(queryClient, chatId, (history) => ({
-          ...mergeMessages(history, page.items, 'older'),
-          nextCursor: page.nextCursor,
-        }));
+        updateHistory(
+          queryClient,
+          chatId,
+          (history) => ({
+            ...mergeMessages(history, page.items, 'older'),
+            nextCursor: page.nextCursor,
+          }),
+          view,
+        );
         setMoreError(null);
         stalledRef.current = false;
       })
@@ -103,7 +113,7 @@ export function useChatHistory(chatId: string): ChatHistoryState {
     loadingMoreRef.current = loading;
 
     return loading;
-  }, [chatId, queryClient]);
+  }, [chatId, queryClient, view]);
 
   const loadMore = useCallback(
     (): Promise<void> => (stalledRef.current ? Promise.resolve() : fetchOlder()),
@@ -123,7 +133,7 @@ export function useChatHistory(chatId: string): ChatHistoryState {
   const loadUntil = useCallback(
     async (seq: number): Promise<boolean> => {
       for (;;) {
-        const history = readHistory(queryClient, chatId);
+        const history = readHistory(queryClient, chatId, view);
 
         if (!history) return false;
         if (reached(history, seq)) return true;
@@ -133,10 +143,10 @@ export function useChatHistory(chatId: string): ChatHistoryState {
         await fetchOlder();
 
         // Страница не пришла (нет связи, сбой) — стоять на месте в цикле незачем.
-        if (readHistory(queryClient, chatId)?.nextCursor === history.nextCursor) return false;
+        if (readHistory(queryClient, chatId, view)?.nextCursor === history.nextCursor) return false;
       }
     },
-    [chatId, fetchOlder, queryClient],
+    [chatId, fetchOlder, queryClient, view],
   );
 
   return {

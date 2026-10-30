@@ -297,6 +297,16 @@ export type Message = {
    * без меню и откликов.
    */
   hidden?: boolean;
+  /**
+   * Корни тредов, в которые входит этот ответ (вид «Треды»); `null` или нет —
+   * не ответ: нет цитат на сообщения этого чата.
+   */
+  chatThreadRootIds?: string[] | null;
+  /**
+   * Заглушка удалённого исходного сообщения с живыми ответами — в ленте
+   * «Тредов»: облачко «Сообщение удалено» с плашкой треда.
+   */
+  chatThreadDeletedRoot?: boolean;
 };
 
 // `media_hidden` — автор скрыл медиа от смотрящего: пути, постера и волны нет,
@@ -330,7 +340,7 @@ const FORWARDED_COMMENT_COLUMNS =
 // реакции и комментарии — той же выборкой. Своя реакция — вычисляемой связью
 // `my_reaction`, и у оригинала тоже.
 export const MESSAGE_COLUMNS =
-  `id, chat_id, author_id, kind, text, hidden_ranges, seq, created_at, edited_at, edited, edit_mark, attachments:attachment_rows(${MESSAGE_ATTACHMENT_COLUMNS}), ${REPLY_COLUMNS}, ${REACTION_AND_COMMENT_COLUMNS}, stream_id, stream_host_id, system_event, system_user_id, author_name, author_avatar_url, author_opaque, system_user_name, system_user_opaque, stream:streams!messages_stream_id_fkey(started_at, ended_at), my_call:my_stream_participation(id), source_chat:chat_rows!messages_source_chat_id_fkey(id, chat_display_name), items:forward_items!forward_items_forward_fkey(id, position, message_id, original:message_rows!forward_items_message_fkey(${ORIGINAL_COLUMNS})), ${FORWARDED_COMMENT_COLUMNS}` as const;
+  `id, chat_id, author_id, kind, text, hidden_ranges, seq, created_at, edited_at, edited, edit_mark, attachments:attachment_rows(${MESSAGE_ATTACHMENT_COLUMNS}), ${REPLY_COLUMNS}, ${REACTION_AND_COMMENT_COLUMNS}, stream_id, stream_host_id, system_event, system_user_id, chat_thread_root_ids, author_name, author_avatar_url, author_opaque, system_user_name, system_user_opaque, stream:streams!messages_stream_id_fkey(started_at, ended_at), my_call:my_stream_participation(id), source_chat:chat_rows!messages_source_chat_id_fkey(id, chat_display_name), items:forward_items!forward_items_forward_fkey(id, position, message_id, original:message_rows!forward_items_message_fkey(${ORIGINAL_COLUMNS})), ${FORWARDED_COMMENT_COLUMNS}` as const;
 
 // Мозаика в облачке должна собираться в порядке выбора файлов, а PostgREST
 // не гарантирует порядок вложенной выборки сам по себе — нужен явный order
@@ -674,6 +684,7 @@ export function toMessage(row: MessageRow): Message {
       ? { displayName: row.author_name ?? 'Без имени', avatarUrl: row.author_avatar_url }
       : null,
     commentForward: toCommentForward(row),
+    chatThreadRootIds: row.chat_thread_root_ids,
   });
 }
 

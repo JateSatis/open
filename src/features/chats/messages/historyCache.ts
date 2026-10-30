@@ -30,8 +30,15 @@ export type ChatHistory = {
   nextCursor: number | null;
 };
 
-export function messagesQueryKey(chatId: string) {
-  return ['messages', chatId] as const;
+/**
+ * Какая лента чата: вся переписка или вид «Треды» — без ответов (их ключ —
+ * под ключом чата: всё, что меняет загруженные сообщения во всех историях,
+ * доходит и до неё).
+ */
+export type HistoryView = 'all' | 'chat-threads';
+
+export function messagesQueryKey(chatId: string, view: HistoryView = 'all') {
+  return view === 'all' ? (['messages', chatId] as const) : (['messages', chatId, view] as const);
 }
 
 export function toSent(message: Message): ChatMessage {
@@ -104,7 +111,8 @@ export function removeMessages(history: ChatHistory, ids: ReadonlySet<string>): 
   const items: ChatMessage[] = [];
 
   for (const message of history.items) {
-    if (ids.has(message.id)) {
+    // Заглушка удалённого исходного в «Тредах» и так стоит на месте удалённого.
+    if (ids.has(message.id) && !message.chatThreadDeletedRoot) {
       changed = true;
       continue;
     }
@@ -396,8 +404,12 @@ export function restoreMessages(history: ChatHistory, messages: ChatMessage[]): 
   return { ...history, items: [...history.items, ...missing].sort(byNewest) };
 }
 
-export function readHistory(queryClient: QueryClient, chatId: string): ChatHistory | undefined {
-  return queryClient.getQueryData<ChatHistory>(messagesQueryKey(chatId));
+export function readHistory(
+  queryClient: QueryClient,
+  chatId: string,
+  view: HistoryView = 'all',
+): ChatHistory | undefined {
+  return queryClient.getQueryData<ChatHistory>(messagesQueryKey(chatId, view));
 }
 
 /** Все загруженные истории — у оригинала бывают копии в островках чужих чатов. */
@@ -425,8 +437,20 @@ export function updateHistory(
   queryClient: QueryClient,
   chatId: string,
   update: (history: ChatHistory) => ChatHistory,
+  view: HistoryView = 'all',
 ) {
-  queryClient.setQueryData<ChatHistory>(messagesQueryKey(chatId), (history) =>
+  queryClient.setQueryData<ChatHistory>(messagesQueryKey(chatId, view), (history) =>
+    history ? update(history) : history,
+  );
+}
+
+/** Меняет все истории чата разом: переписку, «Треды» и открытые треды. */
+export function updateChatHistories(
+  queryClient: QueryClient,
+  chatId: string,
+  update: (history: ChatHistory) => ChatHistory,
+) {
+  queryClient.setQueriesData<ChatHistory>({ queryKey: messagesQueryKey(chatId) }, (history) =>
     history ? update(history) : history,
   );
 }

@@ -20,6 +20,7 @@ import {
 } from '@/api/chats';
 import { PENDING_SEQ } from '@/api/pendingSeq';
 import { MAX_ALBUM_SIZE } from '@/features/chats/lib/mosaicLayout';
+import { settleIntoChatThreads } from '@/features/chats/chatThreads/settle';
 import { mergeMessages, updateHistory } from '@/features/chats/messages/historyCache';
 import {
   addToOutbox,
@@ -301,6 +302,8 @@ function settle(queryClient: QueryClient, chatId: string, localId: string, saved
       items: merged.items.map((message) => (message.id === saved.id ? confirmed : message)),
     };
   });
+
+  settleIntoChatThreads(queryClient, chatId, saved);
 
   // Пока история не перерисовалась, в исходящих лежит уже подтверждённая
   // копия под настоящим id: экран склеивает их по id, и сообщение не мигает.
