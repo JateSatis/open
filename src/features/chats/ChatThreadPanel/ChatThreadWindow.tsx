@@ -321,6 +321,7 @@ export function ChatThreadWindow({ kit, open }: ChatThreadWindowProps) {
                   renderItem={renderItem}
                   contentContainerStyle={styles.listContent}
                   showsVerticalScrollIndicator={false}
+                  showsHorizontalScrollIndicator={false}
                   keyboardShouldPersistTaps="handled"
                   onScrollToIndexFailed={({ index, averageItemLength }) => {
                     listRef.current?.scrollToOffset({
