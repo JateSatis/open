@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   deleteComment,
-  listThreadRoots,
+  listCommentThreadRoots,
   pinComment,
   subscribeToComments,
   unpinComment,
@@ -91,14 +91,14 @@ export type CommentsState = {
   error: string | null;
   /** Догружает следующую страницу верха; промис — когда она легла в кеш (или нечего грузить). */
   loadMore: () => Promise<void>;
-  /** С `threadRootId` — ответ в этот тред, с цитатами или без; без него — наверх. */
+  /** С `commentThreadRootId` — ответ в этот тред, с цитатами или без; без него — наверх. */
   send: (
     text: string,
     media?: OutgoingMedia[],
     replies?: LiveQuote[],
-    threadRootId?: string | null,
+    commentThreadRootId?: string | null,
   ) => void;
-  sendVoice: (voice: LocalMedia, replies?: LiveQuote[], threadRootId?: string | null) => void;
+  sendVoice: (voice: LocalMedia, replies?: LiveQuote[], commentThreadRootId?: string | null) => void;
   /**
    * Тап по реакции: та же, что стоит, — снять, другая — поставить. Ряд —
    * догадка для мгновенного отклика по участию в чате; решит база.
@@ -176,7 +176,7 @@ export function useComments(
   const outbox = useMemo(
     () =>
       scopeKey
-        ? allOutbox.filter((item) => item.threadRootId || item.fragmentKey === scopeKey)
+        ? allOutbox.filter((item) => item.commentThreadRootId || item.fragmentKey === scopeKey)
         : allOutbox,
     [allOutbox, scopeKey],
   );
@@ -301,7 +301,7 @@ export function useComments(
       const outgoing = item.status === 'failed' ? outgoingOf(item) : null;
 
       if (outgoing && item.localId) {
-        void deliverComment(context, item.localId, outgoing, item.threadRootId);
+        void deliverComment(context, item.localId, outgoing, item.commentThreadRootId);
       }
     }
   }, [connection, context, targetId]);
@@ -316,13 +316,13 @@ export function useComments(
     const replies = new Map<string, CommentItem[]>();
 
     for (const item of outbox) {
-      if (!item.threadRootId) {
+      if (!item.commentThreadRootId) {
         roots.push(item);
         continue;
       }
 
       // В треде — по порядку: в исходящих новые вперёд.
-      replies.set(item.threadRootId, [item, ...(replies.get(item.threadRootId) ?? [])]);
+      replies.set(item.commentThreadRootId, [item, ...(replies.get(item.commentThreadRootId) ?? [])]);
     }
 
     return { pendingRoots: roots, pendingReplies: replies };
@@ -386,7 +386,7 @@ export function useComments(
     loadingMoreRef.current = true;
     setIsLoadingMore(true);
 
-    return listThreadRoots(targetId, { cursor, set: loaded.scope?.set })
+    return listCommentThreadRoots(targetId, { cursor, set: loaded.scope?.set })
       .then((page) =>
         updateRoots(
           queryClient,
@@ -410,10 +410,10 @@ export function useComments(
 
       updateAllComments(queryClient, targetId, (item) => {
         if (item.id === comment.id) {
-          return !item.threadRootId && item.repliesCount > 0 ? asDeletedRoot(item) : null;
+          return !item.commentThreadRootId && item.repliesCount > 0 ? asDeletedRoot(item) : null;
         }
 
-        if (item.id !== comment.threadRootId) return item;
+        if (item.id !== comment.commentThreadRootId) return item;
 
         const repliesCount = Math.max(0, item.repliesCount - 1);
 
@@ -455,13 +455,13 @@ export function useComments(
         text: string,
         media: OutgoingMedia[] = [],
         replies: LiveQuote[] = [],
-        threadRootId: string | null = null,
-      ) => sendCommentPost(context, text, media, replies, threadRootId),
+        commentThreadRootId: string | null = null,
+      ) => sendCommentPost(context, text, media, replies, commentThreadRootId),
       [context],
     ),
     sendVoice: useCallback(
-      (voice: LocalMedia, replies: LiveQuote[] = [], threadRootId: string | null = null) =>
-        sendCommentVoice(context, voice, replies, threadRootId),
+      (voice: LocalMedia, replies: LiveQuote[] = [], commentThreadRootId: string | null = null) =>
+        sendCommentVoice(context, voice, replies, commentThreadRootId),
       [context],
     ),
     react: useCallback(

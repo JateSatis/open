@@ -36,7 +36,7 @@ export function RepliesButton({ count, isOwn, onPress }: RepliesButtonProps) {
 
   return (
     <Pressable
-      testID="thread-open"
+      testID="comment-thread-open"
       accessibilityRole="button"
       accessibilityLabel={`Показать ${repliesLabel(count)}`}
       hitSlop={Spacing.two}
@@ -50,7 +50,7 @@ export function RepliesButton({ count, isOwn, onPress }: RepliesButtonProps) {
       </Text>
       <SymbolView
         name={{ ios: 'chevron.right', android: 'chevron_right', web: 'chevron_right' }}
-        size={Sizes.threadToggleIcon}
+        size={Sizes.commentThreadToggleIcon}
         tintColor={theme.primary}
       />
     </Pressable>

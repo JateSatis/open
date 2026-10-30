@@ -159,7 +159,7 @@ export function useSidePanel({ width, windowHeight }: Options): PanelSheet & {
   );
 
   const mainPane = useStillPane();
-  const thread = useStillPane();
+  const commentThread = useStillPane();
   const main = useMemo(() => ({ ...mainPane, dismissPan: swipe }), [mainPane, swipe]);
   const headerPan = useMemo(() => Gesture.Pan().enabled(false), []);
 
@@ -181,7 +181,7 @@ export function useSidePanel({ width, windowHeight }: Options): PanelSheet & {
     dismissY,
     dismissing,
     main,
-    thread,
+    commentThread,
     headerPan,
     shiftStyle,
     footerStyle,

@@ -15,12 +15,12 @@ import { PanelHeader } from './PanelHeader';
 import type { CommentRow } from './rows';
 import { SheetHeader } from './SheetHeader';
 import { styles } from './styles';
-import { ThreadGapRow } from './ThreadGapRow';
+import { CommentThreadGapRow } from './CommentThreadGapRow';
 import { usePanelActions } from './usePanelActions';
 import { usePanelComments } from './usePanelComments';
 import type { PanelSheet } from './usePanelSheet';
 import { useGoToFragment } from './useGoToFragment';
-import { useThreadPane } from './useThreadPane';
+import { useCommentThreadPane } from './useCommentThreadPane';
 
 import { FragmentQuote } from '@/features/chats/FragmentQuote';
 import { mosaicBounds } from '@/features/chats/lib/mosaicLayout';
@@ -35,9 +35,9 @@ import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
 import { visibleQuotes, type CommentItem } from '@/features/interactions/comments/commentItem';
 import { commentsCountLabel } from '@/features/interactions/comments/commentsCount';
 import {
-  getOpenThread,
-  setOpenThread,
-  useOpenThread,
+  getOpenCommentThread,
+  setOpenCommentThread,
+  useOpenCommentThread,
   type CommentsPanelTarget,
 } from '@/features/interactions/comments/commentsPanelStore';
 import { useJumpToComment } from '@/features/interactions/comments/useJumpToComment';
@@ -56,7 +56,7 @@ const CLOSED_NOTICE = {
   pop: 'Поп удалён — новые комментарии не принимаются.',
 } as const;
 
-const exitThread = () => setOpenThread(null);
+const exitCommentThread = () => setOpenCommentThread(null);
 const noop = () => undefined;
 
 type ListRef = React.RefObject<FlashListRef<CommentRow> | null>;
@@ -103,16 +103,20 @@ export function PanelContent({
   const { width: windowWidth } = useWindowDimensions();
   const width = panelWidth ?? windowWidth;
   const mediaBounds = useMemo(() => mosaicBounds(width - Spacing.three * 2), [width]);
-  const openThread = useOpenThread();
-  const threadPane = useThreadPane({ openThread, width, onExit: exitThread });
-  const data = usePanelComments(target, currentUserId, threadPane.shownRoot);
-  const { about, live, pop, amMember, comments, thread, rows, threadRows } = data;
+  const openCommentThread = useOpenCommentThread();
+  const commentThreadPane = useCommentThreadPane({
+    openCommentThread,
+    width,
+    onExit: exitCommentThread,
+  });
+  const data = usePanelComments(target, currentUserId, commentThreadPane.shownRoot);
+  const { about, live, pop, amMember, comments, commentThread, rows, commentThreadRows } = data;
   const targetType = target.subject.type;
   const memberBadge = MEMBER_BADGE[targetType];
   const chatTitleText = useChatTitle(targetType === 'message' ? target.chatId : undefined);
   const mediaTitle = targetType === 'pop' ? (pop?.channelTitle ?? '') : chatTitleText;
   const listRef = sheet.main.listRef as unknown as ListRef;
-  const threadListRef = sheet.thread.listRef as unknown as ListRef;
+  const commentThreadListRef = sheet.commentThread.listRef as unknown as ListRef;
   const inputRef = useRef<TextInput>(null);
   const [composerHeight, setComposerHeight] = useState(0);
   const [keyboardInset, setKeyboardInset] = useState(0);
@@ -143,15 +147,15 @@ export function PanelContent({
       [comments.hasMore, comments.loadMore, rows],
     ),
   );
-  const threadJump = useJumpToComment(
-    threadListRef,
+  const commentThreadJump = useJumpToComment(
+    commentThreadListRef,
     useMemo(
       () => ({
-        keys: threadRows.map((row) => row.key),
-        hasMore: thread.hasGap,
-        loadMore: thread.loadMore,
+        keys: commentThreadRows.map((row) => row.key),
+        hasMore: commentThread.hasGap,
+        loadMore: commentThread.loadMore,
       }),
-      [thread.hasGap, thread.loadMore, threadRows],
+      [commentThread.hasGap, commentThread.loadMore, commentThreadRows],
     ),
   );
 
@@ -169,12 +173,12 @@ export function PanelContent({
     live,
     data,
     currentUserId,
-    openThread: openThread?.rootId ?? null,
+    openCommentThread: openCommentThread?.rootId ?? null,
     inputRef,
     listRef,
-    threadListRef,
+    commentThreadListRef,
     sheet,
-    jump: threadJump.jump,
+    jump: commentThreadJump.jump,
     measureViewport,
   });
 
@@ -200,30 +204,31 @@ export function PanelContent({
 
   // Окно треда — один список на все треды: новый тред начинается сверху, и
   // жест закрытия не опирается на прокрутку прежнего.
-  const enteredRoot = openThread?.rootId ?? null;
-  const { scrollToTop: threadToTop } = sheet.thread;
+  const enteredRoot = openCommentThread?.rootId ?? null;
+  const { scrollToTop: commentThreadToTop } = sheet.commentThread;
 
   useEffect(() => {
-    if (enteredRoot) threadToTop();
-  }, [enteredRoot, threadToTop]);
+    if (enteredRoot) commentThreadToTop();
+  }, [enteredRoot, commentThreadToTop]);
 
   const { jump: jumpMain } = mainJump;
-  const { jump: jumpThread } = threadJump;
+  const { jump: jumpCommentThread } = commentThreadJump;
   const mainOffset = sheet.main.scrollOffset;
-  const threadOffset = sheet.thread.scrollOffset;
+  const commentThreadOffset = sheet.commentThread.scrollOffset;
 
   // В окне треда — когда легло начало треда: до того ответ стоит в хвосте, а
   // потом переезжает на своё место, и прыжок пришёлся бы мимо.
-  const threadSettling = openThread !== null && thread.isLoading && !thread.failed;
+  const commentThreadSettling =
+    openCommentThread !== null && commentThread.isLoading && !commentThread.failed;
   const jumpedTo = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!focusReady || threadSettling || jumpedTo.current === focusReady) return;
+    if (!focusReady || commentThreadSettling || jumpedTo.current === focusReady) return;
 
     jumpedTo.current = focusReady;
 
-    const inThread = getOpenThread() !== null;
-    const offset: SharedValue<number> = inThread ? threadOffset : mainOffset;
+    const inCommentThread = getOpenCommentThread() !== null;
+    const offset: SharedValue<number> = inCommentThread ? commentThreadOffset : mainOffset;
     // Видно — между низом шапки шита и полем ввода.
     const visible = () => {
       const { headerHeight: header, visibleHeight } = sheetLayout.current;
@@ -231,10 +236,17 @@ export function PanelContent({
       return { top: offset.value + header, bottom: offset.value + visibleHeight };
     };
 
-    void (inThread ? jumpThread : jumpMain)(focusReady, { visible }).then((found) => {
+    void (inCommentThread ? jumpCommentThread : jumpMain)(focusReady, { visible }).then((found) => {
       if (!found) showNotice('Не удалось найти комментарий', 'error');
     });
-  }, [focusReady, jumpMain, jumpThread, mainOffset, threadOffset, threadSettling]);
+  }, [
+    focusReady,
+    jumpMain,
+    jumpCommentThread,
+    mainOffset,
+    commentThreadOffset,
+    commentThreadSettling,
+  ]);
 
   // Место под клавиатурой в конце списка: последний комментарий виден над ней.
   useEffect(() => {
@@ -328,11 +340,15 @@ export function PanelContent({
       function renderRow({ item }) {
         if (item.type !== 'comment') {
           return (
-            <ThreadGapRow
-              hidden={item.type === 'thread-gap' ? item.hidden : null}
-              isLoading={item.type === 'thread-gap' && thread.isLoadingMore}
-              failed={item.type === 'thread-failed'}
-              onPress={item.type === 'thread-failed' ? thread.retry : () => void thread.loadMore()}
+            <CommentThreadGapRow
+              hidden={item.type === 'comment-thread-gap' ? item.hidden : null}
+              isLoading={item.type === 'comment-thread-gap' && commentThread.isLoadingMore}
+              failed={item.type === 'comment-thread-failed'}
+              onPress={
+                item.type === 'comment-thread-failed'
+                  ? commentThread.retry
+                  : () => void commentThread.loadMore()
+              }
             />
           );
         }
@@ -342,7 +358,7 @@ export function PanelContent({
         return (
           <CommentRowView
             comment={comment}
-            threadRoot={item.threadRoot}
+            commentThreadRoot={item.commentThreadRoot}
             replies={item.replies}
             pinned={item.pinned}
             isOwn={comment.authorId !== null && comment.authorId === currentUserId}
@@ -353,25 +369,25 @@ export function PanelContent({
             onOpenMenu={actions.openMenu}
             onToggle={actions.toggleSelected}
             onSwipeReply={closed ? undefined : actions.replyTo}
-            onOpenThread={actions.openThread}
+            onOpenCommentThread={actions.openCommentThread}
             renderBubble={renderBubble}
           />
         );
       },
-    [actions, closed, currentUserId, editingId, renderBubble, selection, thread],
+    [actions, closed, currentUserId, editingId, renderBubble, selection, commentThread],
   );
 
   const renderMainRow = useMemo(
     () => rowRenderer(mainJump.highlight),
     [mainJump.highlight, rowRenderer],
   );
-  const renderThreadRow = useMemo(
-    () => rowRenderer(threadJump.highlight),
-    [rowRenderer, threadJump.highlight],
+  const renderCommentThreadRow = useMemo(
+    () => rowRenderer(commentThreadJump.highlight),
+    [rowRenderer, commentThreadJump.highlight],
   );
 
   const count = live?.message.commentsCount ?? pop?.commentsCount ?? 0;
-  const inThread = openThread !== null;
+  const inCommentThread = openCommentThread !== null;
   const listProps = {
     closed,
     headerSpace: headerHeight,
@@ -395,8 +411,8 @@ export function PanelContent({
           {/* Тап по медиа в облачке на хвосте прокрутки — с первого касания. */}
           <ScrollTap style={styles.fill}>
             <Animated.View
-              style={[styles.fill, threadPane.underlayStyle]}
-              pointerEvents={inThread ? 'none' : 'auto'}
+              style={[styles.fill, commentThreadPane.underlayStyle]}
+              pointerEvents={inCommentThread ? 'none' : 'auto'}
             >
               <PaneList
                 {...listProps}
@@ -413,29 +429,29 @@ export function PanelContent({
               />
             </Animated.View>
 
-            <GestureDetector gesture={threadPane.edgePan}>
+            <GestureDetector gesture={commentThreadPane.edgePan}>
               <Animated.View
-                testID="comments-thread"
+                testID="comment-thread"
                 style={[
-                  styles.threadPane,
+                  styles.commentThreadPane,
                   { backgroundColor: theme.background },
-                  threadPane.paneStyle,
+                  commentThreadPane.paneStyle,
                 ]}
-                pointerEvents={inThread ? 'auto' : 'none'}
+                pointerEvents={inCommentThread ? 'auto' : 'none'}
               >
                 <PaneList
                   {...listProps}
-                  testID="comments-thread-list"
-                  pane={sheet.thread}
-                  listRef={threadListRef}
-                  rows={threadRows}
+                  testID="comment-thread-list"
+                  pane={sheet.commentThread}
+                  listRef={commentThreadListRef}
+                  rows={commentThreadRows}
                   silentWhenEmpty
                   isLoading={false}
                   isLoadingMore={false}
                   hasMore={false}
                   error={null}
                   loadMore={noop}
-                  renderRow={renderThreadRow}
+                  renderRow={renderCommentThreadRow}
                 />
               </Animated.View>
             </GestureDetector>
@@ -444,15 +460,15 @@ export function PanelContent({
           <SheetHeader onHeight={sheet.setHeaderHeight} pan={sheet.headerPan}>
             <PanelHeader
               title={
-                inThread
+                inCommentThread
                   ? 'Ответы'
                   : (header?.title ?? (count > 0 ? commentsCountLabel(count) : 'Комментарии'))
               }
-              onBack={inThread ? exitThread : undefined}
+              onBack={inCommentThread ? exitCommentThread : undefined}
               // Своя шапка — у боковой панели: её не тянут вниз.
               grabber={!header}
             />
-            {header && !inThread ? header.extra : null}
+            {header && !inCommentThread ? header.extra : null}
           </SheetHeader>
         </View>
       </Animated.View>
@@ -462,7 +478,7 @@ export function PanelContent({
         onHeight={setComposerHeight}
         actions={actions}
         closedNotice={closed ? CLOSED_NOTICE[targetType] : null}
-        placeholder={inThread ? 'Ответить в треде' : 'Комментарий'}
+        placeholder={inCommentThread ? 'Ответить в треде' : 'Комментарий'}
         title={mediaTitle}
       />
 

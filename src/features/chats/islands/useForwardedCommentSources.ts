@@ -14,7 +14,7 @@ const BATCH_MS = 500;
  * пересланные комментарии, — строкой `вид:id` через запятую: стабильный ключ
  * эффекта.
  */
-function sourceThreads(messages: ChatMessage[]): string {
+function sourceTargets(messages: ChatMessage[]): string {
   const ids = new Set<string>();
 
   for (const message of messages) {
@@ -36,7 +36,7 @@ function sourceThreads(messages: ChatMessage[]): string {
  */
 export function useForwardedCommentSources(chatId: string, messages: ChatMessage[]) {
   const queryClient = useQueryClient();
-  const threads = useMemo(() => sourceThreads(messages), [messages]);
+  const targets = useMemo(() => sourceTargets(messages), [messages]);
   const latest = useRef(messages);
 
   useEffect(() => {
@@ -44,7 +44,7 @@ export function useForwardedCommentSources(chatId: string, messages: ChatMessage
   }, [messages]);
 
   useEffect(() => {
-    if (!threads) return;
+    if (!targets) return;
 
     const changed = new Set<string>();
     const changedTargets = new Set<string>();
@@ -88,8 +88,8 @@ export function useForwardedCommentSources(chatId: string, messages: ChatMessage
       schedule();
     };
 
-    const releases = threads.split(',').map((thread) => {
-      const [type, targetId] = thread.split(':');
+    const releases = targets.split(',').map((target) => {
+      const [type, targetId] = target.split(':');
 
       return acquireCommentTopic(targetId, {
         onEdited: onChange,
@@ -112,5 +112,5 @@ export function useForwardedCommentSources(chatId: string, messages: ChatMessage
 
       if (timer) clearTimeout(timer);
     };
-  }, [chatId, queryClient, threads]);
+  }, [chatId, queryClient, targets]);
 }

@@ -16,8 +16,8 @@ import {
   getPinnedComment,
   listCommentReactions,
   listCommentsByIds,
-  listThreadReplies,
-  listThreadRoots,
+  listCommentThreadReplies,
+  listCommentThreadRoots,
   type Comment,
 } from '@/api/comments';
 import {
@@ -26,14 +26,14 @@ import {
   type CommentItem,
 } from '@/features/interactions/comments/commentItem';
 import {
-  EMPTY_THREAD,
-  addToThread,
-  appendThreadHead,
-  isThreadComplete,
+  EMPTY_COMMENT_THREAD,
+  addToCommentThread,
+  appendCommentThreadHead,
+  isCommentThreadComplete,
   loadedComments,
-  loadedThreads,
+  loadedCommentThreads,
   raiseRoot,
-  readThread,
+  readCommentThread,
   rootsInOrder,
   setAuthorPin,
   replaceComments,
@@ -42,10 +42,10 @@ import {
   updateAllComments,
   updateRoots,
   updateScopedRoots,
-  updateThread,
+  updateCommentThread,
   type RootsPage,
   type RootsScope,
-  type ThreadPage,
+  type CommentThreadPage,
 } from '@/features/interactions/comments/commentsCache';
 
 /** Столько id сверяется одним запросом. */
@@ -58,7 +58,7 @@ const MAX_IDS = 500;
  */
 export async function loadRoots(targetId: string, scope?: RootsScope): Promise<RootsPage> {
   const [page, pinned] = await Promise.all([
-    scope ? listThreadRoots(targetId, { set: scope.set }) : listThreadRoots(targetId),
+    scope ? listCommentThreadRoots(targetId, { set: scope.set }) : listCommentThreadRoots(targetId),
     scope ? getPinnedComment(targetId, scope.set) : getPinnedComment(targetId),
   ]);
 
@@ -79,7 +79,7 @@ async function fragmentLookup(
   messageId: string,
   comments: readonly Comment[],
 ): Promise<FragmentLookup> {
-  const wanted = comments.flatMap((c) => (!c.threadRootId && c.fragmentId ? [c.fragmentId] : []));
+  const wanted = comments.flatMap((c) => (!c.commentThreadRootId && c.fragmentId ? [c.fragmentId] : []));
 
   if (wanted.length === 0 || scopesOf(queryClient, messageId).length === 0) return NO_FRAGMENTS;
 
@@ -124,15 +124,15 @@ export async function syncAuthorPin(queryClient: QueryClient, targetId: string):
  * Начало треда. Своё, что уже лежит за разрывом (только что отправленный
  * ответ, цель прыжка), не теряется.
  */
-export async function loadThread(
+export async function loadCommentThread(
   queryClient: QueryClient,
   targetId: string,
   rootId: string,
-): Promise<ThreadPage> {
-  const page = await listThreadReplies(rootId);
-  const tail = readThread(queryClient, targetId, rootId)?.tail ?? [];
+): Promise<CommentThreadPage> {
+  const page = await listCommentThreadReplies(rootId);
+  const tail = readCommentThread(queryClient, targetId, rootId)?.tail ?? [];
 
-  return appendThreadHead({ ...EMPTY_THREAD, tail }, page.items, page.nextCursor);
+  return appendCommentThreadHead({ ...EMPTY_COMMENT_THREAD, tail }, page.items, page.nextCursor);
 }
 
 /** Ответ — в конец своего треда, если тред дочитан; свой верхнеуровневый — наверх. */
@@ -145,11 +145,11 @@ function placeAdded(
 ) {
   const item = toCommentItem(comment);
 
-  if (comment.threadRootId) {
-    const thread = readThread(queryClient, targetId, comment.threadRootId);
+  if (comment.commentThreadRootId) {
+    const commentThread = readCommentThread(queryClient, targetId, comment.commentThreadRootId);
 
-    if (isThreadComplete(thread)) {
-      updateThread(queryClient, targetId, comment.threadRootId, (page) => addToThread(page, item));
+    if (isCommentThreadComplete(commentThread)) {
+      updateCommentThread(queryClient, targetId, comment.commentThreadRootId, (page) => addToCommentThread(page, item));
     }
 
     return;
@@ -196,12 +196,12 @@ function applyGone(
   const shift = new Map(addedReplies);
 
   for (const item of gone) {
-    if (item.threadRootId) shift.set(item.threadRootId, (shift.get(item.threadRootId) ?? 0) - 1);
+    if (item.commentThreadRootId) shift.set(item.commentThreadRootId, (shift.get(item.commentThreadRootId) ?? 0) - 1);
   }
 
   updateAllComments(queryClient, targetId, (item) => {
     if (goneIds.has(item.id)) {
-      return !item.threadRootId && item.repliesCount > 0 ? asDeletedRoot(item) : null;
+      return !item.commentThreadRootId && item.repliesCount > 0 ? asDeletedRoot(item) : null;
     }
 
     const delta = item.deleted ? (shift.get(item.id) ?? 0) : 0;
@@ -237,11 +237,11 @@ export async function syncComments(
   const roots = new Set<string>();
 
   for (const comment of fresh) {
-    if (comment.threadRootId) roots.add(comment.threadRootId);
+    if (comment.commentThreadRootId) roots.add(comment.commentThreadRootId);
   }
 
   for (const id of known) {
-    const root = loaded.get(id)?.threadRootId;
+    const root = loaded.get(id)?.commentThreadRootId;
 
     if (root) roots.add(root);
   }
@@ -262,8 +262,8 @@ export async function syncComments(
   for (const comment of fresh) {
     if (!addedSet.has(comment.id) || now.has(comment.id)) continue;
 
-    if (comment.threadRootId) {
-      addedReplies.set(comment.threadRootId, (addedReplies.get(comment.threadRootId) ?? 0) + 1);
+    if (comment.commentThreadRootId) {
+      addedReplies.set(comment.commentThreadRootId, (addedReplies.get(comment.commentThreadRootId) ?? 0) + 1);
     }
 
     placeAdded(queryClient, targetId, me, comment, fragmentOf);
@@ -303,16 +303,16 @@ export async function resyncComments(
   me: string | null,
 ): Promise<void> {
   const loaded = [...loadedComments(queryClient, targetId).keys()];
-  const threads = [...loadedThreads(queryClient, targetId)].filter(([, page]) =>
-    isThreadComplete(page),
+  const commentThreads = [...loadedCommentThreads(queryClient, targetId)].filter(([, page]) =>
+    isCommentThreadComplete(page),
   );
 
   await Promise.all([
     syncComments(queryClient, targetId, me, { added: [], changed: loaded }),
     syncAuthorPin(queryClient, targetId),
-    ...threads.map(async ([rootId, page]) => {
+    ...commentThreads.map(async ([rootId, page]) => {
       const last = page.head[page.head.length - 1];
-      const newer = await listThreadReplies(rootId, { cursor: last?.createdAt });
+      const newer = await listCommentThreadReplies(rootId, { cursor: last?.createdAt });
 
       const fragmentOf = await fragmentLookup(queryClient, targetId, newer.items);
 

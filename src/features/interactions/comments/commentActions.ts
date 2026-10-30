@@ -31,7 +31,7 @@ export type CommentActionContext = {
 
 /** Закреп — только у отправленного корня живой цели и только автору контента. */
 function pinnable({ comment, targetLive, canPin = false }: CommentActionContext): boolean {
-  return canPin && targetLive && !comment.threadRootId && !comment.deleted && !isLocalMessage(comment);
+  return canPin && targetLive && !comment.commentThreadRootId && !comment.deleted && !isLocalMessage(comment);
 }
 
 type CommentAction = ContextMenuAction<CommentActionId> & {

@@ -44,11 +44,11 @@ import {
 import type { CommentItem } from '@/features/interactions/comments/commentItem';
 import { toCommentItem } from '@/features/interactions/comments/commentItem';
 import {
-  addToThread,
+  addToCommentThread,
   raiseRoot,
   updateRoots,
   updateScopedRoots,
-  updateThread,
+  updateCommentThread,
 } from '@/features/interactions/comments/commentsCache';
 import { clustersKeyOf } from '@/features/chats/fragments/clusterKeys';
 import { fragmentsKey } from '@/features/chats/fragments/useMessageFragments';
@@ -107,7 +107,7 @@ function optimisticQuote(request: CommentFragment): FragmentQuote | null {
 function draftOf(
   { subject, chatId, currentUserId, me, fragment }: CommentSendContext,
   at: number,
-  content: Pick<CommentItem, 'kind' | 'text' | 'attachments' | 'threadRootId'> &
+  content: Pick<CommentItem, 'kind' | 'text' | 'attachments' | 'commentThreadRootId'> &
     Partial<Pick<CommentItem, 'pendingMedia' | 'pendingVoice' | 'localPreviews' | 'replies'>>,
 ): CommentItem {
   const localId = nextLocalId();
@@ -138,7 +138,7 @@ function draftOf(
     repliesCount: 0,
     deleted: false,
     // Ответ в треде к фрагменту не привязывается.
-    ...(fragment && !content.threadRootId
+    ...(fragment && !content.commentThreadRootId
       ? {
           fragmentKey: fragment.key,
           fragmentId: null,
@@ -153,7 +153,7 @@ async function insert(
   subject: CommentSubject,
   outgoing: Outgoing,
   uploaded: UploadedMedia[],
-  threadRootId: string | null,
+  commentThreadRootId: string | null,
   fragment: CommentFragment | undefined,
 ): Promise<Comment> {
   if (outgoing.type === 'voice') {
@@ -167,8 +167,8 @@ async function insert(
     };
 
     return subject.type === 'pop'
-      ? sendVoicePopComment(subject.id, voice, outgoing.replyTo, threadRootId)
-      : sendVoiceComment(subject.id, voice, outgoing.replyTo, threadRootId, fragment);
+      ? sendVoicePopComment(subject.id, voice, outgoing.replyTo, commentThreadRootId)
+      : sendVoiceComment(subject.id, voice, outgoing.replyTo, commentThreadRootId, fragment);
   }
 
   if (outgoing.type !== 'post') throw new Error('Комментарий не пересылается');
@@ -177,7 +177,7 @@ async function insert(
     text: outgoing.text || undefined,
     media: uploaded.map(toSendMedia),
     replyTo: outgoing.replyTo,
-    threadRootId,
+    commentThreadRootId,
     fragment,
   });
 }
@@ -203,16 +203,16 @@ function settle(queryClient: QueryClient, targetId: string, localId: string, sav
     void queryClient.invalidateQueries({ queryKey: clustersKeyOf(targetId) });
   }
 
-  if (saved.threadRootId) {
-    updateThread(queryClient, targetId, saved.threadRootId, (page) => addToThread(page, item), {
+  if (saved.commentThreadRootId) {
+    updateCommentThread(queryClient, targetId, saved.commentThreadRootId, (page) => addToCommentThread(page, item), {
       create: true,
     });
     // Число ответов у корня — сразу; точное догонит сигнал канала.
     updateRoots(queryClient, targetId, (page) => ({
       ...page,
-      authorPin: page.authorPin && bumpReplies(page.authorPin, saved.threadRootId!),
-      raised: page.raised.map((root) => bumpReplies(root, saved.threadRootId!)),
-      items: page.items.map((root) => bumpReplies(root, saved.threadRootId!)),
+      authorPin: page.authorPin && bumpReplies(page.authorPin, saved.commentThreadRootId!),
+      raised: page.raised.map((root) => bumpReplies(root, saved.commentThreadRootId!)),
+      items: page.items.map((root) => bumpReplies(root, saved.commentThreadRootId!)),
     }));
   } else {
     updateRoots(queryClient, targetId, (page) => raiseRoot(page, item));
@@ -262,7 +262,7 @@ export async function deliverComment(
   context: CommentSendContext,
   localId: string,
   outgoing: Outgoing,
-  threadRootId: string | null,
+  commentThreadRootId: string | null,
 ): Promise<void> {
   const { queryClient, subject, currentUserId } = context;
   const targetId = subject.id;
@@ -289,9 +289,9 @@ export async function deliverComment(
 
     if (discarded.has(localId)) throw new Error('Отправка отменена');
 
-    const fragment = threadRootId ? undefined : fragmentRequest(context, localId);
+    const fragment = commentThreadRootId ? undefined : fragmentRequest(context, localId);
 
-    saved = await insert(subject, outgoing, uploaded, threadRootId, fragment);
+    saved = await insert(subject, outgoing, uploaded, commentThreadRootId, fragment);
 
     // Уже в базе, но человек его удалил — удаляем и там, для всех.
     if (discarded.has(localId)) {
@@ -326,7 +326,7 @@ export async function deliverComment(
 
 /**
  * Текст с альбомом. Больше одного альбома — несколько комментариев, подпись
- * и цитаты ответа — у первого. Тред база получает явно (`threadRootId`), и
+ * и цитаты ответа — у первого. Тред база получает явно (`commentThreadRootId`), и
  * все части ответа ложатся в него, с цитатами или без.
  */
 export function sendCommentPost(
@@ -334,7 +334,7 @@ export function sendCommentPost(
   text: string,
   media: OutgoingMedia[] = [],
   replies: LiveQuote[] = [],
-  threadRootId: string | null = null,
+  commentThreadRootId: string | null = null,
 ) {
   const trimmed = text.trim();
 
@@ -351,7 +351,7 @@ export function sendCommentPost(
       pendingMedia: part.media.length > 0 ? part.media : undefined,
       localPreviews: part.media.length > 0 ? attachments.map((item) => item.url) : undefined,
       replies: index === 0 ? replies : [],
-      threadRootId,
+      commentThreadRootId,
     });
   });
 
@@ -362,17 +362,17 @@ export function sendCommentPost(
     for (const draft of drafts) {
       const outgoing = outgoingOf(draft);
 
-      if (outgoing) await deliverComment(context, draft.localId!, outgoing, threadRootId);
+      if (outgoing) await deliverComment(context, draft.localId!, outgoing, commentThreadRootId);
     }
   })();
 }
 
-/** Голосовое; в треде `threadRootId` — ответ в него, с цитатами или без. */
+/** Голосовое; в треде `commentThreadRootId` — ответ в него, с цитатами или без. */
 export function sendCommentVoice(
   context: CommentSendContext,
   voice: LocalMedia,
   replies: LiveQuote[] = [],
-  threadRootId: string | null = null,
+  commentThreadRootId: string | null = null,
 ) {
   const draft = draftOf(context, Date.now(), {
     kind: 'voice',
@@ -382,7 +382,7 @@ export function sendCommentVoice(
     // Своё голосовое играет из файла на телефоне и после отправки.
     localPreviews: [voice.uri],
     replies,
-    threadRootId,
+    commentThreadRootId,
   });
 
   draft.attachments = [toLocalVoiceAttachment(draft.localId!, voice)];
@@ -391,7 +391,7 @@ export function sendCommentVoice(
     context,
     draft.localId!,
     { type: 'voice', voice, replyTo: replies.map((quote) => quote.messageId) },
-    threadRootId,
+    commentThreadRootId,
   );
 }
 
@@ -400,7 +400,7 @@ export function retryComment(context: CommentSendContext, localId: string) {
   const failed = outboxComments(context.subject.id).find((item) => item.localId === localId);
   const outgoing = failed ? outgoingOf(failed) : null;
 
-  if (failed && outgoing) void deliverComment(context, localId, outgoing, failed.threadRootId);
+  if (failed && outgoing) void deliverComment(context, localId, outgoing, failed.commentThreadRootId);
 }
 
 /** Своё неотправленное — убрать. Если оно как раз едет, по прибытии его не покажут. */

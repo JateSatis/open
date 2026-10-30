@@ -7,7 +7,7 @@ import { CommentsPanel } from '.';
 import {
   getPinnedComment,
   getPopCommentTarget,
-  listThreadRoots,
+  listCommentThreadRoots,
   pinComment,
   sendComment,
   sendPopComment,
@@ -52,9 +52,9 @@ jest.mock('@/api/comments', () => ({
   pinComment: jest.fn(() => Promise.resolve()),
   unpinComment: jest.fn(() => Promise.resolve()),
   COMMENT_PAGE_SIZE: 30,
-  THREAD_PAGE_SIZE: 10,
-  listThreadRoots: jest.fn(),
-  listThreadReplies: jest.fn(() => Promise.resolve({ items: [], nextCursor: null })),
+  COMMENT_THREAD_PAGE_SIZE: 10,
+  listCommentThreadRoots: jest.fn(),
+  listCommentThreadReplies: jest.fn(() => Promise.resolve({ items: [], nextCursor: null })),
   fetchComment: jest.fn(),
   listCommentsByIds: jest.fn(() => Promise.resolve([])),
   getCommentTarget: jest.fn(),
@@ -100,7 +100,7 @@ jest.mock('@/features/media/HoldToRecordRow', () => ({
 jest.mock('@/features/media/galleryPrefetch', () => ({ prefetchGallery: jest.fn() }));
 
 const mockedSession = useSession as jest.MockedFunction<typeof useSession>;
-const mockedRoots = listThreadRoots as jest.MockedFunction<typeof listThreadRoots>;
+const mockedRoots = listCommentThreadRoots as jest.MockedFunction<typeof listCommentThreadRoots>;
 const mockedTarget = getPopCommentTarget as jest.MockedFunction<typeof getPopCommentTarget>;
 const mockedSendPop = sendPopComment as jest.MockedFunction<typeof sendPopComment>;
 const mockedPinned = getPinnedComment as jest.MockedFunction<typeof getPinnedComment>;
@@ -135,7 +135,7 @@ function comment(id: string, overrides: Partial<Comment> = {}): Comment {
     attachments: [],
     reactions: { members: {}, visitors: {}, mine: null },
     replies: [],
-    threadRootId: null,
+    commentThreadRootId: null,
     fragmentId: null,
     fragmentQuote: null,
     repliesCount: 0,
@@ -226,7 +226,7 @@ describe('comments of a pop', () => {
       text: 'к попу',
       media: [],
       replyTo: [],
-      threadRootId: null,
+      commentThreadRootId: null,
     });
     expect(sendComment).not.toHaveBeenCalled();
   });

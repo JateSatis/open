@@ -127,9 +127,9 @@ export const Sizes = {
   /** Толщина пунктира вокруг островка пересылки. */
   islandBorder: 1.5,
   /** Кнопка «N ответов» под облачком корня и строка «Показать ещё». */
-  threadToggle: 28,
+  commentThreadToggle: 28,
   /** Стрелка на кнопке «N ответов». */
-  threadToggleIcon: 14,
+  commentThreadToggleIcon: 14,
   /** Аватар автора в облачке пересланного комментария. */
   forwardedAuthorAvatar: 20,
   /** Круглая плавающая кнопка «+» в списке чатов. */

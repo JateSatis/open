@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import { buildCommentRows, buildThreadRows, type CommentRow } from './rows';
+import { buildCommentRows, buildCommentThreadRows, type CommentRow } from './rows';
 
 import { fetchComment } from '@/api/comments';
 import { trackClusterEvent } from '@/api/fragmentClusterEvents';
@@ -11,16 +11,16 @@ import {
   type CommentItem,
 } from '@/features/interactions/comments/commentItem';
 import {
-  addToThread,
+  addToCommentThread,
   raiseRoot,
   rootsKey,
   updateRoots,
-  updateThread,
+  updateCommentThread,
 } from '@/features/interactions/comments/commentsCache';
 import {
   fragmentSetOf,
-  setOpenThread,
-  useOpenThread,
+  setOpenCommentThread,
+  useOpenCommentThread,
   type CommentsPanelTarget,
 } from '@/features/interactions/comments/commentsPanelStore';
 import type { FragmentScope } from '@/features/interactions/comments/commentDelivery';
@@ -49,7 +49,7 @@ function useFocusComment(targetId: string, focusId: string | undefined) {
     void (async () => {
       try {
         const comment = toCommentItem(await fetchComment(focusId));
-        const rootId = comment.threadRootId ?? comment.id;
+        const rootId = comment.commentThreadRootId ?? comment.id;
         // Корень удалён — на его месте заглушка: тред жив, раз жив этот ответ.
         const root =
           rootId === comment.id
@@ -57,7 +57,12 @@ function useFocusComment(targetId: string, focusId: string | undefined) {
             : await fetchComment(rootId)
                 .then(toCommentItem)
                 .catch(() =>
-                  asDeletedRoot({ ...comment, id: rootId, threadRootId: null, repliesCount: 1 }),
+                  asDeletedRoot({
+                    ...comment,
+                    id: rootId,
+                    commentThreadRootId: null,
+                    repliesCount: 1,
+                  }),
                 );
 
         // Верх мог ещё грузиться — закрепить корень можно, только когда он лёг.
@@ -71,11 +76,17 @@ function useFocusComment(targetId: string, focusId: string | undefined) {
 
         updateRoots(queryClient, targetId, (page) => raiseRoot(page, root));
 
-        if (comment.threadRootId) {
-          updateThread(queryClient, targetId, rootId, (page) => addToThread(page, comment), {
-            create: true,
-          });
-          setOpenThread(rootId, true);
+        if (comment.commentThreadRootId) {
+          updateCommentThread(
+            queryClient,
+            targetId,
+            rootId,
+            (page) => addToCommentThread(page, comment),
+            {
+              create: true,
+            },
+          );
+          setOpenCommentThread(rootId, true);
         }
 
         setReady(focusId);
@@ -94,15 +105,15 @@ function useFocusComment(targetId: string, focusId: string | undefined) {
 
 /**
  * Всё, что панель рисует списками: верх по рангу — основной список, и окно
- * треда `threadRootId` — корень и его ответы.
+ * треда `commentThreadRootId` — корень и его ответы.
  *
- * `threadRootId` — тред в окне, а не в сторе: уезжающее окно рисует свой
+ * `commentThreadRootId` — тред в окне, а не в сторе: уезжающее окно рисует свой
  * тред, хотя в сторе его уже нет.
  */
 export function usePanelComments(
   target: CommentsPanelTarget,
   currentUserId: string | null,
-  threadRootId: string | null,
+  commentThreadRootId: string | null,
 ) {
   const { subject } = target;
   const targetId = subject.id;
@@ -142,8 +153,8 @@ export function usePanelComments(
     amMember,
     fragmentScope,
   );
-  const openThread = useOpenThread();
-  const thread = useCommentThread(targetId, threadRootId, comments.overlay);
+  const openCommentThread = useOpenCommentThread();
+  const commentThread = useCommentThread(targetId, commentThreadRootId, comments.overlay);
   const focusReady = useFocusComment(targetId, target.focusCommentId);
   const { roots, pendingReplies, pinnedId } = comments;
 
@@ -157,21 +168,21 @@ export function usePanelComments(
     [pendingCount, pinnedId, roots],
   );
 
-  const threadRows = useMemo<CommentRow[]>(
+  const commentThreadRows = useMemo<CommentRow[]>(
     () =>
-      threadRootId
-        ? buildThreadRows({
-            root: roots.find((root) => root.id === threadRootId) ?? null,
-            rootId: threadRootId,
-            head: thread.head,
-            tail: thread.tail,
-            pending: pendingReplies.get(threadRootId) ?? NONE,
-            hasGap: thread.hasGap,
-            isLoading: thread.isLoading,
-            failed: thread.failed,
+      commentThreadRootId
+        ? buildCommentThreadRows({
+            root: roots.find((root) => root.id === commentThreadRootId) ?? null,
+            rootId: commentThreadRootId,
+            head: commentThread.head,
+            tail: commentThread.tail,
+            pending: pendingReplies.get(commentThreadRootId) ?? NONE,
+            hasGap: commentThread.hasGap,
+            isLoading: commentThread.isLoading,
+            failed: commentThread.failed,
           })
         : [],
-    [pendingReplies, roots, thread, threadRootId],
+    [pendingReplies, roots, commentThread, commentThreadRootId],
   );
 
   return {
@@ -180,10 +191,10 @@ export function usePanelComments(
     pop,
     amMember,
     comments,
-    openThread,
-    thread,
+    openCommentThread,
+    commentThread,
     rows,
-    threadRows,
+    commentThreadRows,
     focusReady,
   };
 }

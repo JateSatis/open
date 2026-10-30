@@ -6,7 +6,7 @@ import ChatScreen from './[chatId]';
 
 import type { ChatSummary, ForwardedComment, Message } from '@/api/chats';
 import { getChat, listDeletedMessageIds, listMessages, subscribeToChat } from '@/api/chats';
-import { getCommentTarget, listThreadRoots, subscribeToComments } from '@/api/comments';
+import { getCommentTarget, listCommentThreadRoots, subscribeToComments } from '@/api/comments';
 import { listPinnedMessages } from '@/api/pins';
 import { NO_REACTIONS } from '@/api/reactionCounts';
 import { useSession } from '@/features/auth/useSession';
@@ -64,9 +64,9 @@ jest.mock('@/api/comments', () => ({
   pinComment: jest.fn(() => Promise.resolve()),
   unpinComment: jest.fn(() => Promise.resolve()),
   COMMENT_PAGE_SIZE: 30,
-  THREAD_PAGE_SIZE: 10,
-  listThreadRoots: jest.fn(),
-  listThreadReplies: jest.fn(() => Promise.resolve({ items: [], nextCursor: null })),
+  COMMENT_THREAD_PAGE_SIZE: 10,
+  listCommentThreadRoots: jest.fn(),
+  listCommentThreadReplies: jest.fn(() => Promise.resolve({ items: [], nextCursor: null })),
   fetchComment: jest.fn(),
   listCommentsByIds: jest.fn(() => Promise.resolve([])),
   getCommentTarget: jest.fn(),
@@ -189,7 +189,7 @@ function forwarded(
     id: 'c1',
     subject: { type: 'message', id: targetId },
     chatId,
-    threadRootId: null,
+    commentThreadRootId: null,
     authorId: 'user-9',
     authorName: 'Гость',
     authorAvatarUrl: null,
@@ -256,7 +256,7 @@ beforeEach(() => {
   (listPinnedMessages as jest.Mock).mockResolvedValue([]);
   (listDeletedMessageIds as jest.Mock).mockResolvedValue([]);
   (subscribeToChat as jest.Mock).mockReturnValue({ broadcastTyping: jest.fn(), unsubscribe: jest.fn() });
-  (listThreadRoots as jest.Mock).mockResolvedValue({ items: [], nextCursor: null });
+  (listCommentThreadRoots as jest.Mock).mockResolvedValue({ items: [], nextCursor: null });
   (getCommentTarget as jest.Mock).mockImplementation(async (messageId: string) => ({
     state: 'live',
     message: message(messageId, 1),

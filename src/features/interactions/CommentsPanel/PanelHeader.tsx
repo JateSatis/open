@@ -30,7 +30,7 @@ export function PanelHeader({ title, onBack, grabber = true }: PanelHeaderProps)
         <View style={styles.titleStart}>
           {onBack ? (
             <Pressable
-              testID="thread-back"
+              testID="comment-thread-back"
               accessibilityRole="button"
               accessibilityLabel="Назад к комментариям"
               hitSlop={Spacing.two}

@@ -1,15 +1,15 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { listThreadReplies } from '@/api/comments';
+import { listCommentThreadReplies } from '@/api/comments';
 import type { CommentItem } from '@/features/interactions/comments/commentItem';
 import {
-  appendThreadHead,
-  readThread,
-  threadKey,
-  updateThread,
+  appendCommentThreadHead,
+  readCommentThread,
+  commentThreadQueryKey,
+  updateCommentThread,
 } from '@/features/interactions/comments/commentsCache';
-import { loadThread } from '@/features/interactions/comments/commentSync';
+import { loadCommentThread } from '@/features/interactions/comments/commentSync';
 
 const NONE: CommentItem[] = [];
 
@@ -45,8 +45,8 @@ export function useCommentThread(
   const loadingMoreRef = useRef(false);
 
   const { data, refetch, isError, isFetching } = useQuery({
-    queryKey: threadKey(targetId, rootId ?? ''),
-    queryFn: () => loadThread(queryClient, targetId, rootId!),
+    queryKey: commentThreadQueryKey(targetId, rootId ?? ''),
+    queryFn: () => loadCommentThread(queryClient, targetId, rootId!),
     enabled: rootId !== null,
     // Сами по себе страницы треда не перечитываются: свежесть — сигналами канала.
     staleTime: Infinity,
@@ -64,7 +64,7 @@ export function useCommentThread(
   const loadMore = useCallback(() => {
     if (!rootId) return Promise.resolve();
 
-    const page = readThread(queryClient, targetId, rootId);
+    const page = readCommentThread(queryClient, targetId, rootId);
 
     if (!page?.headLoaded || page.nextCursor === null || loadingMoreRef.current) {
       return Promise.resolve();
@@ -73,10 +73,10 @@ export function useCommentThread(
     loadingMoreRef.current = true;
     setIsLoadingMore(true);
 
-    return listThreadReplies(rootId, { cursor: page.nextCursor })
+    return listCommentThreadReplies(rootId, { cursor: page.nextCursor })
       .then((next) =>
-        updateThread(queryClient, targetId, rootId, (current) =>
-          appendThreadHead(current, next.items, next.nextCursor),
+        updateCommentThread(queryClient, targetId, rootId, (current) =>
+          appendCommentThreadHead(current, next.items, next.nextCursor),
         ),
       )
       .catch(() => undefined)

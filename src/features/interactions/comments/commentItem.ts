@@ -21,7 +21,7 @@ export type CommentItem = Omit<ChatMessage, 'createdAt'> & {
   authorName: string | null;
   authorAvatarUrl: string | null;
   /** Корень треда; `null` — комментарий верхнеуровневый. */
-  threadRootId: string | null;
+  commentThreadRootId: string | null;
   /** Сколько живых ответов в треде (у корня). */
   repliesCount: number;
   /** Удалённый корень с живыми ответами — на его месте заглушка. */
@@ -72,7 +72,7 @@ export function toCommentItem(comment: Comment): CommentItem {
     viewsCount: 0,
     readAt: null,
     status: 'sent',
-    threadRootId: comment.threadRootId,
+    commentThreadRootId: comment.commentThreadRootId,
     repliesCount: comment.repliesCount,
     deleted: comment.deleted,
     rank: comment.rank,
@@ -101,8 +101,8 @@ export function asDeletedRoot(item: CommentItem): CommentItem {
 }
 
 /** Тред, куда ляжет ответ на этот комментарий: у ответа — его корень, у корня — он сам. */
-export function threadOf(item: Pick<CommentItem, 'id' | 'threadRootId'>): string {
-  return item.threadRootId ?? item.id;
+export function commentThreadOf(item: Pick<CommentItem, 'id' | 'commentThreadRootId'>): string {
+  return item.commentThreadRootId ?? item.id;
 }
 
 /**
@@ -112,7 +112,12 @@ export function threadOf(item: Pick<CommentItem, 'id' | 'threadRootId'>): string
 export function visibleQuotes(item: CommentItem): CommentItem['replies'] {
   const [only, ...rest] = item.replies;
 
-  if (only && rest.length === 0 && item.threadRootId && only.messageId === item.threadRootId) {
+  if (
+    only &&
+    rest.length === 0 &&
+    item.commentThreadRootId &&
+    only.messageId === item.commentThreadRootId
+  ) {
     return [];
   }
 

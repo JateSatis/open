@@ -16,7 +16,7 @@ import { Sizes } from '@/theme';
 export type CommentRowViewProps = {
   comment: CommentItem;
   /** Корень в окне треда — на фоне островка. */
-  threadRoot: boolean;
+  commentThreadRoot: boolean;
   /** Число на кнопке «N ответов» под облачком; 0 — кнопки нет. */
   replies: number;
   /** Закреплён автором контента: строкой над облачком «Закреплено автором». */
@@ -30,7 +30,7 @@ export type CommentRowViewProps = {
   onToggle: (comment: CommentItem) => void;
   /** Свайп влево — ответить. Нет — у удалённого сообщения ответов не принимают. */
   onSwipeReply?: (comment: CommentItem) => void;
-  onOpenThread: (rootId: string) => void;
+  onOpenCommentThread: (rootId: string) => void;
   /** Облачко — то же, что у сообщения в переписке. */
   renderBubble: (comment: CommentItem) => ReactNode;
 };
@@ -82,7 +82,7 @@ function PinnedLabel() {
  */
 export const CommentRowView = memo(function CommentRowView({
   comment,
-  threadRoot,
+  commentThreadRoot,
   replies,
   pinned = false,
   isOwn,
@@ -93,7 +93,7 @@ export const CommentRowView = memo(function CommentRowView({
   onOpenMenu,
   onToggle,
   onSwipeReply,
-  onOpenThread,
+  onOpenCommentThread,
   renderBubble,
 }: CommentRowViewProps) {
   const theme = useTheme();
@@ -102,16 +102,16 @@ export const CommentRowView = memo(function CommentRowView({
       <RepliesButton
         count={replies}
         isOwn={isOwn && !comment.deleted}
-        onPress={() => onOpenThread(comment.id)}
+        onPress={() => onOpenCommentThread(comment.id)}
       />
     ) : null;
-  const rowStyle = threadRoot
-    ? [styles.threadRoot, { backgroundColor: theme.islandBackground }]
+  const rowStyle = commentThreadRoot
+    ? [styles.commentThreadRoot, { backgroundColor: theme.islandBackground }]
     : styles.row;
 
   if (comment.deleted) {
     return (
-      <View testID={threadRoot ? 'thread-root' : undefined} style={rowStyle}>
+      <View testID={commentThreadRoot ? 'comment-thread-root' : undefined} style={rowStyle}>
         {pinned ? <PinnedLabel /> : null}
         <DeletedRoot />
         {button}
@@ -122,7 +122,7 @@ export const CommentRowView = memo(function CommentRowView({
   const selectable = !isLocalMessage(comment);
 
   return (
-    <View testID={threadRoot ? 'thread-root' : undefined} style={rowStyle}>
+    <View testID={commentThreadRoot ? 'comment-thread-root' : undefined} style={rowStyle}>
       {pinned ? <PinnedLabel /> : null}
       <MessageRow
         selectionMode={selectionMode}

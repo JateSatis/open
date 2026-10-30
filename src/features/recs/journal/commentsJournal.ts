@@ -1,5 +1,5 @@
 // Сессия панели комментариев в журнале: открыта и закрыта, откуда, что в
-// ней показалось, куда прокрутили, какие треды раскрыли, переход по цитате,
+// ней показалось, куда прокрутили, какие треды комментариев раскрыли, переход по цитате,
 // видел ли закреплённый, что было с полем ввода. Панель общая для сообщений
 // и попсов — и сессия тоже. Текст черновика не пишется, только длина.
 
@@ -18,7 +18,7 @@ type Session = {
   videoPlaying?: boolean;
   shown: Set<string>;
   maxDepth: number;
-  threads: Set<string>;
+  commentThreads: Set<string>;
   repliesShown: Set<string>;
   quotesFollowed: number;
   pinnedSeen: boolean;
@@ -71,7 +71,7 @@ function finish(now: number) {
       shown: s.shown.size,
       shown_ids: [...s.shown].slice(0, SHOWN_IDS_MAX),
       max_depth: s.maxDepth,
-      threads_expanded: s.threads.size,
+      threads_expanded: s.commentThreads.size,
       replies_shown: s.repliesShown.size,
       quote_followed: s.quotesFollowed,
       pinned_seen: s.pinnedSeen,
@@ -112,7 +112,7 @@ export function commentsTargetChanged(target: CommentsPanelTarget | null, now = 
     videoPlaying: playback?.playing,
     shown: new Set(),
     maxDepth: 0,
-    threads: new Set(),
+    commentThreads: new Set(),
     repliesShown: new Set(),
     quotesFollowed: 0,
     pinnedSeen: false,
@@ -128,19 +128,19 @@ export function commentsTargetChanged(target: CommentsPanelTarget | null, now = 
   };
 }
 
-export function commentsThreadOpened(rootId: string | null): void {
-  if (session && rootId) session.threads.add(rootId);
+export function commentThreadOpened(rootId: string | null): void {
+  if (session && rootId) session.commentThreads.add(rootId);
 }
 
-/** На экране показались строки списка: верх (`main`) или окно треда. */
+/** На экране показались строки списка: верх (`main`) или окно треда комментариев. */
 export function commentsShown(
-  rows: { id: string; index: number; pinned?: boolean; threadRoot?: boolean }[],
-  pane: 'main' | 'thread',
+  rows: { id: string; index: number; pinned?: boolean; commentThreadRoot?: boolean }[],
+  pane: 'main' | 'commentThread',
 ): void {
   if (!session) return;
 
   for (const row of rows) {
-    if (pane === 'thread' && !row.threadRoot) session.repliesShown.add(row.id);
+    if (pane === 'commentThread' && !row.commentThreadRoot) session.repliesShown.add(row.id);
     else session.shown.add(row.id);
 
     if (pane === 'main') session.maxDepth = Math.max(session.maxDepth, row.index + 1);

@@ -16,7 +16,7 @@ const EMPTY: CommentItem[] = [];
 
 const useCommentOutbox = create<CommentOutboxState>(() => ({ byTarget: {} }));
 
-function setThread(targetId: string, update: (items: CommentItem[]) => CommentItem[]) {
+function setCommentThread(targetId: string, update: (items: CommentItem[]) => CommentItem[]) {
   useCommentOutbox.setState((state) => {
     const current = state.byTarget[targetId] ?? EMPTY;
     const next = update(current);
@@ -41,7 +41,7 @@ export function outboxComments(targetId: string): CommentItem[] {
 }
 
 export function addOutboxComments(targetId: string, drafts: CommentItem[]) {
-  setThread(targetId, (current) => [...drafts, ...current]);
+  setCommentThread(targetId, (current) => [...drafts, ...current]);
 }
 
 export function setOutboxCommentStatus(
@@ -49,7 +49,7 @@ export function setOutboxCommentStatus(
   localId: string,
   status: CommentItem['status'],
 ) {
-  setThread(targetId, (current) =>
+  setCommentThread(targetId, (current) =>
     current.some((item) => item.localId === localId && item.status !== status)
       ? current.map((item) => (item.localId === localId ? { ...item, status } : item))
       : current,
@@ -57,7 +57,7 @@ export function setOutboxCommentStatus(
 }
 
 export function removeOutboxComment(targetId: string, localId: string) {
-  setThread(targetId, (current) =>
+  setCommentThread(targetId, (current) =>
     current.some((item) => item.localId === localId)
       ? current.filter((item) => item.localId !== localId)
       : current,

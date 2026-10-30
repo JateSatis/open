@@ -20,7 +20,7 @@ import {
   commentsComposerTyping,
   commentsShown,
   commentsTargetChanged,
-  commentsThreadOpened,
+  commentThreadOpened,
   commentsVoiceActivity,
 } from './commentsJournal';
 import { logSearchQuery, normalizeQuery } from './searchJournal';
@@ -64,13 +64,13 @@ describe('сессия комментариев', () => {
       Array.from({ length: 10 }, (_, index) => ({ id: `c${index}`, index, pinned: index === 0 })),
       'main',
     );
-    commentsThreadOpened('c3');
+    commentThreadOpened('c3');
     commentsShown(
       [
-        { id: 'c3', index: 0, threadRoot: true },
+        { id: 'c3', index: 0, commentThreadRoot: true },
         { id: 'r1', index: 1 },
       ],
-      'thread',
+      'commentThread',
     );
     commentsComposerFocused();
     commentsComposerTyping(5000);

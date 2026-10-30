@@ -14,9 +14,9 @@ import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from '@/api/supabase';
 
 export type CommentTopicListener = {
-  /** Появился комментарий; `threadRootId` — тред ответа, `null` — верхнеуровневый. */
-  onAdded?: (commentId: string, threadRootId: string | null) => void;
-  onDeleted?: (commentId: string, threadRootId: string | null) => void;
+  /** Появился комментарий; `commentThreadRootId` — тред комментариев ответа, `null` — верхнеуровневый. */
+  onAdded?: (commentId: string, commentThreadRootId: string | null) => void;
+  onDeleted?: (commentId: string, commentThreadRootId: string | null) => void;
   onEdited?: (commentId: string) => void;
   /** Реакции на комментарий изменились — счётчики дочитываются из базы. */
   onReactionsChanged?: (commentId: string) => void;

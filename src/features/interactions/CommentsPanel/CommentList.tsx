@@ -39,7 +39,7 @@ const keyOf = (row: CommentRow) => row.key;
 /** Комментарий засчитан показанным, когда на экране хотя бы половина строки. */
 const VIEWABILITY = { itemVisiblePercentThreshold: 50 };
 const typeOf = (row: CommentRow) =>
-  row.type === 'comment' ? (row.threadRoot ? 'thread-root' : 'comment') : row.type;
+  row.type === 'comment' ? (row.commentThreadRoot ? 'comment-thread-root' : 'comment') : row.type;
 
 /**
  * Комментарии списком сверху вниз — верх по рангу или окно треда.
@@ -101,7 +101,7 @@ export function CommentList({
   );
 
   // Журнал: что из комментариев действительно показалось на экране.
-  const pane = testID === 'comments-thread-list' ? 'thread' : 'main';
+  const pane = testID === 'comment-thread-list' ? 'commentThread' : 'main';
   const onViewableItemsChanged = useCallback(
     ({ changed }: { changed: ViewToken<CommentRow>[] }) => {
       const shown = changed.flatMap(({ item, index, isViewable }) =>
@@ -111,7 +111,7 @@ export function CommentList({
                 id: item.comment.id,
                 index: index ?? 0,
                 pinned: item.pinned,
-                threadRoot: item.threadRoot,
+                commentThreadRoot: item.commentThreadRoot,
               },
             ]
           : [],
