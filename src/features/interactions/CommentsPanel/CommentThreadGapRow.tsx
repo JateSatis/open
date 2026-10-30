@@ -5,7 +5,7 @@ import { styles } from './styles';
 
 import { Text } from '@/components/Text';
 
-export type ThreadGapRowProps = {
+export type CommentThreadGapRowProps = {
   /** Сколько ответов за разрывом; `null` — тред ещё грузится, на месте ответов — колесо. */
   hidden: number | null;
   isLoading: boolean;
@@ -15,15 +15,20 @@ export type ThreadGapRowProps = {
 };
 
 /** Разрыв длинного треда — «Показать ещё N ответов» — или загрузка его начала. */
-export function ThreadGapRow({ hidden, isLoading, failed = false, onPress }: ThreadGapRowProps) {
+export function CommentThreadGapRow({
+  hidden,
+  isLoading,
+  failed = false,
+  onPress,
+}: CommentThreadGapRowProps) {
   if (failed) {
     return (
       <View style={styles.row}>
         <Pressable
-          testID="thread-retry"
+          testID="comment-thread-retry"
           accessibilityRole="button"
           onPress={onPress}
-          style={styles.threadAction}
+          style={styles.commentThreadAction}
         >
           <Text variant="small" color="danger">
             Не удалось загрузить ответы. Повторить
@@ -36,15 +41,15 @@ export function ThreadGapRow({ hidden, isLoading, failed = false, onPress }: Thr
   return (
     <View style={styles.row}>
       {hidden === null || isLoading ? (
-        <View style={styles.threadAction}>
+        <View style={styles.commentThreadAction}>
           <ActivityIndicator accessibilityLabel="Загрузка ответов" />
         </View>
       ) : (
         <Pressable
-          testID="thread-gap"
+          testID="comment-thread-gap"
           accessibilityRole="button"
           onPress={onPress}
-          style={styles.threadAction}
+          style={styles.commentThreadAction}
         >
           <Text variant="smallBold" color="primary" numberOfLines={1} style={styles.repliesLabel}>
             {`Показать ещё ${repliesLabel(hidden)}`}

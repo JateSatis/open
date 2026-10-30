@@ -24,13 +24,13 @@ import { chatTitle } from '@/features/chats/chatDisplay';
 import { visibleCommentActions } from '@/features/interactions/comments/commentActions';
 import {
   commentThreadKey,
-  threadOf,
+  commentThreadOf,
   type CommentItem,
 } from '@/features/interactions/comments/commentItem';
 import { loadedComments } from '@/features/interactions/comments/commentsCache';
 import {
-  getOpenThread,
-  setOpenThread,
+  getOpenCommentThread,
+  setOpenCommentThread,
   type CommentsPanelTarget,
 } from '@/features/interactions/comments/commentsPanelStore';
 import { useCommentActionHandlers } from '@/features/interactions/comments/useCommentActionHandlers';
@@ -50,10 +50,10 @@ type Options = {
   data: ReturnType<typeof usePanelComments>;
   currentUserId: string | null;
   /** Открытое окно треда — id корня. */
-  openThread: string | null;
+  openCommentThread: string | null;
   inputRef: RefObject<TextInput | null>;
   listRef: RefObject<FlashListRef<CommentRow> | null>;
-  threadListRef: RefObject<FlashListRef<CommentRow> | null>;
+  commentThreadListRef: RefObject<FlashListRef<CommentRow> | null>;
   sheet: PanelSheet;
   /** Прыжок к комментарию в окне треда — по тапу на цитату. */
   jump: (commentId: string, options?: { flash?: boolean }) => Promise<boolean>;
@@ -73,7 +73,7 @@ function forwardedOf(
     id: comment.id,
     subject: { type: pop ? 'pop' : 'message', id: comment.targetId },
     chatId: comment.chatId,
-    threadRootId: comment.threadRootId,
+    commentThreadRootId: comment.commentThreadRootId,
     authorId: comment.authorId,
     authorName: comment.authorName,
     authorAvatarUrl: comment.authorAvatarUrl,
@@ -116,10 +116,10 @@ export function usePanelActions({
   live,
   data,
   currentUserId,
-  openThread,
+  openCommentThread,
   inputRef,
   listRef,
-  threadListRef,
+  commentThreadListRef,
   sheet,
   jump,
   measureViewport,
@@ -128,7 +128,7 @@ export function usePanelActions({
   const router = useRouter();
   const { subject } = target;
   const targetId = subject.id;
-  const { comments, rows, threadRows, amMember, pop } = data;
+  const { comments, rows, commentThreadRows, amMember, pop } = data;
   // У попа — чат постов его канала.
   const chatId = live?.message.chatId ?? data.pop?.postsChatId ?? target.chatId ?? '';
   const { chat } = useChat(chatId);
@@ -137,8 +137,8 @@ export function usePanelActions({
   const { close } = sheet;
   // Выбор — среди комментариев того окна, что на экране.
   const visible = useMemo(
-    () => commentsOf(openThread ? threadRows : rows),
-    [openThread, rows, threadRows],
+    () => commentsOf(openCommentThread ? commentThreadRows : rows),
+    [openCommentThread, rows, commentThreadRows],
   );
 
   const { saveEdit: saveCommentEdit } = comments;
@@ -185,13 +185,13 @@ export function usePanelActions({
    * открывается окно треда, поле в фокусе, цитаты нет — в треде любое
    * сообщение и так ответ.
    */
-  const replyInThread = useCallback(
+  const replyInCommentThread = useCallback(
     (picked: CommentItem[]) => {
       const [only, ...rest] = picked;
 
-      if (getOpenThread() || !only || rest.length > 0 || only.threadRootId) return false;
+      if (getOpenCommentThread() || !only || rest.length > 0 || only.commentThreadRootId) return false;
 
-      setOpenThread(only.id);
+      setOpenCommentThread(only.id);
       claimKeyboardForComments();
       focusWithKeyboard(inputRef, undefined, true);
       return true;
@@ -204,9 +204,9 @@ export function usePanelActions({
     currentUserId,
     draft,
     inputRef,
-    thread: comments,
+    commentsState: comments,
     onForward: forward,
-    replyElsewhere: replyInThread,
+    replyElsewhere: replyInCommentThread,
   });
 
   const replyTo = useCallback((comment: CommentItem) => startReply([comment]), [startReply]);
@@ -218,7 +218,7 @@ export function usePanelActions({
   const forwardOne = useCallback((comment: CommentItem) => forward([comment]), [forward]);
 
   const runAction = useCommentActionHandlers({
-    thread: comments,
+    commentsState: comments,
     edit: edit.start,
     reply: replyTo,
     select: selectOne,
@@ -244,25 +244,25 @@ export function usePanelActions({
     };
   });
 
-  const enteredThread = useRef(openThread);
+  const enteredCommentThread = useRef(openCommentThread);
 
   useEffect(() => {
-    if (enteredThread.current === openThread) return;
+    if (enteredCommentThread.current === openCommentThread) return;
 
-    enteredThread.current = openThread;
+    enteredCommentThread.current = openCommentThread;
     resetRef.current();
-  }, [openThread]);
+  }, [openCommentThread]);
 
   // Шит закрылся — цитата ответа не переживает его: черновик сообщения
   // остаётся, а следующее открытие начнётся с основного списка, где эта
   // цитата незаметно увела бы комментарий в тред.
   useEffect(() => () => resetQuoteRef.current(), []);
 
-  const openThreadOf = useCallback((rootId: string) => setOpenThread(rootId), []);
-  const exitThread = useCallback(() => setOpenThread(null), []);
+  const openCommentThreadOf = useCallback((rootId: string) => setOpenCommentThread(rootId), []);
+  const exitCommentThread = useCallback(() => setOpenCommentThread(null), []);
 
   /** Тред ответа с цитатами, отправленного не из окна треда: тред первой цитаты. */
-  const threadOfQuotes = useCallback(
+  const commentThreadOfQuotes = useCallback(
     (quotes: LiveQuote[]): string | null => {
       const [first] = quotes;
 
@@ -270,7 +270,7 @@ export function usePanelActions({
 
       const quoted = loadedComments(queryClient, targetId).get(first.messageId);
 
-      return quoted ? threadOf(quoted) : first.messageId;
+      return quoted ? commentThreadOf(quoted) : first.messageId;
     },
     [targetId, queryClient],
   );
@@ -280,18 +280,18 @@ export function usePanelActions({
    * верхнеуровневый — наверху основного списка.
    */
   const afterSend = useCallback(
-    (threadRootId: string | null) => {
+    (commentThreadRootId: string | null) => {
       // После того как строка встала в список: он держит видимые строки на
       // месте, и новая наверху ушла бы под шапку шита.
       void (async () => {
         await nextFrame();
         await nextFrame();
 
-        if (threadRootId) threadListRef.current?.scrollToEnd({ animated: true });
+        if (commentThreadRootId) commentThreadListRef.current?.scrollToEnd({ animated: true });
         else listRef.current?.scrollToOffset({ offset: 0, animated: true });
       })();
     },
-    [listRef, threadListRef],
+    [listRef, commentThreadListRef],
   );
 
   const { mode } = draft;
@@ -299,21 +299,21 @@ export function usePanelActions({
   const { send, sendVoice: sendCommentVoice } = comments;
 
   // Написанное в окне треда — ответ в этот тред, с цитатой или без.
-  const threadRootId = openThread ?? threadOfQuotes(replies);
+  const commentThreadRootId = openCommentThread ?? commentThreadOfQuotes(replies);
 
   const submit = useCallback(() => {
-    send(draft.text, draft.media(), replies, threadRootId);
+    send(draft.text, draft.media(), replies, commentThreadRootId);
     draft.clear();
-    afterSend(threadRootId);
-  }, [afterSend, draft, replies, send, threadRootId]);
+    afterSend(commentThreadRootId);
+  }, [afterSend, draft, replies, send, commentThreadRootId]);
 
   const sendVoice = useCallback(
     (voice: LocalMedia) => {
-      sendCommentVoice(voice, replies, threadRootId);
+      sendCommentVoice(voice, replies, commentThreadRootId);
       if (replies.length > 0) draft.setMode(null);
-      afterSend(threadRootId);
+      afterSend(commentThreadRootId);
     },
-    [afterSend, draft, replies, sendCommentVoice, threadRootId],
+    [afterSend, draft, replies, sendCommentVoice, commentThreadRootId],
   );
 
   const jumpToQuote = useCallback(
@@ -334,8 +334,8 @@ export function usePanelActions({
       return true;
     }
 
-    if (getOpenThread()) {
-      setOpenThread(null);
+    if (getOpenCommentThread()) {
+      setOpenCommentThread(null);
       return true;
     }
 
@@ -400,8 +400,8 @@ export function usePanelActions({
     replyTo,
     selectOne,
     toggleSelected,
-    openThread: openThreadOf,
-    exitThread,
+    openCommentThread: openCommentThreadOf,
+    exitCommentThread,
     submit,
     sendVoice,
     jumpToQuote,

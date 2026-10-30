@@ -1,4 +1,4 @@
-import { getCommentTarget, listThreadReplies, listThreadRoots } from './comments';
+import { getCommentTarget, listCommentThreadReplies, listCommentThreadRoots } from './comments';
 
 import { supabase } from '@/api/supabase';
 
@@ -70,28 +70,28 @@ function serveRoots(count: number) {
   return calls;
 }
 
-describe('listThreadReplies', () => {
+describe('listCommentThreadReplies', () => {
   it('asks for one row past the page to know whether replies remain', async () => {
     const calls = serveReplies(0);
 
-    await listThreadReplies('root', { limit: 10 });
+    await listCommentThreadReplies('root', { limit: 10 });
 
     expect(calls).toContainEqual({ method: 'limit', args: [11] });
   });
 
-  it('a thread of exactly one page has nothing more to show', async () => {
+  it('a comment thread of exactly one page has nothing more to show', async () => {
     serveReplies(10);
 
-    const page = await listThreadReplies('root', { limit: 10 });
+    const page = await listCommentThreadReplies('root', { limit: 10 });
 
     expect(page.items).toHaveLength(10);
     expect(page.nextCursor).toBeNull();
   });
 
-  it('a thread shorter than a page has nothing more to show', async () => {
+  it('a comment thread shorter than a page has nothing more to show', async () => {
     serveReplies(9);
 
-    const page = await listThreadReplies('root', { limit: 10 });
+    const page = await listCommentThreadReplies('root', { limit: 10 });
 
     expect(page.items).toHaveLength(9);
     expect(page.nextCursor).toBeNull();
@@ -100,18 +100,18 @@ describe('listThreadReplies', () => {
   it('an extra row means more replies: the page stops at its last shown reply', async () => {
     serveReplies(11);
 
-    const page = await listThreadReplies('root', { limit: 10 });
+    const page = await listCommentThreadReplies('root', { limit: 10 });
 
     expect(page.items.map((c) => c.id)).toEqual(rows(10).map((r) => r.id));
     expect(page.nextCursor).toBe(row(10).created_at);
   });
 });
 
-describe('listThreadRoots', () => {
+describe('listCommentThreadRoots', () => {
   it('a full last page has no next cursor', async () => {
     const calls = serveRoots(30);
 
-    const page = await listThreadRoots('m1', { limit: 30 });
+    const page = await listCommentThreadRoots('m1', { limit: 30 });
 
     expect(calls[0].args[0]).toMatchObject({ page_size: 31 });
     expect(page.items).toHaveLength(30);
@@ -121,7 +121,7 @@ describe('listThreadRoots', () => {
   it('an extra row continues after the last shown root', async () => {
     serveRoots(31);
 
-    const page = await listThreadRoots('m1', { limit: 30 });
+    const page = await listCommentThreadRoots('m1', { limit: 30 });
 
     expect(page.items).toHaveLength(30);
     expect(page.nextCursor).toEqual({ rank: row(30).rank, id: 'c30' });
@@ -154,7 +154,9 @@ describe('fragment quote', () => {
       },
     ]);
 
-    const { items } = await listThreadRoots('m1', { set: { kind: 'cluster', clusterId: 'k1' } });
+    const { items } = await listCommentThreadRoots('m1', {
+      set: { kind: 'cluster', clusterId: 'k1' },
+    });
 
     expect(items[0]).toMatchObject({
       fragmentId: 'f1',
@@ -166,7 +168,7 @@ describe('fragment quote', () => {
   it('a plain comment has no quote', async () => {
     serveRows([{ ...row(1), fragment_id: null, fragment: null }]);
 
-    const { items } = await listThreadRoots('m1');
+    const { items } = await listCommentThreadRoots('m1');
 
     expect(items[0].fragmentId).toBeNull();
     expect(items[0].fragmentQuote).toBeNull();
@@ -175,7 +177,7 @@ describe('fragment quote', () => {
   it('a fragment hidden with its deleted message leaves the id without a quote', async () => {
     serveRows([{ ...row(1), fragment_id: 'f1', fragment: null }]);
 
-    const { items } = await listThreadRoots('m1');
+    const { items } = await listCommentThreadRoots('m1');
 
     expect(items[0]).toMatchObject({ fragmentId: 'f1', fragmentQuote: null });
   });

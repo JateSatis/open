@@ -63,7 +63,7 @@ export const styles = StyleSheet.create({
    * Корень в окне треда — на фоне островка, без пунктира. Подложка шире
    * облачка на поле строки, само облачко стоит там же, где в основном списке.
    */
-  threadRoot: {
+  commentThreadRoot: {
     marginHorizontal: Spacing.two,
     marginBottom: Spacing.two,
     paddingHorizontal: Spacing.three - Spacing.two,
@@ -71,7 +71,7 @@ export const styles = StyleSheet.create({
     borderRadius: Radii.lg,
   },
   /** Окно треда — слоем поверх основного списка, въезжает справа. */
-  threadPane: {
+  commentThreadPane: {
     ...StyleSheet.absoluteFill,
   },
   /** Метка закрепа — над облачком, от края облачка, а не аватарки. */
@@ -125,11 +125,11 @@ export const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
   },
   /** Разрыв треда «Показать ещё» и загрузка — на месте ответа. */
-  threadAction: {
+  commentThreadAction: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.two,
-    minHeight: Sizes.threadToggle,
+    minHeight: Sizes.commentThreadToggle,
     marginBottom: Spacing.two,
   },
   /** «N ответов» под облачком корня — вплотную к нему, по его краю. */
@@ -137,7 +137,7 @@ export const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.half,
-    minHeight: Sizes.threadToggle,
+    minHeight: Sizes.commentThreadToggle,
     marginTop: -Spacing.one,
     marginBottom: Spacing.one,
   },

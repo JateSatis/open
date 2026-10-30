@@ -1,10 +1,10 @@
 import { QueryClient } from '@tanstack/react-query';
 
 import {
-  EMPTY_THREAD,
-  addToThread,
+  EMPTY_COMMENT_THREAD,
+  addToCommentThread,
   appendRoots,
-  appendThreadHead,
+  appendCommentThreadHead,
   loadedComments,
   raiseRoot,
   replaceComments,
@@ -12,10 +12,10 @@ import {
   setAuthorPin,
   rootsKey,
   rootsPageOf,
-  threadKey,
+  commentThreadQueryKey,
   updateAllComments,
   type RootsPage,
-  type ThreadPage,
+  type CommentThreadPage,
 } from './commentsCache';
 import { toCommentItem } from './commentItem';
 
@@ -37,7 +37,7 @@ function comment(id: string, minute: number, overrides: Partial<Comment> = {}): 
     attachments: [],
     reactions: { members: {}, visitors: {}, mine: null },
     replies: [],
-    threadRootId: null,
+    commentThreadRootId: null,
     fragmentId: null,
     fragmentQuote: null,
     repliesCount: 0,
@@ -124,29 +124,29 @@ describe('author pin', () => {
   });
 });
 
-describe('thread cache', () => {
-  const reply = (id: string, minute: number) => comment(id, minute, { threadRootId: 'root' });
+describe('comment thread cache', () => {
+  const reply = (id: string, minute: number) => comment(id, minute, { commentThreadRootId: 'root' });
 
   it('keeps my reply past the gap until the head reaches it', () => {
-    let page: ThreadPage = appendThreadHead(EMPTY_THREAD, [reply('r1', 1)], 'cursor');
+    let page: CommentThreadPage = appendCommentThreadHead(EMPTY_COMMENT_THREAD, [reply('r1', 1)], 'cursor');
 
-    page = addToThread(page, toCommentItem(reply('mine', 9)));
+    page = addToCommentThread(page, toCommentItem(reply('mine', 9)));
     expect(ids(page.head)).toEqual(['r1']);
     expect(ids(page.tail)).toEqual(['mine']);
 
-    page = appendThreadHead(page, [reply('r2', 2), reply('mine', 9)], null);
+    page = appendCommentThreadHead(page, [reply('r2', 2), reply('mine', 9)], null);
     expect(ids(page.head)).toEqual(['r1', 'r2', 'mine']);
     expect(page.tail).toEqual([]);
   });
 
-  it('puts a new reply at the end of a fully loaded thread', () => {
-    const page = addToThread(appendThreadHead(EMPTY_THREAD, [reply('r1', 1)], null), toCommentItem(reply('r2', 2)));
+  it('puts a new reply at the end of a fully loaded comment thread', () => {
+    const page = addToCommentThread(appendCommentThreadHead(EMPTY_COMMENT_THREAD, [reply('r1', 1)], null), toCommentItem(reply('r2', 2)));
 
     expect(ids(page.head)).toEqual(['r1', 'r2']);
   });
 
   it('keeps the tail when the head has not been read yet', () => {
-    const page = addToThread(EMPTY_THREAD, toCommentItem(reply('mine', 9)));
+    const page = addToCommentThread(EMPTY_COMMENT_THREAD, toCommentItem(reply('mine', 9)));
 
     expect(page.headLoaded).toBe(false);
     expect(ids(page.tail)).toEqual(['mine']);
@@ -161,15 +161,15 @@ describe('every loaded comment', () => {
       rootsKey('m1'),
       rootsPageOf({ items: [comment('root', 1, { repliesCount: 1 })], nextCursor: null }),
     );
-    queryClient.setQueryData<ThreadPage>(
-      threadKey('m1', 'root'),
-      appendThreadHead(EMPTY_THREAD, [comment('r1', 2, { threadRootId: 'root' })], null),
+    queryClient.setQueryData<CommentThreadPage>(
+      commentThreadQueryKey('m1', 'root'),
+      appendCommentThreadHead(EMPTY_COMMENT_THREAD, [comment('r1', 2, { commentThreadRootId: 'root' })], null),
     );
 
     return queryClient;
   }
 
-  it('finds comments both in the top and in threads', () => {
+  it('finds comments both in the top and in comment threads', () => {
     expect([...loadedComments(seeded(), 'm1').keys()].sort()).toEqual(['r1', 'root']);
   });
 
@@ -180,7 +180,7 @@ describe('every loaded comment', () => {
       item.id === 'r1' ? { ...item, localPreviews: ['file://x'] } : item,
     );
     replaceComments(queryClient, 'm1', [
-      comment('r1', 2, { threadRootId: 'root', text: 'правка', editedAt: '2026-09-30T11:00:00Z' }),
+      comment('r1', 2, { commentThreadRootId: 'root', text: 'правка', editedAt: '2026-09-30T11:00:00Z' }),
     ]);
 
     const edited = loadedComments(queryClient, 'm1').get('r1');

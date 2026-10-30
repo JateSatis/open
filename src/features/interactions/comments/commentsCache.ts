@@ -9,7 +9,7 @@
 // комментарий, к которому пришли по пересланному, — только у себя, до
 // закрытия панели.
 //
-// Тред (`thread`) — ответы одного корня по порядку. Начало треда (`head`)
+// Тред (`commentThread`) — ответы одного корня по порядку. Начало треда (`head`)
 // загружено подряд; за разрывом «Показать ещё» может лежать `tail` — свои
 // только что отправленные ответы и цель прыжка. Когда начало догружено до
 // конца, `tail` вливается в него.
@@ -37,7 +37,7 @@ export type RootsPage = {
   nextCursor: RootCursor | null;
 };
 
-export type ThreadPage = {
+export type CommentThreadPage = {
   /** Начало треда уже читали с сервера. Без этого в кеше может лежать только `tail`. */
   headLoaded: boolean;
   /** Начало треда — подряд, сверху первые. */
@@ -59,11 +59,11 @@ export function rootsKey(targetId: string, scopeKey?: string) {
     : (['comments', targetId, 'roots'] as const);
 }
 
-export function threadKey(targetId: string, rootId: string) {
-  return ['comments', targetId, 'thread', rootId] as const;
+export function commentThreadQueryKey(targetId: string, rootId: string) {
+  return ['comments', targetId, 'comment-thread', rootId] as const;
 }
 
-export const EMPTY_THREAD: ThreadPage = { headLoaded: false, head: [], nextCursor: null, tail: [] };
+export const EMPTY_COMMENT_THREAD: CommentThreadPage = { headLoaded: false, head: [], nextCursor: null, tail: [] };
 
 function byTime(a: CommentItem, b: CommentItem): number {
   if (a.createdAt !== b.createdAt) return a.createdAt < b.createdAt ? -1 : 1;
@@ -162,11 +162,11 @@ export function rootsInOrder(page: RootsPage): CommentItem[] {
  * Очередная порция начала треда. Догнали разрыв — то, что лежало за ним,
  * встаёт в начало, и разрыва больше нет.
  */
-export function appendThreadHead(
-  page: ThreadPage,
+export function appendCommentThreadHead(
+  page: CommentThreadPage,
   incoming: Comment[],
   nextCursor: string | null,
-): ThreadPage {
+): CommentThreadPage {
   const known = new Set(page.head.map((item) => item.id));
   const added = incoming.filter((comment) => !known.has(comment.id)).map(toCommentItem);
   const head = [...page.head, ...added].sort(byTime);
@@ -181,7 +181,7 @@ export function appendThreadHead(
 }
 
 /** Ответ — в конец треда: в начало, если оно загружено до конца, иначе за разрыв. */
-export function addToThread(page: ThreadPage, item: CommentItem): ThreadPage {
+export function addToCommentThread(page: CommentThreadPage, item: CommentItem): CommentThreadPage {
   if ([...page.head, ...page.tail].some((other) => other.id === item.id)) return page;
 
   if (page.headLoaded && page.nextCursor === null) {
@@ -192,7 +192,7 @@ export function addToThread(page: ThreadPage, item: CommentItem): ThreadPage {
 }
 
 /** Тред дочитан до конца: новый ответ встаёт в его конец без разрыва. */
-export function isThreadComplete(page: ThreadPage | undefined): boolean {
+export function isCommentThreadComplete(page: CommentThreadPage | undefined): boolean {
   return Boolean(page?.headLoaded && page.nextCursor === null);
 }
 
@@ -216,11 +216,11 @@ function isRootsPage(page: unknown): page is RootsPage {
   return typeof page === 'object' && page !== null && 'raised' in page;
 }
 
-function isThreadPage(page: unknown): page is ThreadPage {
+function isCommentThreadPage(page: unknown): page is CommentThreadPage {
   return typeof page === 'object' && page !== null && 'head' in page;
 }
 
-function mapPage<T extends RootsPage | ThreadPage>(page: T, update: Update): T {
+function mapPage<T extends RootsPage | CommentThreadPage>(page: T, update: Update): T {
   if (isRootsPage(page)) {
     const authorPin = page.authorPin ? update(page.authorPin) : null;
     const raised = mapItems(page.raised, update);
@@ -231,11 +231,11 @@ function mapPage<T extends RootsPage | ThreadPage>(page: T, update: Update): T {
       : { ...page, authorPin, raised, items };
   }
 
-  const thread = page as ThreadPage;
-  const head = mapItems(thread.head, update);
-  const tail = mapItems(thread.tail, update);
+  const commentThread = page as CommentThreadPage;
+  const head = mapItems(commentThread.head, update);
+  const tail = mapItems(commentThread.tail, update);
 
-  return head === thread.head && tail === thread.tail ? page : ({ ...thread, head, tail } as T);
+  return head === commentThread.head && tail === commentThread.tail ? page : ({ ...commentThread, head, tail } as T);
 }
 
 /**
@@ -243,15 +243,15 @@ function mapPage<T extends RootsPage | ThreadPage>(page: T, update: Update): T {
  * `update` отдаёт тот же объект (не трогать), новый или `null` (убрать).
  */
 export function updateAllComments(queryClient: QueryClient, targetId: string, update: Update) {
-  queryClient.setQueriesData<RootsPage | ThreadPage>({ queryKey: commentsKey(targetId) }, (page) =>
-    isRootsPage(page) || isThreadPage(page) ? mapPage(page, update) : page,
+  queryClient.setQueriesData<RootsPage | CommentThreadPage>({ queryKey: commentsKey(targetId) }, (page) =>
+    isRootsPage(page) || isCommentThreadPage(page) ? mapPage(page, update) : page,
   );
 }
 
 /** То же по всем веткам всех сообщений — для того, что знает только id комментария. */
 export function updateCommentEverywhere(queryClient: QueryClient, update: Update) {
-  queryClient.setQueriesData<RootsPage | ThreadPage>({ queryKey: ['comments'] }, (page) =>
-    isRootsPage(page) || isThreadPage(page) ? mapPage(page, update) : page,
+  queryClient.setQueriesData<RootsPage | CommentThreadPage>({ queryKey: ['comments'] }, (page) =>
+    isRootsPage(page) || isCommentThreadPage(page) ? mapPage(page, update) : page,
   );
 }
 
@@ -262,7 +262,7 @@ export function loadedComments(queryClient: QueryClient, targetId: string): Map<
   for (const [, page] of queryClient.getQueriesData({ queryKey: commentsKey(targetId) })) {
     if (isRootsPage(page)) {
       for (const item of allRoots(page)) found.set(item.id, item);
-    } else if (isThreadPage(page)) {
+    } else if (isCommentThreadPage(page)) {
       for (const item of [...page.head, ...page.tail]) found.set(item.id, item);
     }
   }
@@ -271,16 +271,16 @@ export function loadedComments(queryClient: QueryClient, targetId: string): Map<
 }
 
 /** Загруженные треды сообщения: id корня → страница. */
-export function loadedThreads(queryClient: QueryClient, targetId: string): Map<string, ThreadPage> {
-  const threads = new Map<string, ThreadPage>();
+export function loadedCommentThreads(queryClient: QueryClient, targetId: string): Map<string, CommentThreadPage> {
+  const commentThreads = new Map<string, CommentThreadPage>();
 
-  for (const [key, page] of queryClient.getQueriesData({ queryKey: [...commentsKey(targetId), 'thread'] })) {
+  for (const [key, page] of queryClient.getQueriesData({ queryKey: [...commentsKey(targetId), 'comment-thread'] })) {
     const rootId = key[3];
 
-    if (typeof rootId === 'string' && isThreadPage(page)) threads.set(rootId, page);
+    if (typeof rootId === 'string' && isCommentThreadPage(page)) commentThreads.set(rootId, page);
   }
 
-  return threads;
+  return commentThreads;
 }
 
 export function readRoots(
@@ -325,27 +325,27 @@ export function updateScopedRoots(
   );
 }
 
-export function readThread(
+export function readCommentThread(
   queryClient: QueryClient,
   targetId: string,
   rootId: string,
-): ThreadPage | undefined {
-  return queryClient.getQueryData<ThreadPage>(threadKey(targetId, rootId));
+): CommentThreadPage | undefined {
+  return queryClient.getQueryData<CommentThreadPage>(commentThreadQueryKey(targetId, rootId));
 }
 
 /**
  * Меняет тред. Незагруженный создаётся пустым только с `create`: свой ответ
  * должен дожить до того, как тред откроют и прочитают его начало.
  */
-export function updateThread(
+export function updateCommentThread(
   queryClient: QueryClient,
   targetId: string,
   rootId: string,
-  update: (page: ThreadPage) => ThreadPage,
+  update: (page: CommentThreadPage) => CommentThreadPage,
   { create = false }: { create?: boolean } = {},
 ) {
-  queryClient.setQueryData<ThreadPage>(threadKey(targetId, rootId), (page) =>
-    page ? update(page) : create ? update(EMPTY_THREAD) : page,
+  queryClient.setQueryData<CommentThreadPage>(commentThreadQueryKey(targetId, rootId), (page) =>
+    page ? update(page) : create ? update(EMPTY_COMMENT_THREAD) : page,
   );
 }
 

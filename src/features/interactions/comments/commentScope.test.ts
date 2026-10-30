@@ -6,7 +6,7 @@ import { loadRoots, syncAuthorPin, syncComments } from './commentSync';
 import {
   getPinnedComment,
   listCommentsByIds,
-  listThreadRoots,
+  listCommentThreadRoots,
   type Comment,
 } from '@/api/comments';
 import { listMessageFragments, type Fragment } from '@/api/fragments';
@@ -15,8 +15,8 @@ import { fragmentsKey } from '@/features/chats/fragments/useMessageFragments';
 jest.mock('@/api/comments', () => ({
   getPinnedComment: jest.fn(),
   listCommentsByIds: jest.fn(),
-  listThreadRoots: jest.fn(),
-  listThreadReplies: jest.fn(),
+  listCommentThreadRoots: jest.fn(),
+  listCommentThreadReplies: jest.fn(),
   listCommentReactions: jest.fn(),
 }));
 
@@ -24,7 +24,7 @@ jest.mock('@/api/fragments', () => ({
   listMessageFragments: jest.fn(),
 }));
 
-const mockedRoots = jest.mocked(listThreadRoots);
+const mockedRoots = jest.mocked(listCommentThreadRoots);
 const mockedPinned = jest.mocked(getPinnedComment);
 const mockedByIds = jest.mocked(listCommentsByIds);
 const mockedFragments = jest.mocked(listMessageFragments);
@@ -45,7 +45,7 @@ function comment(id: string, overrides: Partial<Comment> = {}): Comment {
     attachments: [],
     reactions: { members: {}, visitors: {}, mine: null },
     replies: [],
-    threadRootId: null,
+    commentThreadRootId: null,
     fragmentId: null,
     fragmentQuote: null,
     repliesCount: 0,

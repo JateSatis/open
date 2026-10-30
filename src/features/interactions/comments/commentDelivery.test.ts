@@ -70,7 +70,7 @@ describe('a comment to a fragment, sent from its panel', () => {
         attachments: [],
         reactions: { members: {}, visitors: {}, mine: null },
         replies: [],
-        threadRootId: null,
+        commentThreadRootId: null,
         fragmentId: 'f1',
         fragmentQuote: null,
         repliesCount: 0,

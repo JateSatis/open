@@ -27,7 +27,7 @@ function comment(overrides: Partial<CommentItem> = {}): CommentItem {
     viewsCount: 0,
     readAt: null,
     status: 'sent',
-    threadRootId: null,
+    commentThreadRootId: null,
     repliesCount: 0,
     deleted: false,
     ...overrides,
@@ -106,9 +106,9 @@ describe('comment menu', () => {
       expect(actions).not.toContain('pin');
     });
 
-    it('has no pin on a reply in a thread', () => {
+    it('has no pin on a reply in a comment thread', () => {
       const actions = ids({
-        comment: comment({ threadRootId: 'root' }),
+        comment: comment({ commentThreadRootId: 'root' }),
         isOwn: false,
         targetLive: true,
         canPin: true,

@@ -10,7 +10,7 @@ import { showNotice } from '@/features/notifications/alertsStore';
 import { isNetworkError } from '@/lib/network';
 
 type Options = {
-  thread: Pick<CommentsState, 'retry' | 'discard' | 'remove' | 'pin' | 'unpin'>;
+  commentsState: Pick<CommentsState, 'retry' | 'discard' | 'remove' | 'pin' | 'unpin'>;
   /** «Изменить»: поле панели переходит в правку этого комментария. */
   edit: (comment: CommentItem) => void;
   /** «Ответить»: комментарий встаёт плашкой над полем. */
@@ -22,8 +22,8 @@ type Options = {
 };
 
 /** Что делает каждый пункт меню комментария. */
-export function useCommentActionHandlers({ thread, edit, reply, select, forward }: Options) {
-  const { retry, discard, remove, pin, unpin } = thread;
+export function useCommentActionHandlers({ commentsState, edit, reply, select, forward }: Options) {
+  const { retry, discard, remove, pin, unpin } = commentsState;
 
   return useCallback(
     (id: CommentActionId, comment: CommentItem) => {

@@ -1,4 +1,4 @@
-import { buildCommentRows, buildThreadRows, type OpenThread } from './rows';
+import { buildCommentRows, buildCommentThreadRows, type OpenCommentThread } from './rows';
 
 import { NO_REACTIONS } from '@/api/reactionCounts';
 import type { CommentItem } from '@/features/interactions/comments/commentItem';
@@ -27,7 +27,7 @@ function comment(id: string, extra: Partial<CommentItem> = {}): CommentItem {
     viewsCount: 0,
     readAt: null,
     status: 'sent',
-    threadRootId: null,
+    commentThreadRootId: null,
     repliesCount: 0,
     deleted: false,
     ...extra,
@@ -36,7 +36,7 @@ function comment(id: string, extra: Partial<CommentItem> = {}): CommentItem {
 
 const root = comment('a', { repliesCount: 5 });
 
-const open = (extra: Partial<OpenThread>): OpenThread => ({
+const open = (extra: Partial<OpenCommentThread>): OpenCommentThread => ({
   root,
   rootId: 'a',
   head: [],
@@ -73,34 +73,34 @@ describe('buildCommentRows', () => {
   });
 });
 
-describe('buildThreadRows', () => {
+describe('buildCommentThreadRows', () => {
   it('puts the root first, then the head, a gap with the rest, then the tail', () => {
-    const rows = buildThreadRows(
+    const rows = buildCommentThreadRows(
       open({
-        head: [comment('r1', { threadRootId: 'a' }), comment('r2', { threadRootId: 'a' })],
-        tail: [comment('mine', { threadRootId: 'a' })],
+        head: [comment('r1', { commentThreadRootId: 'a' }), comment('r2', { commentThreadRootId: 'a' })],
+        tail: [comment('mine', { commentThreadRootId: 'a' })],
         hasGap: true,
       }),
     );
 
     expect(rows.map((row) => row.key)).toEqual(['a', 'r1', 'r2', 'a/gap', 'mine']);
-    expect(rows.find((row) => row.type === 'thread-gap')).toMatchObject({ hidden: 2 });
+    expect(rows.find((row) => row.type === 'comment-thread-gap')).toMatchObject({ hidden: 2 });
   });
 
-  it('marks only the root as the thread root and puts no reply button anywhere', () => {
-    const rows = buildThreadRows(open({ head: [comment('r1', { threadRootId: 'a' })] }));
+  it('marks only the root as the comment thread root and puts no reply button anywhere', () => {
+    const rows = buildCommentThreadRows(open({ head: [comment('r1', { commentThreadRootId: 'a' })] }));
 
-    expect(rows.map((row) => (row.type === 'comment' ? [row.threadRoot, row.replies] : null))).toEqual([
+    expect(rows.map((row) => (row.type === 'comment' ? [row.commentThreadRoot, row.replies] : null))).toEqual([
       [true, 0],
       [false, 0],
     ]);
   });
 
   it('shows own unsent replies at the very end', () => {
-    const rows = buildThreadRows(
+    const rows = buildCommentThreadRows(
       open({
-        head: [comment('r1', { threadRootId: 'a' })],
-        pending: [comment('local-1', { threadRootId: 'a', status: 'sending' })],
+        head: [comment('r1', { commentThreadRootId: 'a' })],
+        pending: [comment('local-1', { commentThreadRootId: 'a', status: 'sending' })],
       }),
     );
 
@@ -108,15 +108,15 @@ describe('buildThreadRows', () => {
   });
 
   it('shows a loading row under the root until the head arrives', () => {
-    const rows = buildThreadRows(open({ isLoading: true }));
+    const rows = buildCommentThreadRows(open({ isLoading: true }));
 
-    expect(rows.map((row) => row.type)).toEqual(['comment', 'thread-loading']);
+    expect(rows.map((row) => row.type)).toEqual(['comment', 'comment-thread-loading']);
   });
 
   it('keeps a deleted root on top as a stub', () => {
     const gone = comment('a', { deleted: true, repliesCount: 1 });
-    const rows = buildThreadRows(open({ root: gone, head: [comment('r1', { threadRootId: 'a' })] }));
+    const rows = buildCommentThreadRows(open({ root: gone, head: [comment('r1', { commentThreadRootId: 'a' })] }));
 
-    expect(rows[0]).toMatchObject({ key: 'a', threadRoot: true, comment: { deleted: true } });
+    expect(rows[0]).toMatchObject({ key: 'a', commentThreadRoot: true, comment: { deleted: true } });
   });
 });

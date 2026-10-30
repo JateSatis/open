@@ -182,8 +182,8 @@ export type ForwardedComment = {
   subject: { type: 'message' | 'pop'; id: string };
   /** Чат комментария; у комментария к попу — чат постов канала. */
   chatId: string;
-  /** Корень треда; `null` — комментарий верхнеуровневый. */
-  threadRootId: string | null;
+  /** Корень треда комментариев; `null` — комментарий верхнеуровневый. */
+  commentThreadRootId: string | null;
   authorId: string | null;
   /** `null` — аккаунт автора удалён. */
   authorName: string | null;
@@ -611,7 +611,7 @@ function toForwardedComment(row: ForwardedRow): ForwardedComment {
       ? { type: 'pop', id: row.pop_id }
       : { type: 'message', id: row.message_id ?? row.id },
     chatId: row.chat_id,
-    threadRootId: row.thread_root_id,
+    commentThreadRootId: row.thread_root_id,
     authorId: row.author_id,
     authorName: row.author_id ? (row.author_name ?? 'Без имени') : null,
     authorAvatarUrl: row.author_avatar_url,

@@ -11,11 +11,11 @@ import {
   withTiming,
 } from 'react-native-reanimated';
 
-import type { OpenThreadState } from '@/features/interactions/comments/commentsPanelStore';
+import type { OpenCommentThreadState } from '@/features/interactions/comments/commentsPanelStore';
 import { Spacing } from '@/theme';
 
 /** Жест «назад» от левого края окна треда — для тестов. */
-export const THREAD_EDGE_PAN_TEST_ID = 'comments-thread-edge-pan';
+export const COMMENT_THREAD_EDGE_PAN_TEST_ID = 'comment-thread-edge-pan';
 
 /** Ширина полосы у левого края, с которой окно треда тянут назад. */
 const EDGE_WIDTH = Spacing.five;
@@ -33,7 +33,7 @@ const UNDERLAY_SHIFT = 0.25;
 const SLIDE = { duration: 260, easing: Easing.out(Easing.cubic) };
 
 type Options = {
-  openThread: OpenThreadState | null;
+  openCommentThread: OpenCommentThreadState | null;
   width: number;
   /** Окно ушло жестом края — тред закрыть. */
   onExit: () => void;
@@ -44,9 +44,9 @@ type Options = {
  * стрелкой, «назад» или свайпом от левого края. Уезжающее окно рисует свой
  * тред до конца анимации (`shownRoot`), хотя в сторе его уже нет.
  */
-export function useThreadPane({ openThread, width, onExit }: Options) {
-  const rootId = openThread?.rootId ?? null;
-  const instant = openThread?.instant ?? false;
+export function useCommentThreadPane({ openCommentThread, width, onExit }: Options) {
+  const rootId = openCommentThread?.rootId ?? null;
+  const instant = openCommentThread?.instant ?? false;
   const [leaving, setLeaving] = useState<string | null>(null);
   const [lastRoot, setLastRoot] = useState(rootId);
   /** Сдвиг окна вправо: 0 — на месте, `width` — за краем. */
@@ -74,7 +74,7 @@ export function useThreadPane({ openThread, width, onExit }: Options) {
   const edgePan = useMemo(
     () =>
       Gesture.Pan()
-        .withTestId(THREAD_EDGE_PAN_TEST_ID)
+        .withTestId(COMMENT_THREAD_EDGE_PAN_TEST_ID)
         .enabled(rootId !== null)
         .hitSlop({ left: 0, width: EDGE_WIDTH })
         .activeOffsetX(EDGE_ACTIVATION_PX)

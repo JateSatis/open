@@ -6,7 +6,7 @@ import { canCommentOn } from '@/features/chats/messageActions';
 import type { ChatMessage } from '@/features/chats/messages/types';
 import {
   commentsTargetChanged,
-  commentsThreadOpened,
+  commentThreadOpened,
 } from '@/features/recs/journal/commentsJournal';
 
 type FragmentPanelBase = {
@@ -66,20 +66,21 @@ export type CommentsPanelTarget = {
 };
 
 /** Окно треда: корень и как оно появилось — въехало справа или сразу на месте. */
-export type OpenThreadState = { rootId: string; instant: boolean };
+export type OpenCommentThreadState = { rootId: string; instant: boolean };
 
 type PanelState = {
   target: CommentsPanelTarget | null;
   /** Открытое окно треда. Открыто всегда не больше одного. */
-  openThread: OpenThreadState | null;
+  openCommentThread: OpenCommentThreadState | null;
 };
 
-const usePanelStore = create<PanelState>(() => ({ target: null, openThread: null }));
+const usePanelStore = create<PanelState>(() => ({ target: null, openCommentThread: null }));
 
 // Сессия панели в журнале рекомендаций: открытие, смена цели, треды.
 usePanelStore.subscribe((state, prev) => {
   if (state.target !== prev.target) commentsTargetChanged(state.target);
-  if (state.openThread !== prev.openThread) commentsThreadOpened(state.openThread?.rootId ?? null);
+  if (state.openCommentThread !== prev.openCommentThread)
+    commentThreadOpened(state.openCommentThread?.rootId ?? null);
 });
 
 /**
@@ -100,7 +101,7 @@ export function openComments(
       amMember,
       focusCommentId,
     },
-    openThread: null,
+    openCommentThread: null,
   });
 }
 
@@ -119,7 +120,7 @@ export function openFragmentComments(
 ) {
   usePanelStore.setState({
     target: { subject: { type: 'message', id: messageId }, chatId, amMember, fragment, rowKey },
-    openThread: null,
+    openCommentThread: null,
   });
 }
 
@@ -131,7 +132,7 @@ export function openFragmentComments(
 export function openPopComments(popId: string, amMember = false, focusCommentId?: string) {
   usePanelStore.setState({
     target: { subject: { type: 'pop', id: popId }, amMember, focusCommentId },
-    openThread: null,
+    openCommentThread: null,
   });
 }
 
@@ -148,7 +149,7 @@ export function setCommentsAmMember(amMember: boolean) {
 }
 
 export function closeComments() {
-  usePanelStore.setState({ target: null, openThread: null });
+  usePanelStore.setState({ target: null, openCommentThread: null });
 }
 
 export function useCommentsPanelTarget(): CommentsPanelTarget | null {
@@ -159,20 +160,20 @@ export function getCommentsPanelTarget(): CommentsPanelTarget | null {
   return usePanelStore.getState().target;
 }
 
-export function useOpenThread(): OpenThreadState | null {
-  return usePanelStore((state) => state.openThread);
+export function useOpenCommentThread(): OpenCommentThreadState | null {
+  return usePanelStore((state) => state.openCommentThread);
 }
 
-export function getOpenThread(): string | null {
-  return usePanelStore.getState().openThread?.rootId ?? null;
+export function getOpenCommentThread(): string | null {
+  return usePanelStore.getState().openCommentThread?.rootId ?? null;
 }
 
 /**
  * Открывает окно треда этого корня; `null` — закрыть. `instant` — без въезда:
  * шит открылся сразу в треде (пришли к пересланному ответу).
  */
-export function setOpenThread(rootId: string | null, instant = false) {
-  usePanelStore.setState({ openThread: rootId ? { rootId, instant } : null });
+export function setOpenCommentThread(rootId: string | null, instant = false) {
+  usePanelStore.setState({ openCommentThread: rootId ? { rootId, instant } : null });
 }
 
 /**

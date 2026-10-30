@@ -12,17 +12,17 @@ export type CommentRow =
       key: string;
       comment: CommentItem;
       /** Корень в окне треда: на фоне островка. */
-      threadRoot: boolean;
+      commentThreadRoot: boolean;
       /** В основном списке — число на кнопке «N ответов»; 0 — кнопки нет. */
       replies: number;
       /** Закреплён автором контента — над облачком метка. */
       pinned: boolean;
     }
-  | { type: 'thread-gap'; key: string; rootId: string; hidden: number }
-  | { type: 'thread-loading'; key: string; rootId: string }
-  | { type: 'thread-failed'; key: string; rootId: string };
+  | { type: 'comment-thread-gap'; key: string; rootId: string; hidden: number }
+  | { type: 'comment-thread-loading'; key: string; rootId: string }
+  | { type: 'comment-thread-failed'; key: string; rootId: string };
 
-export type OpenThread = {
+export type OpenCommentThread = {
   /** Корень; `null` — его ещё нет среди загруженных. */
   root: CommentItem | null;
   rootId: string;
@@ -62,7 +62,7 @@ export function buildCommentRows(
       type: 'comment',
       key: root.id,
       comment: root,
-      threadRoot: false,
+      commentThreadRoot: false,
       replies,
       pinned: root.id === pinnedId,
     });
@@ -75,14 +75,14 @@ export function buildCommentRows(
  * Окно треда: корень, под ним ответы хронологически — начало, разрыв
  * «показать ещё», загруженный хвост и свои неотправленные.
  */
-export function buildThreadRows(open: OpenThread): CommentRow[] {
+export function buildCommentThreadRows(open: OpenCommentThread): CommentRow[] {
   const { root, rootId } = open;
   const rows: CommentRow[] = [];
   const reply = (comment: CommentItem): CommentRow => ({
     type: 'comment',
     key: comment.id,
     comment,
-    threadRoot: false,
+    commentThreadRoot: false,
     replies: 0,
     pinned: false,
   });
@@ -92,7 +92,7 @@ export function buildThreadRows(open: OpenThread): CommentRow[] {
       type: 'comment',
       key: root.id,
       comment: root,
-      threadRoot: true,
+      commentThreadRoot: true,
       replies: 0,
       pinned: false,
     });
@@ -102,8 +102,8 @@ export function buildThreadRows(open: OpenThread): CommentRow[] {
     // Начало ещё грузится, а хвост уже есть — например, ответ, к которому пришли.
     rows.push(
       open.failed
-        ? { type: 'thread-failed', key: loadingKey(rootId), rootId }
-        : { type: 'thread-loading', key: loadingKey(rootId), rootId },
+        ? { type: 'comment-thread-failed', key: loadingKey(rootId), rootId }
+        : { type: 'comment-thread-loading', key: loadingKey(rootId), rootId },
     );
     rows.push(...open.tail.map(reply));
   } else {
@@ -113,7 +113,7 @@ export function buildThreadRows(open: OpenThread): CommentRow[] {
       const loaded = open.head.length + open.tail.length;
 
       rows.push({
-        type: 'thread-gap',
+        type: 'comment-thread-gap',
         key: gapKey(rootId),
         rootId,
         // Число у корня может отставать от догруженного — «ещё» всегда хоть один.

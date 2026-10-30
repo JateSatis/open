@@ -38,7 +38,7 @@ import { closeComments } from '@/features/interactions/comments/commentsPanelSto
 /** Жест закрытия панели на основном списке — снаружи нужен только тестам. */
 export const PANEL_PAN_TEST_ID = 'comments-panel-pan';
 /** Тот же жест на списке окна треда. */
-export const THREAD_PAN_TEST_ID = 'comments-thread-pan';
+export const COMMENT_THREAD_PAN_TEST_ID = 'comment-thread-pan';
 /** Жест шапки панели — для тестов. */
 export const HEADER_PAN_TEST_ID = 'comments-header-pan';
 
@@ -229,12 +229,12 @@ export function usePanelSheet({ windowHeight }: Options) {
     onRelease: releaseNow,
     testId: PANEL_PAN_TEST_ID,
   });
-  const thread = useSheetPane({
+  const commentThread = useSheetPane({
     dismissY,
     dismissing,
     dismissDistance: geometry.dismissDistance,
     onRelease: releaseNow,
-    testId: THREAD_PAN_TEST_ID,
+    testId: COMMENT_THREAD_PAN_TEST_ID,
   });
 
   /**
@@ -248,7 +248,7 @@ export function usePanelSheet({ windowHeight }: Options) {
       Gesture.Pan()
         .withTestId(HEADER_PAN_TEST_ID)
         .activeOffsetY([-HEADER_ACTIVATION_PX, HEADER_ACTIVATION_PX])
-        .blocksExternalGesture(main.dismissPan, thread.dismissPan)
+        .blocksExternalGesture(main.dismissPan, commentThread.dismissPan)
         .onStart((event) => {
           headerAnchor.value = event.translationY - dismissY.value;
         })
@@ -274,7 +274,7 @@ export function usePanelSheet({ windowHeight }: Options) {
       headerAnchor,
       main.dismissPan,
       release,
-      thread.dismissPan,
+      commentThread.dismissPan,
     ],
   );
 
@@ -312,7 +312,7 @@ export function usePanelSheet({ windowHeight }: Options) {
     dismissY,
     dismissing,
     main,
-    thread,
+    commentThread,
     headerPan,
     shiftStyle,
     footerStyle,

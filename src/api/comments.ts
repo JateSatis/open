@@ -13,7 +13,7 @@
 // Id цели у них из одного пространства uuid, поэтому кеш, топик и выборки
 // ключуются голым id цели; тип нужен только отправке и шапке панели.
 //
-// Треды (миграция `20261004100000_comment_threads.sql`): верхнеуровневые
+// Треды комментариев (миграция `20261004100000_comment_threads.sql`): верхнеуровневые
 // комментарии идут по рангу, ответ ложится в тред своего корня. Тред ответа
 // база выводит из его цитат — отдельного аргумента у отправки нет.
 
@@ -48,7 +48,7 @@ export type { FragmentQuote } from '@/api/fragmentQuote';
 
 export const COMMENT_PAGE_SIZE = 30;
 /** Первая порция треда и каждая следующая по «Показать ещё». */
-export const THREAD_PAGE_SIZE = 10;
+export const COMMENT_THREAD_PAGE_SIZE = 10;
 
 export type CommentKind = 'text' | 'media' | 'voice';
 
@@ -84,7 +84,7 @@ export type Comment = {
   /** Цитаты ответа — комментарии того же треда, по порядку. `messageId` цитаты — id комментария. */
   replies: QuotedMessage[];
   /** Корень треда; `null` — комментарий сам верхнеуровневый. */
-  threadRootId: string | null;
+  commentThreadRootId: string | null;
   /** Фрагмент текста сообщения, к которому комментарий (только у верхнеуровневого). */
   fragmentId: string | null;
   /**
@@ -253,7 +253,7 @@ export function toComment(row: CommentRow): Comment {
     attachments: (row.comment_attachments ?? []).map(attachmentFromRow),
     reactions: toReactions(row),
     replies: [...(row.replies ?? [])].sort((a, b) => a.position - b.position).map(toQuotedComment),
-    threadRootId: row.thread_root_id,
+    commentThreadRootId: row.thread_root_id,
     fragmentId: row.fragment_id,
     fragmentQuote: toFragmentQuote(row.fragment_id, row.fragment),
     repliesCount: row.replies_count,
@@ -268,7 +268,7 @@ export function toComment(row: CommentRow): Comment {
  * Ранг между страницами может вырасти — повторы отсекает клиент.
  * `set` — только корни фрагментов набора (боковая панель).
  */
-export async function listThreadRoots(
+export async function listCommentThreadRoots(
   targetId: string,
   params: { cursor?: RootCursor; limit?: number; set?: FragmentSet } = {},
 ): Promise<{ items: Comment[]; nextCursor: RootCursor | null }> {
@@ -328,11 +328,11 @@ export async function unpinComment(targetId: string): Promise<void> {
  * загруженного ответа: два ответа одного треда за одну транзакцию не
  * появляются, поэтому времени хватает.
  */
-export async function listThreadReplies(
+export async function listCommentThreadReplies(
   rootId: string,
   params: { cursor?: string; limit?: number } = {},
 ): Promise<Page<Comment>> {
-  const limit = params.limit ?? THREAD_PAGE_SIZE;
+  const limit = params.limit ?? COMMENT_THREAD_PAGE_SIZE;
 
   // На одну строку больше страницы: пришла лишняя — ответы ещё остались.
   // По `length === limit` тред ровно из 10 ответов показывал пустую кнопку
@@ -437,7 +437,7 @@ export async function sendComment(
     media?: SendMessageMedia[];
     replyTo?: string[];
     /** Тред ответа; без него — тред по цитатам или верхнеуровневый. */
-    threadRootId?: string | null;
+    commentThreadRootId?: string | null;
     /** Фрагмент текста: готовый (`id`) или свой диапазон — база найдёт или создаст. */
     fragment?: CommentFragment;
   },
@@ -447,7 +447,7 @@ export async function sendComment(
     comment_text: input.text?.trim() ?? '',
     media: (input.media ?? []).map(toMediaJson),
     reply_to: input.replyTo?.length ? input.replyTo : undefined,
-    thread_root: input.threadRootId ?? undefined,
+    thread_root: input.commentThreadRootId ?? undefined,
     fragment: input.fragment ? toFragmentJson(input.fragment) : undefined,
   });
 
@@ -467,7 +467,7 @@ export async function sendPopComment(
     comment_text: input.text?.trim() ?? '',
     media: (input.media ?? []).map(toMediaJson),
     reply_to: input.replyTo?.length ? input.replyTo : undefined,
-    thread_root: input.threadRootId ?? undefined,
+    thread_root: input.commentThreadRootId ?? undefined,
   });
 
   if (error) throw error;
@@ -481,13 +481,13 @@ export async function sendVoicePopComment(
   popId: string,
   voice: SendVoiceInput,
   replyTo: string[] = [],
-  threadRootId: string | null = null,
+  commentThreadRootId: string | null = null,
 ): Promise<Comment> {
   const { data: id, error } = await supabase.rpc('send_voice_pop_comment', {
     target_pop: popId,
     voice: toVoiceJson(voice),
     reply_to: replyTo.length ? replyTo : undefined,
-    thread_root: threadRootId ?? undefined,
+    thread_root: commentThreadRootId ?? undefined,
   });
 
   if (error) throw error;
@@ -501,14 +501,14 @@ export async function sendVoiceComment(
   messageId: string,
   voice: SendVoiceInput,
   replyTo: string[] = [],
-  threadRootId: string | null = null,
+  commentThreadRootId: string | null = null,
   fragment?: CommentFragment,
 ): Promise<Comment> {
   const { data: id, error } = await supabase.rpc('send_voice_comment', {
     target_message: messageId,
     voice: toVoiceJson(voice),
     reply_to: replyTo.length ? replyTo : undefined,
-    thread_root: threadRootId ?? undefined,
+    thread_root: commentThreadRootId ?? undefined,
     fragment: fragment ? toFragmentJson(fragment) : undefined,
   });
 

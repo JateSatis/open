@@ -10,8 +10,8 @@ import { getChat, listDeletedMessageIds, listMessages, subscribeToChat } from '@
 import {
   getCommentTarget,
   listCommentsByIds,
-  listThreadReplies,
-  listThreadRoots,
+  listCommentThreadReplies,
+  listCommentThreadRoots,
   sendComment,
   setCommentReaction,
   subscribeToComments,
@@ -101,9 +101,9 @@ jest.mock('@/api/comments', () => ({
   pinComment: jest.fn(() => Promise.resolve()),
   unpinComment: jest.fn(() => Promise.resolve()),
   COMMENT_PAGE_SIZE: 30,
-  THREAD_PAGE_SIZE: 10,
-  listThreadRoots: jest.fn(),
-  listThreadReplies: jest.fn(() => Promise.resolve({ items: [], nextCursor: null })),
+  COMMENT_THREAD_PAGE_SIZE: 10,
+  listCommentThreadRoots: jest.fn(),
+  listCommentThreadReplies: jest.fn(() => Promise.resolve({ items: [], nextCursor: null })),
   fetchComment: jest.fn(),
   listCommentsByIds: jest.fn(() => Promise.resolve([])),
   getCommentTarget: jest.fn(),
@@ -197,8 +197,8 @@ const mockedSubscribe = subscribeToChat as jest.MockedFunction<typeof subscribeT
 const mockedTombstones = listDeletedMessageIds as jest.MockedFunction<typeof listDeletedMessageIds>;
 const mockedPins = listPinnedMessages as jest.MockedFunction<typeof listPinnedMessages>;
 const mockedSession = useSession as jest.MockedFunction<typeof useSession>;
-const mockedListComments = listThreadRoots as jest.MockedFunction<typeof listThreadRoots>;
-const mockedReplies = listThreadReplies as jest.MockedFunction<typeof listThreadReplies>;
+const mockedListComments = listCommentThreadRoots as jest.MockedFunction<typeof listCommentThreadRoots>;
+const mockedReplies = listCommentThreadReplies as jest.MockedFunction<typeof listCommentThreadReplies>;
 const mockedByIds = listCommentsByIds as jest.MockedFunction<typeof listCommentsByIds>;
 const mockedTarget = getCommentTarget as jest.MockedFunction<typeof getCommentTarget>;
 const mockedSend = sendComment as jest.MockedFunction<typeof sendComment>;
@@ -319,7 +319,7 @@ function comment(id: string, overrides: Partial<Comment> = {}): Comment {
     attachments: [],
     reactions: { members: {}, visitors: {}, mine: null },
     replies: [],
-    threadRootId: null,
+    commentThreadRootId: null,
     fragmentId: null,
     fragmentQuote: null,
     repliesCount: 0,
@@ -551,7 +551,7 @@ describe('comments panel', () => {
       text: 'мой комментарий',
       media: [],
       replyTo: [],
-      threadRootId: null,
+      commentThreadRootId: null,
     });
 
     await act(async () => refuse({ code: '42501', message: 'denied' }));
@@ -643,7 +643,7 @@ describe('a visitor in the comments', () => {
     expect(screen.queryByTestId('visitor-reactions')).toBeNull();
   });
 
-  it('replying to a top-level comment opens its thread: no quote, the message goes into it', async () => {
+  it('replying to a top-level comment opens its comment thread: no quote, the message goes into it', async () => {
     mockedListComments.mockResolvedValue({ items: [comment('c1')], nextCursor: null });
     mockedSend.mockReturnValue(new Promise(() => undefined));
 
@@ -656,7 +656,7 @@ describe('a visitor in the comments', () => {
 
     // Окно треда — даже у комментария без ответов: в нём один корень.
     expect(await screen.findByText('Ответы')).toBeTruthy();
-    expect(rowKeys('comments-thread-list')).toEqual(['c1']);
+    expect(rowKeys('comment-thread-list')).toEqual(['c1']);
     expect(screen.queryByText('В ответ Олег')).toBeNull();
 
     await fireEvent.changeText(screen.getByPlaceholderText('Ответить в треде'), 'согласен');
@@ -667,12 +667,12 @@ describe('a visitor in the comments', () => {
         text: 'согласен',
         media: [],
         replyTo: [],
-        threadRootId: 'c1',
+        commentThreadRootId: 'c1',
       }),
     );
     // Остаёмся в треде, свой ответ — в его конце.
     expect(screen.getByText('Ответы')).toBeTruthy();
-    expect(rowKeys('comments-thread-list')[1]).toMatch(/^local-/);
+    expect(rowKeys('comment-thread-list')[1]).toMatch(/^local-/);
   });
 
   it('offers no editing or deleting on somebody else’s comment, but lets forward it', async () => {
@@ -735,16 +735,16 @@ describe('a visitor in the comments', () => {
   });
 });
 
-describe('threads', () => {
+describe('comment threads', () => {
   const root = comment('root', { repliesCount: 2, text: 'корень' });
   const replies = [
     comment('r1', {
-      threadRootId: 'root',
+      commentThreadRootId: 'root',
       text: 'первый ответ',
       createdAt: '2026-09-30T11:01:00Z',
     }),
     comment('r2', {
-      threadRootId: 'root',
+      commentThreadRootId: 'root',
       text: 'второй ответ',
       createdAt: '2026-09-30T11:02:00Z',
     }),
@@ -758,7 +758,7 @@ describe('threads', () => {
     mockedReplies.mockResolvedValue({ items: replies, nextCursor: null });
   });
 
-  async function openThread() {
+  async function openCommentThread() {
     await renderChat();
     await openCommentsOf(3);
     await screen.findByText('корень');
@@ -774,27 +774,27 @@ describe('threads', () => {
     await openCommentsOf(3);
     await screen.findByText('корень');
 
-    expect(screen.getAllByTestId('thread-open')).toHaveLength(1);
+    expect(screen.getAllByTestId('comment-thread-open')).toHaveLength(1);
     expect(screen.queryByText('первый ответ')).toBeNull();
     expect(rowKeys()).toEqual(['root', 'other']);
   });
 
-  it('opens the thread window by the button: the root first on its own background, then the replies', async () => {
-    await openThread();
+  it('opens the comment thread window by the button: the root first on its own background, then the replies', async () => {
+    await openCommentThread();
 
     expect(screen.getByText('Ответы')).toBeTruthy();
     expect(screen.getByLabelText('Назад к комментариям')).toBeTruthy();
-    expect(rowKeys('comments-thread-list')).toEqual(['root', 'r1', 'r2']);
-    expect(screen.getByTestId('thread-root')).toBeTruthy();
+    expect(rowKeys('comment-thread-list')).toEqual(['root', 'r1', 'r2']);
+    expect(screen.getByTestId('comment-thread-root')).toBeTruthy();
     // Основной список не тронут — тред под корнем не раскрывается.
     expect(rowKeys()).toEqual(['root', 'other']);
     expect(mockedReplies).toHaveBeenCalledWith('root');
   });
 
-  it('a message without a quote in the thread window goes into the thread, at its end', async () => {
+  it('a message without a quote in the comment thread window goes into the comment thread, at its end', async () => {
     mockedSend.mockReturnValue(new Promise(() => undefined));
 
-    await openThread();
+    await openCommentThread();
 
     await fireEvent.changeText(screen.getByPlaceholderText('Ответить в треде'), 'и я');
     await fireEvent.press(screen.getByLabelText('Отправить'));
@@ -804,11 +804,11 @@ describe('threads', () => {
         text: 'и я',
         media: [],
         replyTo: [],
-        threadRootId: 'root',
+        commentThreadRootId: 'root',
       }),
     );
 
-    const keys = rowKeys('comments-thread-list');
+    const keys = rowKeys('comment-thread-list');
 
     expect(keys.slice(0, 3)).toEqual(['root', 'r1', 'r2']);
     expect(keys[3]).toMatch(/^local-/);
@@ -816,10 +816,10 @@ describe('threads', () => {
     expect(screen.getByLabelText('Показать 3 ответа')).toBeTruthy();
   });
 
-  it('a reply to a reply goes into the same thread with its quote', async () => {
+  it('a reply to a reply goes into the same comment thread with its quote', async () => {
     mockedSend.mockReturnValue(new Promise(() => undefined));
 
-    await openThread();
+    await openCommentThread();
 
     await tapComment('r2');
     await fireEvent.press(await screen.findByRole('menuitem', { name: 'Ответить' }));
@@ -833,7 +833,7 @@ describe('threads', () => {
         text: 'и я',
         media: [],
         replyTo: ['r2'],
-        threadRootId: 'root',
+        commentThreadRootId: 'root',
       }),
     );
   });
@@ -853,14 +853,14 @@ describe('threads', () => {
         text: 'наверх',
         media: [],
         replyTo: [],
-        threadRootId: null,
+        commentThreadRootId: null,
       }),
     );
     expect(rowKeys()[0]).toMatch(/^local-/);
   });
 
-  it('system back leaves selection first, then the thread, then closes the sheet', async () => {
-    await openThread();
+  it('system back leaves selection first, then the comment thread, then closes the sheet', async () => {
+    await openCommentThread();
 
     await startSelecting('r1');
     await screen.findByRole('button', { name: 'Ответить' });
@@ -877,8 +877,8 @@ describe('threads', () => {
     await waitFor(() => expect(screen.queryByTestId('comments-panel')).toBeNull());
   });
 
-  it('leaving the thread by the arrow keeps the typed text but drops the quote', async () => {
-    await openThread();
+  it('leaving the comment thread by the arrow keeps the typed text but drops the quote', async () => {
+    await openCommentThread();
 
     await tapComment('r2');
     await fireEvent.press(await screen.findByRole('menuitem', { name: 'Ответить' }));
@@ -891,7 +891,7 @@ describe('threads', () => {
     expect(commentField().props.value).toBe('черновик');
   });
 
-  it('a thread that failed to load offers a retry instead of an endless spinner', async () => {
+  it('a comment thread that failed to load offers a retry instead of an endless spinner', async () => {
     mockedReplies.mockRejectedValueOnce(new Error('offline'));
 
     await renderChat();
@@ -904,8 +904,8 @@ describe('threads', () => {
     expect(await screen.findByText('второй ответ')).toBeTruthy();
   });
 
-  it('a quote picked in the thread does not survive closing the sheet', async () => {
-    await openThread();
+  it('a quote picked in the comment thread does not survive closing the sheet', async () => {
+    await openCommentThread();
 
     await tapComment('r2');
     await fireEvent.press(await screen.findByRole('menuitem', { name: 'Ответить' }));
@@ -920,7 +920,7 @@ describe('threads', () => {
     expect(screen.queryByText('В ответ Олег')).toBeNull();
   });
 
-  it('will not reply to two top-level comments at once — they are two threads', async () => {
+  it('will not reply to two top-level comments at once — they are two comment threads', async () => {
     await renderChat();
     await openCommentsOf(3);
     await screen.findByText('корень');
@@ -1137,13 +1137,13 @@ describe('fragment quote over a comment', () => {
     expect(screen.queryByTestId('quote-highlight')).toBeNull();
   });
 
-  it('stands over the root in the thread window, not over the replies', async () => {
+  it('stands over the root in the comment thread window, not over the replies', async () => {
     mockedListComments.mockResolvedValue({
       items: [{ ...quoted, repliesCount: 1 }],
       nextCursor: null,
     });
     mockedReplies.mockResolvedValue({
-      items: [comment('r1', { threadRootId: 'cf', text: 'ответ в треде' })],
+      items: [comment('r1', { commentThreadRootId: 'cf', text: 'ответ в треде' })],
       nextCursor: null,
     });
 
@@ -1152,7 +1152,7 @@ describe('fragment quote over a comment', () => {
     await screen.findByText('ответ в треде');
 
     expect(
-      within(screen.getByTestId('thread-root')).getByTestId('comment-fragment-quote'),
+      within(screen.getByTestId('comment-thread-root')).getByTestId('comment-fragment-quote'),
     ).toBeTruthy();
     // Корень дважды — в основном списке и в окне треда; у ответа плашки нет.
     expect(screen.getAllByTestId('comment-fragment-quote')).toHaveLength(2);

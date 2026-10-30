@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import { RepliesButton, repliesLabel } from './RepliesButton';
-import { ThreadGapRow } from './ThreadGapRow';
+import { CommentThreadGapRow } from './CommentThreadGapRow';
 
 describe('repliesLabel', () => {
   it.each([
@@ -18,7 +18,7 @@ describe('repliesLabel', () => {
 });
 
 describe('RepliesButton', () => {
-  it('shows the whole label on one line and opens the thread', async () => {
+  it('shows the whole label on one line and opens the comment thread', async () => {
     const onPress = jest.fn();
 
     await render(<RepliesButton count={3} isOwn={false} onPress={onPress} />);
@@ -33,9 +33,9 @@ describe('RepliesButton', () => {
   });
 });
 
-describe('ThreadGapRow', () => {
+describe('CommentThreadGapRow', () => {
   it('shows «Показать ещё N ответов» on one line', async () => {
-    await render(<ThreadGapRow hidden={11} isLoading={false} onPress={jest.fn()} />);
+    await render(<CommentThreadGapRow hidden={11} isLoading={false} onPress={jest.fn()} />);
 
     expect(screen.getByText('Показать ещё 11 ответов').props.numberOfLines).toBe(1);
   });

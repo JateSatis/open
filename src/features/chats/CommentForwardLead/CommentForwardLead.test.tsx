@@ -11,7 +11,7 @@ const forward: CommentForward = {
     id: 'c1',
     subject: { type: 'message', id: 'm1' },
     chatId: 'chat-src',
-    threadRootId: null,
+    commentThreadRootId: null,
     authorId: 'user-2',
     authorName: 'Олег',
     authorAvatarUrl: null,
@@ -52,7 +52,7 @@ describe('CommentForwardLead', () => {
     expect(screen.getByText('Олег')).toBeTruthy();
   });
 
-  it('leads to the comment in its thread from the snippet and the chat, and to the author from the name', async () => {
+  it('leads to the comment in its comment thread from the snippet and the chat, and to the author from the name', async () => {
     const openSource = jest.fn();
     const openAuthor = jest.fn();
 
@@ -110,7 +110,7 @@ describe('CommentForwardLead', () => {
       expect(screen.getByText('Олег')).toBeTruthy();
     });
 
-    it('leads to the comment in its thread from the quote', async () => {
+    it('leads to the comment in its comment thread from the quote', async () => {
       const openSource = jest.fn();
 
       await render(

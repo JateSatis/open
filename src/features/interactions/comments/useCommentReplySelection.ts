@@ -15,7 +15,7 @@ import {
 import { DELETED_ACCOUNT, quoteOf } from '@/features/chats/messageQuote';
 import type { ComposerDraft } from '@/features/chats/useComposerDraft';
 import { useMessageSelection } from '@/features/chats/useMessageSelection';
-import { threadOf, type CommentItem } from '@/features/interactions/comments/commentItem';
+import { commentThreadOf, type CommentItem } from '@/features/interactions/comments/commentItem';
 import type { CommentsState } from '@/features/interactions/comments/useComments';
 import { showNotice } from '@/features/notifications/alertsStore';
 import { focusWithKeyboard } from '@/lib/windowFocus';
@@ -23,8 +23,8 @@ import { focusWithKeyboard } from '@/lib/windowFocus';
 const commentOf = (row: BubbleRow) => (row as MessageListRow).message as CommentItem;
 
 /** Все — из одного треда: ответ ложится только в один тред. */
-export function inOneThread(comments: Pick<CommentItem, 'id' | 'threadRootId'>[]): boolean {
-  return new Set(comments.map(threadOf)).size <= 1;
+export function inOneCommentThread(comments: Pick<CommentItem, 'id' | 'commentThreadRootId'>[]): boolean {
+  return new Set(comments.map(commentThreadOf)).size <= 1;
 }
 
 /**
@@ -38,7 +38,7 @@ export const COMMENT_SELECTION_ACTIONS: readonly SelectionAction[] = SELECTION_A
       ? {
           ...action,
           isEnabled: (context: SelectionActionContext) =>
-            action.isEnabled(context) && inOneThread(context.selected.map(commentOf)),
+            action.isEnabled(context) && inOneCommentThread(context.selected.map(commentOf)),
         }
       : action,
 );
@@ -49,7 +49,7 @@ type Options = {
   currentUserId: string | null;
   draft: ComposerDraft;
   inputRef: RefObject<TextInput | null>;
-  thread: Pick<CommentsState, 'remove'>;
+  commentsState: Pick<CommentsState, 'remove'>;
   /** «Переслать»: комментарии в порядке экрана — дальше выбор чата. */
   onForward: (comments: CommentItem[]) => void;
   /**
@@ -71,7 +71,7 @@ export function useCommentReplySelection({
   currentUserId,
   draft,
   inputRef,
-  thread,
+  commentsState,
   onForward,
   replyElsewhere,
 }: Options) {
@@ -92,7 +92,7 @@ export function useCommentReplySelection({
       if (picked.length === 0) return;
       if (replyElsewhere?.(picked)) return;
 
-      if (!inOneThread(picked)) {
+      if (!inOneCommentThread(picked)) {
         showNotice('Ответить можно только в один тред', 'error');
         return;
       }
@@ -113,7 +113,7 @@ export function useCommentReplySelection({
   );
 
   const { clear } = selection;
-  const { remove } = thread;
+  const { remove } = commentsState;
 
   const runSelectionAction = useCallback(
     (id: SelectionActionId) => {

@@ -4,10 +4,10 @@ tags:
   - comments
 env:
   # Публичный чат с тредами комментариев; основной аккаунт в нём посетитель.
-  THREAD_CHAT_LINK: "openger://chats/2d929436-099b-4cc9-89ba-e764c0ad8306"
+  COMMENT_THREAD_CHAT_LINK: "openger://chats/2d929436-099b-4cc9-89ba-e764c0ad8306"
 ---
 - runFlow: subflows/open-app.yaml
-- openLink: ${THREAD_CHAT_LINK}
+- openLink: ${COMMENT_THREAD_CHAT_LINK}
 - tapOn:
     id: "comments-circle"
     index: 0
@@ -15,23 +15,23 @@ env:
     id: "comments-panel"
 # Тред не раскрывается в списке — открывается отдельным окном.
 - tapOn:
-    id: "thread-open"
+    id: "comment-thread-open"
     index: 0
 - assertVisible: "Ответы"
 - assertVisible:
-    id: "thread-root"
+    id: "comment-thread-root"
 - assertVisible:
-    id: "thread-back"
+    id: "comment-thread-back"
 - assertVisible: "Ответить в треде"
 # Стрелка назад — основной список, шит открыт.
 - tapOn:
-    id: "thread-back"
+    id: "comment-thread-back"
 - assertNotVisible: "Ответы"
 - assertVisible:
     id: "comments-panel"
 # Системное «назад» сначала закрывает тред, потом шит.
 - tapOn:
-    id: "thread-open"
+    id: "comment-thread-open"
     index: 0
 - assertVisible: "Ответы"
 - pressKey: back
@@ -50,7 +50,7 @@ env:
 - assertNotVisible:
     id: "composer-plate"
 - tapOn:
-    id: "thread-back"
+    id: "comment-thread-back"
 - assertNotVisible: "Ответы"
 - pressKey: back
 - pressKey: back
