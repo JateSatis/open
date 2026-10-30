@@ -256,6 +256,10 @@ export function ChatConversation({
   });
   // Переход к сообщению, которого в «Тредах» нет, — через обычный вид.
   const jumpTo = threadsMode.jumpAnywhere;
+  // Список другого вида начинается заново — у самого низа.
+  useEffect(() => {
+    scrollState.current.offset = 0;
+  }, [chatThreads.view]);
   // Поиск по чату — со страницы чата: поле вместо шапки, плашка вместо поля ввода.
   const chatSearch = useChatSearch(chatId, jumpTo);
   const [searchListShown, setSearchListShown] = useState(false);
@@ -683,7 +687,7 @@ export function ChatConversation({
     openChat: navigation.openChat,
   });
   // В «Тредах» под исходным сообщением — плашка его треда.
-  const { renderItem } = useChatThreadPlates({
+  const { renderItem, summaries: chatThreadSummaries } = useChatThreadPlates({
     chatId,
     active: threadsActive,
     messages,
@@ -1097,6 +1101,9 @@ export function ChatConversation({
             <RowRegistryContext.Provider value={rowRegistry}>
               <TileViewportContext.Provider value={measureListFrame}>
                 <FlatList
+                  // Другой вид — другая лента: список начинается заново, а не
+                  // со смещения прежней (место держит прыжок переключения).
+                  key={chatThreads.view}
                   showsVerticalScrollIndicator={false}
                   showsHorizontalScrollIndicator={false}
                   ref={listRef}
@@ -1106,6 +1113,8 @@ export function ChatConversation({
                   onScrollToIndexFailed={jump.onScrollToIndexFailed}
                   keyExtractor={rowKey}
                   renderItem={renderItem}
+                  // Плашки тредов приходят после строк: видимые ячейки перерисовываются.
+                  extraData={chatThreadSummaries}
                   viewabilityConfig={views.viewabilityConfig}
                   onViewableItemsChanged={onViewableItemsChanged}
                   onScroll={onListScroll}

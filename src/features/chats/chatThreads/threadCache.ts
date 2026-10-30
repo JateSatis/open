@@ -40,6 +40,12 @@ export type ChatThreadHistory = ChatHistory & {
   gap: ChatThreadGap | null;
 };
 
+/**
+ * Первая загрузка — начало и хвост треда, вместе в страницу: тред длиннее
+ * страницы открывается с разрывом «показать ещё» между ними.
+ */
+const HEAD_SIZE = 20;
+const TAIL_SIZE = 10;
 /** Сколько страниц новых ответов дочитывать по сигналу, прежде чем перечитать тред заново. */
 const MAX_CATCH_UP_PAGES = 5;
 
@@ -83,9 +89,11 @@ export function mergeChatThreadPage(
 async function firstLoad(chatId: string, rootId: string): Promise<ChatThreadHistory> {
   const [[root], head] = await Promise.all([
     listMessagesByIds([rootId]),
-    listChatThread(rootId),
+    listChatThread(rootId, { limit: HEAD_SIZE }),
   ]);
-  const tail = head.full ? await listChatThread(rootId, { beforeSeq: 'end' }) : null;
+  const tail = head.full
+    ? await listChatThread(rootId, { beforeSeq: 'end', limit: TAIL_SIZE })
+    : null;
   const headLast = head.items[head.items.length - 1]?.seq ?? null;
   const tailFirst = tail?.items[0]?.seq ?? null;
   const gap =

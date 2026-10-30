@@ -109,7 +109,14 @@ export function useChatThreadsMode({
     if (!pending || isLoading) return;
 
     pendingRef.current = null;
-    void jump(pending.rowKey, pending.seq, pending.options).then(pending.resolve);
+
+    // Список только что получил другую ленту: прокрутка в этом же кадре
+    // теряется — прыжок ждёт, пока новые строки отрисуются.
+    requestAnimationFrame(() =>
+      requestAnimationFrame(
+        () => void jump(pending.rowKey, pending.seq, pending.options).then(pending.resolve),
+      ),
+    );
   }, [isLoading, jump, pendingCount, view]);
 
   const jumpAfterSwitch = useCallback(
