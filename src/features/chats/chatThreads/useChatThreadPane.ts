@@ -27,7 +27,7 @@ const NO_MESSAGES: ChatMessage[] = [];
  * корня (на него ответ здесь подразумевается). Цитаты вне треда не
  * показываются: ответ на два треда в шторке первого не цитирует второй.
  */
-function withThreadQuotes(
+export function withThreadQuotes(
   message: ChatMessage,
   rootId: string,
   quotes: Record<string, string[]> | undefined,
