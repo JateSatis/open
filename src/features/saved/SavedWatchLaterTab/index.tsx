@@ -10,9 +10,10 @@ import { styles } from './styles';
 import { useWatchLaterRows } from './useWatchLaterRows';
 
 import type { ChatSummary } from '@/api/chats';
-import type { SavedMessage, SavedTag } from '@/api/saved';
+import type { SavedFilterInput, SavedMessage, SavedTag } from '@/api/saved';
 import { mosaicBounds } from '@/features/chats/lib/mosaicLayout';
 import { bubbleAsideWidth } from '@/features/chats/MessageBubble/layout';
+import { addFilterTag, resetSavedFilters } from '@/features/saved/savedFiltersStore';
 import { SavedListState } from '@/features/saved/SavedListState';
 import { SavedMenu } from '@/features/saved/SavedMenu';
 import { useOpenSavedSource } from '@/features/saved/useOpenSavedSource';
@@ -31,12 +32,20 @@ const EMPTY = {
   hint: 'Отметьте «Посмотреть позже» при сохранении или в меню сохранённого сообщения — оно появится здесь.',
 };
 
+const NOTHING_FOUND = { testID: 'watch-later-nothing-found', title: 'Ничего не найдено' };
+
 export type SavedWatchLaterTabProps = {
   currentUserId: string | null;
   tags: SavedTag[];
   tagsById: ReadonlyMap<string, SavedTag>;
   /** Вкладка видна: до первого захода список не грузится. */
   active: boolean;
+  /** Фильтры экрана и запрос поиска — список сужается до подходящих строк. */
+  filter: { input: SavedFilterInput | null; key: string | null };
+  /** Выбраны фильтры (без поиска) — в пустом списке «Сбросить фильтры». */
+  filtered: boolean;
+  /** Запрос поиска после паузы; пусто — поиска нет. Совпадение подсвечено в превью. */
+  searched: string;
   /** «Ответить» — на «Все», с плашкой над полем заметок. */
   onReply: (items: SavedMessage[], chats: ReadonlyMap<string, ChatSummary>) => void;
   /** «Изменить» своей заметки — на «Все», с плашкой правки. */
@@ -52,11 +61,14 @@ export function SavedWatchLaterTab({
   tags,
   tagsById,
   active,
+  filter,
+  filtered,
+  searched,
   onReply,
   onEdit,
 }: SavedWatchLaterTabProps) {
   const { width: windowWidth } = useWindowDimensions();
-  const later = useWatchLater(active);
+  const later = useWatchLater(active, filter);
   const openSource = useOpenSavedSource();
   const handlers = useSavedItemActions({
     chats: later.chats,
@@ -98,6 +110,7 @@ export function SavedWatchLaterTab({
     mediaBounds,
     expanded: rows.expanded.has(saved.id),
     onOpenSource: openSource,
+    searched,
   });
 
   const renderItem = ({ item }: { item: SavedMessage }) => (
@@ -108,6 +121,7 @@ export function SavedWatchLaterTab({
       onToggleDone={rows.toggleDone}
       onRemove={rows.remove}
       onOpenMenu={openMenu}
+      onTagPress={addFilterTag}
     />
   );
 
@@ -115,7 +129,22 @@ export function SavedWatchLaterTab({
     <SavedListState
       failed={later.failed}
       loading={later.isLoading}
-      empty={later.items.length === 0 ? EMPTY : null}
+      empty={
+        later.items.length === 0
+          ? filtered
+            ? {
+                ...NOTHING_FOUND,
+                action: {
+                  label: 'Сбросить фильтры',
+                  onPress: resetSavedFilters,
+                  testID: 'watch-later-filter-reset',
+                },
+              }
+            : searched !== ''
+              ? NOTHING_FOUND
+              : EMPTY
+          : null
+      }
       onRetry={later.reload}
       failText="Не удалось загрузить список"
       loadingLabel="Загрузка списка"

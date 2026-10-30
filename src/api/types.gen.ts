@@ -4916,6 +4916,7 @@ export type Database = {
         Args: { query: string; target_chat: string }
         Returns: number
       }
+      count_saved_messages: { Args: { p_filter?: Json }; Returns: number }
       create_channel: {
         Args: {
           channel_avatar_url?: string
@@ -5520,7 +5521,12 @@ export type Database = {
         }
       }
       list_saved_messages: {
-        Args: { p_after_seq?: number; p_before_seq?: number; p_limit?: number }
+        Args: {
+          p_after_seq?: number
+          p_before_seq?: number
+          p_filter?: Json
+          p_limit?: number
+        }
         Returns: {
           attachments: Json
           author_avatar_url: string
@@ -5551,7 +5557,7 @@ export type Database = {
         }[]
       }
       list_saved_pins: {
-        Args: never
+        Args: { p_filter?: Json }
         Returns: {
           id: string
           kind: string
@@ -5566,6 +5572,7 @@ export type Database = {
           p_after_at?: string
           p_after_done?: boolean
           p_after_seq?: number
+          p_filter?: Json
           p_limit?: number
         }
         Returns: {
@@ -6412,6 +6419,16 @@ export type Database = {
         Args: { p_chat: string; p_viewer: string }
         Returns: string
       }
+      saved_filter_of: {
+        Args: { p_filter: Json }
+        Returns: Database["public"]["CompositeTypes"]["saved_filter"]
+        SetofOptions: {
+          from: "*"
+          to: "saved_filter"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       saved_finish: {
         Args: {
           p_owner: string
@@ -6449,6 +6466,13 @@ export type Database = {
           p_watch: boolean
         }
         Returns: string
+      }
+      saved_matches: {
+        Args: {
+          f: Database["public"]["CompositeTypes"]["saved_filter"]
+          s: Database["public"]["Tables"]["saved_messages"]["Row"]
+        }
+        Returns: boolean
       }
       saved_note_attach: {
         Args: { p_media: Json; p_owner: string; p_saved: string }
@@ -6511,6 +6535,10 @@ export type Database = {
       saved_tags_checked: {
         Args: { p_owner: string; p_tag_ids: string[] }
         Returns: string[]
+      }
+      saved_type: {
+        Args: { p_kind: string; p_pop_id: string; p_text: string }
+        Returns: string
       }
       search_channels: {
         Args: { max_count?: number; query: string }
@@ -6916,6 +6944,16 @@ export type Database = {
         status: string | null
         masked: boolean | null
         opaque: boolean | null
+      }
+      saved_filter: {
+        tags: string[] | null
+        categories: string[] | null
+        from_at: string | null
+        to_at: string | null
+        types: string[] | null
+        tsq: unknown
+        pattern: string | null
+        searching: boolean | null
       }
     }
   }

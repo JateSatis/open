@@ -21,6 +21,11 @@ jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockPush }),
   useNavigation: () => ({ setOptions: jest.fn() }),
   useIsFocused: () => true,
+  // Шапка экрана — кнопки поиска и фильтров справа.
+  Stack: {
+    Screen: ({ options }: { options?: { headerRight?: () => unknown } }) =>
+      options?.headerRight ? options.headerRight() : null,
+  },
 }));
 jest.mock('@/api/supabase', () => ({ supabase: {} }));
 // Поле заметок — своими тестами (SavedScreen.notes.test.tsx).

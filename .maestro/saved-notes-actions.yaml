@@ -1,0 +1,105 @@
+appId: com.openger.app
+name: «Сохранённые» — теги из меню и тап по тегу, закреп, «Ответить» и переход по цитате, правка, выбор и удаление
+tags:
+  - saved
+---
+- runFlow: subflows/open-app.yaml
+- tapOn:
+    id: "saved-entry"
+- assertVisible:
+    id: "saved-screen"
+# Метки из одних букв: клавиатура realme портит цифры и дефисы в тексте Maestro;
+# заметки и тег по ним убирает e2e-reset.sql.
+- evalScript: ${output.stamp = Date.now().toString(36).replace(/[0-9]/g, function (d) { return 'abcdefghij'[Number(d)]; })}
+- evalScript: ${output.first = 'qxsva' + output.stamp}
+- evalScript: ${output.second = 'qxsvb' + output.stamp}
+- evalScript: ${output.tag = 'qxtg' + output.stamp}
+- evalScript: ${output.edited = 'qxsvc' + output.stamp}
+- tapOn: "Заметка"
+- inputText: ${output.first}
+- tapOn: "Отправить"
+- assertVisible: ${output.first}
+- hideKeyboard
+
+# Новый тег из меню — сразу на заметке; тап по нему на пузыре — фильтр.
+- longPressOn: ${output.first}
+- assertVisible:
+    id: "saved-tag-block"
+- tapOn:
+    id: "saved-tag-expand"
+- tapOn:
+    id: "saved-tag-add"
+- inputText: ${output.tag}
+- pressKey: Enter
+- assertVisible:
+    id: "saved-tag-${output.tag}"
+    checked: true
+- back
+- tapOn:
+    id: "saved-bubble-tag-${output.tag}"
+- assertVisible:
+    id: "saved-filter-chip-${output.tag}"
+- assertVisible: ${output.first}
+- tapOn:
+    id: "saved-filters-reset"
+- assertNotVisible:
+    id: "saved-filter-bar"
+
+# Закреп: полоса над списком; открепить.
+- longPressOn: ${output.first}
+- tapOn: "Закрепить"
+- assertVisible:
+    id: "pinned-bar"
+    containsChild:
+      text: ${output.first}
+- longPressOn:
+    text: ${output.first}
+    childOf:
+      id: "saved-list"
+- tapOn: "Открепить"
+- assertNotVisible:
+    id: "pinned-bar"
+    containsChild:
+      text: ${output.first}
+
+# «Ответить»: плашка над полем, заметка уходит с цитатой; тап по цитате — к цитируемой.
+- longPressOn: ${output.first}
+- tapOn: "Ответить"
+- assertVisible:
+    id: "composer-plate"
+- tapOn: "Заметка"
+- inputText: ${output.second}
+- tapOn: "Отправить"
+- assertVisible: ${output.second}
+- assertVisible:
+    id: "reply-quote"
+- hideKeyboard
+- tapOn:
+    id: "reply-quote"
+- assertVisible: ${output.first}
+
+# Правка своей заметки: текст в поле, после сохранения — «ред.».
+- longPressOn: ${output.second}
+- tapOn: "Изменить"
+- eraseText: 40
+- inputText: ${output.edited}
+- tapOn: "Сохранить"
+- assertVisible: ${output.edited}
+- assertVisible: "ред."
+
+# Выбор и удаление с вопросом — сначала ответ (у первой текст повторяется в цитате).
+- longPressOn: ${output.edited}
+- tapOn: "Выбрать"
+- assertVisible:
+    id: "selection-action-bar"
+- tapOn: "Удалить"
+- assertVisible:
+    id: "confirm-dialog-actions"
+- tapOn: "Удалить"
+- assertNotVisible: ${output.edited}
+- longPressOn: ${output.first}
+- tapOn: "Удалить"
+- assertVisible:
+    id: "confirm-dialog-actions"
+- tapOn: "Удалить"
+- assertNotVisible: ${output.first}

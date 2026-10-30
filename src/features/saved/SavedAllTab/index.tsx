@@ -1,12 +1,15 @@
-import { useCallback, useMemo, useRef } from 'react';
+import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, FlatList, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 
 import { styles } from './styles';
 import { SavedSelectionBar } from './SavedSelectionBar';
+import { useFilterJumps } from './useFilterJumps';
 import { useSavedPinBar } from './useSavedPinBar';
+import { useSavedSearch } from './useSavedSearch';
 
-import type { SavedMessage, SavedTag } from '@/api/saved';
+import type { SavedFilterInput, SavedMessage, SavedTag } from '@/api/saved';
+import { ChatSearchPlate } from '@/features/chats/chatSearch/ChatSearchPlate';
 import type { MosaicBounds } from '@/features/chats/lib/mosaicLayout';
 import { MessageRow } from '@/features/chats/MessageRow';
 import { PinnedBar } from '@/features/chats/PinnedBar';
@@ -14,9 +17,11 @@ import { useChatKeyboardInset } from '@/features/chats/useChatKeyboardInset';
 import { usePendingNotes } from '@/features/saved/notesStore';
 import { SavedBubble } from '@/features/saved/SavedBubble';
 import { SavedComposer } from '@/features/saved/SavedComposer';
+import { resetSavedFilters } from '@/features/saved/savedFiltersStore';
 import { isPendingNote, type SavedItem } from '@/features/saved/savedCopy';
 import { SavedListState } from '@/features/saved/SavedListState';
 import { SavedMenu } from '@/features/saved/SavedMenu';
+import { SavedSearchResults } from '@/features/saved/SavedSearchResults';
 import type { SavedComposerState } from '@/features/saved/useSavedComposer';
 import { useOpenSavedSource } from '@/features/saved/useOpenSavedSource';
 import { useSavedItemActions } from '@/features/saved/useSavedItemActions';
@@ -34,6 +39,12 @@ const EMPTY = {
   hint: 'Напишите заметку внизу или сохраните сообщение: «Переслать» → «★ Сохранённые сообщения». Сохранённое и заметки видите только вы.',
 };
 
+const NOTHING_FOUND = {
+  testID: 'saved-filter-empty',
+  title: 'Ничего не найдено',
+  action: { label: 'Сбросить фильтры', onPress: resetSavedFilters, testID: 'saved-filter-empty-reset' },
+};
+
 export type SavedAllTabProps = {
   currentUserId: string | null;
   tags: SavedTag[];
@@ -43,6 +54,12 @@ export type SavedAllTabProps = {
   active: boolean;
   /** Поле заметок — экрана: «Ответить» с другой вкладки попадает сюда же. */
   composer: SavedComposerState;
+  /** Фильтры экрана: список, закрепы и поиск — только подходящее. */
+  filter: { input: SavedFilterInput | null; key: string | null; active: boolean };
+  /** Запрос поиска; `null` — поиск закрыт. */
+  search: string | null;
+  /** Справа в шапке вне выбора — поиск и фильтры экрана. */
+  headerRight: () => ReactNode;
 };
 
 /**
@@ -58,8 +75,11 @@ export function SavedAllTab({
   mediaBounds,
   active,
   composer,
+  filter,
+  search,
+  headerRight,
 }: SavedAllTabProps) {
-  const saved = useSavedMessages();
+  const saved = useSavedMessages(filter);
   const pending = usePendingNotes();
   const items: SavedItem[] = useMemo(() => {
     // Подтверждённая заметка на миг лежит и там и там — под одним id.
@@ -74,9 +94,22 @@ export function SavedAllTab({
     style: keyboardStyle,
   } = useChatKeyboardInset();
   const listRef = useRef<FlatList<SavedItem> | null>(null);
-  const selection = useSavedSelection(items, active);
+  const selection = useSavedSelection(items, active, headerRight);
   const jump = useSavedJump(listRef, items, saved.loadAround);
-  const pinBar = useSavedPinBar(jump.jump);
+  const pinBar = useSavedPinBar(jump.jump, filter);
+  const matches = useSavedSearch(search, active, filter, jump.jump);
+  const [resultsShown, setResultsShown] = useState(false);
+  const searching = search !== null;
+
+  // Поиск закрыли — следующий откроется с переписки, а не со списка найденного.
+  if (!searching && resultsShown) setResultsShown(false);
+  const showResults = searching && resultsShown;
+  const filterJumps = useFilterJumps({
+    filterKey: filter.key,
+    filtered: filter.active,
+    loading: saved.isLoading,
+    jump: jump.jump,
+  });
   const {
     frameRef,
     target: menuTarget,
@@ -99,8 +132,15 @@ export function SavedAllTab({
     onEdit: startEdit,
     onRetry: retry,
   });
-  const { jump: jumpTo } = jump;
-  const openQuote = useCallback((id: string, seq: number) => void jumpTo(id, seq), [jumpTo]);
+  const { openQuote, filterByTag } = filterJumps;
+  const { select: selectMatch } = matches;
+  const openMatch = useCallback(
+    (at: number) => {
+      setResultsShown(false);
+      selectMatch(at);
+    },
+    [selectMatch],
+  );
 
   const bubble = useCallback(
     (item: SavedItem) => (
@@ -113,9 +153,10 @@ export function SavedAllTab({
         onOpenSource={openSource}
         onQuotePress={openQuote}
         onRetry={retry}
+        onTagPress={filterByTag}
       />
     ),
-    [currentUserId, mediaBounds, openQuote, openSource, retry, saved.chats, tagsById],
+    [currentUserId, filterByTag, mediaBounds, openQuote, openSource, retry, saved.chats, tagsById],
   );
 
   const { active: selecting, isSelected, toggle } = selection;
@@ -193,13 +234,22 @@ export function SavedAllTab({
           <SavedListState
             failed={saved.failed}
             loading={saved.isLoading}
-            empty={empty ? EMPTY : null}
+            empty={empty ? (filter.active ? NOTHING_FOUND : EMPTY) : null}
             onRetry={saved.reload}
             failText="Не удалось загрузить сохранённое"
             loadingLabel="Загрузка сохранённого"
           />
         </View>
       )}
+
+      {showResults ? (
+        <SavedSearchResults
+          search={matches}
+          chats={saved.chats}
+          currentUserId={currentUserId}
+          onSelect={openMatch}
+        />
+      ) : null}
 
       {selecting ? (
         <SavedSelectionBar
@@ -214,9 +264,17 @@ export function SavedAllTab({
 
       {/* На время выбора поле прячется, а не размонтируется: черновик и
           подготовленный рекордер голосовых остаются как были. */}
-      <View style={selecting ? styles.hidden : undefined}>
+      <View style={selecting || searching ? styles.hidden : undefined}>
         <SavedComposer composer={composer} />
       </View>
+
+      {searching && !selecting ? (
+        <ChatSearchPlate
+          search={matches}
+          showingList={showResults}
+          onToggleList={() => setResultsShown((shown) => !shown)}
+        />
+      ) : null}
 
       <SavedMenu
         target={menuTarget}

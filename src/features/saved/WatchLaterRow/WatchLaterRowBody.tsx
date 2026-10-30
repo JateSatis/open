@@ -15,6 +15,9 @@ import type { MosaicBounds } from '@/features/chats/lib/mosaicLayout';
 import { describePreview, previewOf } from '@/features/chats/messageQuote';
 import { SavedBubble } from '@/features/saved/SavedBubble';
 import { isNote, savedSourceLabel, toBubbleMessage } from '@/features/saved/savedCopy';
+import { savedSearchText } from '@/features/saved/savedSearchText';
+import { HighlightedText } from '@/features/search/HighlightedText';
+import { findMatches, normalizeSearch, snippetAround } from '@/features/search/searchText';
 import { formatDayMonth } from '@/lib/dates';
 import { Opacity, Sizes } from '@/theme';
 
@@ -33,6 +36,10 @@ export type WatchLaterRowBodyProps = {
   sticky?: StickyFrame | null;
   /** Обёртка пузыря — жесты строки вокруг него (свайп ждёт перемотку голосового). */
   wrapBubble?: (bubble: ReactNode) => ReactNode;
+  /** Запрос поиска: превью — фрагментом с подсвеченным совпадением. */
+  searched?: string;
+  /** Тап по тегу на раскрытом пузыре — фильтр по нему. */
+  onTagPress?: (tagId: string) => void;
 };
 
 /**
@@ -55,6 +62,8 @@ export const WatchLaterRowBody = forwardRef<View, WatchLaterRowBodyProps>(
       onOpenSource,
       sticky = null,
       wrapBubble = (bubble) => bubble,
+      searched = '',
+      onTagPress,
     },
     ref,
   ) {
@@ -64,6 +73,9 @@ export const WatchLaterRowBody = forwardRef<View, WatchLaterRowBodyProps>(
     const done = saved.watchDoneAt !== null;
     const { bubbleRef, checkStyle, onBubbleLayout } = useStickyCheck(sticky, expanded);
     const preview = describePreview(previewOf(toBubbleMessage(saved)));
+    const needle = normalizeSearch(searched);
+    const found = needle === '' ? null : savedSearchText(saved, needle);
+    const snippet = found === null ? null : snippetAround(found, findMatches(found, needle));
 
     const check = (
       <Pressable
@@ -104,7 +116,16 @@ export const WatchLaterRowBody = forwardRef<View, WatchLaterRowBodyProps>(
             <Text variant="bodyBold" numberOfLines={1}>
               {label.source}
             </Text>
-            {expanded ? null : (
+            {expanded ? null : snippet ? (
+              <HighlightedText
+                variant="small"
+                color="textSecondary"
+                numberOfLines={1}
+                ranges={snippet.ranges}
+              >
+                {snippet.text}
+              </HighlightedText>
+            ) : (
               <Text variant="small" color="textSecondary" numberOfLines={1}>
                 {preview}
               </Text>
@@ -129,6 +150,7 @@ export const WatchLaterRowBody = forwardRef<View, WatchLaterRowBodyProps>(
                     mediaBounds={mediaBounds}
                     onOpenSource={onOpenSource}
                     hideWatchLater
+                    onTagPress={onTagPress ? (tagId) => onTagPress(tagId) : undefined}
                   />,
                 )}
               </Animated.View>

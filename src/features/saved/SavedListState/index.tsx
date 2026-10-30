@@ -2,11 +2,20 @@ import { ActivityIndicator, View } from 'react-native';
 
 import { styles } from './styles';
 
+import { LinkButton } from '@/components/LinkButton';
 import { LoadFailed } from '@/components/LoadFailed';
 import { Text } from '@/components/Text';
 
-/** Пустой список — с подсказкой, как его наполнить. */
-export type SavedEmpty = { testID: string; title: string; hint: string };
+/**
+ * Пустой список — с подсказкой, как его наполнить; под фильтрами — с
+ * действием (сбросить их).
+ */
+export type SavedEmpty = {
+  testID: string;
+  title: string;
+  hint?: string;
+  action?: { label: string; onPress: () => void; testID?: string };
+};
 
 export type SavedListStateProps = {
   failed: boolean;
@@ -45,9 +54,16 @@ export function SavedListState({
   return (
     <View testID={empty.testID} style={styles.centered}>
       <Text variant="bodyBold">{empty.title}</Text>
-      <Text color="textSecondary" style={styles.hint}>
-        {empty.hint}
-      </Text>
+      {empty.hint ? (
+        <Text color="textSecondary" style={styles.hint}>
+          {empty.hint}
+        </Text>
+      ) : null}
+      {empty.action ? (
+        <View testID={empty.action.testID}>
+          <LinkButton label={empty.action.label} onPress={empty.action.onPress} />
+        </View>
+      ) : null}
     </View>
   );
 }

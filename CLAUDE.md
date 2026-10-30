@@ -699,7 +699,13 @@ saved_messages       сохранённые человеком копии соо
                      после seq — окно вокруг записи для перехода к закрепу),
                      list_saved_watch_later (активные, затем выполненные;
                      составной курсор), list_saved_pins; строку собирает одна
-                     saved_rows. Куда ведёт источник — saved_source, можно ли
+                     saved_rows. Фильтр и поиск — один p_filter jsonb у всех
+                     страниц, закрепов и count_saved_messages (tags, categories,
+                     types, from/to — момент сохранения [from, to), q — текст и
+                     название попа, как search_chat_messages): внутри группы —
+                     любой из, между группами — «и». Вид записи — только
+                     saved_type (voice | pop | text_media), подходит ли — только
+                     saved_matches. Куда ведёт источник — saved_source, можно ли
                      переслать пачку — saved_forwardable (в чат уходит живой
                      оригинал, не копия), счётчик — saved_summary. Удаление из
                      сохранённого — физическое (личная закладка).

@@ -25,6 +25,11 @@ jest.mock('expo-router', () => ({
   useRouter: () => ({ push: jest.fn() }),
   useNavigation: () => ({ setOptions: jest.fn() }),
   useIsFocused: () => true,
+  // Шапка экрана — кнопки поиска и фильтров справа.
+  Stack: {
+    Screen: ({ options }: { options?: { headerRight?: () => unknown } }) =>
+      options?.headerRight ? options.headerRight() : null,
+  },
 }));
 jest.mock('@/api/supabase', () => ({ supabase: {} }));
 jest.mock('expo-clipboard', () => ({ setStringAsync: jest.fn(() => Promise.resolve(true)) }));

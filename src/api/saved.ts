@@ -87,6 +87,8 @@ export type SavedMessage = {
   edited: boolean;
   /** Цитаты ответа заметки по порядку; у копий — пусто. */
   replies: SavedQuote[];
+  /** Название попа из снимка — по нему тоже ищет поиск. */
+  popTitle?: string | null;
 };
 
 /**
@@ -102,6 +104,24 @@ export type SavedPage = {
 
 /** Где страница начинается: самые новые, старше записи или новее неё. */
 export type SavedPageParam = { before: number | null } | { after: number };
+
+/** Вид записи для фильтра «Тип сообщения»; правило — у базы (`saved_type`). */
+export type SavedTypeFilter = 'voice' | 'pop' | 'text_media';
+
+/**
+ * Фильтр списков «Сохранённых» на сервере: внутри группы — любой из, между
+ * группами — «и». Даты — моменты: `[from, to)`, границы дней считает
+ * клиент в поясе устройства. `q` — поиск по тексту и названию попа.
+ * Пустая группа — без условия.
+ */
+export type SavedFilterInput = {
+  tags?: string[];
+  categories?: SavedCategory[];
+  types?: SavedTypeFilter[];
+  from?: string;
+  to?: string;
+  q?: string;
+};
 
 /** Курсор «Посмотреть позже» — последняя строка прошлой страницы. */
 export type WatchLaterCursor = { done: boolean; at: string; seq: number };
@@ -162,7 +182,14 @@ type AttachmentJson = {
   media_hidden?: boolean | null;
   pop_id?: string | null;
   pop_channel_id?: string | null;
+  pop_title?: string | null;
 };
+
+function popTitleOf(value: unknown): string | null {
+  if (!Array.isArray(value)) return null;
+
+  return (value as AttachmentJson[]).find((item) => item.pop_title)?.pop_title ?? null;
+}
 
 function toAttachments(value: unknown): MessageAttachment[] {
   if (!Array.isArray(value)) return [];
@@ -278,6 +305,7 @@ export function toSavedMessage(row: SavedRow): SavedMessage {
     tagIds: row.tag_ids ?? [],
     edited: row.edited ?? false,
     replies: toQuotes(row.replies),
+    popTitle: popTitleOf(row.attachments),
   };
 }
 
@@ -289,12 +317,19 @@ export function toSavedMessage(row: SavedRow): SavedMessage {
 export async function listSavedMessages(
   param: SavedPageParam,
   limit = SAVED_PAGE_SIZE,
+  filter: SavedFilterInput | null = null,
+  signal?: AbortSignal,
 ): Promise<SavedPage> {
-  const { data, error } = await supabase.rpc('list_saved_messages', {
+  let request = supabase.rpc('list_saved_messages', {
     p_before_seq: 'before' in param ? (param.before ?? undefined) : undefined,
     p_after_seq: 'after' in param ? param.after : undefined,
     p_limit: limit,
+    p_filter: filter ?? undefined,
   });
+
+  if (signal) request = request.abortSignal(signal);
+
+  const { data, error } = await request;
 
   if (error) throw error;
 
@@ -315,11 +350,14 @@ export async function listSavedMessages(
  * Окно вокруг записи с номером `seq`: она сама и старше — половина, новее —
  * другая. Одна страница с курсорами в обе стороны.
  */
-export async function listSavedAround(seq: number): Promise<SavedPage> {
+export async function listSavedAround(
+  seq: number,
+  filter: SavedFilterInput | null = null,
+): Promise<SavedPage> {
   const half = Math.ceil(SAVED_PAGE_SIZE / 2);
   const [older, newer] = await Promise.all([
-    listSavedMessages({ before: seq + 1 }, half),
-    listSavedMessages({ after: seq }, half),
+    listSavedMessages({ before: seq + 1 }, half, filter),
+    listSavedMessages({ after: seq }, half, filter),
   ]);
   const top = newer.items[0];
 
@@ -341,12 +379,16 @@ function watchCursorOf(item: SavedMessage): WatchLaterCursor | null {
  * Страница «Посмотреть позже»: активные новыми вперёд, затем выполненные —
  * последнее отмеченное первым.
  */
-export async function listWatchLater(cursor: WatchLaterCursor | null): Promise<WatchLaterPage> {
+export async function listWatchLater(
+  cursor: WatchLaterCursor | null,
+  filter: SavedFilterInput | null = null,
+): Promise<WatchLaterPage> {
   const { data, error } = await supabase.rpc('list_saved_watch_later', {
     p_after_done: cursor?.done,
     p_after_at: cursor?.at,
     p_after_seq: cursor?.seq,
     p_limit: SAVED_PAGE_SIZE,
+    p_filter: filter ?? undefined,
   });
 
   if (error) throw error;
@@ -544,9 +586,9 @@ export async function deleteSavedMessages(savedIds: string[]): Promise<void> {
   if (error) throw error;
 }
 
-/** Закрепы по времени закрепления: от первого к последнему. */
-export async function listSavedPins(): Promise<SavedPin[]> {
-  const { data, error } = await supabase.rpc('list_saved_pins');
+/** Закрепы по времени закрепления: от первого к последнему; под фильтром — только подходящие. */
+export async function listSavedPins(filter: SavedFilterInput | null = null): Promise<SavedPin[]> {
+  const { data, error } = await supabase.rpc('list_saved_pins', { p_filter: filter ?? undefined });
 
   if (error) throw error;
 
@@ -637,8 +679,14 @@ export async function deleteSavedNoteByClient(clientId: string): Promise<void> {
   if (error) throw error;
 }
 
-/** Одна запись по id — как её отдают страницы «Все». */
-export async function getSavedMessage(id: string): Promise<SavedMessage | null> {
+/**
+ * Одна запись по id — как её отдают страницы «Все». С фильтром — `null`,
+ * если она под него не подходит.
+ */
+export async function getSavedMessage(
+  id: string,
+  filter: SavedFilterInput | null = null,
+): Promise<SavedMessage | null> {
   // Окно из одной записи: до её номера включительно — её не знаем, поэтому
   // через страницу «Посмотреть позже» нельзя; берём по seq из таблицы.
   const { data: row, error } = await supabase
@@ -650,9 +698,25 @@ export async function getSavedMessage(id: string): Promise<SavedMessage | null> 
   if (error) throw error;
   if (!row) return null;
 
-  const page = await listSavedMessages({ before: row.seq + 1 }, 1);
+  const page = await listSavedMessages({ before: row.seq + 1 }, 1, filter);
 
   return page.items.find((item) => item.id === id) ?? null;
+}
+
+/** Сколько записей подходит под фильтр (с `q` — совпадений поиска), до потолка. */
+export async function countSavedMessages(
+  filter: SavedFilterInput,
+  signal?: AbortSignal,
+): Promise<number> {
+  let request = supabase.rpc('count_saved_messages', { p_filter: filter });
+
+  if (signal) request = request.abortSignal(signal);
+
+  const { data, error } = await request;
+
+  if (error) throw error;
+
+  return data ?? 0;
 }
 
 /**

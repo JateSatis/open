@@ -16,6 +16,7 @@ import {
   deleteSavedNoteByClient,
   getSavedMessage,
   sendSavedNote,
+  type SavedFilterInput,
   type SavedNoteFile,
   type SavedPage,
 } from '@/api/saved';
@@ -38,7 +39,9 @@ import {
   type UploadedMedia,
 } from '@/features/media';
 import { showNotice } from '@/features/notifications/alertsStore';
-import { savedMessagesQueryKey } from '@/features/saved/keys';
+import { savedMessagesKey, savedMessagesQueryKey } from '@/features/saved/keys';
+import { filterKey, toFilterInput } from '@/features/saved/savedFilters';
+import { getSavedFilters } from '@/features/saved/savedFiltersStore';
 import {
   findPending,
   removePending,
@@ -84,14 +87,11 @@ function toOutgoing(payload: NotePayload): Outgoing {
 }
 
 /**
- * Подтверждённая заметка — в первую страницу «Все», если она сейчас — самые
- * новые. Окно вокруг закрепа её не ждёт: она придёт догрузкой вниз.
+ * Заметка — в первую страницу списка, если она сейчас — самые новые. Окно
+ * вокруг закрепа её не ждёт: она придёт догрузкой вниз.
  */
-function settle(queryClient: QueryClient, localId: string, saved: SavedItem) {
-  const pending = findPending(localId);
-  const confirmed: SavedItem = { ...saved, localPreviews: pending?.localPreviews };
-
-  queryClient.setQueryData<InfiniteData<SavedPage, unknown>>(savedMessagesQueryKey, (data) => {
+function putNewest(queryClient: QueryClient, key: string | null, saved: SavedItem) {
+  queryClient.setQueryData<InfiniteData<SavedPage, unknown>>(savedMessagesKey(key), (data) => {
     if (!data || data.pages.length === 0) return data;
 
     const [first, ...rest] = data.pages;
@@ -101,8 +101,34 @@ function settle(queryClient: QueryClient, localId: string, saved: SavedItem) {
       return data;
     }
 
-    return { ...data, pages: [{ ...first, items: [confirmed, ...first.items] }, ...rest] };
+    return { ...data, pages: [{ ...first, items: [saved, ...first.items] }, ...rest] };
   });
+}
+
+/**
+ * На «Все» стоят фильтры: подходит ли под них новая заметка, решает база.
+ * Подходит — встаёт внизу отфильтрованного списка, нет — человеку говорят,
+ * куда она делась.
+ */
+async function placeFiltered(queryClient: QueryClient, saved: SavedItem, filter: SavedFilterInput) {
+  const shown = await getSavedMessage(saved.id, filter).catch(() => null);
+
+  if (shown) {
+    putNewest(queryClient, filterKey(filter), saved);
+    return;
+  }
+
+  showNotice('Заметка сохранена, но скрыта фильтрами', 'info');
+}
+
+/** Подтверждённая заметка — в «Все» без фильтра и в текущий отфильтрованный список. */
+function settle(queryClient: QueryClient, localId: string, saved: SavedItem) {
+  const pending = findPending(localId);
+  const confirmed: SavedItem = { ...saved, localPreviews: pending?.localPreviews };
+  const filter = toFilterInput(getSavedFilters());
+
+  putNewest(queryClient, null, confirmed);
+  if (filter) void placeFiltered(queryClient, confirmed, filter);
 
   // Как у сообщений чата: пока страница не перерисовалась, в исходящих лежит
   // уже подтверждённая копия под настоящим id — экран склеивает их по id.

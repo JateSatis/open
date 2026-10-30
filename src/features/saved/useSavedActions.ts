@@ -27,6 +27,7 @@ import {
   patchQuotes,
   patchSaved,
   putInWatchLater,
+  refreshFiltered,
   rollbackSaved,
   type SavedPatch,
 } from '@/features/saved/savedCache';
@@ -66,6 +67,8 @@ async function optimistic(
     void queryClient.invalidateQueries({ queryKey: savedWatchLaterQueryKey });
     failed(cause, failText);
     return false;
+  } finally {
+    refreshFiltered(queryClient);
   }
 }
 

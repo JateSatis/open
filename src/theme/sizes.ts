@@ -305,4 +305,10 @@ export const Sizes = {
   swipeRemoveIcon: 24,
   /** Дата добавления слева в строке «Посмотреть позже» — ширина под «06.11.25». */
   watchLaterDateWidth: 56,
+  /** Крестик на чипе активного фильтра и ⊗ «Сбросить все». */
+  savedFilterChipIcon: 16,
+  /** Точка «есть фильтры» на значке фильтров в шапке. */
+  savedFilterDot: 8,
+  /** Полоска-ручка листа фильтров. */
+  savedFilterGrabberWidth: 36,
 } as const;

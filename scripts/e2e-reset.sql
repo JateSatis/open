@@ -114,7 +114,13 @@ update public.chats set username = null where username like 'maestro\_%';
 -- saved-messages сохраняет своё тестовое сообщение. Удаление из сохранённого — физическое
 -- (личная закладка, не публичный контент), функции для него пока нет — владельцем схемы.
 delete from public.saved_messages
- where text like 'maestro-%'
+ where (text like 'maestro-%' or text like 'qxsv%')
+   and owner_id in (select id from public.profiles where username in ('shy_guy', 'jatesatis', 'tanya_bomba'));
+
+-- Сценарии «Сохранённых» пишут свои заметки и теги меткой из одних букв (`qxsv…`, `qxtg…`):
+-- клавиатура realme портит цифры и дефисы в тексте Maestro.
+delete from public.saved_tags
+ where name like 'qxtg%'
    and owner_id in (select id from public.profiles where username in ('shy_guy', 'jatesatis', 'tanya_bomba'));
 
 -- Итог одной строкой: обёртка печатает его в отчёт прогона (видно только последний SELECT).

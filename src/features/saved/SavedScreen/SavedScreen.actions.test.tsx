@@ -36,6 +36,11 @@ jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockPush }),
   useNavigation: () => ({ setOptions: mockSetOptions }),
   useIsFocused: () => true,
+  // Шапка экрана — кнопки поиска и фильтров справа.
+  Stack: {
+    Screen: ({ options }: { options?: { headerRight?: () => unknown } }) =>
+      options?.headerRight ? options.headerRight() : null,
+  },
 }));
 jest.mock('expo-clipboard', () => ({ setStringAsync: jest.fn(() => Promise.resolve(true)) }));
 jest.mock('@/api/supabase', () => ({ supabase: {} }));
@@ -427,7 +432,7 @@ describe('SavedScreen — закрепы', () => {
 
     await fireEvent.press(await screen.findByTestId('pinned-bar'));
 
-    await waitFor(() => expect(listSavedAround).toHaveBeenCalledWith(5));
+    await waitFor(() => expect(listSavedAround).toHaveBeenCalledWith(5, null));
     expect(await screen.findByTestId('saved-row-far')).toBeTruthy();
     expect(screen.queryByTestId('saved-row-top')).toBeNull();
   });
