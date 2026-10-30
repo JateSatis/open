@@ -4,8 +4,11 @@ import { create } from 'zustand';
 export type OpenChatThread = {
   chatId: string;
   rootId: string;
-  /** Сообщение, к которому прокрутить шторку при открытии (мой ответ из всплывашки). */
-  focusMessageId?: string;
+  /**
+   * К чему прокрутить шторку при открытии: к сообщению или в конец треда
+   * (`'end'` — мой ответ из всплывашки «Ответ ушёл в тред»).
+   */
+  focusMessageId?: string | 'end';
 };
 
 type State = { open: OpenChatThread | null };

@@ -74,7 +74,12 @@ export type ChatMessagesState = {
   /** Догружает историю назад до сообщения с этим временем. Отвечает, дошли ли. */
   loadUntil: (seq: number) => Promise<boolean>;
   /** Текст с альбомом; с цитатами — это ответ. */
-  send: (text: string, media?: OutgoingMedia[], replies?: LiveQuote[]) => void;
+  send: (
+    text: string,
+    media?: OutgoingMedia[],
+    replies?: LiveQuote[],
+    hidden?: HiddenRange[],
+  ) => void;
   sendVoice: (voice: LocalMedia, replies?: LiveQuote[]) => void;
   /** Пост канала `channelId` с попом и необязательным текстом. */
   sendPop: (channelId: string, text: string, pop: DraftPop, replies?: LiveQuote[]) => void;

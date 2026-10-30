@@ -311,4 +311,10 @@ export const Sizes = {
   savedFilterDot: 8,
   /** Полоска-ручка листа фильтров. */
   savedFilterGrabberWidth: 36,
+  /** Значок ответов на плашке треда и переключатель «Треды» в шапке. */
+  chatThreadIcon: 16,
+  chatThreadToggleIcon: 22,
+  /** Аватар ответившего на плашке треда; второй наезжает на первый. */
+  chatThreadAvatar: 18,
+  chatThreadAvatarOverlap: 6,
 } as const;
