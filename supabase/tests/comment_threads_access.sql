@@ -152,18 +152,18 @@ begin
 
   perform pg_temp.act_as(d);
   select string_agg(id::text, ',' order by rank desc, id desc) into s
-  from public.list_thread_roots(m);
+  from public.list_comment_thread_roots(m);
   perform pg_temp.check(
     'верх по рангу: ответы весят больше реакции, реакция выше пустого',
     s = root1::text || ',' || root2::text || ',' || root3::text,
     s
   );
 
-  select count(*) into n from public.list_thread_roots(m) where thread_root_id is not null;
+  select count(*) into n from public.list_comment_thread_roots(m) where thread_root_id is not null;
   perform pg_temp.check('ответы в верх не попадают', n = 0, n::text);
 
   select string_agg(id::text, ',') into s
-  from public.list_thread_roots(
+  from public.list_comment_thread_roots(
     m,
     (select rank from public.comments where id = root1),
     root1,
@@ -177,7 +177,7 @@ begin
 
   perform pg_temp.act_as(d);
   select coalesce(text, '∅') || '|' || coalesce(author_id::text, '∅') || '|' || replies_count
-  into s from public.list_thread_roots(m) where id = root1;
+  into s from public.list_comment_thread_roots(m) where id = root1;
   perform pg_temp.check('удалённый корень с ответами — заглушка без автора и текста', s = '∅|∅|3', s);
 
   select count(*) into n from public.comments where thread_root_id = root1;
@@ -190,7 +190,7 @@ begin
   perform pg_temp.act_as(a);
   perform public.delete_comment(root2);
   perform pg_temp.act_as(d);
-  select count(*) into n from public.list_thread_roots(m) where id = root2;
+  select count(*) into n from public.list_comment_thread_roots(m) where id = root2;
   perform pg_temp.check('удалённый корень без ответов не отдаётся', n = 0, n::text);
 
   -- =============================================================== пересылка
@@ -278,7 +278,7 @@ begin
   end;
 
   begin
-    perform public.list_thread_roots(m);
+    perform public.list_comment_thread_roots(m);
     perform pg_temp.check('без входа верх не читается', false, 'прошло');
   exception when others then
     perform pg_temp.check('без входа верх не читается', sqlstate = '42501', sqlstate || ' ' || sqlerrm);

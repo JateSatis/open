@@ -741,8 +741,6 @@ begin
   perform pg_temp.act_as(b);
   select count(*) into n from public.list_comment_thread_roots(pop);
   perform pg_temp.check('верх попа: корни без ответов', n = 3, n::text);
-  select count(*) into n from public.list_thread_roots(pop);
-  perform pg_temp.check('list_thread_roots сообщения не отдаёт комментарии попа', n = 0, n::text);
 
   -- К1.2: ветка и цитата не пересекают границу цели.
   msg_comment := public.send_comment(msg, 'комментарий к посту');

@@ -5604,44 +5604,6 @@ export type Database = {
           watch_later_at: string
         }[]
       }
-      list_thread_roots: {
-        Args: {
-          after_id?: string
-          after_rank?: number
-          page_size?: number
-          target_message: string
-        }
-        Returns: {
-          audience: string | null
-          author_avatar_url: string | null
-          author_id: string | null
-          author_name: string | null
-          author_opaque: boolean | null
-          chat_id: string | null
-          created_at: string | null
-          deleted_at: string | null
-          edited_at: string | null
-          fragment_id: string | null
-          id: string | null
-          kind: string | null
-          member_reactions: Json | null
-          message_id: string | null
-          pop_id: string | null
-          rank: number | null
-          reactions_count: number | null
-          replies_count: number | null
-          target_id: string | null
-          text: string | null
-          thread_root_id: string | null
-          visitor_reactions: Json | null
-        }[]
-        SetofOptions: {
-          from: "*"
-          to: "comment_rows"
-          isOneToOne: false
-          isSetofReturn: true
-        }
-      }
       lock_fragment_clusters_shared: {
         Args: { target_message: string }
         Returns: undefined
