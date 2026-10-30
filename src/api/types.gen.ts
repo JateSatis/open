@@ -2113,6 +2113,7 @@ export type Database = {
         Row: {
           author_id: string | null
           chat_id: string
+          chat_thread_root_ids: string[] | null
           clusters_count: number
           comments_count: number
           created_at: string
@@ -2144,6 +2145,7 @@ export type Database = {
         Insert: {
           author_id?: string | null
           chat_id: string
+          chat_thread_root_ids?: string[] | null
           clusters_count?: number
           comments_count?: number
           created_at?: string
@@ -2175,6 +2177,7 @@ export type Database = {
         Update: {
           author_id?: string | null
           chat_id?: string
+          chat_thread_root_ids?: string[] | null
           clusters_count?: number
           comments_count?: number
           created_at?: string
@@ -4444,6 +4447,7 @@ export type Database = {
           author_name: string | null
           author_opaque: boolean | null
           chat_id: string | null
+          chat_thread_root_ids: string[] | null
           clusters_count: number | null
           comments_count: number | null
           created_at: string | null
@@ -4735,6 +4739,7 @@ export type Database = {
         Returns: {
           author_id: string | null
           chat_id: string
+          chat_thread_root_ids: string[] | null
           clusters_count: number
           comments_count: number
           created_at: string
@@ -4840,6 +4845,20 @@ export type Database = {
         }[]
       }
       chat_signal_topic: { Args: { p_chat: string }; Returns: string }
+      chat_thread_summaries: {
+        Args: { p_root_ids: string[] }
+        Returns: {
+          last_attachments: Json
+          last_created_at: string
+          last_kind: string
+          last_seq: number
+          last_text: string
+          others_count: number
+          people: Json
+          replies_count: number
+          root_id: string
+        }[]
+      }
       chat_time_restricted_now: { Args: { p_chat: string }; Returns: boolean }
       chat_time_visible: { Args: { p_chat: string }; Returns: boolean }
       chat_title_for: {
@@ -5238,6 +5257,7 @@ export type Database = {
           author_name: string | null
           author_opaque: boolean | null
           chat_id: string | null
+          chat_thread_root_ids: string[] | null
           clusters_count: number | null
           comments_count: number | null
           created_at: string | null
@@ -5343,6 +5363,26 @@ export type Database = {
           subscribed_at: string
           subscriber_id: string
           username: string
+        }[]
+      }
+      list_chat_thread: {
+        Args: {
+          p_after_seq?: number
+          p_before_seq?: number
+          p_limit?: number
+          p_root: string
+        }
+        Returns: {
+          id: string
+          quote_ids: string[]
+          seq: number
+        }[]
+      }
+      list_chat_thread_deleted_roots: {
+        Args: { p_before_seq?: number; p_chat: string; p_limit?: number }
+        Returns: {
+          id: string
+          seq: number
         }[]
       }
       list_chat_voices: {
