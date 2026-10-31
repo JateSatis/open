@@ -3,7 +3,9 @@
 
 import type { QueryClient } from '@tanstack/react-query';
 
+import { readChatThreadSummaries } from '@/features/chats/chatThreads/summaries';
 import {
+  deletedChatThreadRoot,
   listCommentCounts,
   listClusterCounts,
   listDeletedMessageIds,
@@ -174,12 +176,23 @@ export async function loadHistory(
   if (newer === null) return firstPage(chatId, view);
 
   const latest = readHistory(queryClient, chatId, view) ?? cached;
+  // В «Тредах» удалённое без нас исходное с ответами остаётся заглушкой.
+  const summaries = view === 'chat-threads' ? readChatThreadSummaries(queryClient, chatId) : undefined;
+  const stubs = summaries
+    ? latest.items
+        .filter((message) => deleted.includes(message.id) && (summaries[message.id]?.repliesCount ?? 0) > 0)
+        .map((message) => deletedChatThreadRoot(chatId, message.id, message.seq))
+    : [];
 
   return patchViews(
     patchCommentCounts(
       patchReactions(
         replaceMessages(
-          removeMessages(mergeMessages(latest, newer, 'newer'), new Set(deleted)),
+          mergeMessages(
+            removeMessages(mergeMessages(latest, newer, 'newer'), new Set(deleted)),
+            stubs,
+            'older',
+          ),
           [...edited, ...islands],
         ),
         reactions,

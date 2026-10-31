@@ -1,12 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   FlatList,
   Keyboard,
   Modal,
   Pressable,
   useWindowDimensions,
   View,
+  type ViewToken,
 } from 'react-native';
 import { GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, { useAnimatedStyle } from 'react-native-reanimated';
@@ -16,8 +16,9 @@ import { ChatThreadFooter } from './ChatThreadFooter';
 import type { ChatThreadPanelKit } from './kit';
 import { styles } from './styles';
 import { useChatThreadActions } from './useChatThreadActions';
+import { useChatThreadJump } from './useChatThreadJump';
+import { useChatThreadRenderItem } from './useChatThreadRenderItem';
 
-import type { QuotedMessage } from '@/api/chats';
 import { ConfirmDialogSurface } from '@/components/ConfirmDialog';
 import { dismissTopConfirmDialog } from '@/components/ConfirmDialog/store';
 import { Text } from '@/components/Text';
@@ -34,21 +35,21 @@ import {
   setChatThreadKeyboardWindowOpen,
   useOwnKeyboardHeight,
 } from '@/features/chats/composerKeyboard';
-import { DeletedOriginal } from '@/features/chats/DeletedOriginal';
 import { closeEmojiPanel } from '@/features/chats/EmojiPanel';
-import { mosaicBounds } from '@/features/chats/lib/mosaicLayout';
-import { bubbleAsideWidth } from '@/features/chats/MessageBubble/layout';
 import { MessageContextMenu } from '@/features/chats/MessageContextMenu';
-import { measureInWindow } from '@/features/chats/rowRegistry';
-import { useChatBubbles } from '@/features/chats/useChatBubbles';
-import { useChatRowRenderer } from '@/features/chats/useChatRowRenderer';
-import type { JumpHighlight } from '@/features/chats/useJumpToMessage';
+import type { ChatListRow } from '@/features/chats/islands/rows';
+import {
+  createRowRegistry,
+  measureInWindow,
+  RowRegistryContext,
+} from '@/features/chats/rowRegistry';
+import { useMessageViews } from '@/features/chats/useMessageViews';
 import { repliesLabel } from '@/features/interactions/CommentsPanel/RepliesButton';
 import { useSidePanel } from '@/features/interactions/CommentsPanel/useSidePanel';
 import { TileViewportContext } from '@/features/media/tileRegistry';
 import { InAppNoticeToast } from '@/features/notifications/InAppMessageToast/NoticeToast';
 import { useTheme } from '@/hooks/use-theme';
-import { Sizes, Spacing } from '@/theme';
+import { Sizes } from '@/theme';
 
 export type ChatThreadWindowProps = {
   kit: ChatThreadPanelKit;
@@ -57,6 +58,8 @@ export type ChatThreadWindowProps = {
 
 const rowKey = (row: ChatThreadPaneRow) => row.key;
 const NO_ROOTS: string[] = [];
+/** Положение прокрутки учёту просмотров нужно лишь примерно. */
+const VIEWS_SCROLL_THROTTLE_MS = 100;
 /** Столько ждать `onShow`, прежде чем начать выезд самим. */
 const SHOW_FALLBACK_MS = 300;
 
@@ -111,143 +114,46 @@ export function ChatThreadWindow({ kit, open }: ChatThreadWindowProps) {
     return () => setChatThreadKeyboardWindowOpen(false);
   }, []);
 
-  // Переход по цитате внутри шторки: к сообщению треда, с подсветкой. Цель —
-  // в ref: после догрузки разрыва строка появляется на следующей отрисовке.
-  const [highlight, setHighlight] = useState<JumpHighlight | null>(null);
-  const [jumps, setJumps] = useState(0);
-  const targetRef = useRef<string | null>(null);
-  const { rows, loadUntil } = pane;
+  const { rows } = pane;
+  const { highlight, jumpInPane, onScrollToIndexFailed } = useChatThreadJump({
+    listRef,
+    rows,
+    loadUntil: pane.loadUntil,
+    isLoading: pane.isLoading,
+    focusMessageId: open.focusMessageId,
+  });
 
-  useEffect(() => {
-    const target = targetRef.current;
-    const index = target ? rows.findIndex((row) => row.key === target) : -1;
-
-    if (index === -1) return;
-
-    targetRef.current = null;
-    listRef.current?.scrollToIndex({ index, viewPosition: 0.5, animated: true });
-  }, [jumps, rows]);
-
-  const jumpInPane = useCallback(
-    async (messageId: string, seq: number) => {
-      if (!(await loadUntil(seq))) return;
-
-      targetRef.current = messageId;
-      setJumps((count) => count + 1);
-      setHighlight({ messageId, key: Date.now() });
-    },
-    [loadUntil],
-  );
-
-  // Мой ответ из всплывашки — в конце треда: туда и прокрутить.
-  const focused = useRef(false);
-
-  useEffect(() => {
-    if (focused.current || pane.isLoading || !open.focusMessageId) return;
-
-    focused.current = true;
-
-    const index =
-      open.focusMessageId === 'end' ? -1 : rows.findIndex((row) => row.key === open.focusMessageId);
-
-    requestAnimationFrame(() => {
-      if (index === -1) listRef.current?.scrollToEnd({ animated: false });
-      else listRef.current?.scrollToIndex({ index, viewPosition: 0.5, animated: false });
-    });
-  }, [open.focusMessageId, pane.isLoading, rows]);
-
-  const { navigation } = kit;
-  const paneNavigation = useMemo(
-    () => ({
-      ...navigation,
-      openQuote: (quote: QuotedMessage) => {
-        if (quote.state === 'live') void jumpInPane(quote.messageId, quote.seq);
-      },
-    }),
-    [jumpInPane, navigation],
-  );
-  const mediaBounds = useMemo(
-    () => mosaicBounds(width - Spacing.three * 2, false, bubbleAsideWidth(kit.showAvatars)),
-    [kit.showAvatars, width],
-  );
-  const { bubbleFor } = useChatBubbles({
+  // Просмотры и «прочитано» ответов, прочитанных в шторке, — как в переписке.
+  const [rowRegistry] = useState(createRowRegistry);
+  const views = useMessageViews({
     chatId,
     currentUserId: kit.currentUserId,
-    isMember: kit.isMember,
-    participantsById: kit.peopleById,
-    mediaBounds,
-    retry: kit.retry,
-    openPerson: kit.openPerson,
-    navigation: paneNavigation,
-    reactions: kit.reactions,
-    showAvatars: kit.showAvatars,
-    showAuthors: kit.showAuthors,
-    openForwardedComment: kit.openForwardedComment,
+    isFocused: true,
+    rows: pane.bubbleRows,
+    autoscrollThreshold: 0,
+    measureRow: rowRegistry.measure,
+    measureViewport: measureList,
   });
-  const { renderItem: renderRow } = useChatRowRenderer({
-    currentUserId: kit.currentUserId,
-    isMember: kit.isMember,
-    isSelecting: selection.isActive,
-    isSelected: selection.isSelected,
-    toggleSelected: selection.toggle,
-    editingId: edit.mode?.message.id ?? null,
-    highlight,
-    bubbleFor,
-    openMenu: menu.open,
-    startReply: actions.startReply,
-    retry: kit.retry,
-    hostName: kit.authorName,
-    openChat: navigation.openChat,
-  });
-
-  const renderItem = useCallback(
-    ({ item: row }: { item: ChatThreadPaneRow }) => {
-      if (row.type === 'chat-thread-gap') {
-        return (
-          <Pressable
-            testID="chat-thread-gap"
-            accessibilityRole="button"
-            onPress={() => void pane.loadGap()}
-            style={styles.action}
-          >
-            {pane.loadingGap ? (
-              <ActivityIndicator accessibilityLabel="Загрузка ответов" />
-            ) : (
-              <Text variant="smallBold" color="primary">
-                {`Показать ещё ${repliesLabel(row.hidden)}`}
-              </Text>
-            )}
-          </Pressable>
-        );
-      }
-
-      if (row.type === 'chat-thread-loading') {
-        return row.failed ? (
-          <Pressable testID="chat-thread-retry" onPress={pane.retry} style={styles.action}>
-            <Text variant="small" color="danger">
-              Не удалось загрузить тред. Повторить
-            </Text>
-          </Pressable>
-        ) : (
-          <View style={styles.action}>
-            <ActivityIndicator accessibilityLabel="Загрузка треда" />
-          </View>
-        );
-      }
-
-      if (!row.chatThreadRoot) return renderRow({ item: row });
-
-      return (
-        <View
-          testID="chat-thread-root"
-          style={[styles.chatThreadRoot, { backgroundColor: theme.islandBackground }]}
-        >
-          {row.message.chatThreadDeletedRoot ? <DeletedOriginal /> : renderRow({ item: row })}
-        </View>
-      );
-    },
-    [pane, renderRow, theme.islandBackground],
+  const { onViewableItemsChanged: viewsOnViewable } = views;
+  const onViewableItemsChanged = useCallback(
+    ({ viewableItems }: { viewableItems: ViewToken<ChatThreadPaneRow>[] }) =>
+      viewsOnViewable({
+        viewableItems: viewableItems.filter(
+          (token): token is ViewToken<ChatThreadPaneRow & ChatListRow> =>
+            token.item?.type === 'message',
+        ),
+      }),
+    [viewsOnViewable],
   );
+
+  const { renderItem, bubbleFor } = useChatThreadRenderItem({
+    kit,
+    pane,
+    actions,
+    width,
+    highlight,
+    jumpInPane,
+  });
 
   /** «Назад» закрывает сначала вопрос, панель эмодзи, выбор, правку и ответ, потом шторку. */
   const handleBack = useCallback(() => {
@@ -323,6 +229,7 @@ export function ChatThreadWindow({ kit, open }: ChatThreadWindowProps) {
 
           <GestureDetector gesture={panel.main.dismissPan}>
             <View ref={listFrameRef} style={styles.list} collapsable={false}>
+              <RowRegistryContext.Provider value={rowRegistry}>
               <TileViewportContext.Provider value={measureList}>
                 <FlatList
                   ref={listRef}
@@ -334,18 +241,14 @@ export function ChatThreadWindow({ kit, open }: ChatThreadWindowProps) {
                   showsVerticalScrollIndicator={false}
                   showsHorizontalScrollIndicator={false}
                   keyboardShouldPersistTaps="handled"
-                  onScrollToIndexFailed={({ index, averageItemLength }) => {
-                    listRef.current?.scrollToOffset({
-                      offset: averageItemLength * index,
-                      animated: false,
-                    });
-                    setTimeout(
-                      () => listRef.current?.scrollToIndex({ index, viewPosition: 0.5 }),
-                      120,
-                    );
-                  }}
+                  onScrollToIndexFailed={onScrollToIndexFailed}
+                  viewabilityConfig={views.viewabilityConfig}
+                  onViewableItemsChanged={onViewableItemsChanged}
+                  onScroll={views.onScroll}
+                  scrollEventThrottle={VIEWS_SCROLL_THROTTLE_MS}
                 />
               </TileViewportContext.Provider>
+              </RowRegistryContext.Provider>
             </View>
           </GestureDetector>
 

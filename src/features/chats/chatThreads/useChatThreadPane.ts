@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useMemo, useState } from 'react';
 
-import type { ChatThreadSummary } from '@/api/chats';
+import { deletedChatThreadRoot, type ChatThreadSummary } from '@/api/chats';
 import {
   chatThreadQueryKey,
   loadChatThread,
@@ -11,6 +11,9 @@ import {
 import { chatThreadRootsOf } from '@/features/chats/chatThreads/useChatThreadReplies';
 import type { ChatListRow, MessageListRow } from '@/features/chats/islands/rows';
 import { useOutboxMessages } from '@/features/chats/messages/outbox';
+import { usePendingEditsOf } from '@/features/chats/messages/pendingEdits';
+import { withPendingOverlays } from '@/features/chats/messages/pendingOverlays';
+import { usePendingReactionMap } from '@/features/interactions/pendingReactions';
 import type { ChatMessage } from '@/features/chats/messages/types';
 import { loadStateOf } from '@/lib/loadState';
 
@@ -63,7 +66,13 @@ export function useChatThreadPane(chatId: string, rootId: string, summary: ChatT
   const outbox = useOutboxMessages(chatId);
   const [loadingGap, setLoadingGap] = useState(false);
   const thread = query.data;
-  const items = thread?.items ?? NO_MESSAGES;
+  const pendingEdits = usePendingEditsOf(chatId);
+  const pendingReactions = usePendingReactionMap();
+  // Правка и реакция из шторки видны сразу, как в переписке.
+  const items = useMemo(
+    () => withPendingOverlays(thread?.items ?? NO_MESSAGES, pendingEdits, pendingReactions),
+    [pendingEdits, pendingReactions, thread?.items],
+  );
 
   const pending = useMemo(
     () =>
@@ -89,7 +98,9 @@ export function useChatThreadPane(chatId: string, rootId: string, summary: ChatT
     });
     const result: ChatThreadPaneRow[] = [];
 
+    // Корень удалили, пока шторка открыта, — на его месте заглушка.
     if (root) result.push(toRow(root, true));
+    else if (thread) result.push(toRow({ ...deletedChatThreadRoot(chatId, rootId, 0), status: 'sent' }, true));
 
     if (!thread) {
       result.push({ type: 'chat-thread-loading', key: `${rootId}/loading`, failed: state === 'failed' });
@@ -121,7 +132,7 @@ export function useChatThreadPane(chatId: string, rootId: string, summary: ChatT
       .forEach((message) => result.push(toRow(message, false)));
 
     return result;
-  }, [items, pending, rootId, state, summary, thread]);
+  }, [chatId, items, pending, rootId, state, summary, thread]);
 
   /** Строки облачков новыми вперёд — для выбора: он считает порядок от перевёрнутого списка. */
   const bubbleRows = useMemo(

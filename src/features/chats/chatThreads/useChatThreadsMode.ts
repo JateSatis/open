@@ -55,6 +55,8 @@ type Options = {
   /** Новый вид ещё грузится — прыгать в нём рано. */
   isLoading: boolean;
   jump: JumpToMessage['jump'];
+  /** Догрузка истории открытого вида до номера. */
+  loadUntil: (seq: number) => Promise<boolean>;
   /** Строка на экране — в координатах окна. */
   measureRow: (rowKey: string) => Promise<AnchorRect | null>;
   measureViewport: () => Promise<AnchorRect | null>;
@@ -85,6 +87,7 @@ export function useChatThreadsMode({
   rows,
   isLoading,
   jump,
+  loadUntil,
   measureRow,
   measureViewport,
   scrollOffset,
@@ -132,14 +135,22 @@ export function useChatThreadsMode({
 
   /** Прыжок к строке; в «Тредах» к тому, чего в них нет, — через обычный вид. */
   const jumpAnywhere = useCallback(
-    (rowKey: string, seq: number, options: JumpOptions = {}) => {
+    async (rowKey: string, seq: number, options: JumpOptions = {}) => {
       if (view === 'all' || rows.some((row) => row.key === rowKey)) {
         return jump(rowKey, seq, options);
       }
 
+      // Старое сообщение может быть и в «Тредах», глубже загруженного: сначала
+      // догрузить их, и только если его там нет (это ответ) — в обычный вид.
+      await loadUntil(seq);
+
+      const feed = readHistory(queryClient, chatId, 'chat-threads')?.items ?? [];
+
+      if (feed.some((message) => message.id === rowKey)) return jump(rowKey, seq, options);
+
       return jumpAfterSwitch('all', rowKey, seq, options);
     },
-    [jump, jumpAfterSwitch, rows, view],
+    [chatId, jump, jumpAfterSwitch, loadUntil, queryClient, rows, view],
   );
 
   /** «Показать в чате» из шторки: обычный вид, прокрутка и подсветка. */

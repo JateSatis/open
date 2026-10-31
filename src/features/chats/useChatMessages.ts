@@ -5,7 +5,6 @@ import {
   deleteMessages as deleteOnServer,
   removeForwardItems,
 } from '@/api/chats';
-import { mapOriginals } from '@/features/chats/islands/islandCache';
 import {
   deliver,
   discardLocal,
@@ -29,6 +28,7 @@ import { keepDeletedChatThreadRoots } from '@/features/chats/chatThreads/sync';
 import { saveEdit as saveEditOnServer } from '@/features/chats/messages/editing';
 import { outboxMessages, useOutboxMessages } from '@/features/chats/messages/outbox';
 import { usePendingEditsOf } from '@/features/chats/messages/pendingEdits';
+import { withPendingOverlays } from '@/features/chats/messages/pendingOverlays';
 import type {
   ChatMessage,
   EditResult,
@@ -42,7 +42,6 @@ import { chatsQueryKey } from '@/features/chats/useChats';
 import { pinsQueryKey } from '@/features/chats/usePinnedMessages';
 import { useConnectionStatus } from '@/features/connection/useConnectionStatus';
 import { usePendingReactionMap } from '@/features/interactions/pendingReactions';
-import { withMyReaction } from '@/features/interactions/reactionState';
 import type { LocalMedia, OutgoingMedia } from '@/features/media';
 import type { HiddenRange } from '@/features/chats/hiddenText';
 
@@ -139,41 +138,10 @@ export function useChatMessages(
   // неподтверждённая реакция — поверх подтверждённых счётчиков, и у
   // оригиналов в островках тоже. Реакции у правки — из истории: пока правка
   // едет, счётчики живут своей жизнью.
-  const edited = useMemo(() => {
-    if (Object.keys(pendingEdits).length === 0 && Object.keys(pendingReactions).length === 0) {
-      return history.items;
-    }
-
-    return history.items.map((message) => {
-      const pendingEdit = pendingEdits[message.id];
-      const intent = pendingReactions[message.id];
-      const base = pendingEdit
-        ? { ...pendingEdit, reactions: message.reactions, commentsCount: message.commentsCount }
-        : message;
-      const own = intent ? { ...base, reactions: withMyReaction(base.reactions, intent) } : base;
-
-      const withOriginals = mapOriginals(own, (original) => {
-        const wanted = pendingReactions[original.id];
-
-        return wanted
-          ? { ...original, reactions: withMyReaction(original.reactions, wanted) }
-          : original;
-      });
-      // Реакция на пересланный комментарий — его оригиналу, по id комментария.
-      const forwarded = withOriginals.commentForward?.comment;
-      const forComment = forwarded ? pendingReactions[forwarded.id] : undefined;
-
-      return forwarded && forComment
-        ? {
-            ...withOriginals,
-            commentForward: {
-              ...withOriginals.commentForward!,
-              comment: { ...forwarded, reactions: withMyReaction(forwarded.reactions, forComment) },
-            },
-          }
-        : withOriginals;
-    });
-  }, [history.items, pendingEdits, pendingReactions]);
+  const edited = useMemo(
+    () => withPendingOverlays(history.items, pendingEdits, pendingReactions),
+    [history.items, pendingEdits, pendingReactions],
+  );
 
   const messages = useMemo(() => {
     if (outbox.length === 0) return edited;
@@ -270,11 +238,16 @@ export function useChatMessages(
         updateHistory(
           queryClient,
           chatId,
-          (current) => restoreMessages(current, removedThreads),
+          // Заглушка удалённого исходного уступает место живому.
+          (current) =>
+            restoreMessages(
+              { ...current, items: current.items.filter((m) => !ids.has(m.id)) },
+              removedThreads,
+            ),
           'chat-threads',
         );
-        // Шторки треда вернут своё дочитыванием.
-        void queryClient.invalidateQueries({ queryKey: messagesQueryKey(chatId) });
+        // Шторки треда загружаются заново: дочитывание вернуло бы только новое.
+        void queryClient.resetQueries({ queryKey: [...messagesQueryKey(chatId), 'chat-thread'] });
         throw cause;
       }
 

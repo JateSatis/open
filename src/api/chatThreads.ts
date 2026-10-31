@@ -108,7 +108,9 @@ export async function listChatThreadFeed(
 
   const live = (rows.data ?? []).map(toMessage);
   const deleted = (stubs.data ?? []).map((row) => deletedChatThreadRoot(chatId, row.id, row.seq));
-  const full = live.length === limit || deleted.length === limit;
+  // Ещё есть, если хоть одна выборка полная или вместе они не влезли в страницу.
+  const full =
+    live.length === limit || deleted.length === limit || live.length + deleted.length > limit;
   const items = [...live, ...deleted].sort((a, b) => b.seq - a.seq).slice(0, limit);
 
   return {

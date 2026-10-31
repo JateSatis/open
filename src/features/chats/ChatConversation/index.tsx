@@ -250,6 +250,7 @@ export function ChatConversation({
     rows,
     isLoading,
     jump: jump.jump,
+    loadUntil: chatMessages.loadUntil,
     measureRow: rowRegistry.measure,
     measureViewport: measureListFrame,
     scrollOffset: useCallback(() => scrollState.current.offset, []),
