@@ -204,6 +204,25 @@ begin
   perform pg_temp.check('К1.1 посторонний: у корня с одним задержанным ответом сводки нет',
     not exists (select 1 from public.chat_thread_summaries(array[doomed])));
 
+  -- ============================================= корни пишет только база
+  -- Прямая вставка участника с подставленными корнями: база их обнуляет —
+  -- чужой тред подделкой не пополнить, из ленты «Тредов» не уйти.
+  perform pg_temp.act_as(a);
+  insert into public.messages (id, chat_id, author_id, kind, text, chat_thread_root_ids)
+  values (gen_random_uuid(), grp, a, 'text', 'подделка корней', array[root1, src]);
+  set constraints all immediate;
+  set constraints all deferred;
+  perform set_config('role', 'postgres', true);
+  perform pg_temp.check('подставленные корни при вставке обнуляются',
+    (select chat_thread_root_ids is null from public.messages where text = 'подделка корней'));
+  update public.messages set chat_thread_root_ids = array[original]
+  where text = 'подделка корней';
+  perform pg_temp.act_as(v);
+  perform pg_temp.check('ответ из чужого чата в треде не считается',
+    not exists (
+      select 1 from public.list_chat_thread(original) l
+    ));
+
   -- ===================================================== удалённый корень
   perform set_config('role', 'postgres', true);
   update public.privacy_settings set public_message_visibility_delay = 'off' where user_id = c;
