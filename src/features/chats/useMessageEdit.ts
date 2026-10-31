@@ -9,7 +9,7 @@ import {
   updateEditDraft,
   type EditMode,
 } from '@/features/chats/composerDraftStore';
-import { claimKeyboardForChat } from '@/features/chats/composerKeyboard';
+import { claimKeyboardForChat, claimKeyboardForComments } from '@/features/chats/composerKeyboard';
 import {
   canRecordInEdit,
   editMediaRoom,
@@ -116,7 +116,8 @@ export function useMessageEdit({
         return;
       }
 
-      claimKeyboardForChat();
+      if (ownWindow) claimKeyboardForComments();
+      else claimKeyboardForChat();
       // Меню закрывается в этом же кадре — поле успевает стать видимым,
       // прежде чем получить фокус. Курсор — в конец текста.
       focusWithKeyboard(

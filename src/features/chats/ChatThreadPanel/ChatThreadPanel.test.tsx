@@ -6,6 +6,14 @@ import type { useChatThreadActions } from './useChatThreadActions';
 
 import { ChatThreadsToggle } from '@/features/chats/ChatThreadsToggle';
 
+jest.mock('@/api/supabase', () => ({ supabase: {} }));
+jest.mock('@/features/chats/MessageComposer', () => ({ MessageComposer: () => null }));
+jest.mock('@/features/chats/EditAttachments', () => ({ EditAttachments: () => null }));
+jest.mock('@/features/chats/MediaPickerSheet', () => ({
+  MediaPickerSheet: () => null,
+  armMediaSheet: jest.fn(), openMediaSheet: jest.fn(), releaseMediaSheetArm: jest.fn(),
+}));
+
 describe('ChatThreadsToggle', () => {
   it('в обычном виде ведёт в «Треды», в «Тредах» — обратно', async () => {
     const onPress = jest.fn();

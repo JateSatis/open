@@ -21,6 +21,7 @@ import {
   messagesQueryKey,
   newestSeq,
   removeMessages,
+  replaceMessages,
   toSent,
   type ChatHistory,
 } from '@/features/chats/messages/historyCache';
@@ -89,15 +90,16 @@ export function mergeChatThreadPage(
 async function firstLoad(chatId: string, rootId: string): Promise<ChatThreadHistory> {
   const [[root], head] = await Promise.all([
     listMessagesByIds([rootId]),
-    listChatThread(rootId, { limit: HEAD_SIZE }),
+    listChatThread(rootId, { limit: HEAD_SIZE + 1 }),
   ]);
   const tail = head.full
     ? await listChatThread(rootId, { beforeSeq: 'end', limit: TAIL_SIZE })
     : null;
-  const headLast = head.items[head.items.length - 1]?.seq ?? null;
+  const headLast = head.items[HEAD_SIZE - 1]?.seq ?? null;
+  const firstMissing = head.items[HEAD_SIZE]?.seq ?? null;
   const tailFirst = tail?.items[0]?.seq ?? null;
   const gap =
-    headLast !== null && tailFirst !== null && tailFirst > headLast
+    headLast !== null && firstMissing !== null && tailFirst !== null && tailFirst > firstMissing
       ? { afterSeq: headLast, beforeSeq: tailFirst }
       : null;
   const empty: ChatThreadHistory = { items: [], nextCursor: null, rootId, quotes: {}, gap };
@@ -105,7 +107,7 @@ async function firstLoad(chatId: string, rootId: string): Promise<ChatThreadHist
     items: [root ?? deletedChatThreadRoot(chatId, rootId, 0)],
     quotes: {},
   });
-  const withHead = mergeChatThreadPage(withRoot, head);
+  const withHead = mergeChatThreadPage(withRoot, { ...head, items: head.items.slice(0, HEAD_SIZE) });
 
   return tail ? mergeChatThreadPage(withHead, tail) : withHead;
 }
@@ -149,15 +151,16 @@ export async function loadChatThread(
   if (!cached || since === null) return firstLoad(chatId, rootId);
 
   const loaded = cached.items.map((message) => message.id);
-  const [newer, deleted] = await Promise.all([
+  const [newer, deleted, fresh] = await Promise.all([
     fetchNewer(rootId, since),
     listDeletedMessageIds(loaded),
+    listMessagesByIds(loaded),
   ]);
 
   if (newer === null) return firstLoad(chatId, rootId);
 
   const latest = readChatThread(queryClient, chatId, rootId) ?? cached;
-  const pruned = removeMessages(latest, new Set(deleted));
+  const pruned = replaceMessages(removeMessages(latest, new Set(deleted)), fresh);
 
   return mergeChatThreadPage({ ...latest, ...pruned }, newer);
 }

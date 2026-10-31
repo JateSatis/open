@@ -40,8 +40,8 @@ export type ChatThreadPanelKit = {
     media?: OutgoingMedia[],
     replies?: LiveQuote[],
     hidden?: HiddenRange[],
-  ) => void;
-  sendVoice: (voice: LocalMedia, replies?: LiveQuote[]) => void;
+  ) => string | undefined;
+  sendVoice: (voice: LocalMedia, replies?: LiveQuote[]) => string;
   retry: (localId: string) => void;
   discard: (localId: string) => void;
   saveEdit: (original: ChatMessage, result: EditResult) => void;

@@ -91,6 +91,8 @@ declare
   doomed uuid;
   doomed_reply uuid;
   lone uuid;
+  own_island uuid;
+  own_island_reply uuid;
   n int;
   t text;
   ids uuid[];
@@ -239,6 +241,14 @@ begin
     exists (select 1 from public.list_chat_thread(doomed) l where l.id = doomed_reply));
   perform pg_temp.check('удалённый корень: сводка есть',
     (select s.replies_count = 2 from public.chat_thread_summaries(array[doomed]) s));
+  perform pg_temp.check('номер удалённого корня доступен по видимому ответу',
+    exists (select 1 from public.chat_thread_root_positions(doomed_reply) p where p.id = doomed));
+  perform pg_temp.act_as(b);
+  perform pg_temp.check('сводка знает, что смотрящий уже отвечал',
+    (select s.viewer_replied from public.chat_thread_summaries(array[root1]) s));
+  perform pg_temp.act_as(v);
+  perform pg_temp.check('сводка не приписывает ответ постороннему',
+    (select not s.viewer_replied from public.chat_thread_summaries(array[root1]) s));
 
   perform pg_temp.act_as(b);
   perform public.delete_messages(array[doomed_reply]);
@@ -247,6 +257,29 @@ begin
   perform pg_temp.act_as(v);
   perform pg_temp.check('удалённый корень без живых ответов не показывается',
     not exists (select 1 from public.list_chat_thread_deleted_roots(grp)));
+
+  -- Оригинал может быть переслан обратно в свой чат. Явный via остаётся
+  -- островком, даже если прямое сообщение тоже есть в этом чате.
+  perform pg_temp.act_as(a);
+  own_island := public.forward_messages(grp, grp, array[root1]);
+  set constraints all immediate;
+  set constraints all deferred;
+  own_island_reply := public.send_chat_thread_message(grp, array[root1],
+    jsonb_build_object(root1::text, own_island), 'цитата островка своего чата');
+  set constraints all immediate;
+  set constraints all deferred;
+  perform set_config('role', 'postgres', true);
+  perform pg_temp.check('К1.2 цитата островка своего чата не создаёт тред',
+    (select chat_thread_root_ids is null from public.messages where id = own_island_reply));
+  perform pg_temp.check('цитата островка сохраняет via',
+    (select quoted_forward_id = own_island from public.message_replies where message_id = own_island_reply));
+  perform pg_temp.act_as(v);
+  begin
+    perform public.send_chat_thread_message(grp, array[root1], '{}'::jsonb, 'чужой ответ');
+    perform pg_temp.check('посторонний не отправляет через новую функцию', false);
+  exception when insufficient_privilege then
+    perform pg_temp.check('посторонний не отправляет через новую функцию', true);
+  end;
 end;
 $$;
 

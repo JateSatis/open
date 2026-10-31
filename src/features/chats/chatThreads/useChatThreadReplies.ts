@@ -4,7 +4,7 @@ import { useCallback } from 'react';
 import type { MessageKind } from '@/api/chats';
 import type { MessagePreview } from '@/api/messagePreview';
 import { openChatThread } from '@/features/chats/chatThreads/chatThreadPanelStore';
-import { bumpChatThreadSummaries } from '@/features/chats/chatThreads/summaries';
+import { markPendingChatThreadReply } from '@/features/chats/chatThreads/summaries';
 import { readAllHistories } from '@/features/chats/messages/historyCache';
 import type { LiveQuote } from '@/features/chats/messages/types';
 import type { OutgoingMedia } from '@/features/media';
@@ -71,19 +71,18 @@ export function useChatThreadReplies({ chatId, active, me }: Options) {
   const queryClient = useQueryClient();
 
   const announce = useCallback(
-    (quotes: LiveQuote[], content: SentContent) => {
-      if (!active || !me) return;
+    (quotes: LiveQuote[], content: SentContent, localId?: string) => {
+      if (!active || !me || (content.kind !== 'voice' && !content.text.trim() && !content.media?.length)) return;
 
       const roots = chatThreadRootsOf(queryClient, quotes);
 
       if (roots.length === 0) return;
 
-      bumpChatThreadSummaries(
-        queryClient,
+      markPendingChatThreadReply(
         chatId,
+        localId,
         roots,
         { id: me.userId, name: me.name ?? 'Я', avatarUrl: me.avatarUrl },
-        sentPreview(content),
       );
       showNotice('Ответ ушёл в тред', 'info', {
         label: 'Открыть',

@@ -4845,6 +4845,13 @@ export type Database = {
         }[]
       }
       chat_signal_topic: { Args: { p_chat: string }; Returns: string }
+      chat_thread_root_positions: {
+        Args: { p_reply: string }
+        Returns: {
+          id: string
+          seq: number
+        }[]
+      }
       chat_thread_summaries: {
         Args: { p_root_ids: string[] }
         Returns: {
@@ -4857,6 +4864,7 @@ export type Database = {
           people: Json
           replies_count: number
           root_id: string
+          viewer_replied: boolean
         }[]
       }
       chat_time_restricted_now: { Args: { p_chat: string }; Returns: boolean }
@@ -6688,6 +6696,18 @@ export type Database = {
           title: string
           username: string
         }[]
+      }
+      send_chat_thread_message: {
+        Args: {
+          p_chat: string
+          p_hidden?: Json
+          p_media?: Json
+          p_reply_to: string[]
+          p_reply_via: Json
+          p_text?: string
+          p_voice?: Json
+        }
+        Returns: string
       }
       send_comment: {
         Args: {

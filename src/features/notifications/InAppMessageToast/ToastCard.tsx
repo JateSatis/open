@@ -81,19 +81,19 @@ export function ToastCard({ alert, dismiss, group = null }: ToastCardProps) {
 
     return (
       <Animated.View style={[styles.wrapper, styles.noticeWrapper, slideStyle]}>
-        <Pressable
-          accessibilityRole="alert"
-          onPress={dismiss}
-          style={[styles.card, styles.notice, cardColors]}
-        >
-          <Text variant="small" color={alert.tone === 'error' ? 'danger' : 'text'}>
-            {alert.text}
-          </Text>
+        <View style={[styles.card, styles.notice, cardColors]}>
+          <Pressable accessibilityRole="alert" onPress={dismiss} style={styles.body}>
+            <Text variant="small" color={alert.tone === 'error' ? 'danger' : 'text'}>
+              {alert.text}
+            </Text>
+          </Pressable>
 
           {action ? (
             <Pressable
               accessibilityRole="button"
+              accessibilityLabel={action.label}
               hitSlop={Spacing.two}
+              testID="notice-action-button"
               onPress={() => {
                 dismiss();
                 action.run();
@@ -104,7 +104,7 @@ export function ToastCard({ alert, dismiss, group = null }: ToastCardProps) {
               </Text>
             </Pressable>
           ) : null}
-        </Pressable>
+        </View>
       </Animated.View>
     );
   }

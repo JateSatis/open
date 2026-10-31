@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
-import type { FlatList } from 'react-native';
+import type { FlatList, NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
 
 import type { ChatThreadPaneRow } from '@/features/chats/chatThreads/useChatThreadPane';
 import type { JumpHighlight } from '@/features/chats/useJumpToMessage';
+import { PENDING_SEQ } from '@/api/pendingSeq';
 
 type Options = {
   listRef: RefObject<FlatList<ChatThreadPaneRow> | null>;
@@ -24,6 +25,27 @@ export function useChatThreadJump({ listRef, rows, loadUntil, isLoading, focusMe
   const [jumps, setJumps] = useState(0);
   const targetRef = useRef<string | null>(null);
   const focused = useRef(false);
+  const atEnd = useRef(false);
+  const followOwn = useRef(false);
+  const lastKey = useRef<string | null>(null);
+  const last = rows[rows.length - 1];
+  useEffect(() => {
+    const changed = lastKey.current !== last?.key;
+    lastKey.current = last?.key ?? null;
+    if (!changed || last?.type !== 'message' || last.message.seq < PENDING_SEQ) return;
+    followOwn.current = true;
+    const frame = requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: false }));
+    return () => cancelAnimationFrame(frame);
+  }, [last, listRef]);
+
+  const onScroll = useCallback(({ nativeEvent: event }: NativeSyntheticEvent<NativeScrollEvent>) => {
+    atEnd.current = event.contentOffset.y + event.layoutMeasurement.height >= event.contentSize.height - 24;
+  }, []);
+  const onContentSizeChange = useCallback(() => {
+    if (!followOwn.current && !atEnd.current) return;
+    followOwn.current = false;
+    listRef.current?.scrollToEnd({ animated: false });
+  }, [listRef]);
 
   useEffect(() => {
     const target = targetRef.current;
@@ -70,5 +92,5 @@ export function useChatThreadJump({ listRef, rows, loadUntil, isLoading, focusMe
     [listRef],
   );
 
-  return { highlight, jumpInPane, onScrollToIndexFailed };
+  return { highlight, jumpInPane, onScrollToIndexFailed, onScroll, onContentSizeChange };
 }

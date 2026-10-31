@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 
 import { deletedChatThreadRoot, type ChatThreadSummary } from '@/api/chats';
 import {
@@ -7,7 +7,7 @@ import {
   loadChatThread,
   loadChatThreadGap,
   readChatThread,
-} from '@/features/chats/chatThreads/threadCache';
+} from '@/features/chats/chatThreads/chatThreadCache';
 import { chatThreadRootsOf } from '@/features/chats/chatThreads/useChatThreadReplies';
 import type { ChatListRow, MessageListRow } from '@/features/chats/islands/rows';
 import { useOutboxMessages } from '@/features/chats/messages/outbox';
@@ -16,6 +16,8 @@ import { withPendingOverlays } from '@/features/chats/messages/pendingOverlays';
 import { usePendingReactionMap } from '@/features/interactions/pendingReactions';
 import type { ChatMessage } from '@/features/chats/messages/types';
 import { loadStateOf } from '@/lib/loadState';
+import { showNotice } from '@/features/notifications/alertsStore';
+import { describeLoadError } from '@/lib/network';
 
 /** Строка шторки: облачко, разрыв «показать ещё» или загрузка. */
 export type ChatThreadPaneRow =
@@ -30,7 +32,7 @@ const NO_MESSAGES: ChatMessage[] = [];
  * корня (на него ответ здесь подразумевается). Цитаты вне треда не
  * показываются: ответ на два треда в шторке первого не цитирует второй.
  */
-export function withThreadQuotes(
+export function withChatThreadQuotes(
   message: ChatMessage,
   rootId: string,
   quotes: Record<string, string[]> | undefined,
@@ -65,6 +67,7 @@ export function useChatThreadPane(chatId: string, rootId: string, summary: ChatT
   const state = loadStateOf(query);
   const outbox = useOutboxMessages(chatId);
   const [loadingGap, setLoadingGap] = useState(false);
+  const gapRequest = useRef<Promise<void> | null>(null);
   const thread = query.data;
   const pendingEdits = usePendingEditsOf(chatId);
   const pendingReactions = usePendingReactionMap();
@@ -93,7 +96,7 @@ export function useChatThreadPane(chatId: string, rootId: string, summary: ChatT
     const toRow = (message: ChatMessage, isRoot: boolean): ChatThreadPaneRow => ({
       type: 'message',
       key: message.id,
-      message: isRoot ? message : withThreadQuotes(message, rootId, thread?.quotes, inThread),
+      message: isRoot ? message : withChatThreadQuotes(message, rootId, thread?.quotes, inThread),
       chatThreadRoot: isRoot,
     });
     const result: ChatThreadPaneRow[] = [];
@@ -144,14 +147,17 @@ export function useChatThreadPane(chatId: string, rootId: string, summary: ChatT
     [rows],
   );
 
-  const loadGap = useCallback(async () => {
+  const loadGap = useCallback((): Promise<void> => {
+    if (gapRequest.current) return gapRequest.current;
     setLoadingGap(true);
-
-    try {
-      await loadChatThreadGap(queryClient, chatId, rootId);
-    } finally {
-      setLoadingGap(false);
-    }
+    const request = loadChatThreadGap(queryClient, chatId, rootId)
+      .catch((cause: unknown) => showNotice(describeLoadError(cause, 'Не удалось загрузить ответы') ?? 'Не удалось загрузить ответы', 'error'))
+      .finally(() => {
+        gapRequest.current = null;
+        setLoadingGap(false);
+      });
+    gapRequest.current = request;
+    return request;
   }, [chatId, queryClient, rootId]);
 
   /** Догружает разрыв, пока в треде не окажется сообщение с этим номером. */

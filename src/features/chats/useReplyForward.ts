@@ -4,7 +4,7 @@ import type { TextInput } from 'react-native';
 
 import type { ChatRef, IslandOriginal } from '@/api/chats';
 import { readChatDraft, startForwardPick } from '@/features/chats/composerDraftStore';
-import { claimKeyboardForChat } from '@/features/chats/composerKeyboard';
+import { claimKeyboardForChat, claimKeyboardForComments } from '@/features/chats/composerKeyboard';
 import { anchorOf, contentOf, type BubbleRow } from '@/features/chats/islands/rows';
 import { quoteOf } from '@/features/chats/messageQuote';
 import type { ChatMessage, LiveQuote } from '@/features/chats/messages/types';
@@ -95,7 +95,8 @@ export function useReplyForward({
       if (quotes.length === 0) return;
 
       setMode({ type: 'reply', quotes });
-      claimKeyboardForChat();
+      if (ownWindow) claimKeyboardForComments();
+      else claimKeyboardForChat();
       // Меню и выбор закрываются в этом же кадре — поле успевает стать
       // видимым, прежде чем получить фокус.
       focusWithKeyboard(composerRef, undefined, ownWindow);

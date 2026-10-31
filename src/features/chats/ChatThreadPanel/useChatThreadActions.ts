@@ -5,15 +5,15 @@ import type { TextInput } from 'react-native';
 import type { ChatThreadPanelKit } from './kit';
 
 import type { AnchorRect } from '@/features/chats/MessageContextMenu';
-import { bumpChatThreadSummaries } from '@/features/chats/chatThreads/summaries';
+import { markPendingChatThreadReply } from '@/features/chats/chatThreads/summaries';
 import {
   chatThreadRootsOf,
-  sentPreview,
   type SentContent,
 } from '@/features/chats/chatThreads/useChatThreadReplies';
 import { readChatDraft } from '@/features/chats/composerDraftStore';
 import type { HiddenRange } from '@/features/chats/hiddenText';
 import { contentOf, type BubbleRow, type ChatListRow } from '@/features/chats/islands/rows';
+import { readChatThread } from '@/features/chats/chatThreads/chatThreadCache';
 import {
   canReactTo,
   visibleMessageActions,
@@ -64,7 +64,12 @@ export function useChatThreadActions({
   close,
 }: Options) {
   const queryClient = useQueryClient();
-  const { chatId, currentUserId, isMember, authorName, me } = kit;
+  const { chatId, currentUserId, isMember, me } = kit;
+  const authorName = useCallback((authorId: string | null) => {
+    const row = bubbleRows.find((item) => item.type === 'message' && item.message.authorId === authorId);
+    return row?.type === 'message' && row.message.author
+      ? row.message.author.displayName : kit.authorName(authorId);
+  }, [bubbleRows, kit]);
   const draftKey = chatThreadDraftKey(chatId, rootId);
   const draft = useComposerDraft(draftKey);
   const composerRef = useRef<TextInput>(null);
@@ -81,13 +86,13 @@ export function useChatThreadActions({
 
   // Плашка корня в «Тредах» меняется сразу, не дожидаясь сервера.
   const bump = useCallback(
-    (quotes: LiveQuote[], content: SentContent) => {
-      if (!me) return;
+    (quotes: LiveQuote[], content: SentContent, localId?: string) => {
+      if (!me || (content.kind !== 'voice' && !content.text.trim() && !content.media?.length)) return;
 
       const roots = chatThreadRootsOf(queryClient, quotes);
 
       if (roots.length > 0) {
-        bumpChatThreadSummaries(queryClient, chatId, roots, me, sentPreview(content));
+        markPendingChatThreadReply(chatId, localId, roots, me);
       }
     },
     [chatId, me, queryClient],
@@ -98,8 +103,8 @@ export function useChatThreadActions({
     (text: string, media?: OutgoingMedia[], replies?: LiveQuote[], hidden?: HiddenRange[]) => {
       const quotes = replies?.length ? replies : defaultQuotes();
 
-      sendToChat(text, media, quotes, hidden);
-      bump(quotes, { kind: media?.length ? 'media' : 'text', text, media });
+      const localId = sendToChat(text, media, quotes, hidden);
+      bump(quotes, { kind: media?.length ? 'media' : 'text', text, media }, localId);
     },
     [bump, defaultQuotes, sendToChat],
   );
@@ -107,8 +112,8 @@ export function useChatThreadActions({
     (voice: LocalMedia, replies?: LiveQuote[]) => {
       const quotes = replies?.length ? replies : defaultQuotes();
 
-      sendVoiceToChat(voice, quotes);
-      bump(quotes, { kind: 'voice', text: '', durationMs: voice.durationMs });
+      const localId = sendVoiceToChat(voice, quotes);
+      bump(quotes, { kind: 'voice', text: '', durationMs: voice.durationMs }, localId);
     },
     [bump, defaultQuotes, sendVoiceToChat],
   );
@@ -118,7 +123,15 @@ export function useChatThreadActions({
     sourceChat: kit.sourceChat,
     draft,
     authorName,
-    originalOf: kit.originalOf,
+    originalOf: (row) => {
+      if (row.type !== 'message') return kit.originalOf(row);
+      // Фильтр цитат — только для чтения шторки. Пересылается целое сообщение.
+      const raw = readChatThread(queryClient, chatId, rootId)?.items.find((item) => item.id === row.message.id) ?? row.message;
+      const original = kit.originalOf({ ...row, message: raw });
+      return original && raw.author ? { ...original,
+        authorName: raw.author.displayName, authorAvatarUrl: raw.author.avatarUrl,
+      } : original;
+    },
     composerRef,
     send,
     sendVoice,
@@ -240,6 +253,7 @@ export function useChatThreadActions({
   );
 
   return {
+    close,
     draft,
     composerRef,
     selection,

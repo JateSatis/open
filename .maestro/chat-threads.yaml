@@ -17,13 +17,18 @@ env:
 # Своё исходное сообщение — внизу переписки, от засева не зависит.
 - evalScript: ${output.root = 'maestro-' + Date.now() + '-root'}
 - tapOn: "Сообщение"
-- inputText: ${output.root}
+- runFlow:
+    file: subflows/input-ascii.yaml
+    env:
+      ASCII_TEXT: ${output.root}
 - tapOn: "Отправить"
 - assertVisible: ${output.root}
-- hideKeyboard
+- waitForAnimationToEnd:
+    timeout: 3000
 
 - tapOn:
     id: "chat-threads-toggle"
+    retryTapIfNoChange: false
 # Лента «Тредов» встала: кнопка теперь ведёт в обычный вид.
 - extendedWaitUntil:
     visible:
@@ -45,22 +50,31 @@ env:
     direction: LEFT
 - assertVisible:
     id: "composer-plate"
-- inputText: ${output.reply}
+- runFlow:
+    file: subflows/input-ascii.yaml
+    env:
+      ASCII_TEXT: ${output.reply}
 - tapOn: "Отправить"
 - assertVisible: "Ответ ушёл в тред"
 - assertNotVisible: ${output.reply}
 - assertVisible:
     id: "chat-thread-plate-last"
     text: ".*${output.reply}"
-- tapOn: "Открыть"
-- assertVisible:
-    id: "chat-thread-root"
+- tapOn:
+    id: "notice-action-button"
+- extendedWaitUntil:
+    visible:
+      id: "chat-thread-root"
+    timeout: 20000
 - assertVisible: ${output.reply}
 
 # Ответ из поля шторки — тоже в тред, сразу внизу шторки.
 - evalScript: ${output.second = 'maestro-' + Date.now() + '-pane'}
 - tapOn: "Ответить в треде"
-- inputText: ${output.second}
+- runFlow:
+    file: subflows/input-ascii.yaml
+    env:
+      ASCII_TEXT: ${output.second}
 - tapOn: "Отправить"
 - assertVisible: ${output.second}
 
@@ -68,7 +82,6 @@ env:
 # исходное. (Свайп в шторке тот же, что в переписке; жест Maestro до порога
 # ответа в окне шторки не дотягивает — он проверен руками.)
 - evalScript: ${output.third = 'maestro-' + Date.now() + '-nested'}
-- hideKeyboard
 - longPressOn:
     text: ${output.second}
     childOf:
@@ -77,20 +90,23 @@ env:
 - assertVisible:
     id: "composer-plate"
 - tapOn: "Ответить в треде"
-- inputText: ${output.third}
+- runFlow:
+    file: subflows/input-ascii.yaml
+    env:
+      ASCII_TEXT: ${output.third}
 - tapOn: "Отправить"
 - assertVisible: ${output.third}
 - assertVisible:
     id: "reply-quote"
     text: ".*${output.second}.*"
 
-# «Назад» закрывает клавиатуру и шторку; в обычном виде ответы — в переписке.
-- hideKeyboard
+# «Назад» закрывает шторку; в обычном виде ответы — в переписке.
 - back
 - assertNotVisible:
     id: "chat-thread-root"
 - tapOn:
     id: "chat-threads-toggle"
+    retryTapIfNoChange: false
 - assertVisible: ${output.second}
 
 # Уборка — свои ответы удаляются.

@@ -34,6 +34,8 @@ export type ChatThreadSummary = {
   people: ChatThreadPerson[];
   /** Сколько ещё ответивших, кроме показанных. */
   othersCount: number;
+  /** Я уже отвечал, в том числе среди авторов за «+N». */
+  viewerReplied?: boolean;
 };
 
 /** Страница ответов треда: облачка и их цитаты, входящие в этот тред. */
@@ -46,6 +48,13 @@ export type ChatThreadPage = {
 };
 
 export const CHAT_THREAD_PAGE_SIZE = 30;
+
+/** Номера корней видимого ответа, включая удалённые исходные. */
+export async function listChatThreadRootPositions(replyId: string): Promise<{ id: string; seq: number }[]> {
+  const { data, error } = await supabase.rpc('chat_thread_root_positions', { p_reply: replyId });
+  if (error) throw error;
+  return data ?? [];
+}
 
 /** Самый большой номер — «до конца треда» для страницы с хвоста. */
 const END_SEQ = Number.MAX_SAFE_INTEGER;
@@ -165,6 +174,7 @@ export async function listChatThreadSummaries(rootIds: string[]): Promise<ChatTh
       opaque: opaqueFlag(person.id, person.opaque),
     })),
     othersCount: row.others_count,
+    viewerReplied: row.viewer_replied,
   }));
 }
 

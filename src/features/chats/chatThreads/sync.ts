@@ -13,7 +13,7 @@ import {
   readChatThreadSummaries,
   refreshChatThreadSummaries,
 } from '@/features/chats/chatThreads/summaries';
-import { pullChatThread } from '@/features/chats/chatThreads/threadCache';
+import { pullChatThread } from '@/features/chats/chatThreads/chatThreadCache';
 import {
   mergeMessages,
   readAllHistories,

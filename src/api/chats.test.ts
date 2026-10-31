@@ -235,6 +235,15 @@ describe('sendMessage', () => {
   describe('with media', () => {
     const mockedRpc = supabase.rpc as jest.MockedFunction<typeof supabase.rpc>;
 
+    it('сохраняет явный путь цитаты островка вместе с отправкой', async () => {
+      mockedRpc.mockResolvedValue({ data: 'reply', error: null } as never);
+      mockedFrom.mockReturnValue(new QueryBuilderMock({ data: messageRow('reply', '2026-10-31T10:00:00Z'), error: null }));
+      await sendMessage('chat-1', { text: 'ответ островку', replyTo: ['original'], replyVia: { original: 'island' } });
+      expect(mockedRpc).toHaveBeenCalledWith('send_chat_thread_message', expect.objectContaining({
+        p_chat: 'chat-1', p_reply_to: ['original'], p_reply_via: { original: 'island' }, p_text: 'ответ островку',
+      }));
+    });
+
     it('sends the message and its attachments through one transactional call', async () => {
       mockedRpc.mockResolvedValue({ data: 'm2', error: null } as never);
       const builder = new QueryBuilderMock({

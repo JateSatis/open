@@ -115,7 +115,7 @@ export function ChatThreadWindow({ kit, open }: ChatThreadWindowProps) {
   }, []);
 
   const { rows } = pane;
-  const { highlight, jumpInPane, onScrollToIndexFailed } = useChatThreadJump({
+  const { highlight, jumpInPane, onScrollToIndexFailed, onScroll: trackEnd, onContentSizeChange } = useChatThreadJump({
     listRef,
     rows,
     loadUntil: pane.loadUntil,
@@ -135,6 +135,11 @@ export function ChatThreadWindow({ kit, open }: ChatThreadWindowProps) {
     measureViewport: measureList,
   });
   const { onViewableItemsChanged: viewsOnViewable } = views;
+  const { onScroll: viewsOnScroll } = views;
+  const onScroll = useCallback((event: Parameters<typeof trackEnd>[0]) => {
+    trackEnd(event);
+    viewsOnScroll(event);
+  }, [trackEnd, viewsOnScroll]);
   const onViewableItemsChanged = useCallback(
     ({ viewableItems }: { viewableItems: ViewToken<ChatThreadPaneRow>[] }) =>
       viewsOnViewable({
@@ -244,7 +249,8 @@ export function ChatThreadWindow({ kit, open }: ChatThreadWindowProps) {
                   onScrollToIndexFailed={onScrollToIndexFailed}
                   viewabilityConfig={views.viewabilityConfig}
                   onViewableItemsChanged={onViewableItemsChanged}
-                  onScroll={views.onScroll}
+                  onScroll={onScroll}
+                  onContentSizeChange={onContentSizeChange}
                   scrollEventThrottle={VIEWS_SCROLL_THROTTLE_MS}
                 />
               </TileViewportContext.Provider>

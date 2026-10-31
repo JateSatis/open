@@ -35,6 +35,7 @@ import {
   replaceMessages,
   toSent,
   updateAllHistories,
+  updateChatHistories,
   updateHistory,
   type ChatHistory,
   type HistoryView,
@@ -241,21 +242,21 @@ function editsEverywhere(queryClient: QueryClient): Map<string, number | null> {
  * перезагрузки истории и без прыжка списка.
  */
 export async function refreshChatTimes(queryClient: QueryClient, chatId: string): Promise<void> {
-  const history = readHistory(queryClient, chatId);
-
-  if (!history) return;
-
-  const ids = [
-    ...history.items.filter((message) => message.status === 'sent').map((message) => message.id),
+  // «Треды» и шторки могут содержать сообщения, которых ещё нет в обычной
+  // истории. Смена приватности обновляет каждое место показа.
+  const ids = [...new Set(readAllHistories(queryClient).flatMap((history) => [
+    ...history.items.filter((message) => message.chatId === chatId && message.status === 'sent')
+      .map((message) => message.id),
     ...quotedIds(history),
     ...originalIds(history.items),
-  ].slice(0, MAX_TOMBSTONE_IDS);
+  ]))];
 
   if (ids.length === 0) return;
 
-  const fresh = await listMessagesByIds(ids);
-
-  updateHistory(queryClient, chatId, (current) => replaceMessages(current, fresh));
+  for (let start = 0; start < ids.length; start += MAX_TOMBSTONE_IDS) {
+    const fresh = await listMessagesByIds(ids.slice(start, start + MAX_TOMBSTONE_IDS));
+    updateAllHistories(queryClient, (current) => replaceMessages(current, fresh));
+  }
 }
 
 /**
@@ -369,13 +370,15 @@ export async function refreshIsland(
   chatId: string,
   forwardId: string,
 ): Promise<void> {
-  const loaded = readHistory(queryClient, chatId)?.items.some((message) => message.id === forwardId);
+  const loaded = readAllHistories(queryClient).some((history) =>
+    history.items.some((message) => message.id === forwardId),
+  );
 
   if (!loaded) return;
 
   const [fresh] = await listMessagesByIds([forwardId]);
 
-  updateHistory(queryClient, chatId, (current) =>
+  updateChatHistories(queryClient, chatId, (current) =>
     fresh ? replaceMessages(current, [fresh]) : removeMessages(current, new Set([forwardId])),
   );
 }

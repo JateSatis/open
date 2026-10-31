@@ -1,18 +1,21 @@
 import { QueryClient } from '@tanstack/react-query';
 
-import type { ChatSummary } from '@/api/chats';
+import { listChatThreadSummaries, type ChatSummary } from '@/api/chats';
 import { isChatThreadReply } from '@/features/chats/chatThreads/replies';
 import {
-  bumpChatThreadSummaries,
+  markPendingChatThreadReply,
+  withPendingChatThreadSummaries,
+  refreshChatThreadSummaries,
   chatThreadSummariesKey,
   type ChatThreadSummaries,
 } from '@/features/chats/chatThreads/summaries';
+import { refreshSettledChatThreadSummaries } from '@/features/chats/chatThreads/settle';
 import { keepDeletedChatThreadRoots } from '@/features/chats/chatThreads/sync';
 import {
   mergeChatThreadPage,
   type ChatThreadHistory,
-} from '@/features/chats/chatThreads/threadCache';
-import { withThreadQuotes } from '@/features/chats/chatThreads/useChatThreadPane';
+} from '@/features/chats/chatThreads/chatThreadCache';
+import { withChatThreadQuotes } from '@/features/chats/chatThreads/useChatThreadPane';
 import {
   chatThreadRootsOf,
   sentPreview,
@@ -24,8 +27,10 @@ import {
   type ChatHistory,
 } from '@/features/chats/messages/historyCache';
 import type { ChatMessage, LiveQuote } from '@/features/chats/messages/types';
+import { addToOutbox, outboxMessages, resetOutbox, setOutboxStatus, removeFromOutbox } from '@/features/chats/messages/outbox';
 
 jest.mock('@/api/chats', () => ({
+  listChatThreadSummaries: jest.fn(),
   deletedChatThreadRoot: (chatId: string, id: string, seq: number) => ({
     id,
     chatId,
@@ -131,23 +136,47 @@ describe('chatThreadRootsOf', () => {
   });
 });
 
-describe('withThreadQuotes', () => {
+describe('withChatThreadQuotes', () => {
   const reply = message('r2', { replies: [quote('root'), quote('r1'), quote('other-root')] });
   const ids = (shown: ChatMessage) => shown.replies.map((item) => item.messageId);
 
   it('по ответу базы: только цитаты этого треда, корень не цитируется', () => {
-    expect(ids(withThreadQuotes(reply, 'root', { r2: ['r1'] }, new Set()))).toEqual(['r1']);
+    expect(ids(withChatThreadQuotes(reply, 'root', { r2: ['r1'] }, new Set()))).toEqual(['r1']);
   });
 
   it('без ответа базы (своё только что отправленное) — по загруженному треду', () => {
-    expect(ids(withThreadQuotes(reply, 'root', undefined, new Set(['root', 'r1'])))).toEqual([
+    expect(ids(withChatThreadQuotes(reply, 'root', undefined, new Set(['root', 'r1'])))).toEqual([
       'r1',
     ]);
   });
 });
 
-describe('bumpChatThreadSummaries', () => {
-  it('свой ответ сразу: +1, я последним ответившим, мой текст', () => {
+describe('оптимистичная плашка треда', () => {
+  it('привязывает плашку к localId именно отправленного ответа', () => {
+    resetOutbox();
+    addToOutbox('chat-1', [
+      message('local-first', {
+        status: 'sending', localId: 'local-first', text: 'первый', replies: [quote('root-a')],
+      }),
+      message('local-second', {
+        status: 'sending', localId: 'local-second', text: 'второй', replies: [quote('root-b')],
+      }),
+    ]);
+
+    markPendingChatThreadReply(
+      'chat-1',
+      'local-second',
+      ['root-b'],
+      { id: 'me', name: 'Я', avatarUrl: null },
+    );
+
+    const second = outboxMessages('chat-1').find((item) => item.localId === 'local-second')!;
+    const first = outboxMessages('chat-1').find((item) => item.localId === 'local-first')!;
+    expect(second.chatThreadRootIds).toEqual(['root-b']);
+    expect(first.chatThreadRootIds).toBeUndefined();
+  });
+
+  it('свой ответ сразу: +1, я последним ответившим, мой текст', async () => {
     const queryClient = new QueryClient();
     const key = chatThreadSummariesKey('chat-1');
 
@@ -164,20 +193,67 @@ describe('bumpChatThreadSummaries', () => {
       },
     });
 
-    bumpChatThreadSummaries(
-      queryClient,
+    resetOutbox();
+    addToOutbox('chat-1', [message('local', {
+      status: 'sending', localId: 'local', text: 'мой ответ', replies: [quote('root')],
+    })]);
+    markPendingChatThreadReply(
       'chat-1',
+      'local',
       ['root'],
       { id: 'me', name: 'Я', avatarUrl: null },
-      sentPreview({ kind: 'text', text: 'мой ответ' }),
     );
 
-    const summary = queryClient.getQueryData<ChatThreadSummaries>(key)?.root;
+    const base = queryClient.getQueryData<ChatThreadSummaries>(key)!;
+    const summary = withPendingChatThreadSummaries(base, outboxMessages('chat-1')).root;
 
     expect(summary?.repliesCount).toBe(3);
     expect(summary?.people.map((person) => person.id)).toEqual(['me', 'a']);
     expect(summary?.othersCount).toBe(2);
     expect(summary?.last?.preview.text).toBe('мой ответ');
+    jest.mocked(listChatThreadSummaries).mockResolvedValue([{ ...base.root!, repliesCount: 3 }]);
+    await refreshChatThreadSummaries(queryClient, 'chat-1', ['root']);
+    // Broadcast уже включает отправленное, HTTP ещё не ответил: прибавка одна.
+    expect(queryClient.getQueryData<ChatThreadSummaries>(key)?.root?.repliesCount).toBe(2);
+    expect(withPendingChatThreadSummaries(base, outboxMessages('chat-1')).root?.repliesCount).toBe(3);
+    const alreadyAnswered = { root: { ...base.root!, viewerReplied: true } };
+    expect(withPendingChatThreadSummaries(alreadyAnswered, outboxMessages('chat-1')).root?.othersCount).toBe(1);
+    // Неудача, повтор и удаление исходящего не портят серверную сводку.
+    setOutboxStatus('chat-1', 'local', 'failed');
+    expect(withPendingChatThreadSummaries(base, outboxMessages('chat-1')).root?.repliesCount).toBe(2);
+    setOutboxStatus('chat-1', 'local', 'sending');
+    expect(withPendingChatThreadSummaries(base, outboxMessages('chat-1')).root?.repliesCount).toBe(3);
+    removeFromOutbox('chat-1', 'local');
+    expect(withPendingChatThreadSummaries(base, outboxMessages('chat-1'))).toBe(base);
+    expect(queryClient.getQueryData<ChatThreadSummaries>(key)?.root?.repliesCount).toBe(2);
+  });
+
+  it.each(['failed', 'cancelled'] as const)('восстанавливает ещё не загруженную сводку после %s', async (outcome) => {
+    const queryClient = new QueryClient();
+    const key = chatThreadSummariesKey('chat-1');
+    const server = {
+      rootId: 'root', repliesCount: 2, last: null,
+      people: [{ id: 'a', name: 'A', avatarUrl: null }], othersCount: 0,
+    };
+    queryClient.setQueryData<ChatThreadSummaries>(key, {});
+    jest.mocked(listChatThreadSummaries).mockResolvedValue([server]);
+    resetOutbox();
+    addToOutbox('chat-1', [message('local', {
+      status: 'sending', localId: 'local', text: 'мой ответ', replies: [quote('root')],
+    })]);
+    markPendingChatThreadReply('chat-1', 'local', ['root'], { id: 'me', name: 'Я', avatarUrl: null });
+
+    await refreshChatThreadSummaries(queryClient, 'chat-1', ['root']);
+    expect(withPendingChatThreadSummaries({}, outboxMessages('chat-1')).root?.repliesCount).toBe(1);
+    if (outcome === 'failed') setOutboxStatus('chat-1', 'local', 'failed');
+    else removeFromOutbox('chat-1', 'local');
+    refreshSettledChatThreadSummaries(queryClient, 'chat-1');
+    await Promise.resolve();
+
+    expect(queryClient.getQueryData<ChatThreadSummaries>(key)?.root?.repliesCount).toBe(2);
+    expect(withPendingChatThreadSummaries(
+      queryClient.getQueryData<ChatThreadSummaries>(key)!, outboxMessages('chat-1'),
+    ).root?.repliesCount).toBe(2);
   });
 });
 

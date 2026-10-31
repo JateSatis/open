@@ -10,7 +10,7 @@ export type ChatThreadsToggleProps = {
   onPress: () => void;
 };
 
-const THREADS_ICON = { ios: 'bubble.left.and.bubble.right', android: 'forum', web: 'forum' } as const;
+const CHAT_THREADS_ICON = { ios: 'bubble.left.and.bubble.right', android: 'forum', web: 'forum' } as const;
 const CHAT_ICON = { ios: 'text.bubble', android: 'chat', web: 'chat' } as const;
 
 /**
@@ -30,7 +30,7 @@ export function ChatThreadsToggle({ active, onPress }: ChatThreadsToggleProps) {
       onPress={onPress}
     >
       <SymbolView
-        name={active ? CHAT_ICON : THREADS_ICON}
+        name={active ? CHAT_ICON : CHAT_THREADS_ICON}
         size={Sizes.chatThreadToggleIcon}
         tintColor={theme.primary}
       />

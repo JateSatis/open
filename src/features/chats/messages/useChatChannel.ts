@@ -213,6 +213,7 @@ export function useChatChannel(chatId: string, currentUserId: string | null): Ch
           // Участник сменил, кому видно время: время, даты и прочтение у
           // загруженных сообщений и у участников — перечитать на месте.
           refreshChatTimes(queryClient, chatId).catch(() => undefined);
+          refreshAllChatThreadSummaries(queryClient, chatId).catch(() => undefined);
           void queryClient.invalidateQueries({ queryKey: chatQueryKey(chatId) });
         },
         onPeopleChanged: () => {
@@ -221,6 +222,7 @@ export function useChatChannel(chatId: string, currentUserId: string | null): Ch
           // подписанные ссылки на фото могли стать чужими.
           forgetAvatarUrls();
           refreshChatTimes(queryClient, chatId).catch(() => undefined);
+          refreshAllChatThreadSummaries(queryClient, chatId).catch(() => undefined);
           void queryClient.invalidateQueries({ queryKey: chatQueryKey(chatId) });
         },
         onMediaChanged: () => {
@@ -229,6 +231,7 @@ export function useChatChannel(chatId: string, currentUserId: string | null): Ch
           // заново, прежние подписанные ссылки могли стать чужими.
           forgetChatMediaUrls();
           refreshChatTimes(queryClient, chatId).catch(() => undefined);
+          refreshAllChatThreadSummaries(queryClient, chatId).catch(() => undefined);
           // Ключ чата — префикс и вкладок «Медиа» и «Голосовые».
           void queryClient.invalidateQueries({ queryKey: chatQueryKey(chatId) });
         },

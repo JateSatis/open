@@ -40,14 +40,32 @@ export function useChatThreadRenderItem({ kit, pane, actions, width, highlight, 
   const { chatId } = kit;
   const { navigation } = kit;
   const { selection, menu, edit } = actions;
+  const people = useMemo(() => {
+    const result = new Map(kit.peopleById);
+
+    for (const row of pane.bubbleRows) {
+      if (row.type !== 'message') continue;
+      const { authorId, author } = row.message;
+      if (authorId && author) result.set(authorId, { id: authorId, ...author });
+    }
+
+    return result;
+  }, [kit.peopleById, pane.bubbleRows]);
   const paneNavigation = useMemo(
     () => ({
       ...navigation,
       openQuote: (quote: QuotedMessage) => {
-        if (quote.state === 'live') void jumpInPane(quote.messageId, quote.seq);
+        if (quote.state !== 'live') return;
+        if (pane.bubbleRows.some((row) => row.key === quote.messageId) || !quote.via) {
+          void jumpInPane(quote.messageId, quote.seq);
+        } else {
+          // Корень может цитировать оригинал островка: в ответах его нет.
+          actions.close();
+          navigation.openQuote(quote);
+        }
       },
     }),
-    [jumpInPane, navigation],
+    [actions, jumpInPane, navigation, pane.bubbleRows],
   );
   const mediaBounds = useMemo(
     () => mosaicBounds(width - Spacing.three * 2, false, bubbleAsideWidth(kit.showAvatars)),
@@ -57,7 +75,7 @@ export function useChatThreadRenderItem({ kit, pane, actions, width, highlight, 
     chatId,
     currentUserId: kit.currentUserId,
     isMember: kit.isMember,
-    participantsById: kit.peopleById,
+    participantsById: people,
     mediaBounds,
     retry: kit.retry,
     openPerson: kit.openPerson,
@@ -79,7 +97,7 @@ export function useChatThreadRenderItem({ kit, pane, actions, width, highlight, 
     openMenu: menu.open,
     startReply: actions.startReply,
     retry: kit.retry,
-    hostName: kit.authorName,
+    hostName: (id) => (id ? people.get(id)?.displayName : null) ?? kit.authorName(id),
     openChat: navigation.openChat,
   });
 

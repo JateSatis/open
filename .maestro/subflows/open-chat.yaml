@@ -7,4 +7,7 @@ appId: com.openger.app
     element: ${CHAT}
     direction: DOWN
     timeout: 20000
-- tapOn: ${CHAT}
+- tapOn:
+    text: ${CHAT}
+    childOf:
+      id: "chat-list-item"

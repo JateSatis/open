@@ -78,8 +78,8 @@ export type ChatMessagesState = {
     media?: OutgoingMedia[],
     replies?: LiveQuote[],
     hidden?: HiddenRange[],
-  ) => void;
-  sendVoice: (voice: LocalMedia, replies?: LiveQuote[]) => void;
+  ) => string | undefined;
+  sendVoice: (voice: LocalMedia, replies?: LiveQuote[]) => string;
   /** Пост канала `channelId` с попом и необязательным текстом. */
   sendPop: (channelId: string, text: string, pop: DraftPop, replies?: LiveQuote[]) => void;
   retry: (localId: string) => void;
@@ -260,7 +260,7 @@ export function useChatMessages(
 
   const removeFromIsland = useCallback(
     async (forwardId: string, messageIds: string[]) => {
-      updateHistory(queryClient, chatId, (current) =>
+      updateChatHistories(queryClient, chatId, (current) =>
         removeIslandItems(current, forwardId, new Set(messageIds)),
       );
 

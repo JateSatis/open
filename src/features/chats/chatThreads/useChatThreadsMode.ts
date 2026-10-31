@@ -2,7 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ViewToken } from 'react-native';
 
-import { listMessagesByIds, type ChatSummary } from '@/api/chats';
+import { listChatThreadRootPositions, type ChatSummary } from '@/api/chats';
 import type { AnchorRect } from '@/features/chats/MessageContextMenu';
 import { contentOf, isBubbleRow, type ChatListRow } from '@/features/chats/islands/rows';
 import { readHistory, type HistoryView } from '@/features/chats/messages/historyCache';
@@ -11,6 +11,7 @@ import type { JumpOptions, JumpToMessage } from '@/features/chats/useJumpToMessa
 
 /** Вид «Треды» есть в группе, где сейчас не меньше трёх участников. */
 export const CHAT_THREADS_MIN_PARTICIPANTS = 3;
+const UNAVAILABLE_CONFIRMATION_MS = 600;
 
 export function chatThreadsAvailable(chat: ChatSummary | null): boolean {
   return chat?.kind === 'group' && chat.participants.length >= CHAT_THREADS_MIN_PARTICIPANTS;
@@ -22,19 +23,33 @@ export function chatThreadsAvailable(chat: ChatSummary | null): boolean {
  * возвращается в обычный.
  */
 export function useChatThreadsView(chat: ChatSummary | null) {
-  const available = chatThreadsAvailable(chat);
+  const reportedAvailable = chatThreadsAvailable(chat);
   const [chosen, setView] = useState<HistoryView>('all');
-  const [wasAvailable, setWasAvailable] = useState(available);
+  const [heldAvailable, setHeldAvailable] = useState(reportedAvailable);
+  const available = reportedAvailable || heldAvailable;
   const view: HistoryView = available ? chosen : 'all';
+  const chooseView = useCallback((next: HistoryView) => {
+    setView(next);
+    if (next === 'chat-threads') setHeldAvailable(true);
+  }, []);
 
-  // Вид пропал — выбор сбрасывается: вернувшийся третий участник не
-  // перебрасывает переписку обратно в «Треды».
-  if (wasAvailable !== available) {
-    setWasAvailable(available);
-    if (!available) setView('all');
-  }
+  // Перечитывание участников может ненадолго вернуть неполный список. Не
+  // выбрасываем человека из «Тредов» из-за этого промежуточного состояния;
+  // реальное уменьшение группы подтверждается короткой задержкой.
+  useEffect(() => {
+    if (reportedAvailable) return;
 
-  return { view, available, setView };
+    if (!heldAvailable) return;
+
+    const timer = setTimeout(() => {
+      setHeldAvailable(false);
+      setView('all');
+    }, UNAVAILABLE_CONFIRMATION_MS);
+
+    return () => clearTimeout(timer);
+  }, [heldAvailable, reportedAvailable]);
+
+  return { view, available, setView: chooseView };
 }
 
 type PendingJump = {
@@ -200,13 +215,12 @@ export function useChatThreadsMode({
 
       const loaded = readHistory(queryClient, chatId)?.items ?? [];
       const known = roots.flatMap((id) => loaded.find((item) => item.id === id) ?? []);
-      const found = known.length === roots.length ? known : await listMessagesByIds(roots);
+      const found = known.length === roots.length ? known : await listChatThreadRootPositions(message.id);
       const nearest = found.reduce<{ id: string; seq: number } | null>(
         (best, root) => (!best || root.seq > best.seq ? root : best),
         null,
       );
 
-      // Корня не видно (удалён) — заглушка стоит под тем же id и номером не нужна.
       return nearest ? { rowKey: nearest.id, seq: nearest.seq } : null;
     },
     [chatId, queryClient, rows],

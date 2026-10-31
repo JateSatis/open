@@ -411,16 +411,13 @@ export function ChatConversation({
 
     return authors;
   }, [messages, participantsById]);
-  const departedKey = [...departed.keys()].join(',');
   const peopleById = useMemo(() => {
     const people = new Map<string, Person>(departed);
 
     participantsById.forEach((participant, id) => people.set(id, participant));
 
     return people;
-    // Пересобрать по составу ушедших, а не по каждой новой карте сообщений.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [departedKey, participantsById]);
+  }, [departed, participantsById]);
 
   // Я как поставивший реакцию — из участников: там свежий аватар.
   // Посетителя среди участников нет — тогда из моего профиля.
@@ -487,15 +484,15 @@ export function ChatConversation({
   const { announce: announceThreadReply } = threadReplies;
   const sendInView = useCallback(
     (text: string, media?: OutgoingMedia[], replies?: LiveQuote[], hidden?: HiddenRange[]) => {
-      sendToChat(text, media, replies, hidden);
-      announceThreadReply(replies ?? [], { kind: media?.length ? 'media' : 'text', text, media });
+      const localId = sendToChat(text, media, replies, hidden);
+      announceThreadReply(replies ?? [], { kind: media?.length ? 'media' : 'text', text, media }, localId);
     },
     [announceThreadReply, sendToChat],
   );
   const sendVoiceInView = useCallback(
     (voice: LocalMedia, replies?: LiveQuote[]) => {
-      sendVoiceToChat(voice, replies);
-      announceThreadReply(replies ?? [], { kind: 'voice', text: '', durationMs: voice.durationMs });
+      const localId = sendVoiceToChat(voice, replies);
+      announceThreadReply(replies ?? [], { kind: 'voice', text: '', durationMs: voice.durationMs }, localId);
     },
     [announceThreadReply, sendVoiceToChat],
   );
