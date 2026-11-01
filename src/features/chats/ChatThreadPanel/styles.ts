@@ -9,6 +9,13 @@ export const styles = StyleSheet.create({
   fill: {
     ...StyleSheet.absoluteFill,
   },
+  /** Только видимая левая полоска затемнения: тест и тап попадают наружу панели. */
+  backdropTapTarget: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+  },
   /** Шторка — справа, на всю высоту окна; слева видна затемнённая переписка. */
   panel: {
     position: 'absolute',

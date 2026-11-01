@@ -211,7 +211,7 @@ export function ChatThreadWindow({ kit, open }: ChatThreadWindowProps) {
           <Pressable
             testID="chat-thread-backdrop"
             accessibilityLabel="Закрыть тред"
-            style={styles.fill}
+            style={[styles.backdropTapTarget, { width: screenWidth - width }]}
             onPress={close}
           />
         </Animated.View>

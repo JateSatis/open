@@ -56,12 +56,12 @@ env:
       ASCII_TEXT: ${output.reply}
 - tapOn: "Отправить"
 - assertVisible: "Ответ ушёл в тред"
-- assertNotVisible: ${output.reply}
-- assertVisible:
-    id: "chat-thread-plate-last"
-    text: ".*${output.reply}"
 - tapOn:
     id: "notice-action-button"
+- extendedWaitUntil:
+    visible:
+      id: "chat-thread-panel"
+    timeout: 10000
 - extendedWaitUntil:
     visible:
       id: "chat-thread-root"
@@ -100,10 +100,19 @@ env:
     id: "reply-quote"
     text: ".*${output.second}.*"
 
-# «Назад» закрывает шторку; в обычном виде ответы — в переписке.
-- back
+# Закрытие по затемнению; в обычном виде ответы — в переписке.
+- tapOn:
+    id: "chat-thread-backdrop"
+- extendedWaitUntil:
+    notVisible:
+      id: "chat-thread-root"
+    timeout: 10000
 - assertNotVisible:
     id: "chat-thread-root"
+- assertNotVisible: ${output.reply}
+- assertVisible:
+    id: "chat-thread-plate-last"
+    text: ".*${output.third}"
 - tapOn:
     id: "chat-threads-toggle"
     retryTapIfNoChange: false
