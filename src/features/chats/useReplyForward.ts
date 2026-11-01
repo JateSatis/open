@@ -4,7 +4,7 @@ import type { TextInput } from 'react-native';
 
 import type { ChatRef, IslandOriginal } from '@/api/chats';
 import { readChatDraft, startForwardPick } from '@/features/chats/composerDraftStore';
-import { claimKeyboardForChat } from '@/features/chats/composerKeyboard';
+import { claimKeyboardForChat, claimKeyboardForComments } from '@/features/chats/composerKeyboard';
 import { anchorOf, contentOf, type BubbleRow } from '@/features/chats/islands/rows';
 import { quoteOf } from '@/features/chats/messageQuote';
 import type { ChatMessage, LiveQuote } from '@/features/chats/messages/types';
@@ -33,6 +33,10 @@ type Options = {
   sendVoice: (voice: LocalMedia, replies?: LiveQuote[]) => void;
   /** Пост с попом — только в чате постов канала. */
   sendPop?: (text: string, pop: DraftPop, replies?: LiveQuote[]) => void;
+  /** Ключ черновика поля, если он не чат: у шторки треда черновик свой. */
+  draftKey?: string;
+  /** Поле живёт в своём окне `Modal` (см. `focusWithKeyboard`). */
+  ownWindow?: boolean;
 };
 
 export type ReplyForward = {
@@ -77,6 +81,8 @@ export function useReplyForward({
   send,
   sendVoice: sendVoiceMessage,
   sendPop,
+  draftKey = chatId,
+  ownWindow = false,
 }: Options): ReplyForward {
   const router = useRouter();
   const { mode, setMode } = draft;
@@ -89,12 +95,13 @@ export function useReplyForward({
       if (quotes.length === 0) return;
 
       setMode({ type: 'reply', quotes });
-      claimKeyboardForChat();
+      if (ownWindow) claimKeyboardForComments();
+      else claimKeyboardForChat();
       // Меню и выбор закрываются в этом же кадре — поле успевает стать
       // видимым, прежде чем получить фокус.
-      focusWithKeyboard(composerRef);
+      focusWithKeyboard(composerRef, undefined, ownWindow);
     },
-    [authorName, composerRef, setMode],
+    [authorName, composerRef, ownWindow, setMode],
   );
 
   const startForward = useCallback(
@@ -152,10 +159,10 @@ export function useReplyForward({
       draft.text,
       media,
       mode?.type === 'reply' ? mode.quotes : [],
-      readChatDraft(chatId).hidden,
+      readChatDraft(draftKey).hidden,
     );
     draft.clear();
-  }, [chatId, draft, mode, send, sendPop]);
+  }, [draft, draftKey, mode, send, sendPop]);
 
   const sendVoice = useCallback(
     (voice: LocalMedia) => {

@@ -13,6 +13,7 @@ import {
   type ChatTopicListener,
   type TypingAudience,
 } from '@/api/chatTopics';
+import { MESSAGE_PAGE_SIZE, type MessagePage } from '@/api/messagePage';
 import { messagesSelect, toMessage, type Message } from '@/api/messageRows';
 import { publishPop, type PublishPopInput } from '@/api/pops';
 import { listChatSubscriptions, type Subscription } from '@/api/subscriptions';
@@ -54,8 +55,19 @@ export {
 } from '@/api/messageRows';
 export type { ChatActivity, TypingAudience } from '@/api/chatTopics';
 export { ChatGoneError } from '@/api/chatGone';
-
-export const MESSAGE_PAGE_SIZE = 30;
+export { MESSAGE_PAGE_SIZE, type MessagePage } from '@/api/messagePage';
+export {
+  CHAT_THREAD_PAGE_SIZE,
+  deletedChatThreadRoot,
+  listChatThread,
+  listChatThreadFeed,
+  listChatThreadFeedSince,
+  listChatThreadRootPositions,
+  listChatThreadSummaries,
+  type ChatThreadPage,
+  type ChatThreadPerson,
+  type ChatThreadSummary,
+} from '@/api/chatThreads';
 
 /** `channel` — чат постов канала: пишут в него только те, кого назначил канал. */
 export type ChatKind = 'direct' | 'group' | 'channel';
@@ -185,6 +197,8 @@ export type SendMessageInput = {
   media?: SendMessageMedia[];
   /** Ответ: id сообщений того же чата, по порядку. */
   replyTo?: string[];
+  /** Явный островок для цитаты, в том числе когда оригинал из этого же чата. */
+  replyVia?: Record<string, string>;
   /** Куски текста, скрытые от зрителей, — code points в `text` как он есть. */
   hidden?: HiddenRange[];
 };
@@ -631,8 +645,6 @@ export async function markChatRead(chatId: string): Promise<void> {
   if (error) throw error;
 }
 
-/** Страница переписки с курсором — номером самого старого сообщения на ней. */
-export type MessagePage = { items: Message[]; nextCursor: number | null };
 
 /**
  * One page of a chat, newest first. There is deliberately no "load the whole
@@ -730,8 +742,9 @@ async function sendMediaMessage(
   media: SendMessageMedia[],
   replyTo: string[],
   hidden: HiddenRange[],
+  replyVia: Record<string, string> = {},
 ): Promise<Message> {
-  const { data: newMessageId, error } = await supabase.rpc('send_media_message', {
+  const payload = {
     target_chat: chatId,
     // Функция в базе принимает `text`, допускающий NULL, но генератор типов
     // не размечает скалярные аргументы rpc как nullable — отсюда приведение.
@@ -747,7 +760,13 @@ async function sendMediaMessage(
     })),
     reply_to: replyTo.length > 0 ? replyTo : undefined,
     hidden: hidden.length > 0 ? hiddenRangesJson(hidden) : undefined,
-  });
+  };
+  const { data: newMessageId, error } = Object.keys(replyVia).length > 0
+    ? await supabase.rpc('send_chat_thread_message', {
+        p_chat: chatId, p_text: text as string, p_media: payload.media,
+        p_reply_to: replyTo, p_reply_via: replyVia, p_hidden: payload.hidden,
+      })
+    : await supabase.rpc('send_media_message', payload);
 
   if (error) throw error;
   if (typeof newMessageId !== 'string') throw new Error('Не удалось отправить сообщение');
@@ -772,7 +791,7 @@ export async function sendMessage(chatId: string, input: SendMessageInput): Prom
   // же транзакции, что и само сообщение (см. политику `message_replies`).
   return media.length === 0 && replyTo.length === 0
     ? sendTextMessage(chatId, text!, hidden)
-    : sendMediaMessage(chatId, text, media, replyTo, hidden);
+    : sendMediaMessage(chatId, text, media, replyTo, hidden, input.replyVia);
 }
 
 /**
@@ -784,8 +803,9 @@ export async function sendVoiceMessage(
   chatId: string,
   voice: SendVoiceInput,
   replyTo: string[] = [],
+  replyVia: Record<string, string> = {},
 ): Promise<Message> {
-  const { data: newMessageId, error } = await supabase.rpc('send_voice_message', {
+  const payload = {
     target_chat: chatId,
     voice: {
       url: voice.url,
@@ -795,7 +815,12 @@ export async function sendVoiceMessage(
       waveform: voice.waveform,
     },
     reply_to: replyTo.length > 0 ? replyTo : undefined,
-  });
+  };
+  const { data: newMessageId, error } = Object.keys(replyVia).length > 0
+    ? await supabase.rpc('send_chat_thread_message', {
+        p_chat: chatId, p_voice: payload.voice, p_reply_to: replyTo, p_reply_via: replyVia,
+      })
+    : await supabase.rpc('send_voice_message', payload);
 
   if (error) throw error;
   if (typeof newMessageId !== 'string') throw new Error('Не удалось отправить голосовое');

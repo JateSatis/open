@@ -8,6 +8,11 @@ env:
   CHANNEL: Test Kanal
 ---
 - runFlow: subflows/open-app.yaml
+# Канал — в «Чатах» среди прочих: свежая активность других чатов сдвигает его ниже.
+- scrollUntilVisible:
+    element: ${CHANNEL}
+    direction: DOWN
+    timeout: 20000
 - tapOn: ${CHANNEL}
 - tapOn:
     id: "segment-1"

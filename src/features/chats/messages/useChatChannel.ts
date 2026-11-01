@@ -11,6 +11,13 @@ import {
   type TypingAudience,
 } from '@/api/chats';
 import { isChatMember } from '@/features/chats/chatDisplay';
+import {
+  chatThreadFeedItems,
+  keepDeletedChatThreadRoots,
+  pullChatThreads,
+  refreshAllChatThreadSummaries,
+  refreshChatThreadsAfterChange,
+} from '@/features/chats/chatThreads/sync';
 import { messagesQueryKey } from '@/features/chats/messages/historyCache';
 import {
   dropDeletedMessages,
@@ -99,6 +106,8 @@ export function useChatChannel(chatId: string, currentUserId: string | null): Ch
     try {
       const incoming = await pullNewMessages(queryClient, chatId);
 
+      pullChatThreads(queryClient, chatId, incoming).catch(() => undefined);
+
       // Сообщение пришло — «печатает…» и «записывает…» его автора больше
       // не правда, ждать таймаута незачем.
       const timers = typingTimersRef.current;
@@ -123,7 +132,9 @@ export function useChatChannel(chatId: string, currentUserId: string | null): Ch
     // Пока канала не было, события терялись: сообщения, удаления, закрепы и
     // чужие отметки прочтения. Перезапрос истории — это дочитывание (см.
     // `loadHistory`), а не перезагрузка.
+    // Ключ переписки — префикс и «Тредов», и открытой шторки треда.
     void queryClient.invalidateQueries({ queryKey: messagesQueryKey(chatId) });
+    refreshAllChatThreadSummaries(queryClient, chatId).catch(() => undefined);
     void queryClient.invalidateQueries({ queryKey: pinsQueryKey(chatId) });
     void queryClient.invalidateQueries({ queryKey: chatQueryKey(chatId) });
     void queryClient.invalidateQueries({ queryKey: liveStreamQueryKey(chatId) });
@@ -178,11 +189,19 @@ export function useChatChannel(chatId: string, currentUserId: string | null): Ch
           void queryClient.invalidateQueries({ queryKey: chatQueryKey(chatId) });
         },
         onMessagesDeleted: (messageIds) => {
+          // Плашки — первыми: корни удалённого ответа видны, пока он в истории.
+          refreshChatThreadsAfterChange(queryClient, chatId, messageIds).catch(() => undefined);
+          const feedItems = chatThreadFeedItems(queryClient, chatId, messageIds);
+
           // Не вышло сверить — сверим при следующем событии или переподключении.
-          dropDeletedMessages(queryClient, messageIds).catch(() => undefined);
+          dropDeletedMessages(queryClient, messageIds)
+            .then(() => keepDeletedChatThreadRoots(queryClient, chatId, feedItems))
+            .catch(() => undefined);
         },
         onMessageEdited: (messageId) => {
           refreshEditedMessages(queryClient, [messageId]).catch(() => undefined);
+          // Правленое могло быть последним ответом треда — его текст на плашке.
+          refreshChatThreadsAfterChange(queryClient, chatId, [messageId]).catch(() => undefined);
           // Правленое могло быть закреплено — полоса показывает его текст.
           void queryClient.invalidateQueries({ queryKey: pinsQueryKey(chatId) });
         },
@@ -194,6 +213,7 @@ export function useChatChannel(chatId: string, currentUserId: string | null): Ch
           // Участник сменил, кому видно время: время, даты и прочтение у
           // загруженных сообщений и у участников — перечитать на месте.
           refreshChatTimes(queryClient, chatId).catch(() => undefined);
+          refreshAllChatThreadSummaries(queryClient, chatId).catch(() => undefined);
           void queryClient.invalidateQueries({ queryKey: chatQueryKey(chatId) });
         },
         onPeopleChanged: () => {
@@ -202,6 +222,7 @@ export function useChatChannel(chatId: string, currentUserId: string | null): Ch
           // подписанные ссылки на фото могли стать чужими.
           forgetAvatarUrls();
           refreshChatTimes(queryClient, chatId).catch(() => undefined);
+          refreshAllChatThreadSummaries(queryClient, chatId).catch(() => undefined);
           void queryClient.invalidateQueries({ queryKey: chatQueryKey(chatId) });
         },
         onMediaChanged: () => {
@@ -210,6 +231,7 @@ export function useChatChannel(chatId: string, currentUserId: string | null): Ch
           // заново, прежние подписанные ссылки могли стать чужими.
           forgetChatMediaUrls();
           refreshChatTimes(queryClient, chatId).catch(() => undefined);
+          refreshAllChatThreadSummaries(queryClient, chatId).catch(() => undefined);
           // Ключ чата — префикс и вкладок «Медиа» и «Голосовые».
           void queryClient.invalidateQueries({ queryKey: chatQueryKey(chatId) });
         },

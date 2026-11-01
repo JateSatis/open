@@ -284,7 +284,7 @@ describe('InAppMessageToast', () => {
       showNotice('Изменения не сохранены', 'error', { label: 'Повторить', run: retry }),
     );
 
-    await userEvent.setup().press(await screen.findByRole('button', { name: 'Повторить' }));
+    await userEvent.setup().press(await screen.findByTestId('notice-action-button'));
 
     expect(retry).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(screen.queryByText('Изменения не сохранены')).toBeNull());

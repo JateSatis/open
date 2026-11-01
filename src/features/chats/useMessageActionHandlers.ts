@@ -47,6 +47,8 @@ type Options = {
   openOriginal: (message: ChatMessage) => void;
   /** Чат, откуда переслан островок. */
   openChat: (chatId: string) => void;
+  /** «Показать в чате» из шторки треда: к сообщению в обычной переписке. */
+  showInChat?: (row: BubbleRow) => void;
 };
 
 export type MessageActionHandlers = {
@@ -84,6 +86,7 @@ export function useMessageActionHandlers({
   edit,
   openOriginal,
   openChat,
+  showInChat,
 }: Options): MessageActionHandlers {
   /**
    * Удаляет у всех: свои сообщения — функцией удаления, облачка своих
@@ -170,6 +173,9 @@ export function useMessageActionHandlers({
         case 'open_original':
           if (message) openOriginal(message);
           return;
+        case 'show_in_chat':
+          showInChat?.(row);
+          return;
         case 'pin':
           if (!message) return;
 
@@ -209,6 +215,7 @@ export function useMessageActionHandlers({
       reply,
       retry,
       selection,
+      showInChat,
     ],
   );
 

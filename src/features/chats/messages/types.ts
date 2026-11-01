@@ -17,6 +17,8 @@ export type ChatMessage = Message & {
   status: DeliveryStatus;
   /** Set only while the message exists optimistically, before the server id. */
   localId?: string;
+  /** Автор оптимистичного ответа на плашке треда; серверную сводку не меняет. */
+  chatThreadPendingAuthor?: { id: string; name: string; avatarUrl: string | null };
   /** Исходный выбор из галереи — нужен только для повтора неудачной отправки. */
   pendingMedia?: OutgoingMedia[];
   /** Записанное голосовое до ответа сервера — для повтора неудачной отправки. */
@@ -76,10 +78,11 @@ export type Outgoing =
       text: string;
       media: OutgoingMedia[];
       replyTo: string[];
+      replyVia?: Record<string, string>;
       /** Скрытое от зрителей в `text` — code points. */
       hidden?: HiddenRange[];
     }
-  | { type: 'voice'; voice: LocalMedia; replyTo: string[] }
+  | { type: 'voice'; voice: LocalMedia; replyTo: string[]; replyVia?: Record<string, string> }
   /** Пост канала с попом; новый поп публикуется той же транзакцией. */
   | { type: 'pop_post'; text: string; replyTo: string[]; channelId: string; pop: DraftPop }
   | { type: 'forward'; sourceChatId: string; messageIds: string[] }

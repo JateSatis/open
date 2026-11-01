@@ -16,10 +16,12 @@ import {
   type ForwardedComment,
   type Message,
   type MessageAttachment,
+  type QuotedMessage,
   type SendMessageMedia,
 } from '@/api/chats';
 import { PENDING_SEQ } from '@/api/pendingSeq';
 import { MAX_ALBUM_SIZE } from '@/features/chats/lib/mosaicLayout';
+import { settleIntoChatThreads, refreshSettledChatThreadSummaries } from '@/features/chats/chatThreads/settle';
 import { mergeMessages, updateHistory } from '@/features/chats/messages/historyCache';
 import {
   addToOutbox,
@@ -112,9 +114,16 @@ export function toLocalVoiceAttachment(localId: string, voice: LocalMedia): Mess
   };
 }
 
+/** Путь цитаты не теряется при отправке и повторе неудавшегося ответа. */
+export function quoteIslandPaths(quotes: QuotedMessage[]): Record<string, string> | undefined {
+  const paths = quotes.flatMap((quote) => quote.via ? [[quote.messageId, quote.via.forwardId]] : []);
+  return paths.length > 0 ? Object.fromEntries(paths) : undefined;
+}
+
 /** Что повторить для упавшего сообщения. Пересылка повторяется целиком, одним вызовом. */
 export function outgoingOf(message: ChatMessage): Outgoing | null {
   const replyTo = message.replies.map((quote) => quote.messageId);
+  const replyVia = quoteIslandPaths(message.replies);
 
   if (message.pendingForward) return { type: 'forward', ...message.pendingForward };
 
@@ -126,7 +135,7 @@ export function outgoingOf(message: ChatMessage): Outgoing | null {
     return commentId ? { type: 'forward_comment', commentId } : null;
   }
 
-  if (message.pendingVoice) return { type: 'voice', voice: message.pendingVoice, replyTo };
+  if (message.pendingVoice) return { type: 'voice', voice: message.pendingVoice, replyTo, replyVia };
 
   if (message.pendingPop) {
     return { type: 'pop_post', text: message.text ?? '', replyTo, ...message.pendingPop };
@@ -136,7 +145,7 @@ export function outgoingOf(message: ChatMessage): Outgoing | null {
   const media = message.pendingMedia ?? [];
 
   return text || media.length > 0
-    ? { type: 'post', text, media, replyTo, hidden: message.hiddenRanges }
+    ? { type: 'post', text, media, replyTo, replyVia, hidden: message.hiddenRanges }
     : null;
 }
 
@@ -264,24 +273,24 @@ async function insert(
 
   if (outgoing.type === 'voice') {
     const [file] = uploaded;
+    const voice = {
+      url: file.url,
+      mimeType: file.mimeType,
+      durationMs: file.durationMs ?? 0,
+      sizeBytes: file.sizeBytes,
+      waveform: file.waveform,
+    };
 
-    return sendVoiceMessage(
-      chatId,
-      {
-        url: file.url,
-        mimeType: file.mimeType,
-        durationMs: file.durationMs ?? 0,
-        sizeBytes: file.sizeBytes,
-        waveform: file.waveform,
-      },
-      outgoing.replyTo,
-    );
+    return outgoing.replyVia && Object.keys(outgoing.replyVia).length > 0
+      ? sendVoiceMessage(chatId, voice, outgoing.replyTo, outgoing.replyVia)
+      : sendVoiceMessage(chatId, voice, outgoing.replyTo);
   }
 
   return sendMessage(chatId, {
     text: outgoing.text || undefined,
     media: uploaded.length > 0 ? uploaded.map(toSendMedia) : undefined,
     replyTo: outgoing.replyTo.length > 0 ? outgoing.replyTo : undefined,
+    replyVia: outgoing.replyVia,
     hidden: outgoing.hidden?.length ? outgoing.hidden : undefined,
   });
 }
@@ -301,6 +310,8 @@ function settle(queryClient: QueryClient, chatId: string, localId: string, saved
       items: merged.items.map((message) => (message.id === saved.id ? confirmed : message)),
     };
   });
+
+  settleIntoChatThreads(queryClient, chatId, saved);
 
   // Пока история не перерисовалась, в исходящих лежит уже подтверждённая
   // копия под настоящим id: экран склеивает их по id, и сообщение не мигает.
@@ -455,6 +466,7 @@ export async function deliver(
     // dropped silently.
     setOutboxStatus(chatId, localId, 'failed');
   } finally {
+    if (!saved) refreshSettledChatThreadSummaries(queryClient, chatId);
     delivering.delete(localId);
     discarded.delete(localId);
   }
@@ -516,7 +528,7 @@ export function sendPost(
   // Скрытое — в смещениях обрезанного текста: так его сохранит база.
   const { text: trimmed, ranges } = trimWithRanges(text, hidden);
 
-  if (!trimmed && media.length === 0) return;
+  if (!trimmed && media.length === 0) return undefined;
 
   // Одна мозаика вмещает не больше MAX_ALBUM_SIZE файлов — остальные уходят
   // следующими сообщениями, в порядке выбора. Подпись и ответ — у первого.
@@ -575,6 +587,8 @@ export function sendPost(
       if (outgoing) await deliver(queryClient, chatId, currentUserId, draft.localId!, outgoing);
     }
   })();
+
+  return drafts[0]?.localId;
 }
 
 export function sendVoice(
@@ -615,7 +629,10 @@ export function sendVoice(
     type: 'voice',
     voice,
     replyTo: replies.map((quote) => quote.messageId),
+    replyVia: quoteIslandPaths(replies),
   });
+
+  return localId;
 }
 
 /**

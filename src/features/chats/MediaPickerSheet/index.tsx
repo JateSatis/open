@@ -114,7 +114,7 @@ type SheetComposerProps = {
 
 export type MediaPickerSheetProps = SheetComposerProps & {
   /** Чьё поле открывает этот экземпляр: показывается он только для своего хозяина. */
-  owner?: 'chat' | 'comments' | 'saved';
+  owner?: 'chat' | 'comments' | 'chat-thread' | 'saved';
   /**
    * Разделы шита — вкладки внизу. Набор задаёт хозяин по виду чата; при одном
    * разделе вкладок нет. По умолчанию — только галерея.

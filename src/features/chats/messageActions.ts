@@ -26,6 +26,8 @@ export type MessageActionContext = {
   island?: { isMine: boolean } | null;
   /** Облачко можно отметить — в меню есть «Выбрать» (`isSelectableRow`). */
   selectable?: boolean;
+  /** Меню открыто в шторке треда — есть «Показать в чате». */
+  inChatThread?: boolean;
 };
 
 export type MessageActionId =
@@ -39,6 +41,7 @@ export type MessageActionId =
   | 'unpin'
   | 'forward'
   | 'open_original'
+  | 'show_in_chat'
   | 'delete'
   | 'remove_from_island';
 
@@ -163,6 +166,12 @@ export const MESSAGE_ACTIONS: readonly MessageAction[] = [
     id: 'open_original',
     label: 'Перейти к оригиналу',
     isVisible: ({ island }) => Boolean(island),
+  },
+  {
+    id: 'show_in_chat',
+    label: 'Показать в чате',
+    // Только в шторке треда: из неё — к сообщению в обычной переписке.
+    isVisible: ({ message, inChatThread = false }) => inChatThread && !isLocalMessage(message),
   },
   {
     id: 'delete',

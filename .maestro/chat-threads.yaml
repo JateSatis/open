@@ -1,0 +1,151 @@
+appId: com.openger.app
+name: «Треды» — переключатель, ответ уходит в тред, шторка и ответ из неё
+tags:
+  - chats
+env:
+  # Группа на трёх участников («Треды» есть только в группе от трёх).
+  CHAT: Threads test
+---
+- runFlow: subflows/open-app.yaml
+- runFlow: subflows/open-chat.yaml
+# Переключатель появляется, когда загружен состав группы.
+- extendedWaitUntil:
+    visible:
+      id: "chat-threads-toggle"
+    timeout: 30000
+
+# Своё исходное сообщение — внизу переписки, от засева не зависит.
+- evalScript: ${output.root = 'maestro-' + Date.now() + '-root'}
+- tapOn: "Сообщение"
+- runFlow:
+    file: subflows/input-ascii.yaml
+    env:
+      ASCII_TEXT: ${output.root}
+- tapOn: "Отправить"
+- assertVisible: ${output.root}
+- waitForAnimationToEnd:
+    timeout: 3000
+
+- tapOn:
+    id: "chat-threads-toggle"
+    retryTapIfNoChange: false
+# Лента «Тредов» встала: кнопка теперь ведёт в обычный вид.
+- extendedWaitUntil:
+    visible:
+      id: "chat-threads-toggle"
+      text: "Обычный вид"
+    timeout: 20000
+- assertVisible: ${output.root}
+- waitForAnimationToEnd:
+    timeout: 3000
+
+# Ответ свайпом в «Тредах»: в ленте его нет, плашка у исходного, всплывашка ведёт в тред.
+- evalScript: ${output.reply = 'maestro-' + Date.now()}
+# Тот же текст есть и в превью списка чатов под экраном — искать в переписке.
+- swipe:
+    from:
+      text: ${output.root}
+      childOf:
+        id: "messages-list"
+    direction: LEFT
+- assertVisible:
+    id: "composer-plate"
+- runFlow:
+    file: subflows/input-ascii.yaml
+    env:
+      ASCII_TEXT: ${output.reply}
+- tapOn: "Отправить"
+- assertVisible: "Ответ ушёл в тред"
+- tapOn:
+    id: "notice-action-button"
+- extendedWaitUntil:
+    visible:
+      id: "chat-thread-panel"
+    timeout: 10000
+- extendedWaitUntil:
+    visible:
+      id: "chat-thread-root"
+    timeout: 20000
+- assertVisible: ${output.reply}
+
+# Ответ из поля шторки — тоже в тред, сразу внизу шторки.
+- evalScript: ${output.second = 'maestro-' + Date.now() + '-pane'}
+- tapOn: "Ответить в треде"
+- runFlow:
+    file: subflows/input-ascii.yaml
+    env:
+      ASCII_TEXT: ${output.second}
+- tapOn: "Отправить"
+- assertVisible: ${output.second}
+
+# «Ответить» на ответе в шторке — ответ ему: новое сообщение цитирует его, а не
+# исходное. (Свайп в шторке тот же, что в переписке; жест Maestro до порога
+# ответа в окне шторки не дотягивает — он проверен руками.)
+- evalScript: ${output.third = 'maestro-' + Date.now() + '-nested'}
+- longPressOn:
+    text: ${output.second}
+    childOf:
+      id: "chat-thread-list"
+- tapOn: "Ответить"
+- assertVisible:
+    id: "composer-plate"
+- tapOn: "Ответить в треде"
+- runFlow:
+    file: subflows/input-ascii.yaml
+    env:
+      ASCII_TEXT: ${output.third}
+- tapOn: "Отправить"
+- assertVisible: ${output.third}
+- assertVisible:
+    id: "reply-quote"
+    text: ".*${output.second}.*"
+
+# Закрытие по затемнению; в обычном виде ответы — в переписке.
+- tapOn:
+    id: "chat-thread-backdrop"
+- extendedWaitUntil:
+    notVisible:
+      id: "chat-thread-root"
+    timeout: 10000
+- assertNotVisible:
+    id: "chat-thread-root"
+- assertNotVisible: ${output.reply}
+- assertVisible:
+    id: "chat-thread-plate-last"
+    text: ".*${output.third}"
+- tapOn:
+    id: "chat-threads-toggle"
+    retryTapIfNoChange: false
+- assertVisible: ${output.second}
+
+# Уборка — свои ответы удаляются.
+- longPressOn:
+    text: ${output.third}
+    childOf:
+      id: "messages-list"
+- tapOn: "Удалить"
+- assertVisible: "Удалить сообщение?"
+- tapOn: "Удалить"
+- longPressOn:
+    text: ${output.second}
+    childOf:
+      id: "messages-list"
+- tapOn: "Удалить"
+- assertVisible: "Удалить сообщение?"
+- tapOn: "Удалить"
+- longPressOn:
+    text: ${output.reply}
+    childOf:
+      id: "messages-list"
+- tapOn: "Удалить"
+- assertVisible: "Удалить сообщение?"
+- tapOn: "Удалить"
+- assertNotVisible: ${output.reply}
+- longPressOn:
+    text: ${output.root}
+    childOf:
+      id: "messages-list"
+- tapOn: "Удалить"
+- assertVisible: "Удалить сообщение?"
+- tapOn: "Удалить"
+- assertNotVisible: ${output.root}

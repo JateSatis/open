@@ -1,0 +1,10 @@
+appId: com.openger.app
+---
+# Яндекс-клавиатура на realme переставляет буквы при пакетном вводе adb.
+# Последовательные inputText сохраняют точный текст и работают в Modal.
+- evalScript: ${output.asciiIndex = 0}
+- repeat:
+    times: ${ASCII_TEXT.length}
+    commands:
+      - inputText: ${ASCII_TEXT.charAt(output.asciiIndex)}
+      - evalScript: ${output.asciiIndex += 1}

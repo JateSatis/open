@@ -43,6 +43,8 @@ type Options = {
   /** Ширина панели: она же путь выезда. */
   width: number;
   windowHeight: number;
+  /** Панель уехала — убрать её из стора. По умолчанию — панель комментариев. */
+  onClosed?: () => void;
 };
 
 function useStillPane(): SheetPane {
@@ -74,7 +76,7 @@ function useStillPane(): SheetPane {
  * въезжает справа и уходит вправо: тапом по затемнению, «назад» и свайпом
  * вправо по списку — медленным до порога или броском.
  */
-export function useSidePanel({ width, windowHeight }: Options): PanelSheet & {
+export function useSidePanel({ width, windowHeight, onClosed = closeComments }: Options): PanelSheet & {
   /** Панель доехала — можно отдавать фокус полю ввода. */
   opened: boolean;
 } {
@@ -116,10 +118,10 @@ export function useSidePanel({ width, windowHeight }: Options): PanelSheet & {
           : CLOSE_MS;
 
       offset.value = withTiming(width, { duration, easing: EASE_OUT }, (finished) => {
-        if (finished) runOnJS(closeComments)();
+        if (finished) runOnJS(onClosed)();
       });
     },
-    [offset, width],
+    [offset, onClosed, width],
   );
 
   const close = useCallback(() => {

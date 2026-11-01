@@ -31,6 +31,20 @@ import { useMarkChannelSectionRead } from '@/features/channels/useMarkChannelSec
 import { subscribersLabel } from '@/features/channels/subscriberText';
 import { ChatFooter, modePlate } from '@/features/chats/ChatFooter';
 import { ChatMenu } from '@/features/chats/ChatMenu';
+import { ChatThreadPanel, type ChatThreadPanelKit } from '@/features/chats/ChatThreadPanel';
+import { ChatThreadsToggle } from '@/features/chats/ChatThreadsToggle';
+import {
+  closeChatThread,
+  openedChatThread,
+} from '@/features/chats/chatThreads/chatThreadPanelStore';
+import { useChatThreadPlates } from '@/features/chats/chatThreads/useChatThreadPlates';
+import { useChatThreadReplies } from '@/features/chats/chatThreads/useChatThreadReplies';
+import {
+  useChatThreadsMode,
+  useChatThreadsView,
+} from '@/features/chats/chatThreads/useChatThreadsMode';
+import type { HiddenRange } from '@/features/chats/hiddenText';
+import type { LocalMedia, OutgoingMedia } from '@/features/media';
 import { ChatScreenHeader } from '@/features/chats/ChatScreenHeader';
 import { closeEmojiPanel } from '@/features/chats/EmojiPanel/useEmojiPanel';
 import { ChatSearchHeader } from '@/features/chats/chatSearch/ChatSearchHeader';
@@ -202,7 +216,9 @@ export function ChatConversation({
   );
   const currentUserId = useCurrentUserId();
   const { chat, isLoading: isChatLoading, failed: chatFailed, gone } = useChat(chatId);
-  const chatMessages = useChatMessages(chatId, currentUserId);
+  const chatThreads = useChatThreadsView(chat);
+  const threadsActive = chatThreads.view === 'chat-threads';
+  const chatMessages = useChatMessages(chatId, currentUserId, chatThreads.view);
   const { messages, isLoading, isLoadingMore, hasMore, error, activities } = chatMessages;
   // Показать нечего, а загрузить не вышло: вместо крутилки — «не удалось» с
   // повтором. Упавшее обновление поверх данных сюда не попадает, как и упавший
@@ -221,9 +237,32 @@ export function ChatConversation({
   const pins = usePinnedMessages(chatId);
   const pinCursor = usePinnedCursor(pins.pins);
   const selection = useMessageSelection(rows, currentUserId);
+  const listFrameRef = useRef<View>(null);
+  const measureListFrame = useCallback(() => measureInWindow(listFrameRef.current), []);
+  // Строки на экране — для засчитанных показов: меряются снаружи списка по ключу.
+  const [rowRegistry] = useState(createRowRegistry);
+  const scrollState = useRef({ offset: 0, content: 0, viewport: 0, drivenAt: 0 });
   const jump = useJumpToMessage(listRef, rows, chatMessages.loadUntil);
+  const threadsMode = useChatThreadsMode({
+    chatId,
+    view: chatThreads.view,
+    setView: chatThreads.setView,
+    rows,
+    isLoading,
+    jump: jump.jump,
+    loadUntil: chatMessages.loadUntil,
+    measureRow: rowRegistry.measure,
+    measureViewport: measureListFrame,
+    scrollOffset: useCallback(() => scrollState.current.offset, []),
+  });
+  // Переход к сообщению, которого в «Тредах» нет, — через обычный вид.
+  const jumpTo = threadsMode.jumpAnywhere;
+  // Список другого вида начинается заново — у самого низа.
+  useEffect(() => {
+    scrollState.current.offset = 0;
+  }, [chatThreads.view]);
   // Поиск по чату — со страницы чата: поле вместо шапки, плашка вместо поля ввода.
-  const chatSearch = useChatSearch(chatId, jump.jump);
+  const chatSearch = useChatSearch(chatId, jumpTo);
   const [searchListShown, setSearchListShown] = useState(false);
   const showSearchList = chatSearch.active && searchListShown;
   const { close: closeSearch, select: selectSearchHit } = chatSearch;
@@ -238,8 +277,6 @@ export function ChatConversation({
     },
     [selectSearchHit],
   );
-  const listFrameRef = useRef<View>(null);
-  const measureListFrame = useCallback(() => measureInWindow(listFrameRef.current), []);
   const menu = useMessageMenu<ChatListRow>(measureListFrame);
   const draft = useComposerDraft(chatId);
   const isMember = chat ? isChatMember(chat, currentUserId) : false;
@@ -256,7 +293,6 @@ export function ChatConversation({
     () => (chat?.waiting ?? []).filter((person) => person.id !== currentUserId),
     [chat, currentUserId],
   );
-  const { jump: jumpTo } = jump;
   // Прыжок к сообщению бывает долгим (догрузка истории): если за это время
   // ушли с экрана, шит не открывается — он лёг бы поверх чужого.
   const focusedRef = useRef(isFocused);
@@ -290,7 +326,7 @@ export function ChatConversation({
   );
 
   const navigation = useQuoteNavigation(chatId, {
-    jump: jump.jump,
+    jump: jumpTo,
     isHistoryReady: !isLoading && !isChatLoading,
     isFocused,
     focusComment,
@@ -375,16 +411,13 @@ export function ChatConversation({
 
     return authors;
   }, [messages, participantsById]);
-  const departedKey = [...departed.keys()].join(',');
   const peopleById = useMemo(() => {
     const people = new Map<string, Person>(departed);
 
     participantsById.forEach((participant, id) => people.set(id, participant));
 
     return people;
-    // Пересобрать по составу ушедших, а не по каждой новой карте сообщений.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [departedKey, participantsById]);
+  }, [departed, participantsById]);
 
   // Я как поставивший реакцию — из участников: там свежий аватар.
   // Посетителя среди участников нет — тогда из моего профиля.
@@ -444,6 +477,26 @@ export function ChatConversation({
     [channelId, sendPopTo],
   );
 
+  // В «Тредах» свой ответ в ленте не встаёт: плашка корня меняется сразу, а
+  // всплывашка ведёт в его тред.
+  const { send: sendToChat, sendVoice: sendVoiceToChat } = chatMessages;
+  const threadReplies = useChatThreadReplies({ chatId, active: threadsActive, me });
+  const { announce: announceThreadReply } = threadReplies;
+  const sendInView = useCallback(
+    (text: string, media?: OutgoingMedia[], replies?: LiveQuote[], hidden?: HiddenRange[]) => {
+      const localId = sendToChat(text, media, replies, hidden);
+      announceThreadReply(replies ?? [], { kind: media?.length ? 'media' : 'text', text, media }, localId);
+    },
+    [announceThreadReply, sendToChat],
+  );
+  const sendVoiceInView = useCallback(
+    (voice: LocalMedia, replies?: LiveQuote[]) => {
+      const localId = sendVoiceToChat(voice, replies);
+      announceThreadReply(replies ?? [], { kind: 'voice', text: '', durationMs: voice.durationMs }, localId);
+    },
+    [announceThreadReply, sendVoiceToChat],
+  );
+
   const replyForward = useReplyForward({
     chatId,
     sourceChat: thisChat,
@@ -451,8 +504,8 @@ export function ChatConversation({
     authorName,
     originalOf,
     composerRef,
-    send: chatMessages.send,
-    sendVoice: chatMessages.sendVoice,
+    send: sendInView,
+    sendVoice: sendVoiceInView,
     sendPop,
   });
   const edit = useMessageEdit({ chatId, draft, composerRef, saveEdit: chatMessages.saveEdit });
@@ -612,7 +665,7 @@ export function ChatConversation({
     [queryClient],
   );
 
-  const { renderItem, islandHeader } = useChatRowRenderer({
+  const { renderItem: renderRow, islandHeader } = useChatRowRenderer({
     currentUserId,
     isMember,
     isSelecting,
@@ -631,9 +684,16 @@ export function ChatConversation({
     hostName: authorName,
     openChat: navigation.openChat,
   });
+  // В «Тредах» под исходным сообщением — плашка его треда.
+  const { renderItem, summaries: chatThreadSummaries } = useChatThreadPlates({
+    chatId,
+    active: threadsActive,
+    messages,
+    currentUserId,
+    showAvatars: !isPosts && !ownDirect,
+    renderItem: renderRow,
+  });
 
-  // Строки на экране — для засчитанных показов: меряются снаружи списка по ключу.
-  const [rowRegistry] = useState(createRowRegistry);
   useChatJournal(
     chatId,
     isFocused && active,
@@ -648,6 +708,18 @@ export function ChatConversation({
     measureRow: rowRegistry.measure,
     measureViewport: measureListFrame,
   });
+
+  // Видимые строки — и учёту просмотров, и опорной строке переключения вида.
+  // FlatList не принимает смену обработчика на лету: оба стабильны.
+  const { onViewableItemsChanged: viewsOnViewable } = views;
+  const { trackViewable } = threadsMode;
+  const onViewableItemsChanged = useCallback(
+    (info: Parameters<typeof viewsOnViewable>[0]) => {
+      viewsOnViewable(info);
+      trackViewable(info);
+    },
+    [trackViewable, viewsOnViewable],
+  );
 
   // Прокрутили переписку — прокрученные вбок ряды реакций возвращаются в начало.
   const { onScroll: viewsOnScroll } = views;
@@ -671,7 +743,6 @@ export function ChatConversation({
   // двигает список сама, кадр за кадром, не дожидаясь событий прокрутки.
   // Пока список двигает автопрокрутка, события прокрутки (раз в 100 мс)
   // везут смещение на несколько кадров старше — их смещение не берётся.
-  const scrollState = useRef({ offset: 0, content: 0, viewport: 0, drivenAt: 0 });
   const trackOffset = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     if (Date.now() - scrollState.current.drivenAt > AUTO_SCROLL_QUIET_MS) {
       scrollState.current.offset = event.nativeEvent.contentOffset.y;
@@ -807,6 +878,73 @@ export function ChatConversation({
     [advancePin, jumpTo],
   );
 
+  // Шторка треда — те же облачка, меню и отправка, что в переписке.
+  const { discard, deleteMessages, removeFromIsland, saveEdit } = chatMessages;
+  const chatThreadKit = useMemo(
+    (): ChatThreadPanelKit => ({
+      chatId,
+      sourceChat: thisChat,
+      currentUserId,
+      isMember,
+      me: me ? { id: me.userId, name: me.name ?? 'Я', avatarUrl: me.avatarUrl } : null,
+      peopleById,
+      showAvatars: !isPosts && !ownDirect,
+      showAuthors: !ownDirect,
+      navigation,
+      reactions,
+      pins,
+      authorName,
+      originalOf,
+      openPerson,
+      openForwardedComment,
+      send: sendToChat,
+      sendVoice: sendVoiceToChat,
+      retry,
+      discard,
+      saveEdit,
+      deleteMessages,
+      removeFromIsland,
+      notifyTyping,
+      notifyRecordingVoice,
+      showInChat: threadsMode.showInChat,
+    }),
+    [
+      authorName,
+      chatId,
+      currentUserId,
+      deleteMessages,
+      discard,
+      isMember,
+      isPosts,
+      me,
+      navigation,
+      notifyRecordingVoice,
+      notifyTyping,
+      openForwardedComment,
+      openPerson,
+      originalOf,
+      ownDirect,
+      peopleById,
+      pins,
+      reactions,
+      removeFromIsland,
+      retry,
+      saveEdit,
+      sendToChat,
+      sendVoiceToChat,
+      thisChat,
+      threadsMode.showInChat,
+    ],
+  );
+
+  // Ушли из чата — его шторка треда закрывается вместе с ним.
+  useEffect(
+    () => () => {
+      if (openedChatThread()?.chatId === chatId) closeChatThread();
+    },
+    [chatId],
+  );
+
   const typingLabel = activityLabel(
     activities,
     (userId) => participantsById.get(userId)?.displayName ?? 'Кто-то',
@@ -907,6 +1045,9 @@ export function ChatConversation({
             channelHeader?.right
           ) : isMember ? (
             <View style={styles.headerActions}>
+              {chatThreads.available ? (
+                <ChatThreadsToggle active={threadsActive} onPress={threadsMode.toggle} />
+              ) : null}
               {/* В заявку не звонят — это решает и база. */}
               {chat?.requestPending ? null : (
                 <CallButton
@@ -918,7 +1059,12 @@ export function ChatConversation({
               <ChatMenu chatId={chatId} isMember subscription={null} />
             </View>
           ) : chat && !gone ? (
-            <ChatMenu chatId={chatId} isMember={false} subscription={subscription} />
+            <View style={styles.headerActions}>
+              {chatThreads.available ? (
+                <ChatThreadsToggle active={threadsActive} onPress={threadsMode.toggle} />
+              ) : null}
+              <ChatMenu chatId={chatId} isMember={false} subscription={subscription} />
+            </View>
           ) : undefined
         }
       />
@@ -953,6 +1099,9 @@ export function ChatConversation({
             <RowRegistryContext.Provider value={rowRegistry}>
               <TileViewportContext.Provider value={measureListFrame}>
                 <FlatList
+                  // Другой вид — другая лента: список начинается заново, а не
+                  // со смещения прежней (место держит прыжок переключения).
+                  key={chatThreads.view}
                   showsVerticalScrollIndicator={false}
                   showsHorizontalScrollIndicator={false}
                   ref={listRef}
@@ -962,8 +1111,10 @@ export function ChatConversation({
                   onScrollToIndexFailed={jump.onScrollToIndexFailed}
                   keyExtractor={rowKey}
                   renderItem={renderItem}
+                  // Плашки тредов приходят после строк: видимые ячейки перерисовываются.
+                  extraData={chatThreadSummaries}
                   viewabilityConfig={views.viewabilityConfig}
-                  onViewableItemsChanged={views.onViewableItemsChanged}
+                  onViewableItemsChanged={onViewableItemsChanged}
                   onScroll={onListScroll}
                   onScrollBeginDrag={onListDragStart}
                   onScrollEndDrag={trackOffset}
@@ -1127,6 +1278,8 @@ export function ChatConversation({
         onClose={menu.close}
         journalSubject={menuContent ? { type: 'message', id: menuContent.id } : null}
       />
+
+      {isFocused ? <ChatThreadPanel kit={chatThreadKit} /> : null}
 
       <CommentsPanel onOpenPerson={openPerson} hostChatId={chatId} />
     </View>

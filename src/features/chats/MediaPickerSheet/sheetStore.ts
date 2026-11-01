@@ -19,7 +19,13 @@ export type MediaSheetPhase = 'closed' | 'armed' | 'open' | 'closing';
  * выбранное уходит туда, откуда его открыли, — поэтому каждый хозяин держит
  * свой экземпляр шита, а показывается только экземпляр хозяина.
  */
-export type MediaSheetOwner = 'chat' | 'comments' | 'saved' | 'pick' | AvatarSheetOwner;
+export type MediaSheetOwner =
+  | 'chat'
+  | 'comments'
+  | 'chat-thread'
+  | 'saved'
+  | 'pick'
+  | AvatarSheetOwner;
 
 /**
  * Хозяин шита аватарки — со своим именем: экраны профиля и нового канала

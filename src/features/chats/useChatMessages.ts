@@ -5,7 +5,6 @@ import {
   deleteMessages as deleteOnServer,
   removeForwardItems,
 } from '@/api/chats';
-import { mapOriginals } from '@/features/chats/islands/islandCache';
 import {
   deliver,
   discardLocal,
@@ -20,11 +19,16 @@ import {
   removeIslandItems,
   removeMessages,
   restoreMessages,
+  updateChatHistories,
   updateHistory,
+  type HistoryView,
 } from '@/features/chats/messages/historyCache';
+import { isChatThreadReply } from '@/features/chats/chatThreads/replies';
+import { keepDeletedChatThreadRoots } from '@/features/chats/chatThreads/sync';
 import { saveEdit as saveEditOnServer } from '@/features/chats/messages/editing';
 import { outboxMessages, useOutboxMessages } from '@/features/chats/messages/outbox';
 import { usePendingEditsOf } from '@/features/chats/messages/pendingEdits';
+import { withPendingOverlays } from '@/features/chats/messages/pendingOverlays';
 import type {
   ChatMessage,
   EditResult,
@@ -38,7 +42,6 @@ import { chatsQueryKey } from '@/features/chats/useChats';
 import { pinsQueryKey } from '@/features/chats/usePinnedMessages';
 import { useConnectionStatus } from '@/features/connection/useConnectionStatus';
 import { usePendingReactionMap } from '@/features/interactions/pendingReactions';
-import { withMyReaction } from '@/features/interactions/reactionState';
 import type { LocalMedia, OutgoingMedia } from '@/features/media';
 import type { HiddenRange } from '@/features/chats/hiddenText';
 
@@ -70,8 +73,13 @@ export type ChatMessagesState = {
   /** Догружает историю назад до сообщения с этим временем. Отвечает, дошли ли. */
   loadUntil: (seq: number) => Promise<boolean>;
   /** Текст с альбомом; с цитатами — это ответ. */
-  send: (text: string, media?: OutgoingMedia[], replies?: LiveQuote[]) => void;
-  sendVoice: (voice: LocalMedia, replies?: LiveQuote[]) => void;
+  send: (
+    text: string,
+    media?: OutgoingMedia[],
+    replies?: LiveQuote[],
+    hidden?: HiddenRange[],
+  ) => string | undefined;
+  sendVoice: (voice: LocalMedia, replies?: LiveQuote[]) => string;
   /** Пост канала `channelId` с попом и необязательным текстом. */
   sendPop: (channelId: string, text: string, pop: DraftPop, replies?: LiveQuote[]) => void;
   retry: (localId: string) => void;
@@ -101,11 +109,24 @@ export type ChatMessagesState = {
  * - Realtime и «печатает» — `useChatChannel`;
  * - отправка — `messages/delivery`, вне компонентов, чтобы не обрываться с экраном.
  */
-export function useChatMessages(chatId: string, currentUserId: string | null): ChatMessagesState {
+export function useChatMessages(
+  chatId: string,
+  currentUserId: string | null,
+  view: HistoryView = 'all',
+): ChatMessagesState {
   const queryClient = useQueryClient();
   const connection = useConnectionStatus();
-  const history = useChatHistory(chatId);
-  const outbox = useOutboxMessages(chatId);
+  // Переписка загружена всегда: по ней дочитываются сигналы, и в обычный вид
+  // возвращаются без ожидания. «Треды» — своей историей, пока они открыты.
+  const allHistory = useChatHistory(chatId);
+  const threadsHistory = useChatHistory(chatId, 'chat-threads', view === 'chat-threads');
+  const history = view === 'all' ? allHistory : threadsHistory;
+  const allOutbox = useOutboxMessages(chatId);
+  // Свой неотправленный ответ в «Тредах» в ленте не стоит: он уходит в тред.
+  const outbox = useMemo(
+    () => (view === 'all' ? allOutbox : allOutbox.filter((message) => !isChatThreadReply(message))),
+    [allOutbox, view],
+  );
   const pendingEdits = usePendingEditsOf(chatId);
   const pendingReactions = usePendingReactionMap();
   const { activities, notifyTyping, notifyRecordingVoice } = useChatChannel(chatId, currentUserId);
@@ -117,41 +138,10 @@ export function useChatMessages(chatId: string, currentUserId: string | null): C
   // неподтверждённая реакция — поверх подтверждённых счётчиков, и у
   // оригиналов в островках тоже. Реакции у правки — из истории: пока правка
   // едет, счётчики живут своей жизнью.
-  const edited = useMemo(() => {
-    if (Object.keys(pendingEdits).length === 0 && Object.keys(pendingReactions).length === 0) {
-      return history.items;
-    }
-
-    return history.items.map((message) => {
-      const pendingEdit = pendingEdits[message.id];
-      const intent = pendingReactions[message.id];
-      const base = pendingEdit
-        ? { ...pendingEdit, reactions: message.reactions, commentsCount: message.commentsCount }
-        : message;
-      const own = intent ? { ...base, reactions: withMyReaction(base.reactions, intent) } : base;
-
-      const withOriginals = mapOriginals(own, (original) => {
-        const wanted = pendingReactions[original.id];
-
-        return wanted
-          ? { ...original, reactions: withMyReaction(original.reactions, wanted) }
-          : original;
-      });
-      // Реакция на пересланный комментарий — его оригиналу, по id комментария.
-      const forwarded = withOriginals.commentForward?.comment;
-      const forComment = forwarded ? pendingReactions[forwarded.id] : undefined;
-
-      return forwarded && forComment
-        ? {
-            ...withOriginals,
-            commentForward: {
-              ...withOriginals.commentForward!,
-              comment: { ...forwarded, reactions: withMyReaction(forwarded.reactions, forComment) },
-            },
-          }
-        : withOriginals;
-    });
-  }, [history.items, pendingEdits, pendingReactions]);
+  const edited = useMemo(
+    () => withPendingOverlays(history.items, pendingEdits, pendingReactions),
+    [history.items, pendingEdits, pendingReactions],
+  );
 
   const messages = useMemo(() => {
     if (outbox.length === 0) return edited;
@@ -232,14 +222,32 @@ export function useChatMessages(chatId: string, currentUserId: string | null): C
   const deleteMessages = useCallback(
     async (messageIds: string[]) => {
       const ids = new Set(messageIds);
-      const removed = readHistory(queryClient, chatId)?.items.filter((m) => ids.has(m.id)) ?? [];
+      const removedFrom = (from: HistoryView) =>
+        readHistory(queryClient, chatId, from)?.items.filter((m) => ids.has(m.id)) ?? [];
+      const removed = removedFrom('all');
+      const removedThreads = removedFrom('chat-threads');
 
-      updateHistory(queryClient, chatId, (current) => removeMessages(current, ids));
+      // Из всех историй чата: переписки, «Тредов» и шторок тредов.
+      updateChatHistories(queryClient, chatId, (current) => removeMessages(current, ids));
+      keepDeletedChatThreadRoots(queryClient, chatId, removedThreads);
 
       try {
         await deleteOnServer(messageIds);
       } catch (cause) {
         updateHistory(queryClient, chatId, (current) => restoreMessages(current, removed));
+        updateHistory(
+          queryClient,
+          chatId,
+          // Заглушка удалённого исходного уступает место живому.
+          (current) =>
+            restoreMessages(
+              { ...current, items: current.items.filter((m) => !ids.has(m.id)) },
+              removedThreads,
+            ),
+          'chat-threads',
+        );
+        // Шторки треда загружаются заново: дочитывание вернуло бы только новое.
+        void queryClient.resetQueries({ queryKey: [...messagesQueryKey(chatId), 'chat-thread'] });
         throw cause;
       }
 
@@ -252,7 +260,7 @@ export function useChatMessages(chatId: string, currentUserId: string | null): C
 
   const removeFromIsland = useCallback(
     async (forwardId: string, messageIds: string[]) => {
-      updateHistory(queryClient, chatId, (current) =>
+      updateChatHistories(queryClient, chatId, (current) =>
         removeIslandItems(current, forwardId, new Set(messageIds)),
       );
 
