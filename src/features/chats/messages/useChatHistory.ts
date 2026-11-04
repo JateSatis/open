@@ -6,7 +6,6 @@ import {
   messagesQueryKey,
   readHistory,
   updateHistory,
-  type ChatHistory,
   type HistoryView,
 } from '@/features/chats/messages/historyCache';
 import { listHistoryPage, loadHistory } from '@/features/chats/messages/sync';
@@ -37,19 +36,7 @@ export type ChatHistoryState = {
    * догрузку при той же длине содержимого.
    */
   resumeLoadMore: (atEdge: boolean) => void;
-  /**
-   * Догружает страницы назад, пока в истории не окажется сообщение с этим
-   * номером, — по одной странице, «загрузить весь чат» не существует.
-   * Отвечает, дошли ли до него.
-   */
-  loadUntil: (seq: number) => Promise<boolean>;
 };
-
-function reached(history: ChatHistory | undefined, seq: number): boolean {
-  const oldest = history?.items[history.items.length - 1];
-
-  return oldest !== undefined && oldest.seq <= seq;
-}
 
 /**
  * История переписки в кеше запросов. Между запросами свежей её держит
@@ -130,25 +117,6 @@ export function useChatHistory(
     [fetchOlder],
   );
 
-  const loadUntil = useCallback(
-    async (seq: number): Promise<boolean> => {
-      for (;;) {
-        const history = readHistory(queryClient, chatId, view);
-
-        if (!history) return false;
-        if (reached(history, seq)) return true;
-        if (history.nextCursor === null) return false;
-
-        // Переход к сообщению — явное действие человека: пробуем и после неудачи.
-        await fetchOlder();
-
-        // Страница не пришла (нет связи, сбой) — стоять на месте в цикле незачем.
-        if (readHistory(queryClient, chatId, view)?.nextCursor === history.nextCursor) return false;
-      }
-    },
-    [chatId, fetchOlder, queryClient, view],
-  );
-
   return {
     items: data?.items ?? NO_MESSAGES,
     // Пустая история до первого ответа — не «сообщений пока нет», а «ещё не знаем».
@@ -162,6 +130,5 @@ export function useChatHistory(
     error: moreError,
     loadMore,
     resumeLoadMore,
-    loadUntil,
   };
 }

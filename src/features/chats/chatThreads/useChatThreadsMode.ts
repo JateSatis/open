@@ -70,8 +70,6 @@ type Options = {
   /** Новый вид ещё грузится — прыгать в нём рано. */
   isLoading: boolean;
   jump: JumpToMessage['jump'];
-  /** Догрузка истории открытого вида до номера. */
-  loadUntil: (seq: number) => Promise<boolean>;
   /** Строка на экране — в координатах окна. */
   measureRow: (rowKey: string) => Promise<AnchorRect | null>;
   measureViewport: () => Promise<AnchorRect | null>;
@@ -102,7 +100,6 @@ export function useChatThreadsMode({
   rows,
   isLoading,
   jump,
-  loadUntil,
   measureRow,
   measureViewport,
   scrollOffset,
@@ -155,17 +152,11 @@ export function useChatThreadsMode({
         return jump(rowKey, seq, options);
       }
 
-      // Старое сообщение может быть и в «Тредах», глубже загруженного: сначала
-      // догрузить их, и только если его там нет (это ответ) — в обычный вид.
-      await loadUntil(seq);
-
-      const feed = readHistory(queryClient, chatId, 'chat-threads')?.items ?? [];
-
-      if (feed.some((message) => message.id === rowKey)) return jump(rowKey, seq, options);
-
+      // Весь чат хранит любое сообщение; переключение не проходит историю
+      // «Тредов» страницами ради проверки, есть ли там эта строка.
       return jumpAfterSwitch('all', rowKey, seq, options);
     },
-    [chatId, jump, jumpAfterSwitch, loadUntil, queryClient, rows, view],
+    [jump, jumpAfterSwitch, rows, view],
   );
 
   /** «Показать в чате» из шторки: обычный вид, прокрутка и подсветка. */

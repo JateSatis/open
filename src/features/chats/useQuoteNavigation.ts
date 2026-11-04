@@ -9,9 +9,11 @@ import { chatsQueryKey } from '@/features/chats/chatsKey';
 import { JUMP_PARAM_NAMES, jumpRequestOf, type JumpParams } from '@/features/chats/jumpParams';
 import { chatQueryKey } from '@/features/chats/useChat';
 import { islandItemKey } from '@/features/chats/islands/rows';
+import { loadMessageWindow } from '@/features/chats/messages/useMessageWindow';
+import { messageWindowKey } from '@/features/chats/messages/historyCache';
 import { showNotice } from '@/features/notifications/alertsStore';
 
-type Jump = (rowKey: string, seq: number) => Promise<boolean>;
+type Jump = (rowKey: string, seq: number, options?: { viewPosition?: number }) => Promise<boolean>;
 
 /** Куда прыгнуть в переписке: ключ строки и номер, до которого догрузить историю. */
 export type JumpTarget = { key: string; seq: number };
@@ -121,7 +123,10 @@ export function useQuoteNavigation(
     if (!jumpTo || jumpAt === null) return;
 
     handledJumpRef.current = requestedJump;
-    void jump(jumpTo, jumpAt).then(reportJump);
+    void jump(jumpTo, jumpAt, { viewPosition: 0.5 }).then((found) => {
+      reportJump(found);
+      if (!found && handledJumpRef.current === requestedJump) handledJumpRef.current = null;
+    });
   }, [
     comment,
     comments,
@@ -148,6 +153,13 @@ export function useQuoteNavigation(
       }
 
       const to = focus ? focus.target : target;
+      if (to) {
+        void queryClient.prefetchQuery({
+          queryKey: messageWindowKey(targetChatId, to.seq),
+          queryFn: () => loadMessageWindow(targetChatId, to.seq),
+          staleTime: Infinity,
+        });
+      }
       // Шит открывается по ключу перехода, даже когда прыгать некуда.
       const jumpParams = {
         ...(to ? { jumpTo: to.key, jumpSeq: String(to.seq) } : {}),

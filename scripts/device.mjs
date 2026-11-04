@@ -95,8 +95,12 @@ function shell(command, opts) {
 }
 
 function attached() {
-  return run("adb", ["devices"])
-    .stdout.split(/\r?\n/)
+  const result = run("adb", ["devices"]);
+  if (result.status !== 0) {
+    const detail = String(result.stderr ?? "").trim();
+    fail(`adb devices не выполнился (код ${result.status}). ${detail}`);
+  }
+  return result.stdout.split(/\r?\n/)
     .slice(1)
     .map((line) => line.trim().split(/\s+/))
     .filter(([s, state]) => s && state)
