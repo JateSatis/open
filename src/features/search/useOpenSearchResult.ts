@@ -1,7 +1,10 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { useCallback } from 'react';
 
 import { addRecentSearch, type RecentSearch } from '@/features/search/recentSearches';
+import { loadMessageWindow } from '@/features/chats/messages/useMessageWindow';
+import { messageWindowKey } from '@/features/chats/messages/historyCache';
 
 /**
  * Тап по строке выдачи или «Недавних»: открыть и запомнить. Чат — перепиской
@@ -12,6 +15,7 @@ import { addRecentSearch, type RecentSearch } from '@/features/search/recentSear
  */
 export function useOpenSearchResult(): (item: RecentSearch) => void {
   const router = useRouter();
+  const queryClient = useQueryClient();
 
   return useCallback(
     (item: RecentSearch) => {
@@ -19,6 +23,11 @@ export function useOpenSearchResult(): (item: RecentSearch) => void {
 
       if (item.type === 'message') {
         const { message } = item;
+        void queryClient.prefetchQuery({
+          queryKey: messageWindowKey(message.chatId, message.seq),
+          queryFn: () => loadMessageWindow(message.chatId, message.seq),
+          staleTime: Infinity,
+        });
         const jump = {
           jumpTo: message.id,
           jumpSeq: String(message.seq),
@@ -55,6 +64,6 @@ export function useOpenSearchResult(): (item: RecentSearch) => void {
         });
       }
     },
-    [router],
+    [queryClient, router],
   );
 }

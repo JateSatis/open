@@ -5,7 +5,7 @@ import { BackHandler, FlatList } from 'react-native';
 import ChatScreen from './[chatId]';
 
 import type { ChatSummary, ForwardedComment, Message } from '@/api/chats';
-import { getChat, listDeletedMessageIds, listMessages, subscribeToChat } from '@/api/chats';
+import { getChat, listDeletedMessageIds, listMessages, listMessagesAround, subscribeToChat } from '@/api/chats';
 import { getCommentTarget, listCommentThreadRoots, subscribeToComments } from '@/api/comments';
 import { listPinnedMessages } from '@/api/pins';
 import { NO_REACTIONS } from '@/api/reactionCounts';
@@ -47,6 +47,8 @@ jest.mock('@/api/streams');
 jest.mock('@/api/chats', () => ({
   getChat: jest.fn(),
   listMessages: jest.fn(),
+  listMessagesAround: jest.fn(),
+  listMessagesAfter: jest.fn(),
   listMessagesSince: jest.fn(() => Promise.resolve([])),
   markChatRead: jest.fn(() => Promise.resolve()),
   sendMessage: jest.fn(),
@@ -235,6 +237,7 @@ function withForward(comment: ForwardedComment): Message[] {
 }
 
 const mockedListMessages = listMessages as jest.MockedFunction<typeof listMessages>;
+const mockedAround = listMessagesAround as jest.MockedFunction<typeof listMessagesAround>;
 const mockedShowNotice = showNotice as jest.MockedFunction<typeof showNotice>;
 
 beforeEach(() => {
@@ -253,6 +256,10 @@ beforeEach(() => {
   });
   (getChat as jest.Mock).mockResolvedValue(chat);
   mockedListMessages.mockResolvedValue({ items: withForward(forwarded('chat-2', 'm9')), nextCursor: null });
+  mockedAround.mockResolvedValue({
+    older: { items: [message('m1', 1)], nextCursor: null },
+    newer: [message('m2', 2), message('f1', 5)],
+  });
   (listPinnedMessages as jest.Mock).mockResolvedValue([]);
   (listDeletedMessageIds as jest.Mock).mockResolvedValue([]);
   (subscribeToChat as jest.Mock).mockReturnValue({ broadcastTyping: jest.fn(), unsubscribe: jest.fn() });

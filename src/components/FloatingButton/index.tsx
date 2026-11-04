@@ -1,6 +1,6 @@
 import { SymbolView, type AndroidSymbol, type SFSymbol } from 'expo-symbols';
 import type { Ref } from 'react';
-import { Pressable, type View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
 import { styles } from './styles';
 
@@ -16,6 +16,7 @@ export type FloatingButtonProps = {
   ref?: Ref<View>;
   /** Что лежит у нижнего края под кнопкой — панель вкладок: кнопка встаёт над ней. */
   bottomInset?: number;
+  badge?: number;
 };
 
 /**
@@ -29,6 +30,7 @@ export function FloatingButton({
   testID,
   ref,
   bottomInset = 0,
+  badge = 0,
 }: FloatingButtonProps) {
   const theme = useTheme();
 
@@ -51,6 +53,13 @@ export function FloatingButton({
         size={Sizes.floatingButtonIcon}
         tintColor={theme.text}
       />
+      {badge > 0 ? (
+        <View style={[styles.badge, { backgroundColor: theme.primary }]}>
+          <Text style={[styles.badgeText, { color: theme.primaryText }]}>
+            {badge > 99 ? '99+' : badge}
+          </Text>
+        </View>
+      ) : null}
     </Pressable>
   );
 }

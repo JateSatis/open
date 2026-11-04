@@ -23,6 +23,7 @@ import { originalIds } from '@/features/chats/islands/islandCache';
 import {
   knownEdits,
   mergeMessages,
+  messagesQueryKey,
   newestSeq,
   patchCommentCounts,
   patchClusterCounts,
@@ -107,8 +108,14 @@ export async function pullNewMessages(
   const since = newestSeq(history);
   // В пустом чате дочитывать не от чего — первое сообщение забираем обычной
   // страницей, иначе диалог оживает только после повторного входа.
+  const fetched = since !== null ? await fetchNewer(chatId, since, view) : null;
+  if (since !== null && fetched === null) {
+    const latestPage = await firstPage(chatId, view);
+    queryClient.setQueryData(messagesQueryKey(chatId, view), latestPage);
+    return latestPage.items;
+  }
   const incoming = since !== null
-    ? ((await fetchNewer(chatId, since, view)) ?? [])
+    ? (fetched ?? [])
     : [...(await listHistoryPage(chatId, view)).items].reverse();
 
   if (incoming.length > 0) {
@@ -121,6 +128,34 @@ export async function pullNewMessages(
   }
 
   return incoming;
+}
+
+/** Reconcile cached detached windows after reconnect without replacing their pages. */
+export async function refreshDetachedMessageWindows(
+  queryClient: QueryClient,
+  chatId: string,
+): Promise<void> {
+  const windows = queryClient.getQueriesData<ChatHistory>({ queryKey: ['message-window', chatId] });
+  const histories = windows.flatMap(([, history]) => history ? [history] : []);
+  if (histories.length === 0) return;
+
+  const ids = [...new Set(histories.flatMap((history) => [
+    ...history.items.map((message) => message.id),
+    ...quotedIds(history),
+    ...originalIds(history.items),
+  ]))].slice(0, MAX_TOMBSTONE_IDS);
+  const islands = [...new Set(histories.flatMap((history) =>
+    history.items.filter((message) => message.kind === 'forward').map((message) => message.id),
+  ))];
+
+  await Promise.all([
+    dropDeletedMessages(queryClient, ids),
+    refreshEditedMessages(queryClient, ids),
+    refreshReactions(queryClient, ids),
+    refreshCommentCounts(queryClient, ids),
+    refreshViews(queryClient, ids),
+    ...islands.map((id) => refreshIsland(queryClient, chatId, id)),
+  ].map((request) => request.catch(() => undefined)));
 }
 
 /**

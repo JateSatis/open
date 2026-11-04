@@ -14,6 +14,7 @@ import {
   getChat,
   listDeletedMessageIds,
   listMessages,
+  listMessagesAround,
   subscribeToChat,
 } from '@/api/chats';
 import { listPinnedMessages, pinMessage, type PinnedMessage } from '@/api/pins';
@@ -64,6 +65,8 @@ jest.mock('@/api/streams');
 jest.mock('@/api/chats', () => ({
   getChat: jest.fn(),
   listMessages: jest.fn(),
+  listMessagesAround: jest.fn(),
+  listMessagesAfter: jest.fn(),
   listMessagesSince: jest.fn(() => Promise.resolve([])),
   markChatRead: jest.fn(() => Promise.resolve()),
   sendMessage: jest.fn(),
@@ -548,29 +551,27 @@ describe('pinned bar', () => {
     expect(await screen.findByText('Закреплённое сообщение 1 из 2')).toBeTruthy();
   });
 
-  it('loads older pages until the pinned message is there', async () => {
+  it('opens an old pin through a window around its message', async () => {
     mockedPins.mockResolvedValue([
       { messageId: 'm0', forwardId: null, messageSeq: Date.parse('2026-09-27T09:00:00Z'), originalSeq: Date.parse('2026-09-27T09:00:00Z'), kind: 'text', text: 'давнее', thumbnailUrl: null },
     ]);
-    mockedListMessages
-      .mockResolvedValueOnce({ items: [message('m3', 'как дела?', 'user-1', 3)], nextCursor: Date.parse('2026-09-27T10:03:00Z') })
-      .mockResolvedValueOnce({ items: [message('m2', 'привет', 'user-2', 2)], nextCursor: Date.parse('2026-09-27T10:02:00Z') })
-      .mockResolvedValueOnce({
-        items: [{ ...message('m0', 'давнее', 'user-2'), seq: Date.parse('2026-09-27T09:00:00Z'), createdAt: '2026-09-27T09:00:00Z' }],
-        nextCursor: null,
-      });
+    mockedListMessages.mockResolvedValueOnce({ items: [message('m3', 'как дела?', 'user-1', 3)], nextCursor: Date.parse('2026-09-27T10:03:00Z') });
+    const old = { ...message('m0', 'давнее', 'user-2'), seq: Date.parse('2026-09-27T09:00:00Z'), createdAt: '2026-09-27T09:00:00Z' };
+    const around = listMessagesAround as jest.MockedFunction<typeof listMessagesAround>;
+    around.mockResolvedValueOnce({
+      older: { items: [old], nextCursor: null },
+      newer: [message('m2', 'привет', 'user-2', 2), message('m3', 'как дела?', 'user-1', 3)],
+    });
 
     await renderWithQuery(<ChatScreen />);
     await screen.findByText('как дела?');
 
     fireEvent.press(await screen.findByTestId('pinned-bar'));
 
-    // Полоса тоже показывает «давнее» — ищем именно в переписке.
-    await waitFor(() => expect(screen.getAllByText('давнее')).toHaveLength(2));
-    expect(mockedListMessages).toHaveBeenCalledTimes(3);
-    expect(mockedListMessages).toHaveBeenLastCalledWith('chat-1', {
-      cursor: Date.parse('2026-09-27T10:02:00Z'),
-    });
+    expect(mockedListMessages).toHaveBeenCalledTimes(1);
+    expect(around).toHaveBeenCalledTimes(1);
+    expect(around).toHaveBeenCalledWith('chat-1', old.seq);
+    expect(screen.getByTestId('messages-list')).toBeTruthy();
   });
 });
 

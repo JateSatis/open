@@ -95,8 +95,32 @@ function shell(command, opts) {
 }
 
 function attached() {
-  return run("adb", ["devices"])
-    .stdout.split(/\r?\n/)
+  let result = run("adb", ["devices"]);
+  let devices = result.status === 0 ? parseAttachedDevices(result.stdout) : [];
+  if (result.status !== 0 || devices.length === 0) {
+    const firstError = String(result.stderr ?? "").trim();
+    // After sleep, the ADB server can stay alive but stop reporting devices.
+    // Restart it once before telling the user that nothing is connected.
+    run("adb", ["kill-server"]);
+    const start = run("adb", ["start-server"]);
+    if (start.status !== 0) {
+      const detail = String(start.stderr ?? "").trim();
+      fail(`Не удалось перезапустить adb (код ${start.status}). ${detail || firstError}`);
+    }
+
+    result = run("adb", ["devices"]);
+    if (result.status !== 0) {
+      const detail = String(result.stderr ?? "").trim();
+      fail(`adb devices не выполнился после перезапуска (код ${result.status}). ${detail || firstError}`);
+    }
+    devices = parseAttachedDevices(result.stdout);
+  }
+
+  return devices;
+}
+
+function parseAttachedDevices(stdout) {
+  return stdout.split(/\r?\n/)
     .slice(1)
     .map((line) => line.trim().split(/\s+/))
     .filter(([s, state]) => s && state)
@@ -104,14 +128,24 @@ function attached() {
 }
 
 function pickDevice(flag) {
-  const ready = attached().filter((d) => d.state === "device").map((d) => d.serial);
+  const devices = attached();
+  const ready = devices.filter((d) => d.state === "device").map((d) => d.serial);
   const wanted = flag ?? process.env.ANDROID_SERIAL;
 
   if (wanted) {
-    if (!ready.includes(wanted)) fail(`${wanted} не подключён. Готовы: ${ready.join(", ") || "нет"}`);
+    if (!ready.includes(wanted)) {
+      const state = devices.find((d) => d.serial === wanted)?.state;
+      fail(`${wanted} недоступен${state ? ` (состояние adb: ${state})` : ""}. Готовы: ${ready.join(", ") || "нет"}`);
+    }
     return wanted;
   }
   if (ready.length === 1) return ready[0];
+  if (ready.length === 0 && devices.length === 0) {
+    fail("ADB был перезапущен, но устройств не обнаружено. Проверьте USB и отладку: node scripts/device.mjs devices.");
+  }
+  if (ready.length === 0) {
+    fail(`ADB видит устройства, но ни одно не готово: ${devices.map((d) => `${d.serial} (${d.state})`).join(", ")}. Проверьте разрешение отладки на телефоне.`);
+  }
   fail(
     ready.length === 0
       ? "Ни одного устройства. node scripts/device.mjs devices — проверить состояние."
