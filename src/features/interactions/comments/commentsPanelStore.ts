@@ -57,6 +57,9 @@ export type CommentsPanelTarget = {
    * а ответ открывает окно своего треда; сам он вспыхивает.
    */
   focusCommentId?: string;
+  /** Корень и ключ конкретного перехода; ключ отличает повторный тап по той же ссылке. */
+  focusRootId?: string;
+  focusKey?: string;
   /**
    * Облачко переписки, где выделяли кусок текста (боковая панель): туда ведёт
    * цитата над комментарием. Ключ строки, а не id сообщения: в островке одно
@@ -93,6 +96,8 @@ export function openComments(
   chatId?: string,
   amMember = false,
   focusCommentId?: string,
+  focusRootId?: string,
+  focusKey = String(Date.now()),
 ) {
   usePanelStore.setState({
     target: {
@@ -100,8 +105,10 @@ export function openComments(
       chatId,
       amMember,
       focusCommentId,
+      focusRootId,
+      focusKey: focusCommentId ? focusKey : undefined,
     },
-    openCommentThread: null,
+    openCommentThread: focusRootId ? { rootId: focusRootId, instant: true } : null,
   });
 }
 
@@ -129,10 +136,22 @@ export function openFragmentComments(
  * я публикую в канале: догадка ряда для отклика моей реакции и показ
  * закрепа, решает база. `focusCommentId` — пришли по пересланному комментарию.
  */
-export function openPopComments(popId: string, amMember = false, focusCommentId?: string) {
+export function openPopComments(
+  popId: string,
+  amMember = false,
+  focusCommentId?: string,
+  focusRootId?: string,
+  focusKey = String(Date.now()),
+) {
   usePanelStore.setState({
-    target: { subject: { type: 'pop', id: popId }, amMember, focusCommentId },
-    openCommentThread: null,
+    target: {
+      subject: { type: 'pop', id: popId },
+      amMember,
+      focusCommentId,
+      focusRootId,
+      focusKey: focusCommentId ? focusKey : undefined,
+    },
+    openCommentThread: focusRootId ? { rootId: focusRootId, instant: true } : null,
   });
 }
 

@@ -69,6 +69,9 @@ jest.mock('@/api/pops', () => ({
 }));
 jest.mock('@/api/reactions', () => ({ setPopReaction: jest.fn() }));
 jest.mock('@/api/comments', () => ({ setCommentReaction: jest.fn() }));
+jest.mock('@/features/interactions/comments/prefetchCommentFocus', () => ({
+  prefetchCommentFocus: jest.fn(),
+}));
 jest.mock('@/features/chats/useCurrentUserId', () => ({ useCurrentUserId: () => 'me' }));
 // Панель — своя история (`CommentsPanel`); здесь — что просмотр её открывает.
 jest.mock('@/features/interactions/CommentsPanel', () => ({ CommentsPanel: () => null }));
@@ -340,12 +343,14 @@ describe('PopViewer', () => {
   });
 
   it('opens straight with the pop’s comments when it came from a forwarded comment', async () => {
-    await open(pop('p1'), { canPublish: true, focusCommentId: 'c9' });
+    await open(pop('p1'), {
+      canPublish: new Promise<boolean>(() => undefined),
+      focusCommentId: 'c9',
+    });
 
     await waitFor(() =>
-      expect(getCommentsPanelTarget()).toEqual({
+      expect(getCommentsPanelTarget()).toMatchObject({
         subject: { type: 'pop', id: 'p1' },
-        amMember: true,
         focusCommentId: 'c9',
       }),
     );

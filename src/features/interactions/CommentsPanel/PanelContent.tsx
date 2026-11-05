@@ -110,7 +110,17 @@ export function PanelContent({
     onExit: exitCommentThread,
   });
   const data = usePanelComments(target, currentUserId, commentThreadPane.shownRoot);
-  const { about, live, pop, amMember, comments, commentThread, rows, commentThreadRows } = data;
+  const {
+    about,
+    live,
+    pop,
+    amMember,
+    comments,
+    commentThread,
+    rows,
+    commentThreadRows,
+    focusPending,
+  } = data;
   const targetType = target.subject.type;
   const memberBadge = MEMBER_BADGE[targetType];
   const chatTitleText = useChatTitle(targetType === 'message' ? target.chatId : undefined);
@@ -223,9 +233,9 @@ export function PanelContent({
   const jumpedTo = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!focusReady || commentThreadSettling || jumpedTo.current === focusReady) return;
+    if (!focusReady || commentThreadSettling || jumpedTo.current === focusReady.key) return;
 
-    jumpedTo.current = focusReady;
+    jumpedTo.current = focusReady.key;
 
     const inCommentThread = getOpenCommentThread() !== null;
     const offset: SharedValue<number> = inCommentThread ? commentThreadOffset : mainOffset;
@@ -236,7 +246,7 @@ export function PanelContent({
       return { top: offset.value + header, bottom: offset.value + visibleHeight };
     };
 
-    void (inCommentThread ? jumpCommentThread : jumpMain)(focusReady, { visible }).then((found) => {
+    void (inCommentThread ? jumpCommentThread : jumpMain)(focusReady.id, { visible }).then((found) => {
       if (!found) showNotice('Не удалось найти комментарий', 'error');
     });
   }, [
@@ -347,7 +357,10 @@ export function PanelContent({
               onPress={
                 item.type === 'comment-thread-failed'
                   ? commentThread.retry
-                  : () => void commentThread.loadMore()
+                  : () =>
+                      void (item.type === 'comment-thread-gap' && item.direction === 'before'
+                        ? commentThread.loadBefore()
+                        : commentThread.loadMore())
               }
             />
           );
@@ -420,7 +433,7 @@ export function PanelContent({
                 pane={sheet.main}
                 listRef={listRef}
                 rows={rows}
-                isLoading={comments.isLoading}
+                isLoading={comments.isLoading || focusPending}
                 isLoadingMore={comments.isLoadingMore}
                 hasMore={comments.hasMore}
                 error={comments.error}

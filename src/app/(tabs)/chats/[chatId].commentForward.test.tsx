@@ -38,6 +38,9 @@ jest.mock('expo-router', () => ({
 }));
 
 jest.mock('@/features/pops/openPopViewer', () => ({ openPopViewer: jest.fn() }));
+jest.mock('@/features/interactions/comments/prefetchCommentFocus', () => ({
+  prefetchCommentFocus: jest.fn(),
+}));
 jest.mock('@/api/profile', () => ({
   getProfile: jest.fn(() => Promise.resolve(null)),
   getMyProfile: jest.fn(() => Promise.resolve({ id: 'user-3', displayName: 'Пётр', avatarUrl: null })),
@@ -439,7 +442,11 @@ describe('tapping a forwarded comment to a pop', () => {
 
     await fireEvent.press(screen.getByText('Комментарий из «Pop Lab»'));
 
-    expect(openPopViewer).toHaveBeenCalledWith('channel-1', 'pop-1', { focusCommentId: 'c1' });
+    expect(openPopViewer).toHaveBeenCalledWith(
+      'channel-1',
+      'pop-1',
+      expect.objectContaining({ focusCommentId: 'c1', requestId: expect.any(String) }),
+    );
   });
 
   it('a deleted pop: «Поп удалён», taps open nothing, the comment stays', async () => {

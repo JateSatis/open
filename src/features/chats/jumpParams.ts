@@ -10,9 +10,26 @@ export type JumpParams = {
   jumpKey?: string;
   comments?: string;
   comment?: string;
+  commentRoot?: string;
 };
 
-export const JUMP_PARAM_NAMES = ['jumpTo', 'jumpSeq', 'jumpKey', 'comments', 'comment'] as const;
+export const JUMP_PARAM_NAMES = [
+  'jumpTo',
+  'jumpSeq',
+  'jumpKey',
+  'comments',
+  'comment',
+  'commentRoot',
+] as const;
+
+let lastJumpKey = 0;
+
+/** Миллисекунды плюс счётчик: два быстрых тапа всегда получают разные ключи. */
+export function nextJumpKey(): string {
+  lastJumpKey = Math.max(Date.now(), lastJumpKey + 1);
+
+  return String(lastJumpKey);
+}
 
 /** Только заданные параметры прыжка — без чужих ключей адреса и без пустых. */
 export function pickJumpParams(params: JumpParams): JumpParams {

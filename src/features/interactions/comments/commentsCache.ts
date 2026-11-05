@@ -16,7 +16,7 @@
 
 import type { QueryClient } from '@tanstack/react-query';
 
-import type { Comment, FragmentSet, RootCursor } from '@/api/comments';
+import type { Comment, CommentThreadCursor, FragmentSet, RootCursor } from '@/api/comments';
 import { toCommentItem, type CommentItem } from '@/features/interactions/comments/commentItem';
 
 /**
@@ -43,7 +43,9 @@ export type CommentThreadPage = {
   /** Начало треда — подряд, сверху первые. */
   head: CommentItem[];
   /** Время последнего из `head`, пока дальше есть что грузить; `null` — начало дошло до конца. */
-  nextCursor: string | null;
+  nextCursor: CommentThreadCursor | null;
+  /** Есть ответы старше окна; курсор — самый ранний загруженный ответ. */
+  beforeCursor: CommentThreadCursor | null;
   /** Загруженное за разрывом: свои ответы и цель прыжка, по порядку. */
   tail: CommentItem[];
 };
@@ -63,7 +65,13 @@ export function commentThreadQueryKey(targetId: string, rootId: string) {
   return ['comments', targetId, 'comment-thread', rootId] as const;
 }
 
-export const EMPTY_COMMENT_THREAD: CommentThreadPage = { headLoaded: false, head: [], nextCursor: null, tail: [] };
+export const EMPTY_COMMENT_THREAD: CommentThreadPage = {
+  headLoaded: false,
+  head: [],
+  nextCursor: null,
+  beforeCursor: null,
+  tail: [],
+};
 
 function byTime(a: CommentItem, b: CommentItem): number {
   if (a.createdAt !== b.createdAt) return a.createdAt < b.createdAt ? -1 : 1;
@@ -165,7 +173,7 @@ export function rootsInOrder(page: RootsPage): CommentItem[] {
 export function appendCommentThreadHead(
   page: CommentThreadPage,
   incoming: Comment[],
-  nextCursor: string | null,
+  nextCursor: CommentThreadCursor | null,
 ): CommentThreadPage {
   const known = new Set(page.head.map((item) => item.id));
   const added = incoming.filter((comment) => !known.has(comment.id)).map(toCommentItem);
@@ -174,10 +182,71 @@ export function appendCommentThreadHead(
   const tail = page.tail.filter((item) => !inHead.has(item.id));
 
   if (nextCursor === null) {
-    return { headLoaded: true, head: [...head, ...tail].sort(byTime), nextCursor: null, tail: [] };
+    return {
+      headLoaded: true,
+      head: [...head, ...tail].sort(byTime),
+      nextCursor: null,
+      beforeCursor: page.beforeCursor,
+      tail: [],
+    };
   }
 
-  return { headLoaded: true, head, nextCursor, tail };
+  return { ...page, headLoaded: true, head, nextCursor, tail };
+}
+
+/** Добавляет окно вокруг ответа в хронологическом порядке, без повторов. */
+export function focusedCommentThread(
+  before: Comment[],
+  focus: Comment,
+  after: Comment[],
+  beforeCursor: CommentThreadCursor | null,
+  hasAfter: boolean,
+  previous: CommentThreadPage = EMPTY_COMMENT_THREAD,
+): CommentThreadPage {
+  const known = new Map<string, CommentItem>();
+  const focusItem = toCommentItem(focus);
+
+  // An incomplete prefix and a distant focus window form two separate ranges.
+  // The cache stores one gap, so merging both would falsely claim the missing
+  // interval is loaded. Keep a complete thread; otherwise replace it with the
+  // focused range (the window query is authoritative for this navigation).
+  const completeToEnd = previous.headLoaded && previous.nextCursor === null;
+  if (completeToEnd) {
+    for (const item of [...previous.head, ...previous.tail]) known.set(item.id, item);
+  }
+  for (const item of [...before, ...after].map(toCommentItem)) known.set(item.id, item);
+  known.set(focusItem.id, focusItem);
+
+  const all = [...known.values()].sort(byTime);
+  const head = completeToEnd ? all : all.filter((item) => byTime(item, focusItem) <= 0);
+  const tail = completeToEnd ? [] : all.filter((item) => byTime(item, focusItem) > 0);
+
+  return {
+    headLoaded: true,
+    head,
+    nextCursor:
+      completeToEnd || (tail.length === 0 && !hasAfter)
+        ? null
+        : { createdAt: focus.createdAt, id: focus.id },
+    beforeCursor: completeToEnd ? null : previous.beforeCursor ?? beforeCursor,
+    tail,
+  };
+}
+
+/** Добавляет более старые ответы перед окном и сохраняет его хвост на месте. */
+export function prependCommentThreadHead(
+  page: CommentThreadPage,
+  incoming: Comment[],
+  beforeCursor: CommentThreadCursor | null,
+): CommentThreadPage {
+  const known = new Set([...page.head, ...page.tail].map((item) => item.id));
+  const added = incoming.filter((comment) => !known.has(comment.id)).map(toCommentItem);
+
+  return {
+    ...page,
+    head: [...page.head, ...added].sort(byTime),
+    beforeCursor,
+  };
 }
 
 /** Ответ — в конец треда: в начало, если оно загружено до конца, иначе за разрыв. */

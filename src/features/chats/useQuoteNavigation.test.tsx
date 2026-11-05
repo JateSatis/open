@@ -21,6 +21,9 @@ jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockPush }),
 }));
 jest.mock('@/api/chats', () => ({ listDeletedMessageIds: jest.fn(() => Promise.resolve([])) }));
+jest.mock('@/features/interactions/comments/prefetchCommentFocus', () => ({
+  prefetchCommentFocus: jest.fn(),
+}));
 
 const POSTED_SEQ = 70;
 
@@ -94,7 +97,7 @@ describe('useQuoteNavigation: пост канала', () => {
 
     expect(mockPush).toHaveBeenCalledWith({
       pathname: '/chats/channel/[channelId]',
-      params: { channelId: 'channel-1', jumpTo: 'p1', jumpSeq: String(POSTED_SEQ), jumpKey: '42' },
+      params: { channelId: 'channel-1', jumpTo: 'p1', jumpSeq: String(POSTED_SEQ), jumpKey: expect.any(String) },
     });
   });
 
@@ -103,7 +106,7 @@ describe('useQuoteNavigation: пост канала', () => {
 
     expect(mockPush).toHaveBeenCalledWith({
       pathname: '/chats/[chatId]',
-      params: { chatId: 'posts-1', jumpTo: 'p1', jumpSeq: String(POSTED_SEQ), jumpKey: '42' },
+      params: { chatId: 'posts-1', jumpTo: 'p1', jumpSeq: String(POSTED_SEQ), jumpKey: expect.any(String) },
     });
   });
 
@@ -132,7 +135,7 @@ describe('useQuoteNavigation: пост канала', () => {
           jumpSeq: String(POSTED_SEQ),
           comments: undefined,
           comment: undefined,
-          jumpKey: '42',
+          jumpKey: expect.any(String),
         },
       },
       source: 'channel',
@@ -160,7 +163,7 @@ describe('useQuoteNavigation: пост канала', () => {
         jumpSeq: String(POSTED_SEQ),
         comments: 'p1',
         comment: 'c1',
-        jumpKey: '42',
+        jumpKey: expect.any(String),
       },
     });
   });

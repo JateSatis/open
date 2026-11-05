@@ -1,10 +1,11 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { listCommentThreadReplies } from '@/api/comments';
+import { listCommentThreadReplies, listCommentThreadRepliesBefore } from '@/api/comments';
 import type { CommentItem } from '@/features/interactions/comments/commentItem';
 import {
   appendCommentThreadHead,
+  prependCommentThreadHead,
   readCommentThread,
   commentThreadQueryKey,
   updateCommentThread,
@@ -29,6 +30,9 @@ export type CommentThreadState = {
   isLoadingMore: boolean;
   /** Следующая порция начала; промис — когда она легла в кеш (или нечего грузить). */
   loadMore: () => Promise<void>;
+  /** Догрузить ответы перед сфокусированным окном. */
+  loadBefore: () => Promise<void>;
+  hasBefore: boolean;
 };
 
 /**
@@ -39,6 +43,7 @@ export function useCommentThread(
   targetId: string,
   rootId: string | null,
   overlay: (items: CommentItem[]) => CommentItem[],
+  focusPending = false,
 ): CommentThreadState {
   const queryClient = useQueryClient();
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -46,8 +51,12 @@ export function useCommentThread(
 
   const { data, refetch, isError, isFetching } = useQuery({
     queryKey: commentThreadQueryKey(targetId, rootId ?? ''),
-    queryFn: () => loadCommentThread(queryClient, targetId, rootId!),
-    enabled: rootId !== null,
+    queryFn: () => {
+      const focused = readCommentThread(queryClient, targetId, rootId!);
+
+      return focused?.headLoaded ? focused : loadCommentThread(queryClient, targetId, rootId!);
+    },
+    enabled: rootId !== null && !focusPending,
     // Сами по себе страницы треда не перечитываются: свежесть — сигналами канала.
     staleTime: Infinity,
     refetchOnReconnect: false,
@@ -86,17 +95,42 @@ export function useCommentThread(
       });
   }, [targetId, queryClient, rootId]);
 
-  const head = useMemo(() => overlay(data?.head ?? NONE), [data, overlay]);
-  const tail = useMemo(() => overlay(data?.tail ?? NONE), [data, overlay]);
+  const loadBefore = useCallback(() => {
+    if (!rootId) return Promise.resolve();
+
+    const page = readCommentThread(queryClient, targetId, rootId);
+
+    if (!page?.beforeCursor || loadingMoreRef.current) return Promise.resolve();
+
+    loadingMoreRef.current = true;
+    setIsLoadingMore(true);
+
+    return listCommentThreadRepliesBefore(rootId, page.beforeCursor)
+      .then((next) =>
+        updateCommentThread(queryClient, targetId, rootId, (current) =>
+          prependCommentThreadHead(current, next.items, next.previousCursor),
+        ),
+      )
+      .catch(() => undefined)
+      .finally(() => {
+        loadingMoreRef.current = false;
+        setIsLoadingMore(false);
+      });
+  }, [targetId, queryClient, rootId]);
+
+  const head = useMemo(() => (focusPending ? NONE : overlay(data?.head ?? NONE)), [data, focusPending, overlay]);
+  const tail = useMemo(() => (focusPending ? NONE : overlay(data?.tail ?? NONE)), [data, focusPending, overlay]);
 
   return {
     head,
     tail,
     hasGap: Boolean(data && (!data.headLoaded || data.nextCursor !== null)),
-    isLoading: rootId !== null && !data?.headLoaded,
+    isLoading: rootId !== null && (focusPending || !data?.headLoaded),
     failed: rootId !== null && isError && !isFetching && !data?.headLoaded,
     retry: useCallback(() => void refetch(), [refetch]),
     isLoadingMore,
     loadMore,
+    loadBefore,
+    hasBefore: Boolean(data?.beforeCursor),
   };
 }
