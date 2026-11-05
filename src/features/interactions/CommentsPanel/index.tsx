@@ -41,7 +41,12 @@ export function CommentsPanel({ onOpenPerson, hostChatId }: CommentsPanelProps) 
   // закрывающейся панелью на миг показывался её двойник.
   const isFocused = useIsFocused();
   const target = useCommentsPanelTarget();
-  const open = target !== null && isFocused;
+  // При переходе между чатами оба экрана на мгновение смонтированы. Цель
+  // ссылки принадлежит конечному чату, уходящий экран её не показывает.
+  const belongsToAnotherChat = Boolean(
+    target?.focusKey && hostChatId && target.chatId && target.chatId !== hostChatId,
+  );
+  const open = target !== null && isFocused && !belongsToAnotherChat;
 
   // Пока панель открыта, клавиатура под ней — её поля, а не поля переписки.
   useEffect(() => setCommentsKeyboardWindowOpen(open), [open]);

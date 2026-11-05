@@ -11,6 +11,7 @@ import {
   updateCommentThread,
 } from '@/features/interactions/comments/commentsCache';
 import { loadCommentThread } from '@/features/interactions/comments/commentSync';
+import { showNotice } from '@/features/notifications/alertsStore';
 
 const NONE: CommentItem[] = [];
 
@@ -88,7 +89,9 @@ export function useCommentThread(
           appendCommentThreadHead(current, next.items, next.nextCursor),
         ),
       )
-      .catch(() => undefined)
+      .catch(() => {
+        showNotice('Не удалось загрузить ответы. Попробуйте ещё раз.', 'error');
+      })
       .finally(() => {
         loadingMoreRef.current = false;
         setIsLoadingMore(false);

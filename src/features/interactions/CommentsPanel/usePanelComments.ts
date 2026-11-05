@@ -33,7 +33,9 @@ import { loadRoots } from '@/features/interactions/comments/commentSync';
 import { useComments } from '@/features/interactions/comments/useComments';
 import { useCommentTarget } from '@/features/interactions/comments/useCommentTarget';
 import { useCommentThread } from '@/features/interactions/comments/useCommentThread';
+import { commentFocusWindowQueryKey } from '@/features/interactions/comments/prefetchCommentFocus';
 import { showNotice } from '@/features/notifications/alertsStore';
+import { navigationPerfMark, navigationPerfStart } from '@/features/media/perf';
 
 const NONE: CommentItem[] = [];
 
@@ -57,48 +59,73 @@ function useFocusComment(
     if (!focusId || !focusKey) return;
 
     let cancelled = false;
+    const attemptId = `comment-${focusKey}`;
+    navigationPerfStart(attemptId, 'comment', { targetId, focusId, focusRootHint });
 
     void (async () => {
       try {
         // Цель и верхний список независимы: не ждём один запрос перед вторым.
-        const [fresh, , hintedRoot] = await Promise.all([
-          queryClient.fetchQuery({
+        const focusRequest = queryClient.fetchQuery({
             queryKey: commentFocusQueryKey(focusId),
             queryFn: () => fetchComment(focusId),
             staleTime: 10_000,
-          }),
-          queryClient.fetchQuery({
+          });
+        void focusRequest.then(
+          () => navigationPerfMark(attemptId, 'focus-response-ready'),
+          () => undefined,
+        );
+        // Корни основного списка не нужны, чтобы открыть найденный ответ.
+        // Запускаем их сейчас для фона, но не ставим перед целевым тредом.
+        const rootsRequest = queryClient.fetchQuery({
             queryKey: rootsKey(targetId),
             queryFn: () => loadRoots(targetId),
             staleTime: Infinity,
-          }),
-          focusRootHint
-            ? queryClient
-                .fetchQuery({
-                  queryKey: commentFocusQueryKey(focusRootHint),
-                  queryFn: () => fetchComment(focusRootHint),
-                  staleTime: 10_000,
-                })
-                .catch(() => null)
-            : Promise.resolve(null),
-        ]);
+          });
+        void rootsRequest.catch(() => undefined);
+        const hintedRootRequest = focusRootHint
+          ? queryClient
+              .fetchQuery({
+                queryKey: commentFocusQueryKey(focusRootHint),
+                queryFn: () => fetchComment(focusRootHint),
+                staleTime: 10_000,
+              })
+              .catch(() => null)
+          : Promise.resolve(null);
+
+        const fresh = await focusRequest;
+        navigationPerfMark(attemptId, 'focus-dependencies-ready');
 
         const rootId = fresh.commentThreadRootId ?? fresh.id;
 
         if (cancelled) return;
 
         if (fresh.commentThreadRootId) {
-          // После получения ответа корень и окно соседей читаются одним
-          // параллельным кругом. Недоступный корень — безопасная заглушка.
-          const [root, window] = await Promise.all([
-            (hintedRoot?.id === rootId
-              ? Promise.resolve(hintedRoot)
+          // Корень и окно — независимые чтения. Запускаем оба сразу после
+          // получения цели; загрузка первой страницы списка корней идёт в фоне.
+          const rootRequest = hintedRootRequest.then((hintedRoot) =>
+            hintedRoot?.id === rootId
+              ? hintedRoot
               : queryClient.fetchQuery({
                   queryKey: commentFocusQueryKey(rootId),
                   queryFn: () => fetchComment(rootId),
                   staleTime: 10_000,
-                })
-            )
+                }),
+          );
+          const windowRequest = queryClient.fetchQuery({
+            queryKey: commentFocusWindowQueryKey(targetId, rootId, fresh.id),
+            queryFn: () => listCommentThreadWindow(rootId, fresh),
+            staleTime: 10_000,
+          });
+          void rootRequest.then(
+            () => navigationPerfMark(attemptId, 'root-response-ready'),
+            () => navigationPerfMark(attemptId, 'root-response-failed'),
+          );
+          void windowRequest.then(
+            () => navigationPerfMark(attemptId, 'window-response-ready'),
+            () => navigationPerfMark(attemptId, 'window-response-failed'),
+          );
+          const [root, window] = await Promise.all([
+            rootRequest
               .then(toCommentItem)
               .catch(() =>
                 asDeletedRoot({
@@ -110,7 +137,8 @@ function useFocusComment(
                   }),
                 }),
               ),
-            listCommentThreadWindow(rootId, fresh),
+            windowRequest,
+            rootsRequest,
           ]);
 
           if (cancelled) return;
@@ -126,7 +154,7 @@ function useFocusComment(
                 fresh,
                 window.after,
                 window.beforeCursor,
-                window.hasAfter,
+                window.afterCursor,
                 current,
               ),
             { create: true },
@@ -134,7 +162,10 @@ function useFocusComment(
           setOpenCommentThread(rootId, true);
         } else {
           setOpenCommentThread(null);
-          const around = await listCommentRootsAround(targetId, fresh);
+          const [around] = await Promise.all([
+            listCommentRootsAround(targetId, fresh),
+            rootsRequest,
+          ]);
 
           if (cancelled) return;
 
@@ -151,6 +182,8 @@ function useFocusComment(
         }
 
         setResult({ id: focusId, key: focusKey, failed: false });
+        navigationPerfMark(attemptId, 'target-composition-ready');
+        navigationPerfMark(attemptId, 'environment-ready');
       } catch {
         if (!cancelled) {
           setOpenCommentThread(null);
