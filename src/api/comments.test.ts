@@ -1,4 +1,9 @@
-import { getCommentTarget, listCommentThreadReplies, listCommentThreadRoots } from './comments';
+import {
+  getCommentTarget,
+  listCommentThreadReplies,
+  listCommentThreadRoots,
+  listCommentThreadWindow,
+} from './comments';
 
 import { supabase } from '@/api/supabase';
 
@@ -103,7 +108,32 @@ describe('listCommentThreadReplies', () => {
     const page = await listCommentThreadReplies('root', { limit: 10 });
 
     expect(page.items.map((c) => c.id)).toEqual(rows(10).map((r) => r.id));
-    expect(page.nextCursor).toBe(row(10).created_at);
+    expect(page.nextCursor).toEqual({ createdAt: row(10).created_at, id: 'c10' });
+  });
+});
+
+describe('listCommentThreadWindow', () => {
+  it('loads neighbours on both sides in parallel and returns a cursor before the window', async () => {
+    const calls: { method: string; args: unknown[] }[] = [];
+    const before = rows(11).reverse();
+    const after = rows(3);
+    const results = [before, after];
+    mockedFrom.mockImplementation(() =>
+      chain({ data: results.shift() ?? [], error: null }, calls),
+    );
+
+    const focus = { id: 'target', createdAt: row(12).created_at };
+    const window = await listCommentThreadWindow('root', focus, 10);
+
+    expect(window.before.map((comment) => comment.id)).toEqual(
+      before.slice(0, 10).reverse().map((item) => item.id),
+    );
+    expect(window.after.map((comment) => comment.id)).toEqual(after.map((item) => item.id));
+    expect(window.beforeCursor).toEqual({ createdAt: row(2).created_at, id: 'c2' });
+    expect(window.hasAfter).toBe(false);
+    expect(calls.filter((call) => call.method === 'limit').map((call) => call.args[0])).toEqual([11, 11]);
+    expect(calls.filter((call) => call.method === 'or')).toHaveLength(2);
+    expect(calls.every((call) => call.method !== 'range')).toBe(true);
   });
 });
 

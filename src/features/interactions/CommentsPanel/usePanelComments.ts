@@ -3,7 +3,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { buildCommentRows, buildCommentThreadRows, type CommentRow } from './rows';
 
-import { fetchComment } from '@/api/comments';
+import {
+  fetchComment,
+  commentFocusQueryKey,
+  listCommentRootsAround,
+  listCommentThreadWindow,
+} from '@/api/comments';
 import { trackClusterEvent } from '@/api/fragmentClusterEvents';
 import {
   asDeletedRoot,
@@ -11,7 +16,7 @@ import {
   type CommentItem,
 } from '@/features/interactions/comments/commentItem';
 import {
-  addToCommentThread,
+  focusedCommentThread,
   raiseRoot,
   rootsKey,
   updateRoots,
@@ -37,70 +42,133 @@ const NONE: CommentItem[] = [];
  * встают наверх, у ответа сразу, без въезда, открыто окно его треда. Отдаёт
  * id, к которому прыгнуть, когда он окажется в списке.
  */
-function useFocusComment(targetId: string, focusId: string | undefined) {
+function useFocusComment(
+  targetId: string,
+  focusId: string | undefined,
+  focusKey: string | undefined,
+  focusRootHint: string | undefined,
+) {
   const queryClient = useQueryClient();
-  const [ready, setReady] = useState<string | null>(null);
+  const [result, setResult] = useState<
+    { id: string; key: string; failed: boolean } | null
+  >(null);
 
   useEffect(() => {
-    if (!focusId) return;
+    if (!focusId || !focusKey) return;
 
     let cancelled = false;
 
     void (async () => {
       try {
-        const comment = toCommentItem(await fetchComment(focusId));
-        const rootId = comment.commentThreadRootId ?? comment.id;
-        // Корень удалён — на его месте заглушка: тред жив, раз жив этот ответ.
-        const root =
-          rootId === comment.id
-            ? comment
-            : await fetchComment(rootId)
-                .then(toCommentItem)
-                .catch(() =>
-                  asDeletedRoot({
-                    ...comment,
-                    id: rootId,
-                    commentThreadRootId: null,
-                    repliesCount: 1,
-                  }),
-                );
+        // Цель и верхний список независимы: не ждём один запрос перед вторым.
+        const [fresh, , hintedRoot] = await Promise.all([
+          queryClient.fetchQuery({
+            queryKey: commentFocusQueryKey(focusId),
+            queryFn: () => fetchComment(focusId),
+            staleTime: 10_000,
+          }),
+          queryClient.fetchQuery({
+            queryKey: rootsKey(targetId),
+            queryFn: () => loadRoots(targetId),
+            staleTime: Infinity,
+          }),
+          focusRootHint
+            ? queryClient
+                .fetchQuery({
+                  queryKey: commentFocusQueryKey(focusRootHint),
+                  queryFn: () => fetchComment(focusRootHint),
+                  staleTime: 10_000,
+                })
+                .catch(() => null)
+            : Promise.resolve(null),
+        ]);
 
-        // Верх мог ещё грузиться — закрепить корень можно, только когда он лёг.
-        await queryClient.fetchQuery({
-          queryKey: rootsKey(targetId),
-          queryFn: () => loadRoots(targetId),
-          staleTime: Infinity,
-        });
+        const rootId = fresh.commentThreadRootId ?? fresh.id;
 
         if (cancelled) return;
 
-        updateRoots(queryClient, targetId, (page) => raiseRoot(page, root));
+        if (fresh.commentThreadRootId) {
+          // После получения ответа корень и окно соседей читаются одним
+          // параллельным кругом. Недоступный корень — безопасная заглушка.
+          const [root, window] = await Promise.all([
+            (hintedRoot?.id === rootId
+              ? Promise.resolve(hintedRoot)
+              : queryClient.fetchQuery({
+                  queryKey: commentFocusQueryKey(rootId),
+                  queryFn: () => fetchComment(rootId),
+                  staleTime: 10_000,
+                })
+            )
+              .then(toCommentItem)
+              .catch(() =>
+                asDeletedRoot({
+                  ...toCommentItem({
+                    ...fresh,
+                    id: rootId,
+                    commentThreadRootId: null,
+                    repliesCount: Math.max(1, fresh.repliesCount),
+                  }),
+                }),
+              ),
+            listCommentThreadWindow(rootId, fresh),
+          ]);
 
-        if (comment.commentThreadRootId) {
+          if (cancelled) return;
+
+          updateRoots(queryClient, targetId, (page) => raiseRoot(page, root));
           updateCommentThread(
             queryClient,
             targetId,
             rootId,
-            (page) => addToCommentThread(page, comment),
-            {
-              create: true,
-            },
+            (current) =>
+              focusedCommentThread(
+                window.before,
+                fresh,
+                window.after,
+                window.beforeCursor,
+                window.hasAfter,
+                current,
+              ),
+            { create: true },
           );
           setOpenCommentThread(rootId, true);
+        } else {
+          setOpenCommentThread(null);
+          const around = await listCommentRootsAround(targetId, fresh);
+
+          if (cancelled) return;
+
+          // Window neighbours are promoted only for this panel session; their
+          // rank is unchanged and they are removed from pages when encountered.
+          const ordered = [
+            ...around.filter((item) => item.rank > fresh.rank || (item.rank === fresh.rank && item.id > fresh.id)),
+            fresh,
+            ...around.filter((item) => item.rank < fresh.rank || (item.rank === fresh.rank && item.id < fresh.id)),
+          ];
+          updateRoots(queryClient, targetId, (page) =>
+            ordered.slice().reverse().reduce((current, item) => raiseRoot(current, toCommentItem(item)), page),
+          );
         }
 
-        setReady(focusId);
+        setResult({ id: focusId, key: focusKey, failed: false });
       } catch {
-        if (!cancelled) showNotice('Комментарий удалён', 'error');
+        if (!cancelled) {
+          setOpenCommentThread(null);
+          setResult({ id: focusId, key: focusKey, failed: true });
+          showNotice('Комментарий удалён или недоступен', 'error');
+        }
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [focusId, targetId, queryClient]);
+  }, [focusId, focusKey, focusRootHint, targetId, queryClient]);
 
-  return ready;
+  return {
+    ready: result && result.key === focusKey && !result.failed ? result : null,
+    pending: Boolean(focusId && focusKey && (!result || result.key !== focusKey)),
+  };
 }
 
 /**
@@ -154,8 +222,18 @@ export function usePanelComments(
     fragmentScope,
   );
   const openCommentThread = useOpenCommentThread();
-  const commentThread = useCommentThread(targetId, commentThreadRootId, comments.overlay);
-  const focusReady = useFocusComment(targetId, target.focusCommentId);
+  const focus = useFocusComment(
+    targetId,
+    target.focusCommentId,
+    target.focusKey,
+    target.focusRootId,
+  );
+  const commentThread = useCommentThread(
+    targetId,
+    commentThreadRootId,
+    comments.overlay,
+    focus.pending,
+  );
   const { roots, pendingReplies, pinnedId } = comments;
 
   const pendingCount = useCallback(
@@ -164,8 +242,8 @@ export function usePanelComments(
   );
 
   const rows = useMemo<CommentRow[]>(
-    () => buildCommentRows(roots, pendingCount, pinnedId),
-    [pendingCount, pinnedId, roots],
+    () => (focus.pending ? [] : buildCommentRows(roots, pendingCount, pinnedId)),
+    [focus.pending, pendingCount, pinnedId, roots],
   );
 
   const commentThreadRows = useMemo<CommentRow[]>(
@@ -178,6 +256,7 @@ export function usePanelComments(
             tail: commentThread.tail,
             pending: pendingReplies.get(commentThreadRootId) ?? NONE,
             hasGap: commentThread.hasGap,
+            hasBefore: commentThread.hasBefore,
             isLoading: commentThread.isLoading,
             failed: commentThread.failed,
           })
@@ -195,6 +274,7 @@ export function usePanelComments(
     commentThread,
     rows,
     commentThreadRows,
-    focusReady,
+    focusReady: focus.ready,
+    focusPending: focus.pending,
   };
 }

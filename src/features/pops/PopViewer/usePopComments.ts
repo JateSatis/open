@@ -13,10 +13,10 @@ import {
 export type StartWithComments = {
   startId: string;
   focusCommentId?: string;
+  focusRootId?: string;
+  requestId?: string;
   /** Стартовый поп стал активной страницей и экран готов — пора открывать шит. */
   ready: boolean;
-  /** Право публиковать уже известно: от него — ряд реакции и пункты закрепа в панели. */
-  rightsKnown: boolean;
 };
 
 /**
@@ -40,15 +40,23 @@ export function usePopComments(canPublish: boolean, start?: StartWithComments) {
   }, [canPublish, openPopId]);
 
   // Шит открывается один раз: закрыл — листает попсы дальше без него.
-  const startedRef = useRef(false);
-  const startReady = Boolean(start?.ready && start.rightsKnown);
+  const startedRef = useRef<string | null>(null);
+  const startKey = start
+    ? `${start.startId}:${start.requestId ?? start.focusCommentId ?? 'comments'}`
+    : null;
 
   useEffect(() => {
-    if (!start || !startReady || startedRef.current) return;
+    if (!start || !start.ready || startKey === null || startedRef.current === startKey) return;
 
-    startedRef.current = true;
-    openPopComments(start.startId, canPublish, start.focusCommentId);
-  }, [canPublish, start, startReady]);
+    startedRef.current = startKey;
+    openPopComments(
+      start.startId,
+      canPublish,
+      start.focusCommentId,
+      start.focusRootId,
+      start.requestId,
+    );
+  }, [canPublish, start, startKey]);
 
   // Просмотр — экран поверх вкладок, профиль — во вкладке чатов под ним.
   const onOpenPerson = useCallback(

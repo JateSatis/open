@@ -6,12 +6,19 @@ import type { Channel } from '@/api/channels';
 import { listDeletedMessageIds, type ChatSummary, type QuotedMessage } from '@/api/chats';
 import { channelQueryKey } from '@/features/channels/keys';
 import { chatsQueryKey } from '@/features/chats/chatsKey';
-import { JUMP_PARAM_NAMES, jumpRequestOf, type JumpParams } from '@/features/chats/jumpParams';
+import {
+  JUMP_PARAM_NAMES,
+  jumpRequestOf,
+  nextJumpKey,
+  type JumpParams,
+} from '@/features/chats/jumpParams';
 import { chatQueryKey } from '@/features/chats/useChat';
 import { islandItemKey } from '@/features/chats/islands/rows';
 import { loadMessageWindow } from '@/features/chats/messages/useMessageWindow';
 import { messageWindowKey } from '@/features/chats/messages/historyCache';
 import { showNotice } from '@/features/notifications/alertsStore';
+import { closeComments } from '@/features/interactions/comments/commentsPanelStore';
+import { prefetchCommentFocus } from '@/features/interactions/comments/prefetchCommentFocus';
 
 type Jump = (rowKey: string, seq: number, options?: { viewPosition?: number }) => Promise<boolean>;
 
@@ -22,7 +29,13 @@ export type JumpTarget = { key: string; seq: number };
  * Комментарий, к которому пришли: шит его сообщения и само сообщение в
  * переписке. `target: null` — сообщение удалено, прыгать некуда.
  */
-export type CommentFocus = { messageId: string; commentId: string; target: JumpTarget | null };
+export type CommentFocus = {
+  messageId: string;
+  commentId: string;
+  target: JumpTarget | null;
+  rootId?: string;
+  requestId?: string;
+};
 
 export type QuoteNavigation = {
   /**
@@ -98,13 +111,14 @@ export function useQuoteNavigation(
   const queryClient = useQueryClient();
   const params = useLocalSearchParams<JumpParams>();
   const { jumpTo, jumpSeq, comments, comment } = params;
+  const { commentRoot, jumpKey } = params;
   // Номер приходит строкой адреса; не число — прыгать некуда.
   const jumpAt = jumpSeq !== undefined && Number.isFinite(Number(jumpSeq)) ? Number(jumpSeq) : null;
   const handledJumpRef = useRef<string | null>(null);
   const requestedJump = jumpRequestOf(params);
 
   useEffect(() => {
-    if (!isHistoryReady || !requestedJump || handledJumpRef.current === requestedJump) return;
+    if (!requestedJump || handledJumpRef.current === requestedJump) return;
 
     if (comments && comment) {
       // Шит рисует только экран наверху: при возврате к чату ниже в стеке
@@ -115,10 +129,14 @@ export function useQuoteNavigation(
       focusComment({
         messageId: comments,
         commentId: comment,
+        rootId: commentRoot,
+        requestId: jumpKey ?? requestedJump,
         target: jumpTo && jumpAt !== null ? { key: jumpTo, seq: jumpAt } : null,
       });
       return;
     }
+
+    if (!isHistoryReady) return;
 
     if (!jumpTo || jumpAt === null) return;
 
@@ -129,12 +147,14 @@ export function useQuoteNavigation(
     });
   }, [
     comment,
+    commentRoot,
     comments,
     focusComment,
     isFocused,
     isHistoryReady,
     jump,
     jumpAt,
+    jumpKey,
     jumpTo,
     requestedJump,
   ]);
@@ -152,7 +172,12 @@ export function useQuoteNavigation(
         return;
       }
 
+      closeComments();
+
       const to = focus ? focus.target : target;
+      if (focus) {
+        prefetchCommentFocus(queryClient, focus.messageId, focus.commentId, focus.rootId);
+      }
       if (to) {
         void queryClient.prefetchQuery({
           queryKey: messageWindowKey(targetChatId, to.seq),
@@ -163,8 +188,14 @@ export function useQuoteNavigation(
       // Шит открывается по ключу перехода, даже когда прыгать некуда.
       const jumpParams = {
         ...(to ? { jumpTo: to.key, jumpSeq: String(to.seq) } : {}),
-        ...(focus ? { comments: focus.messageId, comment: focus.commentId } : {}),
-        ...(to || focus ? { jumpKey: String(Date.now()) } : {}),
+        ...(focus
+          ? {
+              comments: focus.messageId,
+              comment: focus.commentId,
+              ...(focus.rootId ? { commentRoot: focus.rootId } : {}),
+            }
+          : {}),
+        ...(to || focus ? { jumpKey: focus?.requestId ?? nextJumpKey() } : {}),
       };
       const channelId = channelIdOfChat(queryClient, targetChatId);
 
@@ -250,7 +281,8 @@ export function useQuoteNavigation(
   );
 
   const openComment = useCallback(
-    (targetChatId: string, focus: CommentFocus) => goToChat(targetChatId, null, focus),
+    (targetChatId: string, focus: CommentFocus) =>
+      goToChat(targetChatId, null, { ...focus, requestId: nextJumpKey() }),
     [goToChat],
   );
 

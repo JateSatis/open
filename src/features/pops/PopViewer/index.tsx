@@ -38,6 +38,8 @@ export type PopViewerProps = {
   openComments?: boolean;
   /** Комментарий, к которому пришли: наверху шита и подсвечен. */
   focusCommentId?: string;
+  focusRootId?: string;
+  focusRequestId?: string;
   /** Активной стала другая страница. */
   onActivePop?: (pop: Pop) => void;
   /** Где идёт показ — для журнала рекомендаций. */
@@ -62,6 +64,8 @@ export function PopViewer({
   channelLink = 'under',
   openComments = false,
   focusCommentId,
+  focusRootId,
+  focusRequestId,
   onActivePop,
   surface = 'channel',
   entry = 'other',
@@ -110,8 +114,17 @@ export function PopViewer({
   const live = focused && appActive;
   const startReady = Boolean(size) && pops[activeIndex]?.id === startId;
   const start = useMemo(
-    () => (openComments ? { startId, focusCommentId, ready: startReady, rightsKnown } : undefined),
-    [focusCommentId, openComments, rightsKnown, startId, startReady],
+    () =>
+      openComments
+        ? {
+            startId,
+            focusCommentId,
+            focusRootId,
+            requestId: focusRequestId,
+            ready: startReady,
+          }
+        : undefined,
+    [focusCommentId, focusRequestId, focusRootId, openComments, startId, startReady],
   );
   const { openPopId, onOpenComments, onOpenPerson } = usePopComments(canPublish, start);
   const commentsOpen = openPopId !== null;

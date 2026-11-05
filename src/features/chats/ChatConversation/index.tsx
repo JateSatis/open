@@ -131,12 +131,13 @@ import { useMyInvite } from '@/features/chats/useMyInvite';
 import { usePinnedCursor } from '@/features/chats/usePinnedCursor';
 import { usePinnedMessages } from '@/features/chats/usePinnedMessages';
 import { useQuoteNavigation, type CommentFocus } from '@/features/chats/useQuoteNavigation';
-import type { JumpParams } from '@/features/chats/jumpParams';
+import { nextJumpKey, type JumpParams } from '@/features/chats/jumpParams';
 import { useReplyForward } from '@/features/chats/useReplyForward';
 import { useRespondToInvite } from '@/features/chats/useRespondToInvite';
 import { WaitingBanner } from '@/features/chats/WaitingBanner';
 import { CommentsPanel, openComments } from '@/features/interactions/CommentsPanel';
 import { resetScrolledRows } from '@/features/interactions/MessageReactions';
+import { prefetchCommentFocus } from '@/features/interactions/comments/prefetchCommentFocus';
 import { menuReactionSet } from '@/features/interactions/reactionState';
 import { useReactToMessage } from '@/features/interactions/useReactToMessage';
 import { TileViewportContext } from '@/features/media/tileRegistry';
@@ -317,36 +318,24 @@ export function ChatConversation({
     () => (chat?.waiting ?? []).filter((person) => person.id !== currentUserId),
     [chat, currentUserId],
   );
-  // Прыжок к сообщению бывает долгим (догрузка истории): если за это время
-  // ушли с экрана, шит не открывается — он лёг бы поверх чужого.
-  const focusedRef = useRef(isFocused);
-
-  useEffect(() => {
-    focusedRef.current = isFocused;
-
-    return () => {
-      focusedRef.current = false;
-    };
-  }, [isFocused]);
-
-  // Пришли к комментарию (тап по пересланному): переписка прокручивается к
-  // сообщению, под которым он оставлен, и над ней открывается шит. Удалённого
-  // или не найденного нет — только шит, и это не ошибка.
+  // Сначала открываем целевую композицию: окно сообщения уже загружается по
+  // адресу, а комментарии начинают читать цель и фокус одновременно.
   const focusComment = useCallback(
     (focus: CommentFocus) => {
-      const open = () => openComments(focus.messageId, chatId, isMember, focus.commentId);
+      prefetchCommentFocus(queryClient, focus.messageId, focus.commentId, focus.rootId);
+      openComments(
+        focus.messageId,
+        chatId,
+        isMember,
+        focus.commentId,
+        focus.rootId,
+        focus.requestId,
+      );
       const { target } = focus;
 
-      if (!target) {
-        open();
-        return;
-      }
-
-      void jumpTo(target.key, target.seq).then(() => {
-        if (focusedRef.current) open();
-      });
+      if (target) void jumpTo(target.key, target.seq);
     },
-    [chatId, isMember, jumpTo],
+    [chatId, isMember, jumpTo, queryClient],
   );
 
   const navigation = useQuoteNavigation(chatId, {
@@ -650,7 +639,17 @@ export function ChatConversation({
       // Поп удалён — идти некуда.
       if (comment.subject.type === 'pop') {
         if (comment.pop) {
-          openPopViewer(comment.pop.channelId, comment.pop.id, { focusCommentId: comment.id });
+          prefetchCommentFocus(
+            queryClient,
+            comment.subject.id,
+            comment.id,
+            comment.commentThreadRootId ?? undefined,
+          );
+          openPopViewer(comment.pop.channelId, comment.pop.id, {
+            focusCommentId: comment.id,
+            focusRootId: comment.commentThreadRootId ?? undefined,
+            requestId: nextJumpKey(),
+          });
         }
 
         return;
@@ -662,7 +661,7 @@ export function ChatConversation({
         target: comment.target ? { key: comment.target.id, seq: comment.target.seq } : null,
       });
     },
-    [openComment],
+    [openComment, queryClient],
   );
 
   const ownDirect = chat?.kind === 'direct' && isMember;

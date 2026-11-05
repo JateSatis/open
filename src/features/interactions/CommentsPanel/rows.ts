@@ -5,6 +5,7 @@
 // виртуализирует ответы, а прыжок к ответу — это прыжок к его строке.
 
 import type { CommentItem } from '@/features/interactions/comments/commentItem';
+import { COMMENT_THREAD_PAGE_SIZE } from '@/api/comments';
 
 export type CommentRow =
   | {
@@ -18,7 +19,7 @@ export type CommentRow =
       /** Закреплён автором контента — над облачком метка. */
       pinned: boolean;
     }
-  | { type: 'comment-thread-gap'; key: string; rootId: string; hidden: number }
+  | { type: 'comment-thread-gap'; key: string; rootId: string; hidden: number; direction?: 'before' | 'after' }
   | { type: 'comment-thread-loading'; key: string; rootId: string }
   | { type: 'comment-thread-failed'; key: string; rootId: string };
 
@@ -31,6 +32,7 @@ export type OpenCommentThread = {
   /** Свои неотправленные ответы — в самом конце. */
   pending: CommentItem[];
   hasGap: boolean;
+  hasBefore?: boolean;
   isLoading: boolean;
   /** Начало не загрузилось — вместо колеса предложить повтор. */
   failed?: boolean;
@@ -95,6 +97,16 @@ export function buildCommentThreadRows(open: OpenCommentThread): CommentRow[] {
       commentThreadRoot: true,
       replies: 0,
       pinned: false,
+    });
+  }
+
+  if (open.hasBefore) {
+    rows.push({
+      type: 'comment-thread-gap',
+      key: `${rootId}/before`,
+      rootId,
+      hidden: COMMENT_THREAD_PAGE_SIZE,
+      direction: 'before',
     });
   }
 
