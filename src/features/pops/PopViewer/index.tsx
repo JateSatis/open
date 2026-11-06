@@ -112,7 +112,9 @@ export function PopViewer({
   }, [pops]);
 
   const live = focused && appActive;
-  const startReady = Boolean(size) && pops[activeIndex]?.id === startId;
+  // Подъём шита не зависит от ленты и медиа: они могут догрузиться под ним.
+  // Размер конечной композиции известен сразу после layout экрана.
+  const startReady = Boolean(size);
   const start = useMemo(
     () =>
       openComments

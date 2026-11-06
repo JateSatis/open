@@ -130,10 +130,55 @@ describe('listCommentThreadWindow', () => {
     );
     expect(window.after.map((comment) => comment.id)).toEqual(after.map((item) => item.id));
     expect(window.beforeCursor).toEqual({ createdAt: row(2).created_at, id: 'c2' });
-    expect(window.hasAfter).toBe(false);
+    expect(window.afterCursor).toBeNull();
     expect(calls.filter((call) => call.method === 'limit').map((call) => call.args[0])).toEqual([11, 11]);
     expect(calls.filter((call) => call.method === 'or')).toHaveLength(2);
     expect(calls.every((call) => call.method !== 'range')).toBe(true);
+  });
+
+  it('limits the after window and continues after its last visible reply', async () => {
+    const calls: { method: string; args: unknown[] }[] = [];
+    const before = rows(2).reverse();
+    const after = rows(11);
+    const results = [before, after];
+    mockedFrom.mockImplementation(() =>
+      chain({ data: results.shift() ?? [], error: null }, calls),
+    );
+
+    const window = await listCommentThreadWindow(
+      'root',
+      { id: 'target', createdAt: row(12).created_at },
+      10,
+    );
+
+    expect(window.after.map((comment) => comment.id)).toEqual(rows(10).map((item) => item.id));
+    expect(window.afterCursor).toEqual({ createdAt: row(10).created_at, id: 'c10' });
+  });
+
+  it('uses the id tie-breaker and scopes both sides to live replies of the root', async () => {
+    const calls: { method: string; args: unknown[] }[] = [];
+    const tiedBefore = { ...row(5), created_at: row(6).created_at };
+    const tiedAfter = { ...row(7), created_at: row(6).created_at };
+    const results = [[tiedBefore], [tiedAfter]];
+    mockedFrom.mockImplementation(() => chain({ data: results.shift() ?? [], error: null }, calls));
+
+    const focus = { id: 'c6', createdAt: row(6).created_at };
+    const window = await listCommentThreadWindow('root', focus, 10);
+
+    expect(window.before.map((item) => item.id)).toEqual(['c5']);
+    expect(window.after.map((item) => item.id)).toEqual(['c7']);
+    expect(calls.filter((call) => call.method === 'or').map((call) => call.args[0])).toEqual([
+      `created_at.lt.${focus.createdAt},and(created_at.eq.${focus.createdAt},id.lt.c6)`,
+      `created_at.gt.${focus.createdAt},and(created_at.eq.${focus.createdAt},id.gt.c6)`,
+    ]);
+    expect(calls.filter((call) => call.method === 'eq')).toContainEqual({
+      method: 'eq',
+      args: ['thread_root_id', 'root'],
+    });
+    expect(calls.filter((call) => call.method === 'is')).toContainEqual({
+      method: 'is',
+      args: ['deleted_at', null],
+    });
   });
 });
 

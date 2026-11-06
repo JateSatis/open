@@ -200,7 +200,7 @@ export function focusedCommentThread(
   focus: Comment,
   after: Comment[],
   beforeCursor: CommentThreadCursor | null,
-  hasAfter: boolean,
+  afterCursor: CommentThreadCursor | null,
   previous: CommentThreadPage = EMPTY_COMMENT_THREAD,
 ): CommentThreadPage {
   const known = new Map<string, CommentItem>();
@@ -225,9 +225,9 @@ export function focusedCommentThread(
     headLoaded: true,
     head,
     nextCursor:
-      completeToEnd || (tail.length === 0 && !hasAfter)
+      completeToEnd || afterCursor === null
         ? null
-        : { createdAt: focus.createdAt, id: focus.id },
+        : afterCursor,
     beforeCursor: completeToEnd ? null : previous.beforeCursor ?? beforeCursor,
     tail,
   };

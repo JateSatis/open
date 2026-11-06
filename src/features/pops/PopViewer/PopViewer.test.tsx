@@ -357,6 +357,35 @@ describe('PopViewer', () => {
     expect(screen.getByTestId('pop-video-shrunk')).toBeTruthy();
   });
 
+  it('opens the focused comments panel while the start pop is still loading', async () => {
+    let resolvePop: (value: Pop) => void = () => undefined;
+    (getPop as jest.Mock).mockReturnValue(new Promise<Pop>((resolve) => { resolvePop = resolve; }));
+    (listPopsAfter as jest.Mock).mockResolvedValue([]);
+    (listPops as jest.Mock).mockResolvedValue([]);
+    (canPublishInChannel as jest.Mock).mockReturnValue(new Promise<boolean>(() => undefined));
+
+    await renderWithQuery(
+      <ChannelPopViewer
+        channelId="channel-1"
+        startId="p1"
+        openComments
+        focusCommentId="c9"
+      />,
+    );
+    await fireEvent(screen.getByTestId('pop-viewer'), 'layout', {
+      nativeEvent: { layout: { width: 400, height: 800 } },
+    });
+
+    await waitFor(() => expect(getCommentsPanelTarget()).toMatchObject({
+      subject: { type: 'pop', id: 'p1' },
+      focusCommentId: 'c9',
+    }));
+    expect(getPop).toHaveBeenCalledWith('p1');
+
+    await act(async () => resolvePop(pop('p1')));
+    expect(await screen.findByTestId('pop-page-active')).toBeTruthy();
+  });
+
   it('opens with comments closed by default', async () => {
     await open(pop('p1'));
 

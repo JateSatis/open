@@ -345,6 +345,7 @@ export async function listCommentThreadReplies(
     .eq('thread_root_id', rootId)
     .is('deleted_at', null)
     .order('created_at', { ascending: true })
+    .order('id', { ascending: true })
     .limit(limit + 1);
 
   if (typeof params.cursor === 'string') {
@@ -380,7 +381,7 @@ export async function listCommentThreadWindow(
   before: Comment[];
   after: Comment[];
   beforeCursor: CommentThreadCursor | null;
-  hasAfter: boolean;
+  afterCursor: CommentThreadCursor | null;
 }> {
   const beforeFilter = `created_at.lt.${focus.createdAt},and(created_at.eq.${focus.createdAt},id.lt.${focus.id})`;
   const afterFilter = `created_at.gt.${focus.createdAt},and(created_at.eq.${focus.createdAt},id.gt.${focus.id})`;
@@ -396,13 +397,19 @@ export async function listCommentThreadWindow(
   const beforeRows = beforeResult.data ?? [];
   const beforeItems = beforeRows.slice(0, limit).reverse().map(toComment);
   const first = beforeItems[0];
+  const afterRows = afterResult.data ?? [];
+  const afterItems = afterRows.slice(0, limit).map(toComment);
+  const lastAfter = afterItems[afterItems.length - 1];
 
   return {
     before: beforeItems,
-    after: (afterResult.data ?? []).map(toComment),
+    after: afterItems,
     beforeCursor:
       beforeRows.length > limit && first ? { createdAt: first.createdAt, id: first.id } : null,
-    hasAfter: (afterResult.data ?? []).length > limit,
+    afterCursor:
+      afterRows.length > limit && lastAfter
+        ? { createdAt: lastAfter.createdAt, id: lastAfter.id }
+        : null,
   };
 }
 
