@@ -1,6 +1,7 @@
 import { act, renderHook } from '@testing-library/react-native';
 import type { RefObject } from 'react';
 import type { FlatList } from 'react-native';
+import type { SharedValue } from 'react-native-reanimated';
 
 import { useJumpToMessage } from './useJumpToMessage';
 
@@ -17,12 +18,13 @@ describe('useJumpToMessage', () => {
       scrollToOffset: jest.fn(),
     };
     const listRef = { current: list } as unknown as RefObject<FlatList<ChatListRow> | null>;
+    const glide = { value: 0 } as unknown as SharedValue<number>;
 
     return {
       list,
       ...(await renderHook(
         ({ currentRows }: { currentRows: readonly { key: string }[] }) =>
-          useJumpToMessage(listRef, currentRows, loadWindow, initiallyPositioned),
+          useJumpToMessage(listRef, currentRows, loadWindow, initiallyPositioned, glide, () => 800),
         { initialProps: { currentRows: rows } },
       )),
     };
@@ -60,6 +62,21 @@ describe('useJumpToMessage', () => {
       viewPosition: 0.5,
       animated: false,
     });
+  });
+
+  it('hides a distant target and loads its window before any scroll', async () => {
+    const loadWindow = jest.fn(async () => true);
+    const { result, list } = await setup([], loadWindow);
+
+    await act(async () => {
+      await result.current.jump('target', 12);
+    });
+
+    expect(loadWindow).toHaveBeenCalledWith(12);
+    // До того как окно ляжет в список, никакой прокрутки нет: цель не
+    // показывается в неверной позиции и не подравнивается повторно.
+    expect(list.scrollToIndex).not.toHaveBeenCalled();
+    expect(result.current.positioned).toBe(false);
   });
 
   it('waits for list content instead of retrying an unmeasured jump on a timer', async () => {

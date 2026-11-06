@@ -569,7 +569,9 @@ describe('pinned bar', () => {
     fireEvent.press(await screen.findByTestId('pinned-bar'));
 
     expect(mockedListMessages).toHaveBeenCalledTimes(1);
-    expect(around).toHaveBeenCalledTimes(1);
+    // Окно закрепа прогревается ещё при загрузке закрепов. В тесте `gcTime: 0`
+    // этот кеш сбрасывается сразу, поэтому сам прыжок читает окно повторно.
+    expect(around).toHaveBeenCalledTimes(2);
     expect(around).toHaveBeenCalledWith('chat-1', old.seq);
     expect(screen.getByTestId('messages-list')).toBeTruthy();
   });

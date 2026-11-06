@@ -1,5 +1,14 @@
+// Мутация `.value` у shared value — штатный API Reanimated, а не нарушение
+// чистоты, которое видит в этом React Compiler.
+/* eslint-disable react-hooks/immutability */
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import type { FlatList } from 'react-native';
+import {
+  Easing,
+  runOnJS,
+  withTiming,
+  type SharedValue,
+} from 'react-native-reanimated';
 
 import type { ChatListRow } from '@/features/chats/islands/rows';
 import { navigationPerfMark, navigationPerfStart } from '@/features/media/perf';
@@ -23,6 +32,11 @@ export type JumpOptions = {
 };
 
 type Target = { rowKey: string; viewPosition: number | null };
+
+/** Иллюзия быстрой прокрутки: сколько высот экрана проезжает список за анимацию. */
+export const GLIDE_SCREENS = 1.5;
+export const GLIDE_MS = 320;
+export const GLIDE_EASING = Easing.out(Easing.cubic);
 
 export type JumpToMessage = {
   /**
@@ -57,6 +71,8 @@ export function useJumpToMessage(
   rows: readonly { key: string }[],
   loadWindow: (seq: number) => Promise<boolean>,
   initiallyPositioned = true,
+  glide: SharedValue<number>,
+  viewport: () => number,
 ): JumpToMessage {
   const [highlight, setHighlight] = useState<JumpHighlight | null>(null);
   const [positioned, setPositioned] = useState(initiallyPositioned);
@@ -75,6 +91,7 @@ export function useJumpToMessage(
   const placeRequestRef = useRef<ReturnType<typeof placeOf> | null>(null);
   const attemptNumberRef = useRef(0);
   const attemptIdRef = useRef<string | null>(null);
+  const glidePendingRef = useRef(false);
 
   // Цель прокручивается, когда она уже в списке: после догрузки строки
   // появляются только на следующей отрисовке.
@@ -155,6 +172,10 @@ export function useJumpToMessage(
       } else {
         targetRef.current = target;
         alignAfterVisibleRef.current = true;
+        // Далёкая цель едет иллюзией быстрой прокрутки, а не появляется
+        // мгновенно. Внутри чата далёкая цель всегда старше места чтения —
+        // направление «вверх».
+        glidePendingRef.current = true;
         setPositioned(false);
         setJumps((count) => count + 1);
       }
@@ -204,13 +225,25 @@ export function useJumpToMessage(
     navigationPerfMark(attemptIdRef.current ?? '', 'target-first-visible', { index });
     visibleKeyRef.current = null;
     waitingForListRef.current = false;
+
+    if (glidePendingRef.current) {
+      glidePendingRef.current = false;
+      setPositioned(true);
+      navigationPerfMark(attemptIdRef.current ?? '', 'glide-start', { direction: 'up' });
+      glide.value = GLIDE_SCREENS * Math.max(1, viewport());
+      glide.value = withTiming(0, { duration: GLIDE_MS, easing: GLIDE_EASING }, (finished) => {
+        if (finished) runOnJS(navigationPerfMark)(attemptIdRef.current ?? '', 'glide-end');
+      });
+      return;
+    }
+
     setPositioned(true);
     if (!alignAfterVisibleRef.current) return;
 
     alignAfterVisibleRef.current = false;
     navigationPerfMark(attemptIdRef.current ?? '', 'positioned');
     requestAnimationFrame(() => setPositioned(true));
-  }, [listRef, rows]);
+  }, [glide, listRef, rows, viewport]);
 
   const onMomentumScrollEnd = useCallback(() => {
     navigationPerfMark(attemptIdRef.current ?? '', 'momentum-end');

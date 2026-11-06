@@ -11,7 +11,14 @@ import {
   type NativeSyntheticEvent,
   type TextInput,
 } from 'react-native';
-import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
+import Animated, {
+  Easing,
+  FadeIn,
+  FadeOut,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 
 import { styles } from './styles';
 
@@ -113,7 +120,12 @@ import { useComposerDraft } from '@/features/chats/useComposerDraft';
 import { chatQueryKey, useChat } from '@/features/chats/useChat';
 import { useChatMessages } from '@/features/chats/useChatMessages';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
-import { useJumpToMessage } from '@/features/chats/useJumpToMessage';
+import {
+  GLIDE_EASING,
+  GLIDE_MS,
+  GLIDE_SCREENS,
+  useJumpToMessage,
+} from '@/features/chats/useJumpToMessage';
 import { useMarkChatRead } from '@/features/chats/useMarkChatRead';
 import {
   useChatSubscription,
@@ -257,8 +269,20 @@ export function ChatConversation({
   const [rowRegistry] = useState(createRowRegistry);
   const scrollState = useRef({ offset: 0, content: 0, viewport: 0, drivenAt: 0 });
   const [awayFromBottom, setAwayFromBottom] = useState(false);
+  // Список скрывается на миг, пока его мгновенно ставят на цель перед
+  // иллюзией прокрутки вниз («к новым»).
+  const [glideHidden, setGlideHidden] = useState(false);
+  // Сдвиг списка для иллюзии быстрой прокрутки при дальнем прыжке: реальная
+  // прокрутка не нужна, поэтому пагинация и onScroll не дёргаются.
+  const jumpGlide = useSharedValue(0);
+  const jumpGlideStyle = useAnimatedStyle(() => ({ transform: [{ translateY: jumpGlide.value }] }));
   const jump = useJumpToMessage(
-    listRef, rows, chatMessages.loadWindow, initialWindowSeq === null,
+    listRef,
+    rows,
+    chatMessages.loadWindow,
+    initialWindowSeq === null,
+    jumpGlide,
+    () => scrollState.current.viewport,
   );
   const threadsMode = useChatThreadsMode({
     chatId,
@@ -818,12 +842,22 @@ export function ChatConversation({
     const { offset, viewport } = scrollState.current;
     closeWindow();
     setAwayFromBottom(false);
-    // Далёкое место заменяется живым хвостом, короткое — плавно листается.
-    requestAnimationFrame(() => listRef.current?.scrollToOffset({
-      offset: 0,
-      animated: offset < viewport * JUMP_DOWN_SCREENS,
-    }));
-  }, [closeWindow]);
+
+    // Близко к низу — обычная плавная прокрутка. Далеко — иллюзия быстрого
+    // скролла вниз, без прохода через сотни сообщений и без пагинации.
+    if (offset < viewport * JUMP_DOWN_SCREENS) {
+      requestAnimationFrame(() => listRef.current?.scrollToOffset({ offset: 0, animated: true }));
+      return;
+    }
+
+    setGlideHidden(true);
+    requestAnimationFrame(() => {
+      listRef.current?.scrollToOffset({ offset: 0, animated: false });
+      setGlideHidden(false);
+      jumpGlide.value = -GLIDE_SCREENS * Math.max(1, viewport);
+      jumpGlide.value = withTiming(0, { duration: GLIDE_MS, easing: GLIDE_EASING });
+    });
+  }, [closeWindow, jumpGlide]);
 
   useEffect(() => {
     if (!isFocused) return;
@@ -1171,7 +1205,8 @@ export function ChatConversation({
           <Animated.View ref={listFrameRef} style={styles.flex}>
             <RowRegistryContext.Provider value={rowRegistry}>
               <TileViewportContext.Provider value={measureListFrame}>
-                <FlatList
+                <Animated.View style={[styles.flex, jumpGlideStyle, { overflow: 'hidden' }]}>
+                  <FlatList
                   // Другой вид — другая лента: список начинается заново, а не
                   // со смещения прежней (место держит прыжок переключения).
                   key={`${chatThreads.view}:${chatMessages.windowSeq ?? 'live'}`}
@@ -1181,7 +1216,7 @@ export function ChatConversation({
                   testID="messages-list"
                   inverted
                   data={rows}
-                  style={!jump.positioned ? { opacity: 0 } : undefined}
+                  style={!jump.positioned || glideHidden ? { opacity: 0 } : undefined}
                   onScrollToIndexFailed={jump.onScrollToIndexFailed}
                   keyExtractor={rowKey}
                   renderItem={renderItem}
@@ -1221,7 +1256,8 @@ export function ChatConversation({
                   ListFooterComponent={
                     isLoadingMore ? <ActivityIndicator accessibilityLabel="Загрузка истории" /> : null
                   }
-                />
+                  />
+                </Animated.View>
                 {!jump.positioned && initialWindowSeq !== null ? (
                   <View pointerEvents="none" style={{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, alignItems: 'center', justifyContent: 'center' }}>
                     <View style={{ width: '70%', height: 90, borderRadius: 24, backgroundColor: theme.backgroundElement, alignItems: 'center', justifyContent: 'center' }}>
