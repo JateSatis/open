@@ -139,8 +139,8 @@ describe('scripts/migration (export-cloud & import-selfhosted)', () => {
       console.log(JSON.stringify({
         database: buildDatabaseVerificationSql([{ schema: 'public', table: 'pops', count: 52 }]),
         storage: buildStorageVerificationSql({ files: [
-          { bucket: 'avatars', path: 'u1/a.jpg' },
-          { bucket: 'media', path: 'u1/pops/p.mp4' },
+          { bucket: 'avatars', path: 'u1/a.jpg', size: 12, mimeType: 'image/jpeg' },
+          { bucket: 'media', path: 'u1/pops/p.mp4', size: 34, mimeType: 'video/mp4' },
         ] }),
       }));
     `);
@@ -149,7 +149,9 @@ describe('scripts/migration (export-cloud & import-selfhosted)', () => {
     expect(result.database).toContain('actual <> 52');
     expect(result.database).toContain('strpos("url", \'cxgkiwxgwxiybazyvcgi.supabase.co\')');
     expect(result.storage).toContain('actual <> 2');
-    expect(result.storage).toContain("('avatars', 'u1/a.jpg')");
-    expect(result.storage).toContain("('media', 'u1/pops/p.mp4')");
+    expect(result.storage).toContain("('avatars', 'u1/a.jpg', 12, 'image/jpeg')");
+    expect(result.storage).toContain("('media', 'u1/pops/p.mp4', 34, 'video/mp4')");
+    expect(result.storage).toContain("'image/jpeg'");
+    expect(result.storage).toContain("'video/mp4'");
   });
 });

@@ -200,7 +200,12 @@ export function buildStorageVerificationSql(manifest) {
   const files = manifest.files ?? [];
   const bucketCounts = new Map();
   for (const file of files) bucketCounts.set(file.bucket, (bucketCounts.get(file.bucket) ?? 0) + 1);
-  const expectedRows = files.map((file) => `    (${escapeSqlString(file.bucket)}, ${escapeSqlString(file.path)})`).join(',\n');
+  const expectedRows = files
+    .map(
+      (file) =>
+        `    (${escapeSqlString(file.bucket)}, ${escapeSqlString(file.path)}, ${Number(file.size)}, ${escapeSqlString(file.mimeType || 'application/octet-stream')})`,
+    )
+    .join(',\n');
   const lines = ['DO $verify_storage$', 'DECLARE actual bigint; missing bigint;', 'BEGIN'];
   lines.push(
     '  SELECT count(*) INTO actual FROM storage.objects;',
@@ -213,8 +218,8 @@ export function buildStorageVerificationSql(manifest) {
     );
   }
   lines.push(
-    `  SELECT count(*) INTO missing FROM (VALUES\n${expectedRows}\n  ) AS expected(bucket_id, name)\n  LEFT JOIN storage.objects AS actual ON actual.bucket_id = expected.bucket_id AND actual.name = expected.name\n  WHERE actual.id IS NULL;`,
-    "  IF missing <> 0 THEN RAISE EXCEPTION 'В storage.objects не хватает % файлов из манифеста', missing; END IF;",
+    `  SELECT count(*) INTO missing FROM (VALUES\n${expectedRows}\n  ) AS expected(bucket_id, name, size, mimetype)\n  LEFT JOIN storage.objects AS actual ON actual.bucket_id = expected.bucket_id AND actual.name = expected.name\n  WHERE actual.id IS NULL\n     OR NULLIF(actual.metadata->>'size', '')::bigint IS DISTINCT FROM expected.size\n     OR actual.metadata->>'mimetype' IS DISTINCT FROM expected.mimetype;`,
+    "  IF missing <> 0 THEN RAISE EXCEPTION 'В storage.objects отсутствуют или отличаются метаданные % файлов', missing; END IF;",
     'END;',
     '$verify_storage$;',
   );
