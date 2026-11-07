@@ -352,11 +352,39 @@ Expo Push, токены `devices.push_token`, отправка из Edge Functio
 
 ## Миграции, типы, переменные окружения
 
-- схема — только миграцией (не веб-панель); имя `<timestamp>_<что>.sql`; применять `npx supabase db
-  push` после `supabase link` (не залинкован/нет пароля — просьба к человеку);
-- после изменения схемы: `npx supabase gen types typescript --linked > src/api/types.gen.ts`;
+- Рабочий backend — self-hosted Supabase на VPS в РФ: Postgres 17, Auth, PostgREST, Realtime,
+  Storage, Edge Functions, Vault и `pg_cron`; LiveKit Server и TURN находятся в том же стеке.
+  Состав сервисов и Caddy-маршруты описаны в `infra/docker-compose.yml` и `infra/Caddyfile`.
+- Схема меняется только миграциями в `supabase/migrations/`; имя
+  `<timestamp>_<что>.sql`. Применить миграции к VPS: `npm run selfhost:migrate`. Скрипт через
+  SSH (`TARGET_SSH_HOST=root@<API_DOMAIN>`) или `TARGET_DB_URL` применяет каждую миграцию
+  транзакционно и регистрирует её в `supabase_migrations.schema_migrations`.
+- SQL-тесты запускать на VPS: `npm run selfhost:test` (тот же способ подключения). Тесты
+  проверяются из `supabase/tests/` и завершаются откатом.
+- После изменения схемы генерировать типы с VPS, а не `--linked` к облаку. Так как порт Postgres
+  не опубликован наружу, открой SSH-туннель к IP контейнера `open-db`. В первом PowerShell окне:
+  `$dbIp = ssh root@<API_DOMAIN> "docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' open-db"`
+  затем `ssh -N -L 55432:$dbIp:5432 root@<API_DOMAIN>`. Во втором окне собери URL подключения
+  из `POSTGRES_PASSWORD` в `infra/.env` (пользователь `postgres`, БД `postgres`, хост
+  `127.0.0.1`, порт `55432`; пароль в URI percent-encode) и выполни:
+  `$pgPassword = ((Get-Content infra/.env | Where-Object { $_ -match '^POSTGRES_PASSWORD=' }) -replace '^POSTGRES_PASSWORD=', '')`
+  затем `$env:TARGET_DB_URL = "postgresql://postgres:$([uri]::EscapeDataString($pgPassword))@127.0.0.1:55432/postgres"`.
+  `npx supabase gen types typescript --db-url "$env:TARGET_DB_URL" --schema public > src/api/types.gen.ts`.
+  После генерации очисти `$env:TARGET_DB_URL` и `$pgPassword`. Пароль не коммитить и не печатать
+  в журнал.
+- Edge Functions развертываются из каталога `supabase/functions/`, смонтированного в контейнер
+  `functions`: после доставки изменений на VPS из `infra/` перезапустить этот сервис командой
+  `docker compose up -d --force-recreate functions`. Конфигурацию Vault, cron и проверку
+  функций выполнять из рабочей копии командами `npm run configure:selfhosted-functions`,
+  `npm run verify:selfhosted-media` и `npm run verify:selfhosted-livekit` (для SSH задать
+  `TARGET_SSH_HOST=root@<API_DOMAIN>`).
+- LiveKit вместе с собственным TURN обновлять из `infra/` на VPS: `docker compose up -d
+  --force-recreate livekit`; конфигурация и порты находятся в `infra/livekit.yaml`,
+  `infra/livekit.runtime.yaml` и `infra/docker-compose.yml`. Секреты LiveKit остаются только в
+  `infra/.env` и серверных Edge Functions.
 - компоненты не зовут `supabase.from(...)` напрямую — только функции из `src/api/`.
-- В клиенте ровно две переменные: `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`
-  (в `.env`, не коммитится). `SUPABASE_SERVICE_ROLE_KEY`, `LIVEKIT_API_KEY/SECRET` — только секреты
-  Edge Functions. `EXPO_PUBLIC_` = попадает в бандл. Публичные id (client ID Google, `iosUrlScheme`)
-  — в `app.json` (extra и плагины), не секреты.
+- В клиенте ровно две переменные из `infra/.env`: `EXPO_PUBLIC_SUPABASE_URL=https://<API_DOMAIN>`
+  и `EXPO_PUBLIC_SUPABASE_ANON_KEY=<ANON_KEY>` (в `.env`, не коммитится). После их изменения
+  перезапустить Metro с `npx expo start --dev-client --clear`, иначе старые значения останутся в
+  JS-бандле. `SERVICE_ROLE_KEY`, `LIVEKIT_API_KEY/SECRET` — только серверные секреты.
+  `EXPO_PUBLIC_` попадает в бандл. Публичные id Google и `iosUrlScheme` находятся в `app.json`.

@@ -25,6 +25,11 @@ JS прилетает с Metro мгновенно; нативная часть �
 на билдере ломается). Id: `com.openger.app` обе платформы, схема `openger`; менять только вместе и до
 публикации.
 
+Android EAS-профили `preview` (APK) и `production` (AAB) сохраняют Gradle/CMake cache между
+сборками. Ключ `open-android-sdk57-native-v1` менять при обновлении Expo SDK, нативных зависимостей,
+плагинов или конфигурации Android; одинаковый ключ переиспользует результаты компиляции нативной
+части. URL и anon key для обоих профилей хранятся в EAS environments `preview` и `production`.
+
 ## Структура проекта
 
 ```text

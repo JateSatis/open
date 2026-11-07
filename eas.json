@@ -17,11 +17,39 @@
       "android": {
         "buildType": "apk"
       },
-      "channel": "preview"
+      "channel": "preview",
+      "environment": "preview",
+      "env": {
+        "EAS_USE_CACHE": "1"
+      },
+      "cache": {
+        "key": "open-android-sdk57-native-v1",
+        "paths": [
+          "/home/expo/.gradle/caches/modules-2",
+          "/home/expo/.gradle/wrapper",
+          "/home/expo/.cache/ccache",
+          "android/.gradle",
+          "android/app/.cxx"
+        ]
+      }
     },
     "production": {
       "autoIncrement": true,
-      "channel": "production"
+      "channel": "production",
+      "environment": "production",
+      "env": {
+        "EAS_USE_CACHE": "1"
+      },
+      "cache": {
+        "key": "open-android-sdk57-native-v1",
+        "paths": [
+          "/home/expo/.gradle/caches/modules-2",
+          "/home/expo/.gradle/wrapper",
+          "/home/expo/.cache/ccache",
+          "android/.gradle",
+          "android/app/.cxx"
+        ]
+      }
     }
   },
   "submit": {
