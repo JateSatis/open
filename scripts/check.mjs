@@ -3,6 +3,10 @@
 //
 //   npm run check
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
+
+// Jest imports the Supabase client in a few tests; match Expo's local .env loading.
+if (existsSync(".env")) process.loadEnvFile(".env");
 
 const CHECKS = [
   { name: "tsc", args: ["tsc", "--noEmit"] },

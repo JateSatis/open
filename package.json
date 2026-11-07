@@ -95,6 +95,8 @@
     "test:functions": "npx -y deno@2 test --allow-env --allow-read --node-modules-dir=none supabase/functions",
     "migrate:selfhosted": "node scripts/migration/apply-migrations.mjs",
     "test:selfhosted": "node scripts/migration/run-selfhosted-tests.mjs",
+    "selfhost:migrate": "node scripts/migration/apply-migrations.mjs",
+    "selfhost:test": "node scripts/migration/run-selfhosted-tests.mjs",
     "configure:selfhosted-functions": "node scripts/migration/configure-selfhosted-functions.mjs",
     "verify:selfhosted-media": "node scripts/migration/verify-selfhosted-sanitize-media.mjs",
     "verify:selfhosted-livekit": "node scripts/migration/verify-selfhosted-livekit.mjs"

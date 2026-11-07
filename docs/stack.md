@@ -5,9 +5,17 @@
 **Клиент:** Expo (React Native), managed workflow, **dev build** (не Expo Go); TypeScript strict;
 Expo Router; Expo UI.
 
-**Бэкенд:** Supabase (Postgres, auth, Realtime, Storage, Edge Functions); LiveKit Cloud (SFU);
-Expo Push (FCM/APNs). Отдельного API-сервера нет — клиент ходит в Postgres напрямую, безопасность
-через RLS; секреты/права выше пользовательских — в Edge Functions.
+**Бэкенд:** self-hosted Supabase-стек на VPS в РФ (Postgres 17, Auth, PostgREST, Realtime,
+Storage, Edge Functions, Vault и `pg_cron`) плюс собственный LiveKit Server и TURN; Expo Push
+(FCM/APNs). Стек и Caddy-маршрутизация описаны в `infra/`. Отдельного API-сервера нет — клиент
+ходит в PostgREST напрямую, безопасность через RLS; секреты и действия с повышенными правами
+остаются в Edge Functions.
+
+Схему выкатывают из миграций командой `npm run selfhost:migrate`, SQL-тесты гоняют через
+`npm run selfhost:test`. Функции и LiveKit обновляют на VPS из `infra/` через Docker Compose;
+детали, Vault-конфигурация и генерация `src/api/types.gen.ts` через SSH-туннель описаны в
+`docs/backend.md`. Локальные клиентские URL и anon key берутся из `infra/.env` в `.env`;
+после смены конфигурации Metro запускается с `--clear`.
 
 Решения архитектурной сессии:
 - серверные данные (чаты, сообщения, лента, профили) — **TanStack Query**; чисто клиентское (UI,
