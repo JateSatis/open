@@ -83,11 +83,43 @@ function applyEnvTemplate(template, secrets) {
   return output;
 }
 
+function readEnvValue(envText, name) {
+  const match = envText.match(new RegExp(`^${name}=(.*)$`, 'm'));
+  return match?.[1]?.trim();
+}
+
+function getGoogleClientIds() {
+  const appConfig = JSON.parse(readFileSync(join(__dirname, '..', 'app.json'), 'utf8'));
+  const googleSignIn = appConfig.expo?.extra?.googleSignIn ?? {};
+
+  return [googleSignIn.webClientId, googleSignIn.iosClientId]
+    .filter((clientId, index, clientIds) => clientId && clientIds.indexOf(clientId) === index)
+    .join(',');
+}
+
+function applyLivekitConfig(template, envText, secrets) {
+  const livekitDomain = readEnvValue(envText, 'LIVEKIT_DOMAIN');
+
+  const validDomain = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i;
+  if (!livekitDomain || !validDomain.test(livekitDomain) || livekitDomain.includes('example.com')) {
+    throw new Error('Укажите реальный LIVEKIT_DOMAIN в infra/.env перед генерацией LiveKit-конфигурации.');
+  }
+
+  const certificateBase = `/data/caddy/certificates/acme-v02.api.letsencrypt.org-directory/${livekitDomain}/${livekitDomain}`;
+
+  return template
+    .replace(/^  domain: .*$/m, `  domain: ${livekitDomain}`)
+    .replace(/^  tls_port: .*$/m, `  tls_port: 5349\n  cert_file: ${certificateBase}.crt\n  key_file: ${certificateBase}.key`)
+    .replace(/^keys:\r?\n(?:[ \t]+.*(?:\r?\n|$))*/m, `keys:\n  ${secrets.LIVEKIT_API_KEY}: ${secrets.LIVEKIT_API_SECRET}\n`)
+    .replace(/^  api_key: .*$/m, `  api_key: ${secrets.LIVEKIT_API_KEY}`);
+}
+
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const writeMode = process.argv.includes('--write');
-  const secrets = generateSecrets();
 
   if (!writeMode) {
+    const secrets = generateSecrets();
+
     for (const [key, value] of Object.entries(secrets)) {
       console.log(`${key}=${value}`);
     }
@@ -95,23 +127,37 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
     const examplePath = join(__dirname, '.env.example');
     const envPath = join(__dirname, '.env');
     const livekitPath = join(__dirname, 'livekit.yaml');
+    const livekitRuntimePath = join(__dirname, 'livekit.runtime.yaml');
 
     const template = existsSync(envPath)
       ? readFileSync(envPath, 'utf8')
       : readFileSync(examplePath, 'utf8');
+    const generatedSecrets = generateSecrets();
+    const secrets = Object.fromEntries(
+      Object.entries(generatedSecrets).map(([key, generatedValue]) => [
+        key,
+        readEnvValue(template, key) || generatedValue,
+      ]),
+    );
     const updatedEnv = applyEnvTemplate(template, secrets);
+    const googleClientId = readEnvValue(updatedEnv, 'GOOGLE_CLIENT_ID');
+    const googleClientIds = getGoogleClientIds();
+    const configuredEnv = !googleClientId && googleClientIds
+      ? applyEnvTemplate(updatedEnv, { GOOGLE_CLIENT_ID: googleClientIds })
+      : updatedEnv;
 
-    writeFileSync(envPath, updatedEnv, 'utf8');
+    let livekitRuntime;
+    if (existsSync(livekitPath)) {
+      const lkTemplate = readFileSync(livekitPath, 'utf8');
+      livekitRuntime = applyLivekitConfig(lkTemplate, configuredEnv, secrets);
+    }
+
+    writeFileSync(envPath, configuredEnv, 'utf8', { mode: 0o600 });
     console.log(`Секреты записаны в ${envPath}`);
 
-    if (existsSync(livekitPath)) {
-      const lkRaw = readFileSync(livekitPath, 'utf8');
-      const lkUpdated = lkRaw
-        .replace(/API_KEY_PLACEHOLDER/g, secrets.LIVEKIT_API_KEY)
-        .replace(/API_SECRET_PLACEHOLDER/g, secrets.LIVEKIT_API_SECRET);
-
-      writeFileSync(livekitPath, lkUpdated, 'utf8');
-      console.log(`Ключи LiveKit подставлены в ${livekitPath}`);
+    if (livekitRuntime) {
+      writeFileSync(livekitRuntimePath, livekitRuntime, 'utf8', { mode: 0o600 });
+      console.log(`Конфигурация LiveKit записана в ${livekitRuntimePath}`);
     }
   }
 }

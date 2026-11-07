@@ -1,1 +1,2 @@
 *.patch text eol=lf
+infra/*.sh text eol=lf

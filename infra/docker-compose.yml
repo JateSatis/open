@@ -68,9 +68,10 @@ services:
       JWT_EXP: ${JWT_EXPIRY:-3600}
     volumes:
       - db-data:/var/lib/postgresql/data
-      - ./init-db:/docker-entrypoint-initdb.d:ro
+      # Keep the Supabase image's own init scripts and run ours after migrate.sh.
+      - ./init-db/00-extensions.sql:/docker-entrypoint-initdb.d/zz-open-extensions.sql:ro
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "postgres", "-h", "localhost"]
+      test: ["CMD", "pg_isready", "-U", "supabase_admin", "-h", "localhost"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -186,7 +187,7 @@ services:
     volumes:
       - storage-data:/var/lib/storage
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5000/status"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:5000/status"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -233,6 +234,9 @@ services:
     restart: unless-stopped
     mem_limit: 384m
     logging: *default-logging
+    depends_on:
+      caddy:
+        condition: service_healthy
     command:
       - --config
       - /etc/livekit.yaml
@@ -242,7 +246,8 @@ services:
       - "5349:5349/tcp"
       - "50000-50100:50000-50100/udp"
     volumes:
-      - ./livekit.yaml:/etc/livekit.yaml:ro
+      - ./livekit.runtime.yaml:/etc/livekit.yaml:ro
+      - caddy-data:/data:ro
 
   caddy:
     image: caddy:2.9-alpine
@@ -256,7 +261,6 @@ services:
       - realtime
       - storage
       - functions
-      - livekit
     ports:
       - "80:80"
       - "443:443"
@@ -268,6 +272,14 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
       - caddy-config:/config
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - test -s "/data/caddy/certificates/acme-v02.api.letsencrypt.org-directory/${API_DOMAIN}/${API_DOMAIN}.crt" && test -s "/data/caddy/certificates/acme-v02.api.letsencrypt.org-directory/${LIVEKIT_DOMAIN}/${LIVEKIT_DOMAIN}.crt"
+      interval: 10s
+      timeout: 5s
+      retries: 60
+      start_period: 20s
 
 volumes:
   db-data:

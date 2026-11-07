@@ -56,3 +56,4 @@ deno.lock
 # Локальный бекап облачных данных Supabase и секреты infra
 .backup/
 infra/.env
+infra/livekit.runtime.yaml
