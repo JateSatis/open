@@ -1,5 +1,6 @@
 # Конфигурация LiveKit Server для VPS 2 vCPU / 3 ГБ RAM (со встроенным TURN).
-# Секреты (keys, webhook, turn.domain) подставляются при деплое или генерацией.
+# Безсекретный шаблон. `node infra/generate-secrets.mjs --write` создаёт
+# игнорируемый `livekit.runtime.yaml`, который использует Compose.
 
 port: 7880
 rtc:
@@ -13,10 +14,10 @@ turn:
   udp_port: 3478
   tls_port: 5349
   # Домен должен совпадать с LIVEKIT_DOMAIN из .env
-  domain: rtc.example.com
+  domain: LIVEKIT_DOMAIN_PLACEHOLDER
 
 keys:
-  # Заменяются значениями LIVEKIT_API_KEY: LIVEKIT_API_SECRET из .env
+  # При генерации заменяется блоком из LIVEKIT_API_KEY и LIVEKIT_API_SECRET.
   API_KEY_PLACEHOLDER: API_SECRET_PLACEHOLDER
 
 webhook:

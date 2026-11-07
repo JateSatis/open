@@ -62,6 +62,11 @@ if ! command -v docker >/dev/null 2>&1; then
   systemctl enable --now docker
 fi
 
+if ! docker compose version >/dev/null 2>&1; then
+  apt-get update -y
+  apt-get install -y docker-compose-plugin
+fi
+
 mkdir -p /etc/docker
 if [ ! -f /etc/docker/daemon.json ]; then
   cat >/etc/docker/daemon.json <<'EOF'
@@ -98,5 +103,11 @@ ufw allow 50000:50100/udp
 
 ufw --force enable
 ufw status verbose
+
+echo "==> Проверка готовности хоста..."
+swapon --show --bytes
+sysctl vm.swappiness vm.vfs_cache_pressure vm.overcommit_memory net.core.rmem_max net.core.wmem_max net.core.rmem_default net.core.wmem_default net.ipv4.tcp_fastopen fs.file-max
+docker compose version
+ufw status
 
 echo "==> Хост готов к запуску: cd infra && docker compose up -d"
