@@ -52,3 +52,7 @@ deno.lock
 
 # Кеш Gradle нативных модулей (modules/*/android)
 .gradle/
+
+# Локальный бекап облачных данных Supabase и секреты infra
+.backup/
+infra/.env

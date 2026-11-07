@@ -1,0 +1,28 @@
+# Конфигурация LiveKit Server для VPS 2 vCPU / 3 ГБ RAM (со встроенным TURN).
+# Секреты (keys, webhook, turn.domain) подставляются при деплое или генерацией.
+
+port: 7880
+rtc:
+  tcp_port: 7881
+  port_range_start: 50000
+  port_range_end: 50100
+  use_external_ip: true
+
+turn:
+  enabled: true
+  udp_port: 3478
+  tls_port: 5349
+  # Домен должен совпадать с LIVEKIT_DOMAIN из .env
+  domain: rtc.example.com
+
+keys:
+  # Заменяются значениями LIVEKIT_API_KEY: LIVEKIT_API_SECRET из .env
+  API_KEY_PLACEHOLDER: API_SECRET_PLACEHOLDER
+
+webhook:
+  api_key: API_KEY_PLACEHOLDER
+  urls:
+    - http://caddy:8000/functions/v1/livekit-webhook
+
+logging:
+  level: info
