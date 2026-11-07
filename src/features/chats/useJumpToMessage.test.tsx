@@ -9,7 +9,7 @@ import type { ChatListRow } from '@/features/chats/islands/rows';
 
 describe('useJumpToMessage', () => {
   async function setup(
-    rows: readonly { key: string }[],
+    rows: readonly { key: string; message?: { seq: number }; island?: { seq: number } }[],
     loadWindow = jest.fn(async () => true),
     initiallyPositioned = true,
   ) {
@@ -22,8 +22,17 @@ describe('useJumpToMessage', () => {
 
     return {
       list,
+      glide,
       ...(await renderHook(
-        ({ currentRows }: { currentRows: readonly { key: string }[] }) =>
+        ({
+          currentRows,
+        }: {
+          currentRows: readonly {
+            key: string;
+            message?: { seq: number };
+            island?: { seq: number };
+          }[];
+        }) =>
           useJumpToMessage(listRef, currentRows, loadWindow, initiallyPositioned, glide, () => 800),
         { initialProps: { currentRows: rows } },
       )),
@@ -78,7 +87,13 @@ describe('useJumpToMessage', () => {
       viewPosition: 0.5,
       animated: false,
     });
+    expect(result.current.positioned).toBe(false);
+    expect(result.current.highlight).toBeNull();
+    await act(async () => {
+      result.current.onVisible(['row-25']);
+    });
     expect(result.current.positioned).toBe(true);
+    expect(result.current.highlight?.messageId).toBe('row-25');
   });
 
   it('hides a distant target and loads its window before any scroll', async () => {
@@ -96,13 +111,92 @@ describe('useJumpToMessage', () => {
     expect(result.current.positioned).toBe(false);
   });
 
+  it('keeps the current list visible while a distant window is loading', async () => {
+    let resolveWindow: (found: boolean) => void = () => {};
+    const loadWindow = jest.fn(
+      () =>
+        new Promise<boolean>((resolve) => {
+          resolveWindow = resolve;
+        }),
+    );
+    const { result } = await setup([{ key: 'current' }], loadWindow);
+
+    let flight: Promise<boolean> = Promise.resolve(false);
+    await act(async () => {
+      flight = result.current.jump('target', 1);
+    });
+    // Сразу при тапе спиннер не мигает: переписка остаётся на месте.
+    expect(result.current.loading).toBe(false);
+    expect(result.current.positioned).toBe(true);
+    expect(result.current.transitioning).toBe(true);
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    });
+    expect(result.current.loading).toBe(true);
+
+    await act(async () => {
+      resolveWindow(false);
+      await flight;
+    });
+    expect(result.current.loading).toBe(false);
+    expect(result.current.transitioning).toBe(false);
+  });
+
+  it('waits for scrollToIndex retry before revealing list and starting glide on distant jump', async () => {
+    const { result, list, rerender } = await setup([{ key: 'current', message: { seq: 100 } }]);
+
+    await act(async () => {
+      await result.current.jump('target', 10);
+    });
+    expect(result.current.positioned).toBe(false);
+    expect(result.current.highlight).toBeNull();
+
+    await rerender({
+      currentRows: [
+        { key: 'newer', message: { seq: 12 } },
+        { key: 'target', message: { seq: 10 } },
+        { key: 'older', message: { seq: 8 } },
+      ],
+    });
+
+    expect(list.scrollToIndex).toHaveBeenCalledTimes(1);
+    expect(list.scrollToIndex).toHaveBeenLastCalledWith({
+      index: 1,
+      viewPosition: 0.5,
+      animated: false,
+    });
+
+    // На первом проходе VirtualizedList ещё не измерил далёкую строку и падает в scrollToOffset.
+    await act(async () => {
+      result.current.onScrollToIndexFailed({ index: 1, averageItemLength: 80 });
+    });
+    expect(list.scrollToOffset).toHaveBeenCalledWith({ offset: 80, animated: false });
+
+    // Приблизительный scrollToOffset уже зацепил целевую строку краем экрана,
+    // но точное позиционирование ещё впереди — раскрывать список и мигать рано.
+    await act(async () => {
+      result.current.onVisible(['target']);
+    });
+    expect(result.current.positioned).toBe(false);
+    expect(result.current.highlight).toBeNull();
+
+    // Таймер повтора докручивает список точно в центр и запускает рывок с подсветкой.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 35));
+    });
+    expect(list.scrollToIndex).toHaveBeenCalledTimes(2);
+    expect(result.current.positioned).toBe(true);
+    expect(result.current.highlight?.messageId).toBe('target');
+  });
+
   it('waits for list content instead of retrying an unmeasured jump on a timer', async () => {
     const { result, list } = await setup([{ key: 'target' }]);
 
     await act(async () => {
       await result.current.jump('target', 12, { viewPosition: 0.5 });
     });
-    act(() => result.current.onScrollToIndexFailed({ index: 0, averageItemLength: 0 }));
+    await act(async () => { result.current.onScrollToIndexFailed({ index: 0, averageItemLength: 0 }); });
 
     expect(list.scrollToIndex).toHaveBeenCalledTimes(1);
 
@@ -118,6 +212,4 @@ describe('useJumpToMessage', () => {
       animated: true,
     });
   });
-
-
 });

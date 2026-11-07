@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
 import type { FlatList } from 'react-native';
 import {
   Easing,
+  runOnJS,
   withTiming,
   type SharedValue,
 } from 'react-native-reanimated';
@@ -30,12 +31,14 @@ export type JumpOptions = {
   viewPosition?: number;
 };
 
-type Target = { rowKey: string; viewPosition: number | null };
+type Target = { rowKey: string; viewPosition: number | null; flash: boolean };
 
 /** Иллюзия быстрой прокрутки: сколько высот экрана проезжает список за анимацию. */
 export const GLIDE_SCREENS = 1.5;
 export const GLIDE_MS = 170;
 export const GLIDE_EASING = Easing.out(Easing.cubic);
+/** Через сколько мс ожидания загрузки окна показать спиннер поверх переписки. */
+const LOADING_SPINNER_DELAY_MS = 180;
 
 export type JumpToMessage = {
   /**
@@ -46,6 +49,8 @@ export type JumpToMessage = {
   jump: (rowKey: string, seq: number, options?: JumpOptions) => Promise<boolean>;
   highlight: JumpHighlight | null;
   positioned: boolean;
+  loading: boolean;
+  transitioning: boolean;
   onVisible: (keys: string[]) => void;
   onMomentumScrollEnd: () => void;
   onListReady: () => void;
@@ -75,15 +80,20 @@ export function useJumpToMessage(
 ): JumpToMessage {
   const [highlight, setHighlight] = useState<JumpHighlight | null>(null);
   const [positioned, setPositioned] = useState(initiallyPositioned);
+  const [loading, setLoading] = useState(false);
+  const [transitioning, setTransitioning] = useState(false);
   // Повторное чтение строк нужно только для удалённой цели или смены вида.
   const [jumps, setJumps] = useState(0);
   // Цель — в ref, а не в состоянии: прокрутка — побочное действие, и
   // перерисовку ради неё запускает уже смена подсветки.
   const targetRef = useRef<Target | null>(null);
   const visibleKeyRef = useRef<string | null>(null);
+  const flashOnVisibleRef = useRef(false);
+  const currentlyVisibleKeysRef = useRef<string[]>([]);
   // Куда встать при повторе после неудачной прокрутки к далёкой строке.
   const placeRef = useRef<number | null>(null);
   const retryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const loadingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const alignAfterVisibleRef = useRef(false);
   const failedRetryRef = useRef(false);
   const waitingForListRef = useRef(false);
@@ -92,7 +102,52 @@ export function useJumpToMessage(
   const attemptIdRef = useRef<string | null>(null);
   const glidePendingRef = useRef(false);
   const visibleIndexRef = useRef(0);
-  const glideStartedRef = useRef(0);
+  const directionRef = useRef(1);
+
+  const clearLoadingTimer = useCallback(() => {
+    if (loadingTimerRef.current) {
+      clearTimeout(loadingTimerRef.current);
+      loadingTimerRef.current = null;
+    }
+    setLoading(false);
+  }, []);
+
+  const revealTarget = useCallback(
+    (targetKey: string) => {
+      visibleKeyRef.current = null;
+      waitingForListRef.current = false;
+      const shouldFlash = flashOnVisibleRef.current;
+      flashOnVisibleRef.current = false;
+
+      if (glidePendingRef.current) {
+        glidePendingRef.current = false;
+        navigationPerfMark(attemptIdRef.current ?? '', 'glide-start', {
+          direction: directionRef.current,
+        });
+        glide.value = directionRef.current * GLIDE_SCREENS * Math.max(1, viewport());
+        glide.value = withTiming(0, { duration: GLIDE_MS, easing: GLIDE_EASING }, (finished) => {
+          if (finished) {
+            runOnJS(navigationPerfMark)(attemptIdRef.current ?? '', 'glide-end');
+            runOnJS(setTransitioning)(false);
+          }
+        });
+        if (shouldFlash) setHighlight({ messageId: targetKey, key: Date.now() });
+        setPositioned(true);
+        navigationPerfMark(attemptIdRef.current ?? '', 'positioned');
+        return;
+      }
+
+      setTransitioning(false);
+      if (shouldFlash) setHighlight({ messageId: targetKey, key: Date.now() });
+      setPositioned(true);
+      if (!alignAfterVisibleRef.current) return;
+
+      alignAfterVisibleRef.current = false;
+      navigationPerfMark(attemptIdRef.current ?? '', 'positioned');
+      requestAnimationFrame(() => setPositioned(true));
+    },
+    [glide, viewport],
+  );
 
   // Цель прокручивается, когда она уже в списке: после догрузки строки
   // появляются только на следующей отрисовке.
@@ -112,6 +167,7 @@ export function useJumpToMessage(
 
     targetRef.current = null;
     visibleKeyRef.current = target.rowKey;
+    flashOnVisibleRef.current = target.flash;
     placeRef.current = target.viewPosition;
     failedRetryRef.current = false;
     placeRequestRef.current = placeOf(index, target.viewPosition, false);
@@ -121,6 +177,7 @@ export function useJumpToMessage(
   useEffect(
     () => () => {
       if (retryRef.current) clearTimeout(retryRef.current);
+      if (loadingTimerRef.current) clearTimeout(loadingTimerRef.current);
     },
     [],
   );
@@ -132,50 +189,69 @@ export function useJumpToMessage(
         clearTimeout(retryRef.current);
         retryRef.current = null;
       }
+      clearLoadingTimer();
       waitingForListRef.current = false;
       attemptIdRef.current = attemptId;
       navigationPerfStart(attemptId, 'message', { rowKey, seq, flash, viewPosition });
       const indexBeforeLoad = rows.findIndex((row) => row.key === rowKey);
       const loaded = indexBeforeLoad !== -1;
-      const distant = !loaded || Math.abs(indexBeforeLoad - visibleIndexRef.current) * 96 > Math.max(1, viewport()) * 1.5;
+      const distant =
+        !loaded ||
+        Math.abs(indexBeforeLoad - visibleIndexRef.current) * 96 > Math.max(1, viewport()) * 1.5;
       if (!distant) glidePendingRef.current = false;
       if (distant && initiallyPositioned) {
         const visibleRow = rows[visibleIndexRef.current];
         const visibleSeq = visibleRow?.message?.seq ?? visibleRow?.island?.seq;
+        // В перевёрнутом списке более старое сообщение (меньший seq / больший индекс)
+        // лежит выше на экране. Чтобы переписка «подлетела» к старому сообщению,
+        // входящее окно с целью приезжает сверху вниз (от -H к 0), как в Telegram.
         const direction = loaded
-          ? (indexBeforeLoad < visibleIndexRef.current ? -1 : 1)
-          : (visibleSeq !== undefined && seq > visibleSeq ? -1 : 1);
+          ? indexBeforeLoad > visibleIndexRef.current
+            ? -1
+            : 1
+          : visibleSeq !== undefined && seq > visibleSeq
+            ? 1
+            : -1;
+        directionRef.current = direction;
         glidePendingRef.current = true;
-        glideStartedRef.current = Date.now();
-        navigationPerfMark(attemptId, 'glide-start', { direction });
-        glide.value = direction * GLIDE_SCREENS * Math.max(1, viewport());
-        glide.value = withTiming(0, { duration: GLIDE_MS, easing: GLIDE_EASING });
+        setTransitioning(true);
       }
       navigationPerfMark(attemptId, loaded ? 'target-in-current-rows' : 'window-request');
+      if (!loaded) {
+        loadingTimerRef.current = setTimeout(() => {
+          loadingTimerRef.current = null;
+          setLoading(true);
+        }, LOADING_SPINNER_DELAY_MS);
+      }
       const found = loaded || (await loadWindow(seq));
       if (attemptIdRef.current !== attemptId) return false;
+      clearLoadingTimer();
       navigationPerfMark(attemptId, 'target-data-ready', { found });
 
       if (!found) {
         glidePendingRef.current = false;
         glide.value = 0;
+        setTransitioning(false);
         targetRef.current = null;
         visibleKeyRef.current = null;
+        flashOnVisibleRef.current = false;
         alignAfterVisibleRef.current = false;
         setPositioned(true);
         return false;
       }
 
-      const target = { rowKey, viewPosition: viewPosition ?? null };
+      const target: Target = { rowKey, viewPosition: viewPosition ?? null, flash };
       const index = rows.findIndex((row) => row.key === rowKey);
       const list = listRef.current;
       visibleKeyRef.current = rowKey;
+      flashOnVisibleRef.current = flash;
       placeRef.current = target.viewPosition;
       failedRetryRef.current = false;
 
       if (loaded && list && index !== -1 && !distant) {
         targetRef.current = null;
         alignAfterVisibleRef.current = false;
+        flashOnVisibleRef.current = false;
         // Маршрутный переход (экран въезжает уже на цели) — цель ставится
         // сразу, скрытым списком; видимая плавная прокрутка — только для
         // перехода внутри уже открытого чата.
@@ -187,26 +263,32 @@ export function useJumpToMessage(
         });
         placeRequestRef.current = placeOf(index, target.viewPosition, animated);
         list.scrollToIndex(placeRequestRef.current);
+        if (flash) setHighlight({ messageId: rowKey, key: Date.now() });
       } else if (loaded && list && index !== -1) {
         targetRef.current = null;
         alignAfterVisibleRef.current = false;
+        if (glidePendingRef.current) {
+          glide.value = directionRef.current * GLIDE_SCREENS * Math.max(1, viewport());
+        }
+        setPositioned(false);
         placeRequestRef.current = placeOf(index, target.viewPosition, false);
         list.scrollToIndex(placeRequestRef.current);
       } else {
         targetRef.current = target;
         alignAfterVisibleRef.current = true;
         // Далёкая цель едет иллюзией быстрой прокрутки, а не появляется
-        // мгновенно. Внутри чата далёкая цель всегда старше места чтения —
-        // направление «вверх».
+        // мгновенно. Пока целевое окно позиционируется, поверх остаётся снимок
+        // исходных сообщений, а входящий список заранее отведён за край экрана.
+        if (glidePendingRef.current) {
+          glide.value = directionRef.current * GLIDE_SCREENS * Math.max(1, viewport());
+        }
         setPositioned(false);
         setJumps((count) => count + 1);
       }
 
-      if (flash) setHighlight({ messageId: rowKey, key: Date.now() });
-
       return true;
     },
-    [glide, initiallyPositioned, listRef, loadWindow, rows, viewport],
+    [clearLoadingTimer, glide, initiallyPositioned, listRef, loadWindow, rows, viewport],
   );
 
   const onScrollToIndexFailed = useCallback(
@@ -233,38 +315,44 @@ export function useJumpToMessage(
         const request = placeRequestRef.current ?? placeOf(index, placeRef.current, false);
         placeRequestRef.current = { ...request, animated: false };
         listRef.current?.scrollToIndex(placeRequestRef.current);
+        // Если после приблизительного scrollToOffset целевая строка уже попала
+        // в viewableItems, точный scrollToIndex двигает её внутри экрана и
+        // повторно onViewableItemsChanged может не вызвать — раскрываем после кадра.
+        const targetKey = visibleKeyRef.current;
+        if (targetKey && currentlyVisibleKeysRef.current.includes(targetKey)) {
+          requestAnimationFrame(() => {
+            if (visibleKeyRef.current === targetKey && retryRef.current === null) {
+              revealTarget(targetKey);
+            }
+          });
+        }
       }, RETRY_SCROLL_MS);
     },
-    [listRef],
+    [listRef, revealTarget],
   );
 
-  const onVisible = useCallback((keys: string[]) => {
-    const first = rows.findIndex((row) => keys.includes(row.key));
-    if (first !== -1) visibleIndexRef.current = first;
-    const targetKey = visibleKeyRef.current;
-    if (!targetKey || !keys.includes(targetKey)) return;
+  const onVisible = useCallback(
+    (keys: string[]) => {
+      currentlyVisibleKeysRef.current = keys;
+      const first = rows.findIndex((row) => keys.includes(row.key));
+      if (first !== -1) visibleIndexRef.current = first;
+      const targetKey = visibleKeyRef.current;
+      if (!targetKey || !keys.includes(targetKey)) return;
 
-    const index = rows.findIndex((row) => row.key === targetKey);
-    if (index === -1) return;
-    navigationPerfMark(attemptIdRef.current ?? '', 'target-first-visible', { index });
-    visibleKeyRef.current = null;
-    waitingForListRef.current = false;
+      const index = rows.findIndex((row) => row.key === targetKey);
+      if (index === -1) return;
+      navigationPerfMark(attemptIdRef.current ?? '', 'target-first-visible', { index });
 
-    if (glidePendingRef.current) {
-      glidePendingRef.current = false;
-      setPositioned(true);
-      if (Date.now() - glideStartedRef.current >= GLIDE_MS) glide.value = 0;
-      navigationPerfMark(attemptIdRef.current ?? '', 'positioned');
-      return;
-    }
+      // Если scrollToIndex упал и ждёт повторного точного докручивания
+      // (по таймеру или первой раскладке), строка уже могла попасть в край
+      // экрана после приблизительного scrollToOffset. Раскрывать список и
+      // запускать анимацию рывка рано — дождёмся финального scrollToIndex.
+      if (retryRef.current !== null || waitingForListRef.current) return;
 
-    setPositioned(true);
-    if (!alignAfterVisibleRef.current) return;
-
-    alignAfterVisibleRef.current = false;
-    navigationPerfMark(attemptIdRef.current ?? '', 'positioned');
-    requestAnimationFrame(() => setPositioned(true));
-  }, [glide, rows]);
+      revealTarget(targetKey);
+    },
+    [revealTarget, rows],
+  );
 
   const onMomentumScrollEnd = useCallback(() => {
     navigationPerfMark(attemptIdRef.current ?? '', 'momentum-end');
@@ -287,6 +375,8 @@ export function useJumpToMessage(
     jump,
     highlight,
     positioned,
+    loading,
+    transitioning,
     onVisible,
     onMomentumScrollEnd,
     onListReady,

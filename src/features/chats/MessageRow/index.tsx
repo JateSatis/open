@@ -33,8 +33,8 @@ import { useTheme } from '@/hooks/use-theme';
 /** Столько держать палец, чтобы открылось меню. */
 const LONG_PRESS_MS = 350;
 /** Подсветка сообщения, к которому прыгнули: вспыхивает, когда прокрутка доехала, держится секунду. */
-const HIGHLIGHT_DELAY_MS = 170;
-const HIGHLIGHT_IN_MS = 150;
+const HIGHLIGHT_DELAY_MS = 0;
+const HIGHLIGHT_IN_MS = 0;
 const HIGHLIGHT_HOLD_MS = 1000;
 const HIGHLIGHT_FADE_MS = 400;
 

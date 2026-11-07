@@ -49,8 +49,6 @@ import { usePendingReactionMap } from '@/features/interactions/pendingReactions'
 import type { LocalMedia, OutgoingMedia } from '@/features/media';
 import type { HiddenRange } from '@/features/chats/hiddenText';
 
-const EMPTY_MESSAGES: ChatMessage[] = [];
-
 export type {
   ChatMessage,
   DeliveryStatus,
@@ -155,7 +153,7 @@ export function useChatMessages(
   const history = view === 'all' ? allHistory : threadsHistory;
   const inWindow = view === 'all' && windowSeq !== null;
   const shownItems = useMemo(
-    () => inWindow ? (window.history?.items ?? EMPTY_MESSAGES) : history.items,
+    () => inWindow ? (window.history?.items ?? history.items) : history.items,
     [history.items, inWindow, window.history?.items],
   );
   const allOutbox = useOutboxMessages(chatId);

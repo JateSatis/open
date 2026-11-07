@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/refs -- the outgoing list uses a frozen render snapshot during the jump. */
 import { useQueryClient } from '@tanstack/react-query';
 import { useIsFocused, useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -12,7 +13,6 @@ import {
   type TextInput,
 } from 'react-native';
 import Animated, {
-  Easing,
   FadeIn,
   FadeOut,
   useAnimatedStyle,
@@ -246,7 +246,6 @@ export function ChatConversation({
   // Показать нечего, а загрузить не вышло: вместо крутилки — «не удалось» с
   // повтором. Упавшее обновление поверх данных сюда не попадает, как и упавший
   // чат при уже загруженных сообщениях: их видно и без него.
-  const failed = chatMessages.failed || (chatFailed && !isLoading && messages.length === 0);
   const queryClient = useQueryClient();
   const reload = useCallback(
     () => reloadMissing(queryClient, [
@@ -284,6 +283,15 @@ export function ChatConversation({
     jumpGlide,
     () => scrollState.current.viewport,
   );
+  const failed = (chatMessages.failed || chatFailed) && messages.length === 0 && !jump.transitioning;
+  const jumpSourceRows = useRef(rows);
+  const jumpSourceOffset = useRef(0);
+  const jumpSourceListRef = useRef<FlatList<ChatListRow>>(null);
+  useEffect(() => {
+    if (jump.transitioning) return;
+    jumpSourceRows.current = rows;
+    jumpSourceOffset.current = scrollState.current.offset;
+  }, [jump.transitioning, rows]);
   const threadsMode = useChatThreadsMode({
     chatId,
     view: chatThreads.view,
@@ -1196,7 +1204,7 @@ export function ChatConversation({
           </View>
         ) : failed ? (
           <LoadFailed message="Не удалось загрузить переписку" onRetry={reload} />
-        ) : isChatLoading || isLoading ? (
+        ) : (isChatLoading || isLoading) && messages.length === 0 && !jump.transitioning ? (
           <View style={styles.centered}>
             {initialWindowSeq !== null ? (
               <View style={{ width: '70%', height: 90, borderRadius: 24, backgroundColor: theme.backgroundElement, alignItems: 'center', justifyContent: 'center' }}>
@@ -1210,6 +1218,27 @@ export function ChatConversation({
           <Animated.View ref={listFrameRef} style={styles.flex}>
             <RowRegistryContext.Provider value={rowRegistry}>
               <TileViewportContext.Provider value={measureListFrame}>
+                {jump.transitioning && !jump.positioned ? (
+                  <RowRegistryContext.Provider value={null}>
+                  <FlatList
+                    pointerEvents="none"
+                    importantForAccessibility="no-hide-descendants"
+                    accessibilityElementsHidden
+                    showsVerticalScrollIndicator={false}
+                    showsHorizontalScrollIndicator={false}
+                    style={{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0 }}
+                    inverted
+                    data={jumpSourceRows.current}
+                    keyExtractor={rowKey}
+                    renderItem={renderItem}
+                    onContentSizeChange={() => {
+                      // The source stays fixed underneath the incoming window.
+                      jumpSourceListRef.current?.scrollToOffset({ offset: jumpSourceOffset.current, animated: false });
+                    }}
+                    ref={jumpSourceListRef}
+                  />
+                  </RowRegistryContext.Provider>
+                ) : null}
                 <Animated.View style={[styles.flex, jumpGlideStyle, { overflow: 'hidden' }]}>
                   <FlatList
                   // Другой вид — другая лента: список начинается заново, а не
@@ -1263,6 +1292,11 @@ export function ChatConversation({
                   }
                   />
                 </Animated.View>
+                {jump.loading ? (
+                  <View pointerEvents="none" style={{ position: 'absolute', top: 8, alignSelf: 'center' }}>
+                    <ActivityIndicator accessibilityLabel="Загрузка сообщения" />
+                  </View>
+                ) : null}
                 {!jump.positioned && initialWindowSeq !== null ? (
                   <View pointerEvents="none" style={{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, alignItems: 'center', justifyContent: 'center' }}>
                     <View style={{ width: '70%', height: 90, borderRadius: 24, backgroundColor: theme.backgroundElement, alignItems: 'center', justifyContent: 'center' }}>
