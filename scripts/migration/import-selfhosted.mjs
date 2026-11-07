@@ -20,18 +20,21 @@
 //      в Storage нового сервера через `TARGET_SUPABASE_URL` + `TARGET_SERVICE_ROLE_KEY`.
 //
 // Запуск:
-//   TARGET_SUPABASE_URL=https://api.openger.ru \
+//   TARGET_SUPABASE_URL=https://api.openger.com \
 //   TARGET_SERVICE_ROLE_KEY=… \
-//   TARGET_DB_URL=postgresql://postgres:…@localhost:5432/postgres \
+//   TARGET_DB_URL=postgresql://supabase_admin:…@localhost:5432/postgres \
+//   # или TARGET_SSH_HOST=root@api.openger.com для SSH к контейнеру open-db
 //   node scripts/migration/import-selfhosted.mjs
 //
 //   # Только собрать и проверить SQL без подключения к серверу:
-//   TARGET_SUPABASE_URL=https://api.openger.ru node scripts/migration/import-selfhosted.mjs --sql-only
+//   TARGET_SUPABASE_URL=https://api.openger.com node scripts/migration/import-selfhosted.mjs --sql-only
 
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { runSql } from './psql-transport.mjs';
 
 import { createClient } from '@supabase/supabase-js';
 
@@ -50,6 +53,11 @@ export const PUBLIC_MEDIA_URL_COLUMNS = {
   'public.channels': ['avatar_url'],
   'public.chats': ['avatar_url'],
   'public.saved_message_attachments': ['url', 'poster_url'],
+};
+
+const IDENTITY_ALWAYS_COLUMNS = {
+  'public.messages': ['seq'],
+  'public.saved_messages': ['seq'],
 };
 
 const PUBLIC_MEDIA_REGEX = /^https?:\/\/[a-z0-9-]+\.supabase\.co(\/storage\/v1\/object\/public\/media\/.+)$/i;
@@ -91,6 +99,25 @@ export function transformTableRow(schema, table, row, targetBaseUrl) {
   }
 
   return { row: copy, rewritten };
+}
+
+/** Проверяет резервные файлы по манифесту до записи любых данных на целевой сервер. */
+export function verifyBackupFiles(backupDir, manifest) {
+  const files = manifest.files ?? [];
+  if (manifest.Verification?.totalFiles !== files.length) {
+    throw new Error(`В манифесте ${files.length} файлов, ожидалось ${manifest.Verification?.totalFiles ?? 'неизвестно'}.`);
+  }
+
+  for (const item of files) {
+    const localFile = join(backupDir, 'storage', item.bucket, ...item.path.split('/'));
+    if (!existsSync(localFile)) throw new Error(`Отсутствует локальный файл бекапа: ${localFile}`);
+    const bytes = readFileSync(localFile);
+    const sha256 = createHash('sha256').update(bytes).digest('hex');
+    if (bytes.length !== item.size || sha256 !== item.sha256) {
+      throw new Error(`Файл бекапа не совпадает с манифестом: ${item.bucket}/${item.path}`);
+    }
+  }
+  return files.length;
 }
 
 function escapeSqlString(str) {
@@ -139,6 +166,66 @@ export function toSqlLiteral(value, dataType) {
   return `${escapeSqlString(value)}::${dataType}`;
 }
 
+function quoteIdentifier(value) {
+  return `"${String(value).replaceAll('"', '""')}"`;
+}
+
+/** Формирует SQL-проверку количества строк и отсутствия старого домена. */
+export function buildDatabaseVerificationSql(expectedTableRows) {
+  const lines = ['DO $verify_import$', 'DECLARE actual bigint;', 'BEGIN'];
+  for (const { schema, table, count } of expectedTableRows) {
+    lines.push(
+      `  SELECT count(*) INTO actual FROM ${quoteIdentifier(schema)}.${quoteIdentifier(table)};`,
+      `  IF actual <> ${count} THEN RAISE EXCEPTION 'Импорт ${schema}.${table}: % строк, ожидалось ${count}', actual; END IF;`,
+    );
+  }
+
+  const oldDomain = 'cxgkiwxgwxiybazyvcgi.supabase.co';
+  for (const [qualifiedTable, columns] of Object.entries(PUBLIC_MEDIA_URL_COLUMNS)) {
+    const [schema, table] = qualifiedTable.split('.');
+    for (const column of columns) {
+      lines.push(
+        `  IF EXISTS (SELECT 1 FROM ${quoteIdentifier(schema)}.${quoteIdentifier(table)} WHERE strpos(${quoteIdentifier(column)}, ${escapeSqlString(oldDomain)}) > 0) THEN`,
+        `    RAISE EXCEPTION 'Старый домен остался в ${schema}.${table}.${column}';`,
+        '  END IF;',
+      );
+    }
+  }
+  lines.push('END;', '$verify_import$;');
+  return lines.join('\n');
+}
+
+/** Формирует точную сверку путей и количеств Storage объектов с манифестом. */
+export function buildStorageVerificationSql(manifest) {
+  const files = manifest.files ?? [];
+  const bucketCounts = new Map();
+  for (const file of files) bucketCounts.set(file.bucket, (bucketCounts.get(file.bucket) ?? 0) + 1);
+  const expectedRows = files
+    .map(
+      (file) =>
+        `    (${escapeSqlString(file.bucket)}, ${escapeSqlString(file.path)}, ${Number(file.size)}, ${escapeSqlString(file.mimeType || 'application/octet-stream')})`,
+    )
+    .join(',\n');
+  const lines = ['DO $verify_storage$', 'DECLARE actual bigint; missing bigint;', 'BEGIN'];
+  lines.push(
+    '  SELECT count(*) INTO actual FROM storage.objects;',
+    `  IF actual <> ${files.length} THEN RAISE EXCEPTION 'storage.objects: % записей, ожидалось ${files.length}', actual; END IF;`,
+  );
+  for (const [bucket, count] of bucketCounts) {
+    lines.push(
+      `  SELECT count(*) INTO actual FROM storage.objects WHERE bucket_id = ${escapeSqlString(bucket)};`,
+      `  IF actual <> ${count} THEN RAISE EXCEPTION 'Storage bucket ${bucket}: % объектов, ожидалось ${count}', actual; END IF;`,
+    );
+  }
+  lines.push(
+    `  SELECT count(*) INTO missing FROM (VALUES\n${expectedRows}\n  ) AS expected(bucket_id, name, size, mimetype)\n  LEFT JOIN storage.objects AS actual ON actual.bucket_id = expected.bucket_id AND actual.name = expected.name\n  WHERE actual.id IS NULL\n     OR NULLIF(actual.metadata->>'size', '')::bigint IS DISTINCT FROM expected.size\n     OR actual.metadata->>'mimetype' IS DISTINCT FROM expected.mimetype;`,
+    "  IF missing <> 0 THEN RAISE EXCEPTION 'В storage.objects отсутствуют или отличаются метаданные % файлов', missing; END IF;",
+    'END;',
+    '$verify_storage$;',
+  );
+  return lines.join('\n');
+}
+
 /** Формирует полный SQL-скрипт импорта из `.backup/`. */
 export function buildImportSql(backupDir, targetBaseUrl) {
   const manifestPath = join(backupDir, 'manifest.json');
@@ -175,6 +262,7 @@ export function buildImportSql(backupDir, targetBaseUrl) {
   }
 
   let totalRewrittenUrls = 0;
+  const expectedTableRows = [];
 
   // 2. Очистка целевых таблиц public перед заливкой (например, дефолтного секрета в identity_secret)
   const publicTables = manifest.tables.filter((t) => t.schema === 'public').map((t) => `public."${t.table}"`);
@@ -188,6 +276,7 @@ export function buildImportSql(backupDir, targetBaseUrl) {
     const tableDumpPath = join(backupDir, tableEntry.file);
     const dump = JSON.parse(readFileSync(tableDumpPath, 'utf8'));
     const { schema, table, primaryKey, columns, rows } = dump;
+    expectedTableRows.push({ schema, table, count: rows?.length ?? 0 });
 
     if (!rows || rows.length === 0) continue;
 
@@ -199,7 +288,7 @@ export function buildImportSql(backupDir, targetBaseUrl) {
       primaryKey && primaryKey.length > 0
         ? ` ON CONFLICT (${primaryKey.map((c) => `"${c}"`).join(', ')}) DO UPDATE SET ` +
           insertableColumns
-            .filter((col) => !primaryKey.includes(col.name))
+            .filter((col) => !primaryKey.includes(col.name) && !IDENTITY_ALWAYS_COLUMNS[`${schema}.${table}`]?.includes(col.name))
             .map((col) => `"${col.name}" = EXCLUDED."${col.name}"`)
             .join(', ')
         : ' ON CONFLICT DO NOTHING';
@@ -217,7 +306,7 @@ export function buildImportSql(backupDir, targetBaseUrl) {
       });
 
       lines.push(
-        `INSERT INTO "${schema}"."${table}" (${colNamesSql}) VALUES\n  ${valueTuples.join(',\n  ')}${conflictClause};`,
+        `INSERT INTO "${schema}"."${table}" (${colNamesSql}) OVERRIDING SYSTEM VALUE VALUES\n  ${valueTuples.join(',\n  ')}${conflictClause};`,
       );
     }
     lines.push('');
@@ -235,33 +324,30 @@ export function buildImportSql(backupDir, targetBaseUrl) {
     lines.push('');
   }
 
+  lines.push('-- Проверка количества строк и отсутствие старого домена.');
+  lines.push(buildDatabaseVerificationSql(expectedTableRows));
   lines.push('COMMIT;');
 
   return { sql: lines.join('\n'), totalRewrittenUrls, manifest };
 }
 
-/** Применяет сгенерированный SQL в целевую БД через `psql` или `docker compose exec`. */
+/** Применяет сгенерированный SQL через прямой URL, SSH или локальный Docker Compose. */
 function executeTargetSql(sqlFilePath) {
   const targetDbUrl = process.env.TARGET_DB_URL;
+  const targetSshHost = process.env.TARGET_SSH_HOST;
+  const sql = readFileSync(sqlFilePath, 'utf8');
 
-  if (targetDbUrl) {
-    const res = spawnSync('psql', [targetDbUrl, '-v', 'ON_ERROR_STOP=1', '-f', sqlFilePath], {
-      cwd: ROOT,
-      stdio: 'inherit',
-      shell: true,
-    });
-    if (res.status !== 0) {
-      throw new Error('Ошибка выполнения SQL через psql TARGET_DB_URL');
-    }
+  if (targetDbUrl || targetSshHost) {
+    runSql(sql);
     return;
   }
 
   const res = spawnSync(
     'docker',
-    ['compose', '-f', 'infra/docker-compose.yml', 'exec', '-T', 'db', 'psql', '-U', 'postgres', '-d', 'postgres', '-v', 'ON_ERROR_STOP=1'],
+    ['compose', '-f', 'infra/docker-compose.yml', 'exec', '-T', 'db', 'psql', '-U', 'supabase_admin', '-d', 'postgres', '-v', 'ON_ERROR_STOP=1'],
     {
       cwd: ROOT,
-      input: readFileSync(sqlFilePath),
+      input: sql,
       stdio: ['pipe', 'inherit', 'inherit'],
       shell: true,
     },
@@ -283,17 +369,28 @@ async function uploadStorageFiles(targetUrl, targetServiceKey, manifest) {
   const catalogPath = join(BACKUP_DIR, 'storage-catalog.json');
   if (existsSync(catalogPath)) {
     const catalog = JSON.parse(readFileSync(catalogPath, 'utf8'));
+    const { data: existingBuckets, error: listError } = await admin.storage.listBuckets();
+    if (listError) throw new Error(`Не удалось прочитать список Storage buckets: ${listError.message}`);
+    const bucketsById = new Map((existingBuckets ?? []).map((bucket) => [bucket.id, bucket]));
+
     for (const b of catalog.buckets ?? []) {
-      await admin.storage.createBucket(b.id, {
+      const options = {
         public: Boolean(b.public),
         fileSizeLimit: b.file_size_limit ?? undefined,
         allowedMimeTypes: b.allowed_mime_types ?? undefined,
-      });
+      };
+      const existing = bucketsById.get(b.id);
+      const result = existing
+        ? await admin.storage.updateBucket(b.id, options)
+        : await admin.storage.createBucket(b.id, options);
+      if (result.error) {
+        throw new Error(`Не удалось ${existing ? 'обновить' : 'создать'} Storage bucket ${b.id}: ${result.error.message}`);
+      }
     }
   }
 
   const files = manifest.files ?? [];
-  const CONCURRENCY = 6;
+  const CONCURRENCY = 3;
   let index = 0;
   let uploaded = 0;
 
@@ -308,17 +405,34 @@ async function uploadStorageFiles(targetUrl, targetServiceKey, manifest) {
       }
 
       const bytes = readFileSync(localFile);
-      const { error } = await admin.storage.from(item.bucket).upload(item.path, bytes, {
-        contentType: item.mimeType || 'application/octet-stream',
-        upsert: true,
-        cacheControl: '31536000',
-      });
+      const sha256 = createHash('sha256').update(bytes).digest('hex');
+      if (bytes.length !== item.size || sha256 !== item.sha256) {
+        throw new Error(`Файл бекапа не совпадает с манифестом: ${item.bucket}/${item.path}`);
+      }
+      for (let attempt = 1; attempt <= 5; attempt += 1) {
+        let error;
+        try {
+          ({ error } = await admin.storage.from(item.bucket).upload(item.path, bytes, {
+            contentType: item.mimeType || 'application/octet-stream',
+            upsert: true,
+            cacheControl: '31536000',
+          }));
+        } catch (cause) {
+          error = cause;
+        }
 
-      if (error) {
-        throw new Error(`Ошибка загрузки ${item.bucket}/${item.path}: ${error.message}`);
+        if (!error) break;
+        const retryable = error.message === 'fetch failed' || error.status === 429 || error.status >= 500;
+        if (!retryable || attempt === 5) {
+          throw new Error(`Ошибка загрузки ${item.bucket}/${item.path} после ${attempt} попыток: ${error.message}`);
+        }
+        await new Promise((resolve) => setTimeout(resolve, 500 * 2 ** (attempt - 1)));
       }
 
       uploaded += 1;
+      if (uploaded % 25 === 0 || uploaded === files.length) {
+        console.log(`    Загружено файлов: ${uploaded}/${files.length}`);
+      }
     }
   }
 
@@ -333,12 +447,16 @@ async function main() {
   const targetServiceKey = process.env.TARGET_SERVICE_ROLE_KEY ?? process.env.SERVICE_ROLE_KEY ?? '';
 
   if (!targetUrl) {
-    console.error('Укажите TARGET_SUPABASE_URL (например, https://api.openger.ru)');
+    console.error('Укажите TARGET_SUPABASE_URL (например, https://api.openger.com)');
     process.exit(1);
   }
 
   console.log(`==> Сборка SQL-дампа из ${BACKUP_DIR} с заменой публичных ссылок на ${targetUrl}...`);
   const { sql, totalRewrittenUrls, manifest } = buildImportSql(BACKUP_DIR, targetUrl);
+  if (!manifest.Verification?.tablesMatched || !manifest.Verification?.filesMatched) {
+    throw new Error('Манифест сообщает о расхождении таблиц или файлов. Импорт остановлен до подключения к VPS.');
+  }
+  console.log(`==> Проверка ${verifyBackupFiles(BACKUP_DIR, manifest)} файлов по размеру и SHA-256...`);
   const sqlOutPath = join(BACKUP_DIR, 'import.sql');
   writeFileSync(sqlOutPath, sql, 'utf8');
 
@@ -359,10 +477,13 @@ async function main() {
 
   console.log('==> [2/2] Загрузка медиафайлов в Storage нового сервера...');
   const uploaded = await uploadStorageFiles(targetUrl, targetServiceKey, manifest);
+  const storageVerificationPath = join(BACKUP_DIR, 'verify-storage.sql');
+  writeFileSync(storageVerificationPath, `${buildStorageVerificationSql(manifest)}\n`, 'utf8');
+  executeTargetSql(storageVerificationPath);
 
   console.log(
     `==> Импорт завершён: восстановлено таблиц — ${manifest.Verification.totalTables}, ` +
-      `переписано ссылок — ${totalRewrittenUrls}, загружено файлов — ${uploaded}.`,
+      `переписано ссылок — ${totalRewrittenUrls}, загружено файлов — ${uploaded}; Storage совпадает с манифестом.`,
   );
 }
 

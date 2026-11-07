@@ -90,7 +90,9 @@
     "build:android": "eas build --profile development --platform android",
     "build:ios": "eas build --profile development --platform ios",
     "postinstall": "patch-package",
-    "test:functions": "npx -y deno@2 test --allow-env --allow-read --node-modules-dir=none supabase/functions"
+    "test:functions": "npx -y deno@2 test --allow-env --allow-read --node-modules-dir=none supabase/functions",
+    "migrate:selfhosted": "node scripts/migration/apply-migrations.mjs",
+    "test:selfhosted": "node scripts/migration/run-selfhosted-tests.mjs"
   },
   "private": true,
   "jest": {
