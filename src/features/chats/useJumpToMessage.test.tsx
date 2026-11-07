@@ -64,6 +64,23 @@ describe('useJumpToMessage', () => {
     });
   });
 
+  it('starts a distant cached jump immediately and positions the target without an animated correction', async () => {
+    const rows = Array.from({ length: 30 }, (_, index) => ({ key: `row-${index}` }));
+    const { result, list } = await setup(rows);
+
+    await act(async () => {
+      await result.current.jump('row-25', 25);
+    });
+
+    expect(list.scrollToIndex).toHaveBeenCalledTimes(1);
+    expect(list.scrollToIndex).toHaveBeenCalledWith({
+      index: 25,
+      viewPosition: 0.5,
+      animated: false,
+    });
+    expect(result.current.positioned).toBe(true);
+  });
+
   it('hides a distant target and loads its window before any scroll', async () => {
     const loadWindow = jest.fn(async () => true);
     const { result, list } = await setup([], loadWindow);

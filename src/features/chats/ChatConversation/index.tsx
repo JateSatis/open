@@ -840,13 +840,20 @@ export function ChatConversation({
   );
   const jumpDown = useCallback(() => {
     const { offset, viewport } = scrollState.current;
+    const distant = chatMessages.windowSeq !== null || offset >= viewport * JUMP_DOWN_SCREENS;
+    if (distant) {
+      // Reanimated shared value starts on the tap, before React switches the window.
+      // eslint-disable-next-line react-hooks/immutability
+      jumpGlide.value = -GLIDE_SCREENS * Math.max(1, viewport);
+      jumpGlide.value = withTiming(0, { duration: GLIDE_MS, easing: GLIDE_EASING });
+    }
     closeWindow();
     setAwayFromBottom(false);
 
     // Близко к низу — обычная плавная прокрутка. Далеко — иллюзия быстрого
     // скролла вниз, без прохода через сотни сообщений и без пагинации.
-    if (offset < viewport * JUMP_DOWN_SCREENS) {
-      requestAnimationFrame(() => listRef.current?.scrollToOffset({ offset: 0, animated: true }));
+    if (!distant) {
+      listRef.current?.scrollToOffset({ offset: 0, animated: true });
       return;
     }
 
@@ -854,10 +861,8 @@ export function ChatConversation({
     requestAnimationFrame(() => {
       listRef.current?.scrollToOffset({ offset: 0, animated: false });
       setGlideHidden(false);
-      jumpGlide.value = -GLIDE_SCREENS * Math.max(1, viewport);
-      jumpGlide.value = withTiming(0, { duration: GLIDE_MS, easing: GLIDE_EASING });
     });
-  }, [closeWindow, jumpGlide]);
+  }, [chatMessages.windowSeq, closeWindow, jumpGlide]);
 
   useEffect(() => {
     if (!isFocused) return;
@@ -1209,7 +1214,7 @@ export function ChatConversation({
                   <FlatList
                   // Другой вид — другая лента: список начинается заново, а не
                   // со смещения прежней (место держит прыжок переключения).
-                  key={`${chatThreads.view}:${chatMessages.windowSeq ?? 'live'}`}
+                  key={chatThreads.view}
                   showsVerticalScrollIndicator={false}
                   showsHorizontalScrollIndicator={false}
                   ref={listRef}

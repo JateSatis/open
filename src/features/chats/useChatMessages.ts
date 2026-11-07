@@ -195,7 +195,6 @@ export function useChatMessages(
     setWindowSeq(seq);
   }, [chatId, queryClient]);
   const loadWindow = useCallback(async (seq: number) => {
-    openWindow(seq);
     try {
       const result = await queryClient.fetchQuery({
         queryKey: messageWindowKey(chatId, seq),
@@ -203,6 +202,7 @@ export function useChatMessages(
         staleTime: Infinity,
       });
       if (!result.items.some((message) => message.seq === seq)) return false;
+      openWindow(seq);
       return true;
     } catch {
       return false;

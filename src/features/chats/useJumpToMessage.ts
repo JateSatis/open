@@ -5,7 +5,6 @@ import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
 import type { FlatList } from 'react-native';
 import {
   Easing,
-  runOnJS,
   withTiming,
   type SharedValue,
 } from 'react-native-reanimated';
@@ -35,7 +34,7 @@ type Target = { rowKey: string; viewPosition: number | null };
 
 /** Иллюзия быстрой прокрутки: сколько высот экрана проезжает список за анимацию. */
 export const GLIDE_SCREENS = 1.5;
-export const GLIDE_MS = 320;
+export const GLIDE_MS = 170;
 export const GLIDE_EASING = Easing.out(Easing.cubic);
 
 export type JumpToMessage = {
@@ -68,7 +67,7 @@ function placeOf(index: number, viewPosition: number | null, animated: boolean) 
  */
 export function useJumpToMessage(
   listRef: RefObject<FlatList<ChatListRow> | null>,
-  rows: readonly { key: string }[],
+  rows: readonly { key: string; message?: { seq: number }; island?: { seq: number } }[],
   loadWindow: (seq: number) => Promise<boolean>,
   initiallyPositioned = true,
   glide: SharedValue<number>,
@@ -92,6 +91,8 @@ export function useJumpToMessage(
   const attemptNumberRef = useRef(0);
   const attemptIdRef = useRef<string | null>(null);
   const glidePendingRef = useRef(false);
+  const visibleIndexRef = useRef(0);
+  const glideStartedRef = useRef(0);
 
   // Цель прокручивается, когда она уже в списке: после догрузки строки
   // появляются только на следующей отрисовке.
@@ -134,13 +135,30 @@ export function useJumpToMessage(
       waitingForListRef.current = false;
       attemptIdRef.current = attemptId;
       navigationPerfStart(attemptId, 'message', { rowKey, seq, flash, viewPosition });
-      const loaded = rows.some((row) => row.key === rowKey);
+      const indexBeforeLoad = rows.findIndex((row) => row.key === rowKey);
+      const loaded = indexBeforeLoad !== -1;
+      const distant = !loaded || Math.abs(indexBeforeLoad - visibleIndexRef.current) * 96 > Math.max(1, viewport()) * 1.5;
+      if (!distant) glidePendingRef.current = false;
+      if (distant && initiallyPositioned) {
+        const visibleRow = rows[visibleIndexRef.current];
+        const visibleSeq = visibleRow?.message?.seq ?? visibleRow?.island?.seq;
+        const direction = loaded
+          ? (indexBeforeLoad < visibleIndexRef.current ? -1 : 1)
+          : (visibleSeq !== undefined && seq > visibleSeq ? -1 : 1);
+        glidePendingRef.current = true;
+        glideStartedRef.current = Date.now();
+        navigationPerfMark(attemptId, 'glide-start', { direction });
+        glide.value = direction * GLIDE_SCREENS * Math.max(1, viewport());
+        glide.value = withTiming(0, { duration: GLIDE_MS, easing: GLIDE_EASING });
+      }
       navigationPerfMark(attemptId, loaded ? 'target-in-current-rows' : 'window-request');
       const found = loaded || (await loadWindow(seq));
       if (attemptIdRef.current !== attemptId) return false;
       navigationPerfMark(attemptId, 'target-data-ready', { found });
 
       if (!found) {
+        glidePendingRef.current = false;
+        glide.value = 0;
         targetRef.current = null;
         visibleKeyRef.current = null;
         alignAfterVisibleRef.current = false;
@@ -155,7 +173,7 @@ export function useJumpToMessage(
       placeRef.current = target.viewPosition;
       failedRetryRef.current = false;
 
-      if (loaded && list && index !== -1) {
+      if (loaded && list && index !== -1 && !distant) {
         targetRef.current = null;
         alignAfterVisibleRef.current = false;
         // Маршрутный переход (экран въезжает уже на цели) — цель ставится
@@ -169,13 +187,17 @@ export function useJumpToMessage(
         });
         placeRequestRef.current = placeOf(index, target.viewPosition, animated);
         list.scrollToIndex(placeRequestRef.current);
+      } else if (loaded && list && index !== -1) {
+        targetRef.current = null;
+        alignAfterVisibleRef.current = false;
+        placeRequestRef.current = placeOf(index, target.viewPosition, false);
+        list.scrollToIndex(placeRequestRef.current);
       } else {
         targetRef.current = target;
         alignAfterVisibleRef.current = true;
         // Далёкая цель едет иллюзией быстрой прокрутки, а не появляется
         // мгновенно. Внутри чата далёкая цель всегда старше места чтения —
         // направление «вверх».
-        glidePendingRef.current = true;
         setPositioned(false);
         setJumps((count) => count + 1);
       }
@@ -184,7 +206,7 @@ export function useJumpToMessage(
 
       return true;
     },
-    [listRef, loadWindow, rows, initiallyPositioned],
+    [glide, initiallyPositioned, listRef, loadWindow, rows, viewport],
   );
 
   const onScrollToIndexFailed = useCallback(
@@ -217,6 +239,8 @@ export function useJumpToMessage(
   );
 
   const onVisible = useCallback((keys: string[]) => {
+    const first = rows.findIndex((row) => keys.includes(row.key));
+    if (first !== -1) visibleIndexRef.current = first;
     const targetKey = visibleKeyRef.current;
     if (!targetKey || !keys.includes(targetKey)) return;
 
@@ -229,11 +253,8 @@ export function useJumpToMessage(
     if (glidePendingRef.current) {
       glidePendingRef.current = false;
       setPositioned(true);
-      navigationPerfMark(attemptIdRef.current ?? '', 'glide-start', { direction: 'up' });
-      glide.value = GLIDE_SCREENS * Math.max(1, viewport());
-      glide.value = withTiming(0, { duration: GLIDE_MS, easing: GLIDE_EASING }, (finished) => {
-        if (finished) runOnJS(navigationPerfMark)(attemptIdRef.current ?? '', 'glide-end');
-      });
+      if (Date.now() - glideStartedRef.current >= GLIDE_MS) glide.value = 0;
+      navigationPerfMark(attemptIdRef.current ?? '', 'positioned');
       return;
     }
 
@@ -243,7 +264,7 @@ export function useJumpToMessage(
     alignAfterVisibleRef.current = false;
     navigationPerfMark(attemptIdRef.current ?? '', 'positioned');
     requestAnimationFrame(() => setPositioned(true));
-  }, [glide, listRef, rows, viewport]);
+  }, [glide, rows]);
 
   const onMomentumScrollEnd = useCallback(() => {
     navigationPerfMark(attemptIdRef.current ?? '', 'momentum-end');
