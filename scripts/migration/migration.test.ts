@@ -53,7 +53,7 @@ describe('scripts/migration (export-cloud & import-selfhosted)', () => {
       import { rewritePublicMediaUrl, toSqlLiteral, transformTableRow } from './scripts/migration/import-selfhosted.mjs';
 
       const cliSample = 'Initialising login role...\\n{"boundary":"abc","rows":[{"cnt":5}]}\\nA new version...';
-      const target = 'https://api.openger.ru/';
+      const target = 'https://api.openger.com/';
       const oldPopUrl = 'https://cxgkiwxgwxiybazyvcgi.supabase.co/storage/v1/object/public/media/626baf39/pops/video.mp4';
 
       const pop = transformTableRow(
@@ -107,23 +107,23 @@ describe('scripts/migration (export-cloud & import-selfhosted)', () => {
     expect(result.buckets).toEqual(['avatars', 'chat-media', 'media']);
     expect(result.parsedCli).toEqual([{ cnt: 5 }]);
     expect(result.rewrittenPopUrl).toBe(
-      'https://api.openger.ru/storage/v1/object/public/media/626baf39/pops/video.mp4',
+      'https://api.openger.com/storage/v1/object/public/media/626baf39/pops/video.mp4',
     );
     expect(result.untouchedRelative).toBe('626baf39/photo/123.jpg');
     expect(result.untouchedExternal).toBe('https://lh3.googleusercontent.com/a/avatar');
 
     expect(result.pop.rewritten).toBe(2);
-    expect(result.pop.row.url).toBe('https://api.openger.ru/storage/v1/object/public/media/u1/pops/v.mp4');
-    expect(result.pop.row.poster_url).toBe('https://api.openger.ru/storage/v1/object/public/media/u1/pops/p.jpg');
+    expect(result.pop.row.url).toBe('https://api.openger.com/storage/v1/object/public/media/u1/pops/v.mp4');
+    expect(result.pop.row.poster_url).toBe('https://api.openger.com/storage/v1/object/public/media/u1/pops/p.jpg');
 
     expect(result.channel.rewritten).toBe(1);
     expect(result.channel.row.avatar_url).toBe(
-      'https://api.openger.ru/storage/v1/object/public/media/u1/channel-avatar/a.jpg',
+      'https://api.openger.com/storage/v1/object/public/media/u1/channel-avatar/a.jpg',
     );
 
     expect(result.chat.rewritten).toBe(1);
     expect(result.chat.row.avatar_url).toBe(
-      'https://api.openger.ru/storage/v1/object/public/media/u1/group-avatar/g.jpg',
+      'https://api.openger.com/storage/v1/object/public/media/u1/group-avatar/g.jpg',
     );
 
     expect(result.literals.nullVal).toBe('NULL');
@@ -131,5 +131,25 @@ describe('scripts/migration (export-cloud & import-selfhosted)', () => {
     expect(result.literals.arrVal).toBe('ARRAY[1, 2, 3]::smallint[]');
     expect(result.literals.emptyArr).toBe("'{}'::uuid[]");
     expect(result.literals.jsonbVal).toBe('\'{"a":1}\'::jsonb');
+  });
+
+  it('строит проверки количества строк, старого домена и точного состава Storage', () => {
+    const result = evalModule(`
+      import { buildDatabaseVerificationSql, buildStorageVerificationSql } from './scripts/migration/import-selfhosted.mjs';
+      console.log(JSON.stringify({
+        database: buildDatabaseVerificationSql([{ schema: 'public', table: 'pops', count: 52 }]),
+        storage: buildStorageVerificationSql({ files: [
+          { bucket: 'avatars', path: 'u1/a.jpg' },
+          { bucket: 'media', path: 'u1/pops/p.mp4' },
+        ] }),
+      }));
+    `);
+
+    expect(result.database).toContain('public"."pops');
+    expect(result.database).toContain('actual <> 52');
+    expect(result.database).toContain('strpos("url", \'cxgkiwxgwxiybazyvcgi.supabase.co\')');
+    expect(result.storage).toContain('actual <> 2');
+    expect(result.storage).toContain("('avatars', 'u1/a.jpg')");
+    expect(result.storage).toContain("('media', 'u1/pops/p.mp4')");
   });
 });

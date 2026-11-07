@@ -27,7 +27,7 @@
 	handle /realtime/v1/* {
 		uri replace /realtime/v1 /socket
 		reverse_proxy realtime:4000 {
-			header_up Host realtime.supabase.eston
+			header_up Host realtime-dev.supabase.eston
 		}
 	}
 
