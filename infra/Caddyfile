@@ -1,0 +1,60 @@
+# Конфигурация Caddy для облегчённого стека Open (Supabase + LiveKit).
+#
+# 1. Внутренний порт :8000 — шлюз внутри Docker-сети для `functions` и `pg_net`
+#    (без TLS, чтобы сервисы общались напрямую без петли через внешний IP).
+# 2. Публичный API-домен `{$API_DOMAIN}` — авто-TLS (Let's Encrypt) и маршрутизация
+#    всех путей `@supabase/supabase-js`:
+#      /auth/v1/*      -> auth:9999
+#      /rest/v1/*      -> rest:3000
+#      /realtime/v1/*  -> realtime:4000/socket/*
+#      /storage/v1/*   -> storage:5000
+#      /functions/v1/* -> functions:9000
+# 3. Домен звонков `{$LIVEKIT_DOMAIN}` — авто-TLS и проксирование WebSocket/HTTP
+#    сигнализации на `livekit:7880`.
+
+(supabase_routes) {
+	# GoTrue ожидает запросы без префикса /auth/v1
+	handle_path /auth/v1/* {
+		reverse_proxy auth:9999
+	}
+
+	# PostgREST ожидает запросы без префикса /rest/v1
+	handle_path /rest/v1/* {
+		reverse_proxy rest:3000
+	}
+
+	# Phoenix-сокет Realtime слушает /socket/* и проверяет tenant по Host
+	handle /realtime/v1/* {
+		uri replace /realtime/v1 /socket
+		reverse_proxy realtime:4000 {
+			header_up Host realtime.supabase.eston
+		}
+	}
+
+	# Storage API ожидает запросы без префикса /storage/v1
+	handle_path /storage/v1/* {
+		reverse_proxy storage:5000
+	}
+
+	# Edge Runtime main-роутер принимает /<function-name>
+	handle_path /functions/v1/* {
+		reverse_proxy functions:9000
+	}
+
+	handle /health {
+		respond "ok" 200
+	}
+}
+
+:8000 {
+	import supabase_routes
+}
+
+{$API_DOMAIN} {
+	encode zstd gzip
+	import supabase_routes
+}
+
+{$LIVEKIT_DOMAIN} {
+	reverse_proxy livekit:7880
+}
