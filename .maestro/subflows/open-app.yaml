@@ -2,17 +2,16 @@ appId: com.openger.app
 ---
 # Приложение уже загружено — ссылка сбрасывает стек на список чатов без перезагрузки
 # бандла. Не загружено (или висит ошибка dev-клиента) — холодный старт.
-- openLink: "openger://chats"
+- openLink: 'openger://chats'
 - waitForAnimationToEnd:
     timeout: 3000
 - runFlow:
     when:
       notVisible:
-        id: "chat-list-item"
+        id: 'tab-bar'
     file: restart-app.yaml
-# Ждём строки списка, а не заголовок «Чаты»: заголовок рисуется раньше данных, и тап по
-# чату сразу после него промахивался.
+# Готовность приложения не зависит от наличия чатов. Нужный чат ждёт open-chat.yaml.
 - extendedWaitUntil:
     visible:
-      id: "chat-list-item"
+      id: 'tab-bar'
     timeout: 90000

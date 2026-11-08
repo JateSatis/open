@@ -3,41 +3,54 @@
 // adb отвечает молчанием, и без ограничения команда висит бесконечно.
 //
 //   node scripts/device.mjs help
-import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { spawnSync } from 'node:child_process';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import {
+  ensureMetro,
+  metroStatus,
+  checkManifest,
+  stopOwnedMetro,
+  packageInfo,
+  classifyUi,
+  backendStatus,
+  saveDiagnostic,
+} from './dev-runtime.mjs';
+import { installedCompatibility } from './dev-build.mjs';
+import { deviceSelection, resolveDevices } from './device-selection.mjs';
+import { ensureScrcpy } from './visual-tools.mjs';
 
 const PORT = 8081;
 const ADB_TIMEOUT_MS = 20_000;
 // Сколько tap/swipe ждут появления цели: экран после перехода дорисовывается не сразу.
 const TARGET_WAIT_MS = 10_000;
-const { expo } = JSON.parse(readFileSync(new URL("../app.json", import.meta.url), "utf8"));
+const { expo } = JSON.parse(readFileSync(new URL('../app.json', import.meta.url), 'utf8'));
 const APP_ID = expo.android.package;
 const DEV_CLIENT_URL = `${expo.scheme}://expo-development-client/?url=${encodeURIComponent(
   `http://127.0.0.1:${PORT}`,
 )}`;
-const OUT_DIR = process.env.OPEN_DEVICE_OUT ?? join(tmpdir(), "open-device");
-const TOOLS_DIR = join(process.env.LOCALAPPDATA ?? tmpdir(), "open-tools");
-const SCRCPY_VERSION = "3.1";
-const SCRCPY_URL = `https://github.com/Genymobile/scrcpy/releases/download/v${SCRCPY_VERSION}/scrcpy-win64-v${SCRCPY_VERSION}.zip`;
+const OUT_DIR = process.env.OPEN_DEVICE_OUT ?? join(tmpdir(), 'open-device');
 
 const HELP = `node scripts/device.mjs <команда> [-s <serial>] ...
 
-Устройство: -s <serial>, иначе ANDROID_SERIAL, иначе единственное подключённое.
+up/reset: --phone по умолчанию (ANDROID_SERIAL не используется), --emulator, --both или -s SERIAL.
+Остальные команды: -s SERIAL, иначе ANDROID_SERIAL, иначе единственное подключённое.
+Без команды --phone/--emulator/--both означают up.
 
-  up [--emulator [--second]]    всё окружение одной командой и только недостающее: Metro,
-                                прогрев бандла, adb reverse, часы, Open открыт на списке чатов.
-                                По умолчанию — подключённый телефон; нет его — выход 4 (спроси
-                                человека). --emulator — эмулятор open_test (--second — и
-                                open_test_2). -s — конкретное устройство. Open не дошёл до
-                                списка за 90 с — сам делает reset
-  reset [-s <serial>]           полный перезапуск: драйвер Maestro, Open, Metro, adb, эмулятор
-                                холодным стартом. Окружение ведёт себя странно — сразу сюда
+  up [--phone|--emulator|--both] только недостающее; телефон по умолчанию, выход 4 при недоступности.
+                                --both: телефон + один OPEN_AVD (по умолчанию open_test).
+                                -s SERIAL: ровно одно устройство; с режимами не совмещается.
+                                Metro проверяется по проекту и переиспользуется. Экран входа и
+                                пустой список допустимы. Нет автоматического полного reset.
+  reset [--phone|--emulator|--both] [--component app|driver|metro|adb|all]
+                                по умолчанию перезапуск только Open; all — явное восстановление
+                                выбранных устройств; выключенные эмуляторы не запускаются.
+                                Metro/adb — общие службы, их явный reset влияет на все соединения.
   devices                       подключённые устройства: модель, Android, что на экране
-  doctor [--fix]                adb, Metro (статус и манифест), adb reverse, приложение наверху;
-                                --fix пробрасывает порт и открывает dev build
+  doctor [--fix]                сборка, Metro, reverse, часы, бэкенд; --fix чинит reverse/часы
+                                и открывает Open. Полная диагностика сохраняется в .expo/agent-runtime.
   open                          открыть dev build на Metro (или запустить release-сборку)
   ui [--all]                    дерево экрана: подписи, testID, центр; --all — и пустые узлы
   tap <цель> [--long] [--n N]   тап по цели; ждёт её появления до 10 с; несколько совпадений —
@@ -60,18 +73,20 @@ const HELP = `node scripts/device.mjs <команда> [-s <serial>] ...
 
 // ---------- adb ----------
 
-function run(cmd, args, { timeout = ADB_TIMEOUT_MS, input, binary = false } = {}) {
+function run(cmd, args, { timeout = ADB_TIMEOUT_MS, input, binary = false, stdio } = {}) {
   const res = spawnSync(cmd, args, {
-    encoding: binary ? "buffer" : "utf8",
+    encoding: binary ? 'buffer' : 'utf8',
     timeout,
     input,
+    stdio,
+    windowsHide: true,
     maxBuffer: 64 * 1024 * 1024,
   });
 
-  if (res.error?.code === "ETIMEDOUT") {
+  if (res.error?.code === 'ETIMEDOUT') {
     fail(
-      `${cmd} ${args.join(" ")} не ответил за ${timeout / 1000} с.` +
-        (cmd === "adb" ? " Залипший сервер: taskkill /F /IM adb.exe, затем adb start-server." : ""),
+      `${cmd} ${args.join(' ')} не ответил за ${timeout / 1000} с.` +
+        (cmd === 'adb' ? ' Проверь adb; адресное восстановление: reset --component adb.' : ''),
     );
   }
   if (res.error) fail(`${cmd}: ${res.error.message}`);
@@ -80,47 +95,29 @@ function run(cmd, args, { timeout = ADB_TIMEOUT_MS, input, binary = false } = {}
 }
 
 function fail(message, code = 1) {
-  console.error(message);
-  process.exit(code);
+  throw Object.assign(new Error(message), { exitCode: code });
 }
 
 let serial = null;
 
 function adb(args, opts) {
-  return run("adb", serial ? ["-s", serial, ...args] : args, opts);
+  return run('adb', serial ? ['-s', serial, ...args] : args, opts);
 }
 
 function shell(command, opts) {
-  return adb(["shell", command], opts).stdout ?? "";
+  return adb(['shell', command], opts).stdout ?? '';
 }
 
 function attached() {
-  let result = run("adb", ["devices"]);
-  let devices = result.status === 0 ? parseAttachedDevices(result.stdout) : [];
-  if (result.status !== 0 || devices.length === 0) {
-    const firstError = String(result.stderr ?? "").trim();
-    // After sleep, the ADB server can stay alive but stop reporting devices.
-    // Restart it once before telling the user that nothing is connected.
-    run("adb", ["kill-server"]);
-    const start = run("adb", ["start-server"]);
-    if (start.status !== 0) {
-      const detail = String(start.stderr ?? "").trim();
-      fail(`Не удалось перезапустить adb (код ${start.status}). ${detail || firstError}`);
-    }
-
-    result = run("adb", ["devices"]);
-    if (result.status !== 0) {
-      const detail = String(result.stderr ?? "").trim();
-      fail(`adb devices не выполнился после перезапуска (код ${result.status}). ${detail || firstError}`);
-    }
-    devices = parseAttachedDevices(result.stdout);
-  }
-
-  return devices;
+  const result = run('adb', ['devices']);
+  if (result.status !== 0)
+    fail('adb devices: ошибка; используй reset --component adb только после диагностики.');
+  return parseAttachedDevices(result.stdout);
 }
 
 function parseAttachedDevices(stdout) {
-  return stdout.split(/\r?\n/)
+  return stdout
+    .split(/\r?\n/)
     .slice(1)
     .map((line) => line.trim().split(/\s+/))
     .filter(([s, state]) => s && state)
@@ -129,38 +126,44 @@ function parseAttachedDevices(stdout) {
 
 function pickDevice(flag) {
   const devices = attached();
-  const ready = devices.filter((d) => d.state === "device").map((d) => d.serial);
+  const ready = devices.filter((d) => d.state === 'device').map((d) => d.serial);
   const wanted = flag ?? process.env.ANDROID_SERIAL;
 
   if (wanted) {
     if (!ready.includes(wanted)) {
       const state = devices.find((d) => d.serial === wanted)?.state;
-      fail(`${wanted} недоступен${state ? ` (состояние adb: ${state})` : ""}. Готовы: ${ready.join(", ") || "нет"}`);
+      fail(
+        `${wanted} недоступен${state ? ` (состояние adb: ${state})` : ''}. Готовы: ${ready.join(', ') || 'нет'}`,
+      );
     }
     return wanted;
   }
   if (ready.length === 1) return ready[0];
   if (ready.length === 0 && devices.length === 0) {
-    fail("ADB был перезапущен, но устройств не обнаружено. Проверьте USB и отладку: node scripts/device.mjs devices.");
+    fail(
+      'Устройств не обнаружено; adb не перезапускался. Проверьте USB и отладку: node scripts/device.mjs devices.',
+    );
   }
   if (ready.length === 0) {
-    fail(`ADB видит устройства, но ни одно не готово: ${devices.map((d) => `${d.serial} (${d.state})`).join(", ")}. Проверьте разрешение отладки на телефоне.`);
+    fail(
+      `ADB видит устройства, но ни одно не готово: ${devices.map((d) => `${d.serial} (${d.state})`).join(', ')}. Проверьте разрешение отладки на телефоне.`,
+    );
   }
   fail(
     ready.length === 0
-      ? "Ни одного устройства. node scripts/device.mjs devices — проверить состояние."
-      : `Подключено несколько: ${ready.join(", ")}. Укажи -s <serial>.`,
+      ? 'Ни одного устройства. node scripts/device.mjs devices — проверить состояние.'
+      : `Подключено несколько: ${ready.join(', ')}. Укажи -s <serial>.`,
   );
 }
 
 function topActivity() {
-  const out = shell("dumpsys activity activities");
+  const out = shell('dumpsys activity activities');
   const line =
-    out.split(/\r?\n/).find((l) => l.includes("topResumedActivity")) ??
-    out.split(/\r?\n/).find((l) => l.includes("mResumedActivity")) ??
-    "";
+    out.split(/\r?\n/).find((l) => l.includes('topResumedActivity')) ??
+    out.split(/\r?\n/).find((l) => l.includes('mResumedActivity')) ??
+    '';
 
-  return line.match(/\{[^}]*\s(\S+\/\S+)/)?.[1] ?? "";
+  return line.match(/\{[^}]*\s(\S+\/\S+)/)?.[1] ?? '';
 }
 
 function appOnTop() {
@@ -170,8 +173,8 @@ function appOnTop() {
 function guard() {
   if (!appOnTop()) {
     fail(
-      `Наверху не Open, а ${topActivity() || "неизвестно"}. Жест отменён.` +
-        " Открыть приложение: node scripts/device.mjs open",
+      `Наверху не Open, а ${topActivity() || 'неизвестно'}. Жест отменён.` +
+        ' Открыть приложение: node scripts/device.mjs open',
       3,
     );
   }
@@ -182,21 +185,24 @@ function guard() {
 /** soft: вместо выхода вернуть null — для ожиданий, где «экран ещё грузится» не ошибка. */
 function dumpUi({ soft = false } = {}) {
   for (let attempt = 0; attempt < (soft ? 1 : 3); attempt += 1) {
-    const out = adb(["exec-out", "uiautomator", "dump", "/dev/tty"], { timeout: 15_000 }).stdout;
-    const xml = out.slice(out.indexOf("<?xml"), out.lastIndexOf("</hierarchy>") + "</hierarchy>".length);
+    const out = adb(['exec-out', 'uiautomator', 'dump', '/dev/tty'], { timeout: 15_000 }).stdout;
+    const xml = out.slice(
+      out.indexOf('<?xml'),
+      out.lastIndexOf('</hierarchy>') + '</hierarchy>'.length,
+    );
 
-    if (xml.includes("<node")) return xml;
+    if (xml.includes('<node')) return xml;
     // Драйвер Maestro от прерванного прогона держит UiAutomation, и дамп молча пустой.
     if (attempt === 0) {
-      shell("am force-stop dev.mobile.maestro; am force-stop dev.mobile.maestro.test");
+      shell('am force-stop dev.mobile.maestro; am force-stop dev.mobile.maestro.test');
     }
     // «could not get idle state» — экран ещё анимируется; через секунду обычно проходит.
-    spawnSync(process.execPath, ["-e", "setTimeout(() => {}, 1000)"]);
+    spawnSync(process.execPath, ['-e', 'setTimeout(() => {}, 1000)']);
   }
   if (soft) return null;
   fail(
-    "uiautomator не отдал дерево экрана: экран непрерывно анимируется (видео) или занят диалогом." +
-      " Видео — смотри скриншотом (shot); всё остальное — node scripts/device.mjs reset.",
+    'uiautomator не отдал дерево экрана: экран непрерывно анимируется (видео) или занят диалогом.' +
+      ' Сделай shot; при занятом драйвере — reset --component driver.',
   );
 }
 
@@ -205,23 +211,23 @@ const decode = (s) =>
     .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
     .replace(/&quot;/g, '"')
     .replace(/&apos;/g, "'")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&amp;/g, "&");
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&');
 
 function parseNodes(xml) {
   return [...xml.matchAll(/<node [^>]*?>/g)].map(([tag]) => {
-    const attr = (name) => decode(tag.match(new RegExp(` ${name}="([^"]*)"`))?.[1] ?? "");
-    const [x1, y1, x2, y2] = attr("bounds").match(/\d+/g)?.map(Number) ?? [0, 0, 0, 0];
-    const rawId = attr("resource-id");
+    const attr = (name) => decode(tag.match(new RegExp(` ${name}="([^"]*)"`))?.[1] ?? '');
+    const [x1, y1, x2, y2] = attr('bounds').match(/\d+/g)?.map(Number) ?? [0, 0, 0, 0];
+    const rawId = attr('resource-id');
 
     return {
-      text: attr("text"),
-      desc: attr("content-desc"),
+      text: attr('text'),
+      desc: attr('content-desc'),
       // testID приходит как resource-id без пакета; нативные id — с пакетом, их режем.
-      id: rawId.includes(":id/") ? rawId.split(":id/")[1] : rawId,
-      clickable: attr("clickable") === "true",
-      focused: attr("focused") === "true",
+      id: rawId.includes(':id/') ? rawId.split(':id/')[1] : rawId,
+      clickable: attr('clickable') === 'true',
+      focused: attr('focused') === 'true',
       cx: Math.round((x1 + x2) / 2),
       cy: Math.round((y1 + y2) / 2),
       w: x2 - x1,
@@ -240,10 +246,10 @@ function describe(node) {
   if (node.id) parts.push(`#${node.id}`);
   if (node.text && !isGlyph(node.text)) parts.push(JSON.stringify(node.text.slice(0, 60)));
   if (node.desc && node.desc !== node.text) parts.push(`[${node.desc.slice(0, 60)}]`);
-  if (node.clickable) parts.push("tap");
-  if (node.focused) parts.push("focus");
+  if (node.clickable) parts.push('tap');
+  if (node.focused) parts.push('focus');
 
-  return `${parts.join(" ")}  @${node.cx},${node.cy}`;
+  return `${parts.join(' ')}  @${node.cx},${node.cy}`;
 }
 
 function cmdUi(all) {
@@ -261,7 +267,7 @@ function cmdUi(all) {
 }
 
 function matchTarget(target, { soft = false } = {}) {
-  const [, kind, value] = target.match(/^(id|text|desc):(.*)$/s) ?? [null, "any", target];
+  const [, kind, value] = target.match(/^(id|text|desc):(.*)$/s) ?? [null, 'any', target];
   const xml = dumpUi({ soft });
   if (xml === null) return null;
   const nodes = parseNodes(xml).filter((n) => n.w > 0 && n.h > 0);
@@ -274,10 +280,12 @@ function matchTarget(target, { soft = false } = {}) {
   const found = nodes.filter(match);
 
   // Подпись часто стоит на некликабельном потомке: предпочитаем кликабельные совпадения.
-  return found.length > 1 && found.some((n) => n.clickable) ? found.filter((n) => n.clickable) : found;
+  return found.length > 1 && found.some((n) => n.clickable)
+    ? found.filter((n) => n.clickable)
+    : found;
 }
 
-const pause = (ms) => spawnSync(process.execPath, ["-e", `setTimeout(() => {}, ${ms})`]);
+const pause = (ms) => spawnSync(process.execPath, ['-e', `setTimeout(() => {}, ${ms})`]);
 
 /**
  * Ждёт, пока цель появится (или исчезнет). Опрос — дампом экрана подряд, без пауз: сам
@@ -296,7 +304,21 @@ function pollTarget(target, { gone = false, timeoutMs }) {
 
   if (found === null) {
     // Так и не отдалось: цели не видно, а «исчезло» подтвердить нечем.
-    return gone ? [{ id: "", text: target, desc: "", clickable: false, focused: false, cx: 0, cy: 0, w: 0, h: 0 }] : [];
+    return gone
+      ? [
+          {
+            id: '',
+            text: target,
+            desc: '',
+            clickable: false,
+            focused: false,
+            cx: 0,
+            cy: 0,
+            w: 0,
+            h: 0,
+          },
+        ]
+      : [];
   }
   return found;
 }
@@ -323,15 +345,17 @@ function findTarget(target, nth, timeoutMs = TARGET_WAIT_MS) {
 }
 
 function cmdWait(target, { gone, timeoutMs }) {
-  if (!target) fail("wait <цель> [--gone] [--timeout сек]");
+  if (!target) fail('wait <цель> [--gone] [--timeout сек]');
   const started = Date.now();
   const found = pollTarget(target, { gone, timeoutMs });
   const seconds = ((Date.now() - started) / 1000).toFixed(1);
 
   if (gone ? found.length > 0 : found.length === 0) {
-    fail(`«${target}» ${gone ? "не исчезло" : "не появилось"} за ${timeoutMs / 1000} с.`, 2);
+    fail(`«${target}» ${gone ? 'не исчезло' : 'не появилось'} за ${timeoutMs / 1000} с.`, 2);
   }
-  console.log(gone ? `«${target}» исчезло за ${seconds} с` : `${describe(found[0])}  (за ${seconds} с)`);
+  console.log(
+    gone ? `«${target}» исчезло за ${seconds} с` : `${describe(found[0])}  (за ${seconds} с)`,
+  );
 }
 
 // ---------- жесты ----------
@@ -345,7 +369,7 @@ function cmdTap(target, { long, nth }) {
   } else {
     shell(`input tap ${t.cx} ${t.cy}`);
   }
-  console.log(`${long ? "долгое нажатие" : "тап"}: ${t.label}`);
+  console.log(`${long ? 'долгое нажатие' : 'тап'}: ${t.label}`);
 }
 
 function cmdSwipe(args, nth) {
@@ -360,9 +384,10 @@ function cmdSwipe(args, nth) {
     return;
   }
 
-  const [target, dir, px = "300", ms = "250"] = args;
+  const [target, dir, px = '300', ms = '250'] = args;
   const delta = { left: [-1, 0], right: [1, 0], up: [0, -1], down: [0, 1] }[dir];
-  if (!target || !delta) fail("swipe <цель> <left|right|up|down> [px] [ms]  или  swipe x1,y1 x2,y2 [ms]");
+  if (!target || !delta)
+    fail('swipe <цель> <left|right|up|down> [px] [ms]  или  swipe x1,y1 x2,y2 [ms]');
 
   const t = findTarget(target, nth);
   const x2 = t.cx + delta[0] * Number(px);
@@ -375,20 +400,23 @@ function cmdSwipe(args, nth) {
 function cmdText(value) {
   guard();
   if (!/^[\x20-\x7E]*$/.test(value)) {
-    fail("adb input text понимает только латиницу и ASCII. Для кириллицы — тестовое сообщение латиницей.");
+    fail(
+      'adb input text понимает только латиницу и ASCII. Для кириллицы — тестовое сообщение латиницей.',
+    );
   }
   // Пробел для input text — %s; спецсимволы оболочки экранируем.
-  const escaped = value.replace(/ /g, "%s").replace(/(["'`\\$&|;<>()])/g, "\\$1");
+  const escaped = value.replace(/ /g, '%s').replace(/(["'`\\$&|;<>()])/g, '\\$1');
   shell(`input text ${escaped}`);
   console.log(`введено: ${value}`);
 }
 
 function cmdKey(name) {
   const code = { back: 4, enter: 66, del: 67 }[name];
-  if (code === undefined) fail("key <back|enter|del>");
+  if (code === undefined) fail('key <back|enter|del>');
   guard();
   shell(`input keyevent ${code}`);
-  if (!appOnTop()) console.error(`Внимание: после «${name}» Open больше не наверху (${topActivity()}).`);
+  if (!appOnTop())
+    console.error(`Внимание: после «${name}» Open больше не наверху (${topActivity()}).`);
   console.log(`клавиша ${name}`);
 }
 
@@ -396,88 +424,75 @@ function cmdKey(name) {
 
 function outPath(name, ext) {
   mkdirSync(OUT_DIR, { recursive: true });
-  const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
 
-  return join(OUT_DIR, `${name ? `${name}-` : ""}${stamp}.${ext}`);
+  return join(OUT_DIR, `${name ? `${name}-` : ''}${stamp}.${ext}`);
 }
 
 function cmdShot(name) {
-  const png = adb(["exec-out", "screencap", "-p"], { binary: true, timeout: 30_000 }).stdout;
-  if (!png || png.length < 1000) fail("screencap вернул пустой кадр.");
+  const png = adb(['exec-out', 'screencap', '-p'], { binary: true, timeout: 30_000 }).stdout;
+  if (!png || png.length < 1000) fail('screencap вернул пустой кадр.');
 
-  const file = outPath(name, "png");
+  const file = outPath(name, 'png');
   writeFileSync(file, png);
   console.log(file);
 }
 
-function ensureScrcpy() {
-  const dir = join(TOOLS_DIR, `scrcpy-win64-v${SCRCPY_VERSION}`);
-  const exe = join(dir, "scrcpy.exe");
-  if (existsSync(exe)) return exe;
-  if (process.platform !== "win32") return "scrcpy";
-
-  mkdirSync(TOOLS_DIR, { recursive: true });
-  const zip = join(TOOLS_DIR, "scrcpy.zip");
-  console.error(`Скачиваю scrcpy ${SCRCPY_VERSION}...`);
-  run("curl", ["-sSL", "-o", zip, SCRCPY_URL], { timeout: 120_000 });
-  // Именно системный bsdtar: GNU tar из Git Bash, первый в PATH, zip не читает.
-  const tar = join(process.env.SystemRoot ?? "C:\\Windows", "System32", "tar.exe");
-  run(tar, ["-xf", zip, "-C", TOOLS_DIR], { timeout: 60_000 });
-  if (!existsSync(exe)) fail(`scrcpy не распаковался в ${dir}`);
-
-  return exe;
-}
-
 function cmdRecord(seconds, name) {
   const sec = Number(seconds);
-  if (!sec || sec > 120) fail("record <сек> [имя], от 1 до 120 секунд.");
+  if (!Number.isInteger(sec) || sec < 1 || sec > 120) fail('record <сек> [имя], от 1 до 120 секунд.');
 
-  const file = outPath(name, "mp4");
+  const file = outPath(name, 'mp4');
   // Своя реализация захвата: adb screenrecord на realme запрещён.
-  run(
+  const recording = run(
     ensureScrcpy(),
-    ["-s", serial, "--no-audio", "--no-playback", "--no-window", `--record=${file}`, `--time-limit=${sec}`],
+    [
+      '-s',
+      serial,
+      '--no-audio',
+      '--no-playback',
+      '--no-window',
+      `--record=${file}`,
+      `--time-limit=${sec}`,
+    ],
     { timeout: (sec + 30) * 1000 },
   );
-  if (!existsSync(file)) fail("scrcpy не записал файл.");
+  if (recording.status !== 0) fail('scrcpy завершился с ошибкой; запись не подтверждена.');
+  if (!existsSync(file)) fail('scrcpy не записал файл.');
   console.log(file);
 }
 
 function cmdFrames(file, fps) {
-  if (!file || !existsSync(file)) fail("frames <mp4> [fps]");
-  const dir = file.replace(/\.mp4$/i, "-frames");
+  if (!file || !existsSync(file)) fail('frames <mp4> [fps]');
+  const dir = file.replace(/\.mp4$/i, '-frames');
   mkdirSync(dir, { recursive: true });
   // Без fps — каждый кадр как есть: частота scrcpy переменная, времена — из ffprobe.
-  const filter = fps ? ["-vf", `fps=${fps}`] : ["-vsync", "0"];
-  run("ffmpeg", ["-loglevel", "error", "-i", file, ...filter, join(dir, "%04d.png")], { timeout: 120_000 });
+  const filter = fps ? ['-vf', `fps=${fps}`] : ['-vsync', '0'];
+  run('ffmpeg', ['-loglevel', 'error', '-i', file, ...filter, join(dir, '%04d.png')], {
+    timeout: 120_000,
+  });
   console.log(dir);
-  if (!fps) console.log(`времена кадров: ffprobe -v error -select_streams v -show_entries frame=pts_time -of csv=p=0 "${file}"`);
+  if (!fps)
+    console.log(
+      `времена кадров: ffprobe -v error -select_streams v -show_entries frame=pts_time -of csv=p=0 "${file}"`,
+    );
 }
 
 // ---------- окружение ----------
 
-async function fetchText(url, headers = {}, ms = 4000) {
-  try {
-    const res = await fetch(url, { headers, signal: AbortSignal.timeout(ms) });
-    return { ok: res.ok, text: await res.text() };
-  } catch (error) {
-    return { ok: false, text: String(error.message ?? error) };
-  }
-}
-
 function cmdDevices() {
   const list = attached();
-  if (list.length === 0) console.log("Ни одного устройства.");
+  if (list.length === 0) console.log('Ни одного устройства.');
 
   for (const d of list) {
-    if (d.state !== "device") {
+    if (d.state !== 'device') {
       console.log(`${d.serial}  ${d.state}`);
       continue;
     }
     serial = d.serial;
-    const model = shell("getprop ro.product.model").trim();
-    const android = shell("getprop ro.build.version.release").trim();
-    console.log(`${d.serial}  ${model}, Android ${android}, наверху: ${topActivity() || "?"}`);
+    const model = shell('getprop ro.product.model').trim();
+    const android = shell('getprop ro.build.version.release').trim();
+    console.log(`${d.serial}  ${model}, Android ${android}, наверху: ${topActivity() || '?'}`);
   }
 }
 
@@ -486,22 +501,24 @@ function cmdOpen() {
   if (!installed) fail(`${APP_ID} не установлен на ${serial}.`);
 
   // В манифесте dev build есть активности dev-лаунчера; у release их нет.
-  const isDevBuild = shell(`dumpsys package ${APP_ID}`).includes("devlauncher");
+  const isDevBuild = shell(`dumpsys package ${APP_ID}`).includes('devlauncher');
   if (isDevBuild) {
-    adb(["reverse", `tcp:${PORT}`, `tcp:${PORT}`]);
+    adb(['reverse', `tcp:${PORT}`, `tcp:${PORT}`]);
     shell(`am start -a android.intent.action.VIEW -d "${DEV_CLIENT_URL}"`);
   } else {
     shell(`monkey -p ${APP_ID} -c android.intent.category.LAUNCHER 1`);
   }
-  console.log(`открыт ${APP_ID} на ${serial}${isDevBuild ? " (dev build → Metro)" : ""}`);
+  console.log(`открыт ${APP_ID} на ${serial}${isDevBuild ? ' (dev build → Metro)' : ''}`);
 }
 
 // ---------- часы ----------
 
 /** Расхождение в секундах; null — устройство ещё не отдаёт время (только загрузилось). */
 function clockDrift() {
-  const deviceTime = Number(shell("date +%s").trim());
-  return Number.isFinite(deviceTime) && deviceTime > 1_600_000_000 ? Math.abs(Date.now() / 1000 - deviceTime) : null;
+  const deviceTime = Number(shell('date +%s').trim());
+  return Number.isFinite(deviceTime) && deviceTime > 1_600_000_000
+    ? Math.abs(Date.now() / 1000 - deviceTime)
+    : null;
 }
 
 /**
@@ -510,7 +527,7 @@ function clockDrift() {
  */
 function fixClock() {
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    shell("cmd network_time_update_service force_refresh");
+    shell('cmd network_time_update_service force_refresh');
     const drift = clockDrift();
     if (drift !== null && drift <= 120) return true;
     // Сразу после загрузки сеть ещё не поднялась — сверка проходит через пару секунд.
@@ -521,64 +538,42 @@ function fixClock() {
 
 // ---------- up: окружение одной командой ----------
 
-const ROOT = fileURLToPath(new URL("..", import.meta.url));
-const BUNDLE_URL = `http://127.0.0.1:${PORT}/node_modules/expo-router/entry.bundle?platform=android&dev=true&minify=false`;
+const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function findEmulator() {
   const roots = [
     process.env.ANDROID_SDK_ROOT,
     process.env.ANDROID_HOME,
-    process.env.LOCALAPPDATA && join(process.env.LOCALAPPDATA, "Android", "Sdk"),
-    "D:/Programs/Android/Sdk",
+    process.env.LOCALAPPDATA && join(process.env.LOCALAPPDATA, 'Android', 'Sdk'),
+    'D:/Programs/Android/Sdk',
   ].filter(Boolean);
 
-  return roots.map((r) => join(r, "emulator", "emulator.exe")).find((p) => existsSync(p)) ?? null;
+  return roots.map((r) => join(r, 'emulator', 'emulator.exe')).find((p) => existsSync(p)) ?? null;
 }
 
-/**
- * Отдельный процесс через Start-Process: запущенное из сессии агента напрямую умирает по
- * лимиту времени команды. Окно — свёрнутое, не скрытое: со скрытым окном у Metro падает
- * дочерний expo-updates cli (0xC0000142), и манифест отдаёт ошибку.
- */
+// Скрытый независимый процесс для явно выбранного эмулятора.
 function startDetached(file, args, cwd) {
-  const list = args.map((a) => `'${a.replace(/'/g, "''")}'`).join(",");
+  const quote = (value) => `'${value.replace(/'/g, "''")}'`;
+  const list = args.map(quote).join(',');
   run(
-    "powershell",
+    'powershell',
     [
-      "-NoProfile",
-      "-Command",
-      `Start-Process -FilePath '${file}' -ArgumentList ${list} -WorkingDirectory '${cwd}' -WindowStyle Minimized`,
+      '-NoProfile',
+      '-Command',
+      `Start-Process -FilePath ${quote(file)} -ArgumentList ${list} -WorkingDirectory ${quote(cwd)} -WindowStyle Hidden`,
     ],
-    { timeout: 30_000 },
+    { timeout: 30_000, stdio: 'ignore' },
   );
 }
 
-function killPortListener(port) {
-  const netstat = spawnSync("netstat", ["-ano", "-p", "TCP"], { encoding: "utf8" }).stdout ?? "";
-  const pid = netstat
-    .split(/\r?\n/)
-    .find((l) => /LISTENING/.test(l) && new RegExp(`:${port}\\s`).test(l))
-    ?.trim()
-    .split(/\s+/)
-    .pop();
-  if (pid) spawnSync("taskkill", ["/F", "/T", "/PID", pid], { stdio: "ignore" });
-  return pid ?? null;
-}
-
-function healAdb() {
-  const res = spawnSync("adb", ["devices"], { encoding: "utf8", timeout: 10_000 });
-  if (res.error?.code !== "ETIMEDOUT") return false;
-
-  spawnSync("taskkill", ["/F", "/IM", "adb.exe"], { stdio: "ignore" });
-  spawnSync("adb", ["start-server"], { stdio: "ignore", timeout: 20_000 });
-  return true;
-}
-
-const readyDevices = () => attached().filter((d) => d.state === "device").map((d) => d.serial);
+const readyDevices = () =>
+  attached()
+    .filter((d) => d.state === 'device')
+    .map((d) => d.serial);
 
 function runningAvd(s) {
-  return (run("adb", ["-s", s, "emu", "avd", "name"]).stdout ?? "").split(/\r?\n/)[0].trim();
+  return (run('adb', ['-s', s, 'emu', 'avd', 'name']).stdout ?? '').split(/\r?\n/)[0].trim();
 }
 
 async function waitUntil(check, timeoutMs, stepMs = 2000) {
@@ -590,209 +585,185 @@ async function waitUntil(check, timeoutMs, stepMs = 2000) {
   return false;
 }
 
-const isEmulatorSerial = (s) => s.startsWith("emulator-");
+const isEmulatorSerial = (s) => s.startsWith('emulator-');
 
-async function cmdUp({ second, only, emulator, cold = false, healed = false }) {
-  const started = Date.now();
-  const log = (m) => console.log(`[${String(Math.round((Date.now() - started) / 1000)).padStart(3)} с] ${m}`);
-
-  if (healAdb()) log("adb не отвечал — перезапустил сервер");
-
-  // Телефон — по умолчанию: он в разы быстрее эмулятора и честнее для видео. Нет телефона —
-  // агент спрашивает человека, подключит ли он его; эмулятор — только если нет (--emulator).
-  if (!only && !emulator) {
-    const phone = readyDevices().find((s) => !isEmulatorSerial(s));
-    if (!phone) {
-      console.error(
-        "Телефон не подключён. Спроси человека (вопросом с вариантами), подключит ли он телефон;" +
-          " если не может — node scripts/device.mjs up --emulator",
-      );
-      process.exit(4);
-    }
-    only = phone;
-  }
-
-  // 1. Эмуляторы — запускаем, но не ждём: пока грузятся, поднимается Metro.
-  const wantedAvds = only ? [] : [process.env.OPEN_AVD ?? "open_test", ...(second ? ["open_test_2"] : [])];
-  const running = new Set(readyDevices().filter((s) => s.startsWith("emulator-")).map(runningAvd));
-  const toStart = wantedAvds.filter((avd) => !running.has(avd));
-
-  if (toStart.length > 0) {
-    const emulatorBin = findEmulator();
-    if (!emulatorBin) fail("emulator.exe не найден: задай ANDROID_HOME.");
-    // Холодный старт (reset) — без снимка: снимок хранит и деградировавшее состояние.
-    const flags = ["-no-boot-anim", ...(cold ? ["-no-snapshot-load"] : [])];
-    for (const avd of toStart) startDetached(emulatorBin, ["-avd", avd, ...flags], ROOT);
-    log(`запускаю эмулятор: ${toStart.join(", ")}`);
-  }
-
-  // 2. Metro. Порт занят мёртвым node — снимаем; живой — переиспользуем.
-  let metroUp = (await fetchText(`http://127.0.0.1:${PORT}/status`)).text.includes("packager-status:running");
-  if (!metroUp) {
-    const pid = killPortListener(PORT);
-    if (pid) log(`порт ${PORT} держал зависший процесс ${pid} — снял`);
-    startDetached("cmd.exe", ["/k", `cd /d ${ROOT} && npx expo start --dev-client`], ROOT);
-    log("запускаю Metro");
-    metroUp = await waitUntil(
-      async () => (await fetchText(`http://127.0.0.1:${PORT}/status`)).text.includes("packager-status:running"),
-      120_000,
-    );
-    if (!metroUp) fail("Metro не поднялся за 2 минуты — посмотри его свёрнутое окно.");
-    log("Metro отвечает");
-  }
-
-  const manifest = await fetchText(
-    `http://127.0.0.1:${PORT}/`,
-    { "expo-platform": "android", accept: "application/expo+json" },
-    60_000,
-  );
-  if (!manifest.ok || manifest.text.includes('"error"')) {
-    fail(`Манифест Metro с ошибкой — перезапусти Metro (не скрытым окном): ${manifest.text.slice(0, 200)}`);
-  }
-
-  // 3. Прогрев бандла параллельно с загрузкой эмулятора: холодная сборка идёт минуты, и
-  // лучше, чтобы она шла сейчас, а не когда агент впервые откроет приложение.
-  const bundleStarted = Date.now();
-  const warm = fetchText(BUNDLE_URL, {}, 400_000).then((r) => {
-    log(r.ok ? `бандл собран (${Math.round((Date.now() - bundleStarted) / 1000)} с)` : `бандл: ${r.text.slice(0, 200)}`);
-    return r.ok;
-  });
-
-  // 4. Ждём эмуляторы.
-  if (wantedAvds.length > 0) {
-    const booted = await waitUntil(() => {
-      const ready = readyDevices().filter((s) => s.startsWith("emulator-"));
-      const avds = new Set(
-        ready
-          .filter((s) => run("adb", ["-s", s, "shell", "getprop", "sys.boot_completed"]).stdout.trim() === "1")
-          // boot_completed бывает раньше менеджера пакетов — тогда «приложение не установлено».
-          .filter((s) => run("adb", ["-s", s, "shell", "pm", "path", "android"]).stdout.includes("package:"))
-          .map(runningAvd),
-      );
-      return wantedAvds.every((avd) => avds.has(avd));
-    }, 300_000, 3000);
-    if (!booted) fail("Эмулятор не загрузился за 5 минут.");
-    if (toStart.length > 0) log("эмуляторы загружены");
-  }
-
-  if (!(await warm)) fail("Metro не отдал бандл — белый экран обеспечен; перезапусти Metro с --clear.");
-
-  // 5. Каждое устройство: порт, часы, приложение наверху и живое.
-  const targets = only
-    ? [only]
-    : readyDevices().filter((s) => s.startsWith("emulator-") && wantedAvds.includes(runningAvd(s)));
-
-  for (const s of targets) {
-    serial = s;
-    adb(["reverse", `tcp:${PORT}`, `tcp:${PORT}`]);
-
-    const drift = clockDrift();
-    if (drift === null || drift > 120) {
-      log(`${s}: часы ${drift === null ? "ещё не идут" : `расходятся на ${Math.round(drift / 60)} мин`} — ${fixClock() ? "синхронизировал" : "не вышло"}`);
-    }
-
-    if (!appOnTop() || matchTarget("id:chat-list-item").length === 0) cmdOpen();
-    // Список чатов, а не заголовок: заголовок рисуется и тогда, когда запросы висят.
-    const found = pollTarget("id:chat-list-item", { timeoutMs: 90_000 });
-    if (found.length === 0) {
-      // Белый экран, ANR, зависшие запросы, занятый uiautomator — разбираться дольше, чем
-      // перезапустить всё. Один раз; не помогло — дело не в окружении.
-      if (!healed) {
-        log(`${s}: Open не дошёл до списка чатов за 90 с — полный перезапуск`);
-        return cmdReset({ target: s, healed: true });
-      }
-      fail(`${s}: после полного перезапуска Open всё равно не дошёл до списка чатов — node scripts/device.mjs shot`);
-    }
-    log(`${s} (${isEmulatorSerial(s) ? runningAvd(s) : "телефон"}): Open открыт, готов`);
-  }
-
-  log(`готово. Устройства: ${targets.join(", ")}`);
+async function appState(timeoutMs = 45000) {
+  const deadline = Date.now() + timeoutMs;
+  do {
+    const xml = dumpUi({ soft: true });
+    const state = classifyUi(xml);
+    if (state !== 'unknown') return state;
+    if (Date.now() >= deadline) return state;
+    await sleep(2000);
+  } while (Date.now() < deadline);
+  return 'unknown';
 }
 
-/**
- * Полный перезапуск: драйвер Maestro, Open, Metro, сервер adb, а эмулятор — холодным стартом
- * без снимка. Дешевле любого разбора «почему зависло»: ~1–2 минуты.
- */
-async function cmdReset({ target, healed = false }) {
-  const phone = target && !isEmulatorSerial(target) ? target : null;
-  console.log(`Полный перезапуск${target ? ` (${target})` : ""}...`);
+async function selectedTargets(selection, startMissing = false) {
+  return resolveDevices(
+    selection,
+    {
+      list: attached,
+      avdName: runningAvd,
+      start: async (avd) => {
+        const binary = findEmulator();
+        if (!binary) throw new Error('Эмулятор не найден; задай ANDROID_HOME.');
+        const available = run(binary, ['-list-avds']).stdout.trim().split(/\r?\n/);
+        if (!available.includes(avd)) throw new Error(`AVD ${avd} не найден. Проверь OPEN_AVD.`);
+        startDetached(binary, ['-avd', avd, '-no-boot-anim'], ROOT);
+      },
+      ready: async (avd) => {
+        let found;
+        const probe = () => {
+          found = readyDevices()
+            .filter(isEmulatorSerial)
+            .find((s) => runningAvd(s) === avd);
+          return (
+            found &&
+            run('adb', ['-s', found, 'shell', 'getprop', 'sys.boot_completed']).stdout.trim() ===
+              '1' &&
+            run('adb', ['-s', found, 'shell', 'pm', 'path', 'android']).stdout.includes('package:')
+          );
+        };
+        const ready = startMissing ? await waitUntil(probe, 300000, 3000) : probe();
+        return ready ? found : null;
+      },
+    },
+    { startMissing, avd: process.env.OPEN_AVD ?? 'open_test' },
+  );
+}
 
-  for (const s of target ? [target] : readyDevices()) {
-    serial = s;
-    spawnSync("adb", ["-s", s, "shell", "am force-stop dev.mobile.maestro; am force-stop dev.mobile.maestro.test; am force-stop " + APP_ID], {
-      stdio: "ignore",
-      timeout: 15_000,
-    });
-  }
-
-  if (killPortListener(PORT)) console.log("Metro остановлен");
-
-  if (!phone) {
-    for (const s of readyDevices().filter(isEmulatorSerial)) {
-      spawnSync("adb", ["-s", s, "emu", "kill"], { stdio: "ignore", timeout: 15_000 });
+async function cmdUp({ selection, openOnly = false }) {
+  const result = { command: 'up', selection, devices: [], metro: 'not-needed', backend: null };
+  try {
+    const targets = await selectedTargets(selection, !openOnly);
+    for (const target of targets) {
+      serial = target;
+      const build = packageInfo(serial);
+      if (build.devClient && result.metro === 'not-needed')
+        result.metro = await ensureMetro({ start: !openOnly });
+      if (build.devClient) {
+        const reverse = adb(['reverse', `tcp:${PORT}`, `tcp:${PORT}`]);
+        if (reverse.status !== 0) throw new Error(`${serial}: adb reverse не выполнен.`);
+      }
+      if (!appOnTop()) cmdOpen();
+      const compatibility = await installedCompatibility(serial, build);
+      if (compatibility.status === 'changed')
+        throw new Error(
+          'Нативный fingerprint отличается от установленной сборки; проверь dev-build.mjs status перед использованием текущего JS.',
+        );
+      const state = await appState();
+      result.devices.push({ serial, build, compatibility, app: state });
+      console.log(
+        `${serial}: ${build.devClient ? 'dev' : 'release (локальные JS-правки не загружаются)'} ${build.versionName} (${build.versionCode}); native: ${compatibility.status}; экран: ${state}`,
+      );
+      if (state === 'error' || state === 'unknown')
+        throw new Error(`Open: ${state}; сделай shot/ui. Автоматический reset отключён.`);
     }
-    await sleep(5000);
-    // emu kill не дошёл (adb завис) — снимаем процессы эмулятора напрямую.
-    spawnSync("taskkill", ["/F", "/IM", "qemu-system-x86_64.exe"], { stdio: "ignore" });
-    spawnSync("taskkill", ["/F", "/IM", "emulator.exe"], { stdio: "ignore" });
-    console.log("Эмулятор остановлен");
+    result.backend = await backendStatus();
+    console.log(
+      `Metro: ${result.metro}. Бэкенд: ${result.backend.ok ? 'доступен' : 'недоступен'} (${result.backend.summary}).`,
+    );
+    console.log(`Тестовые данные: не проверялись; проверяются для выбранных сценариев Maestro.`);
+    if (!result.backend.ok) throw new Error('Сбой бэкенда; локальный reset его не исправляет.');
+    console.log(`Диагностика: ${saveDiagnostic('up', result)}`);
+  } catch (error) {
+    result.error = error.message;
+    console.error(`${error.message}\nДиагностика: ${saveDiagnostic('up', result)}`);
+    process.exitCode = error.exitCode ?? 1;
   }
+}
 
-  spawnSync("taskkill", ["/F", "/IM", "adb.exe"], { stdio: "ignore" });
-  spawnSync("adb", ["start-server"], { stdio: "ignore", timeout: 20_000 });
-  console.log("adb перезапущен");
-
-  await cmdUp(phone ? { only: phone, cold: true, healed } : { emulator: true, cold: true, healed });
+// Recovery is explicit and scoped. Never kill a process just because it owns port 8081.
+async function cmdReset({ selection, component = 'app' }) {
+  if (component === 'adb') {
+    run('adb', ['kill-server']);
+    const result = run('adb', ['start-server']);
+    if (result.status !== 0) fail('adb start-server: ошибка.');
+    console.log('adb перезапущен; повтори doctor.');
+    return;
+  }
+  if (component === 'metro') {
+    stopOwnedMetro();
+    console.log(`Metro: ${await ensureMetro()}`);
+    return;
+  }
+  if (!['app', 'driver', 'all'].includes(component))
+    fail('reset --component app|driver|metro|adb|all');
+  const targets = await selectedTargets(selection);
+  if (component === 'all') {
+    // Explicit full recovery still does not terminate unrelated emulators or unknown listeners.
+    const metro = await metroStatus();
+    if (metro.running && !metro.owned) fail('Metro другого проекта; общий сброс остановлен.');
+    if (metro.running) {
+      stopOwnedMetro();
+      await ensureMetro();
+    }
+    run('adb', ['kill-server']);
+    run('adb', ['start-server']);
+  }
+  for (const target of targets) {
+    serial = target;
+    if (component === 'driver' || component === 'all') {
+      for (const app of ['dev.mobile.maestro', 'dev.mobile.maestro.test'])
+        adb(['shell', 'am', 'force-stop', app]);
+    }
+    if (component !== 'driver') {
+      adb(['shell', 'am', 'force-stop', APP_ID]);
+      cmdOpen();
+    }
+    console.log(`Восстановлен компонент: ${component}. Устройство: ${serial}.`);
+  }
 }
 
 async function cmdDoctor(fix) {
+  const result = {
+    serial,
+    build: packageInfo(serial),
+    metro: await metroStatus(),
+    backend: await backendStatus(),
+  };
+  result.compatibility = await installedCompatibility(serial, result.build);
+  let reversed = (adb(['reverse', '--list']).stdout ?? '').includes(`tcp:${PORT} tcp:${PORT}`);
+  if (fix && result.build.devClient && !reversed)
+    reversed = adb(['reverse', `tcp:${PORT}`, `tcp:${PORT}`]).status === 0;
+  if (fix && !appOnTop()) cmdOpen();
+  result.reverse = reversed;
+  result.activity = topActivity();
+  result.clockDriftSeconds = clockDrift();
+  if (fix && result.clockDriftSeconds !== null && result.clockDriftSeconds > 120 && fixClock())
+    result.clockDriftSeconds = clockDrift();
   const problems = [];
-  const status = await fetchText(`http://127.0.0.1:${PORT}/status`);
-  const metroUp = status.text.includes("packager-status:running");
-  console.log(`Metro /status: ${metroUp ? "работает" : "не отвечает"}`);
-  if (!metroUp) problems.push("Metro не запущен — см. память metro-start-detached");
-
-  if (metroUp) {
-    // /status бывает жив, когда манифест уже отдаёт ошибку (упавший expo-updates cli).
-    const manifest = await fetchText(`http://127.0.0.1:${PORT}/`, {
-      "expo-platform": "android",
-      accept: "application/expo+json",
-    }, 30_000);
-    const manifestOk = manifest.ok && !manifest.text.includes('"error"');
-    console.log(`Metro манифест: ${manifestOk ? "в порядке" : `ошибка: ${manifest.text.slice(0, 200)}`}`);
-    if (!manifestOk) problems.push("манифест Metro с ошибкой — перезапустить Metro не скрытым окном");
+  if (result.build.devClient) {
+    if (!result.metro.owned) problems.push('Metro не отвечает или другой проект');
+    else {
+      try {
+        await checkManifest();
+      } catch (error) {
+        problems.push(error.message);
+      }
+    }
+    if (!reversed) problems.push('нет adb reverse');
   }
-
-  const reverse = adb(["reverse", "--list"]).stdout ?? "";
-  const reversed = reverse.includes(`tcp:${PORT}`);
-  console.log(`adb reverse ${PORT}: ${reversed ? "есть" : "нет"}`);
-
-  const installed = shell(`pm list packages ${APP_ID}`).includes(APP_ID);
-  console.log(`${APP_ID}: ${installed ? "установлен" : "не установлен"}`);
-  if (!installed) problems.push("приложение не установлено");
-
-  const drift = clockDrift();
-  const clockOk = drift <= 120 || (fix && fixClock());
+  if (!result.backend.ok) problems.push('бэкенд недоступен');
+  if (result.clockDriftSeconds === null || result.clockDriftSeconds > 120)
+    problems.push('часы не проверены/расходятся');
+  if (result.compatibility.status === 'changed')
+    problems.push('нативные входы изменились; проверь node scripts/dev-build.mjs status -s SERIAL');
+  result.problems = problems;
   console.log(
-    `часы устройства: ${drift <= 120 ? "в порядке" : `расходятся на ${Math.round(drift / 60)} мин${clockOk ? ", синхронизировал" : ""}`}`,
+    `Устройство: ${serial}; ${result.build.devClient ? 'dev' : 'release'} ${result.build.versionName} (${result.build.versionCode}); native: ${result.compatibility.status}`,
   );
-  if (!clockOk) problems.push("часы отстают — запросы к Supabase падают; doctor --fix или adb reboot");
-
-  const onTop = appOnTop();
-  console.log(`наверху: ${topActivity() || "?"}`);
-
-  if (fix && installed) {
-    if (!reversed) adb(["reverse", `tcp:${PORT}`, `tcp:${PORT}`]);
-    if (!onTop || !reversed) cmdOpen();
-  } else if (!reversed) {
-    problems.push("нет adb reverse — node scripts/device.mjs doctor --fix");
+  console.log(
+    `Metro: ${result.metro.owned ? 'наш, готов' : 'не готов'}; reverse: ${reversed}; бэкенд: ${result.backend.summary}`,
+  );
+  console.log(
+    `Тестовые данные: ещё не проверены. Диагностика: ${saveDiagnostic('doctor', result)}`,
+  );
+  if (problems.length) {
+    console.error(problems.join('; '));
+    process.exitCode = 1;
   }
-
-  if (problems.length > 0) {
-    console.log(`\nПроблемы:\n- ${problems.join("\n- ")}`);
-    process.exit(1);
-  }
-  console.log("\nВсё в порядке.");
 }
 
 // ---------- разбор аргументов ----------
@@ -811,55 +782,79 @@ const bool = (name) => {
   return true;
 };
 
-const serialFlag = flag("-s");
-const nthFlag = flag("--n");
+const serialFlag = flag('-s');
+const nthFlag = flag('--n');
 const nth = nthFlag === undefined ? undefined : Number(nthFlag);
-const long = bool("--long");
-const all = bool("--all");
-const fix = bool("--fix");
-const gone = bool("--gone");
-const second = bool("--second");
-const emulatorFlag = bool("--emulator");
-const timeoutFlag = flag("--timeout");
+const long = bool('--long');
+const all = bool('--all');
+const fix = bool('--fix');
+const gone = bool('--gone');
+const phoneFlag = bool('--phone');
+const bothFlag = bool('--both');
+const emulatorFlag = bool('--emulator');
+const openOnly = bool('--open-only');
+const component = flag('--component');
+const timeoutFlag = flag('--timeout');
 const timeoutMs = timeoutFlag === undefined ? 15_000 : Number(timeoutFlag) * 1000;
-const [command, ...rest] = argv;
+const [requestedCommand, ...rest] = argv;
+const command = requestedCommand ?? (phoneFlag || emulatorFlag || bothFlag ? 'up' : undefined);
 
-if (!command || command === "help" || command === "--help") {
-  console.log(HELP);
-  process.exit(0);
-}
+async function main() {
+  if (!command || command === 'help' || command === '--help') {
+    console.log(HELP);
+    return;
+  }
 
-if (command === "devices") {
-  cmdDevices();
-  process.exit(0);
-}
-if (command === "up") {
-  await cmdUp({ second, only: serialFlag, emulator: emulatorFlag });
-  process.exit(0);
-}
-if (command === "reset") {
-  await cmdReset({ target: serialFlag });
-  process.exit(0);
-}
-if (command === "frames") {
-  cmdFrames(rest[0], rest[1]);
-  process.exit(0);
-}
+  if (command === 'devices') {
+    cmdDevices();
+    return;
+  }
+  const selection = deviceSelection({
+    phone: phoneFlag,
+    emulator: emulatorFlag,
+    both: bothFlag,
+    serial: serialFlag,
+  });
+  if (rest.length && ['up', 'reset'].includes(command))
+    fail(`Лишние аргументы: ${rest.join(' ')}. Используй --phone, --emulator или --both.`);
+  if ((phoneFlag || emulatorFlag || bothFlag) && !['up', 'reset'].includes(command))
+    fail(
+      'Выбор --phone/--emulator/--both поддерживается у up и reset; для других команд используй -s SERIAL.',
+    );
+  if (command === 'up') {
+    await cmdUp({ selection, openOnly });
+    return;
+  }
+  if (command === 'reset') {
+    await cmdReset({ selection, component });
+    return;
+  }
+  if (command === 'frames') {
+    cmdFrames(rest[0], rest[1]);
+    return;
+  }
 
-serial = pickDevice(serialFlag);
+  serial = pickDevice(serialFlag);
 
-const commands = {
-  doctor: () => cmdDoctor(fix),
-  open: () => cmdOpen(),
-  ui: () => cmdUi(all),
-  tap: () => cmdTap(rest.join(" "), { long, nth }),
-  wait: () => cmdWait(rest.join(" "), { gone, timeoutMs }),
-  swipe: () => cmdSwipe(rest, nth),
-  text: () => cmdText(rest.join(" ")),
-  key: () => cmdKey(rest[0]),
-  shot: () => cmdShot(rest[0]),
-  record: () => cmdRecord(rest[0], rest[1]),
-};
+  const commands = {
+    doctor: () => cmdDoctor(fix),
+    open: () => cmdOpen(),
+    ui: () => cmdUi(all),
+    tap: () => cmdTap(rest.join(' '), { long, nth }),
+    wait: () => cmdWait(rest.join(' '), { gone, timeoutMs }),
+    swipe: () => cmdSwipe(rest, nth),
+    text: () => cmdText(rest.join(' ')),
+    key: () => cmdKey(rest[0]),
+    shot: () => cmdShot(rest[0]),
+    record: () => cmdRecord(rest[0], rest[1]),
+  };
 
-if (!commands[command]) fail(`Неизвестная команда «${command}».\n\n${HELP}`);
-await commands[command]();
+  if (!commands[command]) fail(`Неизвестная команда «${command}».\n\n${HELP}`);
+  await commands[command]();
+}
+main().catch((error) => {
+  console.error(
+    `${error.message}\nДиагностика: ${saveDiagnostic('device', { command, serial, error: error.message })}`,
+  );
+  process.exitCode = error.exitCode ?? 1;
+});

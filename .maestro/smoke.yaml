@@ -4,7 +4,12 @@ tags:
   - smoke
 ---
 - runFlow: subflows/open-app.yaml
-- tapOn: "Лента"
-- tapOn: "Профиль"
-- tapOn: "Чаты"
-- assertVisible: "Чаты"
+- tapOn: 'Лента'
+- assertVisible:
+    id: 'feed-search-open'
+- tapOn: 'Профиль'
+- assertVisible:
+    id: 'profile-settings'
+- tapOn: 'Чаты'
+- assertVisible:
+    id: 'chats-search-open'
