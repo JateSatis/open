@@ -38,9 +38,6 @@ function saved(id: string, seq: number, overrides: Partial<SavedMessage> = {}): 
     sourceChatId: 'chat-g',
     sourceMessageId: `msg-${id}`,
     sourceCommentId: null,
-    sourceSeq: 1,
-    commentMessageId: null,
-    commentPopId: null,
     kind: 'text',
     text: `текст ${id}`,
     authorId: null,
@@ -147,7 +144,7 @@ describe('patchSaved under filters', () => {
   function client() {
     const queryClient = new QueryClient();
     const page = (items: SavedMessage[]): InfiniteData<SavedPage> => ({
-      pages: [{ items, nextCursor: null, prevCursor: null }],
+      pages: [{ items, nextCursor: null }],
       pageParams: [null],
     });
     const later = (items: SavedMessage[]): InfiniteData<WatchLaterPage> => ({

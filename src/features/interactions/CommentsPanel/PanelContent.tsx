@@ -3,11 +3,10 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { View, useWindowDimensions, type TextInput } from 'react-native';
 import { GestureDetector } from 'react-native-gesture-handler';
 import { KeyboardEvents } from 'react-native-keyboard-controller';
-import Animated, { type SharedValue } from 'react-native-reanimated';
+import Animated from 'react-native-reanimated';
 
 import { ScrollTap } from '../../../../modules/scroll-tap';
 
-import type { CommentHighlight } from './CommentList';
 import { CommentRowView } from './CommentRowView';
 import { PaneList } from './PaneList';
 import { PanelFooter } from './PanelFooter';
@@ -19,7 +18,6 @@ import { CommentThreadGapRow } from './CommentThreadGapRow';
 import { usePanelActions } from './usePanelActions';
 import { usePanelComments } from './usePanelComments';
 import type { PanelSheet } from './usePanelSheet';
-import { useGoToFragment } from './useGoToFragment';
 import { useCommentThreadPane } from './useCommentThreadPane';
 
 import { FragmentQuote } from '@/features/chats/FragmentQuote';
@@ -35,15 +33,11 @@ import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
 import { visibleQuotes, type CommentItem } from '@/features/interactions/comments/commentItem';
 import { commentsCountLabel } from '@/features/interactions/comments/commentsCount';
 import {
-  getOpenCommentThread,
   setOpenCommentThread,
   useOpenCommentThread,
   type CommentsPanelTarget,
 } from '@/features/interactions/comments/commentsPanelStore';
-import { useJumpToComment } from '@/features/interactions/comments/useJumpToComment';
 import { audienceOf } from '@/features/interactions/reactionState';
-import { showNotice } from '@/features/notifications/alertsStore';
-import { commentsQuoteFollowed } from '@/features/recs/journal/commentsJournal';
 import { useTheme } from '@/hooks/use-theme';
 import { focusWithKeyboard } from '@/lib/windowFocus';
 import { Spacing } from '@/theme';
@@ -119,7 +113,6 @@ export function PanelContent({
     commentThread,
     rows,
     commentThreadRows,
-    focusPending,
   } = data;
   const targetType = target.subject.type;
   const memberBadge = MEMBER_BADGE[targetType];
@@ -146,29 +139,6 @@ export function PanelContent({
     return { ...frame, y: frame.y + header, height: Math.max(0, visibleHeight - header) };
   }, []);
 
-  const mainJump = useJumpToComment(
-    listRef,
-    useMemo(
-      () => ({
-        keys: rows.map((row) => row.key),
-        hasMore: comments.hasMore,
-        loadMore: comments.loadMore,
-      }),
-      [comments.hasMore, comments.loadMore, rows],
-    ),
-  );
-  const commentThreadJump = useJumpToComment(
-    commentThreadListRef,
-    useMemo(
-      () => ({
-        keys: commentThreadRows.map((row) => row.key),
-        hasMore: commentThread.hasGap,
-        loadMore: commentThread.loadMore,
-      }),
-      [commentThread.hasGap, commentThread.loadMore, commentThreadRows],
-    ),
-  );
-
   const openPerson = useCallback(
     (userId: string) => {
       close();
@@ -188,7 +158,6 @@ export function PanelContent({
     listRef,
     commentThreadListRef,
     sheet,
-    jump: commentThreadJump.jump,
     measureViewport,
   });
 
@@ -199,11 +168,6 @@ export function PanelContent({
   useEffect(() => {
     if (focusInput) focusWithKeyboard(inputRef, undefined, true);
   }, [focusInput]);
-
-  // Пришли к комментарию — он вспыхивает, когда встал в список: ответ — в
-  // окне своего треда, верхнеуровневый — в основном. Список к нему не
-  // двигается: он и так наверху.
-  const { focusReady } = data;
 
   useEffect(() => {
     sheetLayout.current = {
@@ -221,43 +185,6 @@ export function PanelContent({
     if (enteredRoot) commentThreadToTop();
   }, [enteredRoot, commentThreadToTop]);
 
-  const { jump: jumpMain } = mainJump;
-  const { jump: jumpCommentThread } = commentThreadJump;
-  const mainOffset = sheet.main.scrollOffset;
-  const commentThreadOffset = sheet.commentThread.scrollOffset;
-
-  // В окне треда — когда легло начало треда: до того ответ стоит в хвосте, а
-  // потом переезжает на своё место, и прыжок пришёлся бы мимо.
-  const commentThreadSettling =
-    openCommentThread !== null && commentThread.isLoading && !commentThread.failed;
-  const jumpedTo = useRef<string | null>(null);
-
-  useEffect(() => {
-    if (!focusReady || commentThreadSettling || jumpedTo.current === focusReady.key) return;
-
-    jumpedTo.current = focusReady.key;
-
-    const inCommentThread = getOpenCommentThread() !== null;
-    const offset: SharedValue<number> = inCommentThread ? commentThreadOffset : mainOffset;
-    // Видно — между низом шапки шита и полем ввода.
-    const visible = () => {
-      const { headerHeight: header, visibleHeight } = sheetLayout.current;
-
-      return { top: offset.value + header, bottom: offset.value + visibleHeight };
-    };
-
-    void (inCommentThread ? jumpCommentThread : jumpMain)(focusReady.id, { visible }).then((found) => {
-      if (!found) showNotice('Не удалось найти комментарий', 'error');
-    });
-  }, [
-    focusReady,
-    jumpMain,
-    jumpCommentThread,
-    mainOffset,
-    commentThreadOffset,
-    commentThreadSettling,
-  ]);
-
   // Место под клавиатурой в конце списка: последний комментарий виден над ней.
   useEffect(() => {
     const shown = KeyboardEvents.addListener('keyboardDidShow', (event) =>
@@ -271,7 +198,6 @@ export function PanelContent({
     };
   }, []);
 
-  const goToFragment = useGoToFragment(target, live?.message ?? null, close, hostChatId);
   const { retry, react } = comments;
   const myAudience = audienceOf(amMember);
   const renderBubble = useCallback(
@@ -290,15 +216,6 @@ export function PanelContent({
               <FragmentQuote
                 text={fragmentQuote?.text ?? null}
                 isOwn={isOwn}
-                // Своё неотправленное ещё не знает фрагмента — переходить не к чему.
-                onPress={
-                  interactive && fragmentId
-                    ? () => {
-                        commentsQuoteFollowed();
-                        void goToFragment(item);
-                      }
-                    : undefined
-                }
               />
             ) : undefined
           }
@@ -312,14 +229,6 @@ export function PanelContent({
           mediaBounds={mediaBounds}
           onRetry={interactive ? retry : undefined}
           onAuthorPress={interactive && authorId ? () => openPerson(authorId) : undefined}
-          onQuotePress={
-            interactive
-              ? (quote) => {
-                  commentsQuoteFollowed();
-                  void actions.jumpToQuote(quote.messageId);
-                }
-              : undefined
-          }
           reactionAudience={myAudience}
           onReactionToggle={
             interactive && canReactTo(item) ? (emoji) => react(item, emoji) : undefined
@@ -330,9 +239,7 @@ export function PanelContent({
       );
     },
     [
-      actions,
       currentUserId,
-      goToFragment,
       mediaBounds,
       memberBadge,
       myAudience,
@@ -346,8 +253,7 @@ export function PanelContent({
   const editingId = actions.edit.mode?.message.id ?? null;
 
   const rowRenderer = useCallback(
-    (highlight: CommentHighlight | null): ListRenderItem<CommentRow> =>
-      function renderRow({ item }) {
+    function renderRow({ item }: Parameters<ListRenderItem<CommentRow>>[0]) {
         if (item.type !== 'comment') {
           return (
             <CommentThreadGapRow
@@ -358,9 +264,7 @@ export function PanelContent({
                 item.type === 'comment-thread-failed'
                   ? commentThread.retry
                   : () =>
-                      void (item.type === 'comment-thread-gap' && item.direction === 'before'
-                        ? commentThread.loadBefore()
-                        : commentThread.loadMore())
+                      void commentThread.loadMore()
               }
             />
           );
@@ -378,7 +282,6 @@ export function PanelContent({
             selectionMode={selection.isActive}
             selected={selection.isSelected(comment.id)}
             editing={comment.id === editingId}
-            highlightKey={highlight?.id === comment.id ? highlight.key : null}
             onOpenMenu={actions.openMenu}
             onToggle={actions.toggleSelected}
             onSwipeReply={closed ? undefined : actions.replyTo}
@@ -388,15 +291,6 @@ export function PanelContent({
         );
       },
     [actions, closed, currentUserId, editingId, renderBubble, selection, commentThread],
-  );
-
-  const renderMainRow = useMemo(
-    () => rowRenderer(mainJump.highlight),
-    [mainJump.highlight, rowRenderer],
-  );
-  const renderCommentThreadRow = useMemo(
-    () => rowRenderer(commentThreadJump.highlight),
-    [rowRenderer, commentThreadJump.highlight],
   );
 
   const count = live?.message.commentsCount ?? pop?.commentsCount ?? 0;
@@ -433,12 +327,12 @@ export function PanelContent({
                 pane={sheet.main}
                 listRef={listRef}
                 rows={rows}
-                isLoading={comments.isLoading || focusPending}
+                isLoading={comments.isLoading}
                 isLoadingMore={comments.isLoadingMore}
                 hasMore={comments.hasMore}
                 error={comments.error}
                 loadMore={comments.loadMore}
-                renderRow={renderMainRow}
+                renderRow={rowRenderer}
               />
             </Animated.View>
 
@@ -464,7 +358,7 @@ export function PanelContent({
                   hasMore={false}
                   error={null}
                   loadMore={noop}
-                  renderRow={renderCommentThreadRow}
+                  renderRow={rowRenderer}
                 />
               </Animated.View>
             </GestureDetector>

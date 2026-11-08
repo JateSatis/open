@@ -19,25 +19,19 @@ function search(patch: Partial<ChatSearch> = {}): ChatSearch {
     setQuery: jest.fn(),
     searched: 'zebra',
     hits: [hit('1'), hit('2'), hit('3')],
-    index: 0,
     total: 12,
     isSearching: false,
     failed: false,
     hasMore: true,
     loadMore: jest.fn(),
-    older: jest.fn(),
-    newer: jest.fn(),
-    select: jest.fn(),
-    reset: jest.fn(),
     close: jest.fn(),
     ...patch,
   };
 }
 
 describe('searchCounterText', () => {
-  it('counts from the freshest match against the total', () => {
-    expect(searchCounterText(search())).toBe('1 из 12');
-    expect(searchCounterText(search({ index: 2 }))).toBe('3 из 12');
+  it('shows the total number of matches', () => {
+    expect(searchCounterText(search())).toBe('Найдено: 12');
   });
 
   it('says nothing was found, and stays empty while there is no query', () => {
@@ -46,26 +40,17 @@ describe('searchCounterText', () => {
   });
 
   it('caps a huge total', () => {
-    expect(searchCounterText(search({ total: 1000 }))).toBe('1 из 1000+');
+    expect(searchCounterText(search({ total: 1000 }))).toBe('Найдено: 1000+');
   });
 });
 
 describe('ChatSearchPlate', () => {
-  it('goes older with the up arrow and newer with the down arrow', async () => {
-    const value = search({ index: 1 });
-    await render(<ChatSearchPlate search={value} showingList={false} onToggleList={jest.fn()} />);
-
-    await fireEvent.press(screen.getByTestId('chat-search-up'));
-    await fireEvent.press(screen.getByTestId('chat-search-down'));
-
-    expect(value.older).toHaveBeenCalled();
-    expect(value.newer).toHaveBeenCalled();
-  });
-
-  it('has no newer match at the freshest one', async () => {
-    await render(<ChatSearchPlate search={search()} showingList={false} onToggleList={jest.fn()} />);
-
-    expect(screen.getByTestId('chat-search-down')).toBeDisabled();
-    expect(screen.getByTestId('chat-search-up')).toBeEnabled();
+  it('offers the result list without navigation arrows', async () => {
+    const toggle = jest.fn();
+    await render(<ChatSearchPlate search={search()} showingList={false} onToggleList={toggle} />);
+    expect(screen.queryByTestId('chat-search-up')).toBeNull();
+    expect(screen.queryByTestId('chat-search-down')).toBeNull();
+    await fireEvent.press(screen.getByTestId('chat-search-list'));
+    expect(toggle).toHaveBeenCalledTimes(1);
   });
 });

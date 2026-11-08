@@ -69,7 +69,7 @@ export function ChannelInfoPage({ channel, slideBack }: ChannelInfoPageProps) {
     [currentUserId, router],
   );
 
-  const { showInChat, searchPosts } = useToPosts(channelId, slideBack.close);
+  const { searchPosts } = useToPosts(channelId, slideBack.close);
 
   const openSubscribers = useCallback(() => page?.focusTab('subscribers'), [page]);
   const searchSubscribers = useCallback(() => {
@@ -116,7 +116,6 @@ export function ChannelInfoPage({ channel, slideBack }: ChannelInfoPageProps) {
     isOwner,
     subscriberQuery,
     onOpenPerson: openPerson,
-    onShowInChat: showInChat,
     onSearchSubscribers: searchSubscribers,
   });
 

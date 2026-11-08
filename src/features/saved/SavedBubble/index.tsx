@@ -3,14 +3,13 @@ import { View } from 'react-native';
 
 import { styles } from './styles';
 
-import type { ChatSummary, QuotedMessage } from '@/api/chats';
+import type { ChatSummary } from '@/api/chats';
 import type { SavedMessage, SavedTag } from '@/api/saved';
 import { SelectionCheck } from '@/components/SelectionCheck';
 import type { MosaicBounds } from '@/features/chats/lib/mosaicLayout';
 import { MessageBubble } from '@/features/chats/MessageBubble';
 import { SavedLead } from '@/features/saved/SavedLead';
 import {
-  isNote,
   savedQuotesOf,
   savedSourceLabel,
   toBubbleMessage,
@@ -24,9 +23,6 @@ export type SavedBubbleProps = {
   currentUserId: string | null;
   tagsById: ReadonlyMap<string, SavedTag>;
   mediaBounds: MosaicBounds;
-  onOpenSource: (saved: SavedMessage) => void;
-  /** Тап по цитате заметки — к цитируемой записи. Нет — цитаты не нажимаются. */
-  onQuotePress?: (savedId: string, seq: number) => void;
   /** Тап по «не отправлено» у своей заметки. */
   onRetry?: (localId: string) => void;
   /** Без кружка «Посмотреть позже» в углу: на своей вкладке у строки свой чекбокс. */
@@ -49,8 +45,6 @@ export const SavedBubble = memo(function SavedBubble({
   currentUserId,
   tagsById,
   mediaBounds,
-  onOpenSource,
-  onQuotePress,
   onRetry,
   hideWatchLater = false,
   onTagPress,
@@ -63,12 +57,6 @@ export const SavedBubble = memo(function SavedBubble({
   const label = savedSourceLabel(saved, chat, currentUserId);
   const tags = saved.tagIds.flatMap((id) => tagsById.get(id) ?? []);
   const watchLater = saved.watchLaterAt !== null && !hideWatchLater;
-  const note = isNote(saved);
-  const openQuote = onQuotePress
-    ? (quote: QuotedMessage) => {
-        if (quote.state === 'live') onQuotePress(quote.messageId, quote.seq);
-      }
-    : undefined;
 
   return (
     <View testID={`saved-row-${saved.id}`} style={styles.row}>
@@ -84,14 +72,12 @@ export const SavedBubble = memo(function SavedBubble({
         showViews={false}
         untracked
         onRetry={onRetry}
-        onQuotePress={openQuote}
         quoteDeletedText={QUOTE_DELETED}
         lead={
           <SavedLead
             label={label}
             isComment={saved.sourceType === 'comment'}
             tags={tags}
-            onOpenSource={note ? undefined : () => onOpenSource(saved)}
             onTagPress={onTagPress ? (tagId) => onTagPress(tagId, saved) : undefined}
           />
         }

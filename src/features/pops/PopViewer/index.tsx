@@ -34,12 +34,6 @@ export type PopViewerProps = {
   startId: string;
   /** Куда ведёт имя канала: под просмотр (лента канала) или поверх него (поиск). */
   channelLink?: OpenChannelMode;
-  /** Сразу с открытыми комментариями к стартовому попу. */
-  openComments?: boolean;
-  /** Комментарий, к которому пришли: наверху шита и подсвечен. */
-  focusCommentId?: string;
-  focusRootId?: string;
-  focusRequestId?: string;
   /** Активной стала другая страница. */
   onActivePop?: (pop: Pop) => void;
   /** Где идёт показ — для журнала рекомендаций. */
@@ -62,10 +56,6 @@ export function PopViewer({
   feed,
   startId,
   channelLink = 'under',
-  openComments = false,
-  focusCommentId,
-  focusRootId,
-  focusRequestId,
   onActivePop,
   surface = 'channel',
   entry = 'other',
@@ -112,23 +102,7 @@ export function PopViewer({
   }, [pops]);
 
   const live = focused && appActive;
-  // Подъём шита не зависит от ленты и медиа: они могут догрузиться под ним.
-  // Размер конечной композиции известен сразу после layout экрана.
-  const startReady = Boolean(size);
-  const start = useMemo(
-    () =>
-      openComments
-        ? {
-            startId,
-            focusCommentId,
-            focusRootId,
-            requestId: focusRequestId,
-            ready: startReady,
-          }
-        : undefined,
-    [focusCommentId, focusRequestId, focusRootId, openComments, startId, startReady],
-  );
-  const { openPopId, onOpenComments, onOpenPerson } = usePopComments(canPublish, start);
+  const { openPopId, onOpenComments, onOpenPerson } = usePopComments(canPublish);
   const commentsOpen = openPopId !== null;
   const chromeStyle = useCommentsChromeFade(commentsOpen);
   const nearbyChannels = useMemo(

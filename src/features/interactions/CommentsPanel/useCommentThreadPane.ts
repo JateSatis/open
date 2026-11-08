@@ -46,7 +46,6 @@ type Options = {
  */
 export function useCommentThreadPane({ openCommentThread, width, onExit }: Options) {
   const rootId = openCommentThread?.rootId ?? null;
-  const instant = openCommentThread?.instant ?? false;
   const [leaving, setLeaving] = useState<string | null>(null);
   const [lastRoot, setLastRoot] = useState(rootId);
   /** Сдвиг окна вправо: 0 — на месте, `width` — за краем. */
@@ -62,14 +61,14 @@ export function useCommentThreadPane({ openCommentThread, width, onExit }: Optio
 
   useEffect(() => {
     if (rootId) {
-      offset.value = instant ? 0 : withTiming(0, SLIDE);
+      offset.value = withTiming(0, SLIDE);
       return;
     }
 
     offset.value = withTiming(width, SLIDE, (finished) => {
       if (finished) runOnJS(finishLeaving)();
     });
-  }, [finishLeaving, instant, offset, rootId, width]);
+  }, [finishLeaving, offset, rootId, width]);
 
   const edgePan = useMemo(
     () =>

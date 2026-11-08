@@ -19,7 +19,6 @@ export type ChatInfoTabsInput = {
   memberQuery: string | null;
   onOpenPerson: (userId: string) => void;
   onOpenChat: (chatId: string) => void;
-  onShowInChat: (messageId: string, seq: number) => void;
   onRemoveMember: (person: Person) => void;
   onCancelInvite: (person: Person) => void;
   onSearchMembers: () => void;
@@ -60,7 +59,7 @@ export function chatInfoTabs(input: ChatInfoTabsInput): InfoTab[] {
       key: 'media',
       title: 'Медиа',
       summary: mediaSummary(summary?.photos ?? 0, summary?.videos ?? 0),
-      render: (tab) => <MediaTab tab={tab} chatId={chat.id} onShowInChat={input.onShowInChat} />,
+      render: (tab) => <MediaTab tab={tab} chatId={chat.id} />,
     });
   }
 
@@ -69,7 +68,7 @@ export function chatInfoTabs(input: ChatInfoTabsInput): InfoTab[] {
       key: 'voices',
       title: 'Голосовые',
       summary: voicesSummary(summary?.voices ?? 0),
-      render: (tab) => <VoicesTab tab={tab} chatId={chat.id} onShowInChat={input.onShowInChat} />,
+      render: (tab) => <VoicesTab tab={tab} chatId={chat.id} />,
     });
   }
 

@@ -1,5 +1,6 @@
 import type { Session as SupabaseSession } from '@supabase/supabase-js';
 import { act, fireEvent, screen, userEvent, waitFor, within } from '@testing-library/react-native';
+
 import { FlatList } from 'react-native';
 import { State } from 'react-native-gesture-handler';
 import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils';
@@ -354,6 +355,29 @@ describe('quotes in bubbles', () => {
     },
   };
 
+  it('keeps the same list and does not load or scroll when a distant quote is pressed', async () => {
+    const reply = { ...message('r1', 'исходный ответ', 'user-2', 3), replies: [liveQuote] };
+    mockedListMessages.mockResolvedValue({ items: [reply], nextCursor: null });
+    await renderWithQuery(<ChatScreen />);
+    await screen.findByText('исходный ответ');
+    const original = screen.getByTestId('messages-list');
+    const bubble = within(original).getByTestId('message-bubble');
+    const scroll = jest.spyOn(FlatList.prototype, 'scrollToIndex');
+    const offset = jest.spyOn(FlatList.prototype, 'scrollToOffset');
+    mockedListMessages.mockClear();
+    const quote = screen.getByTestId('reply-quote');
+    expect(quote).toBeDisabled();
+    await fireEvent.press(quote);
+    expect(scroll).not.toHaveBeenCalled();
+    expect(offset).not.toHaveBeenCalled();
+    expect(mockedListMessages).not.toHaveBeenCalled();
+    expect(screen.getByTestId('messages-list')).toBe(original);
+    expect(within(original).getByTestId('message-bubble')).toBe(bubble);
+    expect(screen.queryByLabelText('Загрузка сообщения')).toBeNull();
+    scroll.mockRestore();
+    offset.mockRestore();
+  });
+
   it('shows the quote, and a deleted original as «Сообщение удалено»', async () => {
     mockedListMessages.mockResolvedValue({
       items: [
@@ -375,7 +399,7 @@ describe('quotes in bubbles', () => {
     expect(within(live).getByText('эй')).toBeTruthy();
   });
 
-  it('lists every quote of a reply to several, oldest on top, and each leads to its own original', async () => {
+  it('lists every quote of a reply to several, oldest on top, without navigation to originals', async () => {
     const second: QuotedMessage = {
       ...liveQuote,
       messageId: 'm2',
@@ -397,18 +421,18 @@ describe('quotes in bubbles', () => {
     await renderWithQuery(<ChatScreen />);
     await screen.findByText('на оба');
 
+    await fireEvent(screen.getByTestId('messages-list'), 'layout', { nativeEvent: { layout: { width: 400, height: 800 } } });
     const quotes = screen.getAllByTestId('reply-quote');
 
     expect(quotes).toHaveLength(2);
     expect(within(quotes[0]).getByText('эй')).toBeTruthy();
     expect(within(quotes[1]).getByText('привет')).toBeTruthy();
 
-    // Строки списка — новыми вперёд: r1, m2, m1.
-    fireEvent.press(quotes[1]);
-    await waitFor(() => expect(scrollToIndex).toHaveBeenLastCalledWith(expect.objectContaining({ index: 1 })));
-
-    fireEvent.press(quotes[0]);
-    await waitFor(() => expect(scrollToIndex).toHaveBeenLastCalledWith(expect.objectContaining({ index: 2 })));
+    expect(quotes[0]).toBeDisabled();
+    expect(quotes[1]).toBeDisabled();
+    await fireEvent.press(quotes[1]);
+    await fireEvent.press(quotes[0]);
+    expect(scrollToIndex).not.toHaveBeenCalled();
 
     scrollToIndex.mockRestore();
   });

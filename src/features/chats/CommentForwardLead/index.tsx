@@ -17,10 +17,6 @@ export type CommentForwardLeadProps = {
   forward: CommentForward;
   /** Облачко своё (переслал я) — цвета на `primary`. */
   isOwn: boolean;
-  /** Тап по сниппету или чату — к комментарию в его ветке. Нет — не нажимается (копия в меню). */
-  onOpenSource?: () => void;
-  /** У комментария к попу тап по цитате попа — сам поп, без комментариев. */
-  onOpenPop?: () => void;
   /** Тап по автору комментария — его профиль. */
   onOpenAuthor?: () => void;
 };
@@ -37,8 +33,6 @@ export type CommentForwardLeadProps = {
 export function CommentForwardLead({
   forward,
   isOwn,
-  onOpenSource,
-  onOpenPop,
   onOpenAuthor,
 }: CommentForwardLeadProps) {
   const theme = useTheme();
@@ -80,9 +74,7 @@ export function CommentForwardLead({
   return (
     <View testID="comment-forward-lead" style={styles.lead}>
       <Pressable
-        accessibilityRole={onOpenSource ? 'link' : undefined}
-        disabled={!onOpenSource}
-        onPress={onOpenSource}
+        disabled
         style={styles.label}
       >
         <SymbolView
@@ -100,20 +92,17 @@ export function CommentForwardLead({
           pop={comment.pop}
           channelName={chat?.name ?? null}
           isOwn={isOwn}
-          onPress={onOpenPop}
         />
       ) : comment.fragmentId ? (
         // Комментарий к куску текста — цитата куска, а не всего сообщения.
         <FragmentQuote
           text={comment.fragmentQuote?.text ?? null}
           isOwn={isOwn}
-          onPress={onOpenSource}
         />
       ) : (
         <ReplyQuote
           quotes={[snippet]}
           isOwn={isOwn}
-          onPress={onOpenSource ? () => onOpenSource() : undefined}
         />
       )}
 

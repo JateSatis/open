@@ -52,24 +52,10 @@ export type CommentsPanelTarget = {
    * реакции на комментарий. Ряд всё равно решает база.
    */
   amMember?: boolean;
-  /**
-   * Комментарий, к которому пришли (тап по пересланному): он встаёт наверх,
-   * а ответ открывает окно своего треда; сам он вспыхивает.
-   */
-  focusCommentId?: string;
-  /** Корень и ключ конкретного перехода; ключ отличает повторный тап по той же ссылке. */
-  focusRootId?: string;
-  focusKey?: string;
-  /**
-   * Облачко переписки, где выделяли кусок текста (боковая панель): туда ведёт
-   * цитата над комментарием. Ключ строки, а не id сообщения: в островке одно
-   * сообщение бывает дважды.
-   */
-  rowKey?: string;
 };
 
-/** Окно треда: корень и как оно появилось — въехало справа или сразу на месте. */
-export type OpenCommentThreadState = { rootId: string; instant: boolean };
+/** Открытое окно ответов выбранного корня. */
+export type OpenCommentThreadState = { rootId: string };
 
 type PanelState = {
   target: CommentsPanelTarget | null;
@@ -89,33 +75,26 @@ usePanelStore.subscribe((state, prev) => {
 /**
  * Открывает панель комментариев к сообщению. Одна функция на всё
  * приложение: переписка открывает её по кружку у облачка, лента — у
- * фрагмента переписки, пересланный комментарий — у сниппета.
+ * фрагмента переписки.
  */
 export function openComments(
   messageId: string,
   chatId?: string,
   amMember = false,
-  focusCommentId?: string,
-  focusRootId?: string,
-  focusKey = String(Date.now()),
 ) {
   usePanelStore.setState({
     target: {
       subject: { type: 'message', id: messageId },
       chatId,
       amMember,
-      focusCommentId,
-      focusRootId,
-      focusKey: focusCommentId ? focusKey : undefined,
     },
-    openCommentThread: focusRootId ? { rootId: focusRootId, instant: true } : null,
+    openCommentThread: null,
   });
 }
 
 /**
  * Открывает боковую панель куска текста сообщения — кластера или области. `chatId` и `amMember`
  * — чата, где живёт сообщение (у облачка островка — чата оригинала).
- * `rowKey` — облачко, где выделяли: туда ведёт цитата над комментарием.
  * Сообщение над боковой панелью не поднимается.
  */
 export function openFragmentComments(
@@ -123,10 +102,9 @@ export function openFragmentComments(
   chatId: string,
   amMember: boolean,
   fragment: FragmentPanelSubject,
-  rowKey?: string,
 ) {
   usePanelStore.setState({
-    target: { subject: { type: 'message', id: messageId }, chatId, amMember, fragment, rowKey },
+    target: { subject: { type: 'message', id: messageId }, chatId, amMember, fragment },
     openCommentThread: null,
   });
 }
@@ -134,24 +112,12 @@ export function openFragmentComments(
 /**
  * Открывает панель комментариев к попу — из просмотра попсов. `amMember` —
  * я публикую в канале: догадка ряда для отклика моей реакции и показ
- * закрепа, решает база. `focusCommentId` — пришли по пересланному комментарию.
+ * закрепа, решает база.
  */
-export function openPopComments(
-  popId: string,
-  amMember = false,
-  focusCommentId?: string,
-  focusRootId?: string,
-  focusKey = String(Date.now()),
-) {
+export function openPopComments(popId: string, amMember = false) {
   usePanelStore.setState({
-    target: {
-      subject: { type: 'pop', id: popId },
-      amMember,
-      focusCommentId,
-      focusRootId,
-      focusKey: focusCommentId ? focusKey : undefined,
-    },
-    openCommentThread: focusRootId ? { rootId: focusRootId, instant: true } : null,
+    target: { subject: { type: 'pop', id: popId }, amMember },
+    openCommentThread: null,
   });
 }
 
@@ -188,11 +154,10 @@ export function getOpenCommentThread(): string | null {
 }
 
 /**
- * Открывает окно треда этого корня; `null` — закрыть. `instant` — без въезда:
- * шит открылся сразу в треде (пришли к пересланному ответу).
+ * Открывает окно треда этого корня; `null` — закрыть.
  */
-export function setOpenCommentThread(rootId: string | null, instant = false) {
-  usePanelStore.setState({ openCommentThread: rootId ? { rootId, instant } : null });
+export function setOpenCommentThread(rootId: string | null) {
+  usePanelStore.setState({ openCommentThread: rootId ? { rootId } : null });
 }
 
 /**

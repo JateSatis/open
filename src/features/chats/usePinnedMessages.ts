@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 
 import {
   byPlaceInChat,
@@ -10,8 +10,6 @@ import {
 } from '@/api/pins';
 import type { Message } from '@/api/chats';
 import { attachmentThumbnail } from '@/features/chats/chatDisplay';
-import { messageWindowKey } from '@/features/chats/messages/historyCache';
-import { loadMessageWindow } from '@/features/chats/messages/useMessageWindow';
 
 export function pinsQueryKey(chatId: string) {
   return ['pins', chatId] as const;
@@ -56,19 +54,6 @@ export function usePinnedMessages(chatId: string): PinnedMessagesState {
     queryFn: () => listPinnedMessages(chatId),
   });
   const pins = data ?? NO_PINS;
-
-  // Закрепы показываются сразу, а тап по ним — это прыжок к сообщению. Пока
-  // человек читает, окно вокруг каждого закрепа уже грузится в кеш: переход
-  // не ждёт сеть. Окна независимы от открытого чата и не включают его запрос.
-  useEffect(() => {
-    for (const pin of pins) {
-      void queryClient.prefetchQuery({
-        queryKey: messageWindowKey(chatId, pin.messageSeq),
-        queryFn: () => loadMessageWindow(chatId, pin.messageSeq),
-        staleTime: Infinity,
-      });
-    }
-  }, [chatId, pins, queryClient]);
 
   const pinnedIds = useMemo(() => new Set(pins.map((pin) => pin.messageId)), [pins]);
   const isPinned = useCallback((messageId: string) => pinnedIds.has(messageId), [pinnedIds]);

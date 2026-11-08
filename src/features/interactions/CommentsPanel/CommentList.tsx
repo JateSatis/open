@@ -9,8 +9,6 @@ import { styles } from './styles';
 import { Text } from '@/components/Text';
 import { commentsShown } from '@/features/recs/journal/commentsJournal';
 
-/** Прыжок к комментарию: он и ключ вспышки — новый на каждый прыжок. */
-export type CommentHighlight = { id: string; key: number };
 
 export type CommentListProps = {
   testID: string;

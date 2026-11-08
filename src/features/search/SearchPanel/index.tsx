@@ -3,7 +3,7 @@ import { ActivityIndicator, SectionList, View } from 'react-native';
 
 import { styles } from './styles';
 
-import type { SearchEntity, SearchMessage } from '@/api/search';
+import type { SearchEntity } from '@/api/search';
 import { useTabBarHeight } from '@/components/TabBar';
 import { Text } from '@/components/Text';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
@@ -115,11 +115,6 @@ export function SearchPanel({ query }: { query: string }) {
     (entity: SearchEntity) => open({ type: 'entity', entity }),
     [open],
   );
-  const openMessage = useCallback(
-    (message: SearchMessage) => open({ type: 'message', message }),
-    [open],
-  );
-
   const renderItem = ({
     item,
     index,
@@ -144,11 +139,6 @@ export function SearchPanel({ query }: { query: string }) {
       opened(entity.kind, entitySubject(entity));
       openEntity(entity);
     };
-    const pressMessage = (message: SearchMessage) => {
-      opened('message', { type: 'message', id: message.id });
-      openMessage(message);
-    };
-
     if (item.type === 'entity') {
       return <SearchEntityRow entity={item.entity} query={results.parsed} onPress={pressEntity} />;
     }
@@ -157,7 +147,6 @@ export function SearchPanel({ query }: { query: string }) {
         <SearchMessageRow
           message={item.message}
           needle={results.parsed.text}
-          onPress={pressMessage}
         />
       );
     }
@@ -165,7 +154,7 @@ export function SearchPanel({ query }: { query: string }) {
     return item.item.type === 'entity' ? (
       <SearchEntityRow entity={item.item.entity} query={NO_QUERY} onPress={pressEntity} />
     ) : (
-      <SearchMessageRow message={item.item.message} needle="" onPress={pressMessage} />
+      <SearchMessageRow message={item.item.message} needle="" />
     );
   };
 

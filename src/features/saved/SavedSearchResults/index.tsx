@@ -18,8 +18,6 @@ export type SavedSearchResultsProps = {
   search: MatchSearch<SavedMessage>;
   chats: ReadonlyMap<string, ChatSummary>;
   currentUserId: string | null;
-  /** Тап по строке: к записи на «Все». */
-  onSelect: (index: number) => void;
 };
 
 /**
@@ -31,7 +29,6 @@ export function SavedSearchResults({
   search,
   chats,
   currentUserId,
-  onSelect,
 }: SavedSearchResultsProps) {
   const theme = useTheme();
   const needle = normalizeSearch(search.searched);
@@ -49,7 +46,7 @@ export function SavedSearchResults({
         keyboardShouldPersistTaps="handled"
         onEndReached={search.loadMore}
         onEndReachedThreshold={0.5}
-        renderItem={({ item, index }) => {
+        renderItem={({ item }) => {
           const chat = item.sourceChatId ? chats.get(item.sourceChatId) : undefined;
           const text = savedSearchText(item, needle);
           const snippet = snippetAround(text, findMatches(text, needle));
@@ -59,7 +56,7 @@ export function SavedSearchResults({
               testID="saved-search-result"
               accessibilityRole="button"
               accessibilityLabel={text}
-              onPress={() => onSelect(index)}
+              disabled
               style={({ pressed }) => [
                 styles.row,
                 pressed && { backgroundColor: theme.backgroundSelected },

@@ -16,7 +16,6 @@ import { ChatThreadFooter } from './ChatThreadFooter';
 import type { ChatThreadPanelKit } from './kit';
 import { styles } from './styles';
 import { useChatThreadActions } from './useChatThreadActions';
-import { useChatThreadJump } from './useChatThreadJump';
 import { useChatThreadRenderItem } from './useChatThreadRenderItem';
 
 import { ConfirmDialogSurface } from '@/components/ConfirmDialog';
@@ -49,7 +48,8 @@ import { useSidePanel } from '@/features/interactions/CommentsPanel/useSidePanel
 import { TileViewportContext } from '@/features/media/tileRegistry';
 import { InAppNoticeToast } from '@/features/notifications/InAppMessageToast/NoticeToast';
 import { useTheme } from '@/hooks/use-theme';
-import { Sizes } from '@/theme';
+import { Sizes, Spacing } from '@/theme';
+import { PENDING_SEQ } from '@/api/pendingSeq';
 
 export type ChatThreadWindowProps = {
   kit: ChatThreadPanelKit;
@@ -97,6 +97,25 @@ export function ChatThreadWindow({ kit, open }: ChatThreadWindowProps) {
   });
   const { selection, menu, edit, draft } = actions;
 
+  const atEnd = useRef(false);
+  const followOwn = useRef(false);
+  const lastKey = useRef<string | null>(null);
+  const last = pane.rows[pane.rows.length - 1];
+  useEffect(() => {
+    const changed = lastKey.current !== last?.key;
+    lastKey.current = last?.key ?? null;
+    if (!changed || last?.type !== 'message' || last.message.seq < PENDING_SEQ) return;
+    followOwn.current = true;
+    const frame = requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: false }));
+    return () => cancelAnimationFrame(frame);
+  }, [last]);
+  const onContentSizeChange = useCallback(() => {
+    if (!followOwn.current && !atEnd.current) return;
+    followOwn.current = false;
+    listRef.current?.scrollToEnd({ animated: false });
+  }, []);
+
+
   // Выезд начинается по `onShow` окна. На Android оно приходит не всегда —
   // особенно если окно открыли посреди перерисовки списка: шторка осталась бы
   // за краем, а невидимое окно ловило бы касания. Запасной старт — по таймеру.
@@ -114,15 +133,6 @@ export function ChatThreadWindow({ kit, open }: ChatThreadWindowProps) {
     return () => setChatThreadKeyboardWindowOpen(false);
   }, []);
 
-  const { rows } = pane;
-  const { highlight, jumpInPane, onScrollToIndexFailed, onScroll: trackEnd, onContentSizeChange } = useChatThreadJump({
-    listRef,
-    rows,
-    loadUntil: pane.loadUntil,
-    isLoading: pane.isLoading,
-    focusMessageId: open.focusMessageId,
-  });
-
   // Просмотры и «прочитано» ответов, прочитанных в шторке, — как в переписке.
   const [rowRegistry] = useState(createRowRegistry);
   const views = useMessageViews({
@@ -136,10 +146,11 @@ export function ChatThreadWindow({ kit, open }: ChatThreadWindowProps) {
   });
   const { onViewableItemsChanged: viewsOnViewable } = views;
   const { onScroll: viewsOnScroll } = views;
-  const onScroll = useCallback((event: Parameters<typeof trackEnd>[0]) => {
-    trackEnd(event);
+  const onScroll = useCallback((event: Parameters<typeof viewsOnScroll>[0]) => {
+    const { contentOffset, layoutMeasurement, contentSize } = event.nativeEvent;
+    atEnd.current = contentOffset.y + layoutMeasurement.height >= contentSize.height - Spacing.six;
     viewsOnScroll(event);
-  }, [trackEnd, viewsOnScroll]);
+  }, [viewsOnScroll]);
   const onViewableItemsChanged = useCallback(
     ({ viewableItems }: { viewableItems: ViewToken<ChatThreadPaneRow>[] }) =>
       viewsOnViewable({
@@ -156,8 +167,6 @@ export function ChatThreadWindow({ kit, open }: ChatThreadWindowProps) {
     pane,
     actions,
     width,
-    highlight,
-    jumpInPane,
   });
 
   /** «Назад» закрывает сначала вопрос, панель эмодзи, выбор, правку и ответ, потом шторку. */
@@ -246,7 +255,6 @@ export function ChatThreadWindow({ kit, open }: ChatThreadWindowProps) {
                   showsVerticalScrollIndicator={false}
                   showsHorizontalScrollIndicator={false}
                   keyboardShouldPersistTaps="handled"
-                  onScrollToIndexFailed={onScrollToIndexFailed}
                   viewabilityConfig={views.viewabilityConfig}
                   onViewableItemsChanged={onViewableItemsChanged}
                   onScroll={onScroll}

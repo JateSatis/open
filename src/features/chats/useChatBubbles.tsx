@@ -14,13 +14,11 @@ import type { MosaicBounds } from '@/features/chats/lib/mosaicLayout';
 import { canReactTo } from '@/features/chats/messageActions';
 import { DELETED_ACCOUNT } from '@/features/chats/messageQuote';
 import type { ChatMessage } from '@/features/chats/messages/types';
-import type { QuoteNavigation } from '@/features/chats/useQuoteNavigation';
 import { commentsEntry } from '@/features/interactions/CommentsPanel';
 import { sendReaction } from '@/features/interactions/reactionSender';
 import { audienceOf, nextReaction } from '@/features/interactions/reactionState';
 import type { ReactToMessage } from '@/features/interactions/useReactToMessage';
 import type { ReactionAudience } from '@/api/reactionCounts';
-import { openPopViewer } from '@/features/pops/openPopViewer';
 
 type Options = {
   chatId: string;
@@ -31,7 +29,6 @@ type Options = {
   mediaBounds: MosaicBounds;
   retry: (localId: string) => void;
   openPerson: (personId: string) => void;
-  navigation: QuoteNavigation;
   reactions: ReactToMessage;
   /**
    * Аватары у чужих облачков. У участника личного диалога их нет вовсе — и у
@@ -45,7 +42,6 @@ type Options = {
    */
   showAuthors?: boolean;
   /** Тап по сниппету пересланного комментария — к нему в его ветке. */
-  openForwardedComment: (comment: ForwardedComment) => void;
   /**
    * Посты канала: подписаны этим именем, а не человеком, и все у левого
    * края — и у владельца тоже. Null — обычная переписка.
@@ -77,15 +73,12 @@ export function useChatBubbles({
   mediaBounds,
   retry,
   openPerson,
-  navigation,
   reactions,
   showAvatars,
   showAuthors = true,
-  openForwardedComment,
   postAuthor = null,
 }: Options): ChatBubbles {
   const queryClient = useQueryClient();
-  const { openQuote, openOriginal } = navigation;
   const { audience: myAudience, toggle } = reactions;
 
   const audienceFor = useCallback(
@@ -143,7 +136,6 @@ export function useChatBubbles({
       const { comment } = forward;
       const author = item.authorId ? participantsById.get(item.authorId) : undefined;
       const commentAuthorId = comment?.authorId ?? null;
-      const pop = comment?.pop ?? null;
       const shown: ChatMessage = comment
         ? {
             ...item,
@@ -182,12 +174,6 @@ export function useChatBubbles({
             <CommentForwardLead
               forward={forward}
               isOwn={item.authorId === currentUserId}
-              onOpenSource={
-                interactive && comment ? () => openForwardedComment(comment) : undefined
-              }
-              onOpenPop={
-                interactive && pop ? () => openPopViewer(pop.channelId, pop.id) : undefined
-              }
               onOpenAuthor={
                 interactive && commentAuthorId ? () => openPerson(commentAuthorId) : undefined
               }
@@ -199,7 +185,6 @@ export function useChatBubbles({
     [
       currentUserId,
       mediaBounds,
-      openForwardedComment,
       openPerson,
       participantsById,
       reactToComment,
@@ -233,7 +218,6 @@ export function useChatBubbles({
           onAuthorPress={
             interactive && authorId && !isPost ? () => openPerson(authorId) : undefined
           }
-          onQuotePress={interactive ? openQuote : undefined}
           reactionAudience={myAudience}
           onReactionToggle={
             interactive && canReactTo(item) ? (emoji) => toggle(item, emoji) : undefined
@@ -269,7 +253,6 @@ export function useChatBubbles({
       mediaBounds,
       myAudience,
       openPerson,
-      openQuote,
       participantsById,
       postAuthor,
       resolvePerson,
@@ -302,14 +285,11 @@ export function useChatBubbles({
           authorAvatarUrl={original.authorAvatarUrl}
           mediaBounds={mediaBounds}
           onAuthorPress={interactive && authorId ? () => openPerson(authorId) : undefined}
-          // Цитаты оригинала — из его чата: туда и прыжок.
-          onQuotePress={interactive ? (quote) => openQuote(quote, original.chatId) : undefined}
           sourceChat={
             fromHeaderChat
               ? null
               : {
                   name: original.chat?.name ?? 'удалённого чата',
-                  onPress: interactive && original.chat ? () => openOriginal(message) : undefined,
                 }
           }
           reactionAudience={audience}
@@ -346,9 +326,7 @@ export function useChatBubbles({
       currentUserId,
       isMember,
       mediaBounds,
-      openOriginal,
       openPerson,
-      openQuote,
       resolvePerson,
       showAvatars,
       toggle,

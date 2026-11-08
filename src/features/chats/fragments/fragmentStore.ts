@@ -31,31 +31,15 @@ export type TextSelection = {
   dragging: 'start' | 'end' | 'words' | null;
 };
 
-/**
- * Кусок текста, к которому пришли по цитате фрагмента. Держится до первого
- * действия человека — его снимает экран переписки.
- */
-export type QuoteHighlight = {
-  rowKey: string;
-  /** Текст, по которому снята геометрия: облачко с другим текстом её не рисует. */
-  text: string;
-  /** Диапазон UTF-16. */
-  start: number;
-  end: number;
-  geometry: TextGeometry;
-};
-
 type FragmentState = {
   /** Облачко в режиме фрагментов — ключ строки. */
   activeKey: string | null;
   selection: TextSelection | null;
-  quote: QuoteHighlight | null;
 };
 
 const useFragmentStore = create<FragmentState>(() => ({
   activeKey: null,
   selection: null,
-  quote: null,
 }));
 
 /** Тап по облачку: то же — выйти из режима, другое — перенести режим на него. */
@@ -124,32 +108,4 @@ export function subscribeTextSelection(listener: (selection: TextSelection | nul
   return useFragmentStore.subscribe((state, previous) => {
     if (state.selection !== previous.selection) listener(state.selection);
   });
-}
-
-export function setQuoteHighlight(quote: QuoteHighlight) {
-  useFragmentStore.setState({ quote });
-}
-
-/**
- * Счётчик действий человека на экране переписки. Переход по цитате долгий
- * (догрузка истории, отрисовка): тронули экран, пока он шёл, — подсветка
- * опоздала и уже не нужна.
- */
-let interactions = 0;
-
-export function quoteInteractionMark(): number {
-  return interactions;
-}
-
-/** Любое действие на экране переписки снимает подсветку. Дёшево, когда её нет. */
-export function clearQuoteHighlight() {
-  interactions += 1;
-  if (useFragmentStore.getState().quote) useFragmentStore.setState({ quote: null });
-}
-
-/** Подсветка куска в этом облачке или `null`. */
-export function useRowQuoteHighlight(rowKey: string | undefined): QuoteHighlight | null {
-  return useFragmentStore((state) =>
-    rowKey !== undefined && state.quote?.rowKey === rowKey ? state.quote : null,
-  );
 }

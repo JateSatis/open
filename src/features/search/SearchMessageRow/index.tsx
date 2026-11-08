@@ -14,14 +14,13 @@ export type SearchMessageRowProps = {
   message: SearchMessage;
   /** Нормализованный текст запроса — что подсветить во фрагменте. */
   needle: string;
-  onPress: (message: SearchMessage) => void;
 };
 
 /**
  * Строка найденного сообщения: чат или канал, автор (в группе), фрагмент
  * вокруг совпадения с подсветкой и время.
  */
-export function SearchMessageRow({ message, needle, onPress }: SearchMessageRowProps) {
+export function SearchMessageRow({ message, needle }: SearchMessageRowProps) {
   const snippet = snippetAround(message.text, findMatches(message.text, needle));
   // В личном диалоге автор понятен из самого чата, в канале пишет канал.
   const author = message.chatKind === 'group' ? message.authorName : null;
@@ -31,7 +30,7 @@ export function SearchMessageRow({ message, needle, onPress }: SearchMessageRowP
       accessibilityRole="button"
       accessibilityLabel={`${message.chatTitle}: ${message.text}`}
       testID="search-message"
-      onPress={() => onPress(message)}
+      disabled
       style={styles.row}
     >
       <Avatar uri={message.chatAvatarUrl} name={message.chatTitle} size={Sizes.chatListAvatar} />

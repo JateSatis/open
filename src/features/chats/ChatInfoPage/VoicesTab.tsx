@@ -1,15 +1,13 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { Image } from 'expo-image';
 import { SymbolView } from 'expo-symbols';
-import { memo, useCallback, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
-import { SHOW_IN_CHAT } from './MediaTab';
 import { TabStatus, tabStatusOf } from './TabStatus';
 import { chatInfoKeys, useChatVoices } from './queries';
 
 import type { ChatVoiceItem } from '@/api/chatInfo';
-import { AnchoredMenu, type MenuAnchor } from '@/components/AnchoredMenu';
 import { InfoTabList } from '@/components/InfoPage';
 import { Text } from '@/components/Text';
 import { hiddenMediaLabel } from '@/features/chats/HiddenMediaTile';
@@ -29,19 +27,17 @@ type Row = { type: 'voice'; item: ChatVoiceItem } | { type: 'skeleton'; key: str
 export type VoicesTabProps = {
   tab: number;
   chatId: string;
-  onShowInChat: (messageId: string, seq: number) => void;
 };
 
 /**
  * Вкладка «Голосовые»: голосовые и кружки чата, свежие сверху. Тап играет на
- * месте, без перехода в чат; долгое нажатие — «Показать в чате».
+ * месте, без перехода в чат.
  */
-export function VoicesTab({ tab, chatId, onShowInChat }: VoicesTabProps) {
+export function VoicesTab({ tab, chatId }: VoicesTabProps) {
   const queryClient = useQueryClient();
   const query = useChatVoices(chatId);
   const { hasNextPage, isFetchingNextPage, fetchNextPage } = query;
   const [openNote, setOpenNote] = useState<string | null>(null);
-  const [menu, setMenu] = useState<{ anchor: MenuAnchor; item: ChatVoiceItem } | null>(null);
 
   const rows = useMemo<Row[]>(() => {
     if (query.data === undefined && query.status !== 'error') {
@@ -73,11 +69,6 @@ export function VoicesTab({ tab, chatId, onShowInChat }: VoicesTabProps) {
     setOpenNote((current) => (current === item.messageId ? null : item.messageId));
   }, []);
 
-  const openMenu = useCallback(
-    (item: ChatVoiceItem, anchor: MenuAnchor) => setMenu({ item, anchor }),
-    [],
-  );
-
   return (
     <>
       <InfoTabList
@@ -95,7 +86,6 @@ export function VoicesTab({ tab, chatId, onShowInChat }: VoicesTabProps) {
               item={row.item}
               noteOpen={openNote === row.item.messageId}
               onToggleNote={toggleNote}
-              onLongPress={openMenu}
             />
           )
         }
@@ -104,15 +94,6 @@ export function VoicesTab({ tab, chatId, onShowInChat }: VoicesTabProps) {
         footer={<TabStatus state={tabStatusOf(query)} what="голосовые" onRetry={retry} />}
       />
 
-      <AnchoredMenu
-        testID="info-voice-menu"
-        anchor={menu?.anchor ?? null}
-        actions={SHOW_IN_CHAT}
-        onSelect={() => {
-          if (menu) onShowInChat(menu.item.messageId, menu.item.seq);
-        }}
-        onClosed={() => setMenu(null)}
-      />
     </>
   );
 }
@@ -135,17 +116,14 @@ type VoiceRowProps = {
   item: ChatVoiceItem;
   noteOpen: boolean;
   onToggleNote: (item: ChatVoiceItem) => void;
-  onLongPress: (item: ChatVoiceItem, anchor: MenuAnchor) => void;
 };
 
 const VoiceRow = memo(function VoiceRow({
   item,
   noteOpen,
   onToggleNote,
-  onLongPress,
 }: VoiceRowProps) {
   const theme = useTheme();
-  const ref = useRef<View>(null);
   const playback = useVoicePlayback(item.url);
   const isNote = item.kind === 'video_note';
   const author = item.authorName ?? DELETED_ACCOUNT;
@@ -168,7 +146,6 @@ const VoiceRow = memo(function VoiceRow({
 
   return (
     <Pressable
-      ref={ref}
       testID="info-voice-row"
       accessibilityRole="button"
       accessibilityLabel={
@@ -179,11 +156,6 @@ const VoiceRow = memo(function VoiceRow({
             : 'Голосовое сообщение'
       }
       onPress={press}
-      onLongPress={() =>
-        ref.current?.measureInWindow((x, y, width, height) =>
-          onLongPress(item, { x, y, width, height }),
-        )
-      }
       style={({ pressed }) => [pressed && { backgroundColor: theme.backgroundElement }]}
     >
       <View style={styles.row}>

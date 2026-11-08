@@ -5,10 +5,8 @@ import {
   addToCommentThread,
   appendRoots,
   appendCommentThreadHead,
-  focusedCommentThread,
   loadedComments,
   raiseRoot,
-  prependCommentThreadHead,
   replaceComments,
   rootsInOrder,
   setAuthorPin,
@@ -19,7 +17,7 @@ import {
   type RootsPage,
   type CommentThreadPage,
 } from './commentsCache';
-import { asDeletedRoot, toCommentItem } from './commentItem';
+import { toCommentItem } from './commentItem';
 
 import type { Comment } from '@/api/comments';
 
@@ -157,67 +155,6 @@ describe('comment thread cache', () => {
     expect(ids(page.tail)).toEqual(['mine']);
   });
 
-  it('seeds a chronological window around a distant reply and keeps both cursors', () => {
-    const page = focusedCommentThread(
-      [reply('r4', 4), reply('r5', 5)],
-      reply('target', 6),
-      [reply('r7', 7), reply('r8', 8)],
-      { createdAt: reply('r4', 4).createdAt, id: 'r4' },
-      { createdAt: reply('r8', 8).createdAt, id: 'r8' },
-    );
-
-    expect(ids(page.head)).toEqual(['r4', 'r5', 'target']);
-    expect(ids(page.tail)).toEqual(['r7', 'r8']);
-    expect(page.beforeCursor?.id).toBe('r4');
-    expect(page.nextCursor).toEqual({ createdAt: reply('r8', 8).createdAt, id: 'r8' });
-  });
-
-  it('replaces a distant partial prefix with the focus window and prepends earlier pages once', () => {
-    const prior = appendCommentThreadHead(EMPTY_COMMENT_THREAD, [reply('r1', 1), reply('r2', 2)], {
-      createdAt: reply('r2', 2).createdAt,
-      id: 'r2',
-    });
-    const focused = focusedCommentThread(
-      [reply('r4', 4), reply('r5', 5)],
-      reply('target', 6),
-      [reply('r7', 7)],
-      { createdAt: reply('r4', 4).createdAt, id: 'r4' },
-      null,
-      prior,
-    );
-    const earlier = prependCommentThreadHead(
-      focused,
-      [reply('r3', 3), reply('r4', 4)],
-      { createdAt: reply('r3', 3).createdAt, id: 'r3' },
-    );
-
-    expect(ids(earlier.head)).toEqual(['r3', 'r4', 'r5', 'target']);
-    expect(ids(earlier.tail)).toEqual(['r7']);
-    expect(earlier.beforeCursor?.id).toBe('r3');
-    expect(new Set([...ids(earlier.head), ...ids(earlier.tail)]).size).toBe(5);
-  });
-
-  it('keeps a deleted root as a content-free thread placeholder', () => {
-    const root = asDeletedRoot(toCommentItem(comment('root', 1, { deleted: true, repliesCount: 1 })));
-    const page = focusedCommentThread([], reply('target', 2), [], null, null);
-
-    expect(root).toMatchObject({ id: 'root', deleted: true, text: null, authorId: null });
-    expect(page.head[0].id).toBe('target');
-  });
-
-  it('has no lower gap when every reply after the focus is already in the window', () => {
-    const page = focusedCommentThread(
-      [reply('r4', 4)],
-      reply('target', 5),
-      [reply('r6', 6), reply('r7', 7)],
-      { createdAt: reply('r4', 4).createdAt, id: 'r4' },
-      null,
-    );
-
-    expect(ids(page.head)).toEqual(['r4', 'target']);
-    expect(ids(page.tail)).toEqual(['r6', 'r7']);
-    expect(page.nextCursor).toBeNull();
-  });
 });
 
 describe('every loaded comment', () => {

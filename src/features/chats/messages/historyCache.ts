@@ -28,13 +28,7 @@ export type ChatHistory = {
   items: ChatMessage[];
   /** `seq` самого старого загруженного, пока глубже есть что грузить. */
   nextCursor: number | null;
-  /** Только для оторванного окна: номер верхнего края; null — достигнут живой край. */
-  newerCursor?: number | null;
 };
-
-export function messageWindowKey(chatId: string, seq: number) {
-  return ['message-window', chatId, seq] as const;
-}
 
 /**
  * Какая лента чата: вся переписка или вид «Треды» — без ответов (их ключ —
@@ -422,7 +416,6 @@ export function readHistory(
 export function readAllHistories(queryClient: QueryClient): ChatHistory[] {
   return [
     ...queryClient.getQueriesData<ChatHistory>({ queryKey: ['messages'] }),
-    ...queryClient.getQueriesData<ChatHistory>({ queryKey: ['message-window'] }),
   ].flatMap(([, history]) => (history ? [history] : []));
 }
 
@@ -432,9 +425,6 @@ export function updateAllHistories(
   update: (history: ChatHistory) => ChatHistory,
 ) {
   queryClient.setQueriesData<ChatHistory>({ queryKey: ['messages'] }, (history) =>
-    history ? update(history) : history,
-  );
-  queryClient.setQueriesData<ChatHistory>({ queryKey: ['message-window'] }, (history) =>
     history ? update(history) : history,
   );
 }
@@ -461,9 +451,6 @@ export function updateChatHistories(
   update: (history: ChatHistory) => ChatHistory,
 ) {
   queryClient.setQueriesData<ChatHistory>({ queryKey: messagesQueryKey(chatId) }, (history) =>
-    history ? update(history) : history,
-  );
-  queryClient.setQueriesData<ChatHistory>({ queryKey: ['message-window', chatId] }, (history) =>
     history ? update(history) : history,
   );
 }

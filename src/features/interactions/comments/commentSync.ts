@@ -122,7 +122,7 @@ export async function syncAuthorPin(queryClient: QueryClient, targetId: string):
 
 /**
  * Начало треда. Своё, что уже лежит за разрывом (только что отправленный
- * ответ, цель прыжка), не теряется.
+ * ответ), не теряется.
  */
 export async function loadCommentThread(
   queryClient: QueryClient,

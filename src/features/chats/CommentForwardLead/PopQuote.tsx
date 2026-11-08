@@ -13,7 +13,6 @@ export type PopQuoteProps = {
   /** Канал попа — строкой над подписью, как автор у цитаты сообщения. */
   channelName: string | null;
   isOwn: boolean;
-  onPress?: () => void;
 };
 
 /** Первая строка подписи попа, иначе — «🎬 Pop». */
@@ -28,7 +27,7 @@ export function popQuoteText(pop: ForwardedCommentPop): string {
  * канал и подпись. Вид — как у цитаты сообщения, только обложка вытянута,
  * как сам поп.
  */
-export function PopQuote({ pop, channelName, isOwn, onPress }: PopQuoteProps) {
+export function PopQuote({ pop, channelName, isOwn }: PopQuoteProps) {
   const theme = useTheme();
   const accentColor = isOwn ? theme.primaryText : theme.primary;
   const snippet = pop ? popQuoteText(pop) : 'Поп удалён';
@@ -36,10 +35,8 @@ export function PopQuote({ pop, channelName, isOwn, onPress }: PopQuoteProps) {
   return (
     <Pressable
       testID="pop-quote"
-      accessibilityRole={onPress && pop ? 'button' : undefined}
       accessibilityLabel={pop ? `Поп: ${snippet}` : snippet}
-      disabled={!onPress || !pop}
-      onPress={onPress}
+      disabled
       style={[
         styles.popQuote,
         { backgroundColor: isOwn ? theme.quoteBackgroundOnPrimary : theme.quoteBackground },

@@ -111,7 +111,6 @@ describe('useOpenChannel', () => {
           params: expect.objectContaining({
             section: 'pops',
             sectionKey: expect.any(String),
-            jumpTo: undefined,
           }),
         },
       }),

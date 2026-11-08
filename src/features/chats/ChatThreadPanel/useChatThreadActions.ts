@@ -40,7 +40,7 @@ type Options = {
   /** Облачка шторки новыми вперёд — для выбора. */
   bubbleRows: ChatListRow[];
   measureList: () => Promise<AnchorRect | null>;
-  /** Закрыть шторку — перед уходом в пересылку и в «Показать в чате». */
+  /** Закрыть шторку — перед уходом в пересылку. */
   close: () => void;
 };
 
@@ -50,7 +50,7 @@ export function chatThreadDraftKey(chatId: string, rootId: string): string {
 
 /**
  * Действия шторки треда — те же, что в переписке: меню, выбор, ответ,
- * правка, пересылка, удаление, закреп, комментарии и «Показать в чате».
+ * правка, пересылка, удаление, закреп и комментарии.
  * Поле ввода — своё: по умолчанию это ответ на исходное сообщение, после
  * «Ответить» — на выбранное.
  */
@@ -187,19 +187,6 @@ export function useChatThreadActions({
     },
     [chatId, isMember],
   );
-  const { showInChat: showInChatOf } = kit;
-  const showInChat = useCallback(
-    (row: BubbleRow) => {
-      const message = contentOf(row);
-
-      if (!message) return;
-
-      close();
-      showInChatOf(row.key, message.seq);
-    },
-    [close, showInChatOf],
-  );
-
   const { runMessageAction, runSelectionAction } = useMessageActionHandlers({
     currentUserId,
     selection,
@@ -213,9 +200,6 @@ export function useChatThreadActions({
     comment,
     forward,
     edit: startEdit,
-    openOriginal: kit.navigation.openOriginal,
-    openChat: kit.navigation.openChat,
-    showInChat,
   });
 
   const menuRow = menu.target?.item ?? null;
@@ -230,7 +214,6 @@ export function useChatThreadActions({
       isMember,
       isPinned: pins.isPinned(menuContent.id),
       selectable: isSelectableRow(menuRow, currentUserId),
-      inChatThread: true,
     });
   }, [currentUserId, isMember, menuContent, menuRow, pins]);
 

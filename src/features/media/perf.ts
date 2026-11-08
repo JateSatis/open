@@ -9,40 +9,6 @@
  */
 export const MEDIA_PERF = false;
 
-/** Временная телеметрия переходов; включать только на dev-устройстве. */
-export const NAVIGATION_PERF = false;
-
-const navigationAttempts = new Map<string, { kind: string; start: number }>();
-
-export function navigationPerfStart(id: string, kind: string, payload?: Record<string, unknown>): void {
-  if (!NAVIGATION_PERF) return;
-
-  navigationAttempts.set(id, { kind, start: performance.now() });
-  console.log('[navigation-perf]', JSON.stringify({ id, kind, event: 'start', at: 0, ...payload }));
-}
-
-export function navigationPerfMark(
-  id: string,
-  event: string,
-  payload?: Record<string, unknown>,
-): void {
-  if (!NAVIGATION_PERF) return;
-
-  const attempt = navigationAttempts.get(id);
-  if (!attempt) return;
-
-  console.log(
-    '[navigation-perf]',
-    JSON.stringify({
-      id,
-      kind: attempt.kind,
-      event,
-      at: Math.round(performance.now() - attempt.start),
-      ...payload,
-    }),
-  );
-}
-
 /** Кадр длиннее этого — пропущенный: на 60 Гц бюджет кадра 16.7 мс. */
 const DROPPED_FRAME_MS = 32;
 

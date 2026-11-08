@@ -1,7 +1,7 @@
 # Переписка и переходы к сообщениям
 
 Слова: чат, отправка, цитата, закреп, поиск в переписке, прыжок, тред сообщений.
-Сверено с `b123c6b`, 08.11.2026. Треды комментариев — [другая карточка](comments.md).
+Обновлено 09.11.2026: реализация переходов к сообщениям удалена по решению человека. Треды комментариев — [другая карточка](comments.md).
 
 ## Точки входа
 
@@ -10,8 +10,8 @@
 | --- | --- |
 | Открыть переписку | [маршрут chatId](../../src/app/%28tabs%29/chats/%5BchatId%5D.tsx) → [ChatConversation](../../src/features/chats/ChatConversation/index.tsx) → [useChatMessages](../../src/features/chats/useChatMessages.ts) |
 | Список чатов | [маршрут списка](../../src/app/%28tabs%29/chats/index.tsx) → [useChats](../../src/features/chats/useChats.ts), [chats API](../../src/api/chats.ts) |
-| Закреп/цитата/возврат вниз | [useJumpToMessage](../../src/features/chats/useJumpToMessage.ts), [useQuoteNavigation](../../src/features/chats/useQuoteNavigation.ts), [usePinnedMessages](../../src/features/chats/usePinnedMessages.ts) |
-| Далёкая цель и подгрузка истории | [useMessageWindow](../../src/features/chats/messages/useMessageWindow.ts): `loadMessageWindow` → `listMessagesAround` в chats API; [historyCache](../../src/features/chats/messages/historyCache.ts) хранит ключи хвоста и окна |
+| Закрепы и цитаты | [usePinnedMessages](../../src/features/chats/usePinnedMessages.ts), [PinnedBar](../../src/features/chats/PinnedBar/index.tsx), [useChatBubbles](../../src/features/chats/useChatBubbles.tsx): отображение без перехода к сообщению |
+| Ручная подгрузка истории | [useChatHistory](../../src/features/chats/messages/useChatHistory.ts) → [historyCache](../../src/features/chats/messages/historyCache.ts); окон вокруг цели больше нет |
 | Отправка/повтор/выход с экрана | [MessageComposer](../../src/features/chats/MessageComposer/index.tsx) → useChatMessages → [delivery](../../src/features/chats/messages/delivery.ts), [outbox](../../src/features/chats/messages/outbox.ts) → chats API |
 | Вид «Треды» в группе | [chatThreads](../../src/features/chats/chatThreads/), [ChatThreadPanel](../../src/features/chats/ChatThreadPanel/), [chatThreads API](../../src/api/chatThreads.ts) |
 
@@ -19,13 +19,19 @@
 
 - `ChatConversation` собирает экран; не начинай с чтения всех его импортов и соседних экранов.
   Найди нужный обработчик/хук по таблице. Строка сообщения — [MessageRow](../../src/features/chats/MessageRow/index.tsx).
-- История сервера и окно вокруг цели живут в Query-кеше, неподтверждённые исходящие — в outbox.
+- История сервера живёт в Query-кеше, неподтверждённые исходящие — в outbox.
   `delivery` работает вне компонентов, чтобы отправка не зависела от открытого экрана.
-- Дальний прыжок затрагивает загрузку окна, сохранение прежнего содержимого, позиционирование
-  и анимацию `jumpGlide`; изменение одной длительности не доказывает ускорение всего перехода.
+- Переходы к сообщениям внутри чата, канала, треда и между чатами удалены. Цитаты,
+  поиск и сохранённые копии остаются читаемыми, но не открывают исходное сообщение.
+  Удалены адресные параметры, подсветка цели, анимация прыжка, возврат вниз и предзагрузка окон.
+  Переходы к попсам и их комментариям из сообщений и сохранённых также удалены.
+  В «Сохранённых» удалены переходы по цитатам, закрепам и результатам поиска; фильтр тегов
+  просто обновляет список. Поиск показывает число совпадений и список без переходов.
+  Обычное открытие чата, ручная прокрутка, отправка и просмотр попсов из сетки канала сохранены.
+  Переключение вида «Треды» открывает список с начала без восстановления позиции.
 - Изменения сообщений приходят через [useChatChannel](../../src/features/chats/messages/useChatChannel.ts),
   [sync](../../src/features/chats/messages/sync.ts) и [chatTopics](../../src/api/chatTopics.ts).
-  При смене ключей/страниц проверь, как обновляются и хвост, и открытое окно.
+  При смене ключей/страниц проверь обновление обычной истории, вида «Треды» и открытых тредов.
 - Меняешь отправку — [права записи](../product.md#права-записи-и-обещания-приватности);
   текст/цитату/историю — [видимость сообщений](../product.md#видимость-сообщений).
   Только при изменении серверного контракта переходи к [данным](data.md).
@@ -33,13 +39,11 @@
 
 ## Проверить изменение
 
-Выбирай подходящее: [useJumpToMessage.test](../../src/features/chats/useJumpToMessage.test.tsx),
-[useMessageWindow.test](../../src/features/chats/messages/useMessageWindow.test.tsx),
-[useQuoteNavigation.test](../../src/features/chats/useQuoteNavigation.test.tsx),
+Выбирай подходящее: [цитаты и отправка](../../src/app/%28tabs%29/chats/%5BchatId%5D.reply.test.tsx),
+[пересланные комментарии](../../src/app/%28tabs%29/chats/%5BchatId%5D.commentForward.test.tsx),
 [chats.test](../../src/api/chats.test.ts); для тредов — [chat_threads_access.sql](../../supabase/tests/chat_threads_access.sql).
 Наличие теста не означает его прохождение; SQL требует нужной среды по backend.
 
-На устройстве для прыжка: близкая/далёкая цель и возврат вниз, холодное/готовое окно,
-правильная позиция и сохранение содержимого. Замеры — [perf](../../src/features/media/perf.ts),
-`navigationPerfStart`/`navigationPerfMark`; флаги логирования выключены в обычном коде.
-Jest проверяет логику, но не подтверждает плавность. Набор выбирай по фактической правке.
+На устройстве: цитата и закреп не перемещают переписку; старые адресные параметры не
+загружают цель; ручная прокрутка, подгрузка и отправка работают. Проверяй также обычное
+открытие чатов и раздела «Посты». Jest не подтверждает визуальную целостность экрана.

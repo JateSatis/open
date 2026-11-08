@@ -13,15 +13,13 @@ import { Spacing } from '@/theme';
 
 export type ChatSearchResultsProps = {
   search: ChatSearch;
-  /** Тап по строке: к сообщению в переписке. */
-  onSelect: (index: number) => void;
 };
 
 /**
  * Найденные сообщения списком поверх переписки: автор, дата, фрагмент с
  * подсвеченным совпадением. Свежие сверху, дальше — догрузкой.
  */
-export function ChatSearchResults({ search, onSelect }: ChatSearchResultsProps) {
+export function ChatSearchResults({ search }: ChatSearchResultsProps) {
   const theme = useTheme();
   const needle = normalizeSearch(search.searched);
 
@@ -38,8 +36,8 @@ export function ChatSearchResults({ search, onSelect }: ChatSearchResultsProps) 
         keyboardShouldPersistTaps="handled"
         onEndReached={search.loadMore}
         onEndReachedThreshold={0.5}
-        renderItem={({ item, index }) => (
-          <ResultRow hit={item} needle={needle} onPress={() => onSelect(index)} />
+        renderItem={({ item }) => (
+          <ResultRow hit={item} needle={needle} />
         )}
         ListEmptyComponent={
           <View style={styles.empty}>
@@ -54,11 +52,9 @@ export function ChatSearchResults({ search, onSelect }: ChatSearchResultsProps) 
 function ResultRow({
   hit,
   needle,
-  onPress,
 }: {
   hit: ChatSearchHit;
   needle: string;
-  onPress: () => void;
 }) {
   const theme = useTheme();
   const snippet = snippetAround(hit.text, findMatches(hit.text, needle));
@@ -68,7 +64,7 @@ function ResultRow({
       testID="chat-search-result"
       accessibilityRole="button"
       accessibilityLabel={hit.text}
-      onPress={onPress}
+      disabled
       style={({ pressed }) => [
         styles.row,
         pressed && { backgroundColor: theme.backgroundSelected },

@@ -20,8 +20,7 @@ export type ClusterEventKind =
   | 'cluster_opened'
   | 'cluster_reacted'
   | 'cluster_commented'
-  | 'area_opened'
-  | 'quote_followed';
+  | 'area_opened';
 
 export type ClusterEvent = {
   kind: ClusterEventKind;

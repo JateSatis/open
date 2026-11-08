@@ -31,7 +31,6 @@ export type WatchLaterRowBodyProps = {
   expanded: boolean;
   onToggleExpanded?: () => void;
   onToggleDone?: () => void;
-  onOpenSource: (saved: SavedMessage) => void;
   /** Прокрутка списка — для чекбокса у раскрытого пузыря. Нет — чекбокс стоит у верха. */
   sticky?: StickyFrame | null;
   /** Обёртка пузыря — жесты строки вокруг него (свайп ждёт перемотку голосового). */
@@ -59,7 +58,6 @@ export const WatchLaterRowBody = forwardRef<View, WatchLaterRowBodyProps>(
       expanded,
       onToggleExpanded,
       onToggleDone,
-      onOpenSource,
       sticky = null,
       wrapBubble = (bubble) => bubble,
       searched = '',
@@ -148,7 +146,6 @@ export const WatchLaterRowBody = forwardRef<View, WatchLaterRowBodyProps>(
                     currentUserId={currentUserId}
                     tagsById={tagsById}
                     mediaBounds={mediaBounds}
-                    onOpenSource={onOpenSource}
                     hideWatchLater
                     onTagPress={onTagPress ? (tagId) => onTagPress(tagId) : undefined}
                   />,

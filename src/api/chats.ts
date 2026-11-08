@@ -62,7 +62,6 @@ export {
   listChatThread,
   listChatThreadFeed,
   listChatThreadFeedSince,
-  listChatThreadRootPositions,
   listChatThreadSummaries,
   type ChatThreadPage,
   type ChatThreadPerson,
@@ -692,52 +691,6 @@ export async function listMessagesSince(chatId: string, sinceSeq: number): Promi
 
   if (error) throw error;
 
-  return (data ?? []).map(toMessage);
-}
-
-/** Окно у якоря: две соседние страницы приходят параллельно одним сетевым кругом. */
-export const MESSAGE_WINDOW_NEWER_SIZE = 12;
-
-export async function listMessagesAround(chatId: string, seq: number): Promise<{
-  older: MessagePage;
-  newer: Message[];
-}> {
-  const [older, newerResult] = await Promise.all([
-    messagesSelect()
-      .eq('chat_id', chatId)
-      .lte('seq', seq)
-      .order('seq', { ascending: false })
-      .limit(MESSAGE_PAGE_SIZE),
-    messagesSelect()
-      .eq('chat_id', chatId)
-      .gt('seq', seq)
-      .order('seq', { ascending: true })
-      .limit(MESSAGE_WINDOW_NEWER_SIZE),
-  ]);
-
-  if (older.error) throw older.error;
-  if (newerResult.error) throw newerResult.error;
-
-  const olderItems = (older.data ?? []).map(toMessage);
-  return {
-    older: {
-      items: olderItems,
-      nextCursor: olderItems.length === MESSAGE_PAGE_SIZE
-        ? olderItems[olderItems.length - 1].seq
-        : null,
-    },
-    newer: (newerResult.data ?? []).map(toMessage),
-  };
-}
-
-/** Следующая страница к живому краю от окна. */
-export async function listMessagesAfter(chatId: string, seq: number): Promise<Message[]> {
-  const { data, error } = await messagesSelect()
-    .eq('chat_id', chatId)
-    .gt('seq', seq)
-    .order('seq', { ascending: true })
-    .limit(MESSAGE_PAGE_SIZE);
-  if (error) throw error;
   return (data ?? []).map(toMessage);
 }
 

@@ -3,8 +3,8 @@ import { act, fireEvent, screen, waitFor, within } from '@testing-library/react-
 import * as Clipboard from 'expo-clipboard';
 import { impactAsync } from 'expo-haptics';
 import { BackHandler, StyleSheet } from 'react-native';
-import { State } from 'react-native-gesture-handler';
-import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils';
+
+
 
 import ChatScreen from './[chatId]';
 
@@ -14,7 +14,6 @@ import {
   getChat,
   listDeletedMessageIds,
   listMessages,
-  listMessagesAround,
   subscribeToChat,
 } from '@/api/chats';
 import { listPinnedMessages, pinMessage, type PinnedMessage } from '@/api/pins';
@@ -65,8 +64,6 @@ jest.mock('@/api/streams');
 jest.mock('@/api/chats', () => ({
   getChat: jest.fn(),
   listMessages: jest.fn(),
-  listMessagesAround: jest.fn(),
-  listMessagesAfter: jest.fn(),
   listMessagesSince: jest.fn(() => Promise.resolve([])),
   markChatRead: jest.fn(() => Promise.resolve()),
   sendMessage: jest.fn(),
@@ -551,28 +548,17 @@ describe('pinned bar', () => {
     expect(await screen.findByText('Закреплённое сообщение 1 из 2')).toBeTruthy();
   });
 
-  it('opens an old pin through a window around its message', async () => {
+  it('keeps history unchanged when an old pin is pressed', async () => {
     mockedPins.mockResolvedValue([
       { messageId: 'm0', forwardId: null, messageSeq: Date.parse('2026-09-27T09:00:00Z'), originalSeq: Date.parse('2026-09-27T09:00:00Z'), kind: 'text', text: 'давнее', thumbnailUrl: null },
     ]);
     mockedListMessages.mockResolvedValueOnce({ items: [message('m3', 'как дела?', 'user-1', 3)], nextCursor: Date.parse('2026-09-27T10:03:00Z') });
-    const old = { ...message('m0', 'давнее', 'user-2'), seq: Date.parse('2026-09-27T09:00:00Z'), createdAt: '2026-09-27T09:00:00Z' };
-    const around = listMessagesAround as jest.MockedFunction<typeof listMessagesAround>;
-    around.mockResolvedValueOnce({
-      older: { items: [old], nextCursor: null },
-      newer: [message('m2', 'привет', 'user-2', 2), message('m3', 'как дела?', 'user-1', 3)],
-    });
-
     await renderWithQuery(<ChatScreen />);
     await screen.findByText('как дела?');
 
     fireEvent.press(await screen.findByTestId('pinned-bar'));
 
     expect(mockedListMessages).toHaveBeenCalledTimes(1);
-    // Окно закрепа прогревается ещё при загрузке закрепов. В тесте `gcTime: 0`
-    // этот кеш сбрасывается сразу, поэтому сам прыжок читает окно повторно.
-    expect(around).toHaveBeenCalledTimes(2);
-    expect(around).toHaveBeenCalledWith('chat-1', old.seq);
     expect(screen.getByTestId('messages-list')).toBeTruthy();
   });
 });

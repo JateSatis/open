@@ -19,7 +19,6 @@ export type ChannelInfoTabsInput = {
   isOwner: boolean;
   subscriberQuery: string | null;
   onOpenPerson: (userId: string) => void;
-  onShowInChat: (messageId: string, seq: number) => void;
   onSearchSubscribers: () => void;
 };
 
@@ -68,7 +67,7 @@ export function channelInfoTabs(input: ChannelInfoTabsInput): InfoTab[] {
       title: 'Медиа',
       summary: mediaSummary(photos, videos),
       render: (tab) => (
-        <MediaTab tab={tab} chatId={channel.postsChatId} onShowInChat={input.onShowInChat} />
+        <MediaTab tab={tab} chatId={channel.postsChatId} />
       ),
     });
   }
@@ -79,7 +78,7 @@ export function channelInfoTabs(input: ChannelInfoTabsInput): InfoTab[] {
       title: 'Голосовые',
       summary: voicesSummary(summary?.voices ?? 0),
       render: (tab) => (
-        <VoicesTab tab={tab} chatId={channel.postsChatId} onShowInChat={input.onShowInChat} />
+        <VoicesTab tab={tab} chatId={channel.postsChatId} />
       ),
     });
   }

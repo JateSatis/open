@@ -102,7 +102,6 @@ export type Comment = {
   deleted: boolean;
 };
 
-export const commentFocusQueryKey = (commentId: string) => ['comment-focus', commentId] as const;
 
 /** Где кончилась страница верха: keyset по рангу. */
 export type RootCursor = { rank: number; id: string };
@@ -370,104 +369,6 @@ export async function listCommentThreadReplies(
         ? { createdAt: items[items.length - 1].createdAt, id: items[items.length - 1].id }
         : null,
   };
-}
-
-/** Окно ответов вокруг цели и курсор для продолжения вверх по треду. */
-export async function listCommentThreadWindow(
-  rootId: string,
-  focus: Pick<Comment, 'id' | 'createdAt'>,
-  limit = COMMENT_THREAD_PAGE_SIZE,
-): Promise<{
-  before: Comment[];
-  after: Comment[];
-  beforeCursor: CommentThreadCursor | null;
-  afterCursor: CommentThreadCursor | null;
-}> {
-  const beforeFilter = `created_at.lt.${focus.createdAt},and(created_at.eq.${focus.createdAt},id.lt.${focus.id})`;
-  const afterFilter = `created_at.gt.${focus.createdAt},and(created_at.eq.${focus.createdAt},id.gt.${focus.id})`;
-  const base = () => commentsSelect().eq('thread_root_id', rootId).is('deleted_at', null);
-  const [beforeResult, afterResult] = await Promise.all([
-    base().or(beforeFilter).order('created_at', { ascending: false }).order('id', { ascending: false }).limit(limit + 1),
-    base().or(afterFilter).order('created_at', { ascending: true }).order('id', { ascending: true }).limit(limit + 1),
-  ]);
-
-  if (beforeResult.error) throw beforeResult.error;
-  if (afterResult.error) throw afterResult.error;
-
-  const beforeRows = beforeResult.data ?? [];
-  const beforeItems = beforeRows.slice(0, limit).reverse().map(toComment);
-  const first = beforeItems[0];
-  const afterRows = afterResult.data ?? [];
-  const afterItems = afterRows.slice(0, limit).map(toComment);
-  const lastAfter = afterItems[afterItems.length - 1];
-
-  return {
-    before: beforeItems,
-    after: afterItems,
-    beforeCursor:
-      beforeRows.length > limit && first ? { createdAt: first.createdAt, id: first.id } : null,
-    afterCursor:
-      afterRows.length > limit && lastAfter
-        ? { createdAt: lastAfter.createdAt, id: lastAfter.id }
-        : null,
-  };
-}
-
-/** Следующая порция ответов перед текущим окном. */
-export async function listCommentThreadRepliesBefore(
-  rootId: string,
-  cursor: CommentThreadCursor,
-  limit = COMMENT_THREAD_PAGE_SIZE,
-): Promise<{ items: Comment[]; previousCursor: CommentThreadCursor | null }> {
-  const { data, error } = await commentsSelect()
-    .eq('thread_root_id', rootId)
-    .is('deleted_at', null)
-    .or(`created_at.lt.${cursor.createdAt},and(created_at.eq.${cursor.createdAt},id.lt.${cursor.id})`)
-    .order('created_at', { ascending: false })
-    .order('id', { ascending: false })
-    .limit(limit + 1);
-
-  if (error) throw error;
-
-  const rows = data ?? [];
-  const items = rows.slice(0, limit).reverse().map(toComment);
-  const first = items[0];
-
-  return {
-    items,
-    previousCursor:
-      rows.length > limit && first ? { createdAt: first.createdAt, id: first.id } : null,
-  };
-}
-
-/** Соседи верхнего комментария по рангу, не загружая предшествующие страницы. */
-export async function listCommentRootsAround(
-  targetId: string,
-  focus: Pick<Comment, 'rank' | 'id'>,
-  limit = 5,
-): Promise<Comment[]> {
-  const [aboveResult, belowResult] = await Promise.all([
-    commentsSelect()
-      .eq('target_id', targetId)
-      .is('thread_root_id', null)
-      .or(`rank.gt.${focus.rank},and(rank.eq.${focus.rank},id.gt.${focus.id})`)
-      .order('rank', { ascending: true })
-      .order('id', { ascending: true })
-      .limit(limit + 1),
-    commentsSelect()
-      .eq('target_id', targetId)
-      .is('thread_root_id', null)
-      .or(`rank.lt.${focus.rank},and(rank.eq.${focus.rank},id.lt.${focus.id})`)
-      .order('rank', { ascending: false })
-      .order('id', { ascending: false })
-      .limit(limit),
-  ]);
-
-  if (aboveResult.error) throw aboveResult.error;
-  if (belowResult.error) throw belowResult.error;
-
-  const above = (aboveResult.data ?? []).slice(0, limit).map(toComment).reverse();
-  return [...above, ...(belowResult.data ?? []).map(toComment)];
 }
 
 /** Пришедшие после `since`, от старых к новым, — дочитывание по сигналу. */

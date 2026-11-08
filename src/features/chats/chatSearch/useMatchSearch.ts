@@ -1,13 +1,12 @@
 import { useInfiniteQuery, useQuery, type QueryKey } from '@tanstack/react-query';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Keyboard } from 'react-native';
+import { useMemo } from 'react';
 
 import { useDebounced } from '@/lib/useDebounced';
 
 /** Пауза после последней буквы: список не прыгает на каждую букву. */
 export const MATCH_SEARCH_DEBOUNCE_MS = 400;
 
-/** Совпадение — запись списка, к которой можно прыгнуть. */
+/** Совпадение — найденная запись. */
 export type MatchHit = { id: string; seq: number };
 
 export type MatchPage<Hit, Cursor> = { items: Hit[]; nextCursor: Cursor | null };
@@ -16,28 +15,18 @@ export type MatchSearch<Hit extends MatchHit = MatchHit> = {
   /** Запрос, по которому пришла выдача (после паузы), — даже когда поиск неактивен. */
   searched: string;
   hits: Hit[];
-  /** Номер текущего совпадения, с нуля; свежие — первые. */
-  index: number;
   /** Всего совпадений; `null` — ещё считается. */
   total: number | null;
   isSearching: boolean;
   failed: boolean;
   hasMore: boolean;
   loadMore: () => void;
-  /** Стрелка вверх — к более старому совпадению. */
-  older: () => void;
-  /** Стрелка вниз — к более новому. */
-  newer: () => void;
-  /** Тап по строке списка. */
-  select: (index: number) => void;
-  /** Следующий поиск — снова с самого свежего совпадения. */
-  reset: () => void;
 };
 
 export type MatchSearchSource<Hit extends MatchHit, Cursor> = {
   /** Что набрано в поле. */
   query: string;
-  /** Совпадения ищутся и список прыгает к ним. */
+  /** Поиск активен. */
   active: boolean;
   /** Ключ выдачи без запроса: чат, фильтры. */
   scope: QueryKey;
@@ -47,23 +36,15 @@ export type MatchSearchSource<Hit extends MatchHit, Cursor> = {
     signal: AbortSignal,
   ) => Promise<MatchPage<Hit, Cursor>>;
   count: (query: string, signal: AbortSignal) => Promise<number>;
-  /** Прыжок списка к совпадению: догрузить место, прокрутить, подсветить. */
-  jump: (hit: Hit) => Promise<boolean>;
 };
 
-/**
- * Поиск по одному списку, как в Telegram: по мере ввода список прыгает к
- * самому свежему совпадению, стрелки листают совпадения с прыжком и
- * подсветкой. Совпадения — с сервера, страницами; до далёкого список
- * догружает историю сам (`jump`). Общий для переписки и «Сохранённых».
- */
+/** Поиск по переписке и сохранённым: совпадения с сервера, страницами. */
 export function useMatchSearch<Hit extends MatchHit, Cursor>({
   query,
   active,
   scope,
   fetchPage,
   count: countHits,
-  jump,
 }: MatchSearchSource<Hit, Cursor>): MatchSearch<Hit> {
   const debounced = useDebounced(query.trim(), MATCH_SEARCH_DEBOUNCE_MS);
   const enabled = active && debounced !== '';
@@ -93,91 +74,15 @@ export function useMatchSearch<Hit extends MatchHit, Cursor>({
     [enabled, results.data],
   );
 
-  // Номер совпадения — для этой выдачи: новый запрос (или та же строка после
-  // закрытия поиска) начинается снова с самого свежего совпадения, туда же
-  // прыгает и список.
-  const first = hits[0];
-  const firstId = first?.id;
-  const [position, setPosition] = useState<{ query: string; firstId?: string; index: number }>({
-    query: '',
-    index: 0,
-  });
-  const index =
-    position.query === debounced && position.firstId === firstId ? position.index : 0;
-
-  // Поиск закрыли или ушли с его списка — выдача пуста, и при возврате список
-  // прыгает к самому свежему совпадению: номер — тоже с него.
-  if (!enabled && position.index !== 0) setPosition({ query: '', index: 0 });
-
-  const goTo = useCallback(
-    (hit: Hit | undefined, at: number) => {
-      if (!hit) return;
-
-      setPosition({ query: debounced, firstId, index: at });
-      void jump(hit);
-    },
-    [debounced, firstId, jump],
-  );
-
-  // Пришла выдача по новому запросу — список у самого свежего совпадения.
-  useEffect(() => {
-    if (!first) return;
-
-    void jump(first);
-    // Только по новому запросу и его первому совпадению.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debounced, firstId]);
-
-  const { hasNextPage, isFetchingNextPage, fetchNextPage } = results;
-
-  const older = useCallback(() => {
-    Keyboard.dismiss();
-    const next = index + 1;
-
-    if (next < hits.length) {
-      goTo(hits[next], next);
-      return;
-    }
-
-    if (!hasNextPage || isFetchingNextPage) return;
-
-    void fetchNextPage().then((page) => {
-      const more = page.data?.pages.flatMap((item) => item.items) ?? [];
-
-      goTo(more[next], next);
-    });
-  }, [fetchNextPage, goTo, hasNextPage, hits, index, isFetchingNextPage]);
-
-  const newer = useCallback(() => {
-    Keyboard.dismiss();
-
-    if (index > 0) goTo(hits[index - 1], index - 1);
-  }, [goTo, hits, index]);
-
-  const select = useCallback(
-    (at: number) => {
-      Keyboard.dismiss();
-      goTo(hits[at], at);
-    },
-    [goTo, hits],
-  );
-
-  const reset = useCallback(() => setPosition({ query: '', index: 0 }), []);
-
   return {
     searched: debounced,
     hits,
-    index,
-    total: count.data ?? (results.data && !hasNextPage ? hits.length : null),
+    total: count.data ?? (results.data && !results.hasNextPage ? hits.length : null),
     isSearching: enabled && (results.isFetching || debounced !== query.trim()),
     failed: results.isError,
-    hasMore: Boolean(hasNextPage),
+    hasMore: Boolean(results.hasNextPage),
     loadMore: () => {
-      if (hasNextPage && !isFetchingNextPage) void fetchNextPage();
+      if (results.hasNextPage && !results.isFetchingNextPage) void results.fetchNextPage();
     },
-    older,
-    newer,
-    select,
-    reset,
   };
 }

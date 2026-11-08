@@ -1,5 +1,5 @@
 // Сессия панели комментариев в журнале: открыта и закрыта, откуда, что в
-// ней показалось, куда прокрутили, какие треды комментариев раскрыли, переход по цитате,
+// ней показалось, куда прокрутили, какие треды комментариев раскрыли,
 // видел ли закреплённый, что было с полем ввода. Панель общая для сообщений
 // и попсов — и сессия тоже. Текст черновика не пишется, только длина.
 
@@ -20,7 +20,6 @@ type Session = {
   maxDepth: number;
   commentThreads: Set<string>;
   repliesShown: Set<string>;
-  quotesFollowed: number;
   pinnedSeen: boolean;
   focused: boolean;
   typingSince: number | null;
@@ -41,7 +40,6 @@ let session: Session | null = null;
 function openedFrom(target: CommentsPanelTarget): string {
   if (target.fragment) return target.fragment.kind === 'cluster' ? 'cluster' : 'area';
   if (target.subject.type === 'pop') return 'pop';
-  if (target.focusCommentId) return 'comment_link';
 
   return target.chatId ? 'chat' : 'other';
 }
@@ -73,7 +71,6 @@ function finish(now: number) {
       max_depth: s.maxDepth,
       threads_expanded: s.commentThreads.size,
       replies_shown: s.repliesShown.size,
-      quote_followed: s.quotesFollowed,
       pinned_seen: s.pinnedSeen,
       composer,
       sent: s.sent,
@@ -114,7 +111,6 @@ export function commentsTargetChanged(target: CommentsPanelTarget | null, now = 
     maxDepth: 0,
     commentThreads: new Set(),
     repliesShown: new Set(),
-    quotesFollowed: 0,
     pinnedSeen: false,
     focused: false,
     typingSince: null,
@@ -148,9 +144,6 @@ export function commentsShown(
   }
 }
 
-export function commentsQuoteFollowed(): void {
-  if (session) session.quotesFollowed += 1;
-}
 
 export function commentsComposerFocused(): void {
   if (session) session.focused = true;

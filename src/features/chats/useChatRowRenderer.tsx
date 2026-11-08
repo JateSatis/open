@@ -17,7 +17,6 @@ import { isLocalMessage } from '@/features/chats/messageActions';
 import type { MenuAnchor } from '@/features/chats/MessageContextMenu';
 import { MessageRow } from '@/features/chats/MessageRow';
 import { SystemMessage } from '@/features/chats/SystemMessage';
-import type { JumpHighlight } from '@/features/chats/useJumpToMessage';
 import { isSelectableRow } from '@/features/chats/useMessageSelection';
 import { Spacing } from '@/theme';
 
@@ -29,7 +28,6 @@ type Options = {
   toggleSelected: (rowKey: string) => void;
   /** Строка, чьё сообщение сейчас правится. */
   editingId: string | null;
-  highlight: JumpHighlight | null;
   bubbleFor: (row: BubbleRow, interactive: boolean) => React.ReactElement | null;
   openMenu: (row: ChatListRow, anchor: MenuAnchor) => void;
   startReply: (rows: BubbleRow[]) => void;
@@ -41,8 +39,6 @@ type Options = {
   longPressAt?: (rowKey: string, point: RowPoint) => boolean | Promise<boolean>;
   retry: (localId: string) => void;
   hostName: (authorId: string | null) => string;
-  /** Тап по плашке островка — чат, откуда переслали. */
-  openChat?: (chatId: string) => void;
 };
 
 /** Облачки островка, которые можно выбрать. */
@@ -65,7 +61,6 @@ export function useChatRowRenderer({
   isSelected,
   toggleSelected,
   editingId,
-  highlight,
   bubbleFor,
   openMenu,
   startReply,
@@ -74,7 +69,6 @@ export function useChatRowRenderer({
   longPressAt,
   retry,
   hostName,
-  openChat,
 }: Options) {
   /**
    * Плашка островка — и в строке, и копией в меню. Тап по ней — исходный
@@ -83,20 +77,16 @@ export function useChatRowRenderer({
   const islandHeader = useCallback(
     (row: IslandHeaderRow, interactive: boolean) => {
       const { island } = row;
-      const sourceChatId = island.forward?.sourceChat?.id;
 
       return (
         <IslandHeader
           sourceName={island.forward?.sourceChat?.name ?? null}
           status={island.status}
-          onPress={
-            interactive && openChat && sourceChatId ? () => openChat(sourceChatId) : undefined
-          }
           onRetry={interactive && island.localId ? () => retry(island.localId!) : undefined}
         />
       );
     },
-    [openChat, retry],
+    [retry],
   );
 
   // В выборе тап по плашке отмечает островок целиком, а если он уже отмечен
@@ -128,7 +118,6 @@ export function useChatRowRenderer({
 
   const renderItem = useCallback(
     ({ item: row }: { item: ChatListRow }) => {
-      const highlightKey = highlight?.messageId === row.key ? highlight.key : null;
 
       if (row.type === 'island-header') {
         const headerItems = isSelecting ? selectableItems(row.island, currentUserId) : [];
@@ -143,7 +132,6 @@ export function useChatRowRenderer({
               headerItems.length > 0 &&
               headerItems.every((item) => isSelected(item.key))
             }
-            highlightKey={highlightKey}
             messageId={row.key}
             onOpenMenu={(anchor) => openMenu(row, anchor)}
             onToggle={() => toggleIsland(row.island)}
@@ -182,7 +170,6 @@ export function useChatRowRenderer({
           selectable={selectable}
           selected={isSelected(row.key)}
           editing={row.key === editingId}
-          highlightKey={highlightKey}
           messageId={row.key}
           onOpenMenu={hasMenu ? (anchor) => openMenu(row, anchor) : undefined}
           onPress={pressRow && content ? () => pressRow(row) : undefined}
@@ -203,8 +190,7 @@ export function useChatRowRenderer({
       bubbleContent,
       currentUserId,
       editingId,
-      highlight,
-      hostName,
+          hostName,
       isMember,
       isSelected,
       isSelecting,

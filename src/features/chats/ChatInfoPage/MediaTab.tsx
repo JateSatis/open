@@ -8,7 +8,6 @@ import { TabStatus, tabStatusOf } from './TabStatus';
 import { chatInfoKeys, useChatMedia } from './queries';
 
 import type { ChatMediaItem } from '@/api/chatInfo';
-import { AnchoredMenu, type MenuAnchor } from '@/components/AnchoredMenu';
 import { InfoTabList, useInfoTabsViewport } from '@/components/InfoPage';
 import { Text } from '@/components/Text';
 import { HiddenMediaTile, hiddenMediaKind } from '@/features/chats/HiddenMediaTile';
@@ -39,7 +38,6 @@ type Cell = { type: 'media'; item: ChatMediaItem } | { type: 'skeleton'; key: st
 export type MediaTabProps = {
   tab: number;
   chatId: string;
-  onShowInChat: (messageId: string, seq: number) => void;
 };
 
 function isVideo(item: ChatMediaItem): boolean {
@@ -54,9 +52,9 @@ function cellImageUri(item: ChatMediaItem): string {
 /**
  * Вкладка «Медиа»: фото и видео чата сеткой в четыре колонки, свежие сверху,
  * альбом — по клетке на вложение. Тап — просмотр с листанием по всем медиа
- * чата, долгое нажатие — «Показать в чате».
+ * чата.
  */
-export function MediaTab({ tab, chatId, onShowInChat }: MediaTabProps) {
+export function MediaTab({ tab, chatId }: MediaTabProps) {
   const queryClient = useQueryClient();
   const { width } = useWindowDimensions();
   const query = useChatMedia(chatId);
@@ -68,7 +66,6 @@ export function MediaTab({ tab, chatId, onShowInChat }: MediaTabProps) {
   const [tiles] = useState(createTileRegistry);
   const tabsViewport = useInfoTabsViewport();
   const measureViewport = useCallback(async () => tabsViewport(), [tabsViewport]);
-  const [menu, setMenu] = useState<{ anchor: MenuAnchor; item: ChatMediaItem } | null>(null);
   const size = (width - GAP * (COLUMNS - 1)) / COLUMNS;
 
   const cells = useMemo<Cell[]>(() => {
@@ -137,11 +134,6 @@ export function MediaTab({ tab, chatId, onShowInChat }: MediaTabProps) {
     },
     [armAt, indexOf],
   );
-  const openMenu = useCallback(
-    (item: ChatMediaItem, anchor: MenuAnchor) => setMenu({ item, anchor }),
-    [],
-  );
-
   return (
     <>
       <InfoTabList
@@ -159,7 +151,6 @@ export function MediaTab({ tab, chatId, onShowInChat }: MediaTabProps) {
             onPress={open}
             onArm={arm}
             onDisarm={disarm}
-            onLongPress={openMenu}
           />
         )}
         onEndReached={loadMore}
@@ -182,26 +173,9 @@ export function MediaTab({ tab, chatId, onShowInChat }: MediaTabProps) {
         />
       </TileViewportContext.Provider>
 
-      <AnchoredMenu
-        testID="info-media-menu"
-        anchor={menu?.anchor ?? null}
-        actions={SHOW_IN_CHAT}
-        onSelect={() => {
-          if (menu) onShowInChat(menu.item.messageId, menu.item.seq);
-        }}
-        onClosed={() => setMenu(null)}
-      />
     </>
   );
 }
-
-export const SHOW_IN_CHAT = [
-  {
-    id: 'show' as const,
-    label: 'Показать в чате',
-    icon: { ios: 'text.bubble', android: 'chat', web: 'chat' } as const,
-  },
-];
 
 type MediaCellProps = {
   cell: Cell;
@@ -212,7 +186,6 @@ type MediaCellProps = {
   /** Палец задержался на клетке — просмотр готовится; ушёл без тапа — не нужен. */
   onArm: (item: ChatMediaItem, origin: TileRect | null) => void;
   onDisarm: () => void;
-  onLongPress: (item: ChatMediaItem, anchor: MenuAnchor) => void;
 };
 
 /** Клетка сетки: квадратное превью, у видео — плашка с длительностью. */
@@ -224,7 +197,6 @@ const MediaCell = memo(function MediaCell({
   onPress,
   onArm,
   onDisarm,
-  onLongPress,
 }: MediaCellProps) {
   const theme = useTheme();
   // Колонка списка — четверть ширины, а клетка уже на зазоры: сдвиг внутри
@@ -253,7 +225,6 @@ const MediaCell = memo(function MediaCell({
       onPress={onPress}
       onArm={onArm}
       onDisarm={onDisarm}
-      onLongPress={onLongPress}
     />
   );
 });
@@ -274,7 +245,6 @@ function MediaCellContent({
   onPress,
   onArm,
   onDisarm,
-  onLongPress,
 }: MediaCellContentProps) {
   const theme = useTheme();
   const ref = useRef<View>(null);
@@ -309,11 +279,6 @@ function MediaCellContent({
         accessibilityRole="imagebutton"
         accessibilityLabel={video ? 'Видео' : 'Фото'}
         onPress={open}
-        onLongPress={() =>
-          ref.current?.measureInWindow((x, y, width, height) =>
-            onLongPress(item, { x, y, width, height }),
-          )
-        }
         style={[box, { backgroundColor: theme.backgroundElement }]}
       >
         <Image

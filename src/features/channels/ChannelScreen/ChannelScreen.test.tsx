@@ -579,7 +579,7 @@ describe('ChatScreen for a posts chat', () => {
     );
   });
 
-  it('carries the jump to a post and its comment over to the channel screen', async () => {
+  it('drops legacy message targets when redirecting a posts chat', async () => {
     mockParams = {
       chatId: 'posts-1',
       jumpTo: 'p1',
@@ -596,11 +596,6 @@ describe('ChatScreen for a posts chat', () => {
         pathname: '/chats/channel/[channelId]',
         params: {
           channelId: 'channel-1',
-          jumpTo: 'p1',
-          jumpSeq: SENT_AT,
-          jumpKey: '42',
-          comments: 'p1',
-          comment: 'c1',
         },
       }),
     );

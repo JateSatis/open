@@ -1,6 +1,7 @@
 import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
 
 import { ChannelPopViewer } from './ChannelPopViewer';
+import PopViewerRoute from '@/app/pops/[channelId]';
 
 import {
   canPublishInChannel,
@@ -30,6 +31,7 @@ const mockPush = jest.fn();
 jest.mock('expo-router', () => ({
   useRouter: () => ({ back: mockBack, push: mockPush }),
   useIsFocused: () => true,
+  useLocalSearchParams: () => ({ channelId: 'channel-1', start: 'p1', comments: '1', comment: 'c9', commentRoot: 'r1', commentKey: 'legacy' }),
   useNavigation: () => ({
     getState: () => ({ index: 1, routes: [{ name: '(tabs)' }, { name: 'pops' }] }),
     addListener: () => () => undefined,
@@ -69,9 +71,6 @@ jest.mock('@/api/pops', () => ({
 }));
 jest.mock('@/api/reactions', () => ({ setPopReaction: jest.fn() }));
 jest.mock('@/api/comments', () => ({ setCommentReaction: jest.fn() }));
-jest.mock('@/features/interactions/comments/prefetchCommentFocus', () => ({
-  prefetchCommentFocus: jest.fn(),
-}));
 jest.mock('@/features/chats/useCurrentUserId', () => ({ useCurrentUserId: () => 'me' }));
 // Панель — своя история (`CommentsPanel`); здесь — что просмотр её открывает.
 jest.mock('@/features/interactions/CommentsPanel', () => ({ CommentsPanel: () => null }));
@@ -105,8 +104,7 @@ async function open(
   start: Pop,
   {
     canPublish = false,
-    focusCommentId,
-  }: { canPublish?: boolean | Promise<boolean>; focusCommentId?: string } = {},
+  }: { canPublish?: boolean | Promise<boolean> } = {},
 ) {
   (getPop as jest.Mock).mockResolvedValue(start);
   (listPopsAfter as jest.Mock).mockResolvedValue([]);
@@ -118,8 +116,6 @@ async function open(
     <ChannelPopViewer
       channelId="channel-1"
       startId={start.id}
-      openComments={focusCommentId !== undefined}
-      focusCommentId={focusCommentId}
     />,
   );
   await fireEvent(screen.getByTestId('pop-viewer'), 'layout', {
@@ -342,48 +338,20 @@ describe('PopViewer', () => {
     await waitFor(() => expect(getCommentsPanelTarget()?.amMember).toBe(true));
   });
 
-  it('opens straight with the pop’s comments when it came from a forwarded comment', async () => {
-    await open(pop('p1'), {
-      canPublish: new Promise<boolean>(() => undefined),
-      focusCommentId: 'c9',
-    });
-
-    await waitFor(() =>
-      expect(getCommentsPanelTarget()).toMatchObject({
-        subject: { type: 'pop', id: 'p1' },
-        focusCommentId: 'c9',
-      }),
-    );
-    expect(screen.getByTestId('pop-video-shrunk')).toBeTruthy();
-  });
-
-  it('opens the focused comments panel while the start pop is still loading', async () => {
-    let resolvePop: (value: Pop) => void = () => undefined;
-    (getPop as jest.Mock).mockReturnValue(new Promise<Pop>((resolve) => { resolvePop = resolve; }));
+  it('ignores legacy route parameters for opening a focused pop comment', async () => {
+    (getPop as jest.Mock).mockResolvedValue(pop('p1'));
     (listPopsAfter as jest.Mock).mockResolvedValue([]);
     (listPops as jest.Mock).mockResolvedValue([]);
-    (canPublishInChannel as jest.Mock).mockReturnValue(new Promise<boolean>(() => undefined));
-
-    await renderWithQuery(
-      <ChannelPopViewer
-        channelId="channel-1"
-        startId="p1"
-        openComments
-        focusCommentId="c9"
-      />,
-    );
+    (canPublishInChannel as jest.Mock).mockResolvedValue(false);
+    await renderWithQuery(<PopViewerRoute />);
     await fireEvent(screen.getByTestId('pop-viewer'), 'layout', {
       nativeEvent: { layout: { width: 400, height: 800 } },
     });
-
-    await waitFor(() => expect(getCommentsPanelTarget()).toMatchObject({
-      subject: { type: 'pop', id: 'p1' },
-      focusCommentId: 'c9',
-    }));
-    expect(getPop).toHaveBeenCalledWith('p1');
-
-    await act(async () => resolvePop(pop('p1')));
-    expect(await screen.findByTestId('pop-page-active')).toBeTruthy();
+    await screen.findByTestId('pop-page-active');
+    expect(getCommentsPanelTarget()).toBeNull();
+    await fireEvent.press(screen.getByTestId('pop-comments'));
+    expect(getCommentsPanelTarget()).toMatchObject({ subject: { type: 'pop', id: 'p1' } });
+    expect(getCommentsPanelTarget()).not.toHaveProperty('focusCommentId');
   });
 
   it('opens with comments closed by default', async () => {
