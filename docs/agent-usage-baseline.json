@@ -1,0 +1,591 @@
+{
+  "schema_version": 1,
+  "recorded_date_moscow": "2026-11-08",
+  "project_revision": "b123c6b",
+  "scope": "Этап 1: исходные показатели локальных журналов проекта. Код приложения и процессы не изменены.",
+  "window": {
+    "start": "2026-10-23T00:00:00+03:00",
+    "end_exclusive": "2026-11-08T00:00:00+03:00"
+  },
+  "method": {
+    "unit": "Учтённый ответ модели; total = input + output. cached и reasoning_subset не прибавляются к total повторно.",
+    "claude": "Дедупликация message.id по всем файлам; повторные блоки и копии между сессиями не суммируются. При обновлении потоковой записи используется максимальное наблюдаемое usage.",
+    "codex": "Дедупликация response_id у token_usage_record; суммируется только usage, а не turn_token_usage/thread_token_usage. Резервный путь для старого формата — приращения total_token_usage; в данном окне вклад этого пути нулевой.",
+    "kimi": "usage.record по каждому запросу, включая запрос сжатия; token_counting.* не суммируется. Основной агент и два помощника входят в сумму.",
+    "polling": "Codex: ответ непосредственно выдаёт только wait/write_stdin/sleep или оболочку exec, вызывающую только write_stdin/clock__sleep. Содержимое ответа инструмента может быть полезным: эта категория не равна устранимым затратам.",
+    "tool_labels": "Эвристические пересекающиеся метки по имени инструмента и аргументам. Это не число сборок/тестовых прогонов и не причинное разложение токенов.",
+    "time": "first/last — календарный интервал записей, содержащий возможные паузы человека. durationMs отдельных команд не суммируется в длительность задачи при перекрытии.",
+    "attribution": "Подагенты Codex с явным parent_thread_id включены в родительскую группу. Guardian без явной связи учитывается отдельно. Для Claude глобальная сумма надёжнее распределения между скопированными/разветвлёнными чатами.",
+    "privacy": "Нет переписок, исходных команд, ответов инструментов, учётных данных или содержимого .env. Идентификаторы чатов оставлены для локальной сверки."
+  },
+  "sources": {
+    "claude_files_scanned": 162,
+    "claude_duplicate_usage_rows": 18165,
+    "claude_usage_variants": 142,
+    "codex_files_scanned": 37,
+    "codex_legacy_files": 9,
+    "kimi_files_scanned": 4
+  },
+  "totals_by_client": {
+    "claude": {
+      "usage": {
+        "input": 1088538038,
+        "cached": 1077209358,
+        "cache_write": 11322368,
+        "uncached_excluding_write": 6312,
+        "output": 1943775,
+        "reasoning_subset": 590723,
+        "total": 1090481813
+      },
+      "responses": 3061,
+      "groups": 16,
+      "cached_share_of_input": 0.989592756886278
+    },
+    "codex": {
+      "usage": {
+        "input": 584254764,
+        "cached": 577485440,
+        "cache_write": 0,
+        "uncached_excluding_write": 6769324,
+        "output": 1495865,
+        "reasoning_subset": 829800,
+        "total": 585750629
+      },
+      "responses": 3935,
+      "groups": 24,
+      "cached_share_of_input": 0.9884137461650205
+    },
+    "kimi": {
+      "usage": {
+        "input": 7385400,
+        "cached": 6580480,
+        "cache_write": 0,
+        "uncached_excluding_write": 804920,
+        "output": 49569,
+        "reasoning_subset": 0,
+        "total": 7434969
+      },
+      "responses": 80,
+      "groups": 2,
+      "cached_share_of_input": 0.8910119966420235
+    }
+  },
+  "counting_checks": {
+    "claude_naive_to_deduplicated_ratio_in_window": 2.5039973958740385,
+    "cross_root_duplicate_responses_all_scanned_history": 917,
+    "codex_four_sample_threads_unique_sum_equals_final_cumulative": true,
+    "codex_four_sample_threads_input_plus_output_equals_recorded_total": true,
+    "parser_self_test": "passed: normalization, duplicate response, streaming usage update, nested polling, mixed calls, date window"
+  },
+  "codex_poll_only": {
+    "responses": 1263,
+    "usage": {
+      "input": 180496656,
+      "cached": 179550336,
+      "cache_write": 0,
+      "uncached_excluding_write": 946320,
+      "output": 139315,
+      "reasoning_subset": 64813,
+      "total": 180635971
+    },
+    "share_of_codex_total": 0.3083837422562973
+  },
+  "representative_cases": [
+    {
+      "title": "Заменить иконку приложения",
+      "outcome": "Изменение ассетов; агент отчитался, проверка новой нативной сборки в этом чате не выполнена.",
+      "vendor": "codex",
+      "root": "01a1b193-f163-7df2-82ca-703a470bf805",
+      "usage": {
+        "input": 314831,
+        "cached": 286848,
+        "cache_write": 0,
+        "uncached_excluding_write": 27983,
+        "output": 1114,
+        "reasoning_subset": 0,
+        "total": 315945
+      },
+      "responses": 9,
+      "sessions": ["01a1b193-f163-7df2-82ca-703a470bf805"],
+      "branches": {},
+      "models": {
+        "gpt-6-luna": 9
+      },
+      "first": "2026-11-06T16:00:12.484Z",
+      "last": "2026-11-06T16:02:08.350Z",
+      "tool_labels": {
+        "git": 3,
+        "read_search": 5,
+        "other": 3,
+        "edit": 1
+      },
+      "tools": {
+        "exec": 8
+      },
+      "tool_calls": 8,
+      "errors_observed": 0,
+      "compactions": 0,
+      "poll_only_responses": 0,
+      "poll_only_usage": {},
+      "median_input_per_response": 37560,
+      "max_input_per_response": 39900,
+      "repeated_tool_arguments": 0
+    },
+    {
+      "title": "Add instant comment jumps",
+      "outcome": "Изменение логики; в финальном ходе подтверждён локальный merge. Jest и Maestro имели зафиксированные ограничения.",
+      "vendor": "codex",
+      "root": "01a1a893-8e61-72e3-806a-837545ce94fa",
+      "usage": {
+        "input": 33324895,
+        "cached": 32716928,
+        "cache_write": 0,
+        "uncached_excluding_write": 607967,
+        "output": 95894,
+        "reasoning_subset": 51318,
+        "total": 33420789
+      },
+      "responses": 265,
+      "sessions": ["01a1a893-8e61-72e3-806a-837545ce94fa"],
+      "branches": {},
+      "models": {
+        "gpt-6-luna": 265
+      },
+      "first": "2026-11-04T22:00:19.043Z",
+      "last": "2026-11-05T10:54:10.711Z",
+      "tool_labels": {
+        "git": 13,
+        "read_search": 52,
+        "device": 11,
+        "maestro": 5,
+        "recovery": 4,
+        "wait_poll": 94,
+        "backend": 17,
+        "edit": 76,
+        "checks": 26,
+        "other": 2
+      },
+      "tools": {
+        "exec": 257,
+        "wait": 2
+      },
+      "tool_calls": 259,
+      "errors_observed": 0,
+      "compactions": 1,
+      "poll_only_responses": 94,
+      "poll_only_usage": {
+        "input": 8974552,
+        "cached": 8777472,
+        "cache_write": 0,
+        "uncached_excluding_write": 197080,
+        "output": 7942,
+        "reasoning_subset": 1526,
+        "total": 8982494
+      },
+      "median_input_per_response": 89083,
+      "max_input_per_response": 245546,
+      "repeated_tool_arguments": 74
+    },
+    {
+      "title": "Переключить Open на self-hosted сервер",
+      "outcome": "Переключение бэкенда, EAS и установка; в финале подтверждены установка и локальный merge.",
+      "vendor": "codex",
+      "root": "01a1b6fb-23e4-7600-b253-968c04fa2fd0",
+      "usage": {
+        "input": 46816053,
+        "cached": 46487808,
+        "cache_write": 0,
+        "uncached_excluding_write": 328245,
+        "output": 88527,
+        "reasoning_subset": 49760,
+        "total": 46904580
+      },
+      "responses": 317,
+      "sessions": ["01a1b6fb-23e4-7600-b253-968c04fa2fd0"],
+      "branches": {},
+      "models": {
+        "gpt-6-luna": 317
+      },
+      "first": "2026-11-07T17:08:04.643Z",
+      "last": "2026-11-07T18:37:09.448Z",
+      "tool_labels": {
+        "git": 20,
+        "read_search": 34,
+        "backend": 22,
+        "device": 37,
+        "edit": 9,
+        "recovery": 2,
+        "wait_poll": 183,
+        "checks": 5,
+        "build_install": 61,
+        "other": 12
+      },
+      "tools": {
+        "exec": 288,
+        "sleep": 9,
+        "wait": 13,
+        "request_user_input_async": 4
+      },
+      "tool_calls": 314,
+      "errors_observed": 0,
+      "compactions": 1,
+      "poll_only_responses": 179,
+      "poll_only_usage": {
+        "input": 27960871,
+        "cached": 27818368,
+        "cache_write": 0,
+        "uncached_excluding_write": 142503,
+        "output": 21441,
+        "reasoning_subset": 12000,
+        "total": 27982312
+      },
+      "median_input_per_response": 170463,
+      "max_input_per_response": 244959,
+      "repeated_tool_arguments": 87
+    },
+    {
+      "title": "Ускорить переходы к контенту",
+      "outcome": "Агент сообщил о реализации и замерах; это отчёт агента, не независимое подтверждение полной приёмки.",
+      "vendor": "codex",
+      "root": "01a1ac73-b637-7431-9254-421fef65c46a",
+      "usage": {
+        "input": 76500062,
+        "cached": 76016512,
+        "cache_write": 0,
+        "uncached_excluding_write": 483550,
+        "output": 231308,
+        "reasoning_subset": 187113,
+        "total": 76731370
+      },
+      "responses": 251,
+      "sessions": ["01a1ac73-b637-7431-9254-421fef65c46a"],
+      "branches": {},
+      "models": {
+        "deepseek-v4-pro": 251
+      },
+      "first": "2026-11-05T16:04:24.586Z",
+      "last": "2026-11-06T03:58:31.278Z",
+      "tool_labels": {
+        "read_search": 151,
+        "other": 17,
+        "device": 78,
+        "wait_poll": 40,
+        "checks": 27,
+        "backend": 1,
+        "edit": 32,
+        "recovery": 14,
+        "image_inspect": 1,
+        "profiling": 7,
+        "git": 6
+      },
+      "tools": {
+        "exec_command": 222,
+        "write_stdin": 40,
+        "apply_patch": 32,
+        "view_image": 1
+      },
+      "tool_calls": 295,
+      "errors_observed": 24,
+      "compactions": 0,
+      "poll_only_responses": 39,
+      "poll_only_usage": {
+        "input": 12453305,
+        "cached": 12429440,
+        "cache_write": 0,
+        "uncached_excluding_write": 23865,
+        "output": 9584,
+        "reasoning_subset": 6846,
+        "total": 12462889
+      },
+      "median_input_per_response": 310985,
+      "max_input_per_response": 492614,
+      "repeated_tool_arguments": 14
+    },
+    {
+      "title": "Ускорить прыжки по чату",
+      "outcome": "Последующая оптимизация; плавность на устройстве в финале не подтверждена.",
+      "vendor": "codex",
+      "root": "01a1b753-59e2-7b73-b67a-696b349b572d",
+      "usage": {
+        "input": 16188528,
+        "cached": 16065920,
+        "cache_write": 0,
+        "uncached_excluding_write": 122608,
+        "output": 27353,
+        "reasoning_subset": 9673,
+        "total": 16215881
+      },
+      "responses": 168,
+      "sessions": ["01a1b753-59e2-7b73-b67a-696b349b572d"],
+      "branches": {},
+      "models": {
+        "gpt-6-sol": 168
+      },
+      "first": "2026-11-07T18:44:38.345Z",
+      "last": "2026-11-07T19:55:44.065Z",
+      "tool_labels": {
+        "git": 10,
+        "read_search": 34,
+        "device": 38,
+        "wait_poll": 52,
+        "edit": 33,
+        "checks": 22,
+        "profiling": 7,
+        "recovery": 1,
+        "other": 4,
+        "backend": 2
+      },
+      "tools": {
+        "exec": 165,
+        "request_user_input_async": 1
+      },
+      "tool_calls": 166,
+      "errors_observed": 0,
+      "compactions": 0,
+      "poll_only_responses": 52,
+      "poll_only_usage": {
+        "input": 5114231,
+        "cached": 5101184,
+        "cache_write": 0,
+        "uncached_excluding_write": 13047,
+        "output": 5443,
+        "reasoning_subset": 2371,
+        "total": 5119674
+      },
+      "median_input_per_response": 94078,
+      "max_input_per_response": 144026,
+      "repeated_tool_arguments": 19
+    },
+    {
+      "title": "Загрузи release на телефон",
+      "outcome": "Операционная задача; используется для сравнения ожидания сборки/установки, приёмка отдельно не аудирована.",
+      "vendor": "codex",
+      "root": "01a1ab5d-c31c-74e1-a21a-b816c5124c7f",
+      "usage": {
+        "input": 4784641,
+        "cached": 4688000,
+        "cache_write": 0,
+        "uncached_excluding_write": 96641,
+        "output": 10514,
+        "reasoning_subset": 4757,
+        "total": 4795155
+      },
+      "responses": 66,
+      "sessions": ["01a1ab5d-c31c-74e1-a21a-b816c5124c7f"],
+      "branches": {},
+      "models": {
+        "gpt-6-luna": 66
+      },
+      "first": "2026-11-05T11:01:16.774Z",
+      "last": "2026-11-05T11:18:14.993Z",
+      "tool_labels": {
+        "read_search": 10,
+        "git": 2,
+        "build_install": 6,
+        "device": 12,
+        "wait_poll": 47,
+        "other": 3
+      },
+      "tools": {
+        "exec": 64,
+        "wait": 1
+      },
+      "tool_calls": 65,
+      "errors_observed": 0,
+      "compactions": 0,
+      "poll_only_responses": 46,
+      "poll_only_usage": {
+        "input": 3511596,
+        "cached": 3468416,
+        "cache_write": 0,
+        "uncached_excluding_write": 43180,
+        "output": 3073,
+        "reasoning_subset": 651,
+        "total": 3514669
+      },
+      "median_input_per_response": 75188,
+      "max_input_per_response": 97740,
+      "repeated_tool_arguments": 35
+    }
+  ],
+  "navigation_workflow": {
+    "roots": [
+      "01a160fe-818b-7ca0-b0b2-db3f51508e7c",
+      "01a19e3f-a5b8-7cb3-adf0-62b5a36512cb",
+      "01a1a893-8e61-72e3-806a-837545ce94fa",
+      "01a1abb0-2ad5-7c40-ba1f-4454b3078870",
+      "01a1ac73-b637-7431-9254-421fef65c46a",
+      "01a1b753-59e2-7b73-b67a-696b349b572d"
+    ],
+    "observed_usage": {
+      "input": 342071250,
+      "cached": 338434048,
+      "cache_write": 0,
+      "uncached_excluding_write": 3637202,
+      "output": 755228,
+      "reasoning_subset": 437184,
+      "total": 342826478
+    },
+    "scope": "Наблюдаемые связанные чаты: подготовка, два этапа реализации, три итерации оптимизации. В подготовительном чате есть также мерджи и правки навыков. Не объявлять это точной стоимостью одной завершённой фичи; guardian и возможные иные продолжения не приписаны без доказанной связи."
+  },
+  "command_evidence": [
+    {
+      "thread": "01a1a893-8e61-72e3-806a-837545ce94fa",
+      "title": "Add instant comment jumps",
+      "scope": "Only retrieved turns; not exhaustive",
+      "commands": {
+        "typecheck": [
+          {
+            "durationMs": 27500,
+            "exitCode": 1
+          },
+          {
+            "durationMs": 26441,
+            "exitCode": 0
+          },
+          {
+            "durationMs": 26498,
+            "exitCode": 0
+          },
+          {
+            "durationMs": 25366,
+            "exitCode": 0
+          },
+          {
+            "durationMs": 36600,
+            "exitCode": 0
+          },
+          {
+            "durationMs": 34199,
+            "exitCode": 0
+          }
+        ],
+        "jest": [
+          {
+            "durationMs": 6288,
+            "exitCode": 1
+          },
+          {
+            "durationMs": 6036,
+            "exitCode": 1
+          },
+          {
+            "durationMs": 32494,
+            "exitCode": 1
+          },
+          {
+            "durationMs": 12315,
+            "exitCode": 0
+          },
+          {
+            "durationMs": 4642,
+            "exitCode": 1
+          },
+          {
+            "durationMs": 24114,
+            "exitCode": 1
+          },
+          {
+            "durationMs": 13850,
+            "exitCode": 0
+          },
+          {
+            "durationMs": 334289,
+            "exitCode": 1
+          },
+          {
+            "durationMs": 386939,
+            "exitCode": 1
+          },
+          {
+            "durationMs": 8227,
+            "exitCode": 1
+          },
+          {
+            "durationMs": 7508,
+            "exitCode": 0
+          },
+          {
+            "durationMs": 310722,
+            "exitCode": 1
+          }
+        ],
+        "full_check": [
+          {
+            "durationMs": 56413,
+            "exitCode": 1
+          }
+        ],
+        "maestro_changed": [
+          {
+            "durationMs": 2987,
+            "exitCode": 1
+          },
+          {
+            "durationMs": 1816600,
+            "exitCode": 1
+          }
+        ],
+        "eslint": [
+          {
+            "durationMs": 29143,
+            "exitCode": 0
+          },
+          {
+            "durationMs": 25643,
+            "exitCode": 0
+          }
+        ]
+      }
+    },
+    {
+      "thread": "01a1b6fb-23e4-7600-b253-968c04fa2fd0",
+      "title": "Переключить Open на self-hosted сервер",
+      "scope": "Only retrieved turns; not exhaustive",
+      "commands": {}
+    },
+    {
+      "thread": "01a1ac73-b637-7431-9254-421fef65c46a",
+      "title": "Ускорить переходы к контенту",
+      "scope": "Only retrieved turns; not exhaustive",
+      "commands": {
+        "typecheck": [
+          {
+            "durationMs": 37630,
+            "exitCode": 1
+          },
+          {
+            "durationMs": 37372,
+            "exitCode": 0
+          }
+        ],
+        "eslint": [
+          {
+            "durationMs": 14332,
+            "exitCode": 0
+          }
+        ]
+      }
+    }
+  ],
+  "limitations": [
+    "Локальные журналы показывают зарегистрированный расход, а не выставленный счёт или формулу лимитов подписки. Codex здесь — клиент, в нём использовались разные модели и провайдеры.",
+    "Окно фиксировано: 23 октября 00:00 — 8 ноября 00:00 по Москве. Текущий аудит исключён. Возможны отсутствующие/удалённые журналы и расходы сервисов изображений вне текстового usage.",
+    "Это целевая выборка разнородных задач. Сравнение задач, моделей и клиентов не является контролируемым экспериментом.",
+    "Метки чтения не доказывают бесполезное перечитывание. Полное причинное разложение контекста на инструкции, код, изображения и историю этим замером не получено.",
+    "Точный расход spec/implementation/rework не всегда отделим: некоторые чаты совмещают их. Сохранены реальные границы чатов и оговорены смешанные цепочки.",
+    "Kimi: учтены токены, но действия инструментов и категории ожидания не измерялись; нули в этих полях не означают отсутствие работы.",
+    "reasoning_subset = 0 может означать, что отдельный счётчик не предоставлен. cache_write = 0 для Codex означает значение в журнале, не доказательство отсутствия внутренних записей кеша.",
+    "Исправление нестабильных тестов и редкие опросы ещё не выполнены. 30,8% на ожидания не является обещанием экономии на 30,8%."
+  ],
+  "priorities_from_evidence": [
+    "В этапе 2 унифицировать инструкции и добавить единый протокол ожидания: агент возвращается к процессу по событию/ограниченному ожиданию, без частого опроса с большим контекстом.",
+    "В этапе инструментов проверять общие предпосылки Maestro до запуска набора и прекращать повторение одной причины отсутствующих данных.",
+    "Карту делать адресной; контролировать размер контекста на ответ и число ответов. Перенос большой инструкции в другой файл сам по себе не доказывает экономию.",
+    "Сохранить контроль качества: не объявлять незавершённую оптимизацию выполненной ради меньшего расхода. Выбирать минимальное доказательство конкретного критерия."
+  ],
+  "reproduce": "python scripts/audit-agent-usage.py --start 2026-10-23T00:00:00+03:00 --end 2026-11-08T00:00:00+03:00 --output <local-summary.json>",
+  "script_sha256": "4f39fe75bc81a22c602ec72010a05d4b1ff21976f1442b3cd049391f54bfd07c",
+  "raw_summary_sha256": "6fadfe645011f9a45e853e0d9a44c5889f4dbf32eb24c3677829bb1f4d3fb562",
+  "reference": "https://developers.openai.com/api/docs/guides/prompt-caching"
+}
