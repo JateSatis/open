@@ -1,8 +1,9 @@
 # Бэкенд
 
-Читай по необходимости: БД, схема, RLS, авторизация, Realtime, стримы, уведомления, миграции,
-переменные окружения. Справочник по схеме; сами миграции — единственный источник правды в
-`supabase/migrations/`.
+Справочник серверных правил и модели данных. Вход по задаче — [данные и интеграции](map/data.md).
+Читай выбранный раздел; оглавление: `node .agents/scripts/read-doc.mjs docs/backend.md`.
+
+Текущая схема определяется последовательностью миграций в `supabase/migrations/`.
 
 ## Авторизация
 
@@ -20,6 +21,8 @@
 
 Сквозное различие: читать чат может любой, писать — только участник; взаимодействие посторонних —
 отдельные таблицы, никогда не смешивается с `messages`.
+
+### Профили и приватность
 
 - `profiles` — 1:1 с `auth.users`; username необязателен, уникален по `lower(username)`. Имя,
   username, `avatar_url`, «О себе», статус клиенту не читаются — только через `person_card`:
@@ -45,6 +48,9 @@
   Смена этих настроек/псевдонима — сигнал `people_changed` в топики чатов человека.
   `dialogue_media_visibility` применяет `media_visible(автор, чат, канал)`: медиа человека видят сам,
   участники чата, остальные — по настройке; пост канала — всем; смена — `media_changed`.
+
+### Дружба и заявки
+
 - `friendships` — одна строка на пару (unique least/greatest), requester → addressee,
   `pending|accepted|declined`; друзья — только accepted (`are_friends`). Отказ отправителю не
   раскрывается: declined — «Заявка отправлена»; отменённая после отказа — `withdrawn_at`, не
@@ -62,16 +68,23 @@
 - @имена — у человека/канала/группы раздельные пространства, общего реестра нет (`@max`, `@max.ch`,
   `@max.di` — суффикс не хранится). Алфавит (латиница, цифры, `_`, без точки) — CHECK; длина/регистр
   — клиент (`username.ts`); свободно ли — `is_username_available(вид, имя)`.
+
+### Каналы и подписки
+
 - `channels` — название, описание, username (обязателен, уникален среди каналов), аватарка, владелец,
   `posts_chat_id` (1:1 чат постов). Пишут только `create_channel`; права/роли — свойство канала.
   Счётчики `subscribers_count`/`readers_count`, `last_pop_at` — триггерами.
-- `subscriptions` — человек + ровно одно из `channel_id|chat_id` (чат — этап 2, пока запрещён
-  проверкой). `in_chats` — читатель, `notify` — карточки, `messages_read_at`/`pops_read_at` — отметки
+- `subscriptions` — человек + ровно одно из `channel_id|chat_id`; подписки на чаты реализованы
+  (`subscribe_to_chat`, `my_subscriptions`; миграция `20261014100000_chat_subscriptions.sql` и последующие).
+  `in_chats` — читатель, `notify` — карточки, `messages_read_at`/`pops_read_at` — отметки
   серверным временем. Подписчик не становится `chat_members`. Читает только сам; функции:
   subscribe_to_channel, set_channel_in_chats, set_channel_notifications, unsubscribe_from_channel,
   mark_channel_read; непрочитанное — my_channel_subscriptions, список — list_channel_subscribers
   (владелец). Отписка удаляет строку физически (не публичный контент). Публикующий в канале не
   подписывается.
+
+### Чаты и членство
+
 - `chats` — kind `direct|group|channel_posts`; у чата постов названия нет (имя из канала). `owner_id`
   — только у группы (CHECK); настраивает группу и удаляет участников только владелец
   (`can_manage_chat`); `created_by` — история (владение переходит: уход/удаление владельца → самый
@@ -95,10 +108,13 @@
 - `chat_invites` — pending|accepted|declined; статус видит только приглашённый, остальным —
   `chat_waiting_invitees`. Зовёт любой участник (`invite_to_chat`), отменяет владелец
   (`cancel_chat_invite`).
+
+### Сообщения и представления
+
 - `messages` — текст, фото, видео, голосовое, кружок, системное, островок пересылки `forward`
   (`source_chat_id` — заголовок). Островок — не сообщение: реакции/комментарии/цитаты/закреп/правку не
   принимает (отказ в базе). Системные (`member_invited|member_joined|member_left|member_removed|
-  owner_changed`): имена в тексте — на момент записи, клиенту собирает `message_rows`. `author_id`/
+owner_changed`): имена в тексте — на момент записи, клиенту собирает `message_rows`. `author_id`/
   `system_user_id`/`text` из таблицы клиенту не читаются. `seq` — монотонный курсор страниц (вместо
   времени). Время (`created_at`/`edited_at`/`read_at`) и сырые просмотры (`views_count` и т.п.)
   клиенту не читаются — читать из `message_rows`. Новая колонка `messages` не видна, пока её нет в
@@ -129,6 +145,9 @@
   `last_message_at`, `chat_read_up_to`, `chat_am_member`). Колонки `owner_id`/`created_by`/
   `last_message_author_id`/`last_message_text`/`founding_member_ids` таблицы клиенту не читаются →
   строку chats целиком клиент не читает.
+
+### Вложения и попсы
+
 - `attachments` — медиа сообщения: свой файл (`url`/`poster_url` в chat-media, очищенные в
   `media_objects`, триггер `guard_attachment_object`) или ссылка на поп (`pop_id`). Клиенту — только
   `attachment_rows`. Ссылку кладут только `publish_pop`/`send_pop_post`, поп того же канала; сейчас
@@ -140,6 +159,9 @@
   `pops:<channel_id>`.
 - `pop_views` — пара поп+зритель; повторный показ ≤ 1/10 с; публикующие в канале не считаются; пишет
   только `record_pop_views`; закрыта.
+
+### Пересылки и фрагменты
+
 - `forward_items` — позиции островка (ссылка на первоисточник); пишут `forward_messages`/
   `remove_forward_items`; заголовок подделать нельзя. Ответ/закреп облачка помнят островок
   (`message_replies.quoted_forward_id`, `message_pins.forward_id`).
@@ -175,12 +197,15 @@
 - `message_revisions` — прежние версии после правки; только модерация; закрыта.
 - `message_views` — пара сообщение+зритель; счётчики `views_count`/`unique_views_count`, прочтение
   `read_at`; пишет только `record_message_views`; закрыта.
+
+### Комментарии и реакции
+
 - `comments` — к сообщению или попу (ровно одно из message_id|pop_id), от любого. Ключ цели —
   `target_id = coalesce(message_id, pop_id)`; чат у сообщения — чат сообщения, у попа — чат постов
   (триггер). `audience` member|visitor ставит база (у попа — `can_publish_in_channel`). Счётчик —
   `messages.comments_count`/`pops.comments_count`. Отправка: send_comment/send_voice_comment
   (сообщение), send_pop_comment/send_voice_pop_comment (поп), верх — `list_comment_thread_roots(target,
-  …, fragment)`; `fragment_id` — у корня.
+…, fragment)`; `fragment_id` — у корня.
 - `comment_attachments` — как attachments; клиенту — `comment_attachment_rows`.
 - `attachment_rows` / `comment_attachment_rows` — вложения глазами смотрящего: скрытое настройкой —
   url/poster_url/waveform null + `media_hidden` (вид/размеры/длительность остаются); клиент встраивает
@@ -195,12 +220,18 @@
 - `reactions` — полиморфные (message|comment|pop|fragment + target_id), audience ставит база, одна
   живая на человека и цель; счётчики — в строке цели.
 - `reaction_emojis` — справочник с валентностью (−1…1); меняется только миграцией.
+
+### Лента и стримы
+
 - `posts` — самостоятельные публикации; `excerpts` — фрагмент переписки (чат+диапазон);
   `streams` — публичный звонок (LiveKit, хост, статус; `host_id` клиенту не читается —
   `chat_live_stream`/`my_ringing_streams`); `stream_participants` — host|speaker|listener (читает
   только сам; кто в эфире — `stream_people`); `stream_identities` — identity комнаты (не id человека;
   `stream_join_info`, вебхук `stream_identity_user`; закрыта); `clips` — вырезка из стрима;
   `feed_items` — единая лента (excerpt|post|clip + сигналы ранжирования).
+
+### Журнал рекомендаций
+
 - `rec_*` — журнал рекомендаций (будущая обучающая выборка): всё закрыто (RLS без политик), кроме
   своих строк скрытия; без облака, переезжает на свой Postgres. `rec_config` — параметры по версиям
   (`rec_settings()`); `rec_events` — типизированные действия, append-only, партиции по дню в
@@ -211,6 +242,9 @@
   тепловая карта, уникальность зрителя); `rec_app_sessions` — сессии; `rec_hidden_pops`/
   `rec_hidden_channels` — «не интересно» (`set_pop_not_interested`/`set_channel_hidden`, подписка на
   канал снимает скрытие).
+
+### Сохранённые
+
 - `saved_messages` — личные копии сообщений/комментариев (не публичный контент; только владелец,
   каскад). Снимок увиденного при сохранении (вид, текст, время — null если скрыто, автор — id если
   виден, иначе снимок имени; клиенту колонка закрыта, автор глазами владельца в
@@ -231,6 +265,9 @@
   null + «Запись удалена»).
 - `saved_tags` — имя (unique lower), цвет (палитра 12), uses_count триггером; `saved_message_tags` —
   связь копия-тег (составные ключи с владельцем).
+
+### Устройства и модерация
+
 - `devices` — сеансы Supabase + push-токены; приватная.
 - `user_presence` — «в сети»/«был(а)» по сеансу (user_id+session_id из JWT): `last_seen_at`,
   `online_until`; пишет `mark_seen(online)` (раз в минуту + уход в фон); читает
@@ -253,7 +290,8 @@
   только знакомые; закрыта.
 - `safety_config` — пороги по версиям (`safety_settings()`); вставка строки; закрыта.
 
-**Правила схемы:**
+## Правила схемы
+
 - каждая таблица: `id uuid default gen_random_uuid()`, `created_at timestamptz default now()`.
 - мягкое удаление `deleted_at`, физически строки не удаляются.
 - `messages` — самая горячая; индексы по `chat_id`+`created_at` обязательны; выборка всегда
@@ -272,6 +310,7 @@
 ## Row Level Security
 
 RLS — на каждой таблице без исключений (таблица без политик = таблица, которой нет).
+
 - SELECT — открыт аутентифицированным почти везде, кроме `deleted_at is not null` и контента
   заблокировавших; люди — глазами смотрящего (`person_card`): колонки с людьми у profiles/messages/
   comments/chats/streams/message_fragments/*_pins закрыты правами, строки reactions/chat_members/
@@ -334,6 +373,7 @@ RLS — на каждой таблице без исключений (табли
 Пакеты: livekit-client, @livekit/react-native, @livekit/react-native-expo-plugin,
 @livekit/react-native-webrtc, @config-plugins/react-native-webrtc. Оба плагина — в `plugins` `app.json`,
 в точке входа `registerGlobals()` (без него не работает), нужна новая сборка dev build.
+
 - токен комнаты — только Edge Function; API-секрет LiveKit никогда в клиенте.
 - identity в токене — непрозрачный id звонка (`stream_join_info` → `stream_identities`), имени нет;
   кто за identity — `stream_people`.
@@ -379,7 +419,7 @@ Expo Push, токены `devices.push_token`, отправка из Edge Functio
   `npm run verify:selfhosted-media` и `npm run verify:selfhosted-livekit` (для SSH задать
   `TARGET_SSH_HOST=root@<API_DOMAIN>`).
 - LiveKit вместе с собственным TURN обновлять из `infra/` на VPS: `docker compose up -d
-  --force-recreate livekit`; конфигурация и порты находятся в `infra/livekit.yaml`,
+--force-recreate livekit`; конфигурация и порты находятся в `infra/livekit.yaml`,
   `infra/livekit.runtime.yaml` и `infra/docker-compose.yml`. Секреты LiveKit остаются только в
   `infra/.env` и серверных Edge Functions.
 - компоненты не зовут `supabase.from(...)` напрямую — только функции из `src/api/`.
