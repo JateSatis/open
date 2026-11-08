@@ -1,7 +1,7 @@
 -- Уборка данных, которые оставляют прерванные сценарии Maestro: сценарий убирает за собой в
 -- конце, а оборванный посередине (выключили ноутбук, упал шаг) — нет, и следующий прогон
 -- падает уже на этих данных. Запускается обёрткой перед прогоном:
---   npx supabase db query --linked -f scripts/e2e-reset.sql
+--   scripts/e2e-prepare.mjs через TARGET_DB_URL или TARGET_SSH_HOST (self-hosted).
 --
 -- Удаление идёт от имени автора через те же функции, что и в приложении: счётчики, превью
 -- чата, закрепы и сигналы обновляются как при обычном удалении. Файл — одна транзакция.
@@ -61,12 +61,15 @@ begin
      and r.user_id = any (test_users);
 
   -- fragment-panel ставит реакцию на фрагмент чужого сообщения и снимает её;
-  -- оборванный прогон оставил бы её. Реакции на фрагменты у тестовых
-  -- аккаунтов — только от сценариев.
+  -- оборванный прогон оставил бы её. Ограничиваем уборку чатом этих сценариев,
+  -- а не всеми реакциями тестового аккаунта в других чатах.
   select coalesce(jsonb_agg(jsonb_build_object('author', r.user_id, 'id', r.target_id)), '[]')
     into fragment_reaction_jobs
     from public.reactions r
+    join public.message_fragments f on f.id = r.target_id
+    join public.messages m on m.id = f.message_id
    where r.target_type = 'fragment'
+     and m.chat_id = '2d929436-099b-4cc9-89ba-e764c0ad8306'
      and r.deleted_at is null
      and r.user_id = any (test_users);
 
@@ -109,7 +112,8 @@ reset role;
 
 -- chat-info ставит группе имя `maestro_…` и стирает его; пишет только set_chat_username от
 -- участника, а уборка идёт владельцем схемы — колонка без истории, счётчиков у неё нет.
-update public.chats set username = null where username like 'maestro\_%';
+update public.chats set username = null where username like 'maestro\_%'
+  and created_by in (select id from public.profiles where username in ('shy_guy', 'jatesatis', 'tanya_bomba'));
 
 -- saved-messages сохраняет своё тестовое сообщение. Удаление из сохранённого — физическое
 -- (личная закладка, не публичный контент), функции для него пока нет — владельцем схемы.
@@ -125,5 +129,7 @@ delete from public.saved_tags
 
 -- Итог одной строкой: обёртка печатает его в отчёт прогона (видно только последний SELECT).
 select
-  (select count(*) from public.messages where text like 'maestro-%' and deleted_at is null) as messages_left,
-  (select count(*) from public.comments where text like 'maestro-%' and deleted_at is null) as comments_left;
+  (select count(*) from public.messages where text like 'maestro-%' and deleted_at is null
+    and author_id in (select id from public.profiles where username in ('shy_guy', 'jatesatis', 'tanya_bomba'))) as messages_left,
+  (select count(*) from public.comments where text like 'maestro-%' and deleted_at is null
+    and author_id in (select id from public.profiles where username in ('shy_guy', 'jatesatis', 'tanya_bomba'))) as comments_left;

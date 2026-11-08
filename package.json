@@ -75,8 +75,6 @@
   },
   "scripts": {
     "start": "expo start --dev-client",
-    "usb": "node scripts/usb.mjs",
-    "usb:open": "node scripts/usb.mjs --open-only",
     "device": "node scripts/device.mjs",
     "e2e": "node scripts/maestro.mjs",
     "reset-project": "node ./scripts/reset-project.js",
