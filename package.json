@@ -68,6 +68,7 @@
     "jest-expo": "~57.0.5",
     "livekit-server-sdk": "^2.19.2",
     "patch-package": "^8.0.1",
+    "pg": "^8.23.1",
     "prettier": "^3.9.7",
     "supabase": "^2.117.0",
     "typescript": "~6.0.3",
