@@ -583,6 +583,38 @@ describe('ChatScreen', () => {
     expect(mockedListMessages).toHaveBeenLastCalledWith('chat-1', { cursor: Date.parse(SENT_AT) });
   });
 
+  it.each(['scrollEndDrag', 'momentumScrollEnd', 'scrollBeginDrag'])(
+    'loads at the physical history edge on %s without onEndReached or another gesture',
+    async (event) => {
+      mockedListMessages.mockResolvedValueOnce({
+        items: [message('m2', 'второе', 'user-2')],
+        nextCursor: 2,
+      });
+      mockedListMessages.mockResolvedValueOnce({
+        items: [message('m1', 'первое', 'user-2')],
+        nextCursor: null,
+      });
+      await renderWithQuery(<ChatScreen />);
+      await screen.findByText('второе');
+
+      const geometry = (y: number) => ({
+        nativeEvent: {
+          contentOffset: { x: 0, y },
+          contentSize: { width: 400, height: 4000 },
+          layoutMeasurement: { width: 400, height: 800 },
+        },
+      });
+      await fireEvent(screen.getByTestId('messages-list'), event, geometry(1000));
+      expect(mockedListMessages).toHaveBeenCalledTimes(1);
+      await fireEvent(screen.getByTestId('messages-list'), event, geometry(3200));
+
+      expect(await screen.findByText('первое')).toBeTruthy();
+      expect(mockedListMessages).toHaveBeenLastCalledWith('chat-1', { cursor: 2 });
+      await fireEvent(screen.getByTestId('messages-list'), event, geometry(3200));
+      expect(mockedListMessages).toHaveBeenCalledTimes(2);
+    },
+  );
+
   it('pulls a broadcast message from the database instead of trusting the payload', async () => {
     mockedListMessages.mockResolvedValue({
       items: [message('m1', 'привет', 'user-2')],
