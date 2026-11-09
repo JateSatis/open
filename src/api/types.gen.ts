@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.17"
+    PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
@@ -4440,6 +4440,62 @@ export type Database = {
           },
         ]
       }
+      history_window_rows: {
+        Row: {
+          after_seq: number | null
+          anchor_id: string | null
+          anchor_seq: number | null
+          before_seq: number | null
+          chat_id: string | null
+          has_after: boolean | null
+          has_before: boolean | null
+          lower_inclusive: boolean | null
+          lower_seq: number | null
+          message_ids: string[] | null
+          target_status: string | null
+          upper_inclusive: boolean | null
+          upper_seq: number | null
+          history_window_messages: {
+            author_avatar_url: string | null
+            author_id: string | null
+            author_name: string | null
+            author_opaque: boolean | null
+            chat_id: string | null
+            chat_thread_root_ids: string[] | null
+            clusters_count: number | null
+            comments_count: number | null
+            created_at: string | null
+            deleted_at: string | null
+            edit_mark: number | null
+            edited: boolean | null
+            edited_at: string | null
+            forwarded_comment_id: string | null
+            fragments_count: number | null
+            hidden: boolean | null
+            hidden_ranges: Json | null
+            id: string | null
+            kind: string | null
+            member_reactions: Json | null
+            reactions_count: number | null
+            read_at: string | null
+            reads_visible: boolean | null
+            seq: number | null
+            source_chat_id: string | null
+            stream_host_id: string | null
+            stream_id: string | null
+            system_event: string | null
+            system_user_id: string | null
+            system_user_name: string | null
+            system_user_opaque: boolean | null
+            text: string | null
+            time_visible: boolean | null
+            unique_views_count: number | null
+            views_count: number | null
+            visitor_reactions: Json | null
+          } | null
+        }
+        Relationships: []
+      }
       message_rows: {
         Row: {
           author_avatar_url: string | null
@@ -5171,8 +5227,86 @@ export type Database = {
         Args: { p_other: string; p_viewer: string }
         Returns: string
       }
+      get_history_window: {
+        Args: {
+          p_chat: string
+          p_cursor?: Json
+          p_hint_seq?: number
+          p_limit?: number
+          p_mode: string
+          p_target?: string
+        }
+        Returns: {
+          after_seq: number | null
+          anchor_id: string | null
+          anchor_seq: number | null
+          before_seq: number | null
+          chat_id: string | null
+          has_after: boolean | null
+          has_before: boolean | null
+          lower_inclusive: boolean | null
+          lower_seq: number | null
+          message_ids: string[] | null
+          target_status: string | null
+          upper_inclusive: boolean | null
+          upper_seq: number | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "history_window_rows"
+          isOneToOne: true
+          isSetofReturn: true
+        }
+      }
       hidden_ranges_from_json: { Args: { value: Json }; Returns: unknown }
       hidden_ranges_json: { Args: { ranges: unknown }; Returns: Json }
+      history_window_messages: {
+        Args: { "": Database["public"]["Views"]["history_window_rows"]["Row"] }
+        Returns: {
+          author_avatar_url: string | null
+          author_id: string | null
+          author_name: string | null
+          author_opaque: boolean | null
+          chat_id: string | null
+          chat_thread_root_ids: string[] | null
+          clusters_count: number | null
+          comments_count: number | null
+          created_at: string | null
+          deleted_at: string | null
+          edit_mark: number | null
+          edited: boolean | null
+          edited_at: string | null
+          forwarded_comment_id: string | null
+          fragments_count: number | null
+          hidden: boolean | null
+          hidden_ranges: Json | null
+          id: string | null
+          kind: string | null
+          member_reactions: Json | null
+          reactions_count: number | null
+          read_at: string | null
+          reads_visible: boolean | null
+          seq: number | null
+          source_chat_id: string | null
+          stream_host_id: string | null
+          stream_id: string | null
+          system_event: string | null
+          system_user_id: string | null
+          system_user_name: string | null
+          system_user_opaque: boolean | null
+          text: string | null
+          time_visible: boolean | null
+          unique_views_count: number | null
+          views_count: number | null
+          visitor_reactions: Json | null
+        }[]
+        SetofOptions: {
+          from: "history_window_rows"
+          to: "message_rows"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       identity_allows: {
         Args: { p_person: string; p_value: string; p_viewer: string }
         Returns: boolean
