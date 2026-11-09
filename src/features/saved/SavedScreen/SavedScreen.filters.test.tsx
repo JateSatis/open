@@ -60,10 +60,8 @@ jest.mock('@/api/saved', () => ({
   listSavedMessages: jest.fn(),
   fetchSourceChats: jest.fn(),
   listSavedTags: jest.fn(),
-  getSavedSource: jest.fn(),
   getSavedSummary: jest.fn(() => Promise.resolve({ watchLaterPending: 0 })),
   listSavedPins: jest.fn(() => Promise.resolve([])),
-  listSavedAround: jest.fn(),
   listWatchLater: jest.fn(() => Promise.resolve({ items: [], nextCursor: null })),
   countSavedMessages: jest.fn(),
   createSavedTag: jest.fn(),
@@ -110,9 +108,6 @@ function saved(id: string, seq: number, overrides: Partial<SavedMessage> = {}): 
     sourceChatId: 'chat-g',
     sourceMessageId: `msg-${id}`,
     sourceCommentId: null,
-    sourceSeq: 42,
-    commentMessageId: null,
-    commentPopId: null,
     kind: 'text',
     text: `текст ${id}`,
     authorId: 'user-anna',
@@ -169,7 +164,6 @@ beforeEach(() => {
   mockedList.mockImplementation(async (_param, _limit, filter) => ({
     items: serve(filter ?? null),
     nextCursor: null,
-    prevCursor: null,
   }));
   mockedCount.mockImplementation(async (filter) => serve(filter).length);
 });
@@ -252,12 +246,16 @@ describe('SavedScreen — поиск', () => {
     await fireEvent.changeText(await view.findByTestId('chat-search-input'), 'ёжик');
 
     await waitFor(() =>
-      expect(view.getByTestId('chat-search-counter')).toHaveTextContent('1 из 1'),
+      expect(view.getByTestId('chat-search-counter')).toHaveTextContent('Найдено: 1'),
     );
     expect(mockedCount).toHaveBeenLastCalledWith({ q: 'ёжик' }, expect.anything());
 
     await fireEvent.press(view.getByTestId('chat-search-list'));
-    expect(await view.findByTestId('saved-search-result')).toHaveTextContent(/ёжика/);
+    const result = await view.findByTestId('saved-search-result');
+    expect(result).toHaveTextContent(/ёжика/);
+    expect(result).toBeDisabled();
+    await fireEvent.press(result);
+    expect(view.getByTestId('saved-search-results')).toBeTruthy();
 
     await fireEvent.press(view.getByTestId('chat-search-input-close'));
 

@@ -16,7 +16,6 @@ import { bubbleAsideWidth } from '@/features/chats/MessageBubble/layout';
 import { addFilterTag, resetSavedFilters } from '@/features/saved/savedFiltersStore';
 import { SavedListState } from '@/features/saved/SavedListState';
 import { SavedMenu } from '@/features/saved/SavedMenu';
-import { useOpenSavedSource } from '@/features/saved/useOpenSavedSource';
 import { useSavedItemActions } from '@/features/saved/useSavedItemActions';
 import { useSavedMenu } from '@/features/saved/useSavedMenu';
 import { useWatchLater } from '@/features/saved/useWatchLater';
@@ -69,7 +68,6 @@ export function SavedWatchLaterTab({
 }: SavedWatchLaterTabProps) {
   const { width: windowWidth } = useWindowDimensions();
   const later = useWatchLater(active, filter);
-  const openSource = useOpenSavedSource();
   const handlers = useSavedItemActions({
     chats: later.chats,
     currentUserId,
@@ -109,7 +107,6 @@ export function SavedWatchLaterTab({
     tagsById,
     mediaBounds,
     expanded: rows.expanded.has(saved.id),
-    onOpenSource: openSource,
     searched,
   });
 

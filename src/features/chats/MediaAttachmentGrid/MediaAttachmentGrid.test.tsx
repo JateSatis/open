@@ -96,7 +96,7 @@ describe('MediaAttachmentGrid', () => {
     });
   });
 
-  it('a pop cover opens the pop; a deleted pop is a plaque that does nothing', async () => {
+  it('pop covers and deleted pop plaques do not open a viewer', async () => {
     const pop: MessageAttachment = {
       ...video,
       id: 'att-pop',
@@ -114,7 +114,8 @@ describe('MediaAttachmentGrid', () => {
     );
 
     await user.press(screen.getByTestId('pop-post-cover'));
-    expect(onPress).toHaveBeenCalledWith(0, null);
+    expect(screen.getByTestId('pop-post-cover')).toBeDisabled();
+    expect(onPress).not.toHaveBeenCalled();
 
     onPress.mockClear();
     await view.rerender(

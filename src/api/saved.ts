@@ -63,10 +63,6 @@ export type SavedMessage = {
   sourceChatId: string | null;
   sourceMessageId: string | null;
   sourceCommentId: string | null;
-  /** Номер сообщения (или того, под которым комментарий) — для перехода. */
-  sourceSeq: number | null;
-  commentMessageId: string | null;
-  commentPopId: string | null;
   kind: MessageKind;
   text: string | null;
   /** Автор глазами владельца; `null` — удалён или подменён (`authorOpaque`). */
@@ -91,19 +87,14 @@ export type SavedMessage = {
   popTitle?: string | null;
 };
 
-/**
- * Страница «Все», новыми вперёд. `nextCursor` — к более старым, `prevCursor`
- * — к более новым (есть, только когда страница — окно вокруг записи, а не
- * самые новые).
- */
+/** Страница «Все», новыми вперёд. `nextCursor` — к более старым. */
 export type SavedPage = {
   items: SavedMessage[];
   nextCursor: number | null;
-  prevCursor: number | null;
 };
 
-/** Где страница начинается: самые новые, старше записи или новее неё. */
-export type SavedPageParam = { before: number | null } | { after: number };
+/** Где страница начинается: самые новые или старше записи. */
+export type SavedPageParam = { before: number | null };
 
 /** Вид записи для фильтра «Тип сообщения»; правило — у базы (`saved_type`). */
 export type SavedTypeFilter = 'voice' | 'pop' | 'text_media';
@@ -154,21 +145,6 @@ export type SavedForwardable =
 
 /** Что ставится каждой сохраняемой копии. */
 export type SaveOptions = { tagIds: string[]; watchLater: boolean };
-
-/** Куда ведёт тап по источнику: решает база. */
-export type SavedSource =
-  | {
-      state: 'live';
-      chatId: string;
-      channelId: string | null;
-      messageId: string | null;
-      seq: number | null;
-      commentId: string | null;
-      popId: string | null;
-      popChannelId: string | null;
-    }
-  | { state: 'original_gone'; chatId: string; channelId: string | null }
-  | { state: 'chat_gone' };
 
 type AttachmentJson = {
   id?: string;
@@ -287,9 +263,6 @@ export function toSavedMessage(row: SavedRow): SavedMessage {
     sourceChatId: row.source_chat_id ?? null,
     sourceMessageId: row.source_message_id ?? null,
     sourceCommentId: row.source_comment_id ?? null,
-    sourceSeq: row.source_seq ?? null,
-    commentMessageId: row.comment_message_id ?? null,
-    commentPopId: row.comment_pop_id ?? null,
     kind: toMessageKind(row.kind),
     text: row.text ?? null,
     authorId: row.author_id ?? null,
@@ -310,9 +283,7 @@ export function toSavedMessage(row: SavedRow): SavedMessage {
 }
 
 /**
- * Страница «Все», новыми вперёд: самые новые, старше записи (`before`) или
- * ближайшие новее неё (`after`). Окно вокруг записи — `before: seq + 1` и
- * `after: seq` (см. `listSavedAround`).
+ * Страница «Все», новыми вперёд, с догрузкой старше `before`.
  */
 export async function listSavedMessages(
   param: SavedPageParam,
@@ -321,8 +292,7 @@ export async function listSavedMessages(
   signal?: AbortSignal,
 ): Promise<SavedPage> {
   let request = supabase.rpc('list_saved_messages', {
-    p_before_seq: 'before' in param ? (param.before ?? undefined) : undefined,
-    p_after_seq: 'after' in param ? param.after : undefined,
+    p_before_seq: param.before ?? undefined,
     p_limit: limit,
     p_filter: filter ?? undefined,
   });
@@ -335,38 +305,9 @@ export async function listSavedMessages(
 
   const items = (data ?? []).map((row) => toSavedMessage(row));
   const full = items.length === limit;
-  const first = items[0];
   const last = items[items.length - 1];
 
-  if ('after' in param) {
-    // Новее курсора — до самых новых: есть ли ещё, знает только полная страница.
-    return { items, nextCursor: null, prevCursor: full && first ? first.seq : null };
-  }
-
-  return { items, nextCursor: full && last ? last.seq : null, prevCursor: null };
-}
-
-/**
- * Окно вокруг записи с номером `seq`: она сама и старше — половина, новее —
- * другая. Одна страница с курсорами в обе стороны.
- */
-export async function listSavedAround(
-  seq: number,
-  filter: SavedFilterInput | null = null,
-): Promise<SavedPage> {
-  const half = Math.ceil(SAVED_PAGE_SIZE / 2);
-  const [older, newer] = await Promise.all([
-    listSavedMessages({ before: seq + 1 }, half, filter),
-    listSavedMessages({ after: seq }, half, filter),
-  ]);
-  const top = newer.items[0];
-
-  return {
-    items: [...newer.items, ...older.items],
-    nextCursor: older.nextCursor,
-    // Новее окна ещё есть, если вторая половина полна.
-    prevCursor: newer.items.length === half && top ? top.seq : null,
-  };
+  return { items, nextCursor: full && last ? last.seq : null };
 }
 
 function watchCursorOf(item: SavedMessage): WatchLaterCursor | null {
@@ -386,7 +327,6 @@ export async function listWatchLater(
   const { data, error } = await supabase.rpc('list_saved_watch_later', {
     p_after_done: cursor?.done,
     p_after_at: cursor?.at,
-    p_after_seq: cursor?.seq,
     p_limit: SAVED_PAGE_SIZE,
     p_filter: filter ?? undefined,
   });
@@ -474,31 +414,6 @@ export async function getSavedSummary(): Promise<{ watchLaterPending: number }> 
   if (error) throw error;
 
   return { watchLaterPending: data?.[0]?.watch_later_pending ?? 0 };
-}
-
-export async function getSavedSource(savedId: string): Promise<SavedSource> {
-  const { data, error } = await supabase.rpc('saved_source', { p_saved: savedId });
-
-  if (error) throw error;
-
-  const row = data?.[0];
-
-  if (!row || row.state === 'chat_gone' || !row.chat_id) return { state: 'chat_gone' };
-
-  if (row.state !== 'live') {
-    return { state: 'original_gone', chatId: row.chat_id, channelId: row.channel_id ?? null };
-  }
-
-  return {
-    state: 'live',
-    chatId: row.chat_id,
-    channelId: row.channel_id ?? null,
-    messageId: row.message_id ?? null,
-    seq: row.seq ?? null,
-    commentId: row.comment_id ?? null,
-    popId: row.pop_id ?? null,
-    popChannelId: row.pop_channel_id ?? null,
-  };
 }
 
 /**

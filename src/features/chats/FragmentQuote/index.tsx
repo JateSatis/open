@@ -15,8 +15,6 @@ export type FragmentQuoteProps = {
   /** Кусок, каким его выделили. `null` — сообщение удалено, цитаты нет. */
   text: string | null;
   isOwn: boolean;
-  /** Тап — к куску в сообщении. Нет обработчика — плашка не нажимается. */
-  onPress?: () => void;
 };
 
 /**
@@ -27,7 +25,6 @@ export type FragmentQuoteProps = {
 export const FragmentQuote = memo(function FragmentQuote({
   text,
   isOwn,
-  onPress,
 }: FragmentQuoteProps) {
   const theme = useTheme();
   const shown = text === null ? 'Сообщение удалено' : truncateGraphemes(text, FRAGMENT_QUOTE_MAX);
@@ -35,10 +32,9 @@ export const FragmentQuote = memo(function FragmentQuote({
   return (
     <Pressable
       testID="comment-fragment-quote"
-      accessibilityRole={onPress ? 'button' : undefined}
+      accessibilityRole="text"
       accessibilityLabel={`Цитата: ${shown}`}
-      disabled={!onPress}
-      onPress={onPress}
+      disabled
       style={[
         quoteStyles.quote,
         { backgroundColor: isOwn ? theme.quoteBackgroundOnPrimary : theme.quoteBackground },

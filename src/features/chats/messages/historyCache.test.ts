@@ -1,19 +1,6 @@
-import { QueryClient } from '@tanstack/react-query';
 
-import {
-  knownEdits,
-  patchReactions,
-  patchViews,
-  quotedIds,
-  removeMessages,
-  replaceMessages,
-  messageWindowKey,
-  messagesQueryKey,
-  readAllHistories,
-  updateAllHistories,
-  updateChatHistories,
-  type ChatHistory,
-} from './historyCache';
+
+import { knownEdits, patchReactions, patchViews, quotedIds, removeMessages, replaceMessages, type ChatHistory } from './historyCache';
 
 import type { ChatMessage } from '@/features/chats/messages/types';
 import { island, original } from '@/test/islands';
@@ -58,31 +45,6 @@ const liveQuote = (messageId: string) => ({
     firstMediaIsVideo: false,
     durationMs: null,
   },
-});
-
-describe('detached message window cache', () => {
-  it('keeps the live tail separate while applying edits and deletion to both caches', () => {
-    const client = new QueryClient();
-    const tail: ChatHistory = { items: [message('latest', { seq: 90 })], nextCursor: 90 };
-    const window: ChatHistory = {
-      items: [message('old', { seq: 10 }), message('older', { seq: 9 })],
-      nextCursor: 9,
-      newerCursor: 10,
-    };
-    client.setQueryData(messagesQueryKey('chat-1'), tail);
-    client.setQueryData(messageWindowKey('chat-1', 10), window);
-
-    expect(readAllHistories(client)).toHaveLength(2);
-    updateAllHistories(client, (history) => replaceMessages(history, [message('old', { seq: 10, text: 'edited' })]));
-    updateChatHistories(client, 'chat-1', (history) => removeMessages(history, new Set(['older'])));
-
-    expect(client.getQueryData<ChatHistory>(messagesQueryKey('chat-1'))).toEqual(tail);
-    expect(client.getQueryData<ChatHistory>(messageWindowKey('chat-1', 10))).toMatchObject({
-      items: [{ id: 'old', text: 'edited' }],
-      nextCursor: 9,
-      newerCursor: 10,
-    });
-  });
 });
 
 describe('removeMessages', () => {

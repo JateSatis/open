@@ -28,7 +28,6 @@ export type ChatSearch = MatchSearch<ChatSearchHit> & {
  */
 export function useChatSearch(
   chatId: string,
-  jump: (rowKey: string, seq: number) => Promise<boolean>,
 ): ChatSearch {
   const params = useLocalSearchParams<ChatSearchParams>();
   const navigation = useNavigation();
@@ -44,16 +43,13 @@ export function useChatSearch(
     scope: ['chatSearch', chatId],
     fetchPage: (value, cursor, signal) => searchChatMessages(chatId, value, cursor, signal),
     count: (value, signal) => countChatSearch(chatId, value, signal),
-    jump: useCallback((hit: ChatSearchHit) => jump(hit.id, hit.seq), [jump]),
   });
-  const { reset } = search;
 
   const close = useCallback(() => {
     Keyboard.dismiss();
     setQuery('');
-    reset();
     navigation.setParams({ search: undefined, searchKey: undefined } as never);
-  }, [navigation, reset]);
+  }, [navigation]);
 
   return { ...search, active, query, setQuery, close };
 }

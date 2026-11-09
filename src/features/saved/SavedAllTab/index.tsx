@@ -1,10 +1,9 @@
-import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import { ActivityIndicator, FlatList, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 
 import { styles } from './styles';
 import { SavedSelectionBar } from './SavedSelectionBar';
-import { useFilterJumps } from './useFilterJumps';
 import { useSavedPinBar } from './useSavedPinBar';
 import { useSavedSearch } from './useSavedSearch';
 
@@ -17,15 +16,13 @@ import { useChatKeyboardInset } from '@/features/chats/useChatKeyboardInset';
 import { usePendingNotes } from '@/features/saved/notesStore';
 import { SavedBubble } from '@/features/saved/SavedBubble';
 import { SavedComposer } from '@/features/saved/SavedComposer';
-import { resetSavedFilters } from '@/features/saved/savedFiltersStore';
+import { addFilterTag, resetSavedFilters } from '@/features/saved/savedFiltersStore';
 import { isPendingNote, type SavedItem } from '@/features/saved/savedCopy';
 import { SavedListState } from '@/features/saved/SavedListState';
 import { SavedMenu } from '@/features/saved/SavedMenu';
 import { SavedSearchResults } from '@/features/saved/SavedSearchResults';
 import type { SavedComposerState } from '@/features/saved/useSavedComposer';
-import { useOpenSavedSource } from '@/features/saved/useOpenSavedSource';
 import { useSavedItemActions } from '@/features/saved/useSavedItemActions';
-import { useSavedJump } from '@/features/saved/useSavedJump';
 import { useSavedMenu } from '@/features/saved/useSavedMenu';
 import { useSavedMessages } from '@/features/saved/useSavedMessages';
 import { useSavedSelection } from '@/features/saved/useSavedSelection';
@@ -87,29 +84,20 @@ export function SavedAllTab({
 
     return [...pending.filter((note) => !loaded.has(note.id)), ...saved.items];
   }, [pending, saved.items]);
-  const openSource = useOpenSavedSource();
   const {
     containerRef: keyboardRef,
     onLayout: measureKeyboardArea,
     style: keyboardStyle,
   } = useChatKeyboardInset();
-  const listRef = useRef<FlatList<SavedItem> | null>(null);
   const selection = useSavedSelection(items, active, headerRight);
-  const jump = useSavedJump(listRef, items, saved.loadAround);
-  const pinBar = useSavedPinBar(jump.jump, filter);
-  const matches = useSavedSearch(search, active, filter, jump.jump);
+  const pinBar = useSavedPinBar(filter);
+  const matches = useSavedSearch(search, active, filter);
   const [resultsShown, setResultsShown] = useState(false);
   const searching = search !== null;
 
   // Поиск закрыли — следующий откроется с переписки, а не со списка найденного.
   if (!searching && resultsShown) setResultsShown(false);
   const showResults = searching && resultsShown;
-  const filterJumps = useFilterJumps({
-    filterKey: filter.key,
-    filtered: filter.active,
-    loading: saved.isLoading,
-    jump: jump.jump,
-  });
   const {
     frameRef,
     target: menuTarget,
@@ -132,16 +120,6 @@ export function SavedAllTab({
     onEdit: startEdit,
     onRetry: retry,
   });
-  const { openQuote, filterByTag } = filterJumps;
-  const { select: selectMatch } = matches;
-  const openMatch = useCallback(
-    (at: number) => {
-      setResultsShown(false);
-      selectMatch(at);
-    },
-    [selectMatch],
-  );
-
   const bubble = useCallback(
     (item: SavedItem) => (
       <SavedBubble
@@ -150,17 +128,14 @@ export function SavedAllTab({
         currentUserId={currentUserId}
         tagsById={tagsById}
         mediaBounds={mediaBounds}
-        onOpenSource={openSource}
-        onQuotePress={openQuote}
         onRetry={retry}
-        onTagPress={filterByTag}
+        onTagPress={addFilterTag}
       />
     ),
-    [currentUserId, filterByTag, mediaBounds, openQuote, openSource, retry, saved.chats, tagsById],
+    [currentUserId, mediaBounds, retry, saved.chats, tagsById],
   );
 
   const { active: selecting, isSelected, toggle } = selection;
-  const { highlight } = jump;
   const editingId = composer.edit.mode?.message.id ?? null;
   const renderItem = useCallback(
     ({ item }: { item: SavedItem }) => {
@@ -173,7 +148,6 @@ export function SavedAllTab({
           selectable={!pendingNote}
           selected={isSelected(item.id)}
           editing={editingId === item.id}
-          highlightKey={highlight?.id === item.id ? highlight.key : null}
           onOpenMenu={(anchor) => openMenu(item, anchor)}
           onToggle={() => toggle(item.id)}
           // Во время правки ответ свайпом заменил бы её и потерял отложенный черновик.
@@ -183,7 +157,7 @@ export function SavedAllTab({
         </MessageRow>
       );
     },
-    [bubble, editingId, highlight, isSelected, openMenu, reply, selecting, toggle],
+    [bubble, editingId, isSelected, openMenu, reply, selecting, toggle],
   );
 
   const empty = items.length === 0;
@@ -201,7 +175,6 @@ export function SavedAllTab({
 
           <View ref={frameRef} collapsable={false} style={styles.flex}>
             <FlatList
-              ref={listRef}
               testID="saved-list"
               inverted
               data={items}
@@ -216,13 +189,6 @@ export function SavedAllTab({
               // Список перевёрнут: его «конец» — верх экрана, там старое.
               onEndReached={saved.hasMore ? saved.loadMore : undefined}
               onEndReachedThreshold={HISTORY_EDGE}
-              // Окно вокруг закрепа: внизу — более новые, догружаются у низа.
-              onStartReached={saved.hasNewer ? saved.loadNewer : undefined}
-              onStartReachedThreshold={HISTORY_EDGE}
-              maintainVisibleContentPosition={
-                saved.hasNewer ? { minIndexForVisible: 0 } : undefined
-              }
-              onScrollToIndexFailed={jump.onScrollToIndexFailed}
               ListFooterComponent={
                 saved.isLoadingMore ? <ActivityIndicator accessibilityLabel="Загрузка" /> : null
               }
@@ -247,7 +213,6 @@ export function SavedAllTab({
           search={matches}
           chats={saved.chats}
           currentUserId={currentUserId}
-          onSelect={openMatch}
         />
       ) : null}
 

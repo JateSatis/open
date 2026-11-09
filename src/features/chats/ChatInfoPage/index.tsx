@@ -21,7 +21,6 @@ import {
 import { subscribersLabel } from '@/features/channels/subscriberText';
 import { chatTitle, counterpart, dialogPair, isChatMember } from '@/features/chats/chatDisplay';
 import { useChatSubscription } from '@/features/chats/chatSubscription';
-import { JUMP_PARAM_NAMES } from '@/features/chats/jumpParams';
 import { useChatChangedSignal } from '@/features/chats/useChatChangedSignal';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
 import { useOnlineUsers } from '@/features/chats/useOnlineUsers';
@@ -31,8 +30,8 @@ import { useProfile } from '@/features/profile/queries';
 import { useChatCall } from '@/features/streams/useChatCall';
 import { plural } from '@/lib/plural';
 
-const CLEARED_JUMP = Object.fromEntries(
-  [...JUMP_PARAM_NAMES, 'search', 'searchKey'].map((name) => [name, undefined]),
+const CLEARED_SEARCH = Object.fromEntries(
+  ['search', 'searchKey'].map((name) => [name, undefined]),
 );
 
 export type ChatInfoPageProps = {
@@ -108,7 +107,7 @@ export function ChatInfoPage({ chat, slideBack }: ChatInfoPageProps) {
     [router],
   );
 
-  // В ту же переписку ниже в стеке — с прыжком к сообщению или в поиск.
+  // В ту же переписку ниже в стеке — в режим поиска.
   const { close } = slideBack;
   const toThisChat = useCallback(
     (params: Record<string, string>) => {
@@ -122,7 +121,7 @@ export function ChatInfoPage({ chat, slideBack }: ChatInfoPageProps) {
       if (state && below !== undefined && below !== -1) {
         navigation.dispatch({
           type: 'SET_PARAMS',
-          payload: { params: { ...CLEARED_JUMP, chatId, ...params } },
+          payload: { params: { ...CLEARED_SEARCH, chatId, ...params } },
           source: state.routes[below].key,
         });
         close();
@@ -134,11 +133,6 @@ export function ChatInfoPage({ chat, slideBack }: ChatInfoPageProps) {
     [chatId, close, navigation, router],
   );
 
-  const showInChat = useCallback(
-    (messageId: string, seq: number) =>
-      toThisChat({ jumpTo: messageId, jumpSeq: String(seq), jumpKey: String(Date.now()) }),
-    [toThisChat],
-  );
   const searchChat = useCallback(
     () => toThisChat({ search: '1', searchKey: String(Date.now()) }),
     [toThisChat],
@@ -204,7 +198,6 @@ export function ChatInfoPage({ chat, slideBack }: ChatInfoPageProps) {
     memberQuery,
     onOpenPerson: openPerson,
     onOpenChat: openChat,
-    onShowInChat: showInChat,
     onRemoveMember: (person) => void groupActions.removeMember(person),
     onCancelInvite: (person) => void groupActions.cancelInvite(person),
     onSearchMembers: searchMembers,

@@ -133,7 +133,7 @@ describe('fragment mode', () => {
     await act(async () => setTextSelection(selectionIn('m1')));
     await act(async () => result.current.pressRow(row('m1')));
 
-    expect(getFragmentState()).toEqual({ activeKey: 'm1', selection: null, quote: null });
+    expect(getFragmentState()).toEqual({ activeKey: 'm1', selection: null });
   });
 
   it('leaves system back to the screen, with or without a text selection', async () => {

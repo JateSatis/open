@@ -36,7 +36,7 @@ import {
 import { useCommentActionHandlers } from '@/features/interactions/comments/useCommentActionHandlers';
 import { useCommentReplySelection } from '@/features/interactions/comments/useCommentReplySelection';
 import { menuReactionSet } from '@/features/interactions/reactionState';
-import { showNotice } from '@/features/notifications/alertsStore';
+
 import type { LocalMedia } from '@/features/media';
 import { focusWithKeyboard } from '@/lib/windowFocus';
 
@@ -55,8 +55,6 @@ type Options = {
   listRef: RefObject<FlashListRef<CommentRow> | null>;
   commentThreadListRef: RefObject<FlashListRef<CommentRow> | null>;
   sheet: PanelSheet;
-  /** Прыжок к комментарию в окне треда — по тапу на цитату. */
-  jump: (commentId: string, options?: { flash?: boolean }) => Promise<boolean>;
   /** Видимая часть списка комментариев в окне — по ней обрезается копия облачка под меню. */
   measureViewport: () => Promise<AnchorRect | null>;
 };
@@ -121,7 +119,6 @@ export function usePanelActions({
   listRef,
   commentThreadListRef,
   sheet,
-  jump,
   measureViewport,
 }: Options) {
   const queryClient = useQueryClient();
@@ -316,13 +313,6 @@ export function usePanelActions({
     [afterSend, draft, replies, sendCommentVoice, commentThreadRootId],
   );
 
-  const jumpToQuote = useCallback(
-    async (commentId: string) => {
-      if (!(await jump(commentId))) showNotice('Не удалось найти комментарий', 'error');
-    },
-    [jump],
-  );
-
   const back = useCallback(() => {
     if (selection.isActive) {
       selection.clear();
@@ -404,7 +394,6 @@ export function usePanelActions({
     exitCommentThread,
     submit,
     sendVoice,
-    jumpToQuote,
     back,
     openMenu,
     closeMenu: menu.close,

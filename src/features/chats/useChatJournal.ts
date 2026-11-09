@@ -12,12 +12,12 @@ import {
 /**
  * Сессия экрана чата в журнале рекомендаций: идёт, пока чат наверху и
  * приложение на переднем плане. Откуда пришли — параметр `from` (поиск,
- * уведомление), прыжок к сообщению или список чатов.
+ * уведомление) или список чатов.
  */
 export function useChatJournal(chatId: string, live: boolean, role: ChatRole) {
   const appActive = useAppActive();
-  const params = useLocalSearchParams<{ from?: string; jumpTo?: string; comment?: string }>();
-  const entry = params.from ?? (params.jumpTo || params.comment ? 'jump' : 'list');
+  const params = useLocalSearchParams<{ from?: string }>();
+  const entry = params.from ?? 'list';
   const running = live && appActive;
 
   useEffect(() => {

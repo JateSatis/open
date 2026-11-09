@@ -1,7 +1,6 @@
 import type {
   ChatRef,
   ChatThreadPerson,
-  ForwardedComment,
   IslandOriginal,
   Person,
 } from '@/api/chats';
@@ -9,13 +8,12 @@ import type { HiddenRange } from '@/features/chats/hiddenText';
 import type { BubbleRow } from '@/features/chats/islands/rows';
 import type { ChatMessage, EditResult, LiveQuote } from '@/features/chats/messages/types';
 import type { PinnedMessagesState } from '@/features/chats/usePinnedMessages';
-import type { QuoteNavigation } from '@/features/chats/useQuoteNavigation';
 import type { ReactToMessage } from '@/features/interactions/useReactToMessage';
 import type { LocalMedia, OutgoingMedia } from '@/features/media';
 
 /**
  * Что шторка треда берёт у переписки: те же люди, отправка, реакции, закрепы
- * и переходы. Облачка, меню и поле ввода в шторке — те же, что в переписке,
+ * Облачка, меню и поле ввода в шторке — те же, что в переписке,
  * только над строками треда.
  */
 export type ChatThreadPanelKit = {
@@ -28,13 +26,11 @@ export type ChatThreadPanelKit = {
   peopleById: ReadonlyMap<string, Person>;
   showAvatars: boolean;
   showAuthors: boolean;
-  navigation: QuoteNavigation;
   reactions: ReactToMessage;
   pins: Pick<PinnedMessagesState, 'pin' | 'unpin' | 'isPinned'>;
   authorName: (authorId: string | null) => string;
   originalOf: (row: BubbleRow) => IslandOriginal | null;
   openPerson: (personId: string) => void;
-  openForwardedComment: (comment: ForwardedComment) => void;
   send: (
     text: string,
     media?: OutgoingMedia[],
@@ -49,6 +45,4 @@ export type ChatThreadPanelKit = {
   removeFromIsland: (forwardId: string, messageIds: string[]) => Promise<void>;
   notifyTyping: () => void;
   notifyRecordingVoice: () => void;
-  /** «Показать в чате»: обычный вид, прокрутка к сообщению и подсветка. */
-  showInChat: (rowKey: string, seq: number) => void;
 };

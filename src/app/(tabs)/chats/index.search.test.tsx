@@ -264,7 +264,7 @@ it('collapses a long block to three rows, expands and collapses it, and resets o
   await waitFor(() => expect(screen.queryByText('Новости d')).toBeNull());
 });
 
-it('opens a channel, a person and a post with a jump, and remembers them in «Недавние»', async () => {
+it('opens and remembers channels and people but leaves message results inactive', async () => {
   mockedEntities.mockResolvedValue([
     entity({}),
     entity({
@@ -292,23 +292,17 @@ it('opens a channel, a person and a post with a jump, and remembers them in «Н
     params: { userId: 'p1' },
   });
 
+  expect(screen.getByTestId('search-message')).toBeDisabled();
+  mockPush.mockClear();
   await fireEvent.press(screen.getByTestId('search-message'));
-  expect(mockPush).toHaveBeenLastCalledWith({
-    pathname: '/chats/channel/[channelId]',
-    params: {
-      channelId: 'ch-1',
-      jumpTo: 'msg-1',
-      jumpSeq: String(post.seq),
-      jumpKey: expect.any(String),
-    },
-  });
+  expect(mockPush).not.toHaveBeenCalled();
 
   await type('');
   expect(await screen.findByText('Недавние')).toBeTruthy();
   // Люди и сообщения «Недавних» показываются после перепроверки сервером.
   expect(await screen.findByRole('button', { name: 'Ёлкин' })).toBeTruthy();
   const rows = screen.getAllByRole('button').map((button) => button.props.accessibilityLabel);
-  expect(rows.indexOf(`Ёлки-палки: ${post.text}`)).toBeLessThan(rows.indexOf('Ёлкин'));
+  expect(rows).not.toContain(`Ёлки-палки: ${post.text}`);
 
   await fireEvent.press(screen.getByRole('button', { name: 'Очистить' }));
   expect(screen.queryByText('Недавние')).toBeNull();
@@ -367,23 +361,16 @@ it('shows a person in «Недавние» as I see them now: hidden name — al
   expect(screen.queryByText(/elkin/)).toBeNull();
 });
 
-it('opens a message of a group chat in that chat, with a new jump key every time', async () => {
+it('does not navigate to a message of a group chat', async () => {
   const message: SearchMessage = { ...post, chatId: 'group-1', chatKind: 'group', channelId: null };
   mockedMessages.mockResolvedValue({ items: [message], nextCursor: null });
   await openSearch();
   await type('елк');
 
   await fireEvent.press(await screen.findByTestId('search-message'));
-  const first = mockPush.mock.calls.at(-1)?.[0];
-  jest.spyOn(Date, 'now').mockReturnValueOnce(Number(first.params.jumpKey) + 1);
+  expect(screen.getByTestId('search-message')).toBeDisabled();
   await fireEvent.press(screen.getByTestId('search-message'));
-  const second = mockPush.mock.calls.at(-1)?.[0];
-
-  expect(first).toMatchObject({
-    pathname: '/chats/[chatId]',
-    params: { chatId: 'group-1', jumpTo: 'msg-1' },
-  });
-  expect(second.params.jumpKey).not.toBe(first.params.jumpKey);
+  expect(mockPush).not.toHaveBeenCalled();
 });
 
 it('without a network says so and still shows my own chats', async () => {

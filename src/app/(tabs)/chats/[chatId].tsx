@@ -10,14 +10,13 @@ import { SlidePage, useSlideBack } from '@/components/SlidePage';
 import { ChatConversation } from '@/features/chats/ChatConversation';
 import { messagesQueryKey } from '@/features/chats/messages/historyCache';
 import { chatQueryKey, useChat } from '@/features/chats/useChat';
-import { pickJumpParams, type JumpParams } from '@/features/chats/jumpParams';
 import { chatsQueryKey } from '@/features/chats/useChats';
 import { useTheme } from '@/hooks/use-theme';
 import { reloadMissing } from '@/lib/loadState';
 
 /**
  * Экран чата. Чат постов канала сам по себе не открывается: куда бы ни вёл
- * переход по его id (заголовок островка, закреп, цитата), он попадает на
+ * маршрут по его id, он попадает на
  * экран канала с разделами.
  *
  * Чтобы переписка не успела мелькнуть и подписаться на чат, который окажется
@@ -29,7 +28,7 @@ import { reloadMissing } from '@/lib/loadState';
  * под ней пусто — назад ведёт в «Чаты».
  */
 export default function ChatScreen() {
-  const params = useLocalSearchParams<{ chatId: string } & JumpParams>();
+  const params = useLocalSearchParams<{ chatId: string }>();
   const { chatId } = params;
   const theme = useTheme();
   const queryClient = useQueryClient();
@@ -42,14 +41,12 @@ export default function ChatScreen() {
   const toChats = useCallback(() => router.replace('/chats'), [router]);
   const slide = useSlideBack(toChats);
 
-  // Прыжок к посту и шит комментария едут дальше, на экран канала: его
-  // «Посты» читают их из своего адреса.
   if (known?.channel) {
     return (
       <Redirect
         href={{
           pathname: '/chats/channel/[channelId]',
-          params: { channelId: known.channel.id, ...pickJumpParams(params) },
+          params: { channelId: known.channel.id },
         }}
       />
     );

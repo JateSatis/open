@@ -52,24 +52,22 @@ describe('CommentForwardLead', () => {
     expect(screen.getByText('Олег')).toBeTruthy();
   });
 
-  it('leads to the comment in its comment thread from the snippet and the chat, and to the author from the name', async () => {
-    const openSource = jest.fn();
+  it('keeps source quotes disabled and opens the author profile', async () => {
     const openAuthor = jest.fn();
 
     await render(
       <CommentForwardLead
         forward={forward}
         isOwn={false}
-        onOpenSource={openSource}
         onOpenAuthor={openAuthor}
       />,
     );
 
+    expect(screen.getByTestId('reply-quote')).toBeDisabled();
     await fireEvent.press(screen.getByText('исходное сообщение'));
     await fireEvent.press(screen.getByText('Комментарий из «Разговор»'));
     await fireEvent.press(screen.getByLabelText('Профиль: Олег'));
 
-    expect(openSource).toHaveBeenCalledTimes(2);
     expect(openAuthor).toHaveBeenCalledTimes(1);
   });
 
@@ -110,16 +108,15 @@ describe('CommentForwardLead', () => {
       expect(screen.getByText('Олег')).toBeTruthy();
     });
 
-    it('leads to the comment in its comment thread from the quote', async () => {
-      const openSource = jest.fn();
+    it('keeps the fragment quote disabled', async () => {
 
       await render(
-        <CommentForwardLead forward={fragmentForward} isOwn={false} onOpenSource={openSource} />,
+        <CommentForwardLead forward={fragmentForward} isOwn={false} />,
       );
 
+      expect(screen.getByTestId('comment-fragment-quote')).toBeDisabled();
       await fireEvent.press(screen.getByTestId('comment-fragment-quote'));
 
-      expect(openSource).toHaveBeenCalledTimes(1);
     });
 
     it('cuts a long quote at 100 characters', async () => {
@@ -173,41 +170,33 @@ describe('CommentForwardLead', () => {
       expect(screen.getByText('Закат над морем')).toBeTruthy();
     });
 
-    it('opens the pop from the quote and the comment from the label', async () => {
-      const openSource = jest.fn();
-      const openPop = jest.fn();
+    it('keeps the pop quote and source label disabled', async () => {
 
       await render(
         <CommentForwardLead
           forward={popForward}
           isOwn={false}
-          onOpenSource={openSource}
-          onOpenPop={openPop}
         />,
       );
 
+      expect(screen.getByTestId('pop-quote')).toBeDisabled();
       await fireEvent.press(screen.getByTestId('pop-quote'));
-      expect(openPop).toHaveBeenCalledTimes(1);
-      expect(openSource).not.toHaveBeenCalled();
 
       await fireEvent.press(screen.getByText('Комментарий из «Pop Lab»'));
-      expect(openSource).toHaveBeenCalledTimes(1);
     });
 
     it('says the pop is gone and opens nothing from the quote', async () => {
-      const openPop = jest.fn();
 
       await render(
         <CommentForwardLead
           forward={{ ...popForward, comment: { ...popForward.comment!, pop: null } }}
           isOwn={false}
-          onOpenPop={openPop}
         />,
       );
 
       expect(screen.getByText('Поп удалён')).toBeTruthy();
+      expect(screen.getByTestId('pop-quote')).toBeDisabled();
       await fireEvent.press(screen.getByTestId('pop-quote'));
-      expect(openPop).not.toHaveBeenCalled();
       expect(screen.getByText('Олег')).toBeTruthy();
     });
   });

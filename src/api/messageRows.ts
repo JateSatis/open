@@ -77,7 +77,7 @@ export type QuotedMessage =
       authorName: string | null;
       /** Автор подменён в диалоге: `authorId` непрозрачный, профиля за ним нет. */
       authorOpaque?: boolean;
-      /** Номер оригинала — до него догружается история при переходе к цитате. */
+      /** Номер оригинала для порядка цитат. */
       seq: number;
       /** `null` — время чата оригинала скрыто от меня. */
       createdAt: string | null;

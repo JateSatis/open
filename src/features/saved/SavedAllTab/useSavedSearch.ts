@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect } from 'react';
+import { useEffect } from 'react';
 
 import {
   countSavedMessages,
@@ -14,7 +14,7 @@ type Filter = { input: SavedFilterInput | null; key: string | null };
 
 /**
  * Поиск на «Все» — как в чате (`useMatchSearch`): совпадения новыми вперёд
- * по `seq` с учётом фильтров, переход — окном вокруг записи (`loadAround`).
+ * по `seq` с учётом фильтров.
  * Выдача — под своим ключом с фильтром: смена фильтра пересчитывает её, а
  * правки списка — нет.
  */
@@ -22,7 +22,6 @@ export function useSavedSearch(
   query: string | null,
   active: boolean,
   filter: Filter,
-  jump: (id: string, seq: number) => Promise<boolean>,
 ) {
   const { input, key } = filter;
   const queryClient = useQueryClient();
@@ -49,6 +48,5 @@ export function useSavedSearch(
       return { items: page.items, nextCursor: page.nextCursor };
     },
     count: (value, signal) => countSavedMessages({ ...input, q: value }, signal),
-    jump: useCallback((hit: SavedMessage) => jump(hit.id, hit.seq), [jump]),
   });
 }

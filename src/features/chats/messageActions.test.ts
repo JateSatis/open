@@ -176,14 +176,13 @@ describe('message menu of a bubble in a forward island', () => {
   const inIsland = (isMine: boolean, isOwn = false) =>
     labels({ message: message(), isOwn, isMember: true, isPinned: false, island: { isMine } });
 
-  it('acts on the original: reply, copy, pin, forward, go to it — never edit or delete it', () => {
+  it('offers original actions without navigation, editing or deletion', () => {
     expect(inIsland(false, true)).toEqual([
       'Ответить',
       'Комментировать',
       'Копировать',
       'Закрепить',
       'Переслать',
-      'Перейти к оригиналу',
     ]);
   });
 
@@ -215,7 +214,7 @@ describe('message menu of a bubble in a forward island', () => {
     ).toEqual(['retry', 'delete_island']);
   });
 
-  it('offers the chat the island came from first — the plate is no longer a link by itself', () => {
+  it('offers selection without source navigation', () => {
     const fromChat = message({
       kind: 'forward',
       authorId: 'user-2',
@@ -223,7 +222,6 @@ describe('message menu of a bubble in a forward island', () => {
     });
 
     expect(islandActions(fromChat, false).map((action) => action.label)).toEqual([
-      'Перейти в «Хейтеры»',
       'Выбрать все',
     ]);
   });

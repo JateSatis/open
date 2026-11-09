@@ -101,9 +101,8 @@ export function MediaAttachmentGrid({
             <Pressable
               key={index}
               testID="pop-post-cover"
-              accessibilityRole="button"
               accessibilityLabel="Pop"
-              onPress={() => onPress(index, null)}
+              disabled
               style={[styles.tile, place]}
             >
               <PopCover

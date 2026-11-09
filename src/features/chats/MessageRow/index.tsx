@@ -4,11 +4,6 @@ import { Pressable, View, type AccessibilityActionEvent } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   runOnJS,
-  useAnimatedStyle,
-  useSharedValue,
-  withDelay,
-  withSequence,
-  withTiming,
 } from 'react-native-reanimated';
 
 import { styles } from './styles';
@@ -32,12 +27,6 @@ import { useTheme } from '@/hooks/use-theme';
 
 /** Столько держать палец, чтобы открылось меню. */
 const LONG_PRESS_MS = 350;
-/** Подсветка сообщения, к которому прыгнули: вспыхивает, когда прокрутка доехала, держится секунду. */
-const HIGHLIGHT_DELAY_MS = 0;
-const HIGHLIGHT_IN_MS = 0;
-const HIGHLIGHT_HOLD_MS = 1000;
-const HIGHLIGHT_FADE_MS = 400;
-
 export type MessageRowProps = {
   children: ReactNode;
   /** Режим выбора: тап и долгое нажатие отмечают, а не открывают. */
@@ -47,8 +36,6 @@ export type MessageRowProps = {
   selected: boolean;
   /** Это сообщение сейчас правится — облачко подсвечено, пока поле в режиме правки. */
   editing?: boolean;
-  /** Меняется при каждом прыжке к сообщению — подсветка вспыхивает заново. */
-  highlightKey: number | null;
   /**
    * Ключ строки: id сообщения, у облачка островка — ключ облачка. Над строкой
    * может быть открыто меню: её копия поднята над затемнением, а сама строка
@@ -93,7 +80,6 @@ export function MessageRow({
   selectable,
   selected,
   editing = false,
-  highlightKey,
   messageId,
   onOpenMenu,
   onLongPressAt,
@@ -103,7 +89,6 @@ export function MessageRow({
   frame,
 }: MessageRowProps) {
   const theme = useTheme();
-  const highlight = useSharedValue(0);
   const swipe = useSwipeReply(messageId, !selectionMode, onSwipeReply);
   // Горизонтальные жесты вокруг строки (свайп страницы) ждут, пока строка
   // ведёт выделение: долгое нажатие с протяжкой или ручку.
@@ -116,22 +101,6 @@ export function MessageRow({
 
   // Шит комментариев меряет строку снаружи списка — по ключу.
   useEffect(() => registry?.register(messageId, contentRef), [messageId, registry]);
-
-  useEffect(() => {
-    if (highlightKey === null) return;
-
-    highlight.set(
-      withDelay(
-        HIGHLIGHT_DELAY_MS,
-        withSequence(
-          withTiming(1, { duration: HIGHLIGHT_IN_MS }),
-          withDelay(HIGHLIGHT_HOLD_MS, withTiming(0, { duration: HIGHLIGHT_FADE_MS })),
-        ),
-      ),
-    );
-  }, [highlight, highlightKey]);
-
-  const highlightStyle = useAnimatedStyle(() => ({ opacity: highlight.value }));
 
   const openMenu = useCallback(
     (touchY: number | null) => {
@@ -231,11 +200,6 @@ export function MessageRow({
   // после него тонули бы, пока список пересобирается.
   return (
     <View style={styles.row}>
-      <Animated.View
-        pointerEvents="none"
-        style={[styles.fill, { backgroundColor: theme.messageHighlight }, highlightStyle]}
-      />
-
       {selected || editing ? (
         <View
           pointerEvents="none"

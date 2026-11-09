@@ -6,21 +6,7 @@ import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-han
 import { SavedScreen } from './index';
 
 import { listForwardedComments, listIslandOriginals } from '@/api/messageRows';
-import {
-  deleteSavedMessages,
-  fetchSourceChats,
-  listSavedAround,
-  listSavedForwardable,
-  listSavedMessages,
-  listSavedPins,
-  listSavedTags,
-  listWatchLater,
-  restoreSavedWatchLater,
-  setSavedPinned,
-  setSavedTag,
-  setSavedWatchLater,
-  type SavedMessage,
-} from '@/api/saved';
+import { deleteSavedMessages, listSavedForwardable, listSavedMessages, listSavedPins, listSavedTags, listWatchLater, restoreSavedWatchLater, setSavedPinned, setSavedTag, setSavedWatchLater, type SavedMessage } from '@/api/saved';
 import { confirm } from '@/components/ConfirmDialog/store';
 import { useSession } from '@/features/auth/useSession';
 import { readForwardPick, resetComposerDrafts } from '@/features/chats/composerDraftStore';
@@ -61,13 +47,11 @@ jest.mock('@/api/messageRows', () => ({
 }));
 jest.mock('@/api/saved', () => ({
   listSavedMessages: jest.fn(),
-  listSavedAround: jest.fn(),
   listWatchLater: jest.fn(),
   listSavedPins: jest.fn(),
   listSavedForwardable: jest.fn(),
   fetchSourceChats: jest.fn(() => Promise.resolve(new Map())),
   listSavedTags: jest.fn(),
-  getSavedSource: jest.fn(),
   getSavedSummary: jest.fn(() => Promise.resolve({ watchLaterPending: 0 })),
   setSavedTag: jest.fn(() => Promise.resolve()),
   setSavedWatchLater: jest.fn(() => Promise.resolve()),
@@ -89,9 +73,6 @@ function saved(id: string, seq: number, overrides: Partial<SavedMessage> = {}): 
     sourceChatId: 'chat-g',
     sourceMessageId: `msg-${id}`,
     sourceCommentId: null,
-    sourceSeq: 42,
-    commentMessageId: null,
-    commentPopId: null,
     kind: 'text',
     text: `текст ${id}`,
     authorId: 'user-anna',
@@ -123,7 +104,7 @@ const noticeText = () => {
 };
 
 async function renderScreen(items: SavedMessage[]) {
-  mocked(listSavedMessages).mockResolvedValue({ items, nextCursor: null, prevCursor: null });
+  mocked(listSavedMessages).mockResolvedValue({ items, nextCursor: null });
   await renderWithQuery(<SavedScreen />);
   await screen.findByTestId(items.length > 0 ? 'saved-list' : 'saved-empty');
 }
@@ -419,21 +400,15 @@ describe('SavedScreen — «Посмотреть позже»', () => {
 });
 
 describe('SavedScreen — закрепы', () => {
-  it('a pin outside the loaded page loads a window around it', async () => {
+  it('keeps the loaded history when a distant pin is pressed', async () => {
     mocked(listSavedPins).mockResolvedValue([
       { id: 'far', seq: 5, kind: 'text', text: 'далёкий', thumbnailUrl: null },
     ]);
-    mocked(listSavedAround).mockResolvedValue({
-      items: [saved('near', 6), saved('far', 5)],
-      nextCursor: 5,
-      prevCursor: 6,
-    });
     await renderScreen([saved('top', 90)]);
-
+    const calls = mocked(listSavedMessages).mock.calls.length;
     await fireEvent.press(await screen.findByTestId('pinned-bar'));
-
-    await waitFor(() => expect(listSavedAround).toHaveBeenCalledWith(5, null));
-    expect(await screen.findByTestId('saved-row-far')).toBeTruthy();
-    expect(screen.queryByTestId('saved-row-top')).toBeNull();
+    expect(screen.getByTestId('saved-row-top')).toBeTruthy();
+    expect(screen.queryByTestId('saved-row-far')).toBeNull();
+    expect(listSavedMessages).toHaveBeenCalledTimes(calls);
   });
 });

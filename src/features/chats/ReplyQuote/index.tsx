@@ -13,8 +13,6 @@ export type ReplyQuoteProps = {
   /** Цитаты ответа в порядке переписки: сверху старые, снизу новые. */
   quotes: QuotedMessage[];
   isOwn: boolean;
-  /** Тап по цитате — прыжок к её оригиналу. Нет обработчика — цитаты не нажимаются. */
-  onPress?: (quote: QuotedMessage) => void;
   /** Подпись удалённого оригинала; по умолчанию — «Сообщение удалено». */
   deletedText?: string;
 };
@@ -22,7 +20,6 @@ export type ReplyQuoteProps = {
 type QuoteLineProps = {
   quote: QuotedMessage;
   isOwn: boolean;
-  onPress?: (quote: QuotedMessage) => void;
   deletedText: string;
 };
 
@@ -37,7 +34,6 @@ const DELETED_TEXT = 'Сообщение удалено';
 const QuoteLine = memo(function QuoteLine({
   quote,
   isOwn,
-  onPress,
   deletedText,
 }: QuoteLineProps) {
   const theme = useTheme();
@@ -53,9 +49,7 @@ const QuoteLine = memo(function QuoteLine({
       testID="reply-quote"
       accessibilityRole="button"
       accessibilityLabel={author ? `Ответ на сообщение: ${author}. ${snippet}` : snippet}
-      // По удалённому оригиналу тап ничего не делает.
-      disabled={!onPress || !live}
-      onPress={() => onPress?.(quote)}
+      disabled
       style={[
         styles.quote,
         { backgroundColor: isOwn ? theme.quoteBackgroundOnPrimary : theme.quoteBackground },
@@ -93,13 +87,11 @@ const QuoteLine = memo(function QuoteLine({
 
 /**
  * Цитаты в облачке ответа — столбиком, каждая сама по себе: у ответа на
- * несколько сообщений видно всё, на что он отвечает, и тап по цитате ведёт
- * к её оригиналу.
+ * несколько сообщений видно всё, на что он отвечает.
  */
 export function ReplyQuote({
   quotes,
   isOwn,
-  onPress,
   deletedText = DELETED_TEXT,
 }: ReplyQuoteProps) {
   if (quotes.length === 0) return null;
@@ -113,7 +105,6 @@ export function ReplyQuote({
           key={`${quote.messageId}:${index}`}
           quote={quote}
           isOwn={isOwn}
-          onPress={onPress}
           deletedText={deletedText}
         />
       ))}

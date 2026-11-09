@@ -26,8 +26,7 @@ export function pinnedSnippet(pin: PinnedMessage): string {
 
 /**
  * Полоса под шапкой чата: закреплённое сообщение и, если их несколько, его
- * номер. Тап ведёт к сообщению — что при этом происходит с полосой, решает
- * экран (переключает на предыдущее закреплённое, как в Telegram).
+ * номер. Тап переключает отображаемый закреп; переписка остаётся на месте.
  */
 export function PinnedBar({ pins, index, onPress }: PinnedBarProps) {
   const theme = useTheme();

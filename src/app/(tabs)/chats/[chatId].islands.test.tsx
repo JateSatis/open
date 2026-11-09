@@ -1,7 +1,7 @@
 import type { Session as SupabaseSession } from '@supabase/supabase-js';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react-native';
-import { State } from 'react-native-gesture-handler';
-import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils';
+
+
 
 import ChatScreen from './[chatId]';
 
@@ -230,10 +230,7 @@ const longPress = startSelecting;
 /** Долгое нажатие на облачко — так открывается его меню. */
 const tapMessage = longPressMessage;
 
-async function choose(label: string) {
-  fireEvent.press(await screen.findByRole('menuitem', { name: label }));
-  await waitFor(() => expect(screen.queryByTestId('message-menu')).toBeNull());
-}
+
 
 /** Облачко, где стоит текст. */
 function bubbleWith(body: string) {
@@ -300,32 +297,18 @@ describe('forward island', () => {
     expect(screen.getAllByTestId('island-border')).toHaveLength(5);
   });
 
-  it('tap on the plate opens its menu, and the first item opens the chat it was forwarded from', async () => {
+  it('keeps the island menu without source navigation', async () => {
     await renderChat();
-
     await tapMessage('isl/header');
-    fireEvent.press(await screen.findByRole('menuitem', { name: 'Перейти в «Хейтеры Джигана»' }));
-
-    // Действие — следующим кадром после закрытия меню.
-    await waitFor(() =>
-      expect(mockPush).toHaveBeenCalledWith({
-        pathname: '/chats/[chatId]',
-        params: { chatId: 'chat-hate' },
-      }),
-    );
+    expect(screen.queryByRole('menuitem', { name: 'Перейти в «Хейтеры Джигана»' })).toBeNull();
+    expect(screen.getByRole('menuitem', { name: 'Выбрать все' })).toBeTruthy();
+    expect(mockPush).not.toHaveBeenCalled();
   });
 
-  it('opens the chat it was forwarded from on a tap on the plate', async () => {
+  it('does not leave the chat when the source plate is pressed', async () => {
     await renderChat();
-
     await fireEvent.press(screen.getByLabelText('Переслано из чата «Хейтеры Джигана»'));
-
-    expect(mockPush).toHaveBeenCalledWith({
-      pathname: '/chats/[chatId]',
-      params: { chatId: 'chat-hate' },
-    });
-    // Тап — не меню.
-    expect(screen.queryByTestId('message-menu')).toBeNull();
+    expect(mockPush).not.toHaveBeenCalled();
   });
 
   it('selects the whole island on a tap on the plate while selecting, without leaving', async () => {
@@ -376,22 +359,10 @@ describe('forward island', () => {
     expect(screen.getByLabelText('Комментарии: 146 комментариев')).toBeTruthy();
   });
 
-  it('opens the original’s chat at the message on a tap on «из <chat>»', async () => {
+  it('does not open an original from its source label', async () => {
     await renderChat();
-
-    fireEvent.press(within(bubbleWith('Самойлова, ты дура!')).getByTestId('message-source-chat'));
-
-    await waitFor(() =>
-      expect(mockPush).toHaveBeenCalledWith({
-        pathname: '/chats/[chatId]',
-        params: {
-          chatId: 'chat-js',
-          jumpTo: 'o1',
-          jumpSeq: String(Date.parse('2026-09-01T10:00:00Z')),
-          jumpKey: expect.any(String),
-        },
-      }),
-    );
+    await fireEvent.press(within(bubbleWith('Самойлова, ты дура!')).getByTestId('message-source-chat'));
+    expect(mockPush).not.toHaveBeenCalled();
   });
 
   it('keeps a stub in place of a deleted original', async () => {
@@ -455,7 +426,7 @@ describe('forward island', () => {
     await screen.findByTestId('message-menu');
     expect(screen.queryByRole('menuitem', { name: 'Изменить' })).toBeNull();
     expect(screen.queryByRole('menuitem', { name: 'Удалить' })).toBeNull();
-    expect(screen.getByRole('menuitem', { name: 'Перейти к оригиналу' })).toBeTruthy();
+    expect(screen.queryByRole('menuitem', { name: 'Перейти к оригиналу' })).toBeNull();
     expect(screen.getByRole('menuitem', { name: 'Убрать из пересылки' })).toBeTruthy();
   });
 

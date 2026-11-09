@@ -1,6 +1,5 @@
-/* eslint-disable react-hooks/refs -- the outgoing list uses a frozen render snapshot during the jump. */
 import { useQueryClient } from '@tanstack/react-query';
-import { useIsFocused, useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
+import { useIsFocused, useNavigation, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   ActivityIndicator,
@@ -12,23 +11,16 @@ import {
   type NativeSyntheticEvent,
   type TextInput,
 } from 'react-native';
-import Animated, {
-  FadeIn,
-  FadeOut,
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-} from 'react-native-reanimated';
+import Animated from 'react-native-reanimated';
 
 import { styles } from './styles';
 
 import { isOpaquePersonId } from '@/api/opaquePeople';
-import type { ChannelRef, ForwardedComment, IslandOriginal, Person } from '@/api/chats';
+import type { ChannelRef, IslandOriginal, Person } from '@/api/chats';
 import type { Pop } from '@/api/pops';
 import type { DraftPop } from '@/features/chats/composerDraftStore';
 import type { LiveQuote } from '@/features/chats/messages/types';
 import { LoadFailed } from '@/components/LoadFailed';
-import { FloatingButton } from '@/components/FloatingButton';
 import {
   useSlidePageBack,
   useSlidePageLeaveGuard,
@@ -48,7 +40,6 @@ import {
 import { useChatThreadPlates } from '@/features/chats/chatThreads/useChatThreadPlates';
 import { useChatThreadReplies } from '@/features/chats/chatThreads/useChatThreadReplies';
 import {
-  useChatThreadsMode,
   useChatThreadsView,
 } from '@/features/chats/chatThreads/useChatThreadsMode';
 import type { HiddenRange } from '@/features/chats/hiddenText';
@@ -63,7 +54,6 @@ import { DeletedOriginal } from '@/features/chats/DeletedOriginal';
 import {
   commentsHomeOf,
   contentOf,
-  islandItemKey,
   toChatRows,
   type BubbleRow,
   type ChatListRow,
@@ -109,23 +99,15 @@ import { useChatRowRenderer } from '@/features/chats/useChatRowRenderer';
 import { FragmentMenu } from '@/features/chats/fragments/FragmentMenu';
 import { commentOnSelection } from '@/features/chats/fragments/openFragmentPanel';
 import {
-  clearQuoteHighlight,
   clearTextSelection,
   type TextSelection,
 } from '@/features/chats/fragments/fragmentStore';
-import { useFragmentJump } from '@/features/chats/fragments/useFragmentJump';
 import { useFragmentMode } from '@/features/chats/fragments/useFragmentMode';
 import { registerSelectionScroller } from '@/features/chats/fragments/selectionAutoScroll';
 import { useComposerDraft } from '@/features/chats/useComposerDraft';
 import { chatQueryKey, useChat } from '@/features/chats/useChat';
 import { useChatMessages } from '@/features/chats/useChatMessages';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
-import {
-  GLIDE_EASING,
-  GLIDE_MS,
-  GLIDE_SCREENS,
-  useJumpToMessage,
-} from '@/features/chats/useJumpToMessage';
 import { useMarkChatRead } from '@/features/chats/useMarkChatRead';
 import {
   useChatSubscription,
@@ -133,7 +115,7 @@ import {
 } from '@/features/chats/chatSubscription';
 import { useChatJournal } from '@/features/chats/useChatJournal';
 import { useMessageViews } from '@/features/chats/useMessageViews';
-import { messageWindowKey, messagesQueryKey } from '@/features/chats/messages/historyCache';
+import { messagesQueryKey } from '@/features/chats/messages/historyCache';
 import { readChatDraft } from '@/features/chats/composerDraftStore';
 import { useMessageActionHandlers } from '@/features/chats/useMessageActionHandlers';
 import { useMessageEdit } from '@/features/chats/useMessageEdit';
@@ -142,14 +124,11 @@ import { isSelectableRow, useMessageSelection } from '@/features/chats/useMessag
 import { useMyInvite } from '@/features/chats/useMyInvite';
 import { usePinnedCursor } from '@/features/chats/usePinnedCursor';
 import { usePinnedMessages } from '@/features/chats/usePinnedMessages';
-import { useQuoteNavigation, type CommentFocus } from '@/features/chats/useQuoteNavigation';
-import { nextJumpKey, type JumpParams } from '@/features/chats/jumpParams';
 import { useReplyForward } from '@/features/chats/useReplyForward';
 import { useRespondToInvite } from '@/features/chats/useRespondToInvite';
 import { WaitingBanner } from '@/features/chats/WaitingBanner';
 import { CommentsPanel, openComments } from '@/features/interactions/CommentsPanel';
 import { resetScrolledRows } from '@/features/interactions/MessageReactions';
-import { prefetchCommentFocus, prefetchCommentThreadWindow } from '@/features/interactions/comments/prefetchCommentFocus';
 import { menuReactionSet } from '@/features/interactions/reactionState';
 import { useReactToMessage } from '@/features/interactions/useReactToMessage';
 import { TileViewportContext } from '@/features/media/tileRegistry';
@@ -158,9 +137,7 @@ import { ChatCallBar } from '@/features/streams/ChatCallBar';
 import { useChatCall } from '@/features/streams/useChatCall';
 import { reloadMissing } from '@/lib/loadState';
 import { stopVoice } from '@/features/media';
-import { showNotice } from '@/features/notifications/alertsStore';
 import { useMyProfile, useProfile } from '@/features/profile/queries';
-import { openPopViewer } from '@/features/pops/openPopViewer';
 import { useTheme } from '@/hooks/use-theme';
 import { setActiveChatId } from '@/store/activeChat';
 import { Spacing } from '@/theme';
@@ -176,7 +153,6 @@ const VIEWS_SCROLL_THROTTLE_MS = 100;
 const AUTO_SCROLL_QUIET_MS = VIEWS_SCROLL_THROTTLE_MS * 3;
 /** Ближе этой доли экрана к старейшему сообщению — пора догружать историю. */
 const HISTORY_EDGE = 0.4;
-const JUMP_DOWN_SCREENS = 2;
 
 export type ChatConversationProps = {
   chatId: string;
@@ -222,7 +198,7 @@ export function ChatConversation({
     onLayout: measureBottomOffset,
     style: keyboardInsetStyle,
   } = useChatKeyboardInset();
-  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const { width: windowWidth } = useWindowDimensions();
   // Ширина списка — окно минус его боковые поля (`styles.list`). Рядом с
   // мозаикой в строке — место круга комментариев и, кроме постов, аватар.
   const isPosts = channel !== null;
@@ -231,17 +207,10 @@ export function ChatConversation({
     [isPosts, windowWidth],
   );
   const currentUserId = useCurrentUserId();
-  const routeJump = useLocalSearchParams<JumpParams>();
-  const [initialWindowSeq] = useState(() =>
-    routeJump.jumpTo && routeJump.jumpSeq && Number.isFinite(Number(routeJump.jumpSeq))
-      ? Number(routeJump.jumpSeq)
-      : null,
-  );
   const { chat, isLoading: isChatLoading, failed: chatFailed, gone } = useChat(chatId);
   const chatThreads = useChatThreadsView(chat);
   const threadsActive = chatThreads.view === 'chat-threads';
-  const chatMessages = useChatMessages(chatId, currentUserId, chatThreads.view, initialWindowSeq);
-  const { closeWindow } = chatMessages;
+  const chatMessages = useChatMessages(chatId, currentUserId, chatThreads.view);
   const { messages, isLoading, isLoadingMore, hasMore, error, activities } = chatMessages;
   // Показать нечего, а загрузить не вышло: вместо крутилки — «не удалось» с
   // повтором. Упавшее обновление поверх данных сюда не попадает, как и упавший
@@ -250,9 +219,9 @@ export function ChatConversation({
   const reload = useCallback(
     () => reloadMissing(queryClient, [
       chatQueryKey(chatId),
-      initialWindowSeq === null ? messagesQueryKey(chatId) : messageWindowKey(chatId, initialWindowSeq),
+      messagesQueryKey(chatId),
     ]),
-    [chatId, initialWindowSeq, queryClient],
+    [chatId, queryClient],
   );
   const { loadMore, retry, notifyTyping, notifyRecordingVoice } = chatMessages;
   const listRef = useRef<FlatList<ChatListRow>>(null);
@@ -267,79 +236,26 @@ export function ChatConversation({
   // Строки на экране — для засчитанных показов: меряются снаружи списка по ключу.
   const [rowRegistry] = useState(createRowRegistry);
   const scrollState = useRef({ offset: 0, content: 0, viewport: 0, drivenAt: 0 });
-  const [awayFromBottom, setAwayFromBottom] = useState(false);
-  // Список скрывается на миг, пока его мгновенно ставят на цель перед
-  // иллюзией прокрутки вниз («к новым»).
-  const [glideHidden, setGlideHidden] = useState(false);
-  // Сдвиг списка для иллюзии быстрой прокрутки при дальнем прыжке: реальная
-  // прокрутка не нужна, поэтому пагинация и onScroll не дёргаются.
-  const jumpGlide = useSharedValue(0);
-  const jumpGlideStyle = useAnimatedStyle(() => ({ transform: [{ translateY: jumpGlide.value }] }));
-  const jump = useJumpToMessage(
-    listRef,
-    rows,
-    chatMessages.loadWindow,
-    initialWindowSeq === null,
-    jumpGlide,
-    () => scrollState.current.viewport,
-  );
-  const failed = (chatMessages.failed || chatFailed) && messages.length === 0 && !jump.transitioning;
-  const jumpSourceRows = useRef(rows);
-  const jumpSourceOffset = useRef(0);
-  const jumpSourceListRef = useRef<FlatList<ChatListRow>>(null);
-  useEffect(() => {
-    if (jump.transitioning) return;
-    jumpSourceRows.current = rows;
-    jumpSourceOffset.current = scrollState.current.offset;
-  }, [jump.transitioning, rows]);
-  const threadsMode = useChatThreadsMode({
-    chatId,
-    view: chatThreads.view,
-    setView: chatThreads.setView,
-    rows,
-    isLoading,
-    jump: jump.jump,
-    measureRow: rowRegistry.measure,
-    measureViewport: measureListFrame,
-    scrollOffset: useCallback(() => scrollState.current.offset, []),
-  });
-  // Переход к сообщению, которого в «Тредах» нет, — через обычный вид.
-  const jumpTo = threadsMode.jumpAnywhere;
+  const failed = (chatMessages.failed || chatFailed) && messages.length === 0;
   // Список другого вида начинается заново — у самого низа.
   useEffect(() => {
     scrollState.current.offset = 0;
   }, [chatThreads.view]);
   // Поиск по чату — со страницы чата: поле вместо шапки, плашка вместо поля ввода.
-  const chatSearch = useChatSearch(chatId, jumpTo);
+  const chatSearch = useChatSearch(chatId);
   const [searchListShown, setSearchListShown] = useState(false);
   const showSearchList = chatSearch.active && searchListShown;
-  const { close: closeSearch, select: selectSearchHit } = chatSearch;
+  const { close: closeSearch } = chatSearch;
   const leaveSearch = useCallback(() => {
     setSearchListShown(false);
     closeSearch();
   }, [closeSearch]);
-  const openSearchHit = useCallback(
-    (at: number) => {
-      setSearchListShown(false);
-      selectSearchHit(at);
-    },
-    [selectSearchHit],
-  );
   const menu = useMessageMenu<ChatListRow>(measureListFrame);
   const draft = useComposerDraft(chatId);
   const isMember = chat ? isChatMember(chat, currentUserId) : false;
   // Моя заявка на диалог ещё не принята: одно сообщение уже ушло, дальше ждать.
   const requestSent = Boolean(chat?.requestPending && chat.createdBy === currentUserId);
   const isFocused = useIsFocused() && active;
-  const wasFocusedRef = useRef(false);
-  useEffect(() => {
-    if (isFocused) {
-      wasFocusedRef.current = true;
-    } else if (wasFocusedRef.current) {
-      closeWindow();
-      wasFocusedRef.current = false;
-    }
-  }, [closeWindow, isFocused]);
   // Заявку спрашиваем только у не-участника: участнику отвечать уже не на что.
   const myInvite = useMyInvite(chatId, chat !== null && !isMember);
   const invite = useRespondToInvite();
@@ -350,32 +266,6 @@ export function ChatConversation({
     () => (chat?.waiting ?? []).filter((person) => person.id !== currentUserId),
     [chat, currentUserId],
   );
-  // Сначала открываем целевую композицию: окно сообщения уже загружается по
-  // адресу, а комментарии начинают читать цель и фокус одновременно.
-  const focusComment = useCallback(
-    (focus: CommentFocus) => {
-      prefetchCommentFocus(queryClient, focus.messageId, focus.commentId, focus.rootId);
-      openComments(
-        focus.messageId,
-        chatId,
-        isMember,
-        focus.commentId,
-        focus.rootId,
-        focus.requestId,
-      );
-      const { target } = focus;
-
-      if (target) void jumpTo(target.key, target.seq);
-    },
-    [chatId, isMember, jumpTo, queryClient],
-  );
-
-  const navigation = useQuoteNavigation(chatId, {
-    jump: jumpTo,
-    isHistoryReady: !isLoading && !isChatLoading,
-    isFocused,
-    focusComment,
-  });
   const call = useChatCall(chatId, chat, currentUserId, isMember);
 
   // Правки, удаления, реакции и комментарии оригиналов в островках приходят
@@ -529,21 +419,19 @@ export function ChatConversation({
   const { announce: announceThreadReply } = threadReplies;
   const sendInView = useCallback(
     (text: string, media?: OutgoingMedia[], replies?: LiveQuote[], hidden?: HiddenRange[]) => {
-      closeWindow();
       listRef.current?.scrollToOffset({ offset: 0, animated: false });
       const localId = sendToChat(text, media, replies, hidden);
       announceThreadReply(replies ?? [], { kind: media?.length ? 'media' : 'text', text, media }, localId);
     },
-    [announceThreadReply, closeWindow, sendToChat],
+    [announceThreadReply, sendToChat],
   );
   const sendVoiceInView = useCallback(
     (voice: LocalMedia, replies?: LiveQuote[]) => {
-      closeWindow();
       listRef.current?.scrollToOffset({ offset: 0, animated: false });
       const localId = sendVoiceToChat(voice, replies);
       announceThreadReply(replies ?? [], { kind: 'voice', text: '', durationMs: voice.durationMs }, localId);
     },
-    [announceThreadReply, closeWindow, sendVoiceToChat],
+    [announceThreadReply, sendVoiceToChat],
   );
 
   const replyForward = useReplyForward({
@@ -618,8 +506,6 @@ export function ChatConversation({
     comment: commentOn,
     forward: replyForward.startForward,
     edit: startEdit,
-    openOriginal: navigation.openOriginal,
-    openChat: navigation.openChat,
   });
 
   // Системный «назад» в правке выходит из правки, а не из чата.
@@ -664,47 +550,6 @@ export function ChatConversation({
 
   useSlidePageBack(isFocused && isSelecting, clearSelection);
 
-  const { openComment } = navigation;
-  const openForwardedComment = useCallback(
-    (comment: ForwardedComment) => {
-      // Комментарий к попу — в просмотре попа, с открытыми комментариями.
-      // Поп удалён — идти некуда.
-      if (comment.subject.type === 'pop') {
-        if (comment.pop) {
-          prefetchCommentFocus(
-            queryClient,
-            comment.subject.id,
-            comment.id,
-            comment.commentThreadRootId ?? undefined,
-          );
-          openPopViewer(comment.pop.channelId, comment.pop.id, {
-            focusCommentId: comment.id,
-            focusRootId: comment.commentThreadRootId ?? undefined,
-            requestId: nextJumpKey(),
-          });
-        }
-
-        return;
-      }
-
-      if (comment.commentThreadRootId) {
-        prefetchCommentThreadWindow(
-          queryClient,
-          comment.subject.id,
-          comment.commentThreadRootId,
-          comment,
-        );
-      }
-      openComment(comment.chatId, {
-        messageId: comment.subject.id,
-        commentId: comment.id,
-        rootId: comment.commentThreadRootId ?? undefined,
-        target: comment.target ? { key: comment.target.id, seq: comment.target.seq } : null,
-      });
-    },
-    [openComment, queryClient],
-  );
-
   const ownDirect = chat?.kind === 'direct' && isMember;
   const { bubbleFor, audienceFor, reactToComment } = useChatBubbles({
     chatId,
@@ -714,18 +559,15 @@ export function ChatConversation({
     mediaBounds,
     retry,
     openPerson,
-    navigation,
     reactions,
     // Участнику личного диалога собеседник известен — ни аватаров, ни имён.
     // Посторонний видит диалог как группу: у каждого облачка — кто это.
     showAvatars: !isPosts && !ownDirect,
     showAuthors: !ownDirect,
-    openForwardedComment,
     postAuthor: channel?.title ?? null,
   });
 
   const fragments = useFragmentMode({ isMember, isFocused, isSelecting });
-  useFragmentJump({ chatId, rows, jump: jumpTo, isFocused });
 
   // Кнопка комментария в меню фрагмента: боковая панель кластера или области.
   const commentOnFragment = useCallback(
@@ -740,7 +582,6 @@ export function ChatConversation({
     isSelected: selection.isSelected,
     toggleSelected: selection.toggle,
     editingId,
-    highlight: jump.highlight,
     bubbleFor,
     openMenu: menu.open,
     startReply,
@@ -750,7 +591,6 @@ export function ChatConversation({
     longPressAt: fragments.longPressAt,
     retry,
     hostName: authorName,
-    openChat: navigation.openChat,
   });
   // В «Тредах» под исходным сообщением — плашка его треда.
   const { renderItem, summaries: chatThreadSummaries } = useChatThreadPlates({
@@ -777,24 +617,10 @@ export function ChatConversation({
     measureViewport: measureListFrame,
   });
 
-  // Видимые строки — и учёту просмотров, и опорной строке переключения вида.
-  // FlatList не принимает смену обработчика на лету: оба стабильны.
-  const { onViewableItemsChanged: viewsOnViewable } = views;
-  const { trackViewable } = threadsMode;
-  const { onVisible: jumpOnVisible } = jump;
-  const { onMomentumScrollEnd: jumpOnMomentumEnd } = jump;
-  const { onListReady: jumpOnListReady } = jump;
-  const onViewableItemsChanged = useCallback(
-    (info: Parameters<typeof viewsOnViewable>[0]) => {
-      viewsOnViewable(info);
-      trackViewable(info);
-      jumpOnVisible(info.viewableItems.flatMap((token) => token.item ? [token.item.key] : []));
-    },
-    [jumpOnVisible, trackViewable, viewsOnViewable],
-  );
+  const { onViewableItemsChanged } = views;
   // Прокрутили переписку — прокрученные вбок ряды реакций возвращаются в начало.
   const { onScroll: viewsOnScroll } = views;
-  const { resumeLoadMore, resumeLoadNewer } = chatMessages;
+  const { resumeLoadMore } = chatMessages;
   const onListDragStart = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
       const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
@@ -802,13 +628,11 @@ export function ChatConversation({
       const toOldest = contentSize.height - layoutMeasurement.height - contentOffset.y;
 
       resumeLoadMore(toOldest < layoutMeasurement.height * HISTORY_EDGE);
-      resumeLoadNewer(contentOffset.y < layoutMeasurement.height * HISTORY_EDGE);
       // Выделение привязано к месту на экране: тронули прокрутку — снимается,
       // режим фрагментов остаётся.
       clearTextSelection();
-      clearQuoteHighlight();
     },
-    [resumeLoadMore, resumeLoadNewer],
+    [resumeLoadMore],
   );
 
   // Где сейчас прокрутка и сколько её всего — автопрокрутке выделения: она
@@ -821,56 +645,14 @@ export function ChatConversation({
     }
   }, []);
 
-  const onListMomentumScrollEnd = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    trackOffset(event);
-    jumpOnMomentumEnd();
-  }, [jumpOnMomentumEnd, trackOffset]);
-
   const onListScroll = useCallback(
     (event: Parameters<typeof viewsOnScroll>[0]) => {
       trackOffset(event);
-      setAwayFromBottom(
-        event.nativeEvent.contentOffset.y >
-          KEEP_READING_POSITION.autoscrollToTopThreshold,
-      );
-      const nearNewestEdge =
-        event.nativeEvent.contentOffset.y <= KEEP_READING_POSITION.autoscrollToTopThreshold &&
-        (chatMessages.windowSeq === null || !chatMessages.hasNewer);
-      if (!nearNewestEdge && event.nativeEvent.contentOffset.y > KEEP_READING_POSITION.autoscrollToTopThreshold) {
-        chatMessages.markAwayFromLatest();
-      } else if (nearNewestEdge) {
-        chatMessages.acknowledgeLatest();
-      }
       viewsOnScroll(event);
       resetScrolledRows();
     },
-    [chatMessages, trackOffset, viewsOnScroll],
+    [trackOffset, viewsOnScroll],
   );
-  const jumpDown = useCallback(() => {
-    const { offset, viewport } = scrollState.current;
-    const distant = chatMessages.windowSeq !== null || offset >= viewport * JUMP_DOWN_SCREENS;
-    if (distant) {
-      // Reanimated shared value starts on the tap, before React switches the window.
-      // eslint-disable-next-line react-hooks/immutability
-      jumpGlide.value = -GLIDE_SCREENS * Math.max(1, viewport);
-      jumpGlide.value = withTiming(0, { duration: GLIDE_MS, easing: GLIDE_EASING });
-    }
-    closeWindow();
-    setAwayFromBottom(false);
-
-    // Близко к низу — обычная плавная прокрутка. Далеко — иллюзия быстрого
-    // скролла вниз, без прохода через сотни сообщений и без пагинации.
-    if (!distant) {
-      listRef.current?.scrollToOffset({ offset: 0, animated: true });
-      return;
-    }
-
-    setGlideHidden(true);
-    requestAnimationFrame(() => {
-      listRef.current?.scrollToOffset({ offset: 0, animated: false });
-      setGlideHidden(false);
-    });
-  }, [chatMessages.windowSeq, closeWindow, jumpGlide]);
 
   useEffect(() => {
     if (!isFocused) return;
@@ -977,21 +759,6 @@ export function ChatConversation({
     [menuRow, runIslandAction, runMessageAction],
   );
 
-  const { advance: advancePin } = pinCursor;
-
-  const openPinned = useCallback(
-    (pin: { messageId: string; forwardId: string | null; messageSeq: number }) => {
-      advancePin();
-      // Закреп облачка островка — к его строке в островке.
-      const key = pin.forwardId ? islandItemKey(pin.forwardId, pin.messageId) : pin.messageId;
-
-      void jumpTo(key, pin.messageSeq).then((found) => {
-        if (!found) showNotice('Не удалось найти сообщение', 'error');
-      });
-    },
-    [advancePin, jumpTo],
-  );
-
   // Шторка треда — те же облачка, меню и отправка, что в переписке.
   const { discard, deleteMessages, removeFromIsland, saveEdit } = chatMessages;
   const chatThreadKit = useMemo(
@@ -1004,13 +771,11 @@ export function ChatConversation({
       peopleById,
       showAvatars: !isPosts && !ownDirect,
       showAuthors: !ownDirect,
-      navigation,
-      reactions,
+        reactions,
       pins,
       authorName,
       originalOf,
       openPerson,
-      openForwardedComment,
       send: sendToChat,
       sendVoice: sendVoiceToChat,
       retry,
@@ -1020,7 +785,6 @@ export function ChatConversation({
       removeFromIsland,
       notifyTyping,
       notifyRecordingVoice,
-      showInChat: threadsMode.showInChat,
     }),
     [
       authorName,
@@ -1031,10 +795,8 @@ export function ChatConversation({
       isMember,
       isPosts,
       me,
-      navigation,
-      notifyRecordingVoice,
+        notifyRecordingVoice,
       notifyTyping,
-      openForwardedComment,
       openPerson,
       originalOf,
       ownDirect,
@@ -1047,7 +809,6 @@ export function ChatConversation({
       sendToChat,
       sendVoiceToChat,
       thisChat,
-      threadsMode.showInChat,
     ],
   );
 
@@ -1121,9 +882,7 @@ export function ChatConversation({
     <View
       ref={containerRef}
       onLayout={measureBottomOffset}
-      // Подсветка куска после перехода по цитате держится до первого касания.
-      // Касание само по себе делает своё: это не перехват ответчика.
-      onTouchStart={clearQuoteHighlight}
+
       style={[styles.flex, { backgroundColor: theme.background }]}
     >
       <ChatScreenHeader
@@ -1160,7 +919,7 @@ export function ChatConversation({
           ) : isMember ? (
             <View style={styles.headerActions}>
               {chatThreads.available ? (
-                <ChatThreadsToggle active={threadsActive} onPress={threadsMode.toggle} />
+                <ChatThreadsToggle active={threadsActive} onPress={() => chatThreads.setView(threadsActive ? 'all' : 'chat-threads')} />
               ) : null}
               {/* В заявку не звонят — это решает и база. */}
               {chat?.requestPending ? null : (
@@ -1175,7 +934,7 @@ export function ChatConversation({
           ) : chat && !gone ? (
             <View style={styles.headerActions}>
               {chatThreads.available ? (
-                <ChatThreadsToggle active={threadsActive} onPress={threadsMode.toggle} />
+                <ChatThreadsToggle active={threadsActive} onPress={() => chatThreads.setView(threadsActive ? 'all' : 'chat-threads')} />
               ) : null}
               <ChatMenu chatId={chatId} isMember={false} subscription={subscription} />
             </View>
@@ -1194,7 +953,7 @@ export function ChatConversation({
           onPress={call.openBar}
         />
 
-        <PinnedBar pins={pins.pins} index={pinCursor.index} onPress={openPinned} />
+        <PinnedBar pins={pins.pins} index={pinCursor.index} onPress={pinCursor.advance} />
 
         {requestSent ? null : <WaitingBanner waiting={waitingForOthers} />}
 
@@ -1204,45 +963,17 @@ export function ChatConversation({
           </View>
         ) : failed ? (
           <LoadFailed message="Не удалось загрузить переписку" onRetry={reload} />
-        ) : (isChatLoading || isLoading) && messages.length === 0 && !jump.transitioning ? (
+        ) : (isChatLoading || isLoading) && messages.length === 0 ? (
           <View style={styles.centered}>
-            {initialWindowSeq !== null ? (
-              <View style={{ width: '70%', height: 90, borderRadius: 24, backgroundColor: theme.backgroundElement, alignItems: 'center', justifyContent: 'center' }}>
-                <ActivityIndicator accessibilityLabel="Загрузка сообщения" />
-              </View>
-            ) : (
-              <ActivityIndicator accessibilityLabel="Загрузка переписки" />
-            )}
+            <ActivityIndicator accessibilityLabel="Загрузка переписки" />
           </View>
         ) : (
           <Animated.View ref={listFrameRef} style={styles.flex}>
             <RowRegistryContext.Provider value={rowRegistry}>
               <TileViewportContext.Provider value={measureListFrame}>
-                {jump.transitioning && !jump.positioned ? (
-                  <RowRegistryContext.Provider value={null}>
-                  <FlatList
-                    pointerEvents="none"
-                    importantForAccessibility="no-hide-descendants"
-                    accessibilityElementsHidden
-                    showsVerticalScrollIndicator={false}
-                    showsHorizontalScrollIndicator={false}
-                    style={{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0 }}
-                    inverted
-                    data={jumpSourceRows.current}
-                    keyExtractor={rowKey}
-                    renderItem={renderItem}
-                    onContentSizeChange={() => {
-                      // The source stays fixed underneath the incoming window.
-                      jumpSourceListRef.current?.scrollToOffset({ offset: jumpSourceOffset.current, animated: false });
-                    }}
-                    ref={jumpSourceListRef}
-                  />
-                  </RowRegistryContext.Provider>
-                ) : null}
-                <Animated.View style={[styles.flex, jumpGlideStyle, { overflow: 'hidden' }]}>
-                  <FlatList
+                <FlatList
                   // Другой вид — другая лента: список начинается заново, а не
-                  // со смещения прежней (место держит прыжок переключения).
+                  // со смещения прежней.
                   key={chatThreads.view}
                   showsVerticalScrollIndicator={false}
                   showsHorizontalScrollIndicator={false}
@@ -1250,8 +981,6 @@ export function ChatConversation({
                   testID="messages-list"
                   inverted
                   data={rows}
-                  style={!jump.positioned || glideHidden ? { opacity: 0 } : undefined}
-                  onScrollToIndexFailed={jump.onScrollToIndexFailed}
                   keyExtractor={rowKey}
                   renderItem={renderItem}
                   // Плашки тредов приходят после строк: видимые ячейки перерисовываются.
@@ -1261,66 +990,36 @@ export function ChatConversation({
                   onScroll={onListScroll}
                   onScrollBeginDrag={onListDragStart}
                   onScrollEndDrag={trackOffset}
-                  onMomentumScrollEnd={onListMomentumScrollEnd}
+                  onMomentumScrollEnd={trackOffset}
                   onContentSizeChange={(_width, height) => {
                     scrollState.current.content = height;
-                    jumpOnListReady();
                   }}
                   onLayout={(event) => {
                     scrollState.current.viewport = event.nativeEvent.layout.height;
                   }}
                   scrollEventThrottle={VIEWS_SCROLL_THROTTLE_MS}
-                  contentContainerStyle={[
-                    styles.list,
-                    !hasMore && { paddingBottom: windowHeight / 2 },
-                  ]}
+                  contentContainerStyle={styles.list}
                   // The list is inverted, so its "end" is the top of the screen:
                   // scrolling up pages further back through the history.
                   // Облачко ниже экрана выросло или сжалось (правка, подгрузка
                   // картинки) — то, что человек читает выше, остаётся на месте.
                   // У самого низа переписки список по-прежнему едет за новым.
                   maintainVisibleContentPosition={KEEP_READING_POSITION}
-                  onEndReached={jump.positioned && hasMore ? loadMore : undefined}
+                  onEndReached={hasMore ? loadMore : undefined}
                   onEndReachedThreshold={HISTORY_EDGE}
-                  onStartReached={jump.positioned && chatMessages.hasNewer ? chatMessages.loadNewer : undefined}
-                  onStartReachedThreshold={HISTORY_EDGE}
                   // Тап по облачку при открытой клавиатуре сразу открывает меню, а
                   // не только прячет клавиатуру; тап по пустому месту — прячет.
                   keyboardShouldPersistTaps="handled"
                   ListFooterComponent={
                     isLoadingMore ? <ActivityIndicator accessibilityLabel="Загрузка истории" /> : null
                   }
-                  />
-                </Animated.View>
-                {jump.loading ? (
-                  <View pointerEvents="none" style={{ position: 'absolute', top: 8, alignSelf: 'center' }}>
-                    <ActivityIndicator accessibilityLabel="Загрузка сообщения" />
-                  </View>
-                ) : null}
-                {!jump.positioned && initialWindowSeq !== null ? (
-                  <View pointerEvents="none" style={{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, alignItems: 'center', justifyContent: 'center' }}>
-                    <View style={{ width: '70%', height: 90, borderRadius: 24, backgroundColor: theme.backgroundElement, alignItems: 'center', justifyContent: 'center' }}>
-                      <ActivityIndicator accessibilityLabel="Загрузка сообщения" />
-                    </View>
-                  </View>
-                ) : null}
+                />
               </TileViewportContext.Provider>
             </RowRegistryContext.Provider>
-            {((chatMessages.windowSeq !== null && chatMessages.hasNewer) || awayFromBottom) && !showSearchList ? (
-              <Animated.View entering={FadeIn.duration(160)} exiting={FadeOut.duration(120)}>
-                <FloatingButton
-                  testID="chat-jump-down"
-                  icon={{ ios: 'arrow.down', android: 'arrow_downward' }}
-                  accessibilityLabel="К новым сообщениям"
-                  badge={chatMessages.newMessagesCount}
-                  onPress={jumpDown}
-                />
-              </Animated.View>
-            ) : null}
           </Animated.View>
         )}
 
-        {showSearchList ? <ChatSearchResults search={chatSearch} onSelect={openSearchHit} /> : null}
+        {showSearchList ? <ChatSearchResults search={chatSearch} /> : null}
 
         {!gone && !failed && !isChatLoading && !isLoading && messages.length === 0 ? (
           <View style={styles.centered}>

@@ -2,8 +2,7 @@
 // пересылки раскладывается на строки: плашка-заголовок и по строке на каждое
 // облачко. Так островок из сотни облачков с альбомами не становится одной
 // гигантской строкой: список по-прежнему виртуализирует облачка по одному,
-// прыжок к сообщению внутри островка — это прыжок к его строке, а подсветка и
-// выбор работают с облачком, как с обычным сообщением.
+// выбор работает с облачком, как с обычным сообщением.
 
 import type { IslandItem } from '@/api/chats';
 import type { ChatMessage } from '@/features/chats/messages/types';
@@ -127,7 +126,7 @@ export function originalAsMessage(original: NonNullable<IslandItem['original']>)
   return message;
 }
 
-/** Островок, где стоит облачко, — для ответа, закрепа и прыжка. У обычного сообщения — `null`. */
+/** Островок, где стоит облачко, — для ответа и закрепа. У обычного сообщения — `null`. */
 export function anchorOf(row: BubbleRow): { id: string; seq: number } | null {
   return row.type === 'island-item' ? { id: row.island.id, seq: row.island.seq } : null;
 }

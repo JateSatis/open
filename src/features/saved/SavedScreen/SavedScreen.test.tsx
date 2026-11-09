@@ -6,7 +6,6 @@ import { SavedScreen } from './index';
 import type { ChatSummary } from '@/api/chats';
 import {
   fetchSourceChats,
-  getSavedSource,
   listSavedMessages,
   listSavedTags,
   type SavedMessage,
@@ -41,17 +40,14 @@ jest.mock('@/api/saved', () => ({
   listSavedMessages: jest.fn(),
   fetchSourceChats: jest.fn(),
   listSavedTags: jest.fn(),
-  getSavedSource: jest.fn(),
   getSavedSummary: jest.fn(() => Promise.resolve({ watchLaterPending: 0 })),
   listSavedPins: jest.fn(() => Promise.resolve([])),
-  listSavedAround: jest.fn(),
   listWatchLater: jest.fn(() => Promise.resolve({ items: [], nextCursor: null })),
 }));
 
 const mockedList = listSavedMessages as jest.MockedFunction<typeof listSavedMessages>;
 const mockedChats = fetchSourceChats as jest.MockedFunction<typeof fetchSourceChats>;
 const mockedTags = listSavedTags as jest.MockedFunction<typeof listSavedTags>;
-const mockedSource = getSavedSource as jest.MockedFunction<typeof getSavedSource>;
 
 function chat(id: string, title: string, channel = false): ChatSummary {
   return {
@@ -89,9 +85,6 @@ function saved(id: string, overrides: Partial<SavedMessage> = {}): SavedMessage 
     sourceChatId: 'chat-g',
     sourceMessageId: `msg-${id}`,
     sourceCommentId: null,
-    sourceSeq: 42,
-    commentMessageId: null,
-    commentPopId: null,
     kind: 'text',
     text: `текст ${id}`,
     authorId: 'user-anna',
@@ -129,7 +122,7 @@ beforeEach(() => {
 
 describe('SavedScreen', () => {
   it('explains how to save when nothing is saved yet', async () => {
-    mockedList.mockResolvedValue({ items: [], nextCursor: null, prevCursor: null });
+    mockedList.mockResolvedValue({ items: [], nextCursor: null });
 
     await renderWithQuery(<SavedScreen />);
 
@@ -149,7 +142,6 @@ describe('SavedScreen', () => {
         saved('c', { sourceChatId: null }),
       ],
       nextCursor: null,
-      prevCursor: null,
     });
 
     await renderWithQuery(<SavedScreen />);
@@ -176,7 +168,6 @@ describe('SavedScreen', () => {
         saved('b', { originalAt: null }),
       ],
       nextCursor: null,
-      prevCursor: null,
     });
 
     await renderWithQuery(<SavedScreen />);
@@ -195,74 +186,16 @@ describe('SavedScreen', () => {
     expect(screen.queryByTestId('comments-slot')).toBeNull();
   });
 
-  it('opens the original scrolled to it, and only says so when it is gone', async () => {
-    mockedList.mockResolvedValue({ items: [saved('a')], nextCursor: null, prevCursor: null });
-    mockedSource.mockResolvedValueOnce({
-      state: 'live',
-      chatId: 'chat-g',
-      channelId: null,
-      messageId: 'msg-a',
-      seq: 42,
-      commentId: null,
-      popId: null,
-      popChannelId: null,
-    });
-
-    await renderWithQuery(<SavedScreen />);
-    await fireEvent.press(await screen.findByTestId('saved-source'));
-
-    await waitFor(() =>
-      expect(mockPush).toHaveBeenCalledWith({
-        pathname: '/chats/[chatId]',
-        params: expect.objectContaining({ chatId: 'chat-g', jumpTo: 'msg-a', jumpSeq: '42' }),
-      }),
-    );
-
-    mockedSource.mockResolvedValueOnce({
-      state: 'original_gone',
-      chatId: 'chat-g',
-      channelId: null,
-    });
-    await fireEvent.press(screen.getByTestId('saved-source'));
-
-    await waitFor(() =>
-      expect(mockPush).toHaveBeenLastCalledWith({
-        pathname: '/chats/[chatId]',
-        params: { chatId: 'chat-g' },
-      }),
-    );
-    expect(useInAppAlert.getState().alert).toMatchObject({ text: 'Оригинал удалён' });
-  });
-
-  it('opens the comments sheet on a saved comment', async () => {
+  it.each(['message', 'comment', 'pop-comment'] as const)('does not open the source for a saved %s', async (kind) => {
     mockedList.mockResolvedValue({
-      items: [saved('a', { sourceType: 'comment', sourceCommentId: 'com-1' })],
+      items: [saved('a', { sourceType: kind === 'message' ? 'message' : 'comment', sourceCommentId: kind !== 'message' ? 'com-1' : null })],
       nextCursor: null,
-      prevCursor: null,
     });
-    mockedSource.mockResolvedValueOnce({
-      state: 'live',
-      chatId: 'chat-g',
-      channelId: null,
-      messageId: 'msg-under',
-      seq: 7,
-      commentId: 'com-1',
-      popId: null,
-      popChannelId: null,
-    });
-
     await renderWithQuery(<SavedScreen />);
-    await fireEvent.press(await screen.findByTestId('saved-source'));
-
-    await waitFor(() =>
-      expect(mockPush).toHaveBeenCalledWith({
-        pathname: '/chats/[chatId]',
-        params: expect.objectContaining({
-          comments: 'msg-under',
-          comment: 'com-1',
-          jumpTo: 'msg-under',
-        }),
-      }),
-    );
+    const source = await screen.findByTestId('saved-source');
+    expect(source.props.accessibilityRole).toBe('text');
+    expect(source.props.onPress).toBeUndefined();
+    await fireEvent.press(source);
+    expect(mockPush).not.toHaveBeenCalled();
   });
 });

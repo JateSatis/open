@@ -11,8 +11,6 @@ export type IslandHeaderProps = {
   sourceName: string | null;
   /** Островок ещё едет на сервер или упал. */
   status: DeliveryStatus;
-  /** Тап по плашке — чат, откуда пересылали. */
-  onPress?: () => void;
   onRetry?: () => void;
 };
 
@@ -21,17 +19,15 @@ export type IslandHeaderProps = {
  * заметная — островок сам по себе не сообщение, и эта строка объясняет, что
  * облачки под ней живут в другом месте.
  */
-export function IslandHeader({ sourceName, status, onPress, onRetry }: IslandHeaderProps) {
+export function IslandHeader({ sourceName, status, onRetry }: IslandHeaderProps) {
   const theme = useTheme();
   const name = sourceName ?? 'удалённый чат';
 
   return (
     <View testID="island-header" style={styles.header}>
       <Pressable
-        accessibilityRole={onPress ? 'button' : undefined}
         accessibilityLabel={`Переслано из чата «${name}»`}
-        disabled={!onPress}
-        onPress={onPress}
+        disabled
         style={[styles.plate, { backgroundColor: theme.islandPlate }]}
       >
         <Text variant="smallBold" numberOfLines={1} style={{ color: theme.primary }}>

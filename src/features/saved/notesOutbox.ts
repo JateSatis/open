@@ -87,17 +87,15 @@ function toOutgoing(payload: NotePayload): Outgoing {
 }
 
 /**
- * Заметка — в первую страницу списка, если она сейчас — самые новые. Окно
- * вокруг закрепа её не ждёт: она придёт догрузкой вниз.
+ * Заметка — в первую страницу списка с самыми новыми записями.
  */
 function putNewest(queryClient: QueryClient, key: string | null, saved: SavedItem) {
   queryClient.setQueryData<InfiniteData<SavedPage, unknown>>(savedMessagesKey(key), (data) => {
     if (!data || data.pages.length === 0) return data;
 
     const [first, ...rest] = data.pages;
-    const newest = data.pages[0].prevCursor === null;
 
-    if (!newest || data.pages.some((page) => page.items.some((item) => item.id === saved.id))) {
+    if (data.pages.some((page) => page.items.some((item) => item.id === saved.id))) {
       return data;
     }
 
@@ -269,9 +267,6 @@ function draftOf(
     sourceChatId: null,
     sourceMessageId: null,
     sourceCommentId: null,
-    sourceSeq: null,
-    commentMessageId: null,
-    commentPopId: null,
     kind: voice ? 'voice' : attachments.length > 0 ? 'media' : 'text',
     text: payload.type === 'post' ? payload.text || null : null,
     authorId: author.id,

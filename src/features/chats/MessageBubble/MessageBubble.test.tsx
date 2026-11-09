@@ -729,7 +729,8 @@ describe('MessageBubble', () => {
     expect(within(cover).getByText('Pop')).toBeTruthy();
     expect(within(cover).getByText('0:06')).toBeTruthy();
     expect(screen.getByText('привет')).toBeTruthy();
-    // Просмотр попа — следующий этап: обложка не кнопка «открыть видео».
+    expect(cover).toBeDisabled();
+    // Обложка остаётся видимой без перехода в просмотр.
     expect(screen.queryByLabelText('Открыть видео')).toBeNull();
   });
 });

@@ -1,18 +1,6 @@
 import { initialSectionOf, sectionRequestOf, sectionRequestParams } from './sectionRequest';
 
 describe('sectionRequestOf', () => {
-  it('asks for «Посты» on a jump to a post, whatever the section says', () => {
-    expect(
-      sectionRequestOf({
-        section: 'pops',
-        sectionKey: '1',
-        jumpTo: 'm',
-        jumpSeq: 't',
-        jumpKey: '9',
-      }),
-    ).toEqual({ section: 'posts', key: '9' });
-  });
-
   it('asks for «Посты» on a search over posts', () => {
     expect(sectionRequestOf({ search: '1', searchKey: '5' })).toEqual({
       section: 'posts',

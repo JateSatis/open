@@ -25,7 +25,6 @@ export type CommentRowViewProps = {
   selectionMode: boolean;
   selected: boolean;
   editing: boolean;
-  highlightKey: number | null;
   onOpenMenu: (comment: CommentItem, anchor: MenuAnchor) => void;
   onToggle: (comment: CommentItem) => void;
   /** Свайп влево — ответить. Нет — у удалённого сообщения ответов не принимают. */
@@ -89,7 +88,6 @@ export const CommentRowView = memo(function CommentRowView({
   selectionMode,
   selected,
   editing,
-  highlightKey,
   onOpenMenu,
   onToggle,
   onSwipeReply,
@@ -129,7 +127,6 @@ export const CommentRowView = memo(function CommentRowView({
         selectable={selectable}
         selected={selected}
         editing={editing}
-        highlightKey={highlightKey}
         messageId={comment.id}
         onOpenMenu={(anchor) => onOpenMenu(comment, anchor)}
         onToggle={() => onToggle(comment)}

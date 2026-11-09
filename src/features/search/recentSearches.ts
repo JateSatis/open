@@ -156,7 +156,7 @@ function isRecent(value: unknown): value is RecentSearch {
 }
 
 const chats = createRecentList<RecentSearch>({
-  // v2: у сообщения есть номер `seq` — по нему прыжок; снимки v1 без него.
+  // Сохраняем формат v2 для уже записанной истории поиска.
   prefix: 'search.recent.v2:',
   keyOf: recentKey,
   isItem: isRecent,

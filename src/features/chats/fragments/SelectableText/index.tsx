@@ -8,7 +8,6 @@ import type { TextGeometry } from '../../../../../modules/text-geometry';
 
 import {
   useFragmentModeActive,
-  useRowQuoteHighlight,
   useRowSelection,
   type TextSelection,
 } from '@/features/chats/fragments/fragmentStore';
@@ -61,9 +60,6 @@ export function SelectableText({
   const theme = useTheme();
   const ref = useRef<RNText>(null);
   const selection = useRowSelection(rowKey);
-  const quote = useRowQuoteHighlight(rowKey);
-  // Текст сменился правкой — прежняя геометрия к нему не подходит.
-  const shownQuote = quote && quote.text === text ? quote : null;
   const fragmentMode = useFragmentModeActive(rowKey);
 
   useEffect(() => {
@@ -82,15 +78,6 @@ export function SelectableText({
 
   const content = (
     <>
-      {shownQuote ? (
-        <RangeFill
-          testID="quote-highlight"
-          geometry={shownQuote.geometry}
-          start={shownQuote.start}
-          end={shownQuote.end}
-          color={isOwn ? theme.fragmentHighlightOnPrimary : theme.fragmentHighlight}
-        />
-      ) : null}
       {selection ? <SelectionLayer selection={selection} isOwn={isOwn} part="fill" /> : null}
       {/* Свой `Text` ref не отдаёт — а мерить нужно сам нативный текст. */}
       <RNText

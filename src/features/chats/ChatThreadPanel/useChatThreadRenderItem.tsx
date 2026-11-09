@@ -6,7 +6,6 @@ import { styles } from './styles';
 import type { useChatThreadActions } from './useChatThreadActions';
 import { ChatThreadActionRow } from './ChatThreadActionRow';
 
-import type { QuotedMessage } from '@/api/chats';
 import type {
   ChatThreadPaneRow,
   useChatThreadPane,
@@ -16,7 +15,6 @@ import { mosaicBounds } from '@/features/chats/lib/mosaicLayout';
 import { bubbleAsideWidth } from '@/features/chats/MessageBubble/layout';
 import { useChatBubbles } from '@/features/chats/useChatBubbles';
 import { useChatRowRenderer } from '@/features/chats/useChatRowRenderer';
-import type { JumpHighlight } from '@/features/chats/useJumpToMessage';
 import { useTheme } from '@/hooks/use-theme';
 import { Spacing } from '@/theme';
 
@@ -26,19 +24,15 @@ type Options = {
   actions: ReturnType<typeof useChatThreadActions>;
   /** Ширина шторки — по ней мозаика медиа. */
   width: number;
-  highlight: JumpHighlight | null;
-  /** Тап по цитате — к сообщению внутри шторки, а не в переписке. */
-  jumpInPane: (messageId: string, seq: number) => Promise<void>;
 };
 
 /**
  * Строки шторки — те же облачки, меню, выбор и свайп ответа, что в
  * переписке; корень — на фоне островка, плюс разрыв и загрузка треда.
  */
-export function useChatThreadRenderItem({ kit, pane, actions, width, highlight, jumpInPane }: Options) {
+export function useChatThreadRenderItem({ kit, pane, actions, width }: Options) {
   const theme = useTheme();
   const { chatId } = kit;
-  const { navigation } = kit;
   const { selection, menu, edit } = actions;
   const people = useMemo(() => {
     const result = new Map(kit.peopleById);
@@ -51,22 +45,6 @@ export function useChatThreadRenderItem({ kit, pane, actions, width, highlight, 
 
     return result;
   }, [kit.peopleById, pane.bubbleRows]);
-  const paneNavigation = useMemo(
-    () => ({
-      ...navigation,
-      openQuote: (quote: QuotedMessage) => {
-        if (quote.state !== 'live') return;
-        if (pane.bubbleRows.some((row) => row.key === quote.messageId) || !quote.via) {
-          void jumpInPane(quote.messageId, quote.seq);
-        } else {
-          // Корень может цитировать оригинал островка: в ответах его нет.
-          actions.close();
-          navigation.openQuote(quote);
-        }
-      },
-    }),
-    [actions, jumpInPane, navigation, pane.bubbleRows],
-  );
   const mediaBounds = useMemo(
     () => mosaicBounds(width - Spacing.three * 2, false, bubbleAsideWidth(kit.showAvatars)),
     [kit.showAvatars, width],
@@ -79,11 +57,9 @@ export function useChatThreadRenderItem({ kit, pane, actions, width, highlight, 
     mediaBounds,
     retry: kit.retry,
     openPerson: kit.openPerson,
-    navigation: paneNavigation,
     reactions: kit.reactions,
     showAvatars: kit.showAvatars,
     showAuthors: kit.showAuthors,
-    openForwardedComment: kit.openForwardedComment,
   });
   const { renderItem: renderRow } = useChatRowRenderer({
     currentUserId: kit.currentUserId,
@@ -92,13 +68,11 @@ export function useChatThreadRenderItem({ kit, pane, actions, width, highlight, 
     isSelected: selection.isSelected,
     toggleSelected: selection.toggle,
     editingId: edit.mode?.message.id ?? null,
-    highlight,
     bubbleFor,
     openMenu: menu.open,
     startReply: actions.startReply,
     retry: kit.retry,
     hostName: (id) => (id ? people.get(id)?.displayName : null) ?? kit.authorName(id),
-    openChat: navigation.openChat,
   });
 
   const renderItem = useCallback(

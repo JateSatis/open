@@ -43,12 +43,6 @@ type Options = {
   forward: (rows: BubbleRow[]) => void;
   /** Изменить: поле ввода переходит в режим правки этого сообщения. */
   edit: (message: ChatMessage) => void;
-  /** Оригинал облачка островка — в его чате. */
-  openOriginal: (message: ChatMessage) => void;
-  /** Чат, откуда переслан островок. */
-  openChat: (chatId: string) => void;
-  /** «Показать в чате» из шторки треда: к сообщению в обычной переписке. */
-  showInChat?: (row: BubbleRow) => void;
 };
 
 export type MessageActionHandlers = {
@@ -84,9 +78,6 @@ export function useMessageActionHandlers({
   comment,
   forward,
   edit,
-  openOriginal,
-  openChat,
-  showInChat,
 }: Options): MessageActionHandlers {
   /**
    * Удаляет у всех: свои сообщения — функцией удаления, облачка своих
@@ -170,12 +161,6 @@ export function useMessageActionHandlers({
         case 'select':
           selection.start(row.key);
           return;
-        case 'open_original':
-          if (message) openOriginal(message);
-          return;
-        case 'show_in_chat':
-          showInChat?.(row);
-          return;
         case 'pin':
           if (!message) return;
 
@@ -209,13 +194,11 @@ export function useMessageActionHandlers({
       discard,
       edit,
       forward,
-      openOriginal,
       pins,
       removeForEveryone,
       reply,
       retry,
       selection,
-      showInChat,
     ],
   );
 
@@ -253,9 +236,6 @@ export function useMessageActionHandlers({
   const runIslandAction = useCallback(
     (id: IslandActionId, island: ChatMessage) => {
       switch (id) {
-        case 'open_source':
-          if (island.forward?.sourceChat) openChat(island.forward.sourceChat.id);
-          return;
         case 'retry':
           if (island.localId) retry(island.localId);
           return;
@@ -289,7 +269,7 @@ export function useMessageActionHandlers({
           return;
       }
     },
-    [currentUserId, deleteMessages, discard, openChat, retry, selection],
+    [currentUserId, deleteMessages, discard, retry, selection],
   );
 
   return { runMessageAction, runSelectionAction, runIslandAction };

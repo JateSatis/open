@@ -130,34 +130,6 @@ export async function pullNewMessages(
   return incoming;
 }
 
-/** Reconcile cached detached windows after reconnect without replacing their pages. */
-export async function refreshDetachedMessageWindows(
-  queryClient: QueryClient,
-  chatId: string,
-): Promise<void> {
-  const windows = queryClient.getQueriesData<ChatHistory>({ queryKey: ['message-window', chatId] });
-  const histories = windows.flatMap(([, history]) => history ? [history] : []);
-  if (histories.length === 0) return;
-
-  const ids = [...new Set(histories.flatMap((history) => [
-    ...history.items.map((message) => message.id),
-    ...quotedIds(history),
-    ...originalIds(history.items),
-  ]))].slice(0, MAX_TOMBSTONE_IDS);
-  const islands = [...new Set(histories.flatMap((history) =>
-    history.items.filter((message) => message.kind === 'forward').map((message) => message.id),
-  ))];
-
-  await Promise.all([
-    dropDeletedMessages(queryClient, ids),
-    refreshEditedMessages(queryClient, ids),
-    refreshReactions(queryClient, ids),
-    refreshCommentCounts(queryClient, ids),
-    refreshViews(queryClient, ids),
-    ...islands.map((id) => refreshIsland(queryClient, chatId, id)),
-  ].map((request) => request.catch(() => undefined)));
-}
-
 /**
  * Загрузка истории для кеша запросов. Первый раз — первая страница. Потом —
  * дочитывание, а не перезагрузка: пришедшее после самого свежего и сверка,

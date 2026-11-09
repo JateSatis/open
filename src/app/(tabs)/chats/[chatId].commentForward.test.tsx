@@ -1,11 +1,11 @@
 import type { Session as SupabaseSession } from '@supabase/supabase-js';
-import { fireEvent, screen, waitFor } from '@testing-library/react-native';
+import { fireEvent, screen } from '@testing-library/react-native';
 import { BackHandler, FlatList } from 'react-native';
 
 import ChatScreen from './[chatId]';
 
 import type { ChatSummary, ForwardedComment, Message } from '@/api/chats';
-import { getChat, listDeletedMessageIds, listMessages, listMessagesAround, subscribeToChat } from '@/api/chats';
+import { getChat, listDeletedMessageIds, listMessages, subscribeToChat } from '@/api/chats';
 import { getCommentTarget, listCommentThreadRoots, subscribeToComments } from '@/api/comments';
 import { listPinnedMessages } from '@/api/pins';
 import { NO_REACTIONS } from '@/api/reactionCounts';
@@ -14,7 +14,6 @@ import { resetComposerDrafts } from '@/features/chats/composerDraftStore';
 import { resetOutbox } from '@/features/chats/messages/outbox';
 import { reportRealtimeJoined, resetConnectionState } from '@/features/connection/connectionStore';
 import { closeComments } from '@/features/interactions/comments/commentsPanelStore';
-import { showNotice } from '@/features/notifications/alertsStore';
 import { openPopViewer } from '@/features/pops/openPopViewer';
 import { renderWithQuery } from '@/test/renderWithQuery';
 
@@ -38,9 +37,6 @@ jest.mock('expo-router', () => ({
 }));
 
 jest.mock('@/features/pops/openPopViewer', () => ({ openPopViewer: jest.fn() }));
-jest.mock('@/features/interactions/comments/prefetchCommentFocus', () => ({
-  prefetchCommentFocus: jest.fn(),
-}));
 jest.mock('@/api/profile', () => ({
   getProfile: jest.fn(() => Promise.resolve(null)),
   getMyProfile: jest.fn(() => Promise.resolve({ id: 'user-3', displayName: 'Пётр', avatarUrl: null })),
@@ -50,8 +46,6 @@ jest.mock('@/api/streams');
 jest.mock('@/api/chats', () => ({
   getChat: jest.fn(),
   listMessages: jest.fn(),
-  listMessagesAround: jest.fn(),
-  listMessagesAfter: jest.fn(),
   listMessagesSince: jest.fn(() => Promise.resolve([])),
   markChatRead: jest.fn(() => Promise.resolve()),
   sendMessage: jest.fn(),
@@ -240,8 +234,7 @@ function withForward(comment: ForwardedComment): Message[] {
 }
 
 const mockedListMessages = listMessages as jest.MockedFunction<typeof listMessages>;
-const mockedAround = listMessagesAround as jest.MockedFunction<typeof listMessagesAround>;
-const mockedShowNotice = showNotice as jest.MockedFunction<typeof showNotice>;
+
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -259,10 +252,6 @@ beforeEach(() => {
   });
   (getChat as jest.Mock).mockResolvedValue(chat);
   mockedListMessages.mockResolvedValue({ items: withForward(forwarded('chat-2', 'm9')), nextCursor: null });
-  mockedAround.mockResolvedValue({
-    older: { items: [message('m1', 1)], nextCursor: null },
-    newer: [message('m2', 2), message('f1', 5)],
-  });
   (listPinnedMessages as jest.Mock).mockResolvedValue([]);
   (listDeletedMessageIds as jest.Mock).mockResolvedValue([]);
   (subscribeToChat as jest.Mock).mockReturnValue({ broadcastTyping: jest.fn(), unsubscribe: jest.fn() });
@@ -284,135 +273,23 @@ async function renderChat() {
   await screen.findByText('текст m2');
 }
 
-describe('tapping a forwarded comment', () => {
-  it('opens the source chat with its sheet and a jump to the commented message', async () => {
-    await renderChat();
-
-    await fireEvent.press(screen.getByText('Комментарий из «Другой»'));
-
-    expect(mockPush).toHaveBeenCalledWith({
-      pathname: '/chats/[chatId]',
-      params: {
-        chatId: 'chat-2',
-        comments: 'm9',
-        comment: 'c1',
-        jumpTo: 'm9',
-        jumpSeq: String(Date.parse('2026-09-30T10:01:00Z')),
-        jumpKey: expect.any(String),
-      },
-    });
-  });
-
-  it('returns to the source chat already open below — no second copy', async () => {
-    mockStack = {
-      index: 1,
-      routes: [
-        { name: '[chatId]', key: 'chat-b', params: { chatId: 'chat-2', jumpTo: 'old' } },
-        { name: '[chatId]', key: 'chat-a', params: { chatId: 'chat-1' } },
-      ],
-    };
-
-    await renderChat();
-    await fireEvent.press(screen.getByText('исходное сообщение'));
-
-    expect(mockPush).not.toHaveBeenCalled();
-    expect(mockDispatch).toHaveBeenCalledWith({
-      type: 'SET_PARAMS',
-      payload: {
-        params: expect.objectContaining({
-          chatId: 'chat-2',
-          comments: 'm9',
-          comment: 'c1',
-          jumpTo: 'm9',
-          jumpKey: expect.any(String),
-        }),
-      },
-      source: 'chat-b',
-    });
-    expect(mockDispatch).toHaveBeenCalledWith({ type: 'POP', payload: { count: 1 } });
-  });
-
-  it('a deleted commented message: the sheet opens on the way, nothing to jump to', async () => {
-    mockStack = {
-      index: 1,
-      routes: [
-        { name: '[chatId]', key: 'chat-b', params: { chatId: 'chat-2', jumpTo: 'old', jumpSeq: AT } },
-        { name: '[chatId]', key: 'chat-a', params: { chatId: 'chat-1' } },
-      ],
-    };
-    mockedListMessages.mockResolvedValue({
-      items: withForward(forwarded('chat-2', 'm9', { target: null })),
-      nextCursor: null,
-    });
-
+describe('disabled chat source navigation', () => {
+  it('keeps a forwarded comment readable without opening its source chat', async () => {
     await renderChat();
     await fireEvent.press(screen.getByText('Комментарий из «Другой»'));
-
-    // Прежний прыжок того экрана стёрт — он не повторится.
-    expect(mockDispatch).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: 'SET_PARAMS',
-        payload: {
-          params: expect.objectContaining({ comments: 'm9', jumpTo: undefined, jumpSeq: undefined }),
-        },
-      }),
-    );
-  });
-
-  it('from this same chat: the sheet opens here and the chat scrolls to the message', async () => {
-    const scrollToIndex = jest.spyOn(FlatList.prototype, 'scrollToIndex');
-    mockedListMessages.mockResolvedValue({
-      items: withForward(forwarded('chat-1', 'm1')),
-      nextCursor: null,
-    });
-
-    await renderChat();
-    await fireEvent.press(screen.getByText('Комментарий из «Разговор»'));
-
-    expect(await screen.findByTestId('comments-panel')).toBeTruthy();
     expect(mockPush).not.toHaveBeenCalled();
-    // m1 — третья строка снизу; ждём, пока шит встанет (в тестах — по таймауту).
-    await waitFor(
-      () => expect(scrollToIndex).toHaveBeenCalledWith(expect.objectContaining({ index: 2 })),
-      { timeout: 4000 },
-    );
-    scrollToIndex.mockRestore();
+    expect(mockDispatch).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('comments-panel')).toBeNull();
+    expect(screen.getByTestId('messages-list')).toBeTruthy();
   });
 
-  it('from this chat, the message since deleted: just the sheet, no “not found” error', async () => {
-    mockedListMessages.mockResolvedValue({
-      items: withForward(forwarded('chat-1', 'm1', { target: null })),
-      nextCursor: null,
-    });
-
+  it('ignores legacy message and comment target parameters', async () => {
+    mockParams = { chatId: 'chat-1', jumpTo: 'm1', jumpSeq: AT, jumpKey: '1', comments: 'm1', comment: 'c1' };
+    const scroll = jest.spyOn(FlatList.prototype, 'scrollToIndex');
     await renderChat();
-    await fireEvent.press(screen.getByText('Комментарий из «Разговор»'));
-
-    expect(await screen.findByTestId('comments-panel')).toBeTruthy();
-    expect(mockedShowNotice).not.toHaveBeenCalledWith('Не удалось найти сообщение', 'error');
-  });
-});
-
-describe('arriving at a forwarded comment', () => {
-  it('opens the sheet and scrolls to the message by the jump key', async () => {
-    const scrollToIndex = jest.spyOn(FlatList.prototype, 'scrollToIndex');
-    mockParams = {
-      chatId: 'chat-1',
-      comments: 'm1',
-      comment: 'c1',
-      jumpTo: 'm1',
-      jumpSeq: String(Date.parse('2026-09-30T10:01:00Z')),
-      jumpKey: '1',
-    };
-
-    await renderChat();
-
-    expect(await screen.findByTestId('comments-panel')).toBeTruthy();
-    await waitFor(
-      () => expect(scrollToIndex).toHaveBeenCalledWith(expect.objectContaining({ index: 2 })),
-      { timeout: 4000 },
-    );
-    scrollToIndex.mockRestore();
+    expect(scroll).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('comments-panel')).toBeNull();
+    scroll.mockRestore();
   });
 });
 
@@ -426,27 +303,25 @@ describe('tapping a forwarded comment to a pop', () => {
     });
   const live = { id: 'pop-1', channelId: 'channel-1', posterUrl: 'https://cdn.test/p.jpg', caption: null };
 
-  it('opens the pop from the quote, with comments closed', async () => {
+  it('does not open the pop from the quote', async () => {
     mockedListMessages.mockResolvedValue({ items: withForward(popComment(live)), nextCursor: null });
     await renderChat();
 
     await fireEvent.press(screen.getByTestId('pop-quote'));
 
-    expect(openPopViewer).toHaveBeenCalledWith('channel-1', 'pop-1');
+    expect(screen.getByTestId('pop-quote')).toBeDisabled();
+    expect(openPopViewer).not.toHaveBeenCalled();
     expect(mockPush).not.toHaveBeenCalled();
   });
 
-  it('opens the pop with its comments and this one in focus from the label', async () => {
+  it('does not open pop comments from the label', async () => {
     mockedListMessages.mockResolvedValue({ items: withForward(popComment(live)), nextCursor: null });
     await renderChat();
 
     await fireEvent.press(screen.getByText('Комментарий из «Pop Lab»'));
 
-    expect(openPopViewer).toHaveBeenCalledWith(
-      'channel-1',
-      'pop-1',
-      expect.objectContaining({ focusCommentId: 'c1', requestId: expect.any(String) }),
-    );
+    expect(openPopViewer).not.toHaveBeenCalled();
+    expect(mockPush).not.toHaveBeenCalled();
   });
 
   it('a deleted pop: «Поп удалён», taps open nothing, the comment stays', async () => {

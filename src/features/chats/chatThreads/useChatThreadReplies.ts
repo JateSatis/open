@@ -86,7 +86,7 @@ export function useChatThreadReplies({ chatId, active, me }: Options) {
       );
       showNotice('Ответ ушёл в тред', 'info', {
         label: 'Открыть',
-        run: () => openChatThread({ chatId, rootId: roots[0], focusMessageId: 'end' }),
+        run: () => openChatThread({ chatId, rootId: roots[0] }),
       });
     },
     [active, chatId, me, queryClient],

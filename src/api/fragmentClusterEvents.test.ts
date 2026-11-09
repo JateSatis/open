@@ -90,7 +90,7 @@ describe('trackClusterEvent', () => {
   it('сбой сети не доходит до вызывающего', async () => {
     rpc.mockRejectedValue(new Error('Network request failed'));
 
-    expect(() => trackClusterEvent({ kind: 'quote_followed', messageId: 'm1', fragmentId: 'f1' })).not.toThrow();
+    expect(() => trackClusterEvent({ kind: 'area_opened', messageId: 'm1', fragmentId: 'f1' })).not.toThrow();
     await expect(flushClusterEvents()).resolves.toBeUndefined();
     expect(rpc).toHaveBeenCalledTimes(1);
   });

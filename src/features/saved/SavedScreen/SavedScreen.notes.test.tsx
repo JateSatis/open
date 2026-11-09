@@ -56,13 +56,11 @@ jest.mock('@/features/auth/useSession', () => ({ useSession: jest.fn() }));
 jest.mock('@/components/ConfirmDialog/store', () => ({ confirm: jest.fn() }));
 jest.mock('@/api/saved', () => ({
   listSavedMessages: jest.fn(),
-  listSavedAround: jest.fn(),
   listWatchLater: jest.fn(),
   listSavedPins: jest.fn(),
   listSavedForwardable: jest.fn(),
   fetchSourceChats: jest.fn(() => Promise.resolve(new Map())),
   listSavedTags: jest.fn(),
-  getSavedSource: jest.fn(),
   getSavedSummary: jest.fn(() => Promise.resolve({ watchLaterPending: 0 })),
   sendSavedNote: jest.fn(),
   getSavedMessage: jest.fn(),
@@ -83,9 +81,6 @@ function saved(id: string, seq: number, overrides: Partial<SavedMessage> = {}): 
     sourceChatId: 'chat-g',
     sourceMessageId: `msg-${id}`,
     sourceCommentId: null,
-    sourceSeq: 42,
-    commentMessageId: null,
-    commentPopId: null,
     kind: 'text',
     text: `текст ${id}`,
     authorId: 'user-anna',
@@ -110,7 +105,6 @@ function note(id: string, seq: number, overrides: Partial<SavedMessage> = {}): S
     category: 'note',
     sourceChatId: null,
     sourceMessageId: null,
-    sourceSeq: null,
     authorId: 'user-1',
     authorName: 'Я',
     text: `заметка ${id}`,
@@ -119,7 +113,7 @@ function note(id: string, seq: number, overrides: Partial<SavedMessage> = {}): S
 }
 
 async function renderScreen(items: SavedMessage[]) {
-  mocked(listSavedMessages).mockResolvedValue({ items, nextCursor: null, prevCursor: null });
+  mocked(listSavedMessages).mockResolvedValue({ items, nextCursor: null });
   await renderWithQuery(<SavedScreen />);
   await screen.findByTestId(items.length > 0 ? 'saved-list' : 'saved-empty');
 }
@@ -208,6 +202,20 @@ describe('SavedScreen — заметки', () => {
       expect(sendSavedNote).toHaveBeenCalledWith(expect.objectContaining({ replyTo: ['a'] })),
     );
     expect(screen.queryByLabelText('Отменить ответ')).toBeNull();
+  });
+
+  it('keeps a note reply quote inert', async () => {
+    await renderScreen([note('n', 10, { replies: [{
+      savedId: 'distant', seq: 1, sourceType: 'note', sourceChatId: null,
+      category: 'note', kind: 'text', text: 'далёкая запись', attachments: [],
+    }] })]);
+    const quote = screen.getByTestId('reply-quote');
+    const calls = mocked(listSavedMessages).mock.calls.length;
+    expect(quote).toBeDisabled();
+    expect(quote.props.onPress).toBeUndefined();
+    await fireEvent.press(quote);
+    expect(screen.getByTestId('saved-row-n')).toBeTruthy();
+    expect(listSavedMessages).toHaveBeenCalledTimes(calls);
   });
 
   it('a deleted quote is a stub «Запись удалена»', async () => {

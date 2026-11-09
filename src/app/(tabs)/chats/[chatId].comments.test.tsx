@@ -5,7 +5,7 @@ import { BackHandler } from 'react-native';
 import ChatScreen from './[chatId]';
 
 import type { ChatSummary, Message } from '@/api/chats';
-import { trackClusterEvent } from '@/api/fragmentClusterEvents';
+
 import { getChat, listDeletedMessageIds, listMessages, subscribeToChat } from '@/api/chats';
 import {
   getCommentTarget,
@@ -18,7 +18,6 @@ import {
   type Comment,
   type CommentChannelHandlers,
 } from '@/api/comments';
-import { locateFragment } from '@/api/fragments';
 import { listPinnedMessages } from '@/api/pins';
 import { NO_REACTIONS } from '@/api/reactionCounts';
 import { useSession } from '@/features/auth/useSession';
@@ -26,12 +25,7 @@ import { resetComposerDrafts } from '@/features/chats/composerDraftStore';
 import { resetOutbox } from '@/features/chats/messages/outbox';
 import { reportRealtimeJoined, resetConnectionState } from '@/features/connection/connectionStore';
 import { resetCommentOutbox } from '@/features/interactions/comments/commentOutbox';
-import {
-  clearQuoteHighlight,
-  exitFragmentMode,
-  getFragmentState,
-  toggleFragmentMode,
-} from '@/features/chats/fragments/fragmentStore';
+import { exitFragmentMode } from '@/features/chats/fragments/fragmentStore';
 import {
   closeComments,
   openFragmentComments,
@@ -119,7 +113,6 @@ jest.mock('@/api/messageViews');
 jest.mock('@/api/fragments', () => ({
   listMessageFragments: jest.fn(() => Promise.resolve([])),
   setFragmentReaction: jest.fn(),
-  locateFragment: jest.fn(),
 }));
 // Геометрия текста облачка: одна строка, по 10 dp на символ.
 jest.mock('../../../../modules/text-geometry', () => ({
@@ -838,6 +831,36 @@ describe('comment threads', () => {
     );
   });
 
+  it.each(['sheet', 'area', 'cluster'] as const)('keeps reply quotes inert in the %s panel without loading a distant target', async (panel) => {
+    const quotedReply = comment('r2', {
+      commentThreadRootId: 'root',
+      text: 'ответ с цитатой',
+      replies: [{
+        messageId: 'distant', state: 'live', authorId: 'user-2', authorName: 'Олег',
+        seq: 1, createdAt: '2026-09-30T10:00:00Z', editMark: null,
+        preview: { kind: 'text', text: 'далёкий ответ', thumbnailUrl: null, mediaCount: 0, firstMediaIsVideo: false, durationMs: null },
+      }],
+    });
+    mockedReplies.mockResolvedValue({ items: [quotedReply], nextCursor: { createdAt: quotedReply.createdAt, id: quotedReply.id } });
+    await renderChat();
+    if (panel === 'sheet') await openCommentsOf(3);
+    else await act(() => openFragmentComments('m1', 'chat-1', false, {
+      kind: panel, key: panel, range: { start: 0, end: 2 }, messageText: 'm1', focusInput: false,
+      ...(panel === 'cluster' ? { clusterId: 'cluster-1', decisionId: null } : {}),
+    } as Parameters<typeof openFragmentComments>[3]));
+    await screen.findByText('корень');
+    await fireEvent.press(screen.getByLabelText('Показать 2 ответа'));
+    const quote = await screen.findByTestId('reply-quote');
+    expect(quote).toBeDisabled();
+    const before = rowKeys('comment-thread-list');
+    const calls = mockedReplies.mock.calls.length;
+    await fireEvent.press(quote);
+    expect(rowKeys('comment-thread-list')).toEqual(before);
+    expect(mockedReplies).toHaveBeenCalledTimes(calls);
+    expect(screen.getByTestId(panel === 'sheet' ? 'comments-panel' : 'fragment-panel')).toBeTruthy();
+    expect(screen.queryByTestId('jump-highlight')).toBeNull();
+  });
+
   it('a message in the main list without a quote stays top-level', async () => {
     mockedSend.mockReturnValue(new Promise(() => undefined));
 
@@ -1016,7 +1039,6 @@ describe('pinning a comment under a message', () => {
 });
 
 describe('fragment quote over a comment', () => {
-  const mockedLocate = locateFragment as jest.MockedFunction<typeof locateFragment>;
   const quoted = comment('cf', {
     text: 'про кусок',
     fragmentId: 'f1',
@@ -1025,7 +1047,6 @@ describe('fragment quote over a comment', () => {
 
   beforeEach(() => {
     exitFragmentMode();
-    clearQuoteHighlight();
     useInAppAlert.setState({ alert: null });
     mockedListComments.mockResolvedValue({
       items: [quoted, comment('plain', { text: 'обычный' })],
@@ -1048,92 +1069,12 @@ describe('fragment quote over a comment', () => {
     expect(within(plates[0]).getByText('m1')).toBeTruthy();
   });
 
-  it('closes the sheet and highlights the quoted piece in the message', async () => {
-    mockedLocate.mockResolvedValue({
-      state: 'live',
-      start: 6,
-      end: 8,
-      lost: false,
-      messageSeq: 1,
-    });
-
+  it('keeps the sheet open and does not locate the fragment when its quote is pressed', async () => {
     await openSheet();
-    // Облачко было в режиме фрагментов — переход его выключает.
-    await act(async () => toggleFragmentMode('m1'));
-    expect(getFragmentState().activeKey).toBe('m1');
-    await fireEvent.press(screen.getByTestId('comment-fragment-quote'));
-
-    await waitFor(() => expect(screen.queryByTestId('comments-panel')).toBeNull());
-    expect(getFragmentState().activeKey).toBeNull();
-    const highlight = await screen.findByTestId('quote-highlight');
-
-    // Ровно «m1»: с шестого символа по восьмой.
-    expect(highlight.children).toHaveLength(1);
-    expect((highlight.children[0] as unknown as { props: { style: unknown } }).props.style).toEqual(
-      expect.arrayContaining([expect.objectContaining({ left: 60, width: 20 })]),
-    );
-
-    // Первое же касание экрана снимает подсветку.
-    await fireEvent(screen.getByText('текст m1'), 'touchStart');
-    await waitFor(() => expect(screen.queryByTestId('quote-highlight')).toBeNull());
-  });
-
-  it('leads to the piece from the fragment side panel too, and the panel closes', async () => {
-    mockedLocate.mockResolvedValue({
-      state: 'live',
-      start: 6,
-      end: 8,
-      lost: false,
-      messageSeq: 1,
-    });
-
-    await renderChat();
-    await act(async () =>
-      openFragmentComments(
-        'm1',
-        'chat-1',
-        false,
-        {
-          kind: 'area',
-          key: 'area:6-8',
-          range: { start: 6, end: 8, text: 'm1' },
-          messageText: 'текст m1',
-          focusInput: false,
-        },
-        'm1',
-      ),
-    );
-    await screen.findByText('про кусок');
-    await fireEvent.press(screen.getAllByTestId('comment-fragment-quote')[0]);
-
-    await waitFor(() => expect(screen.queryByTestId('fragment-panel')).toBeNull());
-    expect(await screen.findByTestId('quote-highlight')).toBeTruthy();
-    expect(jest.mocked(trackClusterEvent)).toHaveBeenCalledWith(
-      expect.objectContaining({
-        kind: 'quote_followed',
-        messageId: 'm1',
-        rangeStart: 6,
-        rangeEnd: 8,
-      }),
-    );
-  });
-
-  it('flashes the whole message and says so when an edit took the piece away', async () => {
-    mockedLocate.mockResolvedValue({
-      state: 'live',
-      start: 0,
-      end: 2,
-      lost: true,
-      messageSeq: 1,
-    });
-
-    await openSheet();
-    await fireEvent.press(screen.getByTestId('comment-fragment-quote'));
-
-    await waitFor(() => expect(screen.queryByTestId('comments-panel')).toBeNull());
-    await waitFor(() =>
-      expect(useInAppAlert.getState().alert).toMatchObject({ text: 'Этот кусок текста изменён' }),
-    );
+    const plate = screen.getByTestId('comment-fragment-quote');
+    expect(plate).toBeDisabled();
+    await fireEvent.press(plate);
+    expect(screen.getByTestId('comments-panel')).toBeTruthy();
     expect(screen.queryByTestId('quote-highlight')).toBeNull();
   });
 
@@ -1159,14 +1100,11 @@ describe('fragment quote over a comment', () => {
   });
 
   it('keeps the sheet open when the message is deleted', async () => {
-    mockedLocate.mockResolvedValue({ state: 'deleted' });
 
     await openSheet();
     await fireEvent.press(screen.getByTestId('comment-fragment-quote'));
 
-    await waitFor(() =>
-      expect(useInAppAlert.getState().alert).toMatchObject({ text: 'Сообщение удалено' }),
-    );
+    expect(useInAppAlert.getState().alert).toBeNull();
     expect(screen.getByTestId('comments-panel')).toBeTruthy();
   });
 });

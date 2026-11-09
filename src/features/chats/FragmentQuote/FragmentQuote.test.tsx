@@ -3,14 +3,14 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 import { FragmentQuote } from './index';
 
 describe('FragmentQuote', () => {
-  it('shows the quoted piece and leads to it by a tap', async () => {
-    const onPress = jest.fn();
+  it('shows the quoted piece without a navigation handler', async () => {
 
-    await render(<FragmentQuote text="какой-то другой уровень" isOwn={false} onPress={onPress} />);
+    await render(<FragmentQuote text="какой-то другой уровень" isOwn={false} />);
 
     await fireEvent.press(screen.getByText('какой-то другой уровень'));
 
-    expect(onPress).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('comment-fragment-quote')).toBeDisabled();
+    expect(screen.getByTestId('comment-fragment-quote').props.onPress).toBeUndefined();
   });
 
   it('shows exactly 100 characters of a long quote and an ellipsis', async () => {

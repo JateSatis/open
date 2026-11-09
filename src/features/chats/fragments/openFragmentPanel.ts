@@ -37,7 +37,6 @@ export function openClusterPanel(source: FragmentPanelSource, cluster: FragmentC
       messageText: source.text,
       focusInput: false,
     },
-    source.rowKey,
   );
   trackClusterEvent({
     kind: 'cluster_opened',
@@ -64,7 +63,6 @@ export function openAreaPanel(source: FragmentPanelSource, start: number, end: n
       messageText: source.text,
       focusInput: true,
     },
-    source.rowKey,
   );
   trackClusterEvent({
     kind: 'area_opened',

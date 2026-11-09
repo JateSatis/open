@@ -2,10 +2,9 @@
 // комментарии, по одной строке, тред под ними не раскрывается. Окно треда —
 // свой список: корень, под ним ответы по одному, как островок пересылки в
 // переписке. Длинный тред не становится одной гигантской строкой, список
-// виртуализирует ответы, а прыжок к ответу — это прыжок к его строке.
+// виртуализирует ответы.
 
 import type { CommentItem } from '@/features/interactions/comments/commentItem';
-import { COMMENT_THREAD_PAGE_SIZE } from '@/api/comments';
 
 export type CommentRow =
   | {
@@ -19,7 +18,7 @@ export type CommentRow =
       /** Закреплён автором контента — над облачком метка. */
       pinned: boolean;
     }
-  | { type: 'comment-thread-gap'; key: string; rootId: string; hidden: number; direction?: 'before' | 'after' }
+  | { type: 'comment-thread-gap'; key: string; rootId: string; hidden: number }
   | { type: 'comment-thread-loading'; key: string; rootId: string }
   | { type: 'comment-thread-failed'; key: string; rootId: string };
 
@@ -32,7 +31,6 @@ export type OpenCommentThread = {
   /** Свои неотправленные ответы — в самом конце. */
   pending: CommentItem[];
   hasGap: boolean;
-  hasBefore?: boolean;
   isLoading: boolean;
   /** Начало не загрузилось — вместо колеса предложить повтор. */
   failed?: boolean;
@@ -100,18 +98,8 @@ export function buildCommentThreadRows(open: OpenCommentThread): CommentRow[] {
     });
   }
 
-  if (open.hasBefore) {
-    rows.push({
-      type: 'comment-thread-gap',
-      key: `${rootId}/before`,
-      rootId,
-      hidden: COMMENT_THREAD_PAGE_SIZE,
-      direction: 'before',
-    });
-  }
-
   if (open.isLoading) {
-    // Начало ещё грузится, а хвост уже есть — например, ответ, к которому пришли.
+    // Начало ещё грузится, а хвост уже есть — например, свой отправленный ответ.
     rows.push(
       open.failed
         ? { type: 'comment-thread-failed', key: loadingKey(rootId), rootId }

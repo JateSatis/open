@@ -2,12 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useMemo, useRef, useState } from 'react';
 
 import { deletedChatThreadRoot, type ChatThreadSummary } from '@/api/chats';
-import {
-  chatThreadQueryKey,
-  loadChatThread,
-  loadChatThreadGap,
-  readChatThread,
-} from '@/features/chats/chatThreads/chatThreadCache';
+import { chatThreadQueryKey, loadChatThread, loadChatThreadGap } from '@/features/chats/chatThreads/chatThreadCache';
 import { chatThreadRootsOf } from '@/features/chats/chatThreads/useChatThreadReplies';
 import type { ChatListRow, MessageListRow } from '@/features/chats/islands/rows';
 import { useOutboxMessages } from '@/features/chats/messages/outbox';
@@ -160,28 +155,6 @@ export function useChatThreadPane(chatId: string, rootId: string, summary: ChatT
     return request;
   }, [chatId, queryClient, rootId]);
 
-  /** Догружает разрыв, пока в треде не окажется сообщение с этим номером. */
-  const loadUntil = useCallback(
-    async (seq: number): Promise<boolean> => {
-      for (;;) {
-        const current = readChatThread(queryClient, chatId, rootId);
-
-        if (!current) return false;
-        if (current.items.some((message) => message.seq === seq)) return true;
-        if (!current.gap || seq <= current.gap.afterSeq || seq >= current.gap.beforeSeq) {
-          return current.items.some((message) => message.seq === seq);
-        }
-
-        const before = current.gap.afterSeq;
-
-        await loadChatThreadGap(queryClient, chatId, rootId);
-
-        if (readChatThread(queryClient, chatId, rootId)?.gap?.afterSeq === before) return false;
-      }
-    },
-    [chatId, queryClient, rootId],
-  );
-
   const retry = useCallback(() => void query.refetch(), [query]);
 
   return {
@@ -192,7 +165,6 @@ export function useChatThreadPane(chatId: string, rootId: string, summary: ChatT
     isLoading: !thread,
     loadingGap,
     loadGap,
-    loadUntil,
     retry,
   };
 }

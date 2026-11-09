@@ -26,8 +26,6 @@ export type MessageActionContext = {
   island?: { isMine: boolean } | null;
   /** Облачко можно отметить — в меню есть «Выбрать» (`isSelectableRow`). */
   selectable?: boolean;
-  /** Меню открыто в шторке треда — есть «Показать в чате». */
-  inChatThread?: boolean;
 };
 
 export type MessageActionId =
@@ -40,8 +38,6 @@ export type MessageActionId =
   | 'pin'
   | 'unpin'
   | 'forward'
-  | 'open_original'
-  | 'show_in_chat'
   | 'delete'
   | 'remove_from_island';
 
@@ -163,17 +159,6 @@ export const MESSAGE_ACTIONS: readonly MessageAction[] = [
     isVisible: ({ message }) => !isLocalMessage(message),
   },
   {
-    id: 'open_original',
-    label: 'Перейти к оригиналу',
-    isVisible: ({ island }) => Boolean(island),
-  },
-  {
-    id: 'show_in_chat',
-    label: 'Показать в чате',
-    // Только в шторке треда: из неё — к сообщению в обычной переписке.
-    isVisible: ({ message, inChatThread = false }) => inChatThread && !isLocalMessage(message),
-  },
-  {
     id: 'delete',
     label: 'Удалить',
     destructive: true,
@@ -210,21 +195,16 @@ export function deletedOriginalActions(isMine: boolean): MessageAction[] {
   );
 }
 
-export type IslandActionId = 'open_source' | 'retry' | 'select_all' | 'delete_island';
+export type IslandActionId = 'retry' | 'select_all' | 'delete_island';
 
 export type IslandAction = { id: IslandActionId; label: string; destructive?: boolean };
 
 /**
  * Пункты островка целиком — по долгому нажатию на плашку, как меню облачка. Реакций и
- * комментариев здесь нет: островок не сообщение. Первым — переход в чат,
- * откуда переслали.
+ * комментариев здесь нет: островок не сообщение.
  */
 export function islandActions(island: ChatMessage, isMine: boolean): IslandAction[] {
   const actions: IslandAction[] = [];
-  const source = island.forward?.sourceChat;
-
-  if (source) actions.push({ id: 'open_source', label: `Перейти в «${source.name}»` });
-
   if (island.status === 'failed') actions.push({ id: 'retry', label: 'Повторить' });
   if (!isLocalMessage(island)) actions.push({ id: 'select_all', label: 'Выбрать все' });
   if (isMine) actions.push({ id: 'delete_island', label: 'Удалить пересылку', destructive: true });

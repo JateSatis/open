@@ -7,7 +7,7 @@ import { BUBBLE_AVATAR } from './layout';
 import { styles } from './styles';
 import { useMediaViewJournal } from './useMediaViewJournal';
 
-import type { QuotedMessage } from '@/api/chats';
+
 import type { ReactionAudience } from '@/api/reactionCounts';
 import { Avatar } from '@/components/Avatar';
 import { Text } from '@/components/Text';
@@ -38,7 +38,6 @@ import { hasReactions } from '@/features/interactions/reactionState';
 import { MediaViewer, type MediaViewerItem } from '@/features/media';
 import { useArmedViewer } from '@/features/media/MediaViewer/useArmedViewer';
 import { createTileRegistry, type TileRect } from '@/features/media/tileRegistry';
-import { openPopViewer } from '@/features/pops/openPopViewer';
 import { useTheme } from '@/hooks/use-theme';
 import { Spacing } from '@/theme';
 
@@ -61,15 +60,13 @@ export type MessageBubbleProps = {
   onRetry?: (localId: string) => void;
   /** Тап по аватару или имени автора — его профиль. Нет автора (удалён) — нет и перехода. */
   onAuthorPress?: () => void;
-  /** Тап по цитате ответа — к её оригиналу. */
-  onQuotePress?: (quote: QuotedMessage) => void;
   /** Подпись удалённой цитаты: у заметки в «Сохранённых» — «Запись удалена». */
   quoteDeletedText?: string;
   /**
    * Облачко островка, чей оригинал из другого чата, чем заголовок островка:
-   * над текстом — «<автор> из <чат>». Тап по чату — туда, к этому сообщению.
+   * над текстом — «<автор> из <чат>».
    */
-  sourceChat?: { name: string; onPress?: () => void } | null;
+  sourceChat?: { name: string } | null;
   /** Мой ряд реакций: тап по реакции в нём ставит или снимает её. */
   reactionAudience?: ReactionAudience;
   /** Тап по реакции своего ряда. Нет обработчика (копия в меню) — ряды не нажимаются. */
@@ -134,7 +131,6 @@ export type MessageBubbleProps = {
   untracked?: boolean;
 };
 
-const noop = () => undefined;
 
 export function MessageBubble({
   message,
@@ -146,7 +142,6 @@ export function MessageBubble({
   mediaBounds,
   onRetry,
   onAuthorPress,
-  onQuotePress,
   quoteDeletedText,
   sourceChat,
   reactionAudience,
@@ -168,14 +163,8 @@ export function MessageBubble({
   const theme = useTheme();
   const fragmentMode = useFragmentModeActive(selectableText?.rowKey);
   const isMediaMessage = message.kind === 'media' && message.attachments.length > 0;
-  // Пост с попом: обложка попа, а не мозаика; тап — просмотр попсов его канала.
+  // Пост с попом показывает обложку без перехода в просмотр.
   const isPopPost = isMediaMessage && Boolean(message.attachments[0]?.popId);
-  const popLink = isPopPost ? message.attachments[0] : undefined;
-  // Оптимистичный пост с новым попом ещё не знает канала, удалённый поп не открыть.
-  const openPop =
-    popLink?.popId && popLink.popChannelId && !popLink.popDeleted
-      ? () => openPopViewer(popLink.popChannelId!, popLink.popId!)
-      : noop;
   const voice = message.kind === 'voice' ? message.attachments[0] : undefined;
   // Облачко комментария — тот же компонент; журнал пишет только сообщения.
   const isComment = 'targetId' in message;
@@ -269,7 +258,6 @@ export function MessageBubble({
         <ReplyQuote
           quotes={message.replies}
           isOwn={isOwn}
-          onPress={onQuotePress}
           deletedText={quoteDeletedText}
         />
       ) : null}
@@ -388,10 +376,8 @@ export function MessageBubble({
           {namesAuthor ? ' из ' : 'из '}
           <Text
             testID="message-source-chat"
-            accessibilityRole={sourceChat.onPress ? 'link' : undefined}
             variant="smallBold"
             color={textColor}
-            onPress={sourceChat.onPress}
             suppressHighlighting
           >
             {sourceChat.name}
@@ -446,7 +432,7 @@ export function MessageBubble({
               attachments={message.attachments}
               layout={layout}
               localPreviews={message.localPreviews}
-              onPress={isPopPost ? openPop : openShown}
+              onPress={openShown}
               tiles={tiles}
               edges={mosaicEdges}
               onArm={isPopPost ? undefined : armShown}
