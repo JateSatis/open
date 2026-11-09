@@ -147,12 +147,21 @@ const rowKey = (row: ChatListRow) => row.key;
 
 /** Ближе этого к самому новому сообщению список держится за низ переписки, а не за прочитанное. */
 const KEEP_READING_POSITION = { minIndexForVisible: 0, autoscrollToTopThreshold: Spacing.six };
-/** Положение прокрутки нужно учёту просмотров лишь примерно: у низа или нет. */
-const VIEWS_SCROLL_THROTTLE_MS = 100;
+/** Не отбрасывать конечную позицию короткого жеста внутри VirtualizedList. */
+const LIST_SCROLL_THROTTLE_MS = 16;
 /** Столько после шага автопрокрутки выделения события прокрутки не двигают её смещение. */
-const AUTO_SCROLL_QUIET_MS = VIEWS_SCROLL_THROTTLE_MS * 3;
+const AUTO_SCROLL_QUIET_MS = 300;
 /** Ближе этой доли экрана к старейшему сообщению — пора догружать историю. */
 const HISTORY_EDGE = 0.4;
+
+function atHistoryEdge({ contentOffset, contentSize, layoutMeasurement }: NativeScrollEvent) {
+  // Список перевёрнут: старые сообщения — у конца содержимого.
+  return (
+    layoutMeasurement.height > 0 &&
+    contentSize.height - layoutMeasurement.height - contentOffset.y <
+      layoutMeasurement.height * HISTORY_EDGE
+  );
+}
 
 export type ChatConversationProps = {
   chatId: string;
@@ -623,11 +632,7 @@ export function ChatConversation({
   const { resumeLoadMore } = chatMessages;
   const onListDragStart = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-      const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
-      // Список перевёрнут: старые сообщения — у конца содержимого.
-      const toOldest = contentSize.height - layoutMeasurement.height - contentOffset.y;
-
-      resumeLoadMore(toOldest < layoutMeasurement.height * HISTORY_EDGE);
+      resumeLoadMore(atHistoryEdge(event.nativeEvent));
       // Выделение привязано к месту на экране: тронули прокрутку — снимается,
       // режим фрагментов остаётся.
       clearTextSelection();
@@ -637,7 +642,7 @@ export function ChatConversation({
 
   // Где сейчас прокрутка и сколько её всего — автопрокрутке выделения: она
   // двигает список сама, кадр за кадром, не дожидаясь событий прокрутки.
-  // Пока список двигает автопрокрутка, события прокрутки (раз в 100 мс)
+  // Пока список двигает автопрокрутка, запоздавшие события прокрутки
   // везут смещение на несколько кадров старше — их смещение не берётся.
   const trackOffset = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     if (Date.now() - scrollState.current.drivenAt > AUTO_SCROLL_QUIET_MS) {
@@ -652,6 +657,17 @@ export function ChatConversation({
       resetScrolledRows();
     },
     [trackOffset, viewsOnScroll],
+  );
+
+  const onListScrollEnd = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      trackOffset(event);
+      viewsOnScroll(event);
+      // Конец жеста/инерции несёт свежую геометрию, даже если список не
+      // вызвал onEndReached. Ошибку здесь не снимаем: повтор — новым жестом.
+      if (hasMore && atHistoryEdge(event.nativeEvent)) loadMore();
+    },
+    [hasMore, loadMore, trackOffset, viewsOnScroll],
   );
 
   useEffect(() => {
@@ -989,15 +1005,15 @@ export function ChatConversation({
                   onViewableItemsChanged={onViewableItemsChanged}
                   onScroll={onListScroll}
                   onScrollBeginDrag={onListDragStart}
-                  onScrollEndDrag={trackOffset}
-                  onMomentumScrollEnd={trackOffset}
+                  onScrollEndDrag={onListScrollEnd}
+                  onMomentumScrollEnd={onListScrollEnd}
                   onContentSizeChange={(_width, height) => {
                     scrollState.current.content = height;
                   }}
                   onLayout={(event) => {
                     scrollState.current.viewport = event.nativeEvent.layout.height;
                   }}
-                  scrollEventThrottle={VIEWS_SCROLL_THROTTLE_MS}
+                  scrollEventThrottle={LIST_SCROLL_THROTTLE_MS}
                   contentContainerStyle={styles.list}
                   // The list is inverted, so its "end" is the top of the screen:
                   // scrolling up pages further back through the history.

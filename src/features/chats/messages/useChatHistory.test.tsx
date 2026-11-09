@@ -51,7 +51,7 @@ function renderHistory() {
   return renderHook(() => useChatHistory('chat-1'), { wrapper });
 }
 
-describe('useChatHistory: догрузка старых после сбоя', () => {
+describe('useChatHistory: догрузка старых', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockedList.mockResolvedValueOnce({
@@ -92,5 +92,61 @@ describe('useChatHistory: догрузка старых после сбоя', ()
     await waitFor(() => expect(result.current.failed).toBe(true));
     expect(result.current.isLoading).toBe(false);
     expect(result.current.items).toHaveLength(0);
+  });
+
+  it('свежий край запускает догрузку без ошибки, события делят один запрос и соблюдают курсор', async () => {
+    const { result } = await renderHistory();
+    await waitFor(() => expect(result.current.items).toHaveLength(1));
+    let complete!: (page: Awaited<ReturnType<typeof listMessages>>) => void;
+    mockedList.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          complete = resolve;
+        }),
+    );
+
+    await act(async () => result.current.resumeLoadMore(false));
+    expect(mockedList).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      result.current.resumeLoadMore(true);
+      void result.current.loadMore();
+      result.current.resumeLoadMore(true);
+      void result.current.loadMore();
+    });
+    expect(mockedList).toHaveBeenCalledTimes(2);
+    expect(mockedList).toHaveBeenLastCalledWith('chat-1', { cursor: 1 });
+    expect(result.current.isLoadingMore).toBe(true);
+
+    await act(async () =>
+      complete({ items: [message('older', '2026-10-11T10:00:00Z')], nextCursor: 2 }),
+    );
+    await waitFor(() => expect(result.current.isLoadingMore).toBe(false));
+    mockedList.mockResolvedValueOnce({
+      items: [message('oldest', '2026-10-10T10:00:00Z')],
+      nextCursor: null,
+    });
+    await act(() => result.current.loadMore());
+    expect(mockedList).toHaveBeenLastCalledWith('chat-1', { cursor: 2 });
+    expect(result.current.items.map(({ id }) => id)).toEqual(['new', 'older', 'oldest']);
+    expect(result.current.hasMore).toBe(false);
+    await act(async () => {
+      result.current.resumeLoadMore(true);
+      await result.current.loadMore();
+    });
+    expect(mockedList).toHaveBeenCalledTimes(3);
+  });
+
+  it('после ошибки автоматические события молчат, новый жест разрешает одну попытку', async () => {
+    const { result } = await renderHistory();
+    await waitFor(() => expect(result.current.items).toHaveLength(1));
+    mockedList.mockRejectedValue(new Error('server unavailable'));
+    await act(() => result.current.loadMore());
+    for (let i = 0; i < 5; i++) await act(() => result.current.loadMore());
+    expect(mockedList).toHaveBeenCalledTimes(2);
+    await act(async () => result.current.resumeLoadMore(true));
+    await waitFor(() => expect(result.current.isLoadingMore).toBe(false));
+    for (let i = 0; i < 5; i++) await act(() => result.current.loadMore());
+    expect(mockedList).toHaveBeenCalledTimes(3);
+    expect(result.current.error).not.toBeNull();
   });
 });

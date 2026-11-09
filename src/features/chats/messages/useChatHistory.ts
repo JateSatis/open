@@ -32,8 +32,8 @@ export type ChatHistoryState = {
   loadMore: () => Promise<void>;
   /**
    * Человек снова листает — после неудачи догрузка снова разрешена. У самого
-   * края истории (`atEdge`) она и пробует сразу: список второй раз не зовёт
-   * догрузку при той же длине содержимого.
+   * края истории (`atEdge`) пробует сразу, даже если ошибки не было: список
+   * может не вызвать onEndReached по устаревшей позиции.
    */
   resumeLoadMore: (atEdge: boolean) => void;
 };
@@ -109,8 +109,6 @@ export function useChatHistory(
 
   const resumeLoadMore = useCallback(
     (atEdge: boolean) => {
-      if (!stalledRef.current) return;
-
       stalledRef.current = false;
       if (atEdge) void fetchOlder();
     },
