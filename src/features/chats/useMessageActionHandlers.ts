@@ -3,7 +3,8 @@ import { useCallback } from 'react';
 
 import { confirm } from '@/components/ConfirmDialog';
 import { copyableText, formatMessagesForCopy } from '@/features/chats/copyMessages';
-import { anchorOf, contentOf, islandItemKey, type BubbleRow } from '@/features/chats/islands/rows';
+import { anchorOf, contentOf, type BubbleRow } from '@/features/chats/islands/rows';
+import { useSelectForwardGroup } from '@/features/chats/islands/useSelectForwardGroup';
 import { messagesCount } from '@/features/chats/messageQuote';
 import {
   isLocalMessage,
@@ -58,7 +59,8 @@ function namesOf(rows: BubbleRow[], authorName: (authorId: string | null) => str
   for (const row of rows) {
     const original = row.type === 'island-item' ? row.item.original : null;
 
-    if (original?.authorId && original.authorName) known.set(original.authorId, original.authorName);
+    if (original?.authorId && original.authorName)
+      known.set(original.authorId, original.authorName);
   }
 
   return (authorId: string | null) => (authorId && known.get(authorId)) || authorName(authorId);
@@ -79,6 +81,7 @@ export function useMessageActionHandlers({
   forward,
   edit,
 }: Options): MessageActionHandlers {
+  const selectForwardGroup = useSelectForwardGroup(selection.start, currentUserId);
   /**
    * Удаляет у всех: свои сообщения — функцией удаления, облачка своих
    * островков — убирает из островков. Оригиналы в островках не трогаются.
@@ -164,16 +167,20 @@ export function useMessageActionHandlers({
         case 'pin':
           if (!message) return;
 
-          pins.pin(message, anchorOf(row)).catch((cause: unknown) =>
-            showNotice(failure('Не удалось закрепить сообщение', cause), 'error'),
-          );
+          pins
+            .pin(message, anchorOf(row))
+            .catch((cause: unknown) =>
+              showNotice(failure('Не удалось закрепить сообщение', cause), 'error'),
+            );
           return;
         case 'unpin':
           if (!message) return;
 
-          pins.unpin(message.id).catch((cause: unknown) =>
-            showNotice(failure('Не удалось открепить сообщение', cause), 'error'),
-          );
+          pins
+            .unpin(message.id)
+            .catch((cause: unknown) =>
+              showNotice(failure('Не удалось открепить сообщение', cause), 'error'),
+            );
           return;
         case 'remove_from_island':
           void removeForEveryone([row]);
@@ -189,17 +196,7 @@ export function useMessageActionHandlers({
           return;
       }
     },
-    [
-      comment,
-      discard,
-      edit,
-      forward,
-      pins,
-      removeForEveryone,
-      reply,
-      retry,
-      selection,
-    ],
+    [comment, discard, edit, forward, pins, removeForEveryone, reply, retry, selection],
   );
 
   const runSelectionAction = useCallback(
@@ -240,12 +237,7 @@ export function useMessageActionHandlers({
           if (island.localId) retry(island.localId);
           return;
         case 'select_all':
-          // Заглушку удалённого отмечает только переславший — чтобы убрать её.
-          selection.start(
-            (island.forward?.items ?? [])
-              .filter((item) => item.original !== null || island.authorId === currentUserId)
-              .map((item) => islandItemKey(island.id, item.messageId)),
-          );
+          void selectForwardGroup(island);
           return;
         case 'delete_island':
           if (isLocalMessage(island)) {
@@ -269,7 +261,7 @@ export function useMessageActionHandlers({
           return;
       }
     },
-    [currentUserId, deleteMessages, discard, retry, selection],
+    [deleteMessages, discard, retry, selectForwardGroup],
   );
 
   return { runMessageAction, runSelectionAction, runIslandAction };

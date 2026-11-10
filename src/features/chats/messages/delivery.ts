@@ -298,7 +298,10 @@ async function insert(
 /** Подтверждённое сервером переезжает из исходящих в историю. */
 function settle(queryClient: QueryClient, chatId: string, localId: string, saved: Message) {
   const localPreviews = findOutboxMessage(chatId, localId)?.localPreviews;
-  const confirmed: ChatMessage = { ...saved, status: 'sent', localPreviews };
+  const confirmed: ChatMessage = {
+    ...saved, status: 'sent', localPreviews,
+    ...(saved.forward ? { renderId: localId } : {}),
+  };
 
   // Свой же broadcast мог прийти раньше ответа на вставку и уже положить это
   // сообщение в историю — тогда ему только достаются локальные превью.

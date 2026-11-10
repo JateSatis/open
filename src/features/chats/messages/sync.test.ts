@@ -1,3 +1,8 @@
+jest.mock('@/api/historyWindow', () => ({
+  getHistoryWindow: jest.fn((...args) => jest.requireActual('@/test/historyWindowMock').fixtureHistoryWindow(...args)),
+  getHistoryGroupKeys: jest.fn(() => Promise.resolve([])),
+  getHistoryItems: jest.fn(() => Promise.resolve([])),
+}));
 import { QueryClient } from '@tanstack/react-query';
 
 import * as chatsApi from '@/api/chats';

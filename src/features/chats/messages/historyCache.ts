@@ -11,14 +11,11 @@
 import type { QueryClient } from '@tanstack/react-query';
 
 import type { Message } from '@/api/chats';
+import type { HistoryCursor, HistoryPosition } from '@/api/historyWindow';
 import { PENDING_SEQ } from '@/api/pendingSeq';
 import type { MessageViews } from '@/api/messageViews';
 import type { MessageReactions } from '@/api/reactionCounts';
-import {
-  mapOriginals,
-  withFreshContent,
-  withoutItems,
-} from '@/features/chats/islands/islandCache';
+import { mapOriginals, withFreshContent, withoutItems } from '@/features/chats/islands/islandCache';
 import { previewOf as previewOfMessage } from '@/features/chats/messageQuote';
 import type { ChatMessage } from '@/features/chats/messages/types';
 import { sameReactions } from '@/features/interactions/reactionState';
@@ -26,8 +23,8 @@ import { sameReactions } from '@/features/interactions/reactionState';
 export type ChatHistory = {
   /** Newest first — the list that renders them is inverted. */
   items: ChatMessage[];
-  /** `seq` самого старого загруженного, пока глубже есть что грузить. */
-  nextCursor: number | null;
+  /** Main history uses an element cursor; thread APIs still use parent seq. */
+  nextCursor: number | HistoryCursor<'before'> | null;
 };
 
 /**
@@ -56,10 +53,21 @@ export function newestSeq(history: ChatHistory): number | null {
   let newest: number | null = null;
 
   for (const message of history.items) {
-    if (message.seq < PENDING_SEQ && (newest === null || message.seq > newest)) newest = message.seq;
+    if (message.seq < PENDING_SEQ && (newest === null || message.seq > newest))
+      newest = message.seq;
   }
 
   return newest;
+}
+
+export function newestPosition(history: ChatHistory): HistoryPosition | null {
+  const seq = newestSeq(history);
+  if (seq === null) return null;
+  const message = history.items.find((item) => item.seq === seq);
+  return {
+    seq,
+    position: Math.max(0, ...(message?.forward?.items.map((item) => item.position) ?? [])),
+  };
 }
 
 /**
@@ -74,14 +82,48 @@ export function mergeMessages(
   incoming: Message[],
   direction: 'newer' | 'older',
 ): ChatHistory {
-  const known = new Set(history.items.map((message) => message.id));
-  const added = incoming.filter((message) => !known.has(message.id)).map(toSent);
-
-  if (added.length === 0) return history;
-
-  const items =
-    direction === 'newer' ? [...added.reverse(), ...history.items] : [...history.items, ...added];
-
+  const byId = new Map(history.items.map((message) => [message.id, message]));
+  const addedIds: string[] = [];
+  let changed = false;
+  for (const message of incoming) {
+    const known = byId.get(message.id);
+    if (!known) {
+      byId.set(message.id, toSent(message));
+      addedIds.push(message.id);
+      changed = true;
+    } else if (known.forward && message.forward) {
+      // Cache groups contain only loaded occurrences. Pagination identity is
+      // still each item.id; grouping never fetches or invents missing siblings.
+      const ids = new Set(known.forward.items.map((item) => item.id));
+      const added = message.forward.items.filter((item) => !ids.has(item.id));
+      const range = message.forwardRange;
+      const forwardRange = range
+        ? {
+            start: Math.min(known.forwardRange?.start ?? range.start, range.start),
+            end: Math.max(known.forwardRange?.end ?? range.end, range.end),
+          }
+        : known.forwardRange;
+      if (
+        added.length ||
+        forwardRange?.start !== known.forwardRange?.start ||
+        forwardRange?.end !== known.forwardRange?.end
+      ) {
+        byId.set(message.id, {
+          ...known,
+          ...(forwardRange ? { forwardRange } : {}),
+          forward: {
+            ...known.forward,
+            items: [...known.forward.items, ...added].sort((a, b) => a.position - b.position),
+          },
+        });
+        changed = true;
+      }
+    }
+  }
+  if (!changed) return history;
+  const existing = history.items.map((message) => byId.get(message.id)!);
+  const added = addedIds.map((id) => byId.get(id)!);
+  const items = direction === 'newer' ? [...added.reverse(), ...existing] : [...existing, ...added];
   return { ...history, items: items.sort(byNewest) };
 }
 
@@ -228,7 +270,9 @@ export function patchReactions(
   const items = history.items.map((message) => {
     const reactions = byId.get(message.id);
     const own =
-      !reactions || sameReactions(message.reactions, reactions) ? message : { ...message, reactions };
+      !reactions || sameReactions(message.reactions, reactions)
+        ? message
+        : { ...message, reactions };
     const next = mapOriginals(own, (original) => {
       const fresh = byId.get(original.id);
 
@@ -338,7 +382,11 @@ export function patchViews(history: ChatHistory, fresh: MessageViews[]): ChatHis
  * своём чате и в островках. Свой комментарий виден в кружке сразу, до ответа
  * сервера; точное число потом кладёт `patchCommentCounts`.
  */
-export function bumpCommentsCount(history: ChatHistory, messageId: string, delta: number): ChatHistory {
+export function bumpCommentsCount(
+  history: ChatHistory,
+  messageId: string,
+  delta: number,
+): ChatHistory {
   let changed = false;
 
   const items = history.items.map((message) => {
@@ -414,9 +462,9 @@ export function readHistory(
 
 /** Все загруженные истории — у оригинала бывают копии в островках чужих чатов. */
 export function readAllHistories(queryClient: QueryClient): ChatHistory[] {
-  return [
-    ...queryClient.getQueriesData<ChatHistory>({ queryKey: ['messages'] }),
-  ].flatMap(([, history]) => (history ? [history] : []));
+  return [...queryClient.getQueriesData<ChatHistory>({ queryKey: ['messages'] })].flatMap(
+    ([, history]) => (history ? [history] : []),
+  );
 }
 
 /** Меняет все загруженные истории разом — оригинал везде, где он показан. */

@@ -23,6 +23,14 @@ export type IslandItemRow = {
 
 export type ChatListRow = MessageListRow | IslandHeaderRow | IslandItemRow;
 
+/** Mount identity is separate from action/selection identity after confirmation. */
+export function rowRenderKey(row: ChatListRow): string {
+  if (row.type === 'message' || !row.island.renderId) return row.key;
+  return row.type === 'island-header'
+    ? islandHeaderKey(row.island.renderId)
+    : islandItemKey(row.island.renderId, row.item.messageId);
+}
+
 /** Строка, которую можно выбрать, процитировать, переслать: облачко. */
 export type BubbleRow = MessageListRow | IslandItemRow;
 
@@ -54,15 +62,13 @@ function rowsOf(message: ChatMessage): ChatListRow[] {
     // Список перевёрнут: нижнее облачко — первая строка, плашка — последняя.
     rows = [
       ...items
-        .map(
-          (item, index): IslandItemRow => ({
-            type: 'island-item',
-            key: islandItemKey(message.id, item.messageId),
-            island: message,
-            item,
-            isLast: index === items.length - 1,
-          }),
-        )
+        .map((item, index): IslandItemRow => ({
+          type: 'island-item',
+          key: islandItemKey(message.id, item.messageId),
+          island: message,
+          item,
+          isLast: index === items.length - 1,
+        }))
         .reverse(),
       { type: 'island-header', key: islandHeaderKey(message.id), island: message },
     ];

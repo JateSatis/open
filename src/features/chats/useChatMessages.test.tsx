@@ -1,3 +1,8 @@
+jest.mock('@/api/historyWindow', () => ({
+  getHistoryWindow: jest.fn((...args) => jest.requireActual('@/test/historyWindowMock').fixtureHistoryWindow(...args)),
+  getHistoryGroupKeys: jest.fn(() => Promise.resolve([])),
+  getHistoryItems: jest.fn(() => Promise.resolve([])),
+}));
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
@@ -36,6 +41,7 @@ jest.mock('@/api/chats', () => ({
   forwardMessages: jest.fn(),
   subscribeToChat: jest.fn(),
   deleteMessages: jest.fn(),
+  removeForwardItems: jest.fn(),
   listDeletedMessageIds: jest.fn(),
   listMessageEdits: jest.fn(() => Promise.resolve([])),
   listCommentCounts: jest.fn(() => Promise.resolve([])),
@@ -913,4 +919,26 @@ describe('useChatMessages replies and forwards', () => {
     expect(mockedForward).toHaveBeenCalledTimes(2);
     expect(mockedForward).toHaveBeenLastCalledWith('chat-1', 'chat-src', ['a', 'b']);
   });
+});
+
+
+it('restores rejected item removal without losing a concurrently loaded neighbour', async () => {
+  const { removeForwardItems } = jest.requireMock('@/api/chats');
+  let reject!: (error:Error)=>void;
+  removeForwardItems.mockReturnValue(new Promise((_resolve, fail)=>{reject=fail;}));
+  const { result } = await renderHook(()=>({chat:useChatMessages('chat-1','user-1'),client:useQueryClient()}),{wrapper});
+  await waitFor(()=>expect(result.current.chat.isLoading).toBe(false));
+  const { mergeMessages,messagesQueryKey } = jest.requireActual('@/features/chats/messages/historyCache');
+  const group=island('remove-group','2026-11-10T12:00:00Z',[original({id:'a'}),original({id:'b'})]);
+  await act(()=>result.current.client.setQueryData(messagesQueryKey('chat-1'),mergeMessages({items:[],nextCursor:null},[group],'older')));
+  let pending!: Promise<unknown>;
+  await act(()=>{pending=result.current.chat.removeFromIsland(group.id,['a']).catch(error=>error);});
+  const current = result.current.client.getQueryData(messagesQueryKey('chat-1')) as import('./messages/historyCache').ChatHistory;
+  expect(current.items[0].forward!.items.map(item=>item.messageId)).toEqual(['b']);
+  const added={...group,forward:{...group.forward!,items:[{...group.forward!.items[1],id:'later-item',messageId:'c',position:2,original:original({id:'c'})}]}};
+  await act(()=>result.current.client.setQueryData(messagesQueryKey('chat-1'),mergeMessages(current,[added],'older')));
+  jest.spyOn(result.current.client,'invalidateQueries').mockResolvedValue();
+  await act(async()=>{reject(new Error('denied'));await pending;});
+  const restored = result.current.client.getQueryData(messagesQueryKey('chat-1')) as import('./messages/historyCache').ChatHistory;
+  expect(restored.items[0].forward!.items.map(item=>item.messageId)).toEqual(['a','b','c']);
 });

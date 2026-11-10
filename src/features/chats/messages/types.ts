@@ -17,6 +17,8 @@ export type ChatMessage = Message & {
   status: DeliveryStatus;
   /** Set only while the message exists optimistically, before the server id. */
   localId?: string;
+  /** Keeps mounted forward rows stable when the server confirms their parent id. */
+  renderId?: string;
   /** Автор оптимистичного ответа на плашке треда; серверную сводку не меняет. */
   chatThreadPendingAuthor?: { id: string; name: string; avatarUrl: string | null };
   /** Исходный выбор из галереи — нужен только для повтора неудачной отправки. */
