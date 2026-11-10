@@ -47,7 +47,7 @@ const MAX_CATCH_UP_PAGES = 5;
 /** Столько id за раз принимает `message_tombstones`. */
 const MAX_TOMBSTONE_IDS = 1000;
 const OPEN_HISTORY_ITEMS = 20;
-const OLDER_HISTORY_ITEMS = 60;
+const OLDER_HISTORY_ITEMS = 30;
 
 /** Страница назад в ленте `view`: вся переписка или «Треды» — без ответов. */
 export async function listHistoryPage(
