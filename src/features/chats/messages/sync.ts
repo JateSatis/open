@@ -2,6 +2,8 @@
 // сами строки всегда читаются из Postgres, где видимость решает RLS.
 
 import type { QueryClient } from '@tanstack/react-query';
+import { getHistoryWindow, type HistoryPosition } from '@/api/historyWindow';
+import { readForwardSlices, patchForwardSlices } from './forwardSlices';
 
 import { readChatThreadSummaries } from '@/features/chats/chatThreads/summaries';
 import {
@@ -10,9 +12,7 @@ import {
   listClusterCounts,
   listDeletedMessageIds,
   listMessageEdits,
-  listMessages,
   listMessagesByIds,
-  listMessagesSince,
   MESSAGE_PAGE_SIZE,
   type Message,
 } from '@/api/chats';
@@ -24,7 +24,7 @@ import {
   knownEdits,
   mergeMessages,
   messagesQueryKey,
-  newestSeq,
+  newestPosition,
   patchCommentCounts,
   patchClusterCounts,
   patchReactions,
@@ -34,7 +34,6 @@ import {
   readHistory,
   removeMessages,
   replaceMessages,
-  toSent,
   updateAllHistories,
   updateChatHistories,
   updateHistory,
@@ -49,20 +48,34 @@ const MAX_CATCH_UP_PAGES = 5;
 const MAX_TOMBSTONE_IDS = 1000;
 
 /** Страница назад в ленте `view`: вся переписка или «Треды» — без ответов. */
-export function listHistoryPage(chatId: string, view: HistoryView, cursor?: number) {
-  return view === 'all'
-    ? listMessages(chatId, { cursor })
-    : listChatThreadFeed(chatId, { cursor });
-}
-
-function listHistorySince(chatId: string, view: HistoryView, since: number) {
-  return view === 'all' ? listMessagesSince(chatId, since) : listChatThreadFeedSince(chatId, since);
+export async function listHistoryPage(
+  chatId: string,
+  view: HistoryView,
+  cursor?: NonNullable<ChatHistory['nextCursor']>,
+) {
+  if (view !== 'all')
+    return listChatThreadFeed(chatId, {
+      cursor: typeof cursor === 'number' ? cursor : cursor?.seq,
+    });
+  const page = await getHistoryWindow(
+    chatId,
+    cursor === undefined
+      ? { mode: 'latest' }
+      : {
+          mode: 'before',
+          cursor:
+            typeof cursor === 'number'
+              ? { chatId, direction: 'before', seq: cursor, position: 0 }
+              : cursor,
+        },
+  );
+  return { items: page.items.map((item) => item.message), nextCursor: page.before };
 }
 
 async function firstPage(chatId: string, view: HistoryView): Promise<ChatHistory> {
   const page = await listHistoryPage(chatId, view);
 
-  return { items: page.items.map(toSent), nextCursor: page.nextCursor };
+  return mergeMessages({ items: [], nextCursor: page.nextCursor }, page.items, 'older');
 }
 
 /**
@@ -72,20 +85,33 @@ async function firstPage(chatId: string, view: HistoryView): Promise<ChatHistory
  */
 async function fetchNewer(
   chatId: string,
-  since: number,
+  since: HistoryPosition,
   view: HistoryView,
 ): Promise<Message[] | null> {
   const newer: Message[] = [];
   let cursor = since;
 
-  for (let page = 0; page < MAX_CATCH_UP_PAGES; page += 1) {
-    const batch = await listHistorySince(chatId, view, cursor);
+  // Element pages can split just two sends into more than five pages. Resetting
+  // here would discard the reading position and race with an older-page load.
+  // Main history catches up incrementally through the one global cursor.
+  for (let page = 0; view === 'all' || page < MAX_CATCH_UP_PAGES; page += 1) {
+    const window =
+      view === 'all'
+        ? await getHistoryWindow(chatId, {
+            mode: 'after',
+            cursor: { chatId, direction: 'after', ...cursor },
+          })
+        : null;
+    const batch = window
+      ? window.items.map((item) => item.message)
+      : await listChatThreadFeedSince(chatId, cursor.seq);
 
     newer.push(...batch);
 
-    if (batch.length < MESSAGE_PAGE_SIZE) return newer;
+    if (window ? !window.after : batch.length < MESSAGE_PAGE_SIZE)
+      return mergeMessages({ items: [], nextCursor: null }, newer, 'newer').items.reverse();
 
-    cursor = batch[batch.length - 1].seq;
+    cursor = window?.after ?? { seq: batch[batch.length - 1].seq, position: 0 };
   }
 
   return null;
@@ -105,18 +131,29 @@ export async function pullNewMessages(
 
   if (!history) return [];
 
-  const since = newestSeq(history);
+  const since = newestPosition(history);
+  if (since === null) {
+    const page = await firstPage(chatId, view);
+    updateHistory(
+      queryClient,
+      chatId,
+      (current) => ({
+        ...mergeMessages(current, page.items, 'newer'),
+        nextCursor: newestPosition(current) === null ? page.nextCursor : current.nextCursor,
+      }),
+      view,
+    );
+    return [...page.items].reverse();
+  }
   // В пустом чате дочитывать не от чего — первое сообщение забираем обычной
   // страницей, иначе диалог оживает только после повторного входа.
-  const fetched = since !== null ? await fetchNewer(chatId, since, view) : null;
-  if (since !== null && fetched === null) {
+  const fetched = await fetchNewer(chatId, since, view);
+  if (fetched === null) {
     const latestPage = await firstPage(chatId, view);
     queryClient.setQueryData(messagesQueryKey(chatId, view), latestPage);
     return latestPage.items;
   }
-  const incoming = since !== null
-    ? (fetched ?? [])
-    : [...(await listHistoryPage(chatId, view)).items].reverse();
+  const incoming = fetched;
 
   if (incoming.length > 0) {
     updateHistory(
@@ -146,7 +183,7 @@ export async function loadHistory(
   view: HistoryView = 'all',
 ): Promise<ChatHistory> {
   const cached = readHistory(queryClient, chatId, view);
-  const since = cached ? newestSeq(cached) : null;
+  const since = cached ? newestPosition(cached) : null;
 
   if (!cached || since === null) return firstPage(chatId, view);
 
@@ -162,16 +199,12 @@ export async function loadHistory(
     0,
     MAX_TOMBSTONE_IDS,
   );
-  // Островки перечитываются целиком: из них могли убрать облачка.
-  const islandIds = cached.items
-    .filter((message) => message.kind === 'forward')
-    .map((message) => message.id)
-    .slice(0, MAX_TOMBSTONE_IDS);
+  // Проверяем лишь загруженные элементы: группа могла потерять часть облачков.
   const [newer, deleted, edited, islands, reactions, commentCounts, views] = await Promise.all([
     fetchNewer(chatId, since, view),
     listDeletedMessageIds(loadedIds),
     fetchStaleEdits(cached, loadedIds),
-    listMessagesByIds(islandIds),
+    readForwardSlices(cached.items),
     // Счётчики пропущенных реакций. Не вышло — не повод ронять дочитывание:
     // их принесёт следующее событие или вход в чат.
     listMessageReactions(loadedMessageIds).catch(() => []),
@@ -185,29 +218,36 @@ export async function loadHistory(
 
   const latest = readHistory(queryClient, chatId, view) ?? cached;
   // В «Тредах» удалённое без нас исходное с ответами остаётся заглушкой.
-  const summaries = view === 'chat-threads' ? readChatThreadSummaries(queryClient, chatId) : undefined;
+  const summaries =
+    view === 'chat-threads' ? readChatThreadSummaries(queryClient, chatId) : undefined;
   const stubs = summaries
     ? latest.items
-        .filter((message) => deleted.includes(message.id) && (summaries[message.id]?.repliesCount ?? 0) > 0)
+        .filter(
+          (message) =>
+            deleted.includes(message.id) && (summaries[message.id]?.repliesCount ?? 0) > 0,
+        )
         .map((message) => deletedChatThreadRoot(chatId, message.id, message.seq))
     : [];
 
-  return patchViews(
-    patchCommentCounts(
-      patchReactions(
-        replaceMessages(
-          mergeMessages(
-            removeMessages(mergeMessages(latest, newer, 'newer'), new Set(deleted)),
-            stubs,
-            'older',
+  return patchForwardSlices(
+    patchViews(
+      patchCommentCounts(
+        patchReactions(
+          replaceMessages(
+            mergeMessages(
+              removeMessages(mergeMessages(latest, newer, 'newer'), new Set(deleted)),
+              stubs,
+              'older',
+            ),
+            edited,
           ),
-          [...edited, ...islands],
+          reactions,
         ),
-        reactions,
+        commentCounts,
       ),
-      commentCounts,
+      views,
     ),
-    views,
+    islands,
   );
 }
 
@@ -215,7 +255,14 @@ export async function loadHistory(
 async function fetchStaleEdits(history: ChatHistory, ids: string[]): Promise<Message[]> {
   const known = knownEdits(history);
   const edits = await listMessageEdits(ids);
-  const stale = edits.filter((edit) => known.get(edit.id) !== edit.editMark).map((edit) => edit.id);
+  const forwards = new Set(
+    history.items
+      .filter((message) => message.forward || message.forwardGroup)
+      .map((message) => message.id),
+  );
+  const stale = edits
+    .filter((edit) => !forwards.has(edit.id) && known.get(edit.id) !== edit.editMark)
+    .map((edit) => edit.id);
 
   return listMessagesByIds(stale);
 }
@@ -249,14 +296,27 @@ function editsEverywhere(queryClient: QueryClient): Map<string, number | null> {
  * перезагрузки истории и без прыжка списка.
  */
 export async function refreshChatTimes(queryClient: QueryClient, chatId: string): Promise<void> {
+  const snapshots = readAllHistories(queryClient).flatMap((history) => history.items);
+  const forwards = new Set(
+    snapshots
+      .filter((message) => message.forward || message.forwardGroup)
+      .map((message) => message.id),
+  );
+  const slices = await readForwardSlices(snapshots.filter((message) => message.chatId === chatId));
+  updateAllHistories(queryClient, (history) => patchForwardSlices(history, slices));
   // «Треды» и шторки могут содержать сообщения, которых ещё нет в обычной
   // истории. Смена приватности обновляет каждое место показа.
-  const ids = [...new Set(readAllHistories(queryClient).flatMap((history) => [
-    ...history.items.filter((message) => message.chatId === chatId && message.status === 'sent')
-      .map((message) => message.id),
-    ...quotedIds(history),
-    ...originalIds(history.items),
-  ]))];
+  const ids = [
+    ...new Set(
+      readAllHistories(queryClient).flatMap((history) => [
+        ...history.items
+          .filter((message) => message.chatId === chatId && message.status === 'sent')
+          .map((message) => message.id),
+        ...quotedIds(history),
+        ...originalIds(history.items),
+      ]),
+    ),
+  ].filter((id) => !forwards.has(id));
 
   if (ids.length === 0) return;
 
@@ -276,7 +336,19 @@ export async function refreshEditedMessages(
   candidates: string[],
 ): Promise<void> {
   const known = editsEverywhere(queryClient);
-  const ids = candidates.filter((id) => known.has(id)).slice(0, MAX_TOMBSTONE_IDS);
+  const snapshots = readAllHistories(queryClient).flatMap((history) => history.items);
+  const forwards = new Set(
+    snapshots
+      .filter((message) => message.forward || message.forwardGroup)
+      .map((message) => message.id),
+  );
+  const slices = await readForwardSlices(
+    snapshots.filter((message) => candidates.includes(message.id)),
+  );
+  updateAllHistories(queryClient, (history) => patchForwardSlices(history, slices));
+  const ids = candidates
+    .filter((id) => known.has(id) && !forwards.has(id))
+    .slice(0, MAX_TOMBSTONE_IDS);
 
   if (ids.length === 0) return;
 
@@ -383,11 +455,12 @@ export async function refreshIsland(
 
   if (!loaded) return;
 
-  const [fresh] = await listMessagesByIds([forwardId]);
-
-  updateChatHistories(queryClient, chatId, (current) =>
-    fresh ? replaceMessages(current, [fresh]) : removeMessages(current, new Set([forwardId])),
+  const snapshot = readAllHistories(queryClient).flatMap((history) =>
+    history.items.filter((message) => message.id === forwardId),
   );
+  const fresh = await readForwardSlices(snapshot);
+
+  updateChatHistories(queryClient, chatId, (current) => patchForwardSlices(current, fresh));
 }
 
 /**

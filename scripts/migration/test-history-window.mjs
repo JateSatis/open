@@ -93,7 +93,7 @@ function load(path) {
 }
 const api = () => {
   cache.clear();
-  return load('@/api/historyWindow');
+  return load('@/api/legacyHistoryWindow');
 };
 await db.connect();
 await writer.connect();

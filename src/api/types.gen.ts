@@ -814,6 +814,13 @@ export type Database = {
             foreignKeyName: "comments_message_fkey"
             columns: ["message_id", "chat_id"]
             isOneToOne: false
+            referencedRelation: "history_element_rows"
+            referencedColumns: ["message_id", "chat_id"]
+          },
+          {
+            foreignKeyName: "comments_message_fkey"
+            columns: ["message_id", "chat_id"]
+            isOneToOne: false
             referencedRelation: "message_rows"
             referencedColumns: ["id", "chat_id"]
           },
@@ -1041,6 +1048,13 @@ export type Database = {
             foreignKeyName: "forward_items_forward_fkey"
             columns: ["forward_id", "chat_id"]
             isOneToOne: false
+            referencedRelation: "history_element_rows"
+            referencedColumns: ["message_id", "chat_id"]
+          },
+          {
+            foreignKeyName: "forward_items_forward_fkey"
+            columns: ["forward_id", "chat_id"]
+            isOneToOne: false
             referencedRelation: "message_rows"
             referencedColumns: ["id", "chat_id"]
           },
@@ -1064,6 +1078,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "messages"
             referencedColumns: ["id", "kind"]
+          },
+          {
+            foreignKeyName: "forward_items_message_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "history_element_rows"
+            referencedColumns: ["message_id"]
           },
           {
             foreignKeyName: "forward_items_message_fkey"
@@ -1137,6 +1158,13 @@ export type Database = {
           scorer?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "fragment_cluster_decisions_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "history_element_rows"
+            referencedColumns: ["message_id"]
+          },
           {
             foreignKeyName: "fragment_cluster_decisions_message_id_fkey"
             columns: ["message_id"]
@@ -1229,6 +1257,13 @@ export type Database = {
             foreignKeyName: "fragment_cluster_events_message_id_fkey"
             columns: ["message_id"]
             isOneToOne: false
+            referencedRelation: "history_element_rows"
+            referencedColumns: ["message_id"]
+          },
+          {
+            foreignKeyName: "fragment_cluster_events_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
             referencedRelation: "message_rows"
             referencedColumns: ["id"]
           },
@@ -1301,6 +1336,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "fragment_cluster_decisions"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fragment_cluster_state_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: true
+            referencedRelation: "history_element_rows"
+            referencedColumns: ["message_id"]
           },
           {
             foreignKeyName: "fragment_cluster_state_message_id_fkey"
@@ -1459,6 +1501,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "reaction_emojis"
             referencedColumns: ["emoji"]
+          },
+          {
+            foreignKeyName: "fragment_clusters_message_fkey"
+            columns: ["message_id", "chat_id"]
+            isOneToOne: false
+            referencedRelation: "history_element_rows"
+            referencedColumns: ["message_id", "chat_id"]
           },
           {
             foreignKeyName: "fragment_clusters_message_fkey"
@@ -1651,6 +1700,13 @@ export type Database = {
             foreignKeyName: "legacy_forward_copies_copy_id_fkey"
             columns: ["copy_id"]
             isOneToOne: false
+            referencedRelation: "history_element_rows"
+            referencedColumns: ["message_id"]
+          },
+          {
+            foreignKeyName: "legacy_forward_copies_copy_id_fkey"
+            columns: ["copy_id"]
+            isOneToOne: false
             referencedRelation: "message_rows"
             referencedColumns: ["id"]
           },
@@ -1667,6 +1723,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "forward_items"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "legacy_forward_copies_forward_item_id_fkey"
+            columns: ["forward_item_id"]
+            isOneToOne: false
+            referencedRelation: "history_element_rows"
+            referencedColumns: ["forward_item_id"]
           },
         ]
       }
@@ -1809,6 +1872,13 @@ export type Database = {
             foreignKeyName: "message_fragments_message_fkey"
             columns: ["message_id", "chat_id"]
             isOneToOne: false
+            referencedRelation: "history_element_rows"
+            referencedColumns: ["message_id", "chat_id"]
+          },
+          {
+            foreignKeyName: "message_fragments_message_fkey"
+            columns: ["message_id", "chat_id"]
+            isOneToOne: false
             referencedRelation: "message_rows"
             referencedColumns: ["id", "chat_id"]
           },
@@ -1868,6 +1938,13 @@ export type Database = {
             foreignKeyName: "message_pins_forward_fkey"
             columns: ["forward_id", "chat_id"]
             isOneToOne: false
+            referencedRelation: "history_element_rows"
+            referencedColumns: ["message_id", "chat_id"]
+          },
+          {
+            foreignKeyName: "message_pins_forward_fkey"
+            columns: ["forward_id", "chat_id"]
+            isOneToOne: false
             referencedRelation: "message_rows"
             referencedColumns: ["id", "chat_id"]
           },
@@ -1877,6 +1954,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "messages"
             referencedColumns: ["id", "chat_id"]
+          },
+          {
+            foreignKeyName: "message_pins_message_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "history_element_rows"
+            referencedColumns: ["message_id"]
           },
           {
             foreignKeyName: "message_pins_message_fkey"
@@ -1948,6 +2032,13 @@ export type Database = {
             foreignKeyName: "message_replies_message_fkey"
             columns: ["message_id", "chat_id"]
             isOneToOne: false
+            referencedRelation: "history_element_rows"
+            referencedColumns: ["message_id", "chat_id"]
+          },
+          {
+            foreignKeyName: "message_replies_message_fkey"
+            columns: ["message_id", "chat_id"]
+            isOneToOne: false
             referencedRelation: "message_rows"
             referencedColumns: ["id", "chat_id"]
           },
@@ -1962,6 +2053,13 @@ export type Database = {
             foreignKeyName: "message_replies_quoted_fkey"
             columns: ["quoted_id"]
             isOneToOne: false
+            referencedRelation: "history_element_rows"
+            referencedColumns: ["message_id"]
+          },
+          {
+            foreignKeyName: "message_replies_quoted_fkey"
+            columns: ["quoted_id"]
+            isOneToOne: false
             referencedRelation: "message_rows"
             referencedColumns: ["id"]
           },
@@ -1971,6 +2069,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "messages"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_replies_quoted_forward_fkey"
+            columns: ["quoted_forward_id", "chat_id"]
+            isOneToOne: false
+            referencedRelation: "history_element_rows"
+            referencedColumns: ["message_id", "chat_id"]
           },
           {
             foreignKeyName: "message_replies_quoted_forward_fkey"
@@ -2048,6 +2153,13 @@ export type Database = {
             foreignKeyName: "message_revisions_message_id_fkey"
             columns: ["message_id"]
             isOneToOne: false
+            referencedRelation: "history_element_rows"
+            referencedColumns: ["message_id"]
+          },
+          {
+            foreignKeyName: "message_revisions_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
             referencedRelation: "message_rows"
             referencedColumns: ["id"]
           },
@@ -2086,6 +2198,13 @@ export type Database = {
           viewer_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "message_views_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "history_element_rows"
+            referencedColumns: ["message_id"]
+          },
           {
             foreignKeyName: "message_views_message_id_fkey"
             columns: ["message_id"]
@@ -3692,6 +3811,13 @@ export type Database = {
             foreignKeyName: "saved_messages_comment_message_id_fkey"
             columns: ["comment_message_id"]
             isOneToOne: false
+            referencedRelation: "history_element_rows"
+            referencedColumns: ["message_id"]
+          },
+          {
+            foreignKeyName: "saved_messages_comment_message_id_fkey"
+            columns: ["comment_message_id"]
+            isOneToOne: false
             referencedRelation: "message_rows"
             referencedColumns: ["id"]
           },
@@ -3750,6 +3876,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "comments"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "saved_messages_source_message_id_fkey"
+            columns: ["source_message_id"]
+            isOneToOne: false
+            referencedRelation: "history_element_rows"
+            referencedColumns: ["message_id"]
           },
           {
             foreignKeyName: "saved_messages_source_message_id_fkey"
@@ -4359,6 +4492,13 @@ export type Database = {
             foreignKeyName: "comments_message_fkey"
             columns: ["message_id", "chat_id"]
             isOneToOne: false
+            referencedRelation: "history_element_rows"
+            referencedColumns: ["message_id", "chat_id"]
+          },
+          {
+            foreignKeyName: "comments_message_fkey"
+            columns: ["message_id", "chat_id"]
+            isOneToOne: false
             referencedRelation: "message_rows"
             referencedColumns: ["id", "chat_id"]
           },
@@ -4428,6 +4568,13 @@ export type Database = {
             foreignKeyName: "message_fragments_message_fkey"
             columns: ["message_id", "chat_id"]
             isOneToOne: false
+            referencedRelation: "history_element_rows"
+            referencedColumns: ["message_id", "chat_id"]
+          },
+          {
+            foreignKeyName: "message_fragments_message_fkey"
+            columns: ["message_id", "chat_id"]
+            isOneToOne: false
             referencedRelation: "message_rows"
             referencedColumns: ["id", "chat_id"]
           },
@@ -4439,6 +4586,104 @@ export type Database = {
             referencedColumns: ["id", "chat_id"]
           },
         ]
+      }
+      history_element_rows: {
+        Row: {
+          chat_id: string | null
+          forward_item_id: string | null
+          hidden: boolean | null
+          id: string | null
+          message_id: string | null
+          position: number | null
+          seq: number | null
+          history_element_forward_item: {
+            chat_id: string
+            created_at: string
+            deleted_at: string | null
+            forward_id: string
+            forward_kind: string
+            id: string
+            message_id: string
+            position: number
+          } | null
+          history_element_message: {
+            author_avatar_url: string | null
+            author_id: string | null
+            author_name: string | null
+            author_opaque: boolean | null
+            chat_id: string | null
+            chat_thread_root_ids: string[] | null
+            clusters_count: number | null
+            comments_count: number | null
+            created_at: string | null
+            deleted_at: string | null
+            edit_mark: number | null
+            edited: boolean | null
+            edited_at: string | null
+            forwarded_comment_id: string | null
+            fragments_count: number | null
+            hidden: boolean | null
+            hidden_ranges: Json | null
+            id: string | null
+            kind: string | null
+            member_reactions: Json | null
+            reactions_count: number | null
+            read_at: string | null
+            reads_visible: boolean | null
+            seq: number | null
+            source_chat_id: string | null
+            stream_host_id: string | null
+            stream_id: string | null
+            system_event: string | null
+            system_user_id: string | null
+            system_user_name: string | null
+            system_user_opaque: boolean | null
+            text: string | null
+            time_visible: boolean | null
+            unique_views_count: number | null
+            views_count: number | null
+            visitor_reactions: Json | null
+          } | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "messages_chat_id_fkey"
+            columns: ["chat_id"]
+            isOneToOne: false
+            referencedRelation: "chat_rows"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "messages_chat_id_fkey"
+            columns: ["chat_id"]
+            isOneToOne: false
+            referencedRelation: "chats"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      history_element_windows: {
+        Row: {
+          after_cursor: Json | null
+          anchor: Json | null
+          before_cursor: Json | null
+          chat_id: string | null
+          coverage: Json | null
+          element_ids: string[] | null
+          has_after: boolean | null
+          has_before: boolean | null
+          target_status: string | null
+          history_window_elements: {
+            chat_id: string | null
+            forward_item_id: string | null
+            hidden: boolean | null
+            id: string | null
+            message_id: string | null
+            position: number | null
+            seq: number | null
+          } | null
+        }
+        Relationships: []
       }
       history_window_rows: {
         Row: {
@@ -5227,6 +5472,53 @@ export type Database = {
         Args: { p_other: string; p_viewer: string }
         Returns: string
       }
+      get_history_element_window: {
+        Args: {
+          p_chat: string
+          p_cursor?: Json
+          p_hint_position?: number
+          p_hint_seq?: number
+          p_limit?: number
+          p_mode: string
+          p_target?: string
+          p_target_item?: string
+        }
+        Returns: {
+          after_cursor: Json | null
+          anchor: Json | null
+          before_cursor: Json | null
+          chat_id: string | null
+          coverage: Json | null
+          element_ids: string[] | null
+          has_after: boolean | null
+          has_before: boolean | null
+          target_status: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "history_element_windows"
+          isOneToOne: true
+          isSetofReturn: true
+        }
+      }
+      get_history_elements: {
+        Args: { p_chat: string; p_ids: string[] }
+        Returns: {
+          chat_id: string | null
+          forward_item_id: string | null
+          hidden: boolean | null
+          id: string | null
+          message_id: string | null
+          position: number | null
+          seq: number | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "history_element_rows"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       get_history_window: {
         Args: {
           p_chat: string
@@ -5260,6 +5552,118 @@ export type Database = {
       }
       hidden_ranges_from_json: { Args: { value: Json }; Returns: unknown }
       hidden_ranges_json: { Args: { ranges: unknown }; Returns: Json }
+      history_element_forward_item: {
+        Args: { "": Database["public"]["Views"]["history_element_rows"]["Row"] }
+        Returns: {
+          chat_id: string
+          created_at: string
+          deleted_at: string | null
+          forward_id: string
+          forward_kind: string
+          id: string
+          message_id: string
+          position: number
+        }
+        SetofOptions: {
+          from: "history_element_rows"
+          to: "forward_items"
+          isOneToOne: true
+          isSetofReturn: true
+        }
+      }
+      history_element_message: {
+        Args: { "": Database["public"]["Views"]["history_element_rows"]["Row"] }
+        Returns: {
+          author_avatar_url: string | null
+          author_id: string | null
+          author_name: string | null
+          author_opaque: boolean | null
+          chat_id: string | null
+          chat_thread_root_ids: string[] | null
+          clusters_count: number | null
+          comments_count: number | null
+          created_at: string | null
+          deleted_at: string | null
+          edit_mark: number | null
+          edited: boolean | null
+          edited_at: string | null
+          forwarded_comment_id: string | null
+          fragments_count: number | null
+          hidden: boolean | null
+          hidden_ranges: Json | null
+          id: string | null
+          kind: string | null
+          member_reactions: Json | null
+          reactions_count: number | null
+          read_at: string | null
+          reads_visible: boolean | null
+          seq: number | null
+          source_chat_id: string | null
+          stream_host_id: string | null
+          stream_id: string | null
+          system_event: string | null
+          system_user_id: string | null
+          system_user_name: string | null
+          system_user_opaque: boolean | null
+          text: string | null
+          time_visible: boolean | null
+          unique_views_count: number | null
+          views_count: number | null
+          visitor_reactions: Json | null
+        }
+        SetofOptions: {
+          from: "history_element_rows"
+          to: "message_rows"
+          isOneToOne: true
+          isSetofReturn: true
+        }
+      }
+      history_element_slice: {
+        Args: {
+          p_chat: string
+          p_direction: string
+          p_inclusive?: boolean
+          p_limit: number
+          p_position: number
+          p_seq: number
+          p_visible_only?: boolean
+        }
+        Returns: {
+          chat_id: string | null
+          forward_item_id: string | null
+          hidden: boolean | null
+          id: string | null
+          message_id: string | null
+          position: number | null
+          seq: number | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "history_element_rows"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      history_window_elements: {
+        Args: {
+          "": Database["public"]["Views"]["history_element_windows"]["Row"]
+        }
+        Returns: {
+          chat_id: string | null
+          forward_item_id: string | null
+          hidden: boolean | null
+          id: string | null
+          message_id: string | null
+          position: number | null
+          seq: number | null
+        }[]
+        SetofOptions: {
+          from: "history_element_windows"
+          to: "history_element_rows"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       history_window_messages: {
         Args: { "": Database["public"]["Views"]["history_window_rows"]["Row"] }
         Returns: {
@@ -7150,8 +7554,7 @@ export type Tables<
 
 export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
-    | keyof DefaultSchema["Tables"]
-    | { schema: keyof DatabaseWithoutInternals },
+    keyof DefaultSchema["Tables"] | { schema: keyof DatabaseWithoutInternals },
   TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
@@ -7175,8 +7578,7 @@ export type TablesInsert<
 
 export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
-    | keyof DefaultSchema["Tables"]
-    | { schema: keyof DatabaseWithoutInternals },
+    keyof DefaultSchema["Tables"] | { schema: keyof DatabaseWithoutInternals },
   TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
@@ -7200,8 +7602,7 @@ export type TablesUpdate<
 
 export type Enums<
   DefaultSchemaEnumNameOrOptions extends
-    | keyof DefaultSchema["Enums"]
-    | { schema: keyof DatabaseWithoutInternals },
+    keyof DefaultSchema["Enums"] | { schema: keyof DatabaseWithoutInternals },
   EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }

@@ -1,10 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 
-import {
-  deleteMessages as deleteOnServer,
-  removeForwardItems,
-} from '@/api/chats';
+import { deleteMessages as deleteOnServer, removeForwardItems } from '@/api/chats';
 import {
   deliver,
   discardLocal,
@@ -15,6 +12,7 @@ import {
 } from '@/features/chats/messages/delivery';
 import {
   messagesQueryKey,
+  mergeMessages,
   readHistory,
   removeIslandItems,
   removeMessages,
@@ -22,6 +20,7 @@ import {
   updateChatHistories,
   updateHistory,
   type HistoryView,
+  type ChatHistory,
 } from '@/features/chats/messages/historyCache';
 import { isChatThreadReply } from '@/features/chats/chatThreads/replies';
 import { keepDeletedChatThreadRoots } from '@/features/chats/chatThreads/sync';
@@ -168,7 +167,6 @@ export function useChatMessages(
 
     wasOfflineRef.current = false;
 
-
     // Связь вернулась — дописываем то, что не ушло. Пользователь уже нажал
     // «отправить»: заставлять его тыкать «повторить» по каждому сообщению
     // значит перекладывать на него работу приложения.
@@ -261,6 +259,24 @@ export function useChatMessages(
 
   const removeFromIsland = useCallback(
     async (forwardId: string, messageIds: string[]) => {
+      const snapshots = queryClient
+        .getQueriesData<ChatHistory>({ queryKey: messagesQueryKey(chatId) })
+        .map(([key, history]) => ({
+          key,
+          removed: (history?.items ?? [])
+            .filter((message) => message.id === forwardId)
+            .map((message) => ({
+              ...message,
+              forward: message.forward
+                ? {
+                    ...message.forward,
+                    items: message.forward.items.filter((item) =>
+                      messageIds.includes(item.messageId),
+                    ),
+                  }
+                : null,
+            })),
+        }));
       updateChatHistories(queryClient, chatId, (current) =>
         removeIslandItems(current, forwardId, new Set(messageIds)),
       );
@@ -268,7 +284,10 @@ export function useChatMessages(
       try {
         await removeForwardItems(forwardId, messageIds);
       } catch (cause) {
-        // Откат — перечитать: островок таков, каким его знает база.
+        for (const { key, removed } of snapshots)
+          queryClient.setQueryData<ChatHistory>(key, (current) =>
+            current ? mergeMessages(current, removed, 'older') : current,
+          );
         void queryClient.invalidateQueries({ queryKey: messagesQueryKey(chatId) });
         throw cause;
       }

@@ -14,6 +14,7 @@ import {
 import Animated from 'react-native-reanimated';
 
 import { styles } from './styles';
+import { useAttachedHistoryRows } from './useAttachedHistoryRows';
 
 import { isOpaquePersonId } from '@/api/opaquePeople';
 import type { ChannelRef, IslandOriginal, Person } from '@/api/chats';
@@ -55,6 +56,7 @@ import {
   commentsHomeOf,
   contentOf,
   toChatRows,
+  rowRenderKey,
   type BubbleRow,
   type ChatListRow,
 } from '@/features/chats/islands/rows';
@@ -143,7 +145,6 @@ import { setActiveChatId } from '@/store/activeChat';
 import { Spacing } from '@/theme';
 
 const noop = () => undefined;
-const rowKey = (row: ChatListRow) => row.key;
 
 /** Ближе этого к самому новому сообщению список держится за низ переписки, а не за прочитанное. */
 const KEEP_READING_POSITION = { minIndexForVisible: 0, autoscrollToTopThreshold: Spacing.six };
@@ -237,6 +238,7 @@ export function ChatConversation({
   const composerRef = useRef<TextInput>(null);
   // Островок раскладывается на строки: плашка и облачка — по строке.
   const rows = useMemo(() => toChatRows(messages), [messages]);
+  const presentedRows = useAttachedHistoryRows(rows, `${chatId}/${chatThreads.view}`);
   const pins = usePinnedMessages(chatId);
   const pinCursor = usePinnedCursor(pins.pins);
   const selection = useMessageSelection(rows, currentUserId);
@@ -996,8 +998,8 @@ export function ChatConversation({
                   ref={listRef}
                   testID="messages-list"
                   inverted
-                  data={rows}
-                  keyExtractor={rowKey}
+                  data={presentedRows}
+                  keyExtractor={rowRenderKey}
                   renderItem={renderItem}
                   // Плашки тредов приходят после строк: видимые ячейки перерисовываются.
                   extraData={chatThreadSummaries}

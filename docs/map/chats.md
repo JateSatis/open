@@ -12,7 +12,7 @@
 | Список чатов | [маршрут списка](../../src/app/%28tabs%29/chats/index.tsx) → [useChats](../../src/features/chats/useChats.ts), [chats API](../../src/api/chats.ts) |
 | Закрепы и цитаты | [usePinnedMessages](../../src/features/chats/usePinnedMessages.ts), [PinnedBar](../../src/features/chats/PinnedBar/index.tsx), [useChatBubbles](../../src/features/chats/useChatBubbles.tsx): отображение без перехода к сообщению |
 | Ручная подгрузка истории | [useChatHistory](../../src/features/chats/messages/useChatHistory.ts) → [historyCache](../../src/features/chats/messages/historyCache.ts); окон вокруг цели больше нет |
-| Серверный участок истории (чат и посты канала) | [historyWindow API](../../src/api/historyWindow.ts): `getHistoryWindow` → `get_history_window` + `history_window_messages`; [контракт](../backend.md#участок-истории). Экран пока использует старый API |
+| Серверный участок истории (чат и посты канала) | [historyWindow API](../../src/api/historyWindow.ts): `getHistoryWindow` → `get_history_element_window` + `history_window_elements`; [контракт](../backend.md#участок-истории). Основная история использует элементы и составной курсор; треды сохраняют старый API |
 | Отправка/повтор/выход с экрана | [MessageComposer](../../src/features/chats/MessageComposer/index.tsx) → useChatMessages → [delivery](../../src/features/chats/messages/delivery.ts), [outbox](../../src/features/chats/messages/outbox.ts) → chats API |
 | Вид «Треды» в группе | [chatThreads](../../src/features/chats/chatThreads/), [ChatThreadPanel](../../src/features/chats/ChatThreadPanel/), [chatThreads API](../../src/api/chatThreads.ts) |
 
