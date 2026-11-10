@@ -18,6 +18,7 @@ export function runSql(sql, { capture = false, timeout } = {}) {
     command = 'ssh';
     const outputFlags = capture ? ' -At -F "|"' : '';
     args = [
+      ...(process.env.TARGET_SSH_BIND_ADDRESS ? ['-b', process.env.TARGET_SSH_BIND_ADDRESS] : []),
       '-o',
       'BatchMode=yes',
       '-o',

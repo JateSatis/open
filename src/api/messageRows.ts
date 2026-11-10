@@ -222,6 +222,12 @@ export type ForwardedComment = {
 export type CommentForward = { commentId: string | null; comment: ForwardedComment | null };
 
 export type Message = {
+  /** Keeps the action type even while viewer privacy renders a text placeholder. */
+  forwardGroup?: boolean;
+  /** Loaded occurrence identities retained through a hidden placeholder, without content. */
+  forwardItemKeys?: string[];
+  /** Verified positions within this group, including currently invisible gaps. */
+  forwardRange?: { start: number; end: number };
   id: string;
   chatId: string;
   /**
@@ -339,8 +345,14 @@ const FORWARDED_COMMENT_COLUMNS =
 // Островок приходит сразу с оригиналами: их текст, файлы, автор, чат,
 // реакции и комментарии — той же выборкой. Своя реакция — вычисляемой связью
 // `my_reaction`, и у оригинала тоже.
+export const MESSAGE_BASE_COLUMNS =
+  `id, chat_id, author_id, kind, text, hidden_ranges, seq, created_at, edited_at, edited, edit_mark, attachments:attachment_rows(${MESSAGE_ATTACHMENT_COLUMNS}), ${REPLY_COLUMNS}, ${REACTION_AND_COMMENT_COLUMNS}, stream_id, stream_host_id, system_event, system_user_id, chat_thread_root_ids, author_name, author_avatar_url, author_opaque, system_user_name, system_user_opaque, stream:streams!messages_stream_id_fkey(started_at, ended_at), my_call:my_stream_participation(id), source_chat:chat_rows!messages_source_chat_id_fkey(id, chat_display_name), ${FORWARDED_COMMENT_COLUMNS}` as const;
+export const FORWARD_ITEM_COLUMNS =
+  `id, position, message_id, original:message_rows!forward_items_message_fkey(${ORIGINAL_COLUMNS})` as const;
 export const MESSAGE_COLUMNS =
-  `id, chat_id, author_id, kind, text, hidden_ranges, seq, created_at, edited_at, edited, edit_mark, attachments:attachment_rows(${MESSAGE_ATTACHMENT_COLUMNS}), ${REPLY_COLUMNS}, ${REACTION_AND_COMMENT_COLUMNS}, stream_id, stream_host_id, system_event, system_user_id, chat_thread_root_ids, author_name, author_avatar_url, author_opaque, system_user_name, system_user_opaque, stream:streams!messages_stream_id_fkey(started_at, ended_at), my_call:my_stream_participation(id), source_chat:chat_rows!messages_source_chat_id_fkey(id, chat_display_name), items:forward_items!forward_items_forward_fkey(id, position, message_id, original:message_rows!forward_items_message_fkey(${ORIGINAL_COLUMNS})), ${FORWARDED_COMMENT_COLUMNS}` as const;
+  `${MESSAGE_BASE_COLUMNS}, items:forward_items!forward_items_forward_fkey(${FORWARD_ITEM_COLUMNS})` as const;
+export const HISTORY_ELEMENT_COLUMNS =
+  `id, message_id, chat_id, seq, position, forward_item_id, message:history_element_message(${MESSAGE_BASE_COLUMNS}), forward_item:history_element_forward_item(${FORWARD_ITEM_COLUMNS})` as const;
 
 // Мозаика в облачке должна собираться в порядке выбора файлов, а PostgREST
 // не гарантирует порядок вложенной выборки сам по себе — нужен явный order
@@ -530,6 +542,7 @@ type ContentRow = Pick<
 
 function toContent(row: ContentRow): Message {
   return {
+    ...(row.kind === 'forward' ? { forwardGroup: true } : {}),
     id: row.id,
     chatId: row.chat_id,
     authorId: row.author_id,
