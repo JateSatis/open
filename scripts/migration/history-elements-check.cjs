@@ -17,7 +17,10 @@ async function main() {
     viewer = randomUUID(),
     source = randomUUID(),
     chat = randomUUID(),
-    single = randomUUID();
+    single = randomUUID(),
+    short = randomUUID(),
+    deep = randomUUID(),
+    mixed = randomUUID();
   const token = (user) => {
     const h = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
     const b = Buffer.from(
@@ -30,34 +33,88 @@ async function main() {
     return `${h}.${b}.${createHmac('sha256', config.secret).update(`${h}.${b}`).digest('base64url')}`;
   };
   const log = (x) => console.log(JSON.stringify(x));
-  async function request(args, user = uid, legacy = config.baseline) {
-    const select = legacy
-      ? `*,items:history_window_messages(${config.legacyColumns})`
-      : `*,items:history_window_elements(${config.elementColumns})`;
+  const meta =
+    'chat_id,target_status,anchor,before_cursor,after_cursor,has_before,has_after,coverage';
+  const bounded = (paths) => paths.map((path) => '&' + path + '.limit=1').join('');
+  async function request(args, user = uid, legacy = config.baseline, projection) {
+    const select =
+      projection ??
+      (legacy
+        ? `*,items:history_window_messages(${config.legacyColumns})`
+        : (config.packedColumns ??
+          `${meta},items:history_window_elements(${config.elementColumns})`));
     const rpc = legacy ? 'get_history_window' : 'get_history_element_window';
-    const url = `http://rest:3000/rpc/${rpc}?select=${encodeURIComponent(select)}&items.order=${legacy ? 'seq.asc' : 'seq.asc,position.asc'}`;
+    const url =
+      `http://rest:3000/rpc/${rpc}?select=${encodeURIComponent(select)}` +
+      (select.includes('items:history_window')
+        ? `&items.order=${legacy ? 'seq.asc' : 'seq.asc,position.asc'}`
+        : '') +
+      (select.includes('history_page_')
+        ? bounded(
+            config.uniqueEmbeds.filter((path) =>
+              path === 'parents.forwarded'
+                ? select.includes('forwarded:')
+                : path === 'parents.source_chat'
+                  ? select.includes('source_chat:')
+                  : path === 'forwards.original'
+                    ? select.includes('original:')
+                    : select.includes('chat:chat_rows!messages_chat_id_fkey'),
+            ),
+          )
+        : '');
     const stats = async () =>
-      +(
+      (
         await db.query(
-          "select coalesce(sum(total_exec_time),0) ms from extensions.pg_stat_statements where query like $1 and query like 'WITH%pgrst%'",
+          "select coalesce(sum(total_exec_time),0) ms, coalesce(sum(calls),0) calls, (select concat(dealloc,'/',stats_reset) from extensions.pg_stat_statements_info) epoch from extensions.pg_stat_statements where toplevel and query like $1 and query like 'WITH%pgrst%'",
           [`%${rpc}%`],
         )
-      ).rows[0].ms;
+      ).rows[0];
     const before = await stats();
     const start = performance.now();
     const response = await fetch(url, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${token(user)}`, 'Content-Type': 'application/json' },
+      headers: {
+        Authorization: `Bearer ${token(user)}`,
+        'Content-Type': 'application/json',
+        Accept: 'application/vnd.pgrst.object+json',
+      },
       body: JSON.stringify(args),
     });
     const text = await response.text();
     const httpMs = +(performance.now() - start).toFixed(1);
+    const after = await stats();
+    const calls = Number(after.calls) - Number(before.calls);
+    const raw = JSON.parse(text);
+    if (response.ok && select === config.packedColumns) {
+      raw.items = raw.parents
+        .flatMap((message) => {
+          const children = raw.forwards.filter((f) => f.forward_id === message.id);
+          return (children.length ? children : [null]).map((f) => ({
+            id: f?.id ?? message.id,
+            message,
+            forward_item: f,
+          }));
+        })
+        .sort(
+          (a, b) =>
+            a.message.seq - b.message.seq ||
+            (a.forward_item?.position ?? 0) - (b.forward_item?.position ?? 0),
+        );
+      assert.deepEqual(
+        raw.items.map((i) => i.id),
+        raw.element_ids,
+      );
+    }
     return {
       status: response.status,
       bytes: Buffer.byteLength(text),
       httpMs,
-      serverMs: response.ok ? +((await stats()) - before).toFixed(1) : null,
-      data: JSON.parse(text),
+      calls,
+      serverMs:
+        response.ok && calls === 1 && before.epoch === after.epoch
+          ? +(after.ms - before.ms).toFixed(1)
+          : null,
+      data: response.ok ? [raw] : raw,
     };
   }
   try {
@@ -71,7 +128,7 @@ async function main() {
       "update privacy_settings set public_message_visibility_delay='off',profile_identity_masking='everyone',dialogue_participant_name_masking='everyone',dialogue_media_visibility='everyone' where user_id=any($1)",
       [[uid, viewer]],
     );
-    for (const id of [source, chat, single]) {
+    for (const id of [source, chat, single, ...(config.profile ? [short, mixed, deep] : [])]) {
       await db.query(
         "insert into chats(id,kind,created_by,owner_id,title,founding_member_ids) values($1,'group',$2,$2,'History elements isolated fixture',array[$2]::uuid[])",
         [id, uid],
@@ -92,6 +149,29 @@ async function main() {
     const originals = (
       await db.query('select id from messages where chat_id=$1 order by seq', [source])
     ).rows.map((x) => x.id);
+    if (config.profile) {
+      await db.query(
+        "insert into messages(chat_id,author_id,kind,text) select $1,$2,'text','short '||n from generate_series(1,120)n",
+        [short, uid],
+      );
+      await db.query(
+        "insert into messages(chat_id,author_id,kind,text) select $1,$2,case when n%4=0 then 'media' else 'text' end,case when n%4=0 then null when n%4=1 then repeat('Long text ',600) else 'short '||n end from generate_series(1,120)n",
+        [mixed, uid],
+      );
+      await db.query(
+        "insert into messages(chat_id,author_id,kind,text) select $1,$2,'text','short '||n from generate_series(1,2400)n",
+        [deep, uid],
+      );
+      const path = uid + '/history-profile.jpg';
+      await db.query(
+        "insert into media_objects(bucket,path,owner_id,kind,mime_type,size_bytes) values('chat-media',$1,$2,'photo','image/jpeg',0)",
+        [path, uid],
+      );
+      await db.query(
+        "insert into attachments(message_id,message_kind,url,mime_type,width,height,position) select id,'media',$2,'image/jpeg',640,480,0 from messages where chat_id=$1 and kind='media'",
+        [mixed, path],
+      );
+    }
     await db.query('set local role authenticated');
     const groups = [];
     for (let i = 0; i < 28; i++)
@@ -117,6 +197,35 @@ async function main() {
       path: 'HTTP local on VPS (open-storage → open-rest), SSH bound to physical interface',
       groups: 28,
     });
+    if (config.seek) {
+      await db.query('begin');
+      await db.query("select set_config('request.jwt.claims',$1,true)", [
+        JSON.stringify({ sub: uid, role: 'authenticated' }),
+      ]);
+      await db.query('set local role authenticated');
+      for (const plan of ['force_generic_plan', 'force_custom_plan']) {
+        await db.query('set local plan_cache_mode=' + plan);
+        for (const [stage, sql] of [
+          ['bounds', "select * from get_history_element_window($1,'latest',30)"],
+          ['slice', "select * from history_element_slice($1,null,null,'before',30)"],
+          [
+            'parents',
+            "with w as materialized(select * from get_history_element_window($1,'latest',30)) select count(*) from w cross join lateral history_page_parents(w)p",
+          ],
+          [
+            'forwards',
+            "with w as materialized(select * from get_history_element_window($1,'latest',30)) select count(*) from w cross join lateral history_page_forwards(w)f",
+          ],
+        ])
+          for (let k = 0; k < 2; k++) {
+            const x = await db.query('explain (analyze,format json,buffers) ' + sql, [source]);
+            const v = x.rows[0]['QUERY PLAN'][0];
+            log({ plan, stage, k, exec: v['Execution Time'], hits: v.Plan['Shared Hit Blocks'] });
+          }
+      }
+      await db.query('rollback');
+      return;
+    }
     if (process.env.ELEMENT_DIAG === '1') {
       await db.query(
         "load 'auto_explain'; set auto_explain.log_min_duration=1; set auto_explain.log_nested_statements=on; set auto_explain.log_analyze=on; set auto_explain.log_format=json; set auto_explain.log_level=notice",
@@ -171,6 +280,156 @@ async function main() {
       ],
       ['28-groups', { p_chat: chat, p_mode: 'latest', p_limit: 30 }],
     ];
+    if (config.plan) {
+      for (const [name, args] of cases) {
+        const select = config.packedColumns;
+        // Private benchmark instance only; never enable plan output on the public API.
+        const target =
+          'http://rest:3103/rpc/get_history_element_window?select=' +
+          encodeURIComponent(select) +
+          bounded(config.uniqueEmbeds);
+        for (let rep = 0; rep < 3; rep++) {
+          const r = await fetch(target, {
+            method: 'POST',
+            headers: {
+              Authorization: 'Bearer ' + token(uid),
+              'Content-Type': 'application/json',
+              Accept: 'application/vnd.pgrst.object+json',
+            },
+            body: JSON.stringify(args),
+          });
+          assert.equal(r.status, 200);
+          await r.arrayBuffer();
+          log({ case: name, timing: r.headers.get('Server-Timing') });
+        }
+        const response = await fetch(
+          'http://rest:3103/rpc/get_history_element_window?select=' +
+            encodeURIComponent(select) +
+            bounded(config.uniqueEmbeds),
+          {
+            method: 'POST',
+            headers: {
+              Authorization: 'Bearer ' + token(uid),
+              'Content-Type': 'application/json',
+              Accept:
+                'application/vnd.pgrst.plan+json; for="application/vnd.pgrst.object+json"; options=analyze|buffers',
+            },
+            body: JSON.stringify(args),
+          },
+        );
+        const data = await response.json();
+        assert.equal(response.status, 200, JSON.stringify(data).slice(0, 150));
+        const nodes = [];
+        function walk(n) {
+          const ms = (n['Actual Total Time'] || 0) * (n['Actual Loops'] || 0);
+          const child = n.Plans || [];
+          const self =
+            ms -
+            child.reduce((v, c) => v + (c['Actual Total Time'] || 0) * (c['Actual Loops'] || 0), 0);
+          if (self > 1)
+            nodes.push({
+              ms: Math.round(self),
+              loops: n['Actual Loops'],
+              rows: n['Actual Rows'],
+              node: n['Node Type'],
+              rel: n['Relation Name'] || n['Function Name'] || n.Alias,
+            });
+          child.forEach(walk);
+        }
+        walk(data[0].Plan);
+        log({
+          name,
+          plan: data[0]['Planning Time'],
+          exec: data[0]['Execution Time'],
+          nodes: nodes.sort((a, b) => b.ms - a.ms).slice(0, 10),
+        });
+      }
+      return;
+    }
+    if (config.profile) {
+      const scenarios = [
+        ['short', { p_chat: short, p_mode: 'latest' }],
+        ['long-history', { p_chat: source, p_mode: 'latest' }],
+        ['mixed', { p_chat: mixed, p_mode: 'latest' }],
+        ...cases.slice(1),
+      ];
+      for (const [name, args] of scenarios) {
+        for (let rep = 0; rep < 3; rep++) {
+          const sizes = [20, 30, 60, 100];
+          for (let k = 0; k < sizes.length; k++) {
+            const size = sizes[(k + rep) % sizes.length];
+            const { data, ...result } = await request({ ...args, p_limit: size });
+            assert.equal(result.status, 200, JSON.stringify(data).slice(0, 200));
+            log({ case: name, size, rep, ...result });
+          }
+        }
+      }
+      const dir = (id, seq, position) => ({
+        p_chat: id,
+        p_mode: 'before',
+        p_limit: 30,
+        p_cursor: { chatId: id, direction: 'before', seq, position },
+      });
+      const sample = async (name, args, projection) => {
+        for (let rep = 0; rep < 3; rep++) {
+          const { data, ...result } = await request(args, uid, false, projection);
+          assert.equal(result.status, 200, JSON.stringify(data).slice(0, 200));
+          log({ case: name, rep, ...result });
+        }
+      };
+      for (const [id, n] of [
+        [short, 120],
+        [deep, 2400],
+      ]) {
+        const { seq } = (
+          await db.query(
+            'select seq from messages where chat_id=$1 order by seq limit 1 offset 60',
+            [id],
+          )
+        ).rows[0];
+        await sample('same-short-text/before-' + n, dir(id, Number(seq), 0));
+      }
+      await sample(
+        'group-middle/before',
+        dir(
+          single,
+          Number(
+            (await db.query('select seq from messages where id=$1', [singleGroup])).rows[0].seq,
+          ),
+          50,
+        ),
+      );
+      for (const [name, args] of cases) {
+        for (const [stage, columns] of [
+          ['bounds', meta],
+          [
+            'elements',
+            config.packedColumns
+              ? meta + ',element_ids'
+              : meta + ',items:history_window_elements(id,seq,position)',
+          ],
+          [
+            'visible',
+            config.packedColumns
+              ? meta +
+                ',element_ids,parents:history_page_parents(id,text,author_id),forwards:history_page_forwards(id,original:message_rows!forward_items_message_fkey(id,text,author_id))'
+              : meta +
+                ',items:history_window_elements(id,message:history_element_message(id,text,author_id),forward_item:history_element_forward_item(id,original:message_rows!forward_items_message_fkey(id,text,author_id)))',
+          ],
+          [
+            'parents',
+            config.packedColumns
+              ? meta + ',parents:history_page_parents(' + config.parentColumns + ')'
+              : meta +
+                ',items:history_window_elements(id,message:history_element_message(' +
+                config.parentColumns +
+                '))',
+          ],
+        ])
+          await sample(name + '/' + stage, args, columns);
+      }
+      return;
+    }
     for (const [name, args] of cases)
       for (let repeat = 0; repeat < 3; repeat++) {
         const result = await request(args);
@@ -195,6 +454,37 @@ async function main() {
         }
       }
     if (!config.baseline) {
+      if (config.packedColumns)
+        for (const [, args] of cases)
+          for (const user of [uid, viewer]) {
+            const packed = (await request(args, user)).data[0];
+            const previous = (
+              await request(
+                args,
+                user,
+                false,
+                meta + ',items:history_window_elements(' + config.elementColumns + ')',
+              )
+            ).data[0];
+            assert.deepEqual(
+              packed.element_ids,
+              previous.items.map((i) => i.id),
+            );
+            assert.equal(
+              packed.parents.length,
+              new Set(previous.items.map((i) => i.message_id)).size,
+            );
+            for (let n = 0; n < previous.items.length; n++) {
+              const a = packed.items[n],
+                b = previous.items[n];
+              assert.deepEqual(a.message, b.message);
+              if (a.forward_item) {
+                const { forward_id, ...fields } = a.forward_item;
+                assert.equal(forward_id, b.message_id);
+                assert.deepEqual(fields, b.forward_item);
+              } else assert.equal(b.forward_item, null);
+            }
+          }
       const get = async (args, user = uid) => {
         const r = await request(args, user);
         assert.equal(r.status, 200, JSON.stringify(r.data));
@@ -459,8 +749,8 @@ async function main() {
         const pending = db.query(
           `with w as materialized(select * from get_history_element_window($1,'around',1,$2,null,null,$3)),
           gate as materialized(select pg_advisory_xact_lock(${lock}) from w)
-          select to_jsonb(w) envelope,(select jsonb_agg(jsonb_build_object('key',e.id,'text',o.text))
-            from history_window_elements(w)e join forward_items f on f.id=e.forward_item_id
+          select to_jsonb(w) envelope,(select jsonb_agg(jsonb_build_object('key',f.id,'text',o.text,'parent',p.id))
+            from history_page_forwards(w) f join history_page_parents(w) p on p.id=f.forward_id
             left join message_rows o on o.id=f.message_id) content from w cross join gate`,
           [single, singleGroup, elements[10].id],
         );
@@ -484,6 +774,7 @@ async function main() {
         const snapshot = (await pending).rows[0];
         await db.query('rollback');
         assert.equal(snapshot.envelope.anchor.key, elements[10].id);
+        assert.equal(snapshot.content[0].parent, singleGroup);
         assert.equal(snapshot.content[0].key, elements[10].id);
         assert.equal(snapshot.content[0].text, 'PRIVATE_ELEMENT_TEXT public');
         assert.equal(
@@ -506,6 +797,31 @@ async function main() {
         test: 'unpublished original access; one snapshot for envelope/content during concurrent element deletion and original edit',
         status: 'PASS',
       });
+      if (config.packedColumns) {
+        // Deliberate cross-table UUID collision, including an item outside a partial group.
+        const collision = elements[1].id;
+        await db.query(
+          "insert into messages(id,chat_id,author_id,kind,text) values($1,$2,$3,'text','history collision')",
+          [collision, single, uid],
+        );
+        try {
+          for (const limit of [1, 3, 100]) {
+            const w = await get({ p_chat: single, p_mode: 'latest', p_limit: limit });
+            assert.equal(w.items.at(-1).message.text, 'history collision');
+            assert.equal(w.items.at(-1).forward_item, null);
+            assert.equal(
+              w.forwards.some((f) => f.id === collision),
+              limit === 100,
+            );
+          }
+        } finally {
+          await db.query('delete from messages where id=$1 and chat_id=$2', [collision, single]);
+        }
+        log({
+          test: 'cross-table UUID collision in and outside selected group range',
+          status: 'PASS',
+        });
+      }
       await db.query('begin');
       await db.query("select set_config('request.jwt.claims',$1,true)", [
         JSON.stringify({ sub: uid, role: 'authenticated' }),
@@ -530,7 +846,9 @@ async function main() {
   } finally {
     await db.query('rollback');
     await db.query('begin');
-    await db.query('delete from chats where id=any($1)', [[source, chat, single]]);
+    await db.query('delete from chats where id=any($1)', [
+      [source, chat, single, short, mixed, deep],
+    ]);
     await db.query('delete from auth.users where id=any($1)', [[uid, viewer]]);
     await db.query('commit');
     await db.end();

@@ -4672,6 +4672,7 @@ export type Database = {
           element_ids: string[] | null
           has_after: boolean | null
           has_before: boolean | null
+          parent_ids: string[] | null
           target_status: string | null
           history_window_elements: {
             chat_id: string | null
@@ -5492,6 +5493,7 @@ export type Database = {
           element_ids: string[] | null
           has_after: boolean | null
           has_before: boolean | null
+          parent_ids: string[] | null
           target_status: string | null
         }
         SetofOptions: {
@@ -5640,6 +5642,76 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "history_element_rows"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      history_page_forwards: {
+        Args: {
+          w: Database["public"]["Views"]["history_element_windows"]["Row"]
+        }
+        Returns: {
+          chat_id: string
+          created_at: string
+          deleted_at: string | null
+          forward_id: string
+          forward_kind: string
+          id: string
+          message_id: string
+          position: number
+        }[]
+        SetofOptions: {
+          from: "history_element_windows"
+          to: "forward_items"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      history_page_parents: {
+        Args: {
+          w: Database["public"]["Views"]["history_element_windows"]["Row"]
+        }
+        Returns: {
+          author_avatar_url: string | null
+          author_id: string | null
+          author_name: string | null
+          author_opaque: boolean | null
+          chat_id: string | null
+          chat_thread_root_ids: string[] | null
+          clusters_count: number | null
+          comments_count: number | null
+          created_at: string | null
+          deleted_at: string | null
+          edit_mark: number | null
+          edited: boolean | null
+          edited_at: string | null
+          forwarded_comment_id: string | null
+          fragments_count: number | null
+          hidden: boolean | null
+          hidden_ranges: Json | null
+          id: string | null
+          kind: string | null
+          member_reactions: Json | null
+          reactions_count: number | null
+          read_at: string | null
+          reads_visible: boolean | null
+          seq: number | null
+          source_chat_id: string | null
+          stream_host_id: string | null
+          stream_id: string | null
+          system_event: string | null
+          system_user_id: string | null
+          system_user_name: string | null
+          system_user_opaque: boolean | null
+          text: string | null
+          time_visible: boolean | null
+          unique_views_count: number | null
+          views_count: number | null
+          visitor_reactions: Json | null
+        }[]
+        SetofOptions: {
+          from: "history_element_windows"
+          to: "message_rows"
           isOneToOne: false
           isSetofReturn: true
         }

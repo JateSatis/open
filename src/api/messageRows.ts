@@ -353,6 +353,16 @@ export const MESSAGE_COLUMNS =
   `${MESSAGE_BASE_COLUMNS}, items:forward_items!forward_items_forward_fkey(${FORWARD_ITEM_COLUMNS})` as const;
 export const HISTORY_ELEMENT_COLUMNS =
   `id, message_id, chat_id, seq, position, forward_item_id, message:history_element_message(${MESSAGE_BASE_COLUMNS}), forward_item:history_element_forward_item(${FORWARD_ITEM_COLUMNS})` as const;
+export const HISTORY_PAGE_COLUMNS =
+  `chat_id,target_status,anchor,before_cursor,after_cursor,has_before,has_after,coverage,element_ids,parents:history_page_parents(${MESSAGE_BASE_COLUMNS}),forwards:history_page_forwards(forward_id,${FORWARD_ITEM_COLUMNS})` as const;
+// Each FK identifies at most one visible row. Keep these lookups correlated
+// so PostgreSQL doesn't expand unrelated comments/chats/originals before matching IDs.
+export const HISTORY_PAGE_UNIQUE_EMBEDS = [
+  'parents.forwarded',
+  'parents.source_chat',
+  'forwards.original',
+  'forwards.original.chat',
+] as const;
 
 // Мозаика в облачке должна собираться в порядке выбора файлов, а PostgREST
 // не гарантирует порядок вложенной выборки сам по себе — нужен явный order

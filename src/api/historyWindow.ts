@@ -1,5 +1,11 @@
 import { MESSAGE_PAGE_SIZE } from '@/api/messagePage';
-import { HISTORY_ELEMENT_COLUMNS, toMessage, type Message } from '@/api/messageRows';
+import {
+  HISTORY_ELEMENT_COLUMNS,
+  HISTORY_PAGE_COLUMNS,
+  HISTORY_PAGE_UNIQUE_EMBEDS,
+  toMessage,
+  type Message,
+} from '@/api/messageRows';
 import type { Json } from '@/api/types.gen';
 import { supabase } from '@/api/supabase';
 
@@ -142,7 +148,7 @@ export async function getHistoryWindow(
       request.savedPosition > 99)
   )
     throw new Error('Invalid saved history position');
-  const { data, error } = await supabase
+  const query = supabase
     .rpc('get_history_element_window', {
       p_chat: chatId,
       p_mode: request.mode,
@@ -153,12 +159,9 @@ export async function getHistoryWindow(
       p_hint_position: request.savedPosition,
       p_cursor: request.cursor,
     })
-    .select(
-      `chat_id,target_status,anchor,before_cursor,after_cursor,has_before,has_after,coverage,items:history_window_elements(${HISTORY_ELEMENT_COLUMNS})`,
-    )
-    .order('seq', { referencedTable: 'items' })
-    .order('position', { referencedTable: 'items' })
-    .single();
+    .select(HISTORY_PAGE_COLUMNS);
+  for (const path of HISTORY_PAGE_UNIQUE_EMBEDS) query.limit(1, { referencedTable: path });
+  const { data, error } = await query.single();
   if (error) throw error;
   if (!data) throw new Error('Missing history window');
   const target = data.target_status;
@@ -180,7 +183,43 @@ export async function getHistoryWindow(
     throw new Error('Invalid history anchor');
   const coverage = data.coverage === null ? null : object(data.coverage);
   const covered = coverage ? { lower: bound(coverage.lower), upper: bound(coverage.upper) } : null;
-  const items = data.items.map(toHistoryItem);
+  // The two tables have independent UUID namespaces. Join by the parent FK;
+  // never guess whether a bare UUID denotes an ordinary message or an item.
+  const children = new Map<string, typeof data.forwards>();
+  for (const item of data.forwards) {
+    const group = children.get(item.forward_id);
+    if (group) group.push(item);
+    else children.set(item.forward_id, [item]);
+  }
+  const items = data.parents
+    .flatMap((parent): HistoryItem[] => {
+      if (!parent.id || parent.seq === null) throw new Error('Invalid history parent');
+      const message = toMessage({ ...parent, items: children.get(parent.id) ?? [] });
+      const forward = message.forward;
+      if (!forward?.items.length)
+        return [
+          {
+            key: message.id,
+            messageId: message.id,
+            forwardItemId: null,
+            originalId: null,
+            position: { seq: message.seq, position: 0 },
+            message,
+          },
+        ];
+      return forward.items.map((item) => ({
+        key: item.id,
+        messageId: message.id,
+        forwardItemId: item.id,
+        originalId: item.messageId,
+        position: { seq: message.seq, position: item.position },
+        message: { ...message, forward: { ...forward, items: [item] } },
+      }));
+    })
+    .sort((a, b) => a.position.seq - b.position.seq || a.position.position - b.position.position);
+  const order = data.element_ids;
+  if (!order || order.length !== items.length || items.some((item, i) => item.key !== order[i]))
+    throw new Error('Inconsistent history page');
   for (const item of items) {
     if (!item.message.forwardGroup || !covered) continue;
     const { lower, upper } = covered;
