@@ -1,5 +1,5 @@
 import { getHistoryWindow, getHistoryItems, type HistoryWindowRequest } from './historyWindow';
-import { HISTORY_ELEMENT_COLUMNS } from './messageRows';
+import { HISTORY_PAGE_COLUMNS } from './messageRows';
 import { supabase } from './supabase';
 
 jest.mock('@/api/supabase', () => ({ supabase: { rpc: jest.fn(), from: jest.fn() } }));
@@ -41,13 +41,15 @@ function response() {
       lower: { seq: 10, position: 49, inclusive: true },
       upper: { seq: 10, position: 51, inclusive: true },
     },
-    items: [element(49), element(50), element(51)],
+    parents: [message],
+    element_ids: ['item-49', 'item-50', 'item-51'],
+    forwards: [51, 49, 50].map((i) => ({ ...element(i).forward_item, forward_id: 'group' })),
   };
 }
 function mock(data: unknown = response()) {
   const query = {
     select: jest.fn().mockReturnThis(),
-    order: jest.fn().mockReturnThis(),
+    limit: jest.fn().mockReturnThis(),
     single: jest.fn().mockResolvedValue({ data, error: null }),
   };
   jest.mocked(supabase.rpc).mockReturnValue(query as unknown as ReturnType<typeof supabase.rpc>);
@@ -62,9 +64,7 @@ it('loads a single snapshot of selected occurrences with distinct item/action/or
     itemId: 'item-50',
   });
   expect(supabase.rpc).toHaveBeenCalledTimes(1);
-  expect(query.select).toHaveBeenCalledWith(
-    expect.stringContaining(`items:history_window_elements(${HISTORY_ELEMENT_COLUMNS})`),
-  );
+  expect(query.select).toHaveBeenCalledWith(HISTORY_PAGE_COLUMNS);
   expect(query.select.mock.calls[0][0]).not.toContain('items:forward_items!');
   expect(result.items.map((item) => item.key)).toEqual(['item-49', 'item-50', 'item-51']);
   expect(result.items[1]).toMatchObject({
@@ -76,6 +76,21 @@ it('loads a single snapshot of selected occurrences with distinct item/action/or
   expect(result.items[1].message.forward!.items).toHaveLength(1);
   expect(result.items[1].message.forward!.items[0].original).toBeNull();
   expect(result.coverage?.lower).toEqual({ seq: 10, position: 49, inclusive: true });
+});
+it('joins by parent even when an ordinary message and a forward item share a UUID', async () => {
+  const page = response();
+  mock({
+    ...page,
+    parents: [{ ...message, id: 'item-50', seq: 12, kind: 'text' }, message],
+    element_ids: [...page.element_ids, 'item-50'],
+  });
+  const { items } = await getHistoryWindow('chat');
+  expect(items.map((i) => [i.messageId, i.forwardItemId])).toEqual([
+    ['group', 'item-49'],
+    ['group', 'item-50'],
+    ['group', 'item-51'],
+    ['item-50', null],
+  ]);
 });
 it.each([
   { chatId: 'other', direction: 'before', seq: 10, position: 1 },
@@ -97,7 +112,9 @@ it('does not claim coverage for an unavailable exact element', async () => {
     before_cursor: null,
     after_cursor: null,
     coverage: null,
-    items: [],
+    element_ids: [],
+    parents: [],
+    forwards: [],
   });
   const result = await getHistoryWindow('chat', {
     mode: 'around',

@@ -35,6 +35,12 @@ const config = {
   secret: env.JWT_SECRET,
   legacyColumns: projection.MESSAGE_COLUMNS,
   elementColumns: projection.HISTORY_ELEMENT_COLUMNS,
+  uniqueEmbeds: projection.HISTORY_PAGE_UNIQUE_EMBEDS,
+  parentColumns: projection.MESSAGE_BASE_COLUMNS,
+  profile: process.argv.includes('--profile'),
+  seek: process.argv.includes('--seek'),
+  plan: process.argv.includes('--plan'),
+  packedColumns: process.argv.includes('--per-element') ? null : projection.HISTORY_PAGE_COLUMNS,
   baseline: process.argv.includes('--baseline'),
 };
 const source = readFileSync(new URL('./history-elements-check.cjs', import.meta.url), 'utf8');
@@ -61,7 +67,7 @@ const code = await new Promise((resolve, reject) => {
   child.on('error', reject);
 });
 writeFileSync(
-  `.backup/history-elements-${process.argv.includes('--diagnose') ? 'diagnose' : config.baseline ? 'before' : 'after'}.log`,
+  `.backup/history-elements-${process.argv.includes('--diagnose') ? 'diagnose' : config.profile ? 'profile' : config.baseline ? 'before' : 'verified'}-${Date.now()}.log`,
   Buffer.concat(output),
 );
 process.exitCode = code ?? 1;

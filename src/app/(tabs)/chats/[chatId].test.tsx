@@ -620,6 +620,32 @@ describe('ChatScreen', () => {
     },
   );
 
+  it('prefetches once during a drag and can continue at the new physical edge when the fling stops', async () => {
+    mockedListMessages
+      .mockResolvedValueOnce({ items: [message('m3', 'третье', 'user-2')], nextCursor: 3 })
+      .mockResolvedValueOnce({ items: [message('m2', 'второе', 'user-2')], nextCursor: 2 })
+      .mockResolvedValueOnce({ items: [message('m1', 'первое', 'user-2')], nextCursor: null });
+    await renderWithQuery(<ChatScreen />);
+    await screen.findByText('третье');
+    const list = screen.getByTestId('messages-list');
+    const geometry = (y: number, h: number) => ({
+      nativeEvent: {
+        contentOffset: { x: 0, y },
+        contentSize: { width: 400, height: h },
+        layoutMeasurement: { width: 400, height: 800 },
+      },
+    });
+    await fireEvent(list, 'scrollBeginDrag', geometry(400, 4000));
+    await fireEvent(list, 'scroll', geometry(2200, 4000));
+    await screen.findByText('второе');
+    await fireEvent(list, 'scroll', geometry(3300, 4800));
+    await fireEvent(list, 'endReached');
+    expect(mockedListMessages).toHaveBeenCalledTimes(2);
+    await fireEvent(list, 'momentumScrollEnd', geometry(4000, 4800));
+    expect(await screen.findByText('первое')).toBeTruthy();
+    expect(mockedListMessages).toHaveBeenCalledTimes(3);
+  });
+
   it('pulls a broadcast message from the database instead of trusting the payload', async () => {
     mockedListMessages.mockResolvedValue({
       items: [message('m1', 'привет', 'user-2')],
