@@ -46,6 +46,8 @@ import type { ChatMessage } from '@/features/chats/messages/types';
 const MAX_CATCH_UP_PAGES = 5;
 /** Столько id за раз принимает `message_tombstones`. */
 const MAX_TOMBSTONE_IDS = 1000;
+const OPEN_HISTORY_ITEMS = 20;
+const OLDER_HISTORY_ITEMS = 60;
 
 /** Страница назад в ленте `view`: вся переписка или «Треды» — без ответов. */
 export async function listHistoryPage(
@@ -60,9 +62,10 @@ export async function listHistoryPage(
   const page = await getHistoryWindow(
     chatId,
     cursor === undefined
-      ? { mode: 'latest' }
+      ? { mode: 'latest', limit: OPEN_HISTORY_ITEMS }
       : {
           mode: 'before',
+          limit: OLDER_HISTORY_ITEMS,
           cursor:
             typeof cursor === 'number'
               ? { chatId, direction: 'before', seq: cursor, position: 0 }

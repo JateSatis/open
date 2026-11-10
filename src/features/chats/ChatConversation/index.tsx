@@ -154,13 +154,17 @@ const LIST_SCROLL_THROTTLE_MS = 16;
 const AUTO_SCROLL_QUIET_MS = 300;
 /** Ближе этой доли экрана к старейшему сообщению — пора догружать историю. */
 const HISTORY_EDGE = 0.4;
+const HISTORY_PREFETCH_SCREENS = 2;
 
-function atHistoryEdge({ contentOffset, contentSize, layoutMeasurement }: NativeScrollEvent) {
+function atHistoryEdge(
+  { contentOffset, contentSize, layoutMeasurement }: NativeScrollEvent,
+  screens = HISTORY_EDGE,
+) {
   // Список перевёрнут: старые сообщения — у конца содержимого.
   return (
     layoutMeasurement.height > 0 &&
     contentSize.height - layoutMeasurement.height - contentOffset.y <
-      layoutMeasurement.height * HISTORY_EDGE
+      layoutMeasurement.height * screens
   );
 }
 
@@ -632,14 +636,24 @@ export function ChatConversation({
   // Прокрутили переписку — прокрученные вбок ряды реакций возвращаются в начало.
   const { onScroll: viewsOnScroll } = views;
   const { resumeLoadMore } = chatMessages;
+  const pageAllowed = useRef(true);
+  const userScrolled = useRef(false);
+  const requestOlder = useCallback(() => {
+    if (!hasMore || isLoadingMore || (!threadsActive && !pageAllowed.current)) return;
+    pageAllowed.current = false;
+    void loadMore();
+  }, [hasMore, isLoadingMore, loadMore, threadsActive]);
   const onListDragStart = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-      resumeLoadMore(atHistoryEdge(event.nativeEvent));
+      pageAllowed.current = true;
+      userScrolled.current = true;
+      resumeLoadMore(false);
+      if (atHistoryEdge(event.nativeEvent)) requestOlder();
       // Выделение привязано к месту на экране: тронули прокрутку — снимается,
       // режим фрагментов остаётся.
       clearTextSelection();
     },
-    [resumeLoadMore],
+    [resumeLoadMore, requestOlder],
   );
 
   // Где сейчас прокрутка и сколько её всего — автопрокрутке выделения: она
@@ -654,20 +668,27 @@ export function ChatConversation({
 
   const onListScroll = useCallback(
     (event: Parameters<typeof viewsOnScroll>[0]) => {
+      if (
+        !threadsActive &&
+        userScrolled.current &&
+        event.nativeEvent.contentOffset.y > scrollState.current.offset &&
+        atHistoryEdge(event.nativeEvent, HISTORY_PREFETCH_SCREENS)
+      )
+        requestOlder();
       trackOffset(event);
       viewsOnScroll(event);
       resetScrolledRows();
     },
-    [trackOffset, viewsOnScroll],
+    [threadsActive, requestOlder, trackOffset, viewsOnScroll],
   );
 
   const onListScrollEnd = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
       trackOffset(event);
       viewsOnScroll(event);
-      // Конец жеста/инерции несёт свежую геометрию, даже если список не
-      // вызвал onEndReached. Ошибку здесь не снимаем: повтор — новым жестом.
-      if (hasMore && atHistoryEdge(event.nativeEvent)) loadMore();
+      // Инерция может пройти всю заранее загруженную страницу. На остановке
+      // проверяем фактический край; loadMore объединяет запросы и не снимает ошибку.
+      if (hasMore && atHistoryEdge(event.nativeEvent)) void loadMore();
     },
     [hasMore, loadMore, trackOffset, viewsOnScroll],
   );
@@ -1023,7 +1044,7 @@ export function ChatConversation({
                   // картинки) — то, что человек читает выше, остаётся на месте.
                   // У самого низа переписки список по-прежнему едет за новым.
                   maintainVisibleContentPosition={KEEP_READING_POSITION}
-                  onEndReached={hasMore ? loadMore : undefined}
+                  onEndReached={hasMore ? requestOlder : undefined}
                   onEndReachedThreshold={HISTORY_EDGE}
                   // Тап по облачку при открытой клавиатуре сразу открывает меню, а
                   // не только прячет клавиатуру; тап по пустому месту — прячет.
