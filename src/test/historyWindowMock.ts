@@ -40,6 +40,7 @@ export async function fixtureHistoryWindow(
       before: null,
       after: null,
       coverage: { lower: null, upper: null },
+      syncCursor: 'h1.fixture',
       reachedStart: true,
       reachedEnd: true,
     };
@@ -58,6 +59,7 @@ export async function fixtureHistoryWindow(
         : { chatId, direction: 'before', seq: page.nextCursor, position: 0 },
     after: null,
     coverage: { lower: null, upper: null },
+    syncCursor: 'h1.fixture',
     reachedStart: page.nextCursor === null,
     reachedEnd: true,
   };
