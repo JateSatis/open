@@ -11,7 +11,7 @@
 | --- | --- |
 | Аккаунт и устройства | [account](../../src/api/account.ts): `devices`, `register_device`, `end_device_session`; [profile](../../src/api/profile.ts): `profile_cards` |
 | Переписка и история | [chats](../../src/api/chats.ts), [messageRows](../../src/api/messageRows.ts): `chat_rows`, `my_chat_list`, `send_media_message`, `edit_message`; [chatThreads](../../src/api/chatThreads.ts): `list_chat_thread` |
-| Участок истории и продолжение в обе стороны | [historyWindow](../../src/api/historyWindow.ts): `get_history_window`, `history_window_rows`, `history_window_messages`; [контракт](../backend.md#участок-истории), [SQL-проверки](../../supabase/tests/history_window_access.sql) |
+| Участок истории и продолжение в обе стороны | [historyWindow](../../src/api/historyWindow.ts): `get_history_element_window`, `history_element_rows`, `history_window_elements`; [контракт](../backend.md#участок-истории), [SQL-проверки](../../supabase/tests/history_window_access.sql) |
 | Комментарии и реакции | [comments](../../src/api/comments.ts), [reactions](../../src/api/reactions.ts): `comment_rows`, `list_comment_thread_roots`, `send_comment`, `set_reaction` |
 | Каналы, попсы и подписки | [channels](../../src/api/channels.ts), [pops](../../src/api/pops.ts), [subscriptions](../../src/api/subscriptions.ts): `channels`, `pops`, `subscriptions`, `subscribe_to_chat`, `subscribe_to_channel` |
 | Сохранённые и заметки | [saved](../../src/api/saved.ts): `saved_messages`, `saved_tags`, `list_saved_messages`, `list_saved_watch_later` |
