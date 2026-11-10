@@ -30,6 +30,7 @@ function load(path) {
   return exports;
 }
 const projection = load('@/api/messageRows');
+const sync = process.argv.includes('--sync') || process.argv.includes('--sync-baseline');
 const config = {
   password: env.POSTGRES_PASSWORD,
   secret: env.JWT_SECRET,
@@ -42,8 +43,12 @@ const config = {
   plan: process.argv.includes('--plan'),
   packedColumns: process.argv.includes('--per-element') ? null : projection.HISTORY_PAGE_COLUMNS,
   baseline: process.argv.includes('--baseline'),
+  syncBaseline: process.argv.includes('--sync-baseline'),
 };
-const source = readFileSync(new URL('./history-elements-check.cjs', import.meta.url), 'utf8');
+const source = readFileSync(
+  new URL(sync ? './history-sync-check.cjs' : './history-elements-check.cjs', import.meta.url),
+  'utf8',
+);
 const args = ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10'];
 if (process.env.TARGET_SSH_BIND_ADDRESS) args.push('-b', process.env.TARGET_SSH_BIND_ADDRESS);
 args.push(
@@ -67,7 +72,7 @@ const code = await new Promise((resolve, reject) => {
   child.on('error', reject);
 });
 writeFileSync(
-  `.backup/history-elements-${process.argv.includes('--diagnose') ? 'diagnose' : config.profile ? 'profile' : config.baseline ? 'before' : 'verified'}-${Date.now()}.log`,
+  `.backup/history-${sync ? 'sync' : 'elements'}-${process.argv.includes('--diagnose') ? 'diagnose' : config.profile ? 'profile' : config.baseline || config.syncBaseline ? 'before' : 'verified'}-${Date.now()}.log`,
   Buffer.concat(output),
 );
 process.exitCode = code ?? 1;
