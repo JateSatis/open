@@ -1,4 +1,10 @@
-import { getHistoryWindow, getHistoryItems, type HistoryWindowRequest } from './historyWindow';
+import {
+  getHistoryChanges,
+  getHistoryRange,
+  getHistoryWindow,
+  getHistoryItems,
+  type HistoryWindowRequest,
+} from './historyWindow';
 import { HISTORY_PAGE_COLUMNS } from './messageRows';
 import { supabase } from './supabase';
 
@@ -32,6 +38,7 @@ function response() {
   return {
     chat_id: 'chat',
     target_status: 'found',
+    sync_cursor: 'h1.fixture',
     anchor: { messageId: 'group', itemId: 'item-50', key: 'item-50', seq: 10, position: 50 },
     before_cursor: { chatId: 'chat', direction: 'before', seq: 10, position: 49 },
     after_cursor: { chatId: 'chat', direction: 'after', seq: 10, position: 51 },
@@ -122,8 +129,43 @@ it('does not claim coverage for an unavailable exact element', async () => {
     itemId: 'removed',
   });
   expect(result.coverage).toBeNull();
+  expect(result.syncCursor).toBeNull();
   expect(result.reachedStart).toBeNull();
   expect(result.reachedEnd).toBeNull();
+});
+it('refreshes within the saved coverage and splits at the last verified coordinate', async () => {
+  const page = response();
+  mock(page);
+  const coverage = { lower: page.coverage.lower, upper: null };
+  const piece = await getHistoryRange('chat', coverage, 3);
+  expect(supabase.rpc).toHaveBeenCalledWith('get_history_range', {
+    p_chat: 'chat',
+    p_range: coverage,
+    p_limit: 3,
+  });
+  expect(piece.syncCursor).toBe(page.sync_cursor);
+  expect(piece.remaining).toEqual({
+    lower: { ...page.coverage.upper, inclusive: false },
+    upper: null,
+  });
+});
+it.each([
+  { status: 'more', cursor: 'h1.continuation', parentIds: [] },
+  { status: 'current', cursor: 'h1.next', parentIds: [] },
+  { status: 'reconcile', cursor: null, parentIds: ['parent'] },
+  { status: 'expired', cursor: null, parentIds: [] },
+])('preserves $status even when there are no visible identifiers', async (page) => {
+  jest
+    .mocked(supabase.rpc)
+    .mockReturnValue(
+      Promise.resolve({ data: page, error: null }) as unknown as ReturnType<typeof supabase.rpc>,
+    );
+  await expect(getHistoryChanges('chat', 'h1.saved', 1)).resolves.toEqual(page);
+  expect(supabase.rpc).toHaveBeenCalledWith('get_history_changes', {
+    p_chat: 'chat',
+    p_cursor: 'h1.saved',
+    p_limit: 1,
+  });
 });
 it('rejects oversized point refresh instead of silently truncating', async () => {
   await expect(

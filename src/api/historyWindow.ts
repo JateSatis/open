@@ -52,6 +52,8 @@ export type HistoryCoverage = {
   lower: (HistoryPosition & { inclusive: boolean }) | null;
   upper: (HistoryPosition & { inclusive: boolean }) | null;
 };
+/** Opaque, reader-bound ticket for one coverage interval. */
+export type HistorySyncCursor = `h1.${string}`;
 export type HistoryItem = {
   /** Occurrence identity: forward_items.id or the ordinary message id. */
   key: string;
@@ -69,6 +71,7 @@ export type HistoryWindow = {
   before: HistoryCursor<'before'> | null;
   after: HistoryCursor<'after'> | null;
   coverage: HistoryCoverage | null;
+  syncCursor: HistorySyncCursor | null;
   reachedStart: boolean | null;
   reachedEnd: boolean | null;
 };
@@ -125,41 +128,55 @@ function toHistoryItem(row: ElementRow): HistoryItem {
   };
 }
 
-/** One statement snapshot. Limit precedes original content embeddings.
- * Quotes/comment forwards remain nested; this is not a byte limit or sync version. */
-export async function getHistoryWindow(
+type RangeRequest = { mode: 'range'; coverage: HistoryCoverage; limit: number };
+function syncCursor(value: Json | undefined): HistorySyncCursor {
+  if (typeof value !== 'string' || !value.startsWith('h1.'))
+    throw new Error('Invalid history sync cursor');
+  return value as HistorySyncCursor;
+}
+
+/** Ordinary navigation and exact-range replacement share the same projection and decoder. */
+async function readWindow(
   chatId: string,
-  request: HistoryWindowRequest = { mode: 'latest' },
+  request: HistoryWindowRequest | RangeRequest,
 ): Promise<HistoryWindow> {
   const limit = request.limit ?? MESSAGE_PAGE_SIZE;
   if (!Number.isInteger(limit) || limit < 1 || limit > HISTORY_WINDOW_MAX_SIZE)
     throw new Error('History limit must be an integer from 1 to 100');
-  if (request.cursor)
+  if (request.mode !== 'range' && request.cursor)
     cursor(request.cursor, chatId, request.mode === 'before' ? 'before' : 'after');
   if (
+    request.mode !== 'range' &&
     request.savedSeq !== undefined &&
     (!Number.isSafeInteger(request.savedSeq) || request.savedSeq < 1)
   )
     throw new Error('Invalid saved history position');
   if (
+    request.mode !== 'range' &&
     request.savedPosition !== undefined &&
     (!Number.isInteger(request.savedPosition) ||
       request.savedPosition < 0 ||
       request.savedPosition > 99)
   )
     throw new Error('Invalid saved history position');
-  const query = supabase
-    .rpc('get_history_element_window', {
-      p_chat: chatId,
-      p_mode: request.mode,
-      p_limit: limit,
-      p_target: request.messageId,
-      p_target_item: request.itemId,
-      p_hint_seq: request.savedSeq,
-      p_hint_position: request.savedPosition,
-      p_cursor: request.cursor,
-    })
-    .select(HISTORY_PAGE_COLUMNS);
+  const rpc =
+    request.mode === 'range'
+      ? supabase.rpc('get_history_range', {
+          p_chat: chatId,
+          p_range: request.coverage,
+          p_limit: limit,
+        })
+      : supabase.rpc('get_history_element_window', {
+          p_chat: chatId,
+          p_mode: request.mode,
+          p_limit: limit,
+          p_target: request.messageId,
+          p_target_item: request.itemId,
+          p_hint_seq: request.savedSeq,
+          p_hint_position: request.savedPosition,
+          p_cursor: request.cursor,
+        });
+  const query = rpc.select(HISTORY_PAGE_COLUMNS);
   for (const path of HISTORY_PAGE_UNIQUE_EMBEDS) query.limit(1, { referencedTable: path });
   const { data, error } = await query.single();
   if (error) throw error;
@@ -248,9 +265,62 @@ export async function getHistoryWindow(
     before: cursor(data.before_cursor, chatId, 'before'),
     after: cursor(data.after_cursor, chatId, 'after'),
     coverage: covered,
+    syncCursor: covered ? syncCursor(data.sync_cursor) : null,
     reachedStart: target === 'unavailable' ? null : !data.has_before,
     reachedEnd: target === 'unavailable' ? null : !data.has_after,
   };
+}
+
+export function getHistoryWindow(
+  chatId: string,
+  request: HistoryWindowRequest = { mode: 'latest' },
+) {
+  return readWindow(chatId, request);
+}
+
+/** Replace only the returned coverage. If it grew, load remaining as another independent piece. */
+export async function getHistoryRange(
+  chatId: string,
+  coverage: HistoryCoverage,
+  limit = HISTORY_WINDOW_MAX_SIZE,
+) {
+  const page = await readWindow(chatId, { mode: 'range', coverage, limit });
+  if (!page.coverage || !page.syncCursor) throw new Error('Missing history range');
+  let remaining: HistoryCoverage | null = null;
+  if (!page.reachedEnd) {
+    if (!page.coverage.upper) throw new Error('Missing history range boundary');
+    remaining = { lower: { ...page.coverage.upper, inclusive: false }, upper: coverage.upper };
+  }
+  return { items: page.items, coverage: page.coverage, syncCursor: page.syncCursor, remaining };
+}
+
+export type HistoryChangePage = { parentIds: string[] } & (
+  | { status: 'more' | 'current'; cursor: HistorySyncCursor }
+  | { status: 'reconcile' | 'expired'; cursor: null }
+);
+
+/** Only 'current' acknowledges the saved copy. 'more' is an in-progress pass. */
+export async function getHistoryChanges(
+  chatId: string,
+  ticket: HistorySyncCursor,
+  limit = MESSAGE_PAGE_SIZE,
+): Promise<HistoryChangePage> {
+  if (!Number.isInteger(limit) || limit < 1 || limit > HISTORY_WINDOW_MAX_SIZE)
+    throw new Error('Invalid history change limit');
+  const { data, error } = await supabase.rpc('get_history_changes', {
+    p_chat: chatId,
+    p_cursor: ticket,
+    p_limit: limit,
+  });
+  if (error) throw error;
+  const { status, cursor: next, parentIds } = object(data);
+  if (!Array.isArray(parentIds) || !parentIds.every((id): id is string => typeof id === 'string'))
+    throw new Error('Invalid changed parents');
+  if (status === 'more' || status === 'current')
+    return { status, parentIds, cursor: syncCursor(next) };
+  if ((status === 'reconcile' || status === 'expired') && next === null)
+    return { status, parentIds, cursor: null };
+  throw new Error('Invalid history change page');
 }
 
 /** Lightweight membership only: no original contents or group expansion. */

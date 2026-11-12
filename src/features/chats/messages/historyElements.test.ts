@@ -40,6 +40,7 @@ const window = (start: number, end: number): HistoryWindow => ({
   after:
     end < 100 ? { chatId: 'chat-1', direction: 'after', seq: group.seq, position: end - 1 } : null,
   coverage: { lower: { seq: group.seq, position: start, inclusive: true }, upper: null },
+  syncCursor: 'h1.fixture',
   reachedStart: start === 0,
   reachedEnd: end === 100,
 });

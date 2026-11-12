@@ -4673,6 +4673,7 @@ export type Database = {
           has_after: boolean | null
           has_before: boolean | null
           parent_ids: string[] | null
+          sync_cursor: string | null
           target_status: string | null
           history_window_elements: {
             chat_id: string | null
@@ -5473,6 +5474,10 @@ export type Database = {
         Args: { p_other: string; p_viewer: string }
         Returns: string
       }
+      get_history_changes: {
+        Args: { p_chat: string; p_cursor: string; p_limit?: number }
+        Returns: Json
+      }
       get_history_element_window: {
         Args: {
           p_chat: string
@@ -5494,6 +5499,7 @@ export type Database = {
           has_after: boolean | null
           has_before: boolean | null
           parent_ids: string[] | null
+          sync_cursor: string | null
           target_status: string | null
         }
         SetofOptions: {
@@ -5518,6 +5524,28 @@ export type Database = {
           from: "*"
           to: "history_element_rows"
           isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      get_history_range: {
+        Args: { p_chat: string; p_limit?: number; p_range: Json }
+        Returns: {
+          after_cursor: Json | null
+          anchor: Json | null
+          before_cursor: Json | null
+          chat_id: string | null
+          coverage: Json | null
+          element_ids: string[] | null
+          has_after: boolean | null
+          has_before: boolean | null
+          parent_ids: string[] | null
+          sync_cursor: string | null
+          target_status: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "history_element_windows"
+          isOneToOne: true
           isSetofReturn: true
         }
       }
