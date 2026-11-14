@@ -25,6 +25,7 @@ export type ChatHistory = {
   items: ChatMessage[];
   /** Main history uses an element cursor; thread APIs still use parent seq. */
   nextCursor: number | HistoryCursor<'before'> | null;
+  afterCursor?: HistoryCursor<'after'> | null;
 };
 
 /**

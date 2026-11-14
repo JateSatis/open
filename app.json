@@ -98,7 +98,8 @@
           "microphonePermission": "Open uses the microphone for calls, voice messages and sound for your videos. Calls in Open are public: listeners can hear you.",
           "cameraPermission": "Open uses the camera to take photos and record videos you send."
         }
-      ]
+      ],
+      "expo-sqlite"
     ],
     "experiments": {
       "typedRoutes": true,
