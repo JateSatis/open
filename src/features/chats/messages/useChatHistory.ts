@@ -19,6 +19,7 @@ import { stillReader, useHistoryReader } from './local/reader';
 import type { ReadingPlace } from './local/segments';
 
 const NO_MESSAGES: ChatMessage[] = [];
+const OLDER_PAGE_SIZE = 50;
 
 export type ChatHistoryState = {
   /** Только подтверждённые сервером, самые новые первыми. */
@@ -133,7 +134,7 @@ export function useChatHistory(
 
     const loading = (
       scope && typeof cursor !== 'number'
-        ? loadPage(scope, { mode: 'before', cursor, limit: 30 }, () =>
+        ? loadPage(scope, { mode: 'before', cursor, limit: OLDER_PAGE_SIZE }, () =>
             stillReader(scope.reader),
           ).then(() => publishPage(previous))
         : listHistoryPage(chatId, view, cursor).then((page) => {

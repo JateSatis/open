@@ -157,6 +157,8 @@ const AUTO_SCROLL_QUIET_MS = 300;
 /** Ближе этой доли экрана к старейшему сообщению — пора догружать историю. */
 const HISTORY_EDGE = 0.4;
 const HISTORY_PREFETCH_SCREENS = 2;
+// На быстрых свайпах две высоты дают меньше полусекунды до старого края.
+const OLDER_PREFETCH_SCREENS = 5;
 
 function atHistoryEdge(
   { contentOffset, contentSize, layoutMeasurement }: NativeScrollEvent,
@@ -701,22 +703,23 @@ function Conversation({
   const pageAllowed = useRef(true);
   const userScrolled = useRef(false);
   const requestOlder = useCallback(() => {
-    if (!hasMore || isLoadingMore || (!threadsActive && !pageAllowed.current)) return;
+    if (!isFocused || !hasMore || isLoadingMore || (!threadsActive && !pageAllowed.current)) return;
     pageAllowed.current = false;
     void loadMore();
-  }, [hasMore, isLoadingMore, loadMore, threadsActive]);
+  }, [isFocused, hasMore, isLoadingMore, loadMore, threadsActive]);
   const onListDragStart = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
       place.interrupt();
       pageAllowed.current = true;
       userScrolled.current = true;
       resumeLoadMore(false);
-      if (atHistoryEdge(event.nativeEvent)) requestOlder();
+      if (atHistoryEdge(event.nativeEvent, threadsActive ? HISTORY_EDGE : OLDER_PREFETCH_SCREENS))
+        requestOlder();
       // Выделение привязано к месту на экране: тронули прокрутку — снимается,
       // режим фрагментов остаётся.
       clearTextSelection();
     },
-    [resumeLoadMore, requestOlder, place],
+    [resumeLoadMore, requestOlder, place, threadsActive],
   );
 
   // Где сейчас прокрутка и сколько её всего — автопрокрутке выделения: она
@@ -735,7 +738,7 @@ function Conversation({
         !threadsActive &&
         userScrolled.current &&
         event.nativeEvent.contentOffset.y > scrollState.current.offset &&
-        atHistoryEdge(event.nativeEvent, HISTORY_PREFETCH_SCREENS)
+        atHistoryEdge(event.nativeEvent, OLDER_PREFETCH_SCREENS)
       )
         requestOlder();
       if (
@@ -1138,7 +1141,7 @@ function Conversation({
                     // У самого низа переписки список по-прежнему едет за новым.
                     maintainVisibleContentPosition={KEEP_READING_POSITION}
                     onEndReached={hasMore && !place.hidden ? requestOlder : undefined}
-                    onEndReachedThreshold={HISTORY_EDGE}
+                    onEndReachedThreshold={threadsActive ? HISTORY_EDGE : OLDER_PREFETCH_SCREENS}
                     // Тап по облачку при открытой клавиатуре сразу открывает меню, а
                     // не только прячет клавиатуру; тап по пустому месту — прячет.
                     keyboardShouldPersistTaps="handled"
