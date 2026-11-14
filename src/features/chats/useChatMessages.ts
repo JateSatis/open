@@ -80,7 +80,7 @@ export type ChatMessagesState = Pick<ChatHistoryState, 'readingPlace' | 'loadNew
   ) => string | undefined;
   sendVoice: (voice: LocalMedia, replies?: LiveQuote[]) => string;
   /** Пост канала `channelId` с попом и необязательным текстом. */
-  sendPop: (channelId: string, text: string, pop: DraftPop, replies?: LiveQuote[]) => void;
+  sendPop: (channelId: string, text: string, pop: DraftPop, replies?: LiveQuote[]) => string;
   retry: (localId: string) => void;
   /** Своё неотправленное или упавшее — убрать. На сервер ничего не уходит. */
   discard: (localId: string) => void;

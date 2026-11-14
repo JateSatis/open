@@ -22,7 +22,7 @@ export function migrate(db: HistoryDatabase) {
   db.execSync('PRAGMA journal_mode=WAL');
   db.withTransactionSync(() => {
     const version = db.getFirstSync<{ user_version: number }>('PRAGMA user_version')!.user_version;
-    if (version > 1) throw new Error('Unsupported history schema');
+    if (version > 2) throw new Error('Unsupported history schema');
     if (version === 0)
       db.execSync(`
       CREATE TABLE history_piece (
@@ -35,11 +35,71 @@ export function migrate(db: HistoryDatabase) {
       CREATE TABLE history_route(reader TEXT, route TEXT, value TEXT NOT NULL, used INTEGER NOT NULL, PRIMARY KEY(reader,route));
       PRAGMA user_version=1;
     `);
+    if (version < 2)
+      db.execSync(`CREATE TABLE history_read (
+        reader TEXT NOT NULL, chat TEXT NOT NULL,
+        seq INTEGER NOT NULL DEFAULT 0, position INTEGER NOT NULL DEFAULT 0,
+        pending_seq INTEGER, pending_position INTEGER, pending_key TEXT,
+        PRIMARY KEY(reader,chat));
+        PRAGMA user_version=2;`);
   });
 }
 
 export class HistoryStorage {
   constructor(readonly db: HistoryDatabase) {}
+
+  reach({ reader, chat }: Scope, point: { seq: number; position: number; key: string }) {
+    return (
+      this.db.runSync(
+        `INSERT INTO history_read(reader,chat,pending_seq,pending_position,pending_key) VALUES(?,?,?,?,?)
+       ON CONFLICT(reader,chat) DO UPDATE SET pending_seq=excluded.pending_seq,
+       pending_position=excluded.pending_position,pending_key=excluded.pending_key
+       WHERE (excluded.pending_seq,excluded.pending_position)>(seq,position)
+       AND (pending_seq IS NULL OR (excluded.pending_seq,excluded.pending_position)>(pending_seq,pending_position))`,
+        reader,
+        chat,
+        point.seq,
+        point.position,
+        point.key,
+      ).changes > 0
+    );
+  }
+
+  pending(reader: string) {
+    return this.db.getAllSync<{ chat: string; seq: number; position: number; key: string }>(
+      'SELECT chat,pending_seq seq,pending_position position,pending_key key FROM history_read WHERE reader=? AND pending_seq IS NOT NULL',
+      reader,
+    );
+  }
+
+  acknowledge({ reader, chat }: Scope, point: { seq: number; position: number }) {
+    this.db.withTransactionSync(() => {
+      this.db.runSync(
+        `INSERT INTO history_read(reader,chat,seq,position) VALUES(?,?,?,?)
+        ON CONFLICT(reader,chat) DO UPDATE SET seq=excluded.seq,position=excluded.position
+        WHERE (excluded.seq,excluded.position)>(seq,position)`,
+        reader,
+        chat,
+        point.seq,
+        point.position,
+      );
+      this.db.runSync(
+        `UPDATE history_read SET pending_seq=NULL,pending_position=NULL,pending_key=NULL
+        WHERE reader=? AND chat=? AND (pending_seq,pending_position)<=(seq,position)`,
+        reader,
+        chat,
+      );
+    });
+  }
+
+  discardPending({ reader, chat }: Scope, key: string) {
+    this.db.runSync(
+      'UPDATE history_read SET pending_seq=NULL,pending_position=NULL,pending_key=NULL WHERE reader=? AND chat=? AND pending_key=?',
+      reader,
+      chat,
+      key,
+    );
+  }
   // In-flight requests only exist within this process. A purge invalidates even requests
   // for previously empty coverage; IDs alone cannot distinguish empty from emptied.
   private epochs = new Map<string, number>();
@@ -167,6 +227,7 @@ export class HistoryStorage {
     this.db.withTransactionSync(() => {
       this.db.runSync('DELETE FROM history_piece WHERE reader=? AND chat=?', reader, chat);
       this.db.runSync('DELETE FROM reading_place WHERE reader=? AND chat=?', reader, chat);
+      this.db.runSync('DELETE FROM history_read WHERE reader=? AND chat=?', reader, chat);
     });
   }
 

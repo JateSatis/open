@@ -15,7 +15,7 @@ export type ChannelSection = 'posts' | 'pops';
  */
 export function useMarkChannelSectionRead(
   channelId: string | null,
-  section: ChannelSection,
+  section: 'pops',
   newestId: string | null,
   active: boolean,
 ) {
@@ -31,7 +31,7 @@ export function useMarkChannelSectionRead(
   useEffect(() => {
     if (!channelId || !active || !subscribed) return;
 
-    const field = section === 'posts' ? 'unreadPosts' : 'unreadPops';
+    const field = 'unreadPops';
 
     queryClient.setQueryData<ChannelSubscription | null>(
       channelSubscriptionQueryKey(channelId),
@@ -40,7 +40,7 @@ export function useMarkChannelSectionRead(
 
     let alive = true;
 
-    markChannelRead(channelId, { posts: section === 'posts', pops: section === 'pops' })
+    markChannelRead(channelId, { posts: false, pops: true })
       .then(() => {
         if (!alive) return;
 

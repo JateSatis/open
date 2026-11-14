@@ -70,6 +70,23 @@ afterEach(() => {
 function insert(p: Piece) {
   expect(storage.replace(scope, storage.entries(scope), [p], p.coverage)).toBe(true);
 }
+it('replays a lost acknowledgement after a process restart without erasing a later occurrence', () => {
+  const early = { seq: 8, position: 1, key: 'first' },
+    late = { seq: 8, position: 3, key: 'third' };
+  storage.reach(scope, early);
+  const sent = storage.pending(scope.reader)[0];
+  native.close();
+  open();
+  expect(storage.pending(scope.reader)).toEqual([sent]);
+  storage.reach(scope, late);
+  storage.acknowledge(scope, sent);
+  expect(storage.pending(scope.reader)).toEqual([{ ...late, chat: scope.chat }]);
+  expect(storage.pending(other.reader)).toEqual([]);
+  storage.acknowledge(scope, late);
+  storage.acknowledge(scope, early);
+  expect(storage.reach(scope, early)).toBe(false);
+  expect(storage.pending(scope.reader)).toEqual([]);
+});
 const changes = jest.mocked(getHistoryChanges),
   range = jest.mocked(getHistoryRange);
 it('reopens at the occurrence, preserves a hole and isolates readers', () => {

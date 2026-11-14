@@ -20,6 +20,7 @@ import { AccountLifecycle } from '@/features/auth/AccountLifecycle';
 import { useSession } from '@/features/auth/useSession';
 import { resetClientState } from '@/features/auth/resetClientState';
 import { HistoryReader, bindHistoryReader } from '@/features/chats/messages/local/reader';
+import { HistoryReadDelivery } from '@/features/chats/useMarkChatRead';
 import { useSessionStore } from '@/features/auth/sessionStore';
 import { ConnectionWatcher } from '@/features/connection/ConnectionWatcher';
 import { reportRequestFailed, reportRequestSucceeded } from '@/features/connection/connectionStore';
@@ -113,6 +114,7 @@ function AccountLayout() {
           <SafeAreaProvider>
             <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
               <ConnectionWatcher />
+              <HistoryReadDelivery />
               <AccountLifecycle />
               <BirthDateGate />
               <JournalSession />

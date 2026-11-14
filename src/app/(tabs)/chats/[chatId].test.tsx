@@ -363,7 +363,7 @@ describe('ChatScreen', () => {
     expect(await screen.findByText('привет')).toBeTruthy();
   });
 
-  it('marks the chat read once its messages are on screen', async () => {
+  it('does not read the entire chat merely by mounting the list', async () => {
     mockedListMessages.mockResolvedValue({
       items: [message('m1', 'привет', 'user-2')],
       nextCursor: null,
@@ -372,7 +372,7 @@ describe('ChatScreen', () => {
     await renderWithQuery(<ChatScreen />);
     await screen.findByText('привет');
 
-    expect(mockedMarkRead).toHaveBeenCalledWith('chat-1');
+    expect(mockedMarkRead).not.toHaveBeenCalled();
   });
 
   it('does not mark an empty chat read', async () => {
@@ -680,7 +680,7 @@ describe('ChatScreen', () => {
     expect(screen.getByLabelText('Просмотры: 1')).toBeTruthy();
   });
 
-  it('marks the chat read when a message arrives while it is already open', async () => {
+  it('does not translate an incoming broadcast into a read-all', async () => {
     mockedListMessages.mockResolvedValue({
       items: [message('m1', 'привет', 'user-2')],
       nextCursor: null,
@@ -694,10 +694,10 @@ describe('ChatScreen', () => {
     handlers?.onMessage();
     await screen.findByText('ещё сообщение');
 
-    expect(mockedMarkRead).toHaveBeenCalledWith('chat-1');
+    expect(mockedMarkRead).not.toHaveBeenCalled();
   });
 
-  it('marks a chat read even when the first message ever arrives into an empty one', async () => {
+  it('does not mark a previously empty chat read on delivery alone', async () => {
     // Пустой чат при открытии и он же с первым сообщением после рассылки:
     // дочитывать не от чего, поэтому страница читается заново.
     mockedListMessages
@@ -713,7 +713,7 @@ describe('ChatScreen', () => {
     handlers?.onMessage();
 
     expect(await screen.findByText('первое')).toBeTruthy();
-    expect(mockedMarkRead).toHaveBeenCalledWith('chat-1');
+    expect(mockedMarkRead).not.toHaveBeenCalled();
   });
 
   it('catches up on what it missed while the channel was gone', async () => {
