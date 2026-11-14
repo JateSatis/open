@@ -53,6 +53,17 @@ begin
       assert found;
       begin perform advance_history_read(dest,mid.seq,mid.position,ids[1],outsider); raise exception 'wrong occurrence accepted';
       exception when invalid_parameter_value then null; end;
+      perform set_config('request.jwt.claims',jsonb_build_object('sub',a,'role','authenticated')::text,true);
+      perform send_media_message(dest,'subscription tail',null);
+      select * into strict tail from messages where chat_id=dest and text='subscription tail';
+      perform set_config('request.jwt.claims',jsonb_build_object('sub',outsider,'role','authenticated')::text,true);
+      select * into first_row from history_read_state(dest);
+      assert first_row.first_seq=tail.seq,'subscriber cannot see incoming tail';
+      assert (select unread_posts from my_subscriptions(dest))=1;
+      select * into result from advance_history_read(dest,tail.seq,0,tail.id,outsider);
+      assert (result.read_seq,result.read_position)=(tail.seq,0);
+      assert (select unread_posts from my_subscriptions(dest))=0;
+      assert not exists(select 1 from chat_members where chat_id=dest and user_id=outsider);
     end if;
   end loop;
 end $$;
