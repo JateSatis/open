@@ -3,8 +3,13 @@ import { useEffect, useMemo, useRef } from 'react';
 
 import { listMessagesByIds } from '@/api/chats';
 import { acquireCommentTopic } from '@/api/commentTopics';
-import { replaceMessages, updateHistory } from '@/features/chats/messages/historyCache';
+import {
+  messagesQueryKey,
+  replaceMessages,
+  updateHistory,
+} from '@/features/chats/messages/historyCache';
 import type { ChatMessage } from '@/features/chats/messages/types';
+import { useHistoryReader } from '../messages/local/reader';
 
 /** Столько копить сигналы, прежде чем перечитать: на горячий комментарий реакции сыплются пачками. */
 const BATCH_MS = 500;
@@ -36,6 +41,7 @@ function sourceTargets(messages: ChatMessage[]): string {
  */
 export function useForwardedCommentSources(chatId: string, messages: ChatMessage[]) {
   const queryClient = useQueryClient();
+  const reader = useHistoryReader();
   const targets = useMemo(() => sourceTargets(messages), [messages]);
   const latest = useRef(messages);
 
@@ -72,10 +78,16 @@ export function useForwardedCommentSources(chatId: string, messages: ChatMessage
         .map((message) => message.id);
 
       if (forwards.length === 0) return;
+      if (reader) {
+        void queryClient.invalidateQueries({ queryKey: messagesQueryKey(chatId), exact: true });
+        return;
+      }
 
       // Не вышло — догонит следующий сигнал или перечитывание истории.
       listMessagesByIds(forwards)
-        .then((fresh) => updateHistory(queryClient, chatId, (current) => replaceMessages(current, fresh)))
+        .then((fresh) =>
+          updateHistory(queryClient, chatId, (current) => replaceMessages(current, fresh)),
+        )
         .catch(() => undefined);
     };
 
@@ -112,5 +124,5 @@ export function useForwardedCommentSources(chatId: string, messages: ChatMessage
 
       if (timer) clearTimeout(timer);
     };
-  }, [chatId, queryClient, targets]);
+  }, [chatId, queryClient, reader, targets]);
 }

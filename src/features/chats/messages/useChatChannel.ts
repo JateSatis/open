@@ -18,7 +18,8 @@ import {
   refreshAllChatThreadSummaries,
   refreshChatThreadsAfterChange,
 } from '@/features/chats/chatThreads/sync';
-import { messagesQueryKey } from '@/features/chats/messages/historyCache';
+import { messagesQueryKey, readHistory } from '@/features/chats/messages/historyCache';
+import { useHistoryReader } from './local/reader';
 import {
   dropDeletedMessages,
   pullNewMessages,
@@ -102,9 +103,20 @@ export function useChatChannel(chatId: string, currentUserId: string | null): Ch
   const viewBatchRef = useRef<Batch>({ ids: new Set(), timer: null });
   const clusterBatchRef = useRef<Batch>({ ids: new Set(), timer: null });
 
+  const reader = useHistoryReader();
+  const refreshMain = useCallback(() => {
+    if (reader)
+      void queryClient.invalidateQueries({ queryKey: messagesQueryKey(chatId), exact: true });
+  }, [reader, chatId, queryClient]);
   const onNewMessage = useCallback(async () => {
     try {
-      const incoming = await pullNewMessages(queryClient, chatId);
+      const before = readHistory(queryClient, chatId)?.items[0]?.seq ?? -1;
+      let incoming;
+      if (reader) {
+        await queryClient.invalidateQueries({ queryKey: messagesQueryKey(chatId), exact: true });
+        incoming =
+          readHistory(queryClient, chatId)?.items.filter((message) => message.seq > before) ?? [];
+      } else incoming = await pullNewMessages(queryClient, chatId);
 
       pullChatThreads(queryClient, chatId, incoming).catch(() => undefined);
 
@@ -126,7 +138,7 @@ export function useChatChannel(chatId: string, currentUserId: string | null): Ch
       // A failed catch-up is not worth an error banner: the next broadcast or
       // a re-entry into the chat reloads the page anyway.
     }
-  }, [chatId, queryClient]);
+  }, [chatId, queryClient, reader]);
 
   const catchUp = useCallback(() => {
     // Пока канала не было, события терялись: сообщения, удаления, закрепы и
@@ -174,10 +186,12 @@ export function useChatChannel(chatId: string, currentUserId: string | null): Ch
         },
         onReconnected: catchUp,
         onMembersChanged: () => {
+          refreshMain();
           // Кто-то принял заявку: состав и «ещё не ответил» живут в чате.
           void queryClient.invalidateQueries({ queryKey: chatQueryKey(chatId) });
         },
         onChatChanged: () => {
+          refreshMain();
           // Название, описание, состав, заявки — или чат удалили. Или участник
           // включил задержку публикации: «печатает» тогда — только участникам.
           void queryClient.invalidateQueries({ queryKey: chatQueryKey(chatId) });
@@ -189,6 +203,7 @@ export function useChatChannel(chatId: string, currentUserId: string | null): Ch
           void queryClient.invalidateQueries({ queryKey: chatQueryKey(chatId) });
         },
         onMessagesDeleted: (messageIds) => {
+          refreshMain();
           // Плашки — первыми: корни удалённого ответа видны, пока он в истории.
           refreshChatThreadsAfterChange(queryClient, chatId, messageIds).catch(() => undefined);
           const feedItems = chatThreadFeedItems(queryClient, chatId, messageIds);
@@ -199,6 +214,7 @@ export function useChatChannel(chatId: string, currentUserId: string | null): Ch
             .catch(() => undefined);
         },
         onMessageEdited: (messageId) => {
+          refreshMain();
           refreshEditedMessages(queryClient, [messageId]).catch(() => undefined);
           // Правленое могло быть последним ответом треда — его текст на плашке.
           refreshChatThreadsAfterChange(queryClient, chatId, [messageId]).catch(() => undefined);
@@ -210,6 +226,7 @@ export function useChatChannel(chatId: string, currentUserId: string | null): Ch
           void queryClient.invalidateQueries({ queryKey: liveStreamQueryKey(chatId) });
         },
         onTimeVisibilityChanged: () => {
+          refreshMain();
           // Участник сменил, кому видно время: время, даты и прочтение у
           // загруженных сообщений и у участников — перечитать на месте.
           refreshChatTimes(queryClient, chatId).catch(() => undefined);
@@ -217,6 +234,7 @@ export function useChatChannel(chatId: string, currentUserId: string | null): Ch
           void queryClient.invalidateQueries({ queryKey: chatQueryKey(chatId) });
         },
         onPeopleChanged: () => {
+          refreshMain();
           // Кто-то сменил, кому виден он сам: имена, фото и id авторов у
           // загруженных сообщений и участники — глазами меня заново. Прежние
           // подписанные ссылки на фото могли стать чужими.
@@ -226,6 +244,7 @@ export function useChatChannel(chatId: string, currentUserId: string | null): Ch
           void queryClient.invalidateQueries({ queryKey: chatQueryKey(chatId) });
         },
         onMediaChanged: () => {
+          refreshMain();
           // Участник сменил, кому видно его медиа: пути и плитки «скрыто
           // автором» у загруженных сообщений и во вкладках — глазами меня
           // заново, прежние подписанные ссылки могли стать чужими.
@@ -239,6 +258,7 @@ export function useChatChannel(chatId: string, currentUserId: string | null): Ch
           void queryClient.invalidateQueries({ queryKey: pinsQueryKey(chatId) });
         },
         onForwardChanged: (forwardId) => {
+          refreshMain();
           refreshIsland(queryClient, chatId, forwardId).catch(() => undefined);
           // Закреп убранного облачка база уже сняла.
           void queryClient.invalidateQueries({ queryKey: pinsQueryKey(chatId) });
@@ -291,7 +311,7 @@ export function useChatChannel(chatId: string, currentUserId: string | null): Ch
       }
       setActivities([]);
     };
-  }, [catchUp, chatId, currentUserId, isMember, onNewMessage, queryClient]);
+  }, [catchUp, chatId, currentUserId, isMember, onNewMessage, queryClient, refreshMain]);
 
   const notifyActivity = useCallback(
     (activity: ChatActivity) => {

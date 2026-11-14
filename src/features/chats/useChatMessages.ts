@@ -35,8 +35,9 @@ import type {
   UserActivity,
 } from '@/features/chats/messages/types';
 import { useChatChannel } from '@/features/chats/messages/useChatChannel';
+import { useHistoryReader } from './messages/local/reader';
 import type { DraftPop } from '@/features/chats/composerDraftStore';
-import { useChatHistory } from '@/features/chats/messages/useChatHistory';
+import { useChatHistory, type ChatHistoryState } from '@/features/chats/messages/useChatHistory';
 import { chatsQueryKey } from '@/features/chats/useChats';
 import { pinsQueryKey } from '@/features/chats/usePinnedMessages';
 import { useConnectionStatus } from '@/features/connection/useConnectionStatus';
@@ -55,7 +56,7 @@ export type {
 } from '@/features/chats/messages/types';
 export { splitIntoAlbums } from '@/features/chats/messages/delivery';
 
-export type ChatMessagesState = {
+export type ChatMessagesState = Pick<ChatHistoryState, 'readingPlace' | 'loadNewer'> & {
   /** Newest first — the list that renders them is inverted. */
   messages: ChatMessage[];
   isLoading: boolean;
@@ -114,6 +115,7 @@ export function useChatMessages(
 ): ChatMessagesState {
   const queryClient = useQueryClient();
   const connection = useConnectionStatus();
+  const reader = useHistoryReader();
   // Переписка загружена всегда: по ней дочитываются сигналы, и в обычный вид
   // возвращаются без ожидания. «Треды» — своей историей, пока они открыты.
   const allHistory = useChatHistory(chatId, 'all');
@@ -232,6 +234,8 @@ export function useChatMessages(
 
       try {
         await deleteOnServer(messageIds);
+        if (reader)
+          void queryClient.invalidateQueries({ queryKey: messagesQueryKey(chatId), exact: true });
       } catch (cause) {
         updateHistory(queryClient, chatId, (current) => restoreMessages(current, removed));
         updateHistory(
@@ -254,7 +258,7 @@ export function useChatMessages(
       void queryClient.invalidateQueries({ queryKey: chatsQueryKey });
       void queryClient.invalidateQueries({ queryKey: pinsQueryKey(chatId) });
     },
-    [chatId, queryClient],
+    [chatId, queryClient, reader],
   );
 
   const removeFromIsland = useCallback(
@@ -283,6 +287,8 @@ export function useChatMessages(
 
       try {
         await removeForwardItems(forwardId, messageIds);
+        if (reader)
+          void queryClient.invalidateQueries({ queryKey: messagesQueryKey(chatId), exact: true });
       } catch (cause) {
         for (const { key, removed } of snapshots)
           queryClient.setQueryData<ChatHistory>(key, (current) =>
@@ -295,11 +301,13 @@ export function useChatMessages(
       void queryClient.invalidateQueries({ queryKey: chatsQueryKey });
       void queryClient.invalidateQueries({ queryKey: pinsQueryKey(chatId) });
     },
-    [chatId, queryClient],
+    [chatId, queryClient, reader],
   );
 
   return {
     messages,
+    readingPlace: history.readingPlace,
+    loadNewer: history.loadNewer,
     isLoading: history.isLoading,
     failed: history.failed,
     isLoadingMore: history.isLoadingMore,

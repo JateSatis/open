@@ -3,6 +3,8 @@ import { useQuery } from '@tanstack/react-query';
 import { getMySubscription, type ChannelSubscription } from '@/api/subscriptions';
 import { channelSubscriptionQueryKey } from '@/features/channels/keys';
 import { useCanPublishState } from '@/features/pops/queries';
+import { useHistoryReader } from '@/features/chats/messages/local/reader';
+import { routeOptions } from '@/features/chats/messages/local/route';
 
 /**
  * Кто я каналу. `unknown` — ответа ещё нет: кнопка подписки не мигает ни
@@ -28,10 +30,11 @@ export function statusOf(
 }
 
 export function useChannelSubscription(channelId: string): ChannelSubscriptionState {
+  const reader = useHistoryReader();
   const { canPublish, known } = useCanPublishState(channelId);
   const { data } = useQuery({
     queryKey: channelSubscriptionQueryKey(channelId),
-    queryFn: () => getMySubscription(channelId),
+    ...routeOptions(reader, 'subscription/' + channelId, () => getMySubscription(channelId)),
     enabled: known && !canPublish,
   });
 

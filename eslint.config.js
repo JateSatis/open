@@ -8,6 +8,6 @@ module.exports = defineConfig([
   prettierConfig,
   {
     // Edge Functions живут в Deno со своими импортами и своим deno lint.
-    ignores: ['dist/*', 'supabase/functions/**'],
+    ignores: ['dist/*', '.expo/**', 'supabase/functions/**'],
   },
 ]);

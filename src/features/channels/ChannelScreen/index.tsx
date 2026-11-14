@@ -77,7 +77,9 @@ export function ChannelScreen({
       <SlidePage slide={slide}>
         <PlainPageBar title="Канал" onBack={slide.close} />
         <View style={[styles.centered, { backgroundColor: theme.background }]}>
-          {state === 'paused' ? (
+          {channel === null ? (
+            <Text color="textSecondary">Канал недоступен</Text>
+          ) : state === 'paused' ? (
             // Без сети запрос стоит на паузе: крутилка обещала бы данные, которых не будет.
             <Text color="textSecondary">Нет связи</Text>
           ) : state === 'failed' ? (

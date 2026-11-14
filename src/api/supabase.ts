@@ -18,9 +18,18 @@ if (!supabaseUrl || !supabaseAnonKey) {
 // select-строк вместе со встроенными таблицами. Без неё каждый запрос
 // возвращал бы `any`, и ряды приходилось бы описывать руками рядом с каждым
 // запросом — а значит, расходиться со схемой при первой же миграции.
+// The existing Supabase storage key, shared with the offline account bootstrap.
+const sessionStorageKey = `sb-${new URL(supabaseUrl).hostname.split('.')[0]}-auth-token`;
+export async function readStoredSession() {
+  const raw = await AsyncStorage.getItem(sessionStorageKey);
+  if (!raw) return null;
+  const value = JSON.parse(raw) as import('@supabase/supabase-js').Session | null;
+  return value?.user?.id && value.refresh_token && value.access_token ? value : null;
+}
 export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   auth: {
     storage: AsyncStorage,
+    storageKey: sessionStorageKey,
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false,

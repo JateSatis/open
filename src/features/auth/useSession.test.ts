@@ -4,10 +4,12 @@ import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 import { useSession } from './useSession';
 
 const mockGetSession = jest.fn();
+const mockStoredSession = jest.fn();
 const mockUnsubscribe = jest.fn();
 let authListener: ((event: AuthChangeEvent, session: Session | null) => void) | null = null;
 
 jest.mock('@/api/supabase', () => ({
+  readStoredSession: () => mockStoredSession(),
   supabase: {
     auth: {
       getSession: () => mockGetSession(),
@@ -39,6 +41,19 @@ describe('useSession', () => {
 
     expect(result.current.isLoading).toBe(true);
     expect(result.current.isAuthenticated).toBe(false);
+  });
+
+  it('opens the stored reader when an expired token cannot be refreshed offline', async () => {
+    mockStoredSession.mockResolvedValue(session);
+    mockGetSession.mockResolvedValue({
+      data: { session: null },
+      error: { name: 'AuthRetryableFetchError' },
+    });
+    const { result } = await renderHook(() => useSession());
+    await act(() => authListener?.('INITIAL_SESSION', null));
+    await waitFor(() => expect(result.current.session).toBe(session));
+    await act(() => authListener?.('SIGNED_OUT', null));
+    expect(result.current.session).toBeNull();
   });
 
   it('reports no session when storage is empty', async () => {

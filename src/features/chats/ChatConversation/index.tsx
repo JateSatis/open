@@ -14,6 +14,12 @@ import {
 import Animated from 'react-native-reanimated';
 
 import { styles } from './styles';
+import {
+  HistoryCell,
+  HistoryLayouts,
+  useInitialHistoryRows,
+  useReadingPlace,
+} from './useReadingPlace';
 import { useAttachedHistoryRows } from './useAttachedHistoryRows';
 
 import { isOpaquePersonId } from '@/api/opaquePeople';
@@ -40,9 +46,7 @@ import {
 } from '@/features/chats/chatThreads/chatThreadPanelStore';
 import { useChatThreadPlates } from '@/features/chats/chatThreads/useChatThreadPlates';
 import { useChatThreadReplies } from '@/features/chats/chatThreads/useChatThreadReplies';
-import {
-  useChatThreadsView,
-} from '@/features/chats/chatThreads/useChatThreadsMode';
+import { useChatThreadsView } from '@/features/chats/chatThreads/useChatThreadsMode';
 import type { HiddenRange } from '@/features/chats/hiddenText';
 import type { LocalMedia, OutgoingMedia } from '@/features/media';
 import { ChatScreenHeader } from '@/features/chats/ChatScreenHeader';
@@ -100,10 +104,7 @@ import { useChatKeyboardInset } from '@/features/chats/useChatKeyboardInset';
 import { useChatRowRenderer } from '@/features/chats/useChatRowRenderer';
 import { FragmentMenu } from '@/features/chats/fragments/FragmentMenu';
 import { commentOnSelection } from '@/features/chats/fragments/openFragmentPanel';
-import {
-  clearTextSelection,
-  type TextSelection,
-} from '@/features/chats/fragments/fragmentStore';
+import { clearTextSelection, type TextSelection } from '@/features/chats/fragments/fragmentStore';
 import { useFragmentMode } from '@/features/chats/fragments/useFragmentMode';
 import { registerSelectionScroller } from '@/features/chats/fragments/selectionAutoScroll';
 import { useComposerDraft } from '@/features/chats/useComposerDraft';
@@ -231,10 +232,7 @@ export function ChatConversation({
   // чат при уже загруженных сообщениях: их видно и без него.
   const queryClient = useQueryClient();
   const reload = useCallback(
-    () => reloadMissing(queryClient, [
-      chatQueryKey(chatId),
-      messagesQueryKey(chatId),
-    ]),
+    () => reloadMissing(queryClient, [chatQueryKey(chatId), messagesQueryKey(chatId)]),
     [chatId, queryClient],
   );
   const { loadMore, retry, notifyTyping, notifyRecordingVoice } = chatMessages;
@@ -242,7 +240,11 @@ export function ChatConversation({
   const composerRef = useRef<TextInput>(null);
   // Островок раскладывается на строки: плашка и облачка — по строке.
   const rows = useMemo(() => toChatRows(messages), [messages]);
-  const presentedRows = useAttachedHistoryRows(rows, `${chatId}/${chatThreads.view}`);
+  const diskWindow = useInitialHistoryRows(rows, chatMessages.readingPlace);
+  const presentedRows = useAttachedHistoryRows(
+    threadsActive ? rows : diskWindow.rows,
+    `${currentUserId}/${chatId}/${chatThreads.view}`,
+  );
   const pins = usePinnedMessages(chatId);
   const pinCursor = usePinnedCursor(pins.pins);
   const selection = useMessageSelection(rows, currentUserId);
@@ -257,6 +259,16 @@ export function ChatConversation({
     scrollState.current.offset = 0;
   }, [chatThreads.view]);
   // Поиск по чату — со страницы чата: поле вместо шапки, плашка вместо поля ввода.
+  const focused = useIsFocused();
+  const place = useReadingPlace(
+    chatId,
+    chatMessages.readingPlace,
+    presentedRows,
+    focused && active && !threadsActive,
+    listRef,
+    scrollState,
+    listFrameRef,
+  );
   const chatSearch = useChatSearch(chatId);
   const [searchListShown, setSearchListShown] = useState(false);
   const showSearchList = chatSearch.active && searchListShown;
@@ -270,7 +282,7 @@ export function ChatConversation({
   const isMember = chat ? isChatMember(chat, currentUserId) : false;
   // Моя заявка на диалог ещё не принята: одно сообщение уже ушло, дальше ждать.
   const requestSent = Boolean(chat?.requestPending && chat.createdBy === currentUserId);
-  const isFocused = useIsFocused() && active;
+  const isFocused = focused && active && !place.hidden;
   // Заявку спрашиваем только у не-участника: участнику отвечать уже не на что.
   const myInvite = useMyInvite(chatId, chat !== null && !isMember);
   const invite = useRespondToInvite();
@@ -301,9 +313,14 @@ export function ChatConversation({
   // экран. Но не чат: закрыл переписку — голосовое замолкает.
   useEffect(() => () => stopVoice(), [chatId]);
 
-  const newestMessageId = chatMessages.latestMessageId;
+  const newestMessageId =
+    (!chatMessages.readingPlace || place.atLatest) &&
+    !diskWindow.hasNewer &&
+    !chatMessages.loadNewer
+      ? chatMessages.latestMessageId
+      : null;
 
-  useMarkChatRead(chatId, newestMessageId, isMember);
+  useMarkChatRead(chatId, newestMessageId, isFocused && isMember);
   // Подписчик чужого диалога — своей отметкой в подписке.
   useMarkChatSubscriptionRead(
     chatId,
@@ -436,7 +453,11 @@ export function ChatConversation({
     (text: string, media?: OutgoingMedia[], replies?: LiveQuote[], hidden?: HiddenRange[]) => {
       listRef.current?.scrollToOffset({ offset: 0, animated: false });
       const localId = sendToChat(text, media, replies, hidden);
-      announceThreadReply(replies ?? [], { kind: media?.length ? 'media' : 'text', text, media }, localId);
+      announceThreadReply(
+        replies ?? [],
+        { kind: media?.length ? 'media' : 'text', text, media },
+        localId,
+      );
     },
     [announceThreadReply, sendToChat],
   );
@@ -444,7 +465,11 @@ export function ChatConversation({
     (voice: LocalMedia, replies?: LiveQuote[]) => {
       listRef.current?.scrollToOffset({ offset: 0, animated: false });
       const localId = sendVoiceToChat(voice, replies);
-      announceThreadReply(replies ?? [], { kind: 'voice', text: '', durationMs: voice.durationMs }, localId);
+      announceThreadReply(
+        replies ?? [],
+        { kind: 'voice', text: '', durationMs: voice.durationMs },
+        localId,
+      );
     },
     [announceThreadReply, sendVoiceToChat],
   );
@@ -626,7 +651,7 @@ export function ChatConversation({
     chatId,
     currentUserId,
     isFocused,
-    rows,
+    rows: presentedRows,
     autoscrollThreshold: KEEP_READING_POSITION.autoscrollToTopThreshold,
     measureRow: rowRegistry.measure,
     measureViewport: measureListFrame,
@@ -645,6 +670,7 @@ export function ChatConversation({
   }, [hasMore, isLoadingMore, loadMore, threadsActive]);
   const onListDragStart = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      place.interrupt();
       pageAllowed.current = true;
       userScrolled.current = true;
       resumeLoadMore(false);
@@ -653,7 +679,7 @@ export function ChatConversation({
       // режим фрагментов остаётся.
       clearTextSelection();
     },
-    [resumeLoadMore, requestOlder],
+    [resumeLoadMore, requestOlder, place],
   );
 
   // Где сейчас прокрутка и сколько её всего — автопрокрутке выделения: она
@@ -675,11 +701,22 @@ export function ChatConversation({
         atHistoryEdge(event.nativeEvent, HISTORY_PREFETCH_SCREENS)
       )
         requestOlder();
+      if (
+        userScrolled.current &&
+        !threadsActive &&
+        event.nativeEvent.contentOffset.y < scrollState.current.offset &&
+        event.nativeEvent.contentOffset.y <
+          HISTORY_PREFETCH_SCREENS * event.nativeEvent.layoutMeasurement.height
+      ) {
+        if (diskWindow.hasNewer) diskWindow.revealNewer();
+        else chatMessages.loadNewer?.();
+      }
       trackOffset(event);
+      if (userScrolled.current) place.moving();
       viewsOnScroll(event);
       resetScrolledRows();
     },
-    [threadsActive, requestOlder, trackOffset, viewsOnScroll],
+    [threadsActive, requestOlder, trackOffset, viewsOnScroll, chatMessages, diskWindow, place],
   );
 
   const onListScrollEnd = useCallback(
@@ -688,9 +725,10 @@ export function ChatConversation({
       viewsOnScroll(event);
       // Инерция может пройти всю заранее загруженную страницу. На остановке
       // проверяем фактический край; loadMore объединяет запросы и не снимает ошибку.
+      place.settled();
       if (hasMore && atHistoryEdge(event.nativeEvent)) void loadMore();
     },
-    [hasMore, loadMore, trackOffset, viewsOnScroll],
+    [hasMore, loadMore, trackOffset, viewsOnScroll, place],
   );
 
   useEffect(() => {
@@ -810,7 +848,7 @@ export function ChatConversation({
       peopleById,
       showAvatars: !isPosts && !ownDirect,
       showAuthors: !ownDirect,
-        reactions,
+      reactions,
       pins,
       authorName,
       originalOf,
@@ -834,7 +872,7 @@ export function ChatConversation({
       isMember,
       isPosts,
       me,
-        notifyRecordingVoice,
+      notifyRecordingVoice,
       notifyTyping,
       openPerson,
       originalOf,
@@ -958,7 +996,10 @@ export function ChatConversation({
           ) : isMember ? (
             <View style={styles.headerActions}>
               {chatThreads.available ? (
-                <ChatThreadsToggle active={threadsActive} onPress={() => chatThreads.setView(threadsActive ? 'all' : 'chat-threads')} />
+                <ChatThreadsToggle
+                  active={threadsActive}
+                  onPress={() => chatThreads.setView(threadsActive ? 'all' : 'chat-threads')}
+                />
               ) : null}
               {/* В заявку не звонят — это решает и база. */}
               {chat?.requestPending ? null : (
@@ -973,7 +1014,10 @@ export function ChatConversation({
           ) : chat && !gone ? (
             <View style={styles.headerActions}>
               {chatThreads.available ? (
-                <ChatThreadsToggle active={threadsActive} onPress={() => chatThreads.setView(threadsActive ? 'all' : 'chat-threads')} />
+                <ChatThreadsToggle
+                  active={threadsActive}
+                  onPress={() => chatThreads.setView(threadsActive ? 'all' : 'chat-threads')}
+                />
               ) : null}
               <ChatMenu chatId={chatId} isMember={false} subscription={subscription} />
             </View>
@@ -1007,54 +1051,68 @@ export function ChatConversation({
             <ActivityIndicator accessibilityLabel="Загрузка переписки" />
           </View>
         ) : (
-          <Animated.View ref={listFrameRef} style={styles.flex}>
-            <RowRegistryContext.Provider value={rowRegistry}>
-              <TileViewportContext.Provider value={measureListFrame}>
-                <FlatList
-                  // Другой вид — другая лента: список начинается заново, а не
-                  // со смещения прежней.
-                  key={chatThreads.view}
-                  showsVerticalScrollIndicator={false}
-                  showsHorizontalScrollIndicator={false}
-                  ref={listRef}
-                  testID="messages-list"
-                  inverted
-                  data={presentedRows}
-                  keyExtractor={rowRenderKey}
-                  renderItem={renderItem}
-                  // Плашки тредов приходят после строк: видимые ячейки перерисовываются.
-                  extraData={chatThreadSummaries}
-                  viewabilityConfig={views.viewabilityConfig}
-                  onViewableItemsChanged={onViewableItemsChanged}
-                  onScroll={onListScroll}
-                  onScrollBeginDrag={onListDragStart}
-                  onScrollEndDrag={onListScrollEnd}
-                  onMomentumScrollEnd={onListScrollEnd}
-                  onContentSizeChange={(_width, height) => {
-                    scrollState.current.content = height;
-                  }}
-                  onLayout={(event) => {
-                    scrollState.current.viewport = event.nativeEvent.layout.height;
-                  }}
-                  scrollEventThrottle={LIST_SCROLL_THROTTLE_MS}
-                  contentContainerStyle={styles.list}
-                  // The list is inverted, so its "end" is the top of the screen:
-                  // scrolling up pages further back through the history.
-                  // Облачко ниже экрана выросло или сжалось (правка, подгрузка
-                  // картинки) — то, что человек читает выше, остаётся на месте.
-                  // У самого низа переписки список по-прежнему едет за новым.
-                  maintainVisibleContentPosition={KEEP_READING_POSITION}
-                  onEndReached={hasMore ? requestOlder : undefined}
-                  onEndReachedThreshold={HISTORY_EDGE}
-                  // Тап по облачку при открытой клавиатуре сразу открывает меню, а
-                  // не только прячет клавиатуру; тап по пустому месту — прячет.
-                  keyboardShouldPersistTaps="handled"
-                  ListFooterComponent={
-                    isLoadingMore ? <ActivityIndicator accessibilityLabel="Загрузка истории" /> : null
-                  }
-                />
-              </TileViewportContext.Provider>
-            </RowRegistryContext.Provider>
+          <Animated.View ref={listFrameRef} style={[styles.flex, place.hidden && { opacity: 0 }]}>
+            <HistoryLayouts.Provider value={place.layouts}>
+              <RowRegistryContext.Provider value={rowRegistry}>
+                <TileViewportContext.Provider value={measureListFrame}>
+                  <FlatList
+                    // Другой вид — другая лента: список начинается заново, а не
+                    // со смещения прежней.
+                    key={chatThreads.view}
+                    showsVerticalScrollIndicator={false}
+                    showsHorizontalScrollIndicator={false}
+                    ref={listRef}
+                    testID="messages-list"
+                    inverted
+                    data={presentedRows}
+                    CellRendererComponent={HistoryCell}
+                    initialNumToRender={20}
+                    onScrollToIndexFailed={({ averageItemLength, index }) =>
+                      listRef.current?.scrollToOffset({
+                        offset: averageItemLength * index,
+                        animated: false,
+                      })
+                    }
+                    keyExtractor={rowRenderKey}
+                    renderItem={renderItem}
+                    // Плашки тредов приходят после строк: видимые ячейки перерисовываются.
+                    extraData={chatThreadSummaries}
+                    viewabilityConfig={views.viewabilityConfig}
+                    onViewableItemsChanged={onViewableItemsChanged}
+                    onScroll={onListScroll}
+                    onScrollBeginDrag={onListDragStart}
+                    onScrollEndDrag={onListScrollEnd}
+                    onMomentumScrollEnd={onListScrollEnd}
+                    onContentSizeChange={(_width, height) => {
+                      scrollState.current.content = height;
+                      place.layoutChanged();
+                    }}
+                    onLayout={(event) => {
+                      scrollState.current.viewport = event.nativeEvent.layout.height;
+                      place.layoutChanged();
+                    }}
+                    scrollEventThrottle={LIST_SCROLL_THROTTLE_MS}
+                    contentContainerStyle={styles.list}
+                    // The list is inverted, so its "end" is the top of the screen:
+                    // scrolling up pages further back through the history.
+                    // Облачко ниже экрана выросло или сжалось (правка, подгрузка
+                    // картинки) — то, что человек читает выше, остаётся на месте.
+                    // У самого низа переписки список по-прежнему едет за новым.
+                    maintainVisibleContentPosition={KEEP_READING_POSITION}
+                    onEndReached={hasMore && !place.hidden ? requestOlder : undefined}
+                    onEndReachedThreshold={HISTORY_EDGE}
+                    // Тап по облачку при открытой клавиатуре сразу открывает меню, а
+                    // не только прячет клавиатуру; тап по пустому месту — прячет.
+                    keyboardShouldPersistTaps="handled"
+                    ListFooterComponent={
+                      isLoadingMore ? (
+                        <ActivityIndicator accessibilityLabel="Загрузка истории" />
+                      ) : null
+                    }
+                  />
+                </TileViewportContext.Provider>
+              </RowRegistryContext.Provider>
+            </HistoryLayouts.Provider>
           </Animated.View>
         )}
 
