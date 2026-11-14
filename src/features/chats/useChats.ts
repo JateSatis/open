@@ -4,6 +4,8 @@ import { useCallback, useState } from 'react';
 import { listChats, type ChatSummary } from '@/api/chats';
 import { chatsQueryKey } from '@/features/chats/chatsKey';
 import { useConnectionStatus } from '@/features/connection/useConnectionStatus';
+import { useHistoryReader } from './messages/local/reader';
+import { routeOptions } from './messages/local/route';
 import { describeLoadError } from '@/lib/network';
 
 export { chatsQueryKey };
@@ -17,11 +19,12 @@ export type ChatsState = {
 };
 
 export function useChats(): ChatsState {
+  const reader = useHistoryReader();
   const connection = useConnectionStatus();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const { data, isPending, fetchStatus, error, refetch } = useQuery({
     queryKey: chatsQueryKey,
-    queryFn: listChats,
+    ...routeOptions(reader, 'chats', listChats),
   });
 
   // Крутилка показывается только когда список тянут пальцем. Фоновое

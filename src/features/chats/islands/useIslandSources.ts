@@ -13,6 +13,7 @@ import {
   refreshViews,
 } from '@/features/chats/messages/sync';
 import type { ChatMessage } from '@/features/chats/messages/types';
+import { useHistoryReader } from '../messages/local/reader';
 
 /** Столько копить события реакций и комментариев, прежде чем перечитать, — как в канале чата. */
 const BATCH_MS = 500;
@@ -73,6 +74,7 @@ function sourceChats(chatId: string, messages: ChatMessage[]): string {
  */
 export function useIslandSources(chatId: string, messages: ChatMessage[]) {
   const queryClient = useQueryClient();
+  const reader = useHistoryReader();
   const sources = useMemo(() => sourceChats(chatId, messages), [chatId, messages]);
 
   useEffect(() => {
@@ -83,12 +85,22 @@ export function useIslandSources(chatId: string, messages: ChatMessage[]) {
     const views = batcher(queryClient, refreshViews);
     const clusters = batcher(queryClient, refreshClusterCounts);
 
+    const refresh = () => {
+      if (reader)
+        void queryClient.invalidateQueries({ queryKey: messagesQueryKey(chatId), exact: true });
+    };
     const releases = sources.split(',').map((sourceId) =>
       subscribeToChatSignals(sourceId, {
+        onMembersChanged: refresh,
+        onMediaChanged: refresh,
+        onPeopleChanged: refresh,
+        onTimeVisibilityChanged: refresh,
         onMessagesDeleted: (ids) => {
+          refresh();
           dropDeletedMessages(queryClient, ids).catch(() => undefined);
         },
         onMessageEdited: (id) => {
+          refresh();
           refreshEditedMessages(queryClient, [id]).catch(() => undefined);
         },
         onReactionsChanged: (id) => reactions.add(id),
@@ -115,5 +127,5 @@ export function useIslandSources(chatId: string, messages: ChatMessage[]) {
       views.stop();
       clusters.stop();
     };
-  }, [chatId, queryClient, sources]);
+  }, [chatId, queryClient, reader, sources]);
 }

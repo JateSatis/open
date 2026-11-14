@@ -3,6 +3,8 @@ import { useInfiniteQuery, useQuery, type InfiniteData } from '@tanstack/react-q
 import { canPublishInChannel, listPops, POPS_PAGE_SIZE, type Pop } from '@/api/pops';
 
 import { popsQueryKey } from './keys';
+import { useHistoryReader } from '@/features/chats/messages/local/reader';
+import { routeOptions } from '@/features/chats/messages/local/route';
 
 export { popsQueryKey };
 export const canPublishQueryKey = (channelId: string) =>
@@ -35,9 +37,10 @@ export function useCanPublishState(channelId: string | null): {
   /** Спросить не удалось — ответа не будет до следующей попытки. */
   failed: boolean;
 } {
+  const reader = useHistoryReader();
   const { data, isError } = useQuery({
     queryKey: canPublishQueryKey(channelId ?? ''),
-    queryFn: () => canPublishInChannel(channelId!),
+    ...routeOptions(reader, 'publish/' + channelId, () => canPublishInChannel(channelId!)),
     enabled: channelId !== null,
   });
 

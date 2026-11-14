@@ -6,7 +6,7 @@ import '@/features/streams/livekitGlobals';
 import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useState } from 'react';
 import { StyleSheet, useColorScheme } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
@@ -17,6 +17,10 @@ import { ScrollTap } from '../../modules/scroll-tap';
 import { ConfirmDialogHost } from '@/components/ConfirmDialog';
 import { SLIDE_PAGE } from '@/components/SlidePage/screenOptions';
 import { AccountLifecycle } from '@/features/auth/AccountLifecycle';
+import { useSession } from '@/features/auth/useSession';
+import { resetClientState } from '@/features/auth/resetClientState';
+import { HistoryReader, bindHistoryReader } from '@/features/chats/messages/local/reader';
+import { useSessionStore } from '@/features/auth/sessionStore';
 import { ConnectionWatcher } from '@/features/connection/ConnectionWatcher';
 import { reportRequestFailed, reportRequestSucceeded } from '@/features/connection/connectionStore';
 import { InAppMessageToast } from '@/features/notifications/InAppMessageToast';
@@ -26,6 +30,7 @@ import { IncomingCallOverlay } from '@/features/streams/IncomingCallOverlay';
 import { BelowReturnBar, ReturnToCallBar } from '@/features/streams/ReturnToCallBar';
 import { isNetworkError } from '@/lib/network';
 
+bindHistoryReader(() => useSessionStore.getState().session?.user.id ?? null);
 SplashScreen.preventAutoHideAsync();
 
 const QUERY_RETRY_DELAY_MS = 1000;
@@ -47,6 +52,16 @@ function reportOutcome(error: unknown | null) {
 }
 
 export default function RootLayout() {
+  const { session } = useSession();
+  const reader = session?.user.id ?? null;
+  return (
+    <HistoryReader.Provider value={reader}>
+      <AccountLayout key={reader ?? 'signed-out'} />
+    </HistoryReader.Provider>
+  );
+}
+
+function AccountLayout() {
   const colorScheme = useColorScheme();
   // One client for the whole app: the cache is shared across features, so it
   // must not be recreated on re-render or scoped to a single tab.
@@ -80,6 +95,8 @@ export default function RootLayout() {
         }),
       }),
   );
+
+  useLayoutEffect(() => () => resetClientState(queryClient), [queryClient]);
 
   useEffect(() => {
     SplashScreen.hideAsync();

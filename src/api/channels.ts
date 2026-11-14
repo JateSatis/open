@@ -100,6 +100,12 @@ export async function createChannel(
   return { channelId: row.channel_id, chatId: row.chat_id };
 }
 
+export class ChannelGoneError extends Error {
+  constructor() {
+    super('Канал не найден');
+  }
+}
+
 export async function getChannel(channelId: string): Promise<Channel> {
   const { data, error } = await supabase
     .from('channels')
@@ -109,7 +115,7 @@ export async function getChannel(channelId: string): Promise<Channel> {
     .maybeSingle();
 
   if (error) throw error;
-  if (!data) throw new Error('Канал не найден');
+  if (!data) throw new ChannelGoneError();
 
   return toChannel(data);
 }

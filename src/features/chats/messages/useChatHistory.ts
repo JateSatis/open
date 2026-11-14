@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 
 import {
   mergeMessages,
@@ -13,11 +13,18 @@ import type { ChatMessage } from '@/features/chats/messages/types';
 import { loadStateOf } from '@/lib/loadState';
 import { describeLoadError } from '@/lib/network';
 
+import { loadPage, projection, refreshLocal } from './local/loader';
+import { localHistory } from './local/database';
+import { stillReader, useHistoryReader } from './local/reader';
+import type { ReadingPlace } from './local/segments';
+
 const NO_MESSAGES: ChatMessage[] = [];
 
 export type ChatHistoryState = {
   /** Только подтверждённые сервером, самые новые первыми. */
   items: ChatMessage[];
+  readingPlace?: ReadingPlace | null;
+  loadNewer?: () => void;
   isLoading: boolean;
   /** Истории нет, а все попытки её загрузить не удались — показать нечего. */
   failed: boolean;
@@ -48,12 +55,48 @@ export function useChatHistory(
   enabled = true,
 ): ChatHistoryState {
   const queryClient = useQueryClient();
+  const reader = useHistoryReader();
+  const scope = useMemo(
+    () => (reader && view === 'all' ? { reader, chat: chatId } : null),
+    [reader, chatId, view],
+  );
+  const disk = useMemo(() => {
+    if (!scope) return null;
+    const db = localHistory();
+    const place = db.place(scope);
+    return { place, history: projection(scope, db.read(scope, place)) };
+  }, [scope]);
   const query = useQuery({
     queryKey: messagesQueryKey(chatId, view),
     // Повторный запрос — дочитывание, а не перезагрузка (см. `loadHistory`):
     // поэтому история спокойно перезапрашивается при каждом входе в чат и
     // после обрыва связи.
-    queryFn: () => loadHistory(queryClient, chatId, view),
+    initialData: disk?.history,
+    initialDataUpdatedAt: 0,
+    queryFn: async ({ signal }) => {
+      if (!scope) return loadHistory(queryClient, chatId, view);
+      const active = () => !signal.aborted && stillReader(scope.reader);
+      const db = localHistory();
+      const previous = readHistory(queryClient, chatId);
+      const stable = () => active() && readHistory(queryClient, chatId) === previous;
+      try {
+        await refreshLocal(scope, db.place(scope), stable);
+      } catch (error) {
+        // A sibling may already have committed a verified revocation.
+        if (stable() && previous) {
+          const verified = projection(scope, db.read(scope));
+          if (verified) queryClient.setQueryData(messagesQueryKey(chatId), verified);
+        }
+        throw error;
+      }
+      if (!active()) throw new Error('History scope changed');
+      if (!stable()) {
+        // Realtime or navigation landed during the read. Recheck against its new generation.
+        void queryClient.invalidateQueries({ queryKey: messagesQueryKey(chatId), exact: true });
+        return readHistory(queryClient, chatId) ?? { items: [], nextCursor: null };
+      }
+      return projection(scope, db.read(scope)) ?? { items: [], nextCursor: null };
+    },
     enabled,
     // Возвращение связи и так перезапрашивает всё через `useConnectionWatch`.
     refetchOnReconnect: false,
@@ -65,26 +108,47 @@ export function useChatHistory(
   const loadingMoreRef = useRef<Promise<void> | null>(null);
   const stalledRef = useRef(false);
 
+  const publishPage = useCallback(
+    (previous: ReturnType<typeof readHistory>) => {
+      if (!scope || !stillReader(scope.reader)) return;
+      if (previous !== readHistory(queryClient, chatId)) {
+        void queryClient.invalidateQueries({ queryKey: messagesQueryKey(chatId), exact: true });
+        return;
+      }
+      const fresh = projection(scope, localHistory().read(scope));
+      if (fresh) queryClient.setQueryData(messagesQueryKey(chatId), fresh);
+    },
+    [chatId, queryClient, scope],
+  );
+
   const fetchOlder = useCallback((): Promise<void> => {
     if (loadingMoreRef.current) return loadingMoreRef.current;
 
-    const cursor = readHistory(queryClient, chatId, view)?.nextCursor ?? null;
+    const previous = readHistory(queryClient, chatId, view);
+    const cursor = previous?.nextCursor ?? null;
 
     if (cursor === null) return Promise.resolve();
 
     setIsLoadingMore(true);
 
-    const loading = listHistoryPage(chatId, view, cursor)
-      .then((page) => {
-        updateHistory(
-          queryClient,
-          chatId,
-          (history) => ({
-            ...mergeMessages(history, page.items, 'older'),
-            nextCursor: page.nextCursor,
-          }),
-          view,
-        );
+    const loading = (
+      scope && typeof cursor !== 'number'
+        ? loadPage(scope, { mode: 'before', cursor, limit: 30 }, () =>
+            stillReader(scope.reader),
+          ).then(() => publishPage(previous))
+        : listHistoryPage(chatId, view, cursor).then((page) => {
+            updateHistory(
+              queryClient,
+              chatId,
+              (history) => ({
+                ...mergeMessages(history, page.items, 'older'),
+                nextCursor: page.nextCursor,
+              }),
+              view,
+            );
+          })
+    )
+      .then(() => {
         setMoreError(null);
         stalledRef.current = false;
       })
@@ -100,7 +164,7 @@ export function useChatHistory(
     loadingMoreRef.current = loading;
 
     return loading;
-  }, [chatId, queryClient, view]);
+  }, [chatId, queryClient, scope, view, publishPage]);
 
   const loadMore = useCallback(
     (): Promise<void> => (stalledRef.current ? Promise.resolve() : fetchOlder()),
@@ -115,7 +179,24 @@ export function useChatHistory(
     [fetchOlder],
   );
 
+  const loadingNewer = useRef(false);
+  const loadNewer = () => {
+    if (!scope || !data?.afterCursor || loadingNewer.current) return;
+    loadingNewer.current = true;
+    void loadPage(scope, { mode: 'after', cursor: data.afterCursor, limit: 30 }, () =>
+      stillReader(scope.reader),
+    )
+      .then(() => publishPage(data))
+      .catch((cause: unknown) =>
+        setMoreError(describeLoadError(cause, 'Не удалось загрузить историю')),
+      )
+      .finally(() => {
+        loadingNewer.current = false;
+      });
+  };
   return {
+    readingPlace: disk?.history ? disk.place : null,
+    loadNewer: data?.afterCursor ? loadNewer : undefined,
     items: data?.items ?? NO_MESSAGES,
     // Пустая история до первого ответа — не «сообщений пока нет», а «ещё не знаем».
     isLoading: state === 'loading' || state === 'paused',
