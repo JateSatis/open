@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect } from 'react';
+import { useCallback } from 'react';
 
 import { byChatListOrder } from '@/api/chatListOrder';
 import type { ChatSummary } from '@/api/chats';
@@ -202,49 +202,4 @@ export function useChatSubscriptionActions(chatId: string): ChatSubscriptionActi
   );
 
   return { subscribe, setNotify, unsubscribe, readAll };
-}
-
-/**
- * Пока подписчик смотрит переписку, всё в ней прочитано — на тех же сигналах,
- * что `useMarkChatRead` у участника: вход и каждое новое сообщение. Отметка —
- * своя, в подписке: галочки «прочитано» у участников она не трогает.
- */
-export function useMarkChatSubscriptionRead(
-  chatId: string,
-  newestMessageId: string | null,
-  enabled: boolean,
-) {
-  const queryClient = useQueryClient();
-
-  useEffect(() => {
-    if (!newestMessageId || !enabled) return;
-
-    let active = true;
-
-    markChatSubscriptionRead(chatId)
-      .then(() => {
-        if (!active) return;
-
-        queryClient.setQueryData<ChatSummary[]>(chatsQueryKey, (chats) =>
-          chats?.map((chat) =>
-            chat.id === chatId && chat.subscription
-              ? {
-                  ...chat,
-                  subscription: { ...chat.subscription, unreadPosts: 0 },
-                  hasUnread: false,
-                }
-              : chat,
-          ),
-        );
-        void queryClient.invalidateQueries({ queryKey: chatsQueryKey });
-        void queryClient.invalidateQueries({ queryKey: chatSubscriptionQueryKey(chatId) });
-      })
-      .catch(() => {
-        // Как у участника: следующее сообщение или повторный вход поправят.
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [chatId, enabled, newestMessageId, queryClient]);
 }

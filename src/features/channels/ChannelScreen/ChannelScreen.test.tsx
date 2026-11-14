@@ -554,15 +554,13 @@ describe('ChannelScreen subscription', () => {
     expect(listChannelSubscribers).not.toHaveBeenCalled();
   });
 
-  it('shows unread counts per section; the open «Посты» are read at once', async () => {
+  it('shows unread counts per section; loading «Посты» preserves the count until a reached position', async () => {
     await renderAs('reader-1', { ...subscription, unreadPosts: 3, unreadPops: 2 });
 
     expect(await screen.findByTestId('segment-badge-1')).toBeTruthy();
     expect(screen.getByRole('tab', { name: 'Попсы, непрочитанных: 2' })).toBeTruthy();
-    await waitFor(() =>
-      expect(markChannelRead).toHaveBeenCalledWith('channel-1', { posts: true, pops: false }),
-    );
-    expect(screen.queryByTestId('segment-badge-0')).toBeNull();
+    expect(markChannelRead).not.toHaveBeenCalledWith('channel-1', { posts: true, pops: false });
+    expect(screen.getByRole('tab', { name: 'Посты, непрочитанных: 3' })).toBeTruthy();
 
     await openPops();
     await waitFor(() =>

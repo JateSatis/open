@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { subscribeToUserEvents } from '@/api/chats';
 import { channelSubscriptionQueryKey } from '@/features/channels/keys';
 import { chatQueryKey } from '@/features/chats/useChat';
+import { refreshRead } from '@/features/chats/useMarkChatRead';
 import { chatsQueryKey } from '@/features/chats/useChats';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
 import { invitesQueryKey } from '@/features/chats/useInvites';
@@ -56,6 +57,8 @@ export function useInAppAlerts(): InAppAlertsState {
     };
 
     const unsubscribe = subscribeToUserEvents(currentUserId, {
+      onHistoryRead: (chat) => refreshRead(queryClient, currentUserId, chat),
+      onJoined: () => refreshRead(queryClient, currentUserId),
       onMessage: (incoming) => {
         refreshChat(incoming.chatId);
 

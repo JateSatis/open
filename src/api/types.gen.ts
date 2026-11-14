@@ -7,11 +7,6 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
-  __InternalSupabase: {
-    PostgrestVersion: "14.5"
-  }
   public: {
     Tables: {
       account_installations: {
@@ -330,6 +325,8 @@ export type Database = {
           id: string
           joined_at: string
           last_read_at: string
+          read_position: number
+          read_seq: number
           user_id: string
         }
         Insert: {
@@ -337,6 +334,8 @@ export type Database = {
           id?: string
           joined_at?: string
           last_read_at?: string
+          read_position?: number
+          read_seq?: number
           user_id: string
         }
         Update: {
@@ -344,6 +343,8 @@ export type Database = {
           id?: string
           joined_at?: string
           last_read_at?: string
+          read_position?: number
+          read_seq?: number
           user_id?: string
         }
         Relationships: [
@@ -4187,6 +4188,8 @@ export type Database = {
           messages_read_at: string
           notify: boolean
           pops_read_at: string
+          read_position: number
+          read_seq: number
           subscriber_id: string
         }
         Insert: {
@@ -4199,6 +4202,8 @@ export type Database = {
           messages_read_at?: string
           notify?: boolean
           pops_read_at?: string
+          read_position?: number
+          read_seq?: number
           subscriber_id: string
         }
         Update: {
@@ -4211,6 +4216,8 @@ export type Database = {
           messages_read_at?: string
           notify?: boolean
           pops_read_at?: string
+          read_position?: number
+          read_seq?: number
           subscriber_id?: string
         }
         Relationships: [
@@ -4918,6 +4925,19 @@ export type Database = {
       add_message_replies: {
         Args: { new_message: string; reply_to: string[]; target_chat: string }
         Returns: undefined
+      }
+      advance_history_read: {
+        Args: {
+          p_chat: string
+          p_expected_reader: string
+          p_key: string
+          p_position: number
+          p_seq: number
+        }
+        Returns: {
+          read_position: number
+          read_seq: number
+        }[]
       }
       age_in_years: { Args: { p_birth: string }; Returns: number }
       alias_compose: { Args: { p_seed: string }; Returns: string }
@@ -5744,6 +5764,17 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      history_read_state: {
+        Args: { p_chat: string }
+        Returns: {
+          first_item: string
+          first_message: string
+          first_position: number
+          first_seq: number
+          read_position: number
+          read_seq: number
+        }[]
+      }
       history_window_elements: {
         Args: {
           "": Database["public"]["Views"]["history_element_windows"]["Row"]
@@ -5944,6 +5975,10 @@ export type Database = {
       }
       latest_local_date: { Args: never; Returns: string }
       leave_chat: { Args: { target_chat: string }; Returns: undefined }
+      legacy_read_seq: {
+        Args: { c: string; member: boolean; stamp: string }
+        Returns: number
+      }
       linked_accounts: { Args: { p_user: string }; Returns: string[] }
       list_blocked_users: {
         Args: {
@@ -6875,6 +6910,17 @@ export type Database = {
               isSetofReturn: true
             }
           }
+      readable_occurrences: {
+        Args: { c: string; only_seq?: number; p: number; s: number }
+        Returns: {
+          author: string
+          item: string
+          kind: string
+          parent: string
+          pos: number
+          seq: number
+        }[]
+      }
       realtime_chat_readable: { Args: { p_topic: string }; Returns: boolean }
       realtime_topic_member: {
         Args: { p_prefix: string; p_topic: string }
@@ -7581,6 +7627,15 @@ export type Database = {
         Args: { target_chat?: string; target_message: string }
         Returns: undefined
       }
+      unread_occurrences: {
+        Args: { c: string; member: boolean; p: number; s: number }
+        Returns: {
+          item: string
+          parent: string
+          pos: number
+          seq: number
+        }[]
+      }
       unsubscribe_from_channel: {
         Args: { target_channel: string }
         Returns: undefined
@@ -7654,7 +7709,8 @@ export type Tables<
 
 export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
-    keyof DefaultSchema["Tables"] | { schema: keyof DatabaseWithoutInternals },
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
   TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
@@ -7678,7 +7734,8 @@ export type TablesInsert<
 
 export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
-    keyof DefaultSchema["Tables"] | { schema: keyof DatabaseWithoutInternals },
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
   TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
@@ -7702,7 +7759,8 @@ export type TablesUpdate<
 
 export type Enums<
   DefaultSchemaEnumNameOrOptions extends
-    keyof DefaultSchema["Enums"] | { schema: keyof DatabaseWithoutInternals },
+    | keyof DefaultSchema["Enums"]
+    | { schema: keyof DatabaseWithoutInternals },
   EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }

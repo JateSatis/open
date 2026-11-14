@@ -299,7 +299,7 @@ async function insert(
 function settle(queryClient: QueryClient, chatId: string, localId: string, saved: Message) {
   const localPreviews = findOutboxMessage(chatId, localId)?.localPreviews;
   const confirmed: ChatMessage = {
-    ...saved, status: 'sent', localPreviews,
+    ...saved, status: 'sent', localPreviews, localId,
     ...(saved.forward ? { renderId: localId } : {}),
   };
 
@@ -949,4 +949,5 @@ export function sendPopPost(
     channelId,
     pop,
   });
+  return localId;
 }

@@ -14,6 +14,7 @@ import type { ChatListRow } from '../islands/rows';
 import { localHistory } from '../messages/local/database';
 import { compare, type ReadingPlace } from '../messages/local/segments';
 import { stillReader, useHistoryReader } from '../messages/local/reader';
+import type { Reached } from '@/api/historyRead';
 
 type Layouts = {
   positions: Map<string, LayoutRectangle>;
@@ -88,6 +89,7 @@ export function useInitialHistoryRows(rows: ChatListRow[], place?: ReadingPlace 
     rows: first > 0 ? rows.slice(first) : rows,
     hasNewer: first > 0,
     revealNewer: () => setEdge(first > 30 ? identity(rows[first - 30]) : null),
+    revealLatest: () => setEdge(null),
   };
 }
 
@@ -99,6 +101,7 @@ export function useReadingPlace(
   list: RefObject<FlatList<ChatListRow> | null>,
   metrics: RefObject<{ offset: number; content: number; viewport: number }>,
   viewportRef: RefObject<View | null>,
+  onReached: (point: Reached) => void,
 ) {
   const reader = useHistoryReader();
   const [layouts] = useState<Layouts>(() => ({ positions: new Map(), nodes: new Map() }));
@@ -114,30 +117,37 @@ export function useReadingPlace(
     latest.current = rows;
   }, [rows]);
 
-  const capture = useCallback(() => {
-    if (!enabled || !reader || !stillReader(reader) || pending || held.current) return;
-    const { offset, viewport } = metrics.current;
-    if (viewport <= 0) return;
-    setAtLatest(offset <= 1);
-    const frame = viewportRef.current?.getBoundingClientRect?.();
-    if (!frame?.height) return;
-    let best: ReadingPlace | null = null;
-    for (const row of latest.current) {
-      const rect = layouts.nodes.get(row.key)?.getBoundingClientRect?.();
-      if (!rect?.height) continue;
-      const top = rect.top - frame.top;
-      if (top >= frame.height || top + rect.height <= 0 || (best && best.offset <= top)) continue;
-      const id = identity(row);
-      if (id) best = { ...id, offset: top };
-    }
-    if (best) {
-      const saved = best;
-      setLast((current) =>
-        current?.key === saved.key && current.offset === saved.offset ? current : saved,
-      );
-      localHistory().savePlace({ reader, chat }, best);
-    }
-  }, [chat, reader, enabled, pending, layouts, metrics, viewportRef]);
+  const aligned = useRef(!initial);
+  const capture = useCallback(
+    (read = true, save = true) => {
+      if (!enabled || !reader || !stillReader(reader) || pending || !aligned.current) return;
+      const { offset, viewport } = metrics.current;
+      if (viewport <= 0) return;
+      if (save) setAtLatest(offset <= 1);
+      const frame = viewportRef.current?.getBoundingClientRect?.();
+      if (!frame?.height) return;
+      let best: ReadingPlace | null = null;
+      let farthest: Reached | null = null;
+      for (const row of latest.current) {
+        const rect = layouts.nodes.get(row.key)?.getBoundingClientRect?.();
+        if (!rect?.height) continue;
+        const top = rect.top - frame.top;
+        if (top >= frame.height || top + rect.height <= 0) continue;
+        const id = identity(row);
+        if (id && (!best || top < best.offset)) best = { ...id, offset: top };
+        if (id && (!farthest || compare(id, farthest) > 0)) farthest = id;
+      }
+      if (read && farthest) onReached(farthest);
+      if (save && best && !held.current) {
+        const saved = best;
+        setLast((current) =>
+          current?.key === saved.key && current.offset === saved.offset ? current : saved,
+        );
+        localHistory().savePlace({ reader, chat }, best);
+      }
+    },
+    [chat, reader, enabled, pending, layouts, metrics, viewportRef, onReached],
+  );
 
   const settled = useCallback(() => {
     clearTimeout(timer.current);
@@ -149,14 +159,18 @@ export function useReadingPlace(
   }, [capture]);
   useLayoutEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
-      if (state !== 'active') capture();
+      if (state !== 'active') capture(false);
+      else settled();
     });
     return () => {
       clearTimeout(timer.current);
-      capture();
+      capture(false);
       sub.remove();
     };
-  }, [capture]);
+  }, [capture, settled]);
+  useLayoutEffect(() => {
+    if (enabled && !pending && !held.current) settled();
+  }, [enabled, pending, rows, settled]);
 
   const anchor = pending ?? last;
   const indexOf = (p: ReadingPlace) => rows.findIndex((row) => identity(row)?.key === p.key);
@@ -176,6 +190,7 @@ export function useReadingPlace(
     if (!enabled || !reader || !anchor || moving.current || !rows.length || !target) return;
     const id = identity(target);
     if (!id || (!pending && !held.current && id.key === anchor.key)) return;
+    aligned.current = false;
     let frame = 0;
     let cancelled = false;
     let stableFrames = 0;
@@ -205,7 +220,9 @@ export function useReadingPlace(
               localHistory().savePlace({ reader, chat }, restored);
             }
             setAtLatest(offset <= 1);
+            aligned.current = true;
             setPending(null);
+            if (!pending) capture();
             return;
           }
         } else {
@@ -224,6 +241,7 @@ export function useReadingPlace(
     };
   }, [
     anchor,
+    capture,
     chat,
     enabled,
     index,
@@ -247,10 +265,12 @@ export function useReadingPlace(
     },
     moving: () => {
       moving.current = true;
+      capture(true, false);
       settled();
     },
     interrupt: () => {
       held.current = false;
+      aligned.current = true;
       setPending(null);
     },
     settled,

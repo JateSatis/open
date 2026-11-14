@@ -272,7 +272,7 @@ describe("ChatScreen: someone else's dialogue", () => {
     expect(screen.queryByText('Не отображать в чатах')).toBeNull();
   });
 
-  it('marks it read with the subscription, never with a member read mark', async () => {
+  it('does not mark a subscription or member read on load alone', async () => {
     stored = subscription;
     subscribers = 1;
     mockedListMessages.mockResolvedValue({
@@ -302,7 +302,8 @@ describe("ChatScreen: someone else's dialogue", () => {
 
     await renderWithQuery(<ChatScreen />);
 
-    await waitFor(() => expect(markChatSubscriptionRead).toHaveBeenCalledWith('chat-1'));
+    expect(await screen.findByText('Аня, привет')).toBeTruthy();
+    expect(markChatSubscriptionRead).not.toHaveBeenCalled();
     expect(mockedMarkRead).not.toHaveBeenCalled();
   });
 

@@ -1265,6 +1265,8 @@ function chatIdOf(payload: unknown): string | null {
 }
 
 export type UserChannelHandlers = {
+  onJoined?:()=>void;
+  onHistoryRead?: (chatId:string)=>void;
   onMessage: (message: IncomingMessage) => void;
   /** В канале, который я читаю, вышел поп без поста. */
   onPop?: (pop: IncomingPop) => void;
@@ -1340,6 +1342,10 @@ export function subscribeToUserEvents(userId: string, handlers: UserChannelHandl
   let wasJoined = false;
 
   channel
+    .on('broadcast', {event:'history_read'}, ({payload})=>{
+      const id=chatIdOf(payload);
+      if(id) handlers.onHistoryRead?.(id);
+    })
     .on('broadcast', { event: 'new_message' }, ({ payload }) => {
       const incoming = toIncoming(payload);
 
@@ -1396,15 +1402,13 @@ export function subscribeToUserEvents(userId: string, handlers: UserChannelHandl
     })
     .subscribe((status) => {
       if (status === 'SUBSCRIBED') {
+        handlers.onJoined?.();
         if (wasJoined) handlers.onReconnected?.();
 
         wasJoined = true;
         return;
       }
 
-      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-        wasJoined = false;
-      }
     });
 
   return () => {

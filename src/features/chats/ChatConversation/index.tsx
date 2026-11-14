@@ -34,7 +34,11 @@ import {
   useSlidePageSwipeStart,
 } from '@/components/SlidePage';
 import { Text } from '@/components/Text';
-import { useMarkChannelSectionRead } from '@/features/channels/useMarkChannelSectionRead';
+import { useHistoryOpening } from './useHistoryOpening';
+import type { ReadingPlace } from '../messages/local/segments';
+import { localHistory } from '../messages/local/database';
+import { stillReader } from '../messages/local/reader';
+import { loadPage, projection } from '../messages/local/loader';
 import { subscribersLabel } from '@/features/channels/subscriberText';
 import { ChatFooter, modePlate } from '@/features/chats/ChatFooter';
 import { ChatMenu } from '@/features/chats/ChatMenu';
@@ -112,10 +116,7 @@ import { chatQueryKey, useChat } from '@/features/chats/useChat';
 import { useChatMessages } from '@/features/chats/useChatMessages';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
 import { useMarkChatRead } from '@/features/chats/useMarkChatRead';
-import {
-  useChatSubscription,
-  useMarkChatSubscriptionRead,
-} from '@/features/chats/chatSubscription';
+import { useChatSubscription } from '@/features/chats/chatSubscription';
 import { useChatJournal } from '@/features/chats/useChatJournal';
 import { useMessageViews } from '@/features/chats/useMessageViews';
 import { messagesQueryKey } from '@/features/chats/messages/historyCache';
@@ -198,13 +199,34 @@ export type ChatConversationProps = {
  * Переписка целиком: шапка (через опции экрана), список, поле ввода, шиты,
  * меню и комментарии. Её показывают и экран чата, и раздел «Посты» канала.
  */
-export function ChatConversation({
+export function ChatConversation(props: ChatConversationProps) {
+  const reader = useCurrentUserId();
+  return <HistoryOpening key={reader + '/' + props.chatId} {...props} />;
+}
+
+function HistoryOpening(props: ChatConversationProps) {
+  const focused = useIsFocused();
+  const opening = useHistoryOpening(props.chatId, focused && props.active !== false);
+  if (!opening.ready)
+    return opening.failed ? (
+      <LoadFailed message="Не удалось загрузить переписку" onRetry={opening.retry} />
+    ) : (
+      <ActivityIndicator />
+    );
+  return (
+    <Conversation {...props} initialPlace={opening.place ?? null} eligible={opening.eligible} />
+  );
+}
+
+function Conversation({
+  initialPlace,
+  eligible,
   chatId,
   channel = null,
   active = true,
   sheetSections: extraSections,
   channelHeader,
-}: ChatConversationProps) {
+}: ChatConversationProps & { initialPlace: ReadingPlace | null; eligible: boolean }) {
   const router = useRouter();
   const nav = useNavigation();
   const theme = useTheme();
@@ -240,7 +262,7 @@ export function ChatConversation({
   const composerRef = useRef<TextInput>(null);
   // Островок раскладывается на строки: плашка и облачка — по строке.
   const rows = useMemo(() => toChatRows(messages), [messages]);
-  const diskWindow = useInitialHistoryRows(rows, chatMessages.readingPlace);
+  const diskWindow = useInitialHistoryRows(rows, initialPlace);
   const presentedRows = useAttachedHistoryRows(
     threadsActive ? rows : diskWindow.rows,
     `${currentUserId}/${chatId}/${chatThreads.view}`,
@@ -260,18 +282,20 @@ export function ChatConversation({
   }, [chatThreads.view]);
   // Поиск по чату — со страницы чата: поле вместо шапки, плашка вместо поля ввода.
   const focused = useIsFocused();
+  const chatSearch = useChatSearch(chatId);
+  const [searchListShown, setSearchListShown] = useState(false);
+  const showSearchList = chatSearch.active && searchListShown;
+  const markRead = useMarkChatRead(chatId, eligible && !showSearchList);
   const place = useReadingPlace(
     chatId,
-    chatMessages.readingPlace,
+    initialPlace,
     presentedRows,
     focused && active && !threadsActive,
     listRef,
     scrollState,
     listFrameRef,
+    markRead,
   );
-  const chatSearch = useChatSearch(chatId);
-  const [searchListShown, setSearchListShown] = useState(false);
-  const showSearchList = chatSearch.active && searchListShown;
   const { close: closeSearch } = chatSearch;
   const leaveSearch = useCallback(() => {
     setSearchListShown(false);
@@ -312,28 +336,6 @@ export function ChatConversation({
   // Плеер голосовых общий на приложение и переживает облачко, уехавшее за
   // экран. Но не чат: закрыл переписку — голосовое замолкает.
   useEffect(() => () => stopVoice(), [chatId]);
-
-  const newestMessageId =
-    (!chatMessages.readingPlace || place.atLatest) &&
-    !diskWindow.hasNewer &&
-    !chatMessages.loadNewer
-      ? chatMessages.latestMessageId
-      : null;
-
-  useMarkChatRead(chatId, newestMessageId, isFocused && isMember);
-  // Подписчик чужого диалога — своей отметкой в подписке.
-  useMarkChatSubscriptionRead(
-    chatId,
-    newestMessageId,
-    isFocused && !isPosts && Boolean(subscription),
-  );
-  // Подписчик канала — своей отметкой: участником чата постов он не бывает.
-  useMarkChannelSectionRead(
-    channel?.id ?? null,
-    'posts',
-    newestMessageId,
-    isFocused && chat !== null && !isMember,
-  );
 
   const readUpTo = useMemo(() => readUpToOf(chat, currentUserId), [chat, currentUserId]);
 
@@ -433,13 +435,15 @@ export function ChatConversation({
   );
 
   // Пост с попом — только в «Постах» канала.
+  const jumpAfterSend = useRef<string | null>(null);
   const { sendPop: sendPopTo } = chatMessages;
   const channelId = channel?.id ?? null;
   const sendPop = useMemo(
     () =>
       channelId
-        ? (text: string, pop: DraftPop, replies?: LiveQuote[]) =>
-            sendPopTo(channelId, text, pop, replies)
+        ? (text: string, pop: DraftPop, replies?: LiveQuote[]) => {
+            jumpAfterSend.current = sendPopTo(channelId, text, pop, replies);
+          }
         : undefined,
     [channelId, sendPopTo],
   );
@@ -447,12 +451,45 @@ export function ChatConversation({
   // В «Тредах» свой ответ в ленте не встаёт: плашка корня меняется сразу, а
   // всплывашка ведёт в его тред.
   const { send: sendToChat, sendVoice: sendVoiceToChat } = chatMessages;
+  const jumpGeneration = useRef(0);
+  useEffect(
+    () => () => {
+      jumpGeneration.current++;
+    },
+    [isFocused, chatId],
+  );
+  useEffect(() => {
+    if (!jumpAfterSend.current || !currentUserId || !isFocused || threadsActive) return;
+    const mine = messages.find((m) => m.localId === jumpAfterSend.current && m.status === 'sent');
+    if (!mine) return;
+    jumpAfterSend.current = null;
+    const generation = ++jumpGeneration.current;
+    const current = () => generation === jumpGeneration.current && stillReader(currentUserId);
+    const scope = { reader: currentUserId, chat: chatId };
+    const target = { messageId: mine.id, key: mine.id, seq: mine.seq, position: 0, offset: 0 };
+    const reveal = () => {
+      if (!current()) return;
+      place.interrupt();
+      diskWindow.revealLatest();
+      listRef.current?.scrollToOffset({ offset: 0, animated: false });
+      place.settled();
+    };
+    void loadPage(scope, { mode: 'around', messageId: mine.id, limit: 30 }, current)
+      .then(() => {
+        if (!current()) return;
+        const cached = projection(scope, localHistory().read(scope, target));
+        if (cached?.items.some((m) => m.id === mine.id))
+          queryClient.setQueryData(messagesQueryKey(chatId), cached);
+        reveal();
+      })
+      .catch(reveal);
+  }, [chatId, currentUserId, queryClient, messages, isFocused, threadsActive, place, diskWindow]);
   const threadReplies = useChatThreadReplies({ chatId, active: threadsActive, me });
   const { announce: announceThreadReply } = threadReplies;
   const sendInView = useCallback(
     (text: string, media?: OutgoingMedia[], replies?: LiveQuote[], hidden?: HiddenRange[]) => {
-      listRef.current?.scrollToOffset({ offset: 0, animated: false });
       const localId = sendToChat(text, media, replies, hidden);
+      if (localId) jumpAfterSend.current = localId;
       announceThreadReply(
         replies ?? [],
         { kind: media?.length ? 'media' : 'text', text, media },
@@ -463,8 +500,8 @@ export function ChatConversation({
   );
   const sendVoiceInView = useCallback(
     (voice: LocalMedia, replies?: LiveQuote[]) => {
-      listRef.current?.scrollToOffset({ offset: 0, animated: false });
       const localId = sendVoiceToChat(voice, replies);
+      jumpAfterSend.current = localId;
       announceThreadReply(
         replies ?? [],
         { kind: 'voice', text: '', durationMs: voice.durationMs },
@@ -1064,6 +1101,7 @@ export function ChatConversation({
                     ref={listRef}
                     testID="messages-list"
                     inverted
+                    scrollEnabled={!place.hidden}
                     data={presentedRows}
                     CellRendererComponent={HistoryCell}
                     initialNumToRender={20}
