@@ -129,6 +129,9 @@ export function useReadingPlace(
       let best: ReadingPlace | null = null;
       let farthest: Reached | null = null;
       for (const row of latest.current) {
+        // При движении нужен только самый новый видимый элемент. Строки идут
+        // от новых к старым, а координату верхней сохраняем уже при остановке.
+        if (!save && farthest) break;
         const rect = layouts.nodes.get(row.key)?.getBoundingClientRect?.();
         if (!rect?.height) continue;
         const top = rect.top - frame.top;

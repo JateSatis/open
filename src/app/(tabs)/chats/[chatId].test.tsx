@@ -605,17 +605,17 @@ describe('ChatScreen', () => {
       const geometry = (y: number) => ({
         nativeEvent: {
           contentOffset: { x: 0, y },
-          contentSize: { width: 400, height: 4000 },
+          contentSize: { width: 400, height: 6400 },
           layoutMeasurement: { width: 400, height: 800 },
         },
       });
       await fireEvent(screen.getByTestId('messages-list'), event, geometry(1000));
       expect(mockedListMessages).toHaveBeenCalledTimes(1);
-      await fireEvent(screen.getByTestId('messages-list'), event, geometry(3200));
+      await fireEvent(screen.getByTestId('messages-list'), event, geometry(5600));
 
       expect(await screen.findByText('первое')).toBeTruthy();
       expect(mockedListMessages).toHaveBeenLastCalledWith('chat-1', { cursor: 2 });
-      await fireEvent(screen.getByTestId('messages-list'), event, geometry(3200));
+      await fireEvent(screen.getByTestId('messages-list'), event, geometry(5600));
       expect(mockedListMessages).toHaveBeenCalledTimes(2);
     },
   );
@@ -635,13 +635,14 @@ describe('ChatScreen', () => {
         layoutMeasurement: { width: 400, height: 800 },
       },
     });
-    await fireEvent(list, 'scrollBeginDrag', geometry(400, 4000));
-    await fireEvent(list, 'scroll', geometry(2200, 4000));
+    await fireEvent(list, 'scrollBeginDrag', geometry(0, 6400));
+    expect(mockedListMessages).toHaveBeenCalledTimes(1);
+    await fireEvent(list, 'scroll', geometry(2400, 6400));
     await screen.findByText('второе');
-    await fireEvent(list, 'scroll', geometry(3300, 4800));
+    await fireEvent(list, 'scroll', geometry(4300, 7200));
     await fireEvent(list, 'endReached');
     expect(mockedListMessages).toHaveBeenCalledTimes(2);
-    await fireEvent(list, 'momentumScrollEnd', geometry(4000, 4800));
+    await fireEvent(list, 'momentumScrollEnd', geometry(6400, 7200));
     expect(await screen.findByText('первое')).toBeTruthy();
     expect(mockedListMessages).toHaveBeenCalledTimes(3);
   });
