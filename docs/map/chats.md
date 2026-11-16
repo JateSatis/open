@@ -8,7 +8,7 @@
 <!-- prettier-ignore -->
 | Сценарий | Читать по ходу данных |
 | --- | --- |
-| Открыть переписку | [маршрут chatId](../../src/app/%28tabs%29/chats/%5BchatId%5D.tsx) → [ChatConversation](../../src/features/chats/ChatConversation/index.tsx) → [useChatMessages](../../src/features/chats/useChatMessages.ts) |
+| Открыть переписку | [маршрут chatId](../../src/app/%28tabs%29/chats/%5BchatId%5D.tsx) → [ChatScreen](../../src/features/chats/ChatScreen/index.tsx) → [ChatConversation](../../src/features/chats/ChatConversation/index.tsx) → [useChatMessages](../../src/features/chats/useChatMessages.ts) |
 | Список чатов | [ChatsScreen](../../src/features/chats/ChatsScreen/index.tsx) → [useChats](../../src/features/chats/useChats.ts), [chats API](../../src/api/chats.ts) |
 | Закрепы и цитаты | [usePinnedMessages](../../src/features/chats/usePinnedMessages.ts), [PinnedBar](../../src/features/chats/PinnedBar/index.tsx), [useChatBubbles](../../src/features/chats/useChatBubbles.tsx): отображение без перехода к сообщению |
 | Открытие и подгрузка основной истории | [useChatHistory](../../src/features/chats/messages/useChatHistory.ts) → [страницы и сверка SQLite](../../src/features/chats/messages/local/loader.ts) → [группировка](../../src/features/chats/messages/historyCache.ts). [Место чтения](../../src/features/chats/ChatConversation/useReadingPlace.tsx) сохраняется по координатам строки списка |

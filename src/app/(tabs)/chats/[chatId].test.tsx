@@ -23,6 +23,7 @@ import { acceptInvite, declineInvite, getMyInvite } from '@/api/invites';
 import { listMessageViews } from '@/api/messageViews';
 import { getProfile } from '@/api/profile';
 import { useSession } from '@/features/auth/useSession';
+import * as conversation from '@/features/chats/ChatConversation';
 import { formatMessageTime } from '@/features/chats/chatDisplay';
 import { resetComposerDrafts } from '@/features/chats/composerDraftStore';
 import { resetOutbox } from '@/features/chats/messages/outbox';
@@ -32,6 +33,7 @@ import { renderWithQuery } from '@/test/renderWithQuery';
 
 const mockPush = jest.fn();
 const mockNavigate = jest.fn();
+const mockRedirect = jest.fn();
 
 // Шапку экран ставит через Stack.Screen — мок рисует её прямо в дереве, чтобы
 // статус собеседника и тап по шапке можно было проверить.
@@ -42,6 +44,10 @@ jest.mock('@/api/reactions', () => ({
   setMessageReaction: jest.fn(),
 }));
 jest.mock('expo-router', () => ({
+  Redirect: ({ href }: { href: unknown }) => {
+    mockRedirect(href);
+    return null;
+  },
   useIsFocused: () => true,
   useNavigation: () => ({
     getState: () => ({ index: 0, routes: [] }),
@@ -234,6 +240,26 @@ beforeEach(() => {
 });
 
 describe('ChatScreen', () => {
+  it('redirects the posts chat to its channel without mounting the conversation', async () => {
+    mockedGetChat.mockResolvedValue({
+      ...chatWith([member]),
+      channel: { id: 'channel-1', title: 'Новости', username: 'news', avatarUrl: null },
+    });
+    const renderConversation = jest.spyOn(conversation, 'ChatConversation');
+    try {
+      await renderWithQuery(<ChatScreen />);
+      await waitFor(() =>
+        expect(mockRedirect).toHaveBeenCalledWith({
+          pathname: '/chats/channel/[channelId]',
+          params: { channelId: 'channel-1' },
+        }),
+      );
+      expect(renderConversation).not.toHaveBeenCalled();
+    } finally {
+      renderConversation.mockRestore();
+    }
+  });
+
   it('shows the counterpart status in the header and opens the chat info page on tap', async () => {
     const user = userEvent.setup();
 
