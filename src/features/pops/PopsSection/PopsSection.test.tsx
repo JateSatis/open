@@ -131,7 +131,9 @@ describe('PopsSection', () => {
 
     expect(screen.getByLabelText('Просмотры: 1234')).toBeTruthy();
     expect(screen.getByText('1,2K')).toBeTruthy();
-    expect(mockOpenPopViewer).toHaveBeenCalledWith('channel-1', 'pop-1');
+    expect(mockOpenPopViewer.mock.calls).toEqual([
+      [{ source: 'channel', channelId: 'channel-1', startId: 'pop-1' }],
+    ]);
   });
 
   it('puts a publishing pop first, marks a failure and retries with the same id', async () => {

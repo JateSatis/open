@@ -16,7 +16,7 @@
 | Галерея, вложения, предпросмотр, полёт фото, голосовое, кружок, аватар | [Медиа](map/media.md) |
 | Сохранённые, заметки себе, теги, посмотреть позже | [SavedScreen](../src/features/saved/SavedScreen/index.tsx) → [saved API](../src/api/saved.ts) |
 | Канал, пост в канале, подписка | [channels](../src/features/channels/) → [channels API](../src/api/channels.ts), [subscriptions API](../src/api/subscriptions.ts); посты используют [переписку](map/chats.md) |
-| Поп, попсы, видео канала, редактор попа | [Экран просмотра из канала и поиска](../src/features/pops/PopViewerScreen.tsx) → [PopViewer](../src/features/pops/PopViewer/index.tsx), [pops API](../src/api/pops.ts) |
+| Поп, попсы, видео канала, редактор попа | [Открытие из канала и поиска](../src/features/pops/openPopViewer.ts) → [экран просмотра](../src/features/pops/PopViewerScreen.tsx) → [PopViewer](../src/features/pops/PopViewer/index.tsx), [pops API](../src/api/pops.ts) |
 | Найти чат, человека, сообщение, канал или поп | [search](../src/features/search/) → [search API](../src/api/search.ts); поиск внутри чата — [chats API](../src/api/chats.ts) |
 | Лента, рекомендации, события просмотра | [Экран ленты](../src/features/feed/FeedScreen/index.tsx), [recs](../src/features/recs/), [recJournal API](../src/api/recJournal.ts). Поиск работает; основная лента пока показывает текст-заглушку |
 | Вход, выход, аккаунт, список устройств | [auth](../src/features/auth/) → [account API](../src/api/account.ts) |

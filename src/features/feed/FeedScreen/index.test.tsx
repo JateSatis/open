@@ -16,6 +16,8 @@ import {
   reportRealtimeJoined,
   resetConnectionState,
 } from '@/features/connection/connectionStore';
+import { logSearchResultOpened } from '@/features/recs/journal/searchJournal';
+import { useLastSearchPop } from '@/features/search/lastSearchPop';
 import {
   addRecentSearch,
   feedRecentQueries,
@@ -28,6 +30,7 @@ const mockPush = jest.fn();
 const mockSetOptions = jest.fn();
 
 jest.mock('expo-router', () => ({
+  router: { push: (...args: unknown[]) => mockPush(...args) },
   useIsFocused: () => true,
   useRouter: () => ({ push: mockPush }),
   useNavigation: () => ({ setOptions: mockSetOptions }),
@@ -38,6 +41,10 @@ jest.mock('expo-router', () => ({
 }));
 
 jest.mock('@/api/supabase', () => ({ supabase: {} }));
+jest.mock('@/features/recs/journal/searchJournal', () => ({
+  logSearchQuery: jest.fn(),
+  logSearchResultOpened: jest.fn(),
+}));
 jest.mock('@/features/auth/useSession', () => ({ useSession: jest.fn() }));
 jest.mock('@/api/search', () => ({
   ...jest.requireActual('@/api/search'),
@@ -226,18 +233,39 @@ it('opens a pop in the search viewer and a channel above the tabs, remembering t
   const tiles = await screen.findAllByTestId('search-pop');
   await fireEvent.press(tiles[2]);
 
+  expect(mockPush).toHaveBeenCalledTimes(1);
   expect(mockPush).toHaveBeenLastCalledWith({
     pathname: '/pops/search',
     params: { q: 'елка', start: 'c' },
   });
+  expect(useLastSearchPop.getState().id).toBe('c');
+  expect(feedRecentQueries.useStore.getState().items).toEqual(['елка']);
+  expect(jest.mocked(logSearchResultOpened).mock.calls).toEqual([
+    ['feed', { type: 'pop', id: 'c' }, { kind: 'pop', section: 'pops', position: 2, query: 'елка' }],
+  ]);
 
   await fireEvent.press(screen.getByTestId('feed-search-channel'));
 
+  expect(mockPush).toHaveBeenCalledTimes(2);
   expect(mockPush).toHaveBeenLastCalledWith({
     pathname: '/channel/[channelId]',
     params: { channelId: 'ch-1' },
   });
   expect(feedRecentQueries.useStore.getState().items).toEqual(['елка']);
+});
+
+it('opens the visible results even when the input already contains a new query', async () => {
+  mockedPops.mockResolvedValueOnce([pop('a'), pop('b')]).mockReturnValue(new Promise(() => {}));
+  await openSearch();
+  await type('елка');
+  await screen.findAllByTestId('search-pop');
+
+  await type('елка зимой');
+  await fireEvent.press(screen.getAllByTestId('search-pop')[1]);
+
+  expect(mockPush.mock.calls).toEqual([
+    [{ pathname: '/pops/search', params: { q: 'елка', start: 'b' } }],
+  ]);
 });
 
 it('remembers the query on «Поиск» of the keyboard', async () => {
