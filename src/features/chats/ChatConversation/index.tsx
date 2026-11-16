@@ -159,6 +159,10 @@ const HISTORY_EDGE = 0.4;
 const HISTORY_PREFETCH_SCREENS = 2;
 // На быстрых свайпах две высоты дают меньше полусекунды до старого края.
 const OLDER_PREFETCH_SCREENS = 5;
+// На первом быстром броске 20 стартовых элементов могут закончиться раньше
+// ответа. Дальше работает обычное окно предзагрузки, по 50 элементов.
+const FLING_LOOKAHEAD_MS = 950;
+const MAX_FLING_LOOKAHEAD_SCREENS = 14;
 
 function atHistoryEdge(
   { contentOffset, contentSize, layoutMeasurement }: NativeScrollEvent,
@@ -702,6 +706,7 @@ function Conversation({
   const { resumeLoadMore } = chatMessages;
   const pageAllowed = useRef(true);
   const userScrolled = useRef(false);
+  const motionSample = useRef({ y: 0, time: 0 });
   const requestOlder = useCallback(() => {
     if (!isFocused || !hasMore || isLoadingMore || (!threadsActive && !pageAllowed.current)) return;
     pageAllowed.current = false;
@@ -712,6 +717,7 @@ function Conversation({
       place.interrupt();
       pageAllowed.current = true;
       userScrolled.current = true;
+      motionSample.current = { y: event.nativeEvent.contentOffset.y, time: event.timeStamp };
       resumeLoadMore(false);
       if (atHistoryEdge(event.nativeEvent, threadsActive ? HISTORY_EDGE : OLDER_PREFETCH_SCREENS))
         requestOlder();
@@ -734,11 +740,25 @@ function Conversation({
 
   const onListScroll = useCallback(
     (event: Parameters<typeof viewsOnScroll>[0]) => {
+      const { contentOffset, layoutMeasurement } = event.nativeEvent;
+      const dt = event.timeStamp - motionSample.current.time;
+      const dy = contentOffset.y - motionSample.current.y;
+      motionSample.current = { y: contentOffset.y, time: event.timeStamp };
+      const screens =
+        presentedRows.length <= 30 && dt > 0 && dt < 150 && layoutMeasurement.height > 0
+          ? Math.min(
+              MAX_FLING_LOOKAHEAD_SCREENS,
+              Math.max(
+                OLDER_PREFETCH_SCREENS,
+                (dy * FLING_LOOKAHEAD_MS) / (dt * layoutMeasurement.height),
+              ),
+            )
+          : OLDER_PREFETCH_SCREENS;
       if (
         !threadsActive &&
         userScrolled.current &&
         event.nativeEvent.contentOffset.y > scrollState.current.offset &&
-        atHistoryEdge(event.nativeEvent, OLDER_PREFETCH_SCREENS)
+        atHistoryEdge(event.nativeEvent, screens)
       )
         requestOlder();
       if (
@@ -756,7 +776,16 @@ function Conversation({
       viewsOnScroll(event);
       resetScrolledRows();
     },
-    [threadsActive, requestOlder, trackOffset, viewsOnScroll, chatMessages, diskWindow, place],
+    [
+      threadsActive,
+      requestOlder,
+      trackOffset,
+      viewsOnScroll,
+      chatMessages,
+      diskWindow,
+      place,
+      presentedRows.length,
+    ],
   );
 
   const onListScrollEnd = useCallback(
@@ -1108,6 +1137,10 @@ function Conversation({
                     data={presentedRows}
                     CellRendererComponent={HistoryCell}
                     initialNumToRender={20}
+                    // Разметить несколько ближайших облачков до следующего взмаха:
+                    // одна пачка из десяти строк с медиа может занять весь жест.
+                    maxToRenderPerBatch={4}
+                    updateCellsBatchingPeriod={16}
                     onScrollToIndexFailed={({ averageItemLength, index }) =>
                       listRef.current?.scrollToOffset({
                         offset: averageItemLength * index,
