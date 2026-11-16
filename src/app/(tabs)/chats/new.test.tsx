@@ -79,6 +79,7 @@ const mockedSession = useSession as jest.MockedFunction<typeof useSession>;
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockSearchParams.mockReturnValue({});
   mockedSession.mockReturnValue({
     session: { user: { id: 'user-1' } } as unknown as SupabaseSession,
     isAuthenticated: true,
@@ -334,13 +335,18 @@ describe('NewChatScreen', () => {
 
   describe('people without a catalogue', () => {
     it('keeps a person picked from their profile visible though they are not among people I know', async () => {
-      mockSearchParams.mockReturnValueOnce({ with: 'user-77' });
+      mockSearchParams.mockReturnValue({ with: 'user-77' });
+      const user = userEvent.setup();
 
       await renderWithQuery(<NewChatScreen />);
 
       // Незнакомого без запроса в списке нет — выбранный не должен быть невидимым.
       expect(await screen.findByRole('checkbox', { name: 'Незнакомка' })).toBeChecked();
       expect(screen.getByText('Марина')).toBeTruthy();
+
+      await user.press(screen.getByRole('checkbox', { name: 'Незнакомка' }));
+      expect(screen.queryByRole('checkbox', { name: 'Незнакомка' })).toBeNull();
+      expect(screen.getByRole('button', { name: 'Выберите, кого позвать' })).toBeDisabled();
     });
 
     it('shows people I know without a query: the server gives friends and people from my chats', async () => {
