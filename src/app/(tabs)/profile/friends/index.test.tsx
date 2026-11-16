@@ -2,6 +2,7 @@ import { screen, userEvent, waitFor } from '@testing-library/react-native';
 
 import MyFriendsScreen from './index';
 import UserFriendsScreen from './[userId]';
+import ChatPersonFriendsScreen from '../../chats/people/friends/[userId]';
 
 import {
   acceptFriendRequest,
@@ -132,14 +133,21 @@ describe('свои друзья', () => {
 });
 
 describe('друзья другого человека', () => {
-  it('показывает его друзей', async () => {
-    mocked.listFriends.mockResolvedValue(page([{ id: 'user-a', name: 'Аня' }]));
+  it.each([
+    { Route: UserFriendsScreen, pathname: '/profile/[userId]' },
+    { Route: ChatPersonFriendsScreen, pathname: '/chats/people/[userId]' },
+  ])(
+    'запрашивает друзей владельца и открывает выбранного друга в $pathname',
+    async ({ Route, pathname }) => {
+      mocked.listFriends.mockResolvedValue(page([{ id: 'user-a', name: 'Аня' }]));
 
-    await renderWithQuery(<UserFriendsScreen />);
+      await renderWithQuery(<Route />);
 
-    expect(await screen.findByText('Аня')).toBeTruthy();
-    expect(mocked.listFriends).toHaveBeenCalledWith('user-b', null);
-  });
+      await userEvent.setup().press(await screen.findByRole('button', { name: 'Аня' }));
+      expect(mocked.listFriends).toHaveBeenCalledWith('user-b', null);
+      expect(mockPush).toHaveBeenCalledWith({ pathname, params: { userId: 'user-a' } });
+    },
+  );
 
   it('К5.3 список скрыт его настройкой — так и сказано, без пустого списка', async () => {
     mocked.listFriends.mockRejectedValue(new FriendsListHiddenError());
