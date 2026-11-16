@@ -1,0 +1,21 @@
+appId: com.openger.app
+---
+# В прозрачном стеке Android оставляет в дереве даже перекрытые вкладки.
+# Узел задаёт только границы надписи; совпадение определяем по пикселям.
+# При несовпадении Maestro пропускает присваивание. В конце сценария тот же
+# шаг обязан распознать надпись на экране списка.
+- evalScript: ${output.chatsTabDrawn = false}
+- runFlow:
+    optional: true
+    when:
+      visible:
+        id: "tab-bar"
+    commands:
+      - assertScreenshot:
+          path: channel-link-chats-label.png
+          cropOn:
+            text: "Чаты"
+            selected: false
+            childOf:
+              id: "tab-bar"
+      - evalScript: ${output.chatsTabDrawn = true}

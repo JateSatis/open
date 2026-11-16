@@ -7,36 +7,35 @@ env:
   CHAT: Plany
 ---
 - runFlow: subflows/open-app.yaml
+- takeScreenshot:
+    path: channel-link-chats-label
+    cropOn:
+      text: "Чаты"
+      selected: false
+      childOf:
+        id: "tab-bar"
 - runFlow: subflows/open-chat.yaml
 - assertVisible: "О чате: ${CHAT}"
 
 - openLink: openger://c/subs_test_zz
 - assertVisible: "О канале: Канал подписок"
-# Android может оставить вкладки фонового списка в дереве. Сохраняем наблюдение
-# и проверяем его в конце, чтобы в отчёте остался результат обоих возвратов.
-- runFlow:
-    when:
-      visible:
-        id: "tab-bar"
-    commands:
-      - evalScript: ${output.tabsInChannel = true}
+- runFlow: subflows/probe-chats-tab.yaml
+- evalScript: ${output.tabsInChannel = output.chatsTabDrawn}
 
 - back
 - assertNotVisible: "О канале: Канал подписок"
 - assertVisible: "О чате: ${CHAT}"
-- runFlow:
-    when:
-      visible:
-        id: "tab-bar"
-    commands:
-      - evalScript: ${output.tabsInChat = true}
+- runFlow: subflows/probe-chats-tab.yaml
+- evalScript: ${output.tabsInChat = output.chatsTabDrawn}
 
 - back
 - assertNotVisible: "О чате: ${CHAT}"
 - assertVisible:
     id: "chats-search-open"
-- assertVisible:
-    id: "tab-bar"
+- runFlow: subflows/probe-chats-tab.yaml
+- assertTrue:
+    condition: ${output.chatsTabDrawn}
+    label: В списке снова видна вкладка «Чаты»
 - assertTrue:
     condition: ${!output.tabsInChannel}
     label: Панель вкладок скрыта в канале
