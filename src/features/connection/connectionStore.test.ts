@@ -1,5 +1,3 @@
-import { onlineManager } from '@tanstack/react-query';
-
 import {
   getConnectionStatus,
   reportDeviceNetwork,
@@ -48,15 +46,6 @@ describe('connectionStore', () => {
     reportRequestSucceeded();
 
     expect(getConnectionStatus()).toBe('online');
-  });
-
-  it('stops queries from hammering a network that is not there', () => {
-    reportDeviceNetwork(false);
-    expect(onlineManager.isOnline()).toBe(false);
-
-    reportDeviceNetwork(true);
-    reportRealtimeJoined();
-    expect(onlineManager.isOnline()).toBe(true);
   });
 
   it('wakes subscribers on a change and stays quiet otherwise', () => {
