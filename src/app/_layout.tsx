@@ -1,9 +1,7 @@
 // Первым: livekit-client ждёт WebRTC в глобальной области с момента загрузки.
-import { ChatGoneError } from '@/api/chatGone';
-import { ProfileUnavailableError } from '@/api/profileErrors';
 import '@/features/streams/livekitGlobals';
 
-import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useLayoutEffect, useState } from 'react';
@@ -23,34 +21,15 @@ import { HistoryReader, bindHistoryReader } from '@/features/chats/messages/loca
 import { HistoryReadDelivery } from '@/features/chats/useMarkChatRead';
 import { useSessionStore } from '@/features/auth/sessionStore';
 import { ConnectionWatcher } from '@/features/connection/ConnectionWatcher';
-import { reportRequestFailed, reportRequestSucceeded } from '@/features/connection/connectionStore';
 import { InAppMessageToast } from '@/features/notifications/InAppMessageToast';
 import { BirthDateGate } from '@/features/privacy/BirthDateGate';
 import { JournalSession } from '@/features/recs/journal/JournalSession';
 import { IncomingCallOverlay } from '@/features/streams/IncomingCallOverlay';
 import { BelowReturnBar, ReturnToCallBar } from '@/features/streams/ReturnToCallBar';
-import { isNetworkError } from '@/lib/network';
+import { createAppQueryClient } from '@/lib/queryClient';
 
 bindHistoryReader(() => useSessionStore.getState().session?.user.id ?? null);
 SplashScreen.preventAutoHideAsync();
-
-const QUERY_RETRY_DELAY_MS = 1000;
-
-/**
- * Каждый запрос и каждая мутация сообщают, дошли ли они до сервера. Это и есть
- * второй источник правды о связи, помимо сокета: отдельного «пинга» приложение
- * не делает, обходится тем, что и так происходит.
- */
-function reportOutcome(error: unknown | null) {
-  if (error === null) {
-    reportRequestSucceeded();
-    return;
-  }
-
-  if (isNetworkError(error)) {
-    reportRequestFailed();
-  }
-}
 
 export default function RootLayout() {
   const { session } = useSession();
@@ -64,38 +43,7 @@ export default function RootLayout() {
 
 function AccountLayout() {
   const colorScheme = useColorScheme();
-  // One client for the whole app: the cache is shared across features, so it
-  // must not be recreated on re-render or scoped to a single tab.
-  const [queryClient] = useState(
-    () =>
-      new QueryClient({
-        defaultOptions: {
-          queries: {
-            // Вернулась связь — данные перечитываются, даже если запрос сам по
-            // себе ещё не считается устаревшим.
-            refetchOnReconnect: 'always',
-            // Одна тихая повторная попытка вслед за первой: со сроком запроса
-            // (`REQUEST_TIMEOUT_MS`) это около 20 с до того, как экран честно
-            // скажет «не удалось загрузить», вместо минуты с лишним по умолчанию.
-            // Удалённый чат и недоступный профиль от повтора не вернутся — сразу
-            // «Чат удалён» и «Пользователь недоступен».
-            retry: (failures, error) =>
-              !(error instanceof ChatGoneError) &&
-              !(error instanceof ProfileUnavailableError) &&
-              failures < 1,
-            retryDelay: QUERY_RETRY_DELAY_MS,
-          },
-        },
-        queryCache: new QueryCache({
-          onSuccess: () => reportOutcome(null),
-          onError: (error) => reportOutcome(error),
-        }),
-        mutationCache: new MutationCache({
-          onSuccess: () => reportOutcome(null),
-          onError: (error) => reportOutcome(error),
-        }),
-      }),
-  );
+  const [queryClient] = useState(createAppQueryClient);
 
   useLayoutEffect(() => () => resetClientState(queryClient), [queryClient]);
 
