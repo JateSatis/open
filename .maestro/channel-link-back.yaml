@@ -1,0 +1,29 @@
+appId: com.openger.app
+name: Публичная ссылка открывает канал поверх переписки и сохраняет путь назад в «Чаты»
+tags:
+  - chats
+  - channels
+env:
+  CHAT: Plany
+---
+- runFlow: subflows/open-app.yaml
+- runFlow: subflows/open-chat.yaml
+- assertVisible: "О чате: ${CHAT}"
+- assertNotVisible:
+    id: "tab-bar"
+
+- openLink: openger://c/subs_test_zz
+- assertVisible: "О канале: Канал подписок"
+- assertNotVisible:
+    id: "tab-bar"
+
+- back
+- assertVisible: "О чате: ${CHAT}"
+- assertNotVisible:
+    id: "tab-bar"
+
+- back
+- assertVisible:
+    id: "chats-search-open"
+- assertVisible:
+    id: "tab-bar"
