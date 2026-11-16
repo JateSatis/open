@@ -1,7 +1,7 @@
 import { fireEvent } from '@testing-library/react-native';
 import { router } from 'expo-router';
 
-import MyProfileScreen from './index';
+import { MyProfileScreen } from './index';
 
 import { getFriendsSummary } from '@/api/friends';
 import { getMyProfile } from '@/api/profile';
