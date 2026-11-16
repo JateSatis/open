@@ -2,7 +2,7 @@ import type { Session as SupabaseSession } from '@supabase/supabase-js';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react-native';
 import { BackHandler } from 'react-native';
 
-import ChatsScreen from './index';
+import { ChatsScreen } from './index';
 
 import type { ChatSummary } from '@/api/chats';
 import { listChats } from '@/api/chats';
