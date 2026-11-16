@@ -3,6 +3,7 @@ import { ActivityIndicator, FlatList, View } from 'react-native';
 import { styles } from './styles';
 
 import { FriendsListHiddenError } from '@/api/friends';
+import { Screen } from '@/components/Screen';
 import { Text } from '@/components/Text';
 import { FriendRow } from '@/features/friends/FriendRow';
 import { useFriendsList } from '@/features/friends/queries';
@@ -17,7 +18,15 @@ export type FriendsListProps = {
  * Друзья другого человека — постранично. Закрыл список настройкой — сервер
  * отказывает, и экран так и говорит, без пустого списка вместо отказа.
  */
-export function FriendsList({ userId, onOpenPerson }: FriendsListProps) {
+export function FriendsList(props: FriendsListProps) {
+  return (
+    <Screen edges={['bottom']}>
+      <FriendsListContent {...props} />
+    </Screen>
+  );
+}
+
+function FriendsListContent({ userId, onOpenPerson }: FriendsListProps) {
   const { data, isPending, error, hasNextPage, isFetchingNextPage, fetchNextPage } =
     useFriendsList(userId);
   const friends = (data ?? []).flatMap((page) => page.items);

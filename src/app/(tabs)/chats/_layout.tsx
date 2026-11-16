@@ -20,6 +20,7 @@ export default function ChatsLayout() {
           въезжают и уезжают за пальцем, прозрачные поверх предыдущего экрана,
           чтобы тот был виден, пока страницу тянут (см. `SlidePage`). */}
       <Stack.Screen name="people/[userId]" options={SLIDE_PAGE} />
+      <Stack.Screen name="people/friends/[userId]" options={{ title: 'Друзья' }} />
       <Stack.Screen name="[chatId]" options={SLIDE_PAGE} />
       <Stack.Screen name="request/[userId]" options={SLIDE_PAGE} />
       <Stack.Screen name="channel/[channelId]" options={SLIDE_PAGE} />
