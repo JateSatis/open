@@ -9,21 +9,37 @@ env:
 - runFlow: subflows/open-app.yaml
 - runFlow: subflows/open-chat.yaml
 - assertVisible: "О чате: ${CHAT}"
-- assertNotVisible:
-    id: "tab-bar"
 
 - openLink: openger://c/subs_test_zz
 - assertVisible: "О канале: Канал подписок"
-- assertNotVisible:
-    id: "tab-bar"
+# Android может оставить вкладки фонового списка в дереве. Сохраняем наблюдение
+# и проверяем его в конце, чтобы в отчёте остался результат обоих возвратов.
+- runFlow:
+    when:
+      visible:
+        id: "tab-bar"
+    commands:
+      - evalScript: ${output.tabsInChannel = true}
 
 - back
+- assertNotVisible: "О канале: Канал подписок"
 - assertVisible: "О чате: ${CHAT}"
-- assertNotVisible:
-    id: "tab-bar"
+- runFlow:
+    when:
+      visible:
+        id: "tab-bar"
+    commands:
+      - evalScript: ${output.tabsInChat = true}
 
 - back
+- assertNotVisible: "О чате: ${CHAT}"
 - assertVisible:
     id: "chats-search-open"
 - assertVisible:
     id: "tab-bar"
+- assertTrue:
+    condition: ${!output.tabsInChannel}
+    label: Панель вкладок скрыта в канале
+- assertTrue:
+    condition: ${!output.tabsInChat}
+    label: Панель вкладок скрыта в переписке

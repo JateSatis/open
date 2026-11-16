@@ -4,10 +4,12 @@ appId: com.openger.app
 # первом экране. Свежая активность в других чатах (тестовые чаты, переписка
 # на втором устройстве) сдвигает его ниже.
 - scrollUntilVisible:
-    element: ${CHAT}
+    element:
+      id: "chat-list-item"
+      text: ${CHAT}
     direction: DOWN
     timeout: 20000
+- waitForAnimationToEnd
 - tapOn:
+    id: "chat-list-item"
     text: ${CHAT}
-    childOf:
-      id: "chat-list-item"
