@@ -1,7 +1,7 @@
 import type { Session as SupabaseSession } from '@supabase/supabase-js';
 import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
 
-import FeedScreen from './index';
+import { FeedScreen } from './index';
 
 import {
   searchChannels,

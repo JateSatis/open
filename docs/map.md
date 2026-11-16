@@ -18,7 +18,7 @@
 | Канал, пост в канале, подписка | [channels](../src/features/channels/) → [channels API](../src/api/channels.ts), [subscriptions API](../src/api/subscriptions.ts); посты используют [переписку](map/chats.md) |
 | Поп, попсы, видео канала, редактор попа | [pops](../src/features/pops/) → [PopViewer](../src/features/pops/PopViewer/index.tsx), [pops API](../src/api/pops.ts) |
 | Найти чат, человека, сообщение, канал или поп | [search](../src/features/search/) → [search API](../src/api/search.ts); поиск внутри чата — [chats API](../src/api/chats.ts) |
-| Лента, рекомендации, события просмотра | [Экран ленты](../src/app/%28tabs%29/feed/index.tsx), [recs](../src/features/recs/), [recJournal API](../src/api/recJournal.ts). Поиск работает; основная лента пока показывает текст-заглушку |
+| Лента, рекомендации, события просмотра | [Экран ленты](../src/features/feed/FeedScreen/index.tsx), [recs](../src/features/recs/), [recJournal API](../src/api/recJournal.ts). Поиск работает; основная лента пока показывает текст-заглушку |
 | Вход, выход, аккаунт, список устройств | [auth](../src/features/auth/) → [account API](../src/api/account.ts) |
 | Профиль, имя, username | [profile](../src/features/profile/) → [profile API](../src/api/profile.ts), [usernames](../src/api/usernames.ts) |
 | Друзья, заявка, блокировка, возраст, кто видит имя/медиа | [friends](../src/features/friends/), [privacy](../src/features/privacy/), [moderation](../src/features/moderation/) → [права и данные](map/data.md) |
