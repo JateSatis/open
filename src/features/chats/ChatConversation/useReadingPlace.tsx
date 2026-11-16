@@ -101,7 +101,7 @@ export function useReadingPlace(
   list: RefObject<FlatList<ChatListRow> | null>,
   metrics: RefObject<{ offset: number; content: number; viewport: number }>,
   viewportRef: RefObject<View | null>,
-  onReached: (point: Reached) => void,
+  onReached: (point: Reached) => boolean,
 ) {
   const reader = useHistoryReader();
   const [layouts] = useState<Layouts>(() => ({ positions: new Map(), nodes: new Map() }));
@@ -112,15 +112,34 @@ export function useReadingPlace(
   const [atLatest, setAtLatest] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const moving = useRef(false);
+  const reached = useRef<Reached | null>(null);
   const latest = useRef(rows);
+  const newest = useRef<Reached | null>(null);
   useLayoutEffect(() => {
     latest.current = rows;
+    newest.current = null;
+    for (const row of rows) {
+      const point = identity(row);
+      if (point) {
+        newest.current = point;
+        break;
+      }
+    }
   }, [rows]);
 
   const aligned = useRef(!initial);
   const capture = useCallback(
     (read = true, save = true) => {
       if (!enabled || !reader || !stillReader(reader) || pending || !aligned.current) return;
+      // Если прочитана даже самая новая строка этой ленты, движение внутри
+      // неё не может продвинуть границу. Точную позицию сохраним при остановке.
+      if (
+        !save &&
+        newest.current &&
+        reached.current &&
+        compare(newest.current, reached.current) <= 0
+      )
+        return;
       const { offset, viewport } = metrics.current;
       if (viewport <= 0) return;
       if (save) setAtLatest(offset <= 1);
@@ -140,7 +159,9 @@ export function useReadingPlace(
         if (id && (!best || top < best.offset)) best = { ...id, offset: top };
         if (id && (!farthest || compare(id, farthest) > 0)) farthest = id;
       }
-      if (read && farthest) onReached(farthest);
+      if (read && farthest && (!reached.current || compare(farthest, reached.current) > 0)) {
+        if (onReached(farthest)) reached.current = farthest;
+      }
       if (save && best && !held.current) {
         const saved = best;
         setLast((current) =>

@@ -110,8 +110,10 @@ export function useMarkChatRead(chat: string, enabled: boolean) {
   const reader = useHistoryReader();
   return useCallback(
     (point: Reached) => {
-      if (!reader || !enabled || !stillReader(reader) || AppState.currentState !== 'active') return;
+      if (!reader || !enabled || !stillReader(reader) || AppState.currentState !== 'active')
+        return false;
       if (localHistory().reach({ reader, chat }, point)) wake?.();
+      return true;
     },
     [reader, chat, enabled],
   );

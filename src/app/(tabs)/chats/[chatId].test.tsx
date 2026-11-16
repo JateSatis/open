@@ -620,6 +620,29 @@ describe('ChatScreen', () => {
     },
   );
 
+  it('requests the next page early only when the starting window is being crossed quickly', async () => {
+    mockedListMessages
+      .mockResolvedValueOnce({ items: [message('m2', 'второе', 'user-2')], nextCursor: 2 })
+      .mockResolvedValueOnce({ items: [message('m1', 'первое', 'user-2')], nextCursor: null });
+    await renderWithQuery(<ChatScreen />);
+    await screen.findByText('второе');
+    const list = screen.getByTestId('messages-list');
+    const sample = (timeStamp: number, y: number) => ({
+      timeStamp,
+      nativeEvent: {
+        contentOffset: { x: 0, y },
+        contentSize: { width: 400, height: 7200 },
+        layoutMeasurement: { width: 400, height: 600 },
+      },
+    });
+    await fireEvent(list, 'scrollBeginDrag', sample(100, 0));
+    await fireEvent(list, 'scroll', sample(132, 10));
+    expect(mockedListMessages).toHaveBeenCalledTimes(1);
+    await fireEvent(list, 'scroll', sample(148, 160));
+    expect(await screen.findByText('первое')).toBeTruthy();
+    expect(mockedListMessages).toHaveBeenCalledTimes(2);
+  });
+
   it('prefetches once during a drag and can continue at the new physical edge when the fling stops', async () => {
     mockedListMessages
       .mockResolvedValueOnce({ items: [message('m3', 'третье', 'user-2')], nextCursor: 3 })
