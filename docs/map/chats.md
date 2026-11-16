@@ -9,7 +9,7 @@
 | Сценарий | Читать по ходу данных |
 | --- | --- |
 | Открыть переписку | [маршрут chatId](../../src/app/%28tabs%29/chats/%5BchatId%5D.tsx) → [ChatConversation](../../src/features/chats/ChatConversation/index.tsx) → [useChatMessages](../../src/features/chats/useChatMessages.ts) |
-| Список чатов | [маршрут списка](../../src/app/%28tabs%29/chats/index.tsx) → [useChats](../../src/features/chats/useChats.ts), [chats API](../../src/api/chats.ts) |
+| Список чатов | [ChatsScreen](../../src/features/chats/ChatsScreen/index.tsx) → [useChats](../../src/features/chats/useChats.ts), [chats API](../../src/api/chats.ts) |
 | Закрепы и цитаты | [usePinnedMessages](../../src/features/chats/usePinnedMessages.ts), [PinnedBar](../../src/features/chats/PinnedBar/index.tsx), [useChatBubbles](../../src/features/chats/useChatBubbles.tsx): отображение без перехода к сообщению |
 | Открытие и подгрузка основной истории | [useChatHistory](../../src/features/chats/messages/useChatHistory.ts) → [страницы и сверка SQLite](../../src/features/chats/messages/local/loader.ts) → [группировка](../../src/features/chats/messages/historyCache.ts). [Место чтения](../../src/features/chats/ChatConversation/useReadingPlace.tsx) сохраняется по координатам строки списка |
 | Серверный участок истории (чат и посты канала) | [historyWindow API](../../src/api/historyWindow.ts): `getHistoryWindow` → `get_history_element_window` + `history_page_parents` / `history_page_forwards`; [контракт](../backend.md#участок-истории). Основная история использует элементы и составной курсор; треды сохраняют старый API |
