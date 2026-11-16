@@ -13,10 +13,11 @@ import { reportRealtimeJoined, resetConnectionState } from '@/features/connectio
 import { renderWithQuery } from '@/test/renderWithQuery';
 
 const mockPush = jest.fn();
+const mockNavigate = jest.fn();
 
 jest.mock('expo-router', () => ({
   useIsFocused: () => true,
-  useRouter: () => ({ push: mockPush }),
+  useRouter: () => ({ push: mockPush, navigate: mockNavigate }),
 }));
 
 jest.mock('@/features/auth/useSession', () => ({
@@ -198,6 +199,28 @@ describe('InvitesScreen', () => {
     await user.press(await screen.findByLabelText('Открыть чат: Поход'));
 
     expect(mockPush).toHaveBeenCalledWith('/chats/chat-7');
+  });
+
+  it('pushes the inviter’s profile onto the chats stack', async () => {
+    mockedList.mockResolvedValue([invite()]);
+    const user = userEvent.setup();
+
+    await renderWithQuery(<InvitesScreen />);
+    await user.press(await screen.findByLabelText('Профиль: Марина'));
+
+    expect(mockPush.mock.calls).toEqual([['/chats/people/user-2']]);
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it('navigates to the profile tab for the current user', async () => {
+    mockedList.mockResolvedValue([invite({ inviter: { ...marina, id: 'user-1' } })]);
+    const user = userEvent.setup();
+
+    await renderWithQuery(<InvitesScreen />);
+    await user.press(await screen.findByLabelText('Профиль: Марина'));
+
+    expect(mockNavigate.mock.calls).toEqual([['/profile']]);
+    expect(mockPush).not.toHaveBeenCalled();
   });
 
   it('reports a failed answer in plain words', async () => {
