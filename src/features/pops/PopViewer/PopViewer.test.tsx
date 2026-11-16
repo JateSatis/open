@@ -23,6 +23,7 @@ import {
   getCommentsPanelTarget,
 } from '@/features/interactions/comments/commentsPanelStore';
 import { resetPendingReactions } from '@/features/interactions/pendingReactions';
+import { useSearchPopFeed } from '@/features/search/useSearchPopFeed';
 import { renderWithQuery } from '@/test/renderWithQuery';
 
 const mockBack = jest.fn();
@@ -70,6 +71,7 @@ jest.mock('@/api/pops', () => ({
   POPS_PAGE_SIZE: 30,
 }));
 jest.mock('@/api/reactions', () => ({ setPopReaction: jest.fn() }));
+jest.mock('@/features/search/useSearchPopFeed', () => ({ useSearchPopFeed: jest.fn() }));
 jest.mock('@/api/comments', () => ({ setCommentReaction: jest.fn() }));
 jest.mock('@/features/chats/useCurrentUserId', () => ({ useCurrentUserId: () => 'me' }));
 // Панель — своя история (`CommentsPanel`); здесь — что просмотр её открывает.
@@ -348,6 +350,7 @@ describe('PopViewer', () => {
       nativeEvent: { layout: { width: 400, height: 800 } },
     });
     await screen.findByTestId('pop-page-active');
+    expect(useSearchPopFeed).not.toHaveBeenCalled();
     expect(getCommentsPanelTarget()).toBeNull();
     await fireEvent.press(screen.getByTestId('pop-comments'));
     expect(getCommentsPanelTarget()).toMatchObject({ subject: { type: 'pop', id: 'p1' } });

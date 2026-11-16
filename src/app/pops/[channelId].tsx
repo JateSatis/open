@@ -1,6 +1,6 @@
 import { useLocalSearchParams } from 'expo-router';
 
-import { ChannelPopViewer } from '@/features/pops/PopViewer/ChannelPopViewer';
+import { PopViewerScreen } from '@/features/pops/PopViewerScreen';
 
 export default function PopViewerRoute() {
   const { channelId, start, from } = useLocalSearchParams<{
@@ -11,10 +11,6 @@ export default function PopViewerRoute() {
   }>();
 
   return (
-    <ChannelPopViewer
-      channelId={channelId}
-      startId={start}
-      entry={from ?? 'channel_grid'}
-    />
+    <PopViewerScreen source="channel" channelId={channelId} startId={start} entry={from} />
   );
 }
