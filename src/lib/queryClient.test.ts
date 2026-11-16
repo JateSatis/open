@@ -63,7 +63,7 @@ describe.each(['запрос', 'мутация'] as const)('%s и состоян
     if (operation === 'запрос') {
       return client.fetchQuery({ queryKey: ['chats'], queryFn: fn, retry: false });
     }
-    return client.getMutationCache().build(client, { mutationFn: fn }).execute(undefined);
+    return client.getMutationCache().build(client, { mutationFn: fn, gcTime: Infinity }).execute(undefined);
   }
 
   it('сообщает об успешной связи', async () => {

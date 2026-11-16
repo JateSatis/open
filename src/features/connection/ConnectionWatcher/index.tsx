@@ -1,3 +1,6 @@
+import { useEffect } from 'react';
+
+import { syncQueryOnlineState } from '@/features/connection/syncQueryOnlineState';
 import { useConnectionWatch } from '@/features/connection/useConnectionWatch';
 
 /**
@@ -6,6 +9,7 @@ import { useConnectionWatch } from '@/features/connection/useConnectionWatch';
  * доступ к кешу, чтобы перечитать данные после возвращения сети.
  */
 export function ConnectionWatcher() {
+  useEffect(syncQueryOnlineState, []);
   useConnectionWatch();
 
   return null;

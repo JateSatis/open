@@ -1,4 +1,3 @@
-import { onlineManager } from '@tanstack/react-query';
 import { create } from 'zustand';
 
 // Состояние связи с сервером — одно на всё приложение.
@@ -50,12 +49,6 @@ const useConnectionStore = create<ConnectionStoreState>(() => initialState);
 function apply(patch: Partial<Pick<ConnectionStoreState, 'realtime' | 'requests' | 'deviceOffline'>>) {
   const prev = useConnectionStore.getState();
   const status = derive({ ...prev, ...patch });
-
-  if (status !== prev.status) {
-    // Пока связи нет, TanStack Query не должен долбиться в сеть; как только
-    // она появляется, он сам перезапрашивает всё, что успело устареть.
-    onlineManager.setOnline(status !== 'offline');
-  }
 
   useConnectionStore.setState({ ...patch, status });
 }
@@ -127,5 +120,4 @@ export function reportRequestFailed() {
 /** Только для тестов: вернуть состояние к исходному. */
 export function resetConnectionState() {
   useConnectionStore.setState(initialState);
-  onlineManager.setOnline(true);
 }
