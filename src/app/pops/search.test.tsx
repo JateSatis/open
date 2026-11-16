@@ -6,6 +6,7 @@ import { canPublishInChannel, recordPopViews } from '@/api/pops';
 import { acquirePopTopic } from '@/api/popTopics';
 import { searchPops, SEARCH_POPS_PAGE_SIZE, type SearchPop } from '@/api/search';
 import { getMySubscription, subscribeToChannel } from '@/api/subscriptions';
+import { usePopFeed } from '@/features/pops/usePopFeed';
 import { useLastSearchPop } from '@/features/search/lastSearchPop';
 import { renderWithQuery } from '@/test/renderWithQuery';
 
@@ -35,6 +36,7 @@ jest.mock('expo-video', () => {
   };
 });
 jest.mock('@/api/supabase', () => ({ supabase: {} }));
+jest.mock('@/features/pops/usePopFeed', () => ({ usePopFeed: jest.fn() }));
 jest.mock('@/api/search', () => ({
   ...jest.requireActual('@/api/search'),
   searchPops: jest.fn(),
@@ -111,6 +113,7 @@ it('starts at the tapped pop with its own channel in the header', async () => {
   expect(await page.findByText('Канал B')).toBeTruthy();
   expect(page.getByTestId('pop-title')).toHaveTextContent('Ёлка b');
   expect(useLastSearchPop.getState().id).toBe('b');
+  expect(usePopFeed).not.toHaveBeenCalled();
 });
 
 it('«Подписаться» subscribes to the channel of this pop', async () => {
