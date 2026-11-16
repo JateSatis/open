@@ -1,0 +1,44 @@
+appId: com.openger.app
+name: Публичная ссылка открывает канал поверх переписки и сохраняет путь назад в «Чаты»
+tags:
+  - chats
+  - channels
+env:
+  CHAT: Plany
+---
+- runFlow: subflows/open-app.yaml
+- takeScreenshot:
+    path: channel-link-chats-label
+    cropOn:
+      text: "Чаты"
+      selected: false
+      childOf:
+        id: "tab-bar"
+- runFlow: subflows/open-chat.yaml
+- assertVisible: "О чате: ${CHAT}"
+
+- openLink: openger://c/subs_test_zz
+- assertVisible: "О канале: Канал подписок"
+- runFlow: subflows/probe-chats-tab.yaml
+- evalScript: ${output.tabsInChannel = output.chatsTabDrawn}
+
+- back
+- assertNotVisible: "О канале: Канал подписок"
+- assertVisible: "О чате: ${CHAT}"
+- runFlow: subflows/probe-chats-tab.yaml
+- evalScript: ${output.tabsInChat = output.chatsTabDrawn}
+
+- back
+- assertNotVisible: "О чате: ${CHAT}"
+- assertVisible:
+    id: "chats-search-open"
+- runFlow: subflows/probe-chats-tab.yaml
+- assertTrue:
+    condition: ${output.chatsTabDrawn}
+    label: В списке снова видна вкладка «Чаты»
+- assertTrue:
+    condition: ${!output.tabsInChannel}
+    label: Панель вкладок скрыта в канале
+- assertTrue:
+    condition: ${!output.tabsInChat}
+    label: Панель вкладок скрыта в переписке
