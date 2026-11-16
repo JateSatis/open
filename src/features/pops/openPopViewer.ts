@@ -1,12 +1,22 @@
+import { router } from 'expo-router';
+
+import type { PopViewerScreenParams } from './PopViewerScreen';
+
 import { closeComments } from '@/features/interactions/comments/commentsPanelStore';
 
-/** Открыть выбранный поп из сетки канала. */
-export function openPopViewer(channelId: string, popId: string) {
+export function openPopViewer(params: PopViewerScreenParams) {
+  if (params.source === 'search') {
+    router.push({ pathname: '/pops/search', params: { q: params.query, start: params.startId } });
+    return;
+  }
+
   closeComments();
-  void import('expo-router').then(({ router }) =>
-    router.push({
-      pathname: '/pops/[channelId]',
-      params: { channelId, start: popId, from: 'channel_grid' },
-    }),
-  );
+  router.push({
+    pathname: '/pops/[channelId]',
+    params: {
+      channelId: params.channelId,
+      start: params.startId,
+      from: params.entry ?? 'channel_grid',
+    },
+  });
 }

@@ -37,7 +37,10 @@ export function PopsSection({ channelId, active = true }: PopsSectionProps) {
     [channelId, router],
   );
 
-  const openPop = useCallback((pop: Pop) => openPopViewer(channelId, pop.id), [channelId]);
+  const openPop = useCallback(
+    (pop: Pop) => openPopViewer({ source: 'channel', channelId, startId: pop.id }),
+    [channelId],
+  );
 
   return (
     <PopGrid

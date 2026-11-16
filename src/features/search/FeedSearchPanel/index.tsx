@@ -11,12 +11,13 @@ import type { SearchEntity, SearchPop } from '@/api/search';
 import { useTabBarHeight } from '@/components/TabBar';
 import { Text } from '@/components/Text';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
+import { openPopViewer } from '@/features/pops/openPopViewer';
 import {
   buildFeedSearchRows,
   FEED_POP_COLUMNS,
   type FeedSearchRow,
 } from '@/features/search/feedSearchRows';
-import { useLastSearchPop } from '@/features/search/lastSearchPop';
+import { setLastSearchPop } from '@/features/search/lastSearchPop';
 import { feedRecentQueries } from '@/features/search/recentSearches';
 import { COLLAPSED_ROWS } from '@/features/search/searchSections';
 import { useFeedSearch } from '@/features/search/useFeedSearch';
@@ -125,10 +126,10 @@ export function FeedSearchPanel({ query, onPickRecent }: FeedSearchPanelProps) {
           query: shownQuery,
         },
       );
-      useLastSearchPop.setState({ id: pop.id });
-      router.push({ pathname: '/pops/search', params: { q: shownQuery, start: pop.id } });
+      setLastSearchPop(pop);
+      openPopViewer({ source: 'search', query: shownQuery, startId: pop.id });
     },
-    [remember, results.pops, router, shownQuery],
+    [remember, results.pops, shownQuery],
   );
 
   const toggleChannels = useCallback(
