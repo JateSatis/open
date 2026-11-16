@@ -13,7 +13,7 @@ Realtime возвращает сигналы в доменные хуки и к�
 <!-- prettier-ignore -->
 | Связь | Точка входа и зачем читать |
 | --- | --- |
-| Корень приложения | [app/_layout](../../src/app/_layout.tsx): общий QueryClient, провайдеры жестов/клавиатуры, связь, звонки и глобальные оверлеи |
+| Корень приложения | [app/_layout](../../src/app/_layout.tsx) создаёт [QueryClient](../../src/lib/queryClient.ts) на время жизни аккаунта, подключает провайдеры жестов/клавиатуры, связь, звонки и глобальные оверлеи |
 | Маршруты и вкладки | [app](../../src/app/), [TabBar](../../src/components/TabBar/index.tsx), [SlidePage](../../src/components/SlidePage/index.tsx): экран может иметь несколько точек входа |
 | Серверное состояние | TanStack Query; ключи и слияние данных обычно внутри фичи (`keys.ts`, `*Cache.ts`). Например, [historyCache](../../src/features/chats/messages/historyCache.ts) |
 | Локальное состояние | Zustand: [store](../../src/store/) и доменные `*Store.ts`/`*store.ts`. Только чтение `src/store` не даёт карту всех состояний |
