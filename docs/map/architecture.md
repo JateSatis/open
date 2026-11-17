@@ -6,14 +6,14 @@
 
 ## Путь выполнения
 
-`src/app` → `src/navigation/routes` (React Navigation) → `src/features/<область>` → `src/api` → Supabase PostgREST/RPC.
+`src/index.tsx` → `src/navigation/routes` (React Navigation) → `src/features/<область>` → `src/api` → Supabase PostgREST/RPC.
 Realtime возвращает сигналы в доменные хуки и кеш; медиа и звонки дополнительно идут через
 [Edge Functions](data.md). Права определяются сервером, не состоянием кнопок.
 
 <!-- prettier-ignore -->
 | Связь | Точка входа и зачем читать |
 | --- | --- |
-| Корень приложения | [app/index](../../src/app/index.tsx) регистрирует приложение Expo, хранит ожидающую ссылку и подключает глобальные провайдеры, сервисы и оверлеи. Для каждого аккаунта создаётся свой [QueryClient](../../src/lib/queryClient.ts). [AppRoutes](../../src/navigation/routes/AppRoutes.tsx) получает ссылку и выбирает доступные экраны по сессии и дате рождения. |
+| Корень приложения | [src/index.tsx](../../src/index.tsx) регистрирует приложение Expo, хранит ожидающую ссылку и подключает глобальные провайдеры, сервисы и оверлеи. Для каждого аккаунта создаётся свой [QueryClient](../../src/lib/queryClient.ts). [AppRoutes](../../src/navigation/routes/AppRoutes.tsx) получает ссылку и выбирает доступные экраны по сессии и дате рождения. |
 | Маршруты и вкладки | [AppRoutes](../../src/navigation/routes/AppRoutes.tsx), [маршруты и ссылки](../../src/navigation/), [TabBar](../../src/components/TabBar/index.tsx), [SlidePage](../../src/components/SlidePage/index.tsx). Одну страницу регистрируем один раз, сколько бы точек входа у неё ни было. Исходная страница выбирает переход и передаёт параметры. Целевая страница читает параметры открытия из `route.params`. Дочерние компоненты получают данные и обработчики через `props`. |
 | Серверное состояние | TanStack Query; ключи и слияние данных обычно внутри фичи (`keys.ts`, `*Cache.ts`). Например, [historyCache](../../src/features/chats/messages/historyCache.ts) |
 | Локальное состояние | Zustand: [store](../../src/store/) и доменные `*Store.ts`/`*store.ts`. Только чтение `src/store` не даёт карту всех состояний |
@@ -30,7 +30,7 @@ Realtime возвращает сигналы в доменные хуки и к�
 <!-- prettier-ignore -->
 | За что отвечает | Где проверять влияние |
 | --- | --- |
-| React Navigation, screens, safe-area | `src/app`, SlidePage, корневой layout |
+| React Navigation, screens, safe-area | Корень приложения в `src/index.tsx`, AppRoutes, SlidePage |
 | Reanimated, Gesture Handler, keyboard-controller | Шиты, просмотрщик, композер; жесты и клавиатура требуют целевого прохода на устройстве |
 | expo-image/video/audio/media-library, compressor, Skia | [Медиа](media.md), редактор попа; конкретные импорты покажут используемый пакет |
 | Supabase, TanStack Query, Zustand | API, доменные ключи/кеши/сторы; изменение ключа может затронуть Realtime и оптимистичные обновления |

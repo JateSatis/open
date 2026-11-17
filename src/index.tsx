@@ -10,7 +10,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-import { ScrollTap } from '../../modules/scroll-tap';
+import { ScrollTap } from '../modules/scroll-tap';
 import { ConfirmDialogHost } from '@/components/ConfirmDialog';
 import { AccountLifecycle } from '@/features/auth/AccountLifecycle';
 import { resetClientState } from '@/features/auth/resetClientState';
