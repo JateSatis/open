@@ -13,7 +13,7 @@ Realtime возвращает сигналы в доменные хуки и к�
 <!-- prettier-ignore -->
 | Связь | Точка входа и зачем читать |
 | --- | --- |
-| Корень приложения | [AppRouter](../../src/app/AppRouter.tsx) выбирает доступные экраны по сессии и дате рождения. [AppRoot](../../src/AppRoot.tsx) оборачивает его провайдерами, создаёт [QueryClient](../../src/lib/queryClient.ts) на время жизни аккаунта и подключает связь, звонки и глобальные оверлеи. [app/index](../../src/app/index.tsx) регистрирует приложение Expo. |
+| Корень приложения | [app/index](../../src/app/index.tsx) регистрирует приложение Expo, хранит ожидающую ссылку и подключает глобальные провайдеры, сервисы и оверлеи. Для каждого аккаунта создаётся свой [QueryClient](../../src/lib/queryClient.ts). [AppRouter](../../src/app/AppRouter.tsx) получает ссылку и выбирает доступные экраны по сессии и дате рождения. |
 | Маршруты и вкладки | [маршруты и ссылки](../../src/navigation/), [TabBar](../../src/components/TabBar/index.tsx), [SlidePage](../../src/components/SlidePage/index.tsx): экран может иметь несколько точек входа |
 | Серверное состояние | TanStack Query; ключи и слияние данных обычно внутри фичи (`keys.ts`, `*Cache.ts`). Например, [historyCache](../../src/features/chats/messages/historyCache.ts) |
 | Локальное состояние | Zustand: [store](../../src/store/) и доменные `*Store.ts`/`*store.ts`. Только чтение `src/store` не даёт карту всех состояний |
