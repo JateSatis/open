@@ -128,7 +128,7 @@ SQL использует явно заданный `TARGET_SSH_HOST` или `TAR
 ## Структура проекта
 
 ```text
-src/app/              корень Expo; стек React Navigation, вкладки и внешние ссылки — src/navigation/
+src/index.tsx         точка входа Expo; стек React Navigation, вкладки и внешние ссылки — src/navigation/
 src/components/       переиспользуемый UI без домена
 src/features/         фичи по сценариям; актуальные точки входа — в docs/map.md
 src/api/              supabase.ts (клиент один раз), types.gen.ts (не редактировать),

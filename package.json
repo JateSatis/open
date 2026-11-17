@@ -1,6 +1,6 @@
 {
   "name": "open",
-  "main": "./src/app/index.tsx",
+  "main": "./src/index.tsx",
   "version": "1.0.0",
   "dependencies": {
     "@config-plugins/react-native-webrtc": "^15.0.2",
