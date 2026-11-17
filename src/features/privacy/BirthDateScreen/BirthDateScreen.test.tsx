@@ -1,8 +1,8 @@
 import { screen, userEvent, waitFor } from '@testing-library/react-native';
 
-import BirthDateRoute from './birth-date';
-import Index from './index';
-import TabsLayout from './(tabs)/_layout';
+import BirthDateRoute from '@/app/birth-date';
+import Index from '@/app/index';
+import TabsLayout from '@/app/(tabs)/_layout';
 
 import { deleteMyAccount, signOutLocally } from '@/api/account';
 import { BirthDateTooYoungError, getMyPrivacySettings, setBirthDate } from '@/api/privacy';

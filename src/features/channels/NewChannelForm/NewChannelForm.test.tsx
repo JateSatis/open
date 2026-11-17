@@ -1,7 +1,7 @@
 import type { Session as SupabaseSession } from '@supabase/supabase-js';
 import { fireEvent, screen, userEvent, waitFor } from '@testing-library/react-native';
 
-import NewChannelScreen from './new-channel';
+import NewChannelScreen from '@/app/(tabs)/chats/new-channel';
 
 import { ChannelUsernameTakenError, createChannel } from '@/api/channels';
 import { isUsernameAvailable } from '@/api/usernames';

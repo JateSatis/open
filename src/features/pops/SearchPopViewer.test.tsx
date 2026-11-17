@@ -1,6 +1,6 @@
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react-native';
 
-import SearchPopViewerRoute from './search';
+import SearchPopViewerRoute from '@/app/pops/search';
 
 import { canPublishInChannel, recordPopViews } from '@/api/pops';
 import { acquirePopTopic } from '@/api/popTopics';

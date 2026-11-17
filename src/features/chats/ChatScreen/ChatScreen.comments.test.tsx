@@ -7,7 +7,7 @@ import type { Session as SupabaseSession } from '@supabase/supabase-js';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react-native';
 import { BackHandler } from 'react-native';
 
-import ChatScreen from './[chatId]';
+import ChatScreen from '@/app/(tabs)/chats/[chatId]';
 
 import type { ChatSummary, Message } from '@/api/chats';
 
@@ -120,7 +120,7 @@ jest.mock('@/api/fragments', () => ({
   setFragmentReaction: jest.fn(),
 }));
 // Геометрия текста облачка: одна строка, по 10 dp на символ.
-jest.mock('../../../../modules/text-geometry', () => ({
+jest.mock('modules/text-geometry', () => ({
   textGeometryAvailable: true,
   measureText: jest.fn((view: { props?: { children?: unknown } } | null) => {
     const text = String(view?.props?.children ?? '');

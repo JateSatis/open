@@ -1,6 +1,6 @@
 import { screen, userEvent } from '@testing-library/react-native';
 
-import BlockedUsersRoute from './blocked';
+import BlockedUsersRoute from '@/app/(tabs)/profile/blocked';
 
 import { listBlockedUsers, unblockUser } from '@/api/blocks';
 import { renderWithQuery } from '@/test/renderWithQuery';

@@ -1,7 +1,7 @@
 import type { Session as SupabaseSession } from '@supabase/supabase-js';
 import { screen, userEvent, waitFor } from '@testing-library/react-native';
 
-import NewChatScreen from './new';
+import NewChatScreen from '@/app/(tabs)/chats/new';
 
 import { searchPeople } from '@/api/groups';
 import { createChat, DuplicateChatError } from '@/api/invites';

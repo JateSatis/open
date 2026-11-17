@@ -1,6 +1,6 @@
 import { screen, userEvent, waitFor, within } from '@testing-library/react-native';
 
-import PrivacyRoute from './privacy';
+import PrivacyRoute from '@/app/(tabs)/profile/privacy';
 
 import { getMyPrivacySettings, setPrivacySetting, type PrivacySettings } from '@/api/privacy';
 import { useColorScheme } from '@/hooks/use-color-scheme';

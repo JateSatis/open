@@ -1,8 +1,8 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react-native';
 import { useLocalSearchParams } from 'expo-router';
 
-import ChatPersonScreen from '../chats/people/[userId]';
-import UserProfileScreen from './[userId]';
+import ChatPersonScreen from '@/app/(tabs)/chats/people/[userId]';
+import UserProfileScreen from '@/app/(tabs)/profile/[userId]';
 
 import {
   acceptFriendRequest,

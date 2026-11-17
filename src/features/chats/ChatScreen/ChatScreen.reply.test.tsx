@@ -10,7 +10,7 @@ import { FlatList } from 'react-native';
 import { State } from 'react-native-gesture-handler';
 import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils';
 
-import ChatScreen from './[chatId]';
+import ChatScreen from '@/app/(tabs)/chats/[chatId]';
 
 import type { ChatSummary, Message, QuotedMessage } from '@/api/chats';
 import {

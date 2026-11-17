@@ -11,7 +11,7 @@ import { BackHandler, StyleSheet } from 'react-native';
 
 
 
-import ChatScreen from './[chatId]';
+import ChatScreen from '@/app/(tabs)/chats/[chatId]';
 
 import type { ChatChannelHandlers, ChatSummary, Message } from '@/api/chats';
 import {

@@ -1,7 +1,7 @@
 import { act, fireEvent, waitFor } from '@testing-library/react-native';
 import { router } from 'expo-router';
 
-import EditProfileScreen from './edit';
+import EditProfileScreen from '@/app/(tabs)/profile/edit';
 
 import { getMyProfile, updateMyProfile, UsernameTakenError } from '@/api/profile';
 import { isUsernameAvailable } from '@/api/usernames';

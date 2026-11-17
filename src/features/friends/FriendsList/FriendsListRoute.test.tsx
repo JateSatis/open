@@ -1,8 +1,8 @@
 import { screen, userEvent, waitFor } from '@testing-library/react-native';
 
-import MyFriendsScreen from './index';
-import UserFriendsScreen from './[userId]';
-import ChatPersonFriendsScreen from '../../chats/people/friends/[userId]';
+import MyFriendsScreen from '@/app/(tabs)/profile/friends/index';
+import UserFriendsScreen from '@/app/(tabs)/profile/friends/[userId]';
+import ChatPersonFriendsScreen from '@/app/(tabs)/chats/people/friends/[userId]';
 
 import {
   acceptFriendRequest,

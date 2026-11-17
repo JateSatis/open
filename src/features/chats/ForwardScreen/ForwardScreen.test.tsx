@@ -1,6 +1,6 @@
 import { act, render, screen } from '@testing-library/react-native';
 
-import ForwardRoute from './forward';
+import ForwardRoute from '@/app/(tabs)/chats/forward';
 
 import * as drafts from '@/features/chats/composerDraftStore';
 import { ForwardSheet } from '@/features/chats/ForwardSheet';

@@ -1,6 +1,6 @@
 import { screen, userEvent, waitFor } from '@testing-library/react-native';
 
-import AccountScreen from './account';
+import AccountScreen from '@/app/(tabs)/profile/account';
 
 import {
   deleteMyAccount,

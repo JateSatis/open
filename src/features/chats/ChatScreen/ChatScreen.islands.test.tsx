@@ -8,7 +8,7 @@ import { act, fireEvent, screen, waitFor, within } from '@testing-library/react-
 
 
 
-import ChatScreen from './[chatId]';
+import ChatScreen from '@/app/(tabs)/chats/[chatId]';
 
 import type { ChatSummary, Message } from '@/api/chats';
 import {

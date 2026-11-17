@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
-import SignInScreen from './sign-in';
+import SignInScreen from '@/app/(auth)/sign-in';
 
 import { signInWithApple, signInWithGoogle } from '@/features/auth/signIn';
 import { signInMessages } from '@/features/auth/signInErrors';
