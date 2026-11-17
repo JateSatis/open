@@ -1,7 +1,7 @@
 import type { Session as SupabaseSession } from '@supabase/supabase-js';
 import { fireEvent, screen, userEvent, waitFor } from '@testing-library/react-native';
 
-import { NewChannelRoute as NewChannelScreen } from '@/navigation/screens/NewChannelRoute';
+import { NewChannelForm } from '@/features/channels/NewChannelForm';
 
 import { ChannelUsernameTakenError, createChannel } from '@/api/channels';
 import { isUsernameAvailable } from '@/api/usernames';
@@ -79,9 +79,9 @@ async function fill(title: string, username: string) {
   await fireEvent.changeText(screen.getByTestId('channel-username'), username);
 }
 
-describe('NewChannelScreen', () => {
+describe('NewChannelForm', () => {
   it('shows the avatar circle and three fields, with «Создать» disabled', async () => {
-    await renderWithQuery(<NewChannelScreen />);
+    await renderWithQuery(<NewChannelForm />);
 
     expect(screen.getByText('Название')).toBeTruthy();
     expect(screen.getByText('Описание')).toBeTruthy();
@@ -90,7 +90,7 @@ describe('NewChannelScreen', () => {
   });
 
   it('rejects a malformed username without asking the server', async () => {
-    await renderWithQuery(<NewChannelScreen />);
+    await renderWithQuery(<NewChannelForm />);
     await fill('Канал', 'Ab');
 
     expect(await screen.findByText('Минимум 3 символа')).toBeTruthy();
@@ -99,7 +99,7 @@ describe('NewChannelScreen', () => {
   });
 
   it('says the name is taken and keeps «Создать» disabled', async () => {
-    await renderWithQuery(<NewChannelScreen />);
+    await renderWithQuery(<NewChannelForm />);
     await fill('Канал', 'taken_name');
 
     expect(await screen.findByText('Имя занято')).toBeTruthy();
@@ -108,13 +108,13 @@ describe('NewChannelScreen', () => {
   });
 
   it('shows the fixed .ch suffix next to the name', async () => {
-    await renderWithQuery(<NewChannelScreen />);
+    await renderWithQuery(<NewChannelForm />);
 
     expect(screen.getByTestId('channel-username-suffix')).toHaveTextContent('.ch');
   });
 
   it('refuses a name with a dot and keeps «Создать» disabled', async () => {
-    await renderWithQuery(<NewChannelScreen />);
+    await renderWithQuery(<NewChannelForm />);
     await fill('Канал', 'a.b');
 
     expect(await screen.findByText('Точка в имени недопустима')).toBeTruthy();
@@ -123,7 +123,7 @@ describe('NewChannelScreen', () => {
   });
 
   it('drops a pasted .ch suffix and keeps only the name', async () => {
-    await renderWithQuery(<NewChannelScreen />);
+    await renderWithQuery(<NewChannelForm />);
     await fill('Канал', '@news.ch');
 
     expect(screen.getByTestId('channel-username')).toHaveDisplayValue('news');
@@ -132,7 +132,7 @@ describe('NewChannelScreen', () => {
   it('creates a channel with a free name and replaces the form with it', async () => {
     const user = userEvent.setup();
 
-    await renderWithQuery(<NewChannelScreen />);
+    await renderWithQuery(<NewChannelForm />);
     await fill('Мой канал', 'my_channel');
 
     expect(await screen.findByText('Имя свободно')).toBeTruthy();
@@ -153,7 +153,7 @@ describe('NewChannelScreen', () => {
 
     mockedCreate.mockRejectedValue(new ChannelUsernameTakenError('my_channel'));
 
-    await renderWithQuery(<NewChannelScreen />);
+    await renderWithQuery(<NewChannelForm />);
     await user.press(screen.getByText('Выбрать аватарку'));
     await fill('Мой канал', 'my_channel');
     await screen.findByText('Имя свободно');

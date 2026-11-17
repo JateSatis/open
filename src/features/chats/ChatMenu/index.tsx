@@ -21,7 +21,7 @@ export function ChatMenu({ chatId, isMember, subscription }: ChatMenuProps) {
   const run = (item: ChatMenuItem) => {
     switch (item) {
       case 'subscribers':
-        router.push({ name: 'ChatSubscribers', params: { chatId } });
+        router.push({ name: 'Subscribers', params: { target: { kind: 'chat', id: chatId } } });
         return;
       case 'mute':
         void actions.setNotify(false);

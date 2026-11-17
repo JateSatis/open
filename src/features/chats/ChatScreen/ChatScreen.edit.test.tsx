@@ -6,7 +6,7 @@ jest.mock('@/api/historyWindow', () => ({
 import type { Session as SupabaseSession } from '@supabase/supabase-js';
 import { act, fireEvent, screen, userEvent, waitFor, within } from '@testing-library/react-native';
 
-import { ChatRoute as ChatScreen } from '@/navigation/screens/ChatRoute';
+import { ChatScreen } from '@/features/chats/ChatScreen';
 
 import type {
   ChatChannelHandlers,

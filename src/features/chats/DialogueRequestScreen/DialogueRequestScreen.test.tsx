@@ -9,6 +9,7 @@ import { renderWithQuery } from '@/test/renderWithQuery';
 const mockReplace = jest.fn();
 
 jest.mock('@/navigation', () => ({
+  useRouteParams: () => ({ userId: 'user-2' }),
   useIsFocused: () => true,
   useRouter: () => ({ replace: mockReplace, back: jest.fn(), canGoBack: () => true }),
   useNavigation: () => ({ addListener: () => () => undefined, getState: () => ({ index: 1 }) }),
@@ -58,7 +59,7 @@ beforeEach(() => {
 
 describe('DialogueRequestScreen', () => {
   it('К1.1 только текст: ни вложений, ни голосового, ни кружка', async () => {
-    await renderWithQuery(<DialogueRequestScreen userId="user-2" />);
+    await renderWithQuery(<DialogueRequestScreen />);
 
     expect(await screen.findByText('Заявка на диалог')).toBeTruthy();
     expect(screen.queryByTestId('composer-attach')).toBeNull();
@@ -68,7 +69,7 @@ describe('DialogueRequestScreen', () => {
   it('К1.1 первое сообщение и есть заявка — создаётся чат и открывается', async () => {
     const user = userEvent.setup();
 
-    await renderWithQuery(<DialogueRequestScreen userId="user-2" />);
+    await renderWithQuery(<DialogueRequestScreen />);
     await user.type(await screen.findByLabelText('Текст заявки'), 'Привет!');
     await user.press(screen.getByTestId('composer-send'));
 
@@ -84,7 +85,7 @@ describe('DialogueRequestScreen', () => {
     );
     const user = userEvent.setup();
 
-    await renderWithQuery(<DialogueRequestScreen userId="user-2" />);
+    await renderWithQuery(<DialogueRequestScreen />);
     await user.type(await screen.findByLabelText('Текст заявки'), 'Ещё раз');
     await user.press(screen.getByTestId('composer-send'));
 

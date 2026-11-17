@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useRouter } from '@/navigation';
+import { useRouteParams, useRouter } from '@/navigation';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, View } from 'react-native';
 import {
@@ -30,14 +30,13 @@ import { Spacing } from '@/theme';
 /** Дольше приглашение не ждём — дальше это потеря связи. */
 const INVITE_DEADLINE_MS = 20_000;
 
-export type ChatInviteScreenProps = { chatId: string };
-
 /**
  * «Добавить участников»: поиск людей и отметка нескольких. Позванный
  * получает заявку, как при создании группы, и участником становится, только
  * приняв её. Кто уже в группе или позван — помечен и не выбирается.
  */
-export function ChatInviteScreen({ chatId }: ChatInviteScreenProps) {
+export function ChatInviteScreen() {
+  const { chatId } = useRouteParams<'ChatInvite'>();
   const router = useRouter();
   const theme = useTheme();
   const insets = useSafeAreaInsets();

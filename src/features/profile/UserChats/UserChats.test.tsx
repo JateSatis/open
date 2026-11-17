@@ -9,6 +9,7 @@ import { renderWithQuery } from '@/features/profile/renderWithQuery';
 const mockPush = jest.fn();
 
 jest.mock('@/navigation', () => ({
+  useRouteParams: () => ({ userId: 'user-2' }),
   useIsFocused: () => true,
   ScreenOptions: () => null,
   useRouter: () => ({ push: mockPush }),
@@ -79,7 +80,7 @@ describe('UserChats', () => {
       nextPage: null,
     });
 
-    await renderWithQuery(<UserChats userId="user-2" />);
+    await renderWithQuery(<UserChats />);
 
     expect(await screen.findByText('Олег')).toBeTruthy();
     expect(screen.getByText('Кухня')).toBeTruthy();
@@ -95,7 +96,7 @@ describe('UserChats', () => {
       nextPage: null,
     });
 
-    await renderWithQuery(<UserChats userId="user-2" />);
+    await renderWithQuery(<UserChats />);
     await fireEvent.press(await screen.findByText('Олег'));
 
     expect(mockPush).toHaveBeenCalledWith({ name: 'Chat', params: { chatId: 'c1' } });
@@ -104,7 +105,7 @@ describe('UserChats', () => {
   it('says so honestly when there are no dialogs', async () => {
     listChatsOfMock.mockResolvedValue({ items: [], nextCursor: null, nextPage: null });
 
-    await renderWithQuery(<UserChats userId="user-2" />);
+    await renderWithQuery(<UserChats />);
 
     expect(await screen.findByText('Пока ни одного диалога.')).toBeTruthy();
   });

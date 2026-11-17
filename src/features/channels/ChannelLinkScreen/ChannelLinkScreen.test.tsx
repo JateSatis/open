@@ -23,7 +23,9 @@ const mockBack = jest.fn();
 const mockRedirect = jest.fn();
 let mockCanGoBack = true;
 
+let mockPageParams: Record<string, unknown>;
 jest.mock('@/navigation', () => ({
+  useRouteParams: () => (mockPageParams),
   useRouter: () => ({
     replace: mockReplace,
     push: mockPush,
@@ -47,7 +49,8 @@ describe('ChannelLinkScreen', () => {
   it('opens the channel in the chats tab over what was open, so «back» returns there', async () => {
     jest.mocked(findChannelByUsername).mockResolvedValue('channel-1');
 
-    await renderWithQuery(<ChannelLinkScreen username="News" />);
+    mockPageParams = { username: 'News' };
+    await renderWithQuery(<ChannelLinkScreen />);
 
     await waitFor(() => expect(mockRedirect).toHaveBeenCalledWith(channelHref));
     expect(findChannelByUsername).toHaveBeenCalledWith('News');
@@ -57,7 +60,8 @@ describe('ChannelLinkScreen', () => {
     mockCanGoBack = false;
     jest.mocked(findChannelByUsername).mockResolvedValue('channel-1');
 
-    await renderWithQuery(<ChannelLinkScreen username="news" />);
+    mockPageParams = { username: 'news' };
+    await renderWithQuery(<ChannelLinkScreen />);
 
     await waitFor(() => expect(mockRedirect).toHaveBeenCalledWith(channelHref));
   });
@@ -65,7 +69,8 @@ describe('ChannelLinkScreen', () => {
   it('says «Канал не найден» and goes back', async () => {
     jest.mocked(findChannelByUsername).mockResolvedValue(null);
 
-    await renderWithQuery(<ChannelLinkScreen username="nosuchname" />);
+    mockPageParams = { username: 'nosuchname' };
+    await renderWithQuery(<ChannelLinkScreen />);
 
     expect(await screen.findByText('Канал не найден')).toBeTruthy();
     await fireEvent.press(screen.getByTestId('channel-link-back'));

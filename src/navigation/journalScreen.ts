@@ -22,11 +22,9 @@ const paths = {
   Dialogs: 'profile/dialogs/[userId]',
   Request: 'chats/request/[userId]',
   ChannelInfo: 'chats/channel-info/[channelId]',
-  ChannelEdit: 'chats/channel-edit/[channelId]',
-  ChannelSubscribers: 'chats/channel-subscribers/[channelId]',
+  EditDetails: 'chats/channel-edit/[channelId]',
+  Subscribers: 'chats/channel-subscribers/[channelId]',
   ChatInfo: 'chats/chat-info/[chatId]',
-  ChatEdit: 'chats/chat-edit/[chatId]',
-  ChatSubscribers: 'chats/chat-subscribers/[chatId]',
   ChatInvite: 'chats/chat-invite/[chatId]',
   EditProfile: 'profile/edit',
   Account: 'profile/account',
@@ -39,6 +37,16 @@ export function journalScreen(name: string, tab: keyof TabsParams | null, params
   const source = (params as { source?: string } | undefined)?.source;
   if (name === 'PopViewer')
     return { screen: source === 'search' ? 'pops/search' : paths.PopViewer, tab: null };
+  if (
+    (name === 'Subscribers' || name === 'EditDetails') &&
+    (params as RootParams['Subscribers'] | undefined)?.target.kind === 'chat'
+  ) {
+    return {
+      screen:
+        name === 'Subscribers' ? 'chats/chat-subscribers/[chatId]' : 'chats/chat-edit/[chatId]',
+      tab,
+    };
+  }
   if (!Object.prototype.hasOwnProperty.call(paths, name)) return { screen: name, tab: null };
   const path = paths[name as keyof typeof paths];
   if (tab === 'chats' && (name === 'Person' || name === 'Friends' || name === 'Dialogs'))

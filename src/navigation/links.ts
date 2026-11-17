@@ -92,11 +92,17 @@ const links: Link[] = [
   },
   {
     path: 'chats/channel-edit/:channelId',
-    to: (path) => ({ name: 'ChannelEdit', params: { channelId: path.channelId } }),
+    to: (path) => ({
+      name: 'EditDetails',
+      params: { target: { kind: 'channel', id: path.channelId } },
+    }),
   },
   {
     path: 'chats/channel-subscribers/:channelId',
-    to: (path) => ({ name: 'ChannelSubscribers', params: { channelId: path.channelId } }),
+    to: (path) => ({
+      name: 'Subscribers',
+      params: { target: { kind: 'channel', id: path.channelId } },
+    }),
   },
   {
     path: 'chats/chat-info/:chatId',
@@ -104,11 +110,11 @@ const links: Link[] = [
   },
   {
     path: 'chats/chat-edit/:chatId',
-    to: (path) => ({ name: 'ChatEdit', params: { chatId: path.chatId } }),
+    to: (path) => ({ name: 'EditDetails', params: { target: { kind: 'chat', id: path.chatId } } }),
   },
   {
     path: 'chats/chat-subscribers/:chatId',
-    to: (path) => ({ name: 'ChatSubscribers', params: { chatId: path.chatId } }),
+    to: (path) => ({ name: 'Subscribers', params: { target: { kind: 'chat', id: path.chatId } } }),
   },
   {
     path: 'chats/chat-invite/:chatId',

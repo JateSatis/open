@@ -24,7 +24,7 @@ export function ChannelMenu({ channelId, isOwner }: ChannelMenuProps) {
   const run = (item: ChannelMenuItem) => {
     switch (item) {
       case 'subscribers':
-        router.push({ name: 'ChannelSubscribers', params: { channelId } });
+        router.push({ name: 'Subscribers', params: { target: { kind: 'channel', id: channelId } } });
         return;
       case 'mute':
         void actions.setNotify(false);

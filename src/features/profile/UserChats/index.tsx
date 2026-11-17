@@ -1,4 +1,4 @@
-import { ScreenOptions, useRouter } from '@/navigation';
+import { useRouteParams, ScreenOptions, useRouter } from '@/navigation';
 import { ActivityIndicator, FlatList, View } from 'react-native';
 
 import { styles } from './styles';
@@ -16,7 +16,8 @@ import { displayNameOf } from '@/features/profile/username';
  * по его отметке. Тап открывает чат; кто не участник, смотрит его
  * посетителем. Сюда позже добавятся чаты, на которые он подписан.
  */
-export function UserChats({ userId }: { userId: string }) {
+export function UserChats() {
+  const { userId } = useRouteParams<'Dialogs'>();
   const router = useRouter();
   const { data: profile } = useProfile(userId);
   const { chats, isLoading, isLoadingMore, hasMore, error, loadMore } = useChatsOf(userId);

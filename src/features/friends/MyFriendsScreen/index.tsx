@@ -1,10 +1,11 @@
+import { useRouter } from '@/navigation';
 import { Screen } from '@/components/Screen';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
-import { MyFriends, type MyFriendsProps } from '@/features/friends/MyFriends';
+import { MyFriends } from '@/features/friends/MyFriends';
 
-type MyFriendsScreenProps = Pick<MyFriendsProps, 'onOpenPerson'>;
-
-export function MyFriendsScreen({ onOpenPerson }: MyFriendsScreenProps) {
+export function MyFriendsScreen() {
+  const router = useRouter();
+  const onOpenPerson = (userId: string) => router.push({ name: 'Person', params: { userId } });
   const userId = useCurrentUserId();
 
   if (!userId) return null;

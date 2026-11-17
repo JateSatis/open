@@ -1,6 +1,6 @@
 import { screen, userEvent, waitFor, within } from '@testing-library/react-native';
 
-import { PrivacyRoute } from '@/navigation/screens/PrivacyRoute';
+import { PrivacyScreen } from '@/features/privacy/PrivacyScreen';
 
 import { getMyPrivacySettings, setPrivacySetting, type PrivacySettings } from '@/api/privacy';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -75,7 +75,7 @@ describe('Конфиденциальность и безопасность', () 
   ])('К5.1 %s видит текущее значение трёх настроек этапа', async (_who, value, label) => {
     mocked.getMyPrivacySettings.mockResolvedValue(value);
 
-    await renderWithQuery(<PrivacyRoute />);
+    await renderWithQuery(<PrivacyScreen />);
 
     expect(await screen.findByText(TITLES.activity)).toBeTruthy();
     for (const title of [TITLES.activity, TITLES.time, TITLES.search]) {
@@ -86,7 +86,7 @@ describe('Конфиденциальность и безопасность', () 
   it('группы «Активность» и «Поиск и контакты», список друзей — на месте', async () => {
     mocked.getMyPrivacySettings.mockResolvedValue(TEEN);
 
-    await renderWithQuery(<PrivacyRoute />);
+    await renderWithQuery(<PrivacyScreen />);
 
     expect(await screen.findByText('Активность')).toBeTruthy();
     expect(screen.getByText('Поиск и контакты')).toBeTruthy();
@@ -118,7 +118,7 @@ describe('Конфиденциальность и безопасность', () 
     });
     const user = userEvent.setup();
 
-    await renderWithQuery(<PrivacyRoute />);
+    await renderWithQuery(<PrivacyScreen />);
     await user.press(await screen.findByTestId(`${testID}-nobody`));
 
     expect(mocked.setPrivacySetting).toHaveBeenCalledWith(key, 'nobody');
@@ -130,7 +130,7 @@ describe('Конфиденциальность и безопасность', () 
     mocked.setPrivacySetting.mockRejectedValue(new Error('offline'));
     const user = userEvent.setup();
 
-    await renderWithQuery(<PrivacyRoute />);
+    await renderWithQuery(<PrivacyScreen />);
     await user.press(await screen.findByTestId('privacy-message-time-everyone'));
 
     expect(
@@ -146,7 +146,7 @@ describe('Конфиденциальность и безопасность', () 
   it('пояснения говорят, что скрыто, и не обещают анонимности', async () => {
     mocked.getMyPrivacySettings.mockResolvedValue(TEEN);
 
-    await renderWithQuery(<PrivacyRoute />);
+    await renderWithQuery(<PrivacyScreen />);
 
     expect(await screen.findByText(/во всех диалогах, где вы участвуете/)).toBeTruthy();
     expect(
@@ -161,7 +161,7 @@ describe('Конфиденциальность и безопасность', () 
     mocked.useColorScheme.mockReturnValue(scheme);
     mocked.getMyPrivacySettings.mockResolvedValue(TEEN);
 
-    await renderWithQuery(<PrivacyRoute />);
+    await renderWithQuery(<PrivacyScreen />);
 
     const activity = await screen.findByTestId('privacy-activity-status-friends');
 
@@ -174,7 +174,7 @@ describe('Конфиденциальность и безопасность', () 
     mocked.getMyPrivacySettings.mockResolvedValue(ADULT);
     const user = userEvent.setup();
 
-    await renderWithQuery(<PrivacyRoute />);
+    await renderWithQuery(<PrivacyScreen />);
     await user.press(await screen.findByTestId('privacy-blocked'));
 
     expect(mockPush).toHaveBeenCalledWith({ name: 'Blocked' });

@@ -22,7 +22,7 @@ import { GROUP_TITLE_MAX_LENGTH } from '@/features/chats/limits';
 import { openMediaSheet } from '@/features/chats/MediaPickerSheet';
 import { MediaAvatarSheet } from '@/features/chats/MediaPickerSheet/MediaAvatarSheet';
 import { useChangeGroupAvatar } from '@/features/chats/useChangeGroupAvatar';
-import { chatQueryKey, useChat } from '@/features/chats/useChat';
+import { chatQueryKey } from '@/features/chats/useChat';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
 import { usePreparedAvatar } from '@/features/chats/usePreparedAvatar';
 import {
@@ -45,37 +45,7 @@ const TEXT_DEADLINE_MS = 20_000;
 /** Фото в черновике: не трогали, новое (готовый файл) или убрать. */
 type PhotoDraft = { kind: 'keep' } | { kind: 'set'; uri: string } | { kind: 'remove' };
 
-export type ChatEditScreenProps = { chatId: string };
-
-/**
- * «Изменить» группы: фото, название, описание и `@имя` — одним сохранением
- * по галочке. Только владелец: остальным карандаш не показывается, а база
- * им откажет.
- */
-export function ChatEditScreen({ chatId }: ChatEditScreenProps) {
-  const { chat } = useChat(chatId);
-  const currentUserId = useCurrentUserId();
-
-  if (!chat) {
-    return (
-      <View style={styles.centered}>
-        <ActivityIndicator accessibilityLabel="Загрузка чата" />
-      </View>
-    );
-  }
-
-  if (chat.ownerId === null || chat.ownerId !== currentUserId) {
-    return (
-      <View style={styles.centered}>
-        <Text color="textSecondary">Изменять группу может только её владелец.</Text>
-      </View>
-    );
-  }
-
-  return <ChatEditForm chat={chat} />;
-}
-
-function ChatEditForm({ chat }: { chat: ChatSummary }) {
+export function ChatEditForm({ chat }: { chat: ChatSummary }) {
   // Форма доходит до края окна: панели вкладок под экраном нет.
   const insets = useSafeAreaInsets();
   const theme = useTheme();

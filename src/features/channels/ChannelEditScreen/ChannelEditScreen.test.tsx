@@ -1,7 +1,7 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 
-import { ChannelEditScreen } from '.';
+import { EditDetailsScreen } from '@/features/chats/EditDetailsScreen';
 
 import {
   ChannelUsernameTakenError,
@@ -51,6 +51,7 @@ let mockBeforeRemove: ((event: unknown) => void) | null = null;
 
 // Галочка живёт в шапке стека — мок рисует её прямо на экране.
 jest.mock('@/navigation', () => ({
+  useRouteParams: () => ({ target: { kind: 'channel', id: 'channel-1' } }),
   useRouter: () => ({ back: mockBack }),
   useNavigation: () => ({
     addListener: (_name: string, listener: (event: unknown) => void) => {
@@ -114,14 +115,14 @@ describe('ChannelEditScreen', () => {
   it('is only for the owner', async () => {
     mockUserId = 'stranger';
 
-    await renderWithQuery(<ChannelEditScreen channelId="channel-1" />);
+    await renderWithQuery(<EditDetailsScreen />);
 
     expect(await screen.findByText('Изменять канал может только его владелец.')).toBeTruthy();
     expect(screen.queryByTestId('channel-edit-save')).toBeNull();
   });
 
   it('keeps the check mark off until something changes', async () => {
-    await renderWithQuery(<ChannelEditScreen channelId="channel-1" />);
+    await renderWithQuery(<EditDetailsScreen />);
 
     expect(await screen.findByTestId('channel-edit-save')).toBeDisabled();
 
@@ -131,7 +132,7 @@ describe('ChannelEditScreen', () => {
   });
 
   it('saves title, description and a free name, then goes back', async () => {
-    await renderWithQuery(<ChannelEditScreen channelId="channel-1" />);
+    await renderWithQuery(<EditDetailsScreen />);
 
     await fireEvent.changeText(await screen.findByTestId('channel-edit-title'), '  Новости дня ');
     await fireEvent.changeText(screen.getByTestId('chat-edit-description'), 'Коротко\nо главном');
@@ -149,7 +150,7 @@ describe('ChannelEditScreen', () => {
   it('a taken or empty name keeps the check mark off', async () => {
     jest.mocked(isUsernameAvailable).mockResolvedValue(false);
 
-    await renderWithQuery(<ChannelEditScreen channelId="channel-1" />);
+    await renderWithQuery(<EditDetailsScreen />);
 
     await fireEvent.changeText(await screen.findByTestId('channel-username'), 'busy');
     expect(await screen.findByText('Имя занято')).toBeTruthy();
@@ -161,7 +162,7 @@ describe('ChannelEditScreen', () => {
   });
 
   it('an empty title keeps the check mark off', async () => {
-    await renderWithQuery(<ChannelEditScreen channelId="channel-1" />);
+    await renderWithQuery(<EditDetailsScreen />);
 
     await fireEvent.changeText(await screen.findByTestId('channel-edit-title'), '   ');
 
@@ -171,7 +172,7 @@ describe('ChannelEditScreen', () => {
   it('a name taken at the last moment is explained and the screen stays', async () => {
     jest.mocked(setChannelUsername).mockRejectedValue(new ChannelUsernameTakenError('daily'));
 
-    await renderWithQuery(<ChannelEditScreen channelId="channel-1" />);
+    await renderWithQuery(<EditDetailsScreen />);
 
     await fireEvent.changeText(await screen.findByTestId('channel-username'), 'daily');
     await screen.findByText('Имя свободно');
@@ -182,7 +183,7 @@ describe('ChannelEditScreen', () => {
   });
 
   it('uploads a new photo by the check mark and removes the replaced own file', async () => {
-    await renderWithQuery(<ChannelEditScreen channelId="channel-1" />);
+    await renderWithQuery(<EditDetailsScreen />);
 
     await fireEvent.press(await screen.findByText('Установить новое фото'));
     expect(openMediaSheet).toHaveBeenCalledWith('avatar:channel-edit');
@@ -205,7 +206,7 @@ describe('ChannelEditScreen', () => {
   });
 
   it('asks before leaving with unsaved changes', async () => {
-    await renderWithQuery(<ChannelEditScreen channelId="channel-1" />);
+    await renderWithQuery(<EditDetailsScreen />);
 
     await fireEvent.changeText(await screen.findByTestId('channel-edit-title'), 'Другое');
     const event = { preventDefault: jest.fn(), data: { action: { type: 'GO_BACK' } } };

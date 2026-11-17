@@ -1,7 +1,7 @@
 import { act, fireEvent, waitFor } from '@testing-library/react-native';
 import { router } from '@/navigation';
 
-import { EditProfileRoute as EditProfileScreen } from '@/navigation/screens/EditProfileRoute';
+import { EditProfileScreen } from '@/features/profile/EditProfileScreen';
 
 import { getMyProfile, updateMyProfile, UsernameTakenError } from '@/api/profile';
 import { isUsernameAvailable } from '@/api/usernames';

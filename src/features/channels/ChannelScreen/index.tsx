@@ -28,25 +28,13 @@ import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
 import { popSheetSection } from '@/features/pops/popSheetSection';
 import { useCanPublish } from '@/features/pops/queries';
 import { PopsSection } from '@/features/pops/PopsSection';
-import type { SectionRequest } from '@/features/channels/sectionRequest';
+import { initialSectionOf, sectionRequestOf, type SectionRequest } from '@/features/channels/sectionRequest';
 import { formatUsername } from '@/features/profile/username';
 import { useTheme } from '@/hooks/use-theme';
 import { reloadMissing, loadStateOf } from '@/lib/loadState';
 
 const SECTIONS = ['Посты', 'Попсы'] as const;
 const SECTION_KEYS: readonly ChannelSection[] = ['posts', 'pops'];
-
-export type ChannelScreenProps = {
-  channelId: string;
-  /** С какого раздела открыть. Из «Чатов» — тот, где свежее непрочитанное. */
-  section?: ChannelSection;
-  /**
-   * Раздел, запрошенный снаружи: «Посты» — поиск,
-   * «Попсы» — имя канала в просмотре
-   * попсов. Новый ключ переключает экран — и уже открытый, ниже в стеке.
-   */
-  sectionRequest?: SectionRequest;
-};
 
 /**
  * Экран канала: под шапкой — «Посты» | «Попсы», разделы листаются свайпом и
@@ -56,11 +44,11 @@ export type ChannelScreenProps = {
  * «Попсов» свайп вправо сначала листает на «Посты», с «Постов» — уводит
  * страницу. Под ней пусто (холодный старт ссылкой) — назад ведёт в «Чаты».
  */
-export function ChannelScreen({
-  channelId,
-  section = 'posts',
-  sectionRequest,
-}: ChannelScreenProps) {
+export function ChannelScreen() {
+  const params = useRouteParams<'Channel'>();
+  const { channelId } = params;
+  const section = initialSectionOf(params);
+  const sectionRequest = sectionRequestOf(params);
   const theme = useTheme();
   const queryClient = useQueryClient();
   const query = useChannel(channelId);
@@ -100,6 +88,7 @@ export function ChannelScreen({
       channel={channel}
       initialIndex={SECTION_KEYS.indexOf(sectionRequest?.section ?? section)}
       sectionRequest={sectionRequest}
+      searchOpen={params.search === '1'}
     />
   );
 }
@@ -108,10 +97,11 @@ type ChannelSectionsProps = {
   slide: SlideBack;
   channel: Channel;
   initialIndex: number;
+  searchOpen: boolean;
   sectionRequest?: SectionRequest;
 };
 
-function ChannelSections({ slide, channel, initialIndex, sectionRequest }: ChannelSectionsProps) {
+function ChannelSections({ slide, channel, initialIndex, sectionRequest, searchOpen }: ChannelSectionsProps) {
   const theme = useTheme();
   const { width } = useWindowDimensions();
   const router = useRouter();
@@ -125,7 +115,6 @@ function ChannelSections({ slide, channel, initialIndex, sectionRequest }: Chann
   const swipeBack = useMemo(() => makeSwipe(canSwipeBack), [canSwipeBack, makeSwipe]);
   const { subscription } = useChannelSubscription(channel.id);
   const navigation = useNavigation();
-  const searchOpen = useRouteParams<'Channel'>().search === '1';
   const searching = searchOpen && index === 0;
 
   // Поиск — по постам: ушли на «Попсы» — поиск закрывается, иначе шапка

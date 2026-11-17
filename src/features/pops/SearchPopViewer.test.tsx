@@ -1,6 +1,6 @@
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react-native';
 
-import { PopViewerRoute as SearchPopViewerRoute } from '@/navigation/screens/PopViewerRoute';
+import { PopViewerScreen } from '@/features/pops/PopViewerScreen';
 
 import { canPublishInChannel, recordPopViews } from '@/api/pops';
 import { acquirePopTopic } from '@/api/popTopics';
@@ -89,7 +89,7 @@ async function open(pops: SearchPop[], start: string) {
   mockParams = { q: 'елка', start };
   jest.mocked(searchPops).mockImplementation(async (_query, cursor) => (cursor ? [] : pops));
 
-  await renderWithQuery(<SearchPopViewerRoute />);
+  await renderWithQuery(<PopViewerScreen />);
   await fireEvent(screen.getByTestId('pop-viewer'), 'layout', {
     nativeEvent: { layout: { width: 400, height: 800 } },
   });

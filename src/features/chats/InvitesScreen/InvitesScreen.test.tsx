@@ -1,7 +1,7 @@
 import type { Session as SupabaseSession } from '@supabase/supabase-js';
 import { screen, userEvent, waitFor } from '@testing-library/react-native';
 
-import { InvitesRoute as InvitesScreen } from '@/navigation/screens/InvitesRoute';
+import { InvitesScreen } from '@/features/chats/InvitesScreen';
 
 import type { ChatSummary } from '@/api/chats';
 import { blockUser, reportUser } from '@/api/blocks';

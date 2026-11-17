@@ -1,7 +1,7 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react-native';
 import { useRouteParams } from '@/navigation';
 
-import { PersonRoute as UserProfileScreen } from '@/navigation/screens/PersonRoute';
+import { UserProfile } from '@/features/profile/UserProfile';
 
 import {
   acceptFriendRequest,
@@ -108,7 +108,7 @@ describe('переходы из профиля', () => {
   });
 
   it('открывает друзей и диалоги владельца в исходном стеке', async () => {
-    await renderWithQuery(<UserProfileScreen />);
+    await renderWithQuery(<UserProfile />);
 
     await fireEvent.press(await screen.findByText('Диалоги'));
     expect(mockPush).toHaveBeenLastCalledWith({ name: 'Dialogs', params: { userId: 'user-2' } });
@@ -121,7 +121,7 @@ describe('переходы из профиля', () => {
   });
 
   it('открывает новый чат с владельцем профиля', async () => {
-    await renderWithQuery(<UserProfileScreen />);
+    await renderWithQuery(<UserProfile />);
     await fireEvent.press(await screen.findByText('Написать'));
 
     expect(mockPush).toHaveBeenCalledWith({ name: 'NewChat', params: { with: 'user-2' } });
@@ -129,7 +129,7 @@ describe('переходы из профиля', () => {
 
   it('из своего профиля по динамической ссылке открывает свой список с заявками', async () => {
     useSessionMock.mockReturnValue({ session: { user: { id: 'user-2' } } });
-    await renderWithQuery(<UserProfileScreen />);
+    await renderWithQuery(<UserProfile />);
     await fireEvent.press(await screen.findByTestId('profile-friends'));
 
     expect(mockNavigate).toHaveBeenCalledWith({ name: 'MyFriends' });
@@ -137,7 +137,7 @@ describe('переходы из профиля', () => {
   });
 
   it('возвращается к предыдущему экрану', async () => {
-    await renderWithQuery(<UserProfileScreen />);
+    await renderWithQuery(<UserProfile />);
     await fireEvent.press(await screen.findByTestId('info-back'));
 
     expect(mockBack).toHaveBeenCalledTimes(1);
@@ -146,7 +146,7 @@ describe('переходы из профиля', () => {
 
   it('при пустой истории возвращается в Чаты', async () => {
     mockCanGoBack.mockReturnValue(false);
-    await renderWithQuery(<UserProfileScreen />);
+    await renderWithQuery(<UserProfile />);
     await fireEvent.press(await screen.findByTestId('info-back'));
 
     expect(mockReplace).toHaveBeenCalledWith({ name: 'Tabs', params: { screen: 'chats' } });
@@ -154,11 +154,11 @@ describe('переходы из профиля', () => {
   });
 });
 
-describe('UserProfileScreen', () => {
+describe('UserProfile', () => {
   it('loads the profile named in the route with its status and bio', async () => {
     getProfileMock.mockResolvedValue(profile);
 
-    const { findByText, getByText } = await renderWithQuery(<UserProfileScreen />);
+    const { findByText, getByText } = await renderWithQuery(<UserProfile />);
 
     expect(await findByText('Анна')).toBeTruthy();
     expect(getByText('@anna')).toBeTruthy();
@@ -170,7 +170,7 @@ describe('UserProfileScreen', () => {
   it('renders someone without a username without crashing', async () => {
     getProfileMock.mockResolvedValue({ ...profile, username: null, displayName: null });
 
-    const { findByText } = await renderWithQuery(<UserProfileScreen />);
+    const { findByText } = await renderWithQuery(<UserProfile />);
 
     expect(await findByText('Без имени')).toBeTruthy();
   });
@@ -178,7 +178,7 @@ describe('UserProfileScreen', () => {
   it('offers no follow button — there are no subscriptions', async () => {
     getProfileMock.mockResolvedValue(profile);
 
-    const { findByText, queryByText } = await renderWithQuery(<UserProfileScreen />);
+    const { findByText, queryByText } = await renderWithQuery(<UserProfile />);
     await findByText('Анна');
 
     expect(queryByText('Подписаться')).toBeNull();
@@ -188,7 +188,7 @@ describe('UserProfileScreen', () => {
     useSessionMock.mockReturnValue({ session: { user: { id: 'user-2' } } });
     getProfileMock.mockResolvedValue(profile);
 
-    const { findByText, queryByText } = await renderWithQuery(<UserProfileScreen />);
+    const { findByText, queryByText } = await renderWithQuery(<UserProfile />);
     await findByText('Анна');
 
     expect(queryByText('Написать')).toBeNull();
@@ -197,14 +197,14 @@ describe('UserProfileScreen', () => {
   it('offers a retry when the profile fails to load', async () => {
     getProfileMock.mockRejectedValueOnce(new Error('offline')).mockResolvedValue(profile);
 
-    const { findByText } = await renderWithQuery(<UserProfileScreen />);
+    const { findByText } = await renderWithQuery(<UserProfile />);
     await fireEvent.press(await findByText('Повторить'));
 
     expect(await findByText('Анна')).toBeTruthy();
   });
 });
 
-describe('UserProfileScreen — друзья', () => {
+describe('UserProfile — друзья', () => {
   /** Действие меняет пару на сервере — и статус, перечитанный после него, тоже. */
   function serverAnswers(action: jest.Mock, status: string) {
     action.mockImplementation(() => {
@@ -219,7 +219,7 @@ describe('UserProfileScreen — друзья', () => {
 
     return renderWithQuery(
       <>
-        <UserProfileScreen />
+        <UserProfile />
         <ConfirmDialogHost />
       </>,
     );
@@ -316,13 +316,13 @@ describe('UserProfileScreen — друзья', () => {
   });
 });
 
-describe('UserProfileScreen — блокировка и жалоба', () => {
+describe('UserProfile — блокировка и жалоба', () => {
   function renderProfile() {
     getProfileMock.mockResolvedValue(profile);
 
     return renderWithQuery(
       <>
-        <UserProfileScreen />
+        <UserProfile />
         <ConfirmDialogHost />
       </>,
     );
@@ -371,7 +371,7 @@ describe('UserProfileScreen — блокировка и жалоба', () => {
   it('К2.1 профиль заблокировавшего — «Пользователь недоступен», без повтора', async () => {
     getProfileMock.mockRejectedValue(new ProfileUnavailableError());
 
-    await renderWithQuery(<UserProfileScreen />);
+    await renderWithQuery(<UserProfile />);
 
     expect(await screen.findByText('Пользователь недоступен')).toBeTruthy();
     expect(screen.queryByText('Повторить')).toBeNull();

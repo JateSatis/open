@@ -7,12 +7,16 @@ import { BirthDateTooYoungError, getMyPrivacySettings, setBirthDate } from '@/ap
 import { useSession } from '@/features/auth/useSession';
 import { renderWithQuery } from '@/test/renderWithQuery';
 
-jest.mock('@/navigation/screens', () => {
+// Этот тест монтирует только экраны входа, даты и вкладок.
+jest.mock('@/navigation/routes/ChatsRoutes', () => ({ chatsRoutes: null }));
+jest.mock('@/navigation/routes/FeedRoutes', () => ({ feedRoutes: null }));
+jest.mock('@/navigation/routes/ProfileRoutes', () => ({ profileRoutes: null }));
+jest.mock('@/features/streams/CallScreen', () => ({ CallScreen: () => null }));
+jest.mock('@/features/media/MediaLabScreen', () => ({ MediaLabScreen: () => null }));
+jest.mock('@/features/chats/MosaicLabScreen', () => ({ MosaicLabScreen: () => null }));
+jest.mock('@/features/auth/SignInScreen', () => {
   const { Text } = require('react-native');
-  return new Proxy({ __esModule: true,
-    BirthDateScreen: require('@/features/privacy/BirthDateScreen').BirthDateScreen,
-    SignInScreen: () => <Text>Вход</Text>,
-  }, {get: (target, key: string) => Reflect.get(target, key) ?? (() => null)});
+  return { SignInScreen: () => <Text>Вход</Text> };
 });
 jest.mock('@/navigation/MainTabs', () => {
   const { Text } = require('react-native');

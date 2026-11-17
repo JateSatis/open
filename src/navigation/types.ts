@@ -4,6 +4,7 @@ import type { ChatSearchParams } from '@/features/chats/chatSearch/useChatSearch
 import type { PopViewerScreenParams } from '@/features/pops/PopViewerScreen';
 
 export type TabsParams = { feed: undefined; chats: undefined; profile: undefined };
+export type ChatOrChannel = { kind: 'chat' | 'channel'; id: string };
 export type RootParams = {
   Tabs: NavigatorScreenParams<TabsParams> | undefined;
   SignIn: undefined;
@@ -27,11 +28,9 @@ export type RootParams = {
   Dialogs: { userId: string };
   Request: { userId: string };
   ChannelInfo: { channelId: string };
-  ChannelEdit: { channelId: string };
-  ChannelSubscribers: { channelId: string };
+  EditDetails: { target: ChatOrChannel };
+  Subscribers: { target: ChatOrChannel };
   ChatInfo: { chatId: string };
-  ChatEdit: { chatId: string };
-  ChatSubscribers: { chatId: string };
   ChatInvite: { chatId: string };
   EditProfile: undefined;
   Account: undefined;

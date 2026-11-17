@@ -6,7 +6,7 @@ jest.mock('@/api/historyWindow', () => ({
 import type { Session as SupabaseSession } from '@supabase/supabase-js';
 import { fireEvent, screen, waitFor } from '@testing-library/react-native';
 
-import { ChatRoute as ChatScreen } from '@/navigation/screens/ChatRoute';
+import { ChatScreen } from '@/features/chats/ChatScreen';
 
 import type { ChatSummary } from '@/api/chats';
 import { getChat, listMessages, markChatRead, subscribeToChat } from '@/api/chats';
@@ -365,8 +365,7 @@ describe('ChatScreen: my own dialogue', () => {
 
     await waitFor(() =>
       expect(mockPush).toHaveBeenCalledWith({
-        name: 'ChatSubscribers',
-        params: { chatId: 'chat-1' },
+        name: 'Subscribers', params: { target: { kind: 'chat', id: 'chat-1' } },
       }),
     );
     expect(getMyChatSubscription).not.toHaveBeenCalled();

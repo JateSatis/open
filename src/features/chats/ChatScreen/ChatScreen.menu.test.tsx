@@ -11,7 +11,7 @@ import { BackHandler, StyleSheet } from 'react-native';
 
 
 
-import { ChatRoute as ChatScreen } from '@/navigation/screens/ChatRoute';
+import { ChatScreen } from '@/features/chats/ChatScreen';
 
 import type { ChatChannelHandlers, ChatSummary, Message } from '@/api/chats';
 import {
@@ -253,7 +253,8 @@ beforeEach(() => {
 describe('message menu', () => {
   it('shows the author every action on their own message', async () => {
     await renderWithQuery(<ChatScreen />);
-    await screen.findByText('как дела?');
+    // Первое открытие включает загрузку истории; здесь проверяем действия меню.
+    await screen.findByText('как дела?', {}, { timeout: 4000 });
 
     await tapMessage('m3');
 

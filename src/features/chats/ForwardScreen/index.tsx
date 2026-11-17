@@ -1,3 +1,4 @@
+import { useRouter } from '@/navigation';
 import { useEffect, useRef, useState } from 'react';
 
 import {
@@ -7,7 +8,8 @@ import {
 } from '@/features/chats/composerDraftStore';
 import { ForwardSheet } from '@/features/chats/ForwardSheet';
 
-export function ForwardScreen({ onClose }: { onClose: () => void }) {
+export function ForwardScreen() {
+  const { back: onClose } = useRouter();
   // Лист сохраняет выбор до закрытия, даже когда отправка уже очистила стор.
   const [pick] = useState(readForwardPick);
   const sent = useRef(false);
