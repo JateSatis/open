@@ -1,4 +1,4 @@
-import { useRouter } from 'expo-router';
+import { useRouter } from '@/navigation';
 import { SymbolView } from 'expo-symbols';
 import { ActivityIndicator, View } from 'react-native';
 
@@ -110,7 +110,7 @@ export function PrivacyScreen() {
                     tintColor={theme.textSecondary}
                   />
                 }
-                onPress={() => router.push('/profile/blocked')}
+                onPress={() => router.push({ name: 'Blocked' })}
               />
             </SettingsSection>
           </View>

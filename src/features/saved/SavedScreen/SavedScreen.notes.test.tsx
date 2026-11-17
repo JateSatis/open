@@ -21,15 +21,13 @@ import { resetNotesOutbox, useNotesOutbox } from '@/features/saved/notesStore';
 import { longPressMessage } from '@/test/messageGestures';
 import { renderWithQuery } from '@/test/renderWithQuery';
 
-jest.mock('expo-router', () => ({
+jest.mock('@/navigation', () => ({
   useRouter: () => ({ push: jest.fn() }),
   useNavigation: () => ({ setOptions: jest.fn() }),
   useIsFocused: () => true,
   // Шапка экрана — кнопки поиска и фильтров справа.
-  Stack: {
-    Screen: ({ options }: { options?: { headerRight?: () => unknown } }) =>
+  ScreenOptions: ({ options }: { options?: { headerRight?: () => unknown } }) =>
       options?.headerRight ? options.headerRight() : null,
-  },
 }));
 jest.mock('@/api/supabase', () => ({ supabase: {} }));
 jest.mock('expo-clipboard', () => ({ setStringAsync: jest.fn(() => Promise.resolve(true)) }));

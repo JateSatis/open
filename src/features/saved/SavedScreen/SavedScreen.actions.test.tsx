@@ -18,15 +18,13 @@ import { renderWithQuery } from '@/test/renderWithQuery';
 const mockPush = jest.fn();
 const mockSetOptions = jest.fn();
 
-jest.mock('expo-router', () => ({
+jest.mock('@/navigation', () => ({
   useRouter: () => ({ push: mockPush }),
   useNavigation: () => ({ setOptions: mockSetOptions }),
   useIsFocused: () => true,
   // Шапка экрана — кнопки поиска и фильтров справа.
-  Stack: {
-    Screen: ({ options }: { options?: { headerRight?: () => unknown } }) =>
+  ScreenOptions: ({ options }: { options?: { headerRight?: () => unknown } }) =>
       options?.headerRight ? options.headerRight() : null,
-  },
 }));
 jest.mock('expo-clipboard', () => ({ setStringAsync: jest.fn(() => Promise.resolve(true)) }));
 jest.mock('@/api/supabase', () => ({ supabase: {} }));
@@ -246,7 +244,7 @@ describe('SavedScreen — пересылка', () => {
     await longPressMessage('a');
     await fireEvent.press(await screen.findByRole('menuitem', { name: 'Переслать' }));
 
-    await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/chats/forward'));
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith({ name: 'Forward' }));
     expect(readForwardPick()).toEqual({
       batches: [
         { sourceChat: { id: 'chat-src', name: 'Джиган и Самойлова' }, items: [{ original: live }] },

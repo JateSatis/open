@@ -2,13 +2,14 @@ import { renderHook } from '@testing-library/react-native';
 
 import { useOpenChannel } from './useOpenChannel';
 
+const mockReplace = jest.fn();
 const mockBack = jest.fn();
 const mockPush = jest.fn();
 const mockDispatch = jest.fn();
 let mockState: object = {};
 
-jest.mock('expo-router', () => ({
-  useRouter: () => ({ back: mockBack, push: mockPush }),
+jest.mock('@/navigation', () => ({
+  useRouter: () => ({ replace: mockReplace, back: mockBack, push: mockPush }),
   useNavigation: () => ({ getState: () => mockState, dispatch: mockDispatch }),
 }));
 
@@ -18,35 +19,9 @@ beforeEach(() => {
 
 /** Корневой стек: вкладки, в них стек чатов с экраном канала, сверху просмотр. */
 function viewerAbove(channelId: string) {
-  return {
-    key: 'root',
-    index: 1,
-    routes: [
-      {
-        key: 'tabs',
-        name: '(tabs)',
-        state: {
-          key: 'tabs-nav',
-          index: 0,
-          routes: [
-            {
-              key: 'chats-tab',
-              name: 'chats',
-              state: {
-                key: 'chats-stack',
-                index: 1,
-                routes: [
-                  { key: 'list', name: 'index' },
-                  { key: 'channel-screen', name: 'channel/[channelId]', params: { channelId } },
-                ],
-              },
-            },
-          ],
-        },
-      },
-      { key: 'viewer', name: 'pops/[channelId]' },
-    ],
-  };
+  return { index: 2, routes: [
+    {name: 'Tabs'}, {name: 'Channel', key: 'channel-screen', params: {channelId}}, {name: 'PopViewer'},
+  ]};
 }
 
 async function press(channelId: string, mode: 'under' | 'over') {
@@ -68,9 +43,9 @@ describe('useOpenChannel', () => {
 
     await press('A', 'under');
 
-    expect(mockBack).toHaveBeenCalled();
-    expect(mockPush).toHaveBeenCalledWith({
-      pathname: '/chats/channel/[channelId]',
+    expect(mockBack).not.toHaveBeenCalled();
+    expect(mockReplace).toHaveBeenCalledWith({
+      name: 'Channel',
       params: { channelId: 'A', section: 'pops' },
     });
   });
@@ -89,7 +64,7 @@ describe('useOpenChannel', () => {
 
     expect(mockBack).not.toHaveBeenCalled();
     expect(mockPush).toHaveBeenCalledWith({
-      pathname: '/channel/[channelId]',
+      name: 'Channel',
       params: { channelId: 'B', section: 'pops' },
     });
   });
@@ -106,7 +81,6 @@ describe('useOpenChannel', () => {
       expect.objectContaining({
         type: 'SET_PARAMS',
         source: 'channel-screen',
-        target: 'chats-stack',
         payload: {
           params: expect.objectContaining({
             section: 'pops',
@@ -123,8 +97,8 @@ describe('useOpenChannel', () => {
     await press('A', 'under');
 
     expect(mockDispatch).not.toHaveBeenCalled();
-    expect(mockPush).toHaveBeenCalledWith({
-      pathname: '/chats/channel/[channelId]',
+    expect(mockReplace).toHaveBeenCalledWith({
+      name: 'Channel',
       params: { channelId: 'A', section: 'pops' },
     });
   });

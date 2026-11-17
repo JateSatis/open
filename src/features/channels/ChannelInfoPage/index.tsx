@@ -1,5 +1,5 @@
 import * as Clipboard from 'expo-clipboard';
-import { useRouter } from 'expo-router';
+import { useRouter } from '@/navigation';
 import { useCallback, useState } from 'react';
 
 import { ChannelInfoCards } from './ChannelInfoCards';
@@ -60,11 +60,11 @@ export function ChannelInfoPage({ channel, slideBack }: ChannelInfoPageProps) {
   const openPerson = useCallback(
     (personId: string) => {
       if (personId === currentUserId) {
-        router.navigate('/profile');
+        router.navigate({ name: 'Tabs', params: { screen: 'profile' } });
         return;
       }
 
-      router.push({ pathname: '/chats/people/[userId]', params: { userId: personId } });
+      router.push({ name: 'Person', params: { userId: personId } });
     },
     [currentUserId, router],
   );
@@ -103,7 +103,7 @@ export function ChannelInfoPage({ channel, slideBack }: ChannelInfoPageProps) {
   );
 
   const actions = channelInfoActions(role, subscription, {
-    onNewPop: () => router.push({ pathname: '/pop-editor/[channelId]', params: { channelId } }),
+    onNewPop: () => router.push({ name: 'PopEditor', params: { channelId } }),
     onSubscribers: openSubscribers,
     onSetInChats: (value) => void subscriptionActions.setInChats(value),
     onSetNotify: (value) => void subscriptionActions.setNotify(value),
@@ -164,7 +164,7 @@ export function ChannelInfoPage({ channel, slideBack }: ChannelInfoPageProps) {
                 icon={{ ios: 'pencil', android: 'edit', web: 'edit' }}
                 accessibilityLabel="Изменить"
                 onPress={() =>
-                  router.push({ pathname: '/chats/channel-edit/[channelId]', params: { channelId } })
+                  router.push({ name: 'ChannelEdit', params: { channelId } })
                 }
               />
             ) : null}

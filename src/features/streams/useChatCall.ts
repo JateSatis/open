@@ -1,4 +1,4 @@
-import { useRouter } from 'expo-router';
+import { useRouter } from '@/navigation';
 import { useCallback } from 'react';
 
 import type { ChatSummary } from '@/api/chats';
@@ -51,7 +51,7 @@ export function useChatCall(
     if (!target) return;
 
     if (isInThisCall) {
-      router.push('/call');
+      router.push({ name: 'Call' });
       return;
     }
 
@@ -69,7 +69,7 @@ export function useChatCall(
     if (!target || !stream) return;
 
     if (isInThisCall) {
-      router.push('/call');
+      router.push({ name: 'Call' });
       return;
     }
 

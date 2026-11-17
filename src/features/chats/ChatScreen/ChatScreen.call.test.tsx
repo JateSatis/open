@@ -7,7 +7,7 @@ import type { Session as SupabaseSession } from '@supabase/supabase-js';
 import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
 import { BackHandler } from 'react-native';
 
-import ChatScreen from '@/app/(tabs)/chats/[chatId]';
+import { ChatRoute as ChatScreen } from '@/navigation/screens/ChatRoute';
 
 import type { ChatChannelHandlers, ChatSummary, Message } from '@/api/chats';
 import { getChat, listMessages, subscribeToChat } from '@/api/chats';
@@ -24,14 +24,14 @@ import { renderWithQuery } from '@/test/renderWithQuery';
 
 const mockPush = jest.fn();
 
-jest.mock('expo-router', () => ({
+jest.mock('@/navigation', () => ({
   useIsFocused: () => true,
   useNavigation: () => ({
     getState: () => ({ index: 0, routes: [] }),
     dispatch: jest.fn(),
     addListener: () => () => undefined,
   }),
-  useLocalSearchParams: () => ({ chatId: 'chat-1' }),
+  useRouteParams: () => ({ chatId: 'chat-1' }),
   useRouter: () => ({
     push: mockPush,
     navigate: jest.fn(),
@@ -39,8 +39,7 @@ jest.mock('expo-router', () => ({
     canGoBack: () => true,
   }),
   router: { push: jest.fn() },
-  Stack: {
-    Screen: ({
+  ScreenOptions: ({
       options,
     }: {
       options?: { headerTitle?: () => React.ReactNode; headerRight?: () => React.ReactNode };
@@ -50,7 +49,6 @@ jest.mock('expo-router', () => ({
         {options?.headerRight ? options.headerRight() : null}
       </>
     ),
-  },
 }));
 
 jest.mock('@/api/profile', () => ({ getProfile: jest.fn(() => Promise.resolve(null)) }));
@@ -242,7 +240,7 @@ describe('кнопка «Позвонить»', () => {
       chatTitle: 'Марина',
       isDirect: true,
     });
-    expect(mockPush).toHaveBeenCalledWith('/call');
+    expect(mockPush).toHaveBeenCalledWith({ name: 'Call' });
   });
 
   it('без микрофона звонок не создаётся', async () => {
@@ -341,7 +339,7 @@ describe('полоса звонка', () => {
 
     fireEvent.press(await screen.findByText('Вернуться'));
 
-    expect(mockPush).toHaveBeenCalledWith('/call');
+    expect(mockPush).toHaveBeenCalledWith({ name: 'Call' });
     expect(mockedJoin).not.toHaveBeenCalled();
   });
 });

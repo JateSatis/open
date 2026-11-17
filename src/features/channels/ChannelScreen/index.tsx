@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useIsFocused, useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
+import { useIsFocused, useRouteParams, useNavigation, useRouter } from '@/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, useWindowDimensions, View } from 'react-native';
 import { useDerivedValue, useSharedValue, withTiming } from 'react-native-reanimated';
@@ -23,7 +23,6 @@ import type { ChannelSection } from '@/features/channels/useMarkChannelSectionRe
 import { channelQueryKey, useChannel } from '@/features/channels/useChannel';
 import type { Pop } from '@/api/pops';
 import { ChatConversation } from '@/features/chats/ChatConversation';
-import type { ChatSearchParams } from '@/features/chats/chatSearch/useChatSearch';
 import { closeMediaSheet } from '@/features/chats/MediaPickerSheet';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
 import { popSheetSection } from '@/features/pops/popSheetSection';
@@ -68,7 +67,7 @@ export function ChannelScreen({
   const channel = query.data;
   const state = loadStateOf(query);
   const router = useRouter();
-  const toChats = useCallback(() => router.replace('/chats'), [router]);
+  const toChats = useCallback(() => router.replace({ name: 'Tabs', params: { screen: 'chats' } }), [router]);
   // Одна на маршрут: заглушка и разделы въезжают и уходят одним движением.
   const slide = useSlideBack(toChats);
 
@@ -126,7 +125,7 @@ function ChannelSections({ slide, channel, initialIndex, sectionRequest }: Chann
   const swipeBack = useMemo(() => makeSwipe(canSwipeBack), [canSwipeBack, makeSwipe]);
   const { subscription } = useChannelSubscription(channel.id);
   const navigation = useNavigation();
-  const searchOpen = useLocalSearchParams<ChatSearchParams>().search === '1';
+  const searchOpen = useRouteParams<'Channel'>().search === '1';
   const searching = searchOpen && index === 0;
 
   // Поиск — по постам: ушли на «Попсы» — поиск закрывается, иначе шапка
@@ -153,7 +152,7 @@ function ChannelSections({ slide, channel, initialIndex, sectionRequest }: Chann
         onAdd: () => {
           closeMediaSheet();
           router.push({
-            pathname: '/pop-editor/[channelId]',
+            name: 'PopEditor',
             params: { channelId: channel.id, from: 'posts' },
           });
         },
@@ -212,7 +211,7 @@ function ChannelSections({ slide, channel, initialIndex, sectionRequest }: Chann
       right: <ChannelMenu channelId={channel.id} isOwner={isOwner} />,
       onTitlePress: () =>
         router.push({
-          pathname: '/chats/channel-info/[channelId]',
+          name: 'ChannelInfo',
           params: { channelId: channel.id },
         }),
     }),

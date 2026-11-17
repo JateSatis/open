@@ -1,6 +1,6 @@
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react-native';
 
-import SearchPopViewerRoute from '@/app/pops/search';
+import { PopViewerRoute as SearchPopViewerRoute } from '@/navigation/screens/PopViewerRoute';
 
 import { canPublishInChannel, recordPopViews } from '@/api/pops';
 import { acquirePopTopic } from '@/api/popTopics';
@@ -14,8 +14,8 @@ const mockBack = jest.fn();
 const mockPush = jest.fn();
 let mockParams: { q: string; start: string } = { q: 'елка', start: 'b' };
 
-jest.mock('expo-router', () => ({
-  useLocalSearchParams: () => mockParams,
+jest.mock('@/navigation', () => ({
+  useRouteParams: () => ({ source: 'search', query: mockParams.q, startId: mockParams.start }),
   useRouter: () => ({ back: mockBack, push: mockPush }),
   useIsFocused: () => true,
   useNavigation: () => ({
@@ -132,7 +132,7 @@ it('the channel name opens that channel above the viewer, on its «Попсы»'
   fireEvent.press(within(screen.getByTestId('pop-page-active')).getByTestId('pop-channel-name'));
 
   expect(mockPush).toHaveBeenCalledWith({
-    pathname: '/channel/[channelId]',
+    name: 'Channel',
     params: { channelId: 'B', section: 'pops' },
   });
   expect(mockBack).not.toHaveBeenCalled();

@@ -1,6 +1,6 @@
 import { act, render, screen } from '@testing-library/react-native';
 
-import ForwardRoute from '@/app/(tabs)/chats/forward';
+import { ForwardRoute } from '@/navigation/screens/ForwardRoute';
 
 import * as drafts from '@/features/chats/composerDraftStore';
 import { ForwardSheet } from '@/features/chats/ForwardSheet';
@@ -8,7 +8,7 @@ import { original } from '@/test/islands';
 
 const mockBack = jest.fn();
 
-jest.mock('expo-router', () => ({ useRouter: () => ({ back: mockBack }) }));
+jest.mock('@/navigation', () => ({ useRouter: () => ({ back: mockBack }) }));
 jest.mock('@/features/chats/ForwardSheet', () => ({ ForwardSheet: jest.fn(() => null) }));
 jest.mock('@/features/recs/journal/chatJournal', () => ({
   forwardPickerOpened: jest.fn(),

@@ -1,4 +1,4 @@
-import { Stack, useRouter } from 'expo-router';
+import { ScreenOptions, useRouter } from '@/navigation';
 import { ActivityIndicator, FlatList, View } from 'react-native';
 
 import { styles } from './styles';
@@ -22,11 +22,11 @@ export function UserChats({ userId }: { userId: string }) {
   const { chats, isLoading, isLoadingMore, hasMore, error, loadMore } = useChatsOf(userId);
   const title = profile ? `Диалоги: ${displayNameOf(profile)}` : 'Диалоги';
 
-  const open = (chatId: string) => router.push({ pathname: '/chats/[chatId]', params: { chatId } });
+  const open = (chatId: string) => router.push({ name: 'Chat', params: { chatId } });
 
   return (
     <Screen edges={['bottom']} contentContainerStyle={styles.screen}>
-      <Stack.Screen options={{ title }} />
+      <ScreenOptions options={{ title }} />
 
       {isLoading ? (
         <View style={styles.centered}>

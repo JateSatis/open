@@ -7,7 +7,7 @@ import type { Session as SupabaseSession } from '@supabase/supabase-js';
 import { fireEvent, screen } from '@testing-library/react-native';
 import { BackHandler, FlatList } from 'react-native';
 
-import ChatScreen from '@/app/(tabs)/chats/[chatId]';
+import { ChatRoute as ChatScreen } from '@/navigation/screens/ChatRoute';
 
 import type { ChatSummary, ForwardedComment, Message } from '@/api/chats';
 import { getChat, listDeletedMessageIds, listMessages, subscribeToChat } from '@/api/chats';
@@ -29,16 +29,16 @@ const mockDispatch = jest.fn();
 let mockParams: Record<string, string> = { chatId: 'chat-1' };
 let mockStack: { index: number; routes: Route[] } = { index: 0, routes: [] };
 
-jest.mock('expo-router', () => ({
+jest.mock('@/navigation', () => ({
   useIsFocused: () => true,
   useNavigation: () => ({
     getState: () => mockStack,
     dispatch: mockDispatch,
     addListener: () => () => undefined,
   }),
-  useLocalSearchParams: () => mockParams,
+  useRouteParams: () => mockParams,
   useRouter: () => ({ push: mockPush, navigate: jest.fn() }),
-  Stack: { Screen: () => null },
+  ScreenOptions: () => null,
 }));
 
 jest.mock('@/features/pops/openPopViewer', () => ({ openPopViewer: jest.fn() }));

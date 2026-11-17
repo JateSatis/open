@@ -26,7 +26,7 @@ import {
 } from '@/api/subscriptions';
 import { ConfirmDialogHost } from '@/components/ConfirmDialog';
 import { resetConfirmDialogQueue } from '@/components/ConfirmDialog/store';
-import ChatScreen from '@/app/(tabs)/chats/[chatId]';
+import { ChatRoute as ChatScreen } from '@/navigation/screens/ChatRoute';
 import { useSession } from '@/features/auth/useSession';
 import { readChatDraft, resetComposerDrafts } from '@/features/chats/composerDraftStore';
 import { resetOutbox } from '@/features/chats/messages/outbox';
@@ -44,22 +44,21 @@ jest.mock('@/api/reactions', () => ({
   listMessageReactions: jest.fn(() => Promise.resolve([])),
   setMessageReaction: jest.fn(),
 }));
-// Шапка ставится через Stack.Screen — мок рисует её заголовок и правую часть в дереве.
-jest.mock('expo-router', () => ({
+// Шапка ставится через ScreenOptions — мок рисует её заголовок и правую часть в дереве.
+jest.mock('@/navigation', () => ({
   useIsFocused: () => true,
   useNavigation: () => ({
     getState: () => ({ index: 0, routes: [] }),
     dispatch: jest.fn(),
     addListener: () => () => undefined,
   }),
-  useLocalSearchParams: () => mockParams,
+  useRouteParams: () => mockParams,
   useRouter: () => ({ push: jest.fn(), navigate: jest.fn(), replace: jest.fn() }),
   Redirect: ({ href }: { href: unknown }) => {
     mockRedirect(href);
     return null;
   },
-  Stack: {
-    Screen: ({
+  ScreenOptions: ({
       options,
     }: {
       options?: { headerTitle?: () => React.ReactNode; headerRight?: () => React.ReactNode };
@@ -69,7 +68,6 @@ jest.mock('expo-router', () => ({
         {options?.headerRight ? options.headerRight() : null}
       </>
     ),
-  },
 }));
 
 jest.mock('@/api/profile', () => ({ getProfile: jest.fn(() => Promise.resolve(null)) }));
@@ -576,7 +574,7 @@ describe('ChatScreen for a posts chat', () => {
 
     await waitFor(() =>
       expect(mockRedirect).toHaveBeenCalledWith({
-        pathname: '/chats/channel/[channelId]',
+        name: 'Channel',
         params: { channelId: 'channel-1' },
       }),
     );
@@ -596,7 +594,7 @@ describe('ChatScreen for a posts chat', () => {
 
     await waitFor(() =>
       expect(mockRedirect).toHaveBeenCalledWith({
-        pathname: '/chats/channel/[channelId]',
+        name: 'Channel',
         params: {
           channelId: 'channel-1',
         },

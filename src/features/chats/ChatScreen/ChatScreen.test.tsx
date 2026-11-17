@@ -15,7 +15,7 @@ import {
   within,
 } from '@testing-library/react-native';
 
-import ChatScreen from '@/app/(tabs)/chats/[chatId]';
+import { ChatRoute as ChatScreen } from '@/navigation/screens/ChatRoute';
 
 import type { ChatChannelHandlers, ChatSummary, Message } from '@/api/chats';
 import { getChat, listMessages, markChatRead, sendMessage, subscribeToChat } from '@/api/chats';
@@ -35,7 +35,7 @@ const mockPush = jest.fn();
 const mockNavigate = jest.fn();
 const mockRedirect = jest.fn();
 
-// Шапку экран ставит через Stack.Screen — мок рисует её прямо в дереве, чтобы
+// Шапку экран ставит через ScreenOptions — мок рисует её прямо в дереве, чтобы
 // статус собеседника и тап по шапке можно было проверить.
 jest.mock('@/api/messageViews');
 jest.mock('@/api/reactions', () => ({
@@ -43,7 +43,7 @@ jest.mock('@/api/reactions', () => ({
   listMessageReactions: jest.fn(() => Promise.resolve([])),
   setMessageReaction: jest.fn(),
 }));
-jest.mock('expo-router', () => ({
+jest.mock('@/navigation', () => ({
   Redirect: ({ href }: { href: unknown }) => {
     mockRedirect(href);
     return null;
@@ -54,12 +54,10 @@ jest.mock('expo-router', () => ({
     dispatch: jest.fn(),
     addListener: () => () => undefined,
   }),
-  useLocalSearchParams: () => ({ chatId: 'chat-1' }),
+  useRouteParams: () => ({ chatId: 'chat-1' }),
   useRouter: () => ({ push: mockPush, navigate: mockNavigate }),
-  Stack: {
-    Screen: ({ options }: { options?: { headerTitle?: () => React.ReactNode } }) =>
+  ScreenOptions: ({ options }: { options?: { headerTitle?: () => React.ReactNode } }) =>
       options?.headerTitle ? options.headerTitle() : null,
-  },
 }));
 
 jest.mock('@/api/profile', () => ({ getProfile: jest.fn() }));
@@ -250,7 +248,7 @@ describe('ChatScreen', () => {
       await renderWithQuery(<ChatScreen />);
       await waitFor(() =>
         expect(mockRedirect).toHaveBeenCalledWith({
-          pathname: '/chats/channel/[channelId]',
+          name: 'Channel',
           params: { channelId: 'channel-1' },
         }),
       );
@@ -271,7 +269,7 @@ describe('ChatScreen', () => {
 
     // Свой диалог, как и группа, ведёт на страницу информации, а не в профиль.
     await user.press(screen.getByLabelText('О чате: Разговор'));
-    expect(mockPush).toHaveBeenCalledWith('/chats/chat-info/chat-1');
+    expect(mockPush).toHaveBeenCalledWith({ name: 'ChatInfo', params: { chatId: 'chat-1' } });
   });
 
   it('opens «О чате» from a tap on the header of a group', async () => {
@@ -281,7 +279,7 @@ describe('ChatScreen', () => {
     await renderWithQuery(<ChatScreen />);
     await user.press(await screen.findByLabelText('О чате: Разговор'));
 
-    expect(mockPush).toHaveBeenCalledWith('/chats/chat-info/chat-1');
+    expect(mockPush).toHaveBeenCalledWith({ name: 'ChatInfo', params: { chatId: 'chat-1' } });
     expect(screen.queryByLabelText('Профиль: Разговор')).toBeNull();
   });
 
@@ -317,7 +315,7 @@ describe('ChatScreen', () => {
     await renderWithQuery(<ChatScreen />);
     await user.press(await screen.findByLabelText('О чате: Разговор'));
 
-    expect(mockPush).toHaveBeenCalledWith('/chats/chat-info/chat-1');
+    expect(mockPush).toHaveBeenCalledWith({ name: 'ChatInfo', params: { chatId: 'chat-1' } });
   });
 
   it('opens the author profile from a tap on their avatar in a group', async () => {
@@ -332,7 +330,7 @@ describe('ChatScreen', () => {
     await screen.findByText('привет');
     await user.press(screen.getByLabelText('Профиль: Марина'));
 
-    expect(mockPush).toHaveBeenCalledWith('/chats/people/user-2');
+    expect(mockPush).toHaveBeenCalledWith({ name: 'Person', params: { userId: 'user-2' } });
   });
 
   it('участник личного диалога не видит у собеседника ни имени, ни аватара', async () => {
@@ -369,7 +367,7 @@ describe('ChatScreen', () => {
 
     await user.press(screen.getByLabelText('Профиль: Марина'));
 
-    expect(mockPush).toHaveBeenCalledWith('/chats/people/user-2');
+    expect(mockPush).toHaveBeenCalledWith({ name: 'Person', params: { userId: 'user-2' } });
   });
 
   it('shows the conversation to anyone who opens it', async () => {

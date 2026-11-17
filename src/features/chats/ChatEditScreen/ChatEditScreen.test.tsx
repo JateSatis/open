@@ -46,13 +46,11 @@ jest.mock('@/features/media', () => ({
 const mockBack = jest.fn();
 
 // Галочка живёт в шапке стека — мок рисует её прямо на экране.
-jest.mock('expo-router', () => ({
+jest.mock('@/navigation', () => ({
   useRouter: () => ({ back: mockBack }),
   useNavigation: () => ({ addListener: () => () => undefined, dispatch: jest.fn() }),
-  Stack: {
-    Screen: ({ options }: { options?: { headerRight?: () => ReactNode } }) =>
+  ScreenOptions: ({ options }: { options?: { headerRight?: () => ReactNode } }) =>
       options?.headerRight ? options.headerRight() : null,
-  },
 }));
 
 // Шит аватарки — свой тест; здесь — кто его открывает и что делает с итогом.

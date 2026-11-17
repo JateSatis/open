@@ -1,6 +1,6 @@
 import type { FlashListRef } from '@shopify/flash-list';
 import { useQueryClient } from '@tanstack/react-query';
-import { useRouter } from 'expo-router';
+import { useRouter } from '@/navigation';
 import { useCallback, useEffect, useMemo, useRef, type RefObject } from 'react';
 import type { TextInput } from 'react-native';
 
@@ -170,7 +170,7 @@ export function usePanelActions({
       // Окно панели — поверх экранов: выбор чата открывается за ним.
       close();
       router.push({
-        pathname: '/chats/forward',
+        name: 'Forward',
         params: hostChatId ? { from: hostChatId } : {},
       });
     },

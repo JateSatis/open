@@ -1,4 +1,4 @@
-import { useNavigation, useRouter } from 'expo-router';
+import { useNavigation, useRouter } from '@/navigation';
 import { useCallback } from 'react';
 
 
@@ -23,7 +23,7 @@ export function useToPosts(channelId: string, close: () => void) {
       const below = state ? state.routes[state.index - 1] : undefined;
 
       if (
-        below?.name === 'channel/[channelId]' &&
+        below?.name === 'Channel' &&
         (below.params as { channelId?: string } | undefined)?.channelId === channelId
       ) {
         navigation.dispatch({
@@ -35,7 +35,7 @@ export function useToPosts(channelId: string, close: () => void) {
         return;
       }
 
-      router.push({ pathname: '/chats/channel/[channelId]', params: { channelId, ...params } });
+      router.push({ name: 'Channel', params: { channelId, ...params } });
     },
     [channelId, close, navigation, router],
   );

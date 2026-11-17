@@ -1,4 +1,4 @@
-import { Stack, useRouter } from 'expo-router';
+import { ScreenOptions, useRouter } from '@/navigation';
 import { useCallback, useRef, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
@@ -147,7 +147,7 @@ function ChannelEditForm({ channel }: { channel: Channel }) {
 
   return (
     <>
-      <Stack.Screen
+      <ScreenOptions
         options={{
           title: 'Изменить',
           headerRight: () => (

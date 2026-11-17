@@ -1,6 +1,6 @@
 import { screen, userEvent, waitFor, within } from '@testing-library/react-native';
 
-import PrivacyRoute from '@/app/(tabs)/profile/privacy';
+import { PrivacyRoute } from '@/navigation/screens/PrivacyRoute';
 
 import { getMyPrivacySettings, setPrivacySetting, type PrivacySettings } from '@/api/privacy';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -9,7 +9,7 @@ import { Colors } from '@/theme';
 
 const mockPush = jest.fn();
 
-jest.mock('expo-router', () => ({ useRouter: () => ({ push: mockPush }) }));
+jest.mock('@/navigation', () => ({ useRouter: () => ({ push: mockPush }) }));
 jest.mock('@/api/supabase', () => ({ supabase: {} }));
 jest.mock('@/api/friends', () => ({}));
 jest.mock('@/api/privacy', () => ({
@@ -177,7 +177,7 @@ describe('Конфиденциальность и безопасность', () 
     await renderWithQuery(<PrivacyRoute />);
     await user.press(await screen.findByTestId('privacy-blocked'));
 
-    expect(mockPush).toHaveBeenCalledWith('/profile/blocked');
+    expect(mockPush).toHaveBeenCalledWith({ name: 'Blocked' });
     expect(screen.getByText(/могут прислать заявку — одно сообщение без медиа/)).toBeTruthy();
     expect(screen.queryByText('Заявки на диалог')).toBeNull();
   });

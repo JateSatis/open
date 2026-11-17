@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { router } from '@/navigation';
 import { create } from 'zustand';
 
 import type { IncomingCall } from '@/api/chats';
@@ -42,7 +42,7 @@ export function ring(call: IncomingCall, now: number = Date.now()) {
   if (isInCall()) {
     showNotice(`Входящий звонок · ${incomingTitle(call)}`, 'info', {
       label: 'Открыть чат',
-      run: () => router.push(`/chats/${call.chatId}`),
+      run: () => router.push({ name: 'Chat', params: { chatId: call.chatId } }),
     });
     return;
   }

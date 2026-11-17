@@ -1,4 +1,4 @@
-import { useRouter } from 'expo-router';
+import { useRouter } from '@/navigation';
 import { useCallback, useEffect } from 'react';
 
 import type { Pop } from '@/api/pops';
@@ -34,8 +34,8 @@ export function usePopComments(canPublish: boolean) {
     (personId: string) => {
       router.back();
 
-      if (personId === currentUserId) router.navigate('/profile');
-      else router.push(`/chats/people/${personId}`);
+      if (personId === currentUserId) router.navigate({ name: 'Tabs', params: { screen: 'profile' } });
+      else router.push({ name: 'Person', params: { userId: personId } });
     },
     [currentUserId, router],
   );

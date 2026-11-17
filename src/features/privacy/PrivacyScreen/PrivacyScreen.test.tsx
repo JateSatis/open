@@ -11,7 +11,7 @@ import {
 } from '@/api/privacy';
 import { renderWithQuery } from '@/features/profile/renderWithQuery';
 
-jest.mock('expo-router', () => ({ useRouter: () => ({ push: jest.fn() }) }));
+jest.mock('@/navigation', () => ({ useRouter: () => ({ push: jest.fn() }) }));
 jest.mock('@/api/supabase', () => ({ supabase: {} }));
 jest.mock('@/features/chats/useCurrentUserId', () => ({ useCurrentUserId: () => 'me' }));
 jest.mock('@/api/privacy', () => {

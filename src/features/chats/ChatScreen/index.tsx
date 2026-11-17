@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { Redirect, useRouter } from 'expo-router';
+import { Redirect, useRouter } from '@/navigation';
 import { useCallback } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 
@@ -36,14 +36,14 @@ export function ChatScreen({ chatId }: { chatId: string }) {
   const { chat, isLoading, failed } = useChat(chatId);
   const known = chat ?? listed ?? null;
   const router = useRouter();
-  const toChats = useCallback(() => router.replace('/chats'), [router]);
+  const toChats = useCallback(() => router.replace({ name: 'Tabs', params: { screen: 'chats' } }), [router]);
   const slide = useSlideBack(toChats);
 
   if (known?.channel) {
     return (
       <Redirect
         href={{
-          pathname: '/chats/channel/[channelId]',
+          name: 'Channel',
           params: { channelId: known.channel.id },
         }}
       />

@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useRouter } from 'expo-router';
+import { useRouter } from '@/navigation';
 import { useCallback } from 'react';
 
 import type { ChatSummary, Person } from '@/api/chats';
@@ -62,7 +62,7 @@ export function useGroupActions(chat: ChatSummary, currentUserId: string | null)
     );
     void queryClient.invalidateQueries({ queryKey: chatsQueryKey });
     void queryClient.invalidateQueries({ queryKey: chatQueryKey(chatId) });
-    router.dismissTo('/chats');
+    router.navigate({ name: 'Tabs', params: { screen: 'chats' } });
   }, [chatId, queryClient, router]);
 
   const leave = useCallback(async () => {

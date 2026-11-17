@@ -23,7 +23,7 @@ import { island, original } from '@/test/islands';
 
 // Только путь с медиа: остальное поведение (текст, повтор, догрузка после
 // обрыва связи) уже проверено через экран чата в
-// `src/app/(tabs)/chats/[chatId].test.tsx`, который использует этот хук как
+// `src/features/chats/ChatScreen/ChatScreen.test.tsx`, который использует этот хук как
 // есть.
 jest.mock('@/api/messageViews');
 jest.mock('@/api/reactions', () => ({

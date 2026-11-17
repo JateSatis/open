@@ -7,7 +7,7 @@ import type { Session as SupabaseSession } from '@supabase/supabase-js';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react-native';
 import { BackHandler } from 'react-native';
 
-import ChatScreen from '@/app/(tabs)/chats/[chatId]';
+import { ChatRoute as ChatScreen } from '@/navigation/screens/ChatRoute';
 
 import type { ChatChannelHandlers, ChatSummary, Message } from '@/api/chats';
 import { getChat, listDeletedMessageIds, listMessages, subscribeToChat } from '@/api/chats';
@@ -24,7 +24,7 @@ import { PRIMARY_REACTIONS } from '@/features/interactions/reactionSet';
 import { renderWithQuery } from '@/test/renderWithQuery';
 import { longPressMessage, startSelecting } from '@/test/messageGestures';
 
-// Шапку экран ставит через Stack.Screen — мок рисует и заголовок, и правую
+// Шапку экран ставит через ScreenOptions — мок рисует и заголовок, и правую
 // кнопку прямо в дереве: так видно «Выбрано: N» и «Отмена».
 jest.mock('@/api/messageViews');
 jest.mock('@/api/reactions', () => ({
@@ -32,17 +32,16 @@ jest.mock('@/api/reactions', () => ({
   listMessageReactions: jest.fn(() => Promise.resolve([])),
   setMessageReaction: jest.fn(),
 }));
-jest.mock('expo-router', () => ({
+jest.mock('@/navigation', () => ({
   useIsFocused: () => true,
   useNavigation: () => ({
     getState: () => ({ index: 0, routes: [] }),
     dispatch: jest.fn(),
     addListener: () => () => undefined,
   }),
-  useLocalSearchParams: () => ({ chatId: 'chat-1' }),
+  useRouteParams: () => ({ chatId: 'chat-1' }),
   useRouter: () => ({ push: jest.fn(), navigate: jest.fn() }),
-  Stack: {
-    Screen: ({
+  ScreenOptions: ({
       options,
     }: {
       options?: { headerTitle?: () => React.ReactNode; headerRight?: () => React.ReactNode };
@@ -52,7 +51,6 @@ jest.mock('expo-router', () => ({
         {options?.headerRight ? options.headerRight() : null}
       </>
     ),
-  },
 }));
 
 jest.mock('@/api/profile', () => ({ getProfile: jest.fn(() => Promise.resolve(null)) }));

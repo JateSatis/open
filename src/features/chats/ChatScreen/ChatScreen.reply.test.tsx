@@ -10,7 +10,7 @@ import { FlatList } from 'react-native';
 import { State } from 'react-native-gesture-handler';
 import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils';
 
-import ChatScreen from '@/app/(tabs)/chats/[chatId]';
+import { ChatRoute as ChatScreen } from '@/navigation/screens/ChatRoute';
 
 import type { ChatSummary, Message, QuotedMessage } from '@/api/chats';
 import {
@@ -37,16 +37,16 @@ jest.mock('@/api/reactions', () => ({
   listMessageReactions: jest.fn(() => Promise.resolve([])),
   setMessageReaction: jest.fn(),
 }));
-jest.mock('expo-router', () => ({
+jest.mock('@/navigation', () => ({
   useIsFocused: () => true,
   useNavigation: () => ({
     getState: () => ({ index: 0, routes: [] }),
     dispatch: jest.fn(),
     addListener: () => () => undefined,
   }),
-  useLocalSearchParams: () => ({ chatId: 'chat-1' }),
+  useRouteParams: () => ({ chatId: 'chat-1' }),
   useRouter: () => ({ push: mockPush, navigate: jest.fn() }),
-  Stack: { Screen: () => null },
+  ScreenOptions: () => null,
 }));
 
 jest.mock('@/api/profile', () => ({ getProfile: jest.fn(() => Promise.resolve(null)) }));
@@ -451,7 +451,7 @@ describe('forwarding', () => {
     await tapMessage('m2');
     await choose('Переслать');
 
-    expect(mockPush).toHaveBeenCalledWith({ pathname: '/chats/forward', params: { from: 'chat-1' } });
+    expect(mockPush).toHaveBeenCalledWith({ name: 'Forward', params: { from: 'chat-1' } });
     // Пересылается оригинал целиком — с автором и чатом, откуда пересылают.
     expect(useComposerDrafts.getState().forwardPick).toEqual({
       sourceChat: { id: 'chat-1', name: expect.any(String) },

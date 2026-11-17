@@ -6,4 +6,5 @@ export const SLIDE_PAGE = {
   headerShown: false,
   presentation: 'transparentModal',
   animation: 'none',
+  gestureEnabled: false,
 } as const;

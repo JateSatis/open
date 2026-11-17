@@ -1,4 +1,4 @@
-import { useRouter } from 'expo-router';
+import { useRouter } from '@/navigation';
 
 import { channelMenuActions, type ChannelMenuItem } from './actions';
 
@@ -24,7 +24,7 @@ export function ChannelMenu({ channelId, isOwner }: ChannelMenuProps) {
   const run = (item: ChannelMenuItem) => {
     switch (item) {
       case 'subscribers':
-        router.push({ pathname: '/chats/channel-subscribers/[channelId]', params: { channelId } });
+        router.push({ name: 'ChannelSubscribers', params: { channelId } });
         return;
       case 'mute':
         void actions.setNotify(false);

@@ -1,7 +1,7 @@
 import type { Session as SupabaseSession } from '@supabase/supabase-js';
 import { fireEvent, screen, userEvent, waitFor } from '@testing-library/react-native';
 
-import NewChannelScreen from '@/app/(tabs)/chats/new-channel';
+import { NewChannelRoute as NewChannelScreen } from '@/navigation/screens/NewChannelRoute';
 
 import { ChannelUsernameTakenError, createChannel } from '@/api/channels';
 import { isUsernameAvailable } from '@/api/usernames';
@@ -11,7 +11,7 @@ import { renderWithQuery } from '@/test/renderWithQuery';
 
 const mockReplace = jest.fn();
 
-jest.mock('expo-router', () => ({
+jest.mock('@/navigation', () => ({
   useRouter: () => ({ replace: mockReplace, push: jest.fn() }),
 }));
 
@@ -140,7 +140,7 @@ describe('NewChannelScreen', () => {
 
     await user.press(createButton());
 
-    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/chats/channel/channel-1'));
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith({ name: 'Channel', params: { channelId: 'channel-1' } }));
     expect(mockedCreate).toHaveBeenCalledWith(
       { title: 'Мой канал', username: 'my_channel', description: null, avatarUrl: null },
       expect.anything(),

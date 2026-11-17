@@ -1,7 +1,7 @@
 import type { Session as SupabaseSession } from '@supabase/supabase-js';
 import { screen, userEvent, waitFor } from '@testing-library/react-native';
 
-import InvitesScreen from '@/app/(tabs)/chats/invites';
+import { InvitesRoute as InvitesScreen } from '@/navigation/screens/InvitesRoute';
 
 import type { ChatSummary } from '@/api/chats';
 import { blockUser, reportUser } from '@/api/blocks';
@@ -15,7 +15,7 @@ import { renderWithQuery } from '@/test/renderWithQuery';
 const mockPush = jest.fn();
 const mockNavigate = jest.fn();
 
-jest.mock('expo-router', () => ({
+jest.mock('@/navigation', () => ({
   useIsFocused: () => true,
   useRouter: () => ({ push: mockPush, navigate: mockNavigate }),
 }));
@@ -198,7 +198,7 @@ describe('InvitesScreen', () => {
     await renderWithQuery(<InvitesScreen />);
     await user.press(await screen.findByLabelText('Открыть чат: Поход'));
 
-    expect(mockPush).toHaveBeenCalledWith('/chats/chat-7');
+    expect(mockPush).toHaveBeenCalledWith({ name: 'Chat', params: { chatId: 'chat-7' } });
   });
 
   it('pushes the inviter’s profile onto the chats stack', async () => {
@@ -208,7 +208,7 @@ describe('InvitesScreen', () => {
     await renderWithQuery(<InvitesScreen />);
     await user.press(await screen.findByLabelText('Профиль: Марина'));
 
-    expect(mockPush.mock.calls).toEqual([['/chats/people/user-2']]);
+    expect(mockPush.mock.calls).toEqual([[{ name: 'Person', params: { userId: 'user-2' } }]]);
     expect(mockNavigate).not.toHaveBeenCalled();
   });
 
@@ -219,7 +219,7 @@ describe('InvitesScreen', () => {
     await renderWithQuery(<InvitesScreen />);
     await user.press(await screen.findByLabelText('Профиль: Марина'));
 
-    expect(mockNavigate.mock.calls).toEqual([['/profile']]);
+    expect(mockNavigate.mock.calls).toEqual([[{ name: 'Tabs', params: { screen: 'profile' } }]]);
     expect(mockPush).not.toHaveBeenCalled();
   });
 

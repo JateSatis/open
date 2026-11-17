@@ -1,22 +1,22 @@
 import { screen, userEvent, waitFor } from '@testing-library/react-native';
 
-import BirthDateRoute from '@/app/birth-date';
-import Index from '@/app/index';
-import TabsLayout from '@/app/(tabs)/_layout';
+import { AppRouter } from '@/app/AppRouter';
 
 import { deleteMyAccount, signOutLocally } from '@/api/account';
 import { BirthDateTooYoungError, getMyPrivacySettings, setBirthDate } from '@/api/privacy';
 import { useSession } from '@/features/auth/useSession';
 import { renderWithQuery } from '@/test/renderWithQuery';
 
-jest.mock('expo-router', () => {
-  const { Text: MockText } = jest.requireActual('react-native');
-
-  return {
-    // Куда увела навигация — видно на экране текстом.
-    Redirect: ({ href }: { href: string }) => <MockText>{`redirect:${href}`}</MockText>,
-    Tabs: Object.assign(() => <MockText>вкладки</MockText>, { Screen: () => null }),
-  };
+jest.mock('@/navigation/screens', () => {
+  const { Text } = require('react-native');
+  return new Proxy({ __esModule: true,
+    BirthDateScreen: require('@/features/privacy/BirthDateScreen').BirthDateScreen,
+    SignInScreen: () => <Text>Вход</Text>,
+  }, {get: (target, key: string) => Reflect.get(target, key) ?? (() => null)});
+});
+jest.mock('@/navigation/MainTabs', () => {
+  const { Text } = require('react-native');
+  return { MainTabs: () => <Text>вкладки</Text> };
 });
 
 jest.mock('@/api/supabase', () => ({ supabase: {} }));
@@ -95,22 +95,22 @@ beforeEach(() => {
 
 describe('ворота даты рождения', () => {
   it('К2.1 без даты вкладки не показываются — вместо них экран даты', async () => {
-    await renderWithQuery(<TabsLayout />);
+    await renderWithQuery(<AppRouter />);
 
-    expect(await screen.findByText('redirect:/birth-date')).toBeTruthy();
+    expect(await screen.findByText('Дата рождения')).toBeTruthy();
     expect(screen.queryByText('вкладки')).toBeNull();
   });
 
   it('К2.1 холодный старт без даты ведёт на экран даты', async () => {
-    await renderWithQuery(<Index />);
+    await renderWithQuery(<AppRouter />);
 
-    expect(await screen.findByText('redirect:/birth-date')).toBeTruthy();
+    expect(await screen.findByText('Дата рождения')).toBeTruthy();
   });
 
   it('пока ответа нет, вкладки не мелькают', async () => {
     mocked.getMyPrivacySettings.mockReturnValue(new Promise(() => {}));
 
-    await renderWithQuery(<TabsLayout />);
+    await renderWithQuery(<AppRouter />);
 
     expect(screen.queryByText('вкладки')).toBeNull();
   });
@@ -121,7 +121,7 @@ describe('ворота даты рождения', () => {
       friendsListVisibility: 'everyone',
     });
 
-    await renderWithQuery(<TabsLayout />);
+    await renderWithQuery(<AppRouter />);
     expect(await screen.findByText('вкладки')).toBeTruthy();
   });
 
@@ -131,23 +131,23 @@ describe('ворота даты рождения', () => {
       friendsListVisibility: 'everyone',
     });
 
-    await renderWithQuery(<BirthDateRoute />);
+    await renderWithQuery(<AppRouter />);
 
-    expect(await screen.findByText('redirect:/(tabs)/chats')).toBeTruthy();
+    expect(await screen.findByText('вкладки')).toBeTruthy();
   });
 
   it('не вошёл — экран даты ведёт ко входу', async () => {
     mocked.useSession.mockReturnValue({ session: null, isAuthenticated: false, isLoading: false });
 
-    await renderWithQuery(<BirthDateRoute />);
+    await renderWithQuery(<AppRouter />);
 
-    expect(await screen.findByText('redirect:/(auth)/sign-in')).toBeTruthy();
+    expect(await screen.findByText('Вход')).toBeTruthy();
   });
 });
 
 describe('экран даты рождения', () => {
   it('говорит, что дату не видит никто, и без даты дальше не пускает', async () => {
-    await renderWithQuery(<BirthDateRoute />);
+    await renderWithQuery(<AppRouter />);
 
     expect(await screen.findByText('Дата рождения')).toBeTruthy();
     expect(screen.getByText(/Дату рождения не видит никто, кроме вас/)).toBeTruthy();
@@ -160,17 +160,17 @@ describe('экран даты рождения', () => {
     ['13–17', 15],
   ])('К2.2 дата %s — во вкладки «Чаты»', async (_label, years) => {
     serverAcceptsDate();
-    await renderWithQuery(<BirthDateRoute />);
+    await renderWithQuery(<AppRouter />);
 
     await pickAndContinue(yearsAgo(years));
 
     await waitFor(() => expect(mocked.setBirthDate).toHaveBeenCalledWith(dateOnly(yearsAgo(years))));
-    expect(await screen.findByText('redirect:/(tabs)/chats')).toBeTruthy();
+    expect(await screen.findByText('вкладки')).toBeTruthy();
   });
 
   it('К2.3 12 лет — отказ; «Изменить дату» возвращает к полю, 14 лет пускает', async () => {
     mocked.setBirthDate.mockRejectedValueOnce(new BirthDateTooYoungError());
-    await renderWithQuery(<BirthDateRoute />);
+    await renderWithQuery(<AppRouter />);
 
     await pickAndContinue(yearsAgo(12));
 
@@ -183,13 +183,13 @@ describe('экран даты рождения', () => {
 
     await pickAndContinue(yearsAgo(14));
 
-    expect(await screen.findByText('redirect:/(tabs)/chats')).toBeTruthy();
+    expect(await screen.findByText('вкладки')).toBeTruthy();
   });
 
   it('К2.4 «Выйти» на отказе удаляет аккаунт и выходит', async () => {
     mocked.setBirthDate.mockRejectedValue(new BirthDateTooYoungError());
     mocked.deleteMyAccount.mockResolvedValue(undefined);
-    await renderWithQuery(<BirthDateRoute />);
+    await renderWithQuery(<AppRouter />);
 
     await pickAndContinue(yearsAgo(12));
     await userEvent.setup().press(await screen.findByText('Выйти'));
@@ -201,7 +201,7 @@ describe('экран даты рождения', () => {
   it('удаление не прошло — понятный текст, аккаунт не брошен молча', async () => {
     mocked.setBirthDate.mockRejectedValue(new BirthDateTooYoungError());
     mocked.deleteMyAccount.mockRejectedValue(new Error('offline'));
-    await renderWithQuery(<BirthDateRoute />);
+    await renderWithQuery(<AppRouter />);
 
     await pickAndContinue(yearsAgo(12));
     await userEvent.setup().press(await screen.findByText('Выйти'));
@@ -214,7 +214,7 @@ describe('экран даты рождения', () => {
 
   it('сбой сохранения — понятный текст, а не сырой ответ', async () => {
     mocked.setBirthDate.mockRejectedValue(new Error('PGRST'));
-    await renderWithQuery(<BirthDateRoute />);
+    await renderWithQuery(<AppRouter />);
 
     await pickAndContinue(yearsAgo(20));
 

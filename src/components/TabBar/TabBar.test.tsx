@@ -3,10 +3,9 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 import { TabBar } from '.';
 
 const mockNavigate = jest.fn();
-const mockUseNavigation = jest.fn((_parent?: string) => ({ navigate: mockNavigate }));
 
-jest.mock('expo-router', () => ({
-  useNavigation: (parent?: string) => mockUseNavigation(parent),
+jest.mock('@/navigation', () => ({
+  useNavigation: () => ({navigate: mockNavigate}),
 }));
 
 beforeEach(() => jest.clearAllMocks());
@@ -34,7 +33,6 @@ describe('TabBar', () => {
 
     await fireEvent.press(screen.getByRole('tab', { name: 'Лента' }));
 
-    expect(mockUseNavigation).toHaveBeenCalledWith('/(tabs)');
     expect(mockNavigate).toHaveBeenCalledWith('feed');
   });
 

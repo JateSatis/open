@@ -8,9 +8,9 @@ import { renderWithQuery } from '@/features/profile/renderWithQuery';
 
 const mockPush = jest.fn();
 
-jest.mock('expo-router', () => ({
+jest.mock('@/navigation', () => ({
   useIsFocused: () => true,
-  Stack: { Screen: () => null },
+  ScreenOptions: () => null,
   useRouter: () => ({ push: mockPush }),
 }));
 jest.mock('@/api/profile', () => ({ getProfile: jest.fn() }));
@@ -98,7 +98,7 @@ describe('UserChats', () => {
     await renderWithQuery(<UserChats userId="user-2" />);
     await fireEvent.press(await screen.findByText('Олег'));
 
-    expect(mockPush).toHaveBeenCalledWith({ pathname: '/chats/[chatId]', params: { chatId: 'c1' } });
+    expect(mockPush).toHaveBeenCalledWith({ name: 'Chat', params: { chatId: 'c1' } });
   });
 
   it('says so honestly when there are no dialogs', async () => {

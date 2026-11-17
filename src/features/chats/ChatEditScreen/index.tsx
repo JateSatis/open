@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { Stack, useNavigation, useRouter } from 'expo-router';
+import { ScreenOptions, useNavigation, useRouter } from '@/navigation';
 import { SymbolView } from 'expo-symbols';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, View } from 'react-native';
@@ -206,7 +206,7 @@ function ChatEditForm({ chat }: { chat: ChatSummary }) {
 
   return (
     <>
-      <Stack.Screen
+      <ScreenOptions
         options={{
           title: 'Изменить',
           headerRight: () => (

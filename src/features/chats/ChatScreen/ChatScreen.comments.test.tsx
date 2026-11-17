@@ -7,7 +7,7 @@ import type { Session as SupabaseSession } from '@supabase/supabase-js';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react-native';
 import { BackHandler } from 'react-native';
 
-import ChatScreen from '@/app/(tabs)/chats/[chatId]';
+import { ChatRoute as ChatScreen } from '@/navigation/screens/ChatRoute';
 
 import type { ChatSummary, Message } from '@/api/chats';
 
@@ -59,16 +59,16 @@ jest.mock('@shopify/flash-list', () => {
   };
 });
 
-jest.mock('expo-router', () => ({
+jest.mock('@/navigation', () => ({
   useIsFocused: () => mockFocused,
   useNavigation: () => ({
     getState: () => ({ index: 0, routes: [] }),
     dispatch: jest.fn(),
     addListener: () => () => undefined,
   }),
-  useLocalSearchParams: () => ({ chatId: 'chat-1' }),
+  useRouteParams: () => ({ chatId: 'chat-1' }),
   useRouter: () => ({ push: mockPush, navigate: jest.fn() }),
-  Stack: { Screen: () => null },
+  ScreenOptions: () => null,
 }));
 
 jest.mock('@/api/profile', () => ({
@@ -120,7 +120,7 @@ jest.mock('@/api/fragments', () => ({
   setFragmentReaction: jest.fn(),
 }));
 // Геометрия текста облачка: одна строка, по 10 dp на символ.
-jest.mock('modules/text-geometry', () => ({
+jest.mock('../../../../modules/text-geometry', () => ({
   textGeometryAvailable: true,
   measureText: jest.fn((view: { props?: { children?: unknown } } | null) => {
     const text = String(view?.props?.children ?? '');
@@ -726,7 +726,7 @@ describe('a visitor in the comments', () => {
 
     await waitFor(() =>
       expect(mockPush).toHaveBeenCalledWith({
-        pathname: '/chats/forward',
+        name: 'Forward',
         params: { from: 'chat-1' },
       }),
     );

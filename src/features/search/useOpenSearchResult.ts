@@ -1,4 +1,4 @@
-import { useRouter } from 'expo-router';
+import { useRouter } from '@/navigation';
 import { useCallback } from 'react';
 
 import { addRecentSearch, type RecentSearch } from '@/features/search/recentSearches';
@@ -14,15 +14,15 @@ export function useOpenSearchResult(): (item: Extract<RecentSearch, { type: 'ent
       const { entity } = item;
 
       if (entity.kind === 'person') {
-        router.push({ pathname: '/chats/people/[userId]', params: { userId: entity.id } });
+        router.push({ name: 'Person', params: { userId: entity.id } });
       } else if (entity.kind === 'channel' && entity.channelId) {
         router.push({
-          pathname: '/chats/channel/[channelId]',
+          name: 'Channel',
           params: { channelId: entity.channelId },
         });
       } else if (entity.chatId) {
         router.push({
-          pathname: '/chats/[chatId]',
+          name: 'Chat',
           params: { chatId: entity.chatId, from: 'search' },
         });
       }

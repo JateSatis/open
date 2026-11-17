@@ -1,8 +1,7 @@
 import { screen, userEvent, waitFor } from '@testing-library/react-native';
 
-import MyFriendsScreen from '@/app/(tabs)/profile/friends/index';
-import UserFriendsScreen from '@/app/(tabs)/profile/friends/[userId]';
-import ChatPersonFriendsScreen from '@/app/(tabs)/chats/people/friends/[userId]';
+import { MyFriendsRoute as MyFriendsScreen } from '@/navigation/screens/MyFriendsRoute';
+import { FriendsRoute as UserFriendsScreen } from '@/navigation/screens/FriendsRoute';
 
 import {
   acceptFriendRequest,
@@ -17,9 +16,9 @@ import { renderWithQuery } from '@/test/renderWithQuery';
 
 const mockPush = jest.fn();
 
-jest.mock('expo-router', () => ({
+jest.mock('@/navigation', () => ({
   useRouter: () => ({ push: mockPush }),
-  useLocalSearchParams: () => ({ userId: 'user-b' }),
+  useRouteParams: () => ({ userId: 'user-b' }),
 }));
 jest.mock('@/api/supabase', () => ({ supabase: {} }));
 jest.mock('@/api/friends', () => ({
@@ -145,26 +144,21 @@ describe('свои друзья', () => {
     await userEvent.setup().press(await screen.findByText('Вера'));
 
     expect(mockPush).toHaveBeenCalledWith({
-      pathname: '/profile/[userId]',
+      name: 'Person',
       params: { userId: 'user-c' },
     });
   });
 });
 
 describe('друзья другого человека', () => {
-  it.each([
-    { Route: UserFriendsScreen, pathname: '/profile/[userId]' },
-    { Route: ChatPersonFriendsScreen, pathname: '/chats/people/[userId]' },
-  ])(
-    'запрашивает друзей владельца и открывает выбранного друга в $pathname',
-    async ({ Route, pathname }) => {
+  it('запрашивает друзей владельца и открывает выбранного друга', async () => {
       mocked.listFriends.mockResolvedValue(page([{ id: 'user-a', name: 'Аня' }]));
 
-      await renderWithQuery(<Route />);
+      await renderWithQuery(<UserFriendsScreen />);
 
       await userEvent.setup().press(await screen.findByRole('button', { name: 'Аня' }));
       expect(mocked.listFriends).toHaveBeenCalledWith('user-b', null);
-      expect(mockPush).toHaveBeenCalledWith({ pathname, params: { userId: 'user-a' } });
+      expect(mockPush).toHaveBeenCalledWith({ name: 'Person', params: { userId: 'user-a' } });
     },
   );
 

@@ -38,14 +38,14 @@ function HeaderHost() {
   return headerRight ? headerRight() : null;
 }
 
-jest.mock('expo-router', () => ({
+jest.mock('@/navigation', () => ({
   useRouter: () => ({ push: jest.fn() }),
   useNavigation: () => ({
     setOptions: (options: { headerRight?: () => ReactElement }) =>
       mockSetHeader?.(options.headerRight),
   }),
   useIsFocused: () => true,
-  Stack: { Screen: () => null },
+  ScreenOptions: () => null,
 }));
 jest.mock('@/api/supabase', () => ({ supabase: {} }));
 jest.mock('@/features/saved/SavedComposer', () => ({ SavedComposer: () => null }));

@@ -48,13 +48,13 @@ const STACK_OVER_CHANNEL = {
   index: 2,
   routes: [
     { key: 'chats', name: 'index' },
-    { key: 'channel-key', name: 'channel/[channelId]', params: { channelId: 'channel-1' } },
+    { key: 'channel-key', name: 'Channel', params: { channelId: 'channel-1' } },
     { key: 'info-key', name: 'channel-info/[channelId]', params: { channelId: 'channel-1' } },
   ] as MockRoute[],
 };
 let mockStack = STACK_OVER_CHANNEL;
 
-jest.mock('expo-router', () => ({
+jest.mock('@/navigation', () => ({
   useIsFocused: () => true,
   useNavigation: () => ({
     getState: () => mockStack,
@@ -359,7 +359,7 @@ describe('ChannelInfoPage', () => {
       await fireEvent.press(screen.getByTestId('info-action-new-pop'));
 
       expect(mockPush).toHaveBeenCalledWith({
-        pathname: '/pop-editor/[channelId]',
+        name: 'PopEditor',
         params: { channelId: 'channel-1' },
       });
     });
@@ -410,7 +410,7 @@ describe('ChannelInfoPage', () => {
       await fireEvent.press(screen.getByTestId('info-edit'));
 
       expect(mockPush).toHaveBeenCalledWith({
-        pathname: '/chats/channel-edit/[channelId]',
+        name: 'ChannelEdit',
         params: { channelId: 'channel-1' },
       });
     });
@@ -451,7 +451,7 @@ describe('ChannelInfoPage', () => {
 
     await waitFor(() =>
       expect(mockPush).toHaveBeenCalledWith({
-        pathname: '/chats/channel/[channelId]',
+        name: 'Channel',
         params: expect.objectContaining({ channelId: 'channel-1', search: '1' }),
       }),
     );

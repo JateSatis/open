@@ -1,5 +1,5 @@
 import { SymbolView } from 'expo-symbols';
-import { useIsFocused, useRouter } from 'expo-router';
+import { useIsFocused, useRouter } from '@/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, View, type LayoutChangeEvent } from 'react-native';
 import Animated from 'react-native-reanimated';

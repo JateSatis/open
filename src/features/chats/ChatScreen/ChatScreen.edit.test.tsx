@@ -6,7 +6,7 @@ jest.mock('@/api/historyWindow', () => ({
 import type { Session as SupabaseSession } from '@supabase/supabase-js';
 import { act, fireEvent, screen, userEvent, waitFor, within } from '@testing-library/react-native';
 
-import ChatScreen from '@/app/(tabs)/chats/[chatId]';
+import { ChatRoute as ChatScreen } from '@/navigation/screens/ChatRoute';
 
 import type {
   ChatChannelHandlers,
@@ -44,16 +44,16 @@ jest.mock('@/api/reactions', () => ({
   listMessageReactions: jest.fn(() => Promise.resolve([])),
   setMessageReaction: jest.fn(),
 }));
-jest.mock('expo-router', () => ({
+jest.mock('@/navigation', () => ({
   useIsFocused: () => true,
   useNavigation: () => ({
     getState: () => ({ index: 0, routes: [] }),
     dispatch: jest.fn(),
     addListener: () => () => undefined,
   }),
-  useLocalSearchParams: () => ({ chatId: 'chat-1' }),
+  useRouteParams: () => ({ chatId: 'chat-1' }),
   useRouter: () => ({ push: jest.fn(), navigate: jest.fn() }),
-  Stack: { Screen: () => null },
+  ScreenOptions: () => null,
 }));
 
 jest.mock('@/api/profile', () => ({ getProfile: jest.fn(() => Promise.resolve(null)) }));

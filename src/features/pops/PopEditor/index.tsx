@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useRouter } from 'expo-router';
+import { useRouter } from '@/navigation';
 import { SymbolView } from 'expo-symbols';
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, Pressable, View } from 'react-native';

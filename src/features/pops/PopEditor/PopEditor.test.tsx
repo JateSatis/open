@@ -11,7 +11,7 @@ const mockBack = jest.fn();
 let mockOnPick: ((asset: MediaLibraryItem) => void) | null = null;
 let mockFilter: GalleryFilter | null = null;
 
-jest.mock('expo-router', () => ({ useRouter: () => ({ back: mockBack }) }));
+jest.mock('@/navigation', () => ({ useRouter: () => ({ back: mockBack }) }));
 jest.mock('@tanstack/react-query', () => ({ useQueryClient: () => ({}) }));
 jest.mock('expo-video', () => ({ useVideoPlayer: () => ({}), VideoView: () => null }));
 jest.mock('@/features/auth/useSession', () => ({

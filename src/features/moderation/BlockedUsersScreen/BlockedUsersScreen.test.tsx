@@ -1,13 +1,13 @@
 import { screen, userEvent } from '@testing-library/react-native';
 
-import BlockedUsersRoute from '@/app/(tabs)/profile/blocked';
+import { BlockedRoute as BlockedUsersRoute } from '@/navigation/screens/BlockedRoute';
 
 import { listBlockedUsers, unblockUser } from '@/api/blocks';
 import { renderWithQuery } from '@/test/renderWithQuery';
 
 const mockPush = jest.fn();
 
-jest.mock('expo-router', () => ({ useRouter: () => ({ push: mockPush }) }));
+jest.mock('@/navigation', () => ({ useRouter: () => ({ push: mockPush }) }));
 jest.mock('@/api/supabase', () => ({ supabase: {} }));
 jest.mock('@/api/chats', () => ({}));
 jest.mock('@/api/blocks', () => ({ listBlockedUsers: jest.fn(), unblockUser: jest.fn() }));
@@ -40,7 +40,7 @@ it('нажатие на имя открывает профиль выбранн�
   await user.press(await screen.findByText('Борис'));
 
   expect(mockPush).toHaveBeenCalledWith({
-    pathname: '/profile/[userId]',
+    name: 'Person',
     params: { userId: 'user-b' },
   });
   expect(unblockUser).not.toHaveBeenCalled();

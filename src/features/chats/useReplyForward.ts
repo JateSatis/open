@@ -1,4 +1,4 @@
-import { useRouter } from 'expo-router';
+import { useRouter } from '@/navigation';
 import { useCallback, type RefObject } from 'react';
 import type { TextInput } from 'react-native';
 
@@ -116,7 +116,7 @@ export function useReplyForward({
 
       if (comments.length > 0 && comments.length === rows.length) {
         startForwardPick({ comments });
-        router.push({ pathname: '/chats/forward', params: { from: chatId } });
+        router.push({ name: 'Forward', params: { from: chatId } });
         return;
       }
 
@@ -136,7 +136,7 @@ export function useReplyForward({
       if (items.length === 0) return;
 
       startForwardPick({ sourceChat, items });
-      router.push({ pathname: '/chats/forward', params: { from: chatId } });
+      router.push({ name: 'Forward', params: { from: chatId } });
     },
     [chatId, originalOf, router, sourceChat],
   );

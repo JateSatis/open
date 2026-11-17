@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useRouter } from 'expo-router';
+import { useRouter } from '@/navigation';
 import { useCallback, useState } from 'react';
 import { View } from 'react-native';
 import Animated from 'react-native-reanimated';
@@ -38,7 +38,7 @@ export function DialogueRequestScreen({ userId }: { userId: string }) {
   const { data: profile } = useProfile(userId);
   const name = profile ? displayNameOf(profile) : 'Новый диалог';
   const [text, setText] = useState('');
-  const toChats = useCallback(() => router.replace('/chats'), [router]);
+  const toChats = useCallback(() => router.replace({ name: 'Tabs', params: { screen: 'chats' } }), [router]);
   const slide = useSlideBack(toChats);
   const { containerRef, onLayout, style: keyboardStyle } = useChatKeyboardInset();
   const left = DIALOGUE_REQUEST_MAX_LENGTH - text.length;
@@ -46,7 +46,7 @@ export function DialogueRequestScreen({ userId }: { userId: string }) {
   const openChat = useCallback(
     (chatId: string) => {
       void queryClient.invalidateQueries({ queryKey: chatsQueryKey });
-      router.replace(`/chats/${chatId}`);
+      router.replace({ name: 'Chat', params: { chatId } });
     },
     [queryClient, router],
   );

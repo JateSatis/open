@@ -1,4 +1,4 @@
-import { useIsFocused, useNavigation } from 'expo-router';
+import { useIsFocused, useNavigation } from '@/navigation';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from 'react';
 import { BackHandler, Pressable } from 'react-native';
 

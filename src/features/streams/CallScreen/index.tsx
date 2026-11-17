@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useRouter } from 'expo-router';
+import { useIsFocused, useRouter } from '@/navigation';
 import { SymbolView } from 'expo-symbols';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, View } from 'react-native';
@@ -40,6 +40,7 @@ function useNow(): number {
 export function CallScreen() {
   const call = useActiveCall();
   const router = useRouter();
+  const focused = useIsFocused();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const now = useNow();
@@ -88,8 +89,8 @@ export function CallScreen() {
       return;
     }
 
-    if (hadCall.current && router.canGoBack()) router.back();
-  }, [call, router]);
+    if (focused && hadCall.current && router.canGoBack()) router.back();
+  }, [call, focused, router]);
 
   const minimize = () => {
     if (router.canGoBack()) router.back();

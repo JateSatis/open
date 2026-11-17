@@ -1,7 +1,7 @@
 import type { Session as SupabaseSession } from '@supabase/supabase-js';
 import { screen, userEvent, waitFor } from '@testing-library/react-native';
 
-import NewChatScreen from '@/app/(tabs)/chats/new';
+import { NewChatRoute as NewChatScreen } from '@/navigation/screens/NewChatRoute';
 
 import { searchPeople } from '@/api/groups';
 import { createChat, DuplicateChatError } from '@/api/invites';
@@ -14,10 +14,10 @@ import { renderWithQuery } from '@/test/renderWithQuery';
 const mockReplace = jest.fn();
 const mockSearchParams = jest.fn((): { with?: string } => ({}));
 
-jest.mock('expo-router', () => ({
+jest.mock('@/navigation', () => ({
   useIsFocused: () => true,
   useRouter: () => ({ replace: mockReplace, push: jest.fn() }),
-  useLocalSearchParams: () => mockSearchParams(),
+  useRouteParams: () => mockSearchParams(),
 }));
 
 jest.mock('@/features/auth/useSession', () => ({
@@ -114,7 +114,7 @@ describe('NewChatScreen', () => {
     await user.press(screen.getByText('Позвать в диалог'));
 
     expect(mockedCreate).toHaveBeenCalledWith({ inviteeIds: ['user-2'], title: '' });
-    expect(mockReplace).toHaveBeenCalledWith('/chats/chat-new');
+    expect(mockReplace).toHaveBeenCalledWith({ name: 'Chat', params: { chatId: 'chat-new' } });
   });
 
   it('К1.1 не-другу — экран заявки, чат ещё не создан', async () => {
@@ -127,7 +127,7 @@ describe('NewChatScreen', () => {
 
     await waitFor(() =>
       expect(mockReplace).toHaveBeenCalledWith({
-        pathname: '/chats/request/[userId]',
+        name: 'Request',
         params: { userId: 'user-2' },
       }),
     );
@@ -188,7 +188,7 @@ describe('NewChatScreen', () => {
     await user.press(await screen.findByText('Марина'));
     await user.press(screen.getByText('Позвать в диалог'));
 
-    expect(mockReplace).toHaveBeenCalledWith('/chats/chat-theirs');
+    expect(mockReplace).toHaveBeenCalledWith({ name: 'Chat', params: { chatId: 'chat-theirs' } });
   });
 
   it('explains a repeat invite and leads to the chat that is still waiting', async () => {
@@ -203,7 +203,7 @@ describe('NewChatScreen', () => {
     expect(mockReplace).not.toHaveBeenCalled();
 
     await user.press(screen.getByText('Открыть тот чат'));
-    expect(mockReplace).toHaveBeenCalledWith('/chats/chat-old');
+    expect(mockReplace).toHaveBeenCalledWith({ name: 'Chat', params: { chatId: 'chat-old' } });
   });
 
   it('drops the repeat warning once the choice of people changes', async () => {
@@ -270,7 +270,7 @@ describe('NewChatScreen', () => {
         avatarUrl: 'https://x/g.jpg',
       });
       expect(removePublicMedia).not.toHaveBeenCalled();
-      expect(mockReplace).toHaveBeenCalledWith('/chats/chat-new');
+      expect(mockReplace).toHaveBeenCalledWith({ name: 'Chat', params: { chatId: 'chat-new' } });
     });
 
     it('keeps the photo while the choice narrows to one and back', async () => {
@@ -328,7 +328,7 @@ describe('NewChatScreen', () => {
       await pickPhoto(user);
       await user.press(screen.getByText('Позвать в группу (2)'));
 
-      expect(mockReplace).toHaveBeenCalledWith('/chats/chat-theirs');
+      expect(mockReplace).toHaveBeenCalledWith({ name: 'Chat', params: { chatId: 'chat-theirs' } });
       expect(removePublicMedia).toHaveBeenCalledWith('user-1/group-avatar/g.jpg');
     });
   });

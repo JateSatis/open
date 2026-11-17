@@ -11,7 +11,7 @@ import { renderWithQuery } from '@/test/renderWithQuery';
 
 const mockPush = jest.fn();
 
-jest.mock('expo-router', () => ({ useRouter: () => ({ push: mockPush }) }));
+jest.mock('@/navigation', () => ({ useRouter: () => ({ push: mockPush }) }));
 jest.mock('@/features/auth/useSession', () => ({
   useSession: () => ({ session: { user: { id: 'me' } } }),
 }));
@@ -107,7 +107,7 @@ describe('PopsSection', () => {
     fireEvent.press(screen.getByLabelText('Новый поп'));
 
     expect(mockPush).toHaveBeenCalledWith({
-      pathname: '/pop-editor/[channelId]',
+      name: 'PopEditor',
       params: { channelId: 'channel-1', from: 'pops' },
     });
   });

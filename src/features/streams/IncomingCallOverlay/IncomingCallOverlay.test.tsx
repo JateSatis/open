@@ -15,7 +15,7 @@ import { renderWithQuery } from '@/test/renderWithQuery';
 
 const mockPush = jest.fn();
 
-jest.mock('expo-router', () => ({
+jest.mock('@/navigation', () => ({
   useIsFocused: () => true,
   useRouter: () => ({ push: mockPush, back: jest.fn(), canGoBack: () => true }),
   router: { push: jest.fn() },
@@ -109,7 +109,7 @@ it('«Присоединиться» входит в звонок говорящ
     chatTitle: 'Поход',
     isDirect: false,
   });
-  expect(mockPush).toHaveBeenCalledWith('/call');
+  expect(mockPush).toHaveBeenCalledWith({ name: 'Call' });
   expect(useIncomingCall.getState().ringing).toBeNull();
 });
 

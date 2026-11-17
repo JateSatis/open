@@ -1,4 +1,4 @@
-import { useNavigation } from 'expo-router';
+import { useNavigation } from '@/navigation';
 import { useEffect, type RefObject } from 'react';
 
 import { confirm } from '@/components/ConfirmDialog/store';

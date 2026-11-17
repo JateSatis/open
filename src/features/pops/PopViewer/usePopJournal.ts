@@ -1,4 +1,4 @@
-import { useNavigation } from 'expo-router';
+import { useNavigation } from '@/navigation';
 import { useEffect, useRef } from 'react';
 
 import type { Pop } from '@/api/pops';

@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useRouter } from 'expo-router';
+import { useRouter } from '@/navigation';
 import { useCallback } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import Animated, { useAnimatedStyle } from 'react-native-reanimated';
@@ -29,7 +29,7 @@ export function ChatInfoScreen({ chatId }: ChatInfoScreenProps) {
   const { chat, failed, gone } = useChat(chatId);
   // Одна на маршрут: заглушка и страница въезжают и уходят одним движением.
   // Под страницей ничего нет (открыли ссылкой) — уйти в саму переписку.
-  const toChat = useCallback(() => router.replace(`/chats/${chatId}`), [chatId, router]);
+  const toChat = useCallback(() => router.replace({ name: 'Chat', params: { chatId } }), [chatId, router]);
   const slideBack = useSlideBack(toChat);
 
   if (chat) return <ChatInfoPage chat={chat} slideBack={slideBack} />;

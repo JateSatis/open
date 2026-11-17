@@ -1,10 +1,10 @@
+import { journalScreen } from '@/navigation/journalScreen';
 import {
   announce,
   appCameForeground,
   appWentBackground,
   enterScreen,
   resetAppSessionForTests,
-  screenOf,
   SESSION_GAP_MS,
   startAppSession,
 } from './appSession';
@@ -239,10 +239,10 @@ describe('сессия приложения', () => {
   });
 
   it('имя экрана — по шаблону маршрута, без групп', () => {
-    expect(screenOf(['(tabs)', 'chats', '[chatId]'])).toEqual({
+    expect(journalScreen('Chat', 'chats')).toEqual({
       screen: 'chats/[chatId]',
       tab: 'chats',
     });
-    expect(screenOf(['pops', 'search'])).toEqual({ screen: 'pops/search', tab: null });
+    expect(journalScreen('PopViewer', 'feed', {source: 'search'})).toEqual({ screen: 'pops/search', tab: null });
   });
 });

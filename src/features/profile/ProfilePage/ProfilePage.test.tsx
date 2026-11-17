@@ -8,7 +8,7 @@ import type { Profile } from '@/api/profile';
 import type { SlideBack } from '@/components/InfoPage';
 import { Text } from '@/components/Text';
 
-jest.mock('expo-router', () => ({ useIsFocused: () => true }));
+jest.mock('@/navigation', () => ({ useIsFocused: () => true }));
 
 jest.mock('@shopify/react-native-skia', () => ({
   Skia: { Data: { fromURI: () => Promise.reject(new Error('нет в тестах')) } },

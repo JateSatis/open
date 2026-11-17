@@ -11,7 +11,7 @@ import {
 } from '@/features/streams/incomingCall';
 import { setInCall } from '@/store/callPresence';
 
-jest.mock('expo-router', () => ({ router: { push: jest.fn() } }));
+jest.mock('@/navigation', () => ({ router: { push: jest.fn() } }));
 
 const NOW = Date.parse('2026-10-01T12:00:00Z');
 

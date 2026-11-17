@@ -6,7 +6,7 @@
 ## Клиент
 
 **Клиент:** Expo (React Native), managed workflow, **dev build** (не Expo Go); TypeScript strict;
-Expo Router; Expo UI.
+React Navigation (native stack и нижние вкладки); Expo UI.
 
 ## Инфраструктура
 

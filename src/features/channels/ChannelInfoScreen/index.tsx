@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useRouter } from 'expo-router';
+import { useRouter } from '@/navigation';
 import { useCallback } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import Animated, { useAnimatedStyle } from 'react-native-reanimated';
@@ -30,7 +30,7 @@ export function ChannelInfoScreen({ channelId }: ChannelInfoScreenProps) {
   // Одна на маршрут: заглушка и страница въезжают и уходят одним движением.
   // Под страницей ничего нет — уйти в сам канал.
   const toChannel = useCallback(
-    () => router.replace({ pathname: '/chats/channel/[channelId]', params: { channelId } }),
+    () => router.replace({ name: 'Channel', params: { channelId } }),
     [channelId, router],
   );
   const slideBack = useSlideBack(toChannel);

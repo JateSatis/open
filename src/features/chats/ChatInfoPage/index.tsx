@@ -1,4 +1,4 @@
-import { useNavigation, useRouter } from 'expo-router';
+import { useNavigation, useRouter } from '@/navigation';
 import { useCallback, useMemo, useState } from 'react';
 
 import { ChatInfoCards } from './ChatInfoCards';
@@ -89,21 +89,21 @@ export function ChatInfoPage({ chat, slideBack }: ChatInfoPageProps) {
   const openPerson = useCallback(
     (personId: string) => {
       if (personId === currentUserId) {
-        router.navigate('/profile');
+        router.navigate({ name: 'Tabs', params: { screen: 'profile' } });
         return;
       }
 
       // Подменённый в диалоге: id непрозрачный, профиля за ним нет.
       if (isOpaquePersonId(personId)) return;
 
-      router.push({ pathname: '/chats/people/[userId]', params: { userId: personId } });
+      router.push({ name: 'Person', params: { userId: personId } });
     },
     [currentUserId, router],
   );
 
   const openChat = useCallback(
     (targetChatId: string) =>
-      router.push({ pathname: '/chats/[chatId]', params: { chatId: targetChatId } }),
+      router.push({ name: 'Chat', params: { chatId: targetChatId } }),
     [router],
   );
 
@@ -112,23 +112,18 @@ export function ChatInfoPage({ chat, slideBack }: ChatInfoPageProps) {
   const toThisChat = useCallback(
     (params: Record<string, string>) => {
       const state = navigation.getState();
-      const below = state?.routes.findIndex(
-        (route) =>
-          route.name === '[chatId]' &&
-          (route.params as { chatId?: string } | undefined)?.chatId === chatId,
-      );
-
-      if (state && below !== undefined && below !== -1) {
+      const below = state?.routes[state.index - 1];
+      if (below?.name === 'Chat' && (below.params as {chatId?: string})?.chatId === chatId) {
         navigation.dispatch({
           type: 'SET_PARAMS',
           payload: { params: { ...CLEARED_SEARCH, chatId, ...params } },
-          source: state.routes[below].key,
+          source: below.key,
         });
         close();
         return;
       }
 
-      router.push({ pathname: '/chats/[chatId]', params: { chatId, ...params } });
+      router.push({ name: 'Chat', params: { chatId, ...params } });
     },
     [chatId, close, navigation, router],
   );
@@ -227,7 +222,7 @@ export function ChatInfoPage({ chat, slideBack }: ChatInfoPageProps) {
             onCopied={onCopied}
             onOpenPerson={openPerson}
             onAddMembers={() =>
-              router.push({ pathname: '/chats/chat-invite/[chatId]', params: { chatId } })
+              router.push({ name: 'ChatInvite', params: { chatId } })
             }
           />
         }
@@ -250,7 +245,7 @@ export function ChatInfoPage({ chat, slideBack }: ChatInfoPageProps) {
                 testID="info-edit"
                 icon={{ ios: 'pencil', android: 'edit', web: 'edit' }}
                 accessibilityLabel="Изменить"
-                onPress={() => router.push(`/chats/chat-edit/${chatId}`)}
+                onPress={() => router.push({ name: 'ChatEdit', params: { chatId } })}
               />
             ) : null}
             <ChatInfoMenu

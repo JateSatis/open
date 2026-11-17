@@ -1,4 +1,4 @@
-import { useRouter } from 'expo-router';
+import { useRouter } from '@/navigation';
 import { useEffect, useState } from 'react';
 import { Animated, Pressable, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -117,7 +117,7 @@ export function ToastCard({ alert, dismiss, group = null }: ToastCardProps) {
 
     if (channel) {
       router.push({
-        pathname: '/chats/channel/[channelId]',
+        name: 'Channel',
         params: { channelId: channel.id, section: alert.kind === 'pop' ? 'pops' : 'posts' },
       });
       return;
@@ -125,7 +125,7 @@ export function ToastCard({ alert, dismiss, group = null }: ToastCardProps) {
 
     // Заявка открывает сам чат: его можно прочитать и там же принять.
     router.push({
-      pathname: '/chats/[chatId]',
+      name: 'Chat',
       params: { chatId: alert.chatId, from: 'notification' },
     });
   };

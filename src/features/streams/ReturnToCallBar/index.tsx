@@ -1,4 +1,4 @@
-import { usePathname, useRouter } from 'expo-router';
+import { useCurrentScreen, useRouter } from '@/navigation';
 import { SymbolView } from 'expo-symbols';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Pressable, View } from 'react-native';
@@ -22,9 +22,9 @@ const useRowHeight = create<{ height: number }>(() => ({ height: 0 }));
 /** Звонок свёрнут: полоса видна на любом экране, кроме самого экрана звонка. */
 export function useReturnBarVisible(): boolean {
   const call = useActiveCall();
-  const pathname = usePathname();
+  const screen = useCurrentScreen(state => state.name);
 
-  return call !== null && pathname !== '/call';
+  return call !== null && screen !== 'Call';
 }
 
 function useTicker(active: boolean): number {
@@ -82,7 +82,7 @@ export function ReturnToCallBar() {
       testID="return-to-call"
       accessibilityRole="button"
       accessibilityLabel={`Вернуться к звонку в «${call.chatTitle}»`}
-      onPress={() => router.push('/call')}
+      onPress={() => router.push({ name: 'Call' })}
       style={[styles.bar, { backgroundColor: theme.callBar, paddingTop: insets.top }]}
     >
       <View

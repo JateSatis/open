@@ -1,8 +1,7 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { useRouteParams } from '@/navigation';
 
-import ChatPersonScreen from '@/app/(tabs)/chats/people/[userId]';
-import UserProfileScreen from '@/app/(tabs)/profile/[userId]';
+import { PersonRoute as UserProfileScreen } from '@/navigation/screens/PersonRoute';
 
 import {
   acceptFriendRequest,
@@ -27,10 +26,10 @@ const mockNavigate = jest.fn();
 const mockReplace = jest.fn();
 const mockCanGoBack = jest.fn();
 
-jest.mock('expo-router', () => ({
+jest.mock('@/navigation', () => ({
   useIsFocused: () => true,
-  Stack: { Screen: () => null },
-  useLocalSearchParams: jest.fn(),
+  ScreenOptions: () => null,
+  useRouteParams: jest.fn(),
   useRouter: () => ({
     push: mockPush,
     navigate: mockNavigate,
@@ -70,7 +69,7 @@ jest.mock('@shopify/react-native-skia', () => ({
 jest.mock('@/features/media', () => ({ MediaViewer: () => null }));
 
 const getProfileMock = getProfile as jest.Mock;
-const useLocalSearchParamsMock = useLocalSearchParams as jest.Mock;
+const useRouteParamsMock = useRouteParams as jest.Mock;
 const useSessionMock = useSession as jest.Mock;
 const friends = {
   status: getFriendshipStatus as jest.Mock,
@@ -93,7 +92,7 @@ const profile = {
 beforeEach(() => {
   jest.clearAllMocks();
   mockCanGoBack.mockReturnValue(true);
-  useLocalSearchParamsMock.mockReturnValue({ userId: 'user-2' });
+  useRouteParamsMock.mockReturnValue({ userId: 'user-2' });
   useSessionMock.mockReturnValue({ session: { user: { id: 'user-1' } } });
   friends.status.mockResolvedValue('none');
   friends.summary.mockResolvedValue({ listVisible: true, friendsCount: 3, incomingCount: null });
@@ -103,67 +102,54 @@ beforeEach(() => {
   (reportUser as jest.Mock).mockResolvedValue(undefined);
 });
 
-describe.each([
-  {
-    root: '/chats',
-    Entry: ChatPersonScreen,
-    dialogs: '/chats/people/dialogs/[userId]',
-    friendsList: '/chats/people/friends/[userId]',
-  },
-  {
-    root: '/profile',
-    Entry: UserProfileScreen,
-    dialogs: '/profile/dialogs/[userId]',
-    friendsList: '/profile/friends/[userId]',
-  },
-])('переходы из $root', ({ root, Entry, dialogs, friendsList }) => {
+describe('переходы из профиля', () => {
   beforeEach(() => {
     getProfileMock.mockResolvedValue(profile);
   });
 
   it('открывает друзей и диалоги владельца в исходном стеке', async () => {
-    await renderWithQuery(<Entry />);
+    await renderWithQuery(<UserProfileScreen />);
 
     await fireEvent.press(await screen.findByText('Диалоги'));
-    expect(mockPush).toHaveBeenLastCalledWith({ pathname: dialogs, params: { userId: 'user-2' } });
+    expect(mockPush).toHaveBeenLastCalledWith({ name: 'Dialogs', params: { userId: 'user-2' } });
 
     await fireEvent.press(await screen.findByTestId('profile-friends'));
     expect(mockPush).toHaveBeenLastCalledWith({
-      pathname: friendsList,
+      name: 'Friends',
       params: { userId: 'user-2' },
     });
   });
 
   it('открывает новый чат с владельцем профиля', async () => {
-    await renderWithQuery(<Entry />);
+    await renderWithQuery(<UserProfileScreen />);
     await fireEvent.press(await screen.findByText('Написать'));
 
-    expect(mockPush).toHaveBeenCalledWith({ pathname: '/chats/new', params: { with: 'user-2' } });
+    expect(mockPush).toHaveBeenCalledWith({ name: 'NewChat', params: { with: 'user-2' } });
   });
 
   it('из своего профиля по динамической ссылке открывает свой список с заявками', async () => {
     useSessionMock.mockReturnValue({ session: { user: { id: 'user-2' } } });
-    await renderWithQuery(<Entry />);
+    await renderWithQuery(<UserProfileScreen />);
     await fireEvent.press(await screen.findByTestId('profile-friends'));
 
-    expect(mockNavigate).toHaveBeenCalledWith('/profile/friends');
+    expect(mockNavigate).toHaveBeenCalledWith({ name: 'MyFriends' });
     expect(mockPush).not.toHaveBeenCalled();
   });
 
   it('возвращается к предыдущему экрану', async () => {
-    await renderWithQuery(<Entry />);
+    await renderWithQuery(<UserProfileScreen />);
     await fireEvent.press(await screen.findByTestId('info-back'));
 
     expect(mockBack).toHaveBeenCalledTimes(1);
     expect(mockReplace).not.toHaveBeenCalled();
   });
 
-  it('при пустой истории возвращается в корень исходной вкладки', async () => {
+  it('при пустой истории возвращается в Чаты', async () => {
     mockCanGoBack.mockReturnValue(false);
-    await renderWithQuery(<Entry />);
+    await renderWithQuery(<UserProfileScreen />);
     await fireEvent.press(await screen.findByTestId('info-back'));
 
-    expect(mockReplace).toHaveBeenCalledWith(root);
+    expect(mockReplace).toHaveBeenCalledWith({ name: 'Tabs', params: { screen: 'chats' } });
     expect(mockBack).not.toHaveBeenCalled();
   });
 });

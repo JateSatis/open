@@ -1,5 +1,5 @@
 import * as Clipboard from 'expo-clipboard';
-import { useRouter } from 'expo-router';
+import { useRouter } from '@/navigation';
 import { useCallback } from 'react';
 
 import type { ChatSummary } from '@/api/chats';

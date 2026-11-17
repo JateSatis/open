@@ -1,7 +1,7 @@
 import { act, fireEvent, waitFor } from '@testing-library/react-native';
-import { router } from 'expo-router';
+import { router } from '@/navigation';
 
-import EditProfileScreen from '@/app/(tabs)/profile/edit';
+import { EditProfileRoute as EditProfileScreen } from '@/navigation/screens/EditProfileRoute';
 
 import { getMyProfile, updateMyProfile, UsernameTakenError } from '@/api/profile';
 import { isUsernameAvailable } from '@/api/usernames';
@@ -9,7 +9,7 @@ import { openMediaSheet } from '@/features/chats/MediaPickerSheet';
 import { removeOwnAvatar, uploadAvatar, type PreparedAvatar } from '@/features/media';
 import { renderWithQuery } from '@/features/profile/renderWithQuery';
 
-jest.mock('expo-router', () => ({
+jest.mock('@/navigation', () => ({
   useIsFocused: () => true,
   router: { push: jest.fn(), back: jest.fn() },
 }));

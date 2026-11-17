@@ -1,4 +1,4 @@
-import { useRouter } from 'expo-router';
+import { useRouter } from '@/navigation';
 import { useCallback } from 'react';
 
 import type { Pop } from '@/api/pops';
@@ -31,7 +31,7 @@ export function PopsSection({ channelId, active = true }: PopsSectionProps) {
   const openEditor = useCallback(
     () =>
       router.push({
-        pathname: '/pop-editor/[channelId]',
+        name: 'PopEditor',
         params: { channelId, from: 'pops' },
       }),
     [channelId, router],

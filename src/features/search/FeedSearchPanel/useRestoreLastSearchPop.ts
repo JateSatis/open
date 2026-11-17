@@ -1,5 +1,5 @@
 import type { FlashListRef, ViewToken } from '@shopify/flash-list';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect } from '@/navigation';
 import { useCallback, useEffect, useRef, type RefObject } from 'react';
 
 import { rowOfPop, type FeedSearchRow } from '@/features/search/feedSearchRows';

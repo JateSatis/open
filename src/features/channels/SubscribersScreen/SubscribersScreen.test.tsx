@@ -7,7 +7,7 @@ import { renderWithQuery } from '@/test/renderWithQuery';
 
 const mockPush = jest.fn();
 
-jest.mock('expo-router', () => ({
+jest.mock('@/navigation', () => ({
   useRouter: () => ({ push: mockPush, navigate: jest.fn() }),
 }));
 jest.mock('@/features/chats/useCurrentUserId', () => ({ useCurrentUserId: () => 'owner-1' }));
@@ -46,7 +46,7 @@ describe('SubscribersScreen', () => {
     await renderWithQuery(<SubscribersScreen target={{ kind: 'channel', id: 'channel-1' }} />);
     await userEvent.setup().press(await screen.findByRole('button', { name: 'Человек a' }));
 
-    expect(mockPush).toHaveBeenCalledWith('/chats/people/a');
+    expect(mockPush).toHaveBeenCalledWith({ name: 'Person', params: { userId: 'a' } });
   });
 
   it('lists the subscribers of a chat without the «в чатах» mark', async () => {

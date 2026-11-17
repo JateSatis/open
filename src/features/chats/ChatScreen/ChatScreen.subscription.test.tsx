@@ -6,7 +6,7 @@ jest.mock('@/api/historyWindow', () => ({
 import type { Session as SupabaseSession } from '@supabase/supabase-js';
 import { fireEvent, screen, waitFor } from '@testing-library/react-native';
 
-import ChatScreen from '@/app/(tabs)/chats/[chatId]';
+import { ChatRoute as ChatScreen } from '@/navigation/screens/ChatRoute';
 
 import type { ChatSummary } from '@/api/chats';
 import { getChat, listMessages, markChatRead, subscribeToChat } from '@/api/chats';
@@ -30,7 +30,7 @@ import { renderWithQuery } from '@/test/renderWithQuery';
 const mockPush = jest.fn();
 const mockNavigate = jest.fn();
 
-// Шапку экран ставит через Stack.Screen — мок рисует и название, и правую
+// Шапку экран ставит через ScreenOptions — мок рисует и название, и правую
 // часть («⋮», звонок) прямо в дереве.
 jest.mock('@/api/messageViews');
 jest.mock('@/api/reactions', () => ({
@@ -38,17 +38,16 @@ jest.mock('@/api/reactions', () => ({
   listMessageReactions: jest.fn(() => Promise.resolve([])),
   setMessageReaction: jest.fn(),
 }));
-jest.mock('expo-router', () => ({
+jest.mock('@/navigation', () => ({
   useIsFocused: () => true,
   useNavigation: () => ({
     getState: () => ({ index: 0, routes: [] }),
     dispatch: jest.fn(),
     addListener: () => () => undefined,
   }),
-  useLocalSearchParams: () => ({ chatId: 'chat-1' }),
+  useRouteParams: () => ({ chatId: 'chat-1' }),
   useRouter: () => ({ push: mockPush, navigate: mockNavigate }),
-  Stack: {
-    Screen: ({
+  ScreenOptions: ({
       options,
     }: {
       options?: {
@@ -61,7 +60,6 @@ jest.mock('expo-router', () => ({
         {options?.headerRight ? options.headerRight() : null}
       </>
     ),
-  },
 }));
 
 jest.mock('@/api/profile', () => ({ getProfile: jest.fn() }));
@@ -367,7 +365,7 @@ describe('ChatScreen: my own dialogue', () => {
 
     await waitFor(() =>
       expect(mockPush).toHaveBeenCalledWith({
-        pathname: '/chats/chat-subscribers/[chatId]',
+        name: 'ChatSubscribers',
         params: { chatId: 'chat-1' },
       }),
     );

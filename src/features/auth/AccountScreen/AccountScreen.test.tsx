@@ -1,6 +1,6 @@
 import { screen, userEvent, waitFor } from '@testing-library/react-native';
 
-import AccountScreen from '@/app/(tabs)/profile/account';
+import { AccountRoute as AccountScreen } from '@/navigation/screens/AccountRoute';
 
 import {
   deleteMyAccount,
@@ -38,7 +38,7 @@ jest.mock('@/api/account', () => ({
   signOutLocally: jest.fn(),
 }));
 
-jest.mock('expo-router', () => ({ router: { push: jest.fn() } }));
+jest.mock('@/navigation', () => ({ router: { push: jest.fn() } }));
 
 jest.mock('@/api/privacy', () => ({
   ...jest.requireActual('@/api/privacy'),
@@ -368,12 +368,12 @@ describe('AccountScreen — дата рождения', () => {
   });
 
   it('ведёт на экран «Конфиденциальность и безопасность»', async () => {
-    const { router } = jest.requireMock('expo-router') as { router: { push: jest.Mock } };
+    const { router } = jest.requireMock('@/navigation') as { router: { push: jest.Mock } };
     const user = userEvent.setup();
 
     await renderAccount();
     await user.press(await screen.findByText('Конфиденциальность и безопасность'));
 
-    expect(router.push).toHaveBeenCalledWith('/profile/privacy');
+    expect(router.push).toHaveBeenCalledWith({ name: 'Privacy' });
   });
 });
