@@ -1,24 +1,16 @@
 import { useRouter } from 'expo-router';
 
-import { Screen } from '@/components/Screen';
-import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
-import { MyFriends } from '@/features/friends/MyFriends';
+import { MyFriendsScreen } from '@/features/friends/MyFriendsScreen';
 
 /** Свои друзья и входящие заявки — из своего профиля. */
-export default function MyFriendsScreen() {
+export default function MyFriendsRoute() {
   const router = useRouter();
-  const userId = useCurrentUserId();
-
-  if (!userId) return null;
 
   return (
-    <Screen edges={['bottom']}>
-      <MyFriends
-        userId={userId}
-        onOpenPerson={(personId) =>
-          router.push({ pathname: '/profile/[userId]', params: { userId: personId } })
-        }
-      />
-    </Screen>
+    <MyFriendsScreen
+      onOpenPerson={(personId) =>
+        router.push({ pathname: '/profile/[userId]', params: { userId: personId } })
+      }
+    />
   );
 }

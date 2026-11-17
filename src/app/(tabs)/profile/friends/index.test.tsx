@@ -12,6 +12,7 @@ import {
   listIncomingFriendRequests,
   type FriendsPage,
 } from '@/api/friends';
+import { useSession } from '@/features/auth/useSession';
 import { renderWithQuery } from '@/test/renderWithQuery';
 
 const mockPush = jest.fn();
@@ -29,7 +30,11 @@ jest.mock('@/api/friends', () => ({
   declineFriendRequest: jest.fn(),
 }));
 jest.mock('@/features/auth/useSession', () => ({
-  useSession: () => ({ session: { user: { id: 'me' } }, isAuthenticated: true, isLoading: false }),
+  useSession: jest.fn(() => ({
+    session: { user: { id: 'me' } },
+    isAuthenticated: true,
+    isLoading: false,
+  })),
 }));
 
 const mocked = {
@@ -58,6 +63,20 @@ beforeEach(() => {
 });
 
 describe('свои друзья', () => {
+  it('без текущего пользователя не запрашивает друзей и входящие заявки', async () => {
+    jest.mocked(useSession).mockReturnValueOnce({
+      session: null,
+      isAuthenticated: false,
+      isLoading: true,
+    });
+
+    await renderWithQuery(<MyFriendsScreen />);
+
+    expect(screen.toJSON()).toBeNull();
+    expect(mocked.listFriends).not.toHaveBeenCalled();
+    expect(mocked.listIncoming).not.toHaveBeenCalled();
+  });
+
   it('К4.1 входящая заявка — в разделе «Заявки», друзья — ниже', async () => {
     mocked.listIncoming.mockResolvedValue(page([{ id: 'user-a', name: 'Аня' }]));
     mocked.listFriends.mockResolvedValue(page([{ id: 'user-c', name: 'Вера', username: 'vera' }]));
