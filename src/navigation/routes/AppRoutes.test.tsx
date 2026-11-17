@@ -3,10 +3,10 @@ import { DeviceEventEmitter, Linking } from 'react-native';
 
 import { ReturnToCallBar } from '@/features/streams/ReturnToCallBar';
 import { setCall } from '@/features/streams/callStore';
-import { AppRouter } from '@/app/AppRouter';
+import { AppRoutes } from './AppRoutes';
 import { navigationRef, router } from '@/navigation';
-import { destinationForURL } from './links';
-import { useIncomingLink } from './useIncomingLink';
+import { destinationForURL } from '../links';
+import { useIncomingLink } from '../useIncomingLink';
 import { openPopViewer } from '@/features/pops/openPopViewer';
 
 let mockAccount: string | null = 'reader';
@@ -49,7 +49,7 @@ function Harness() {
   return (
     <>
       <ReturnToCallBar />
-      <AppRouter key={mockAccount ?? 'signed-out'} incoming={incoming} />
+      <AppRoutes key={mockAccount ?? 'signed-out'} incoming={incoming} />
     </>
   );
 }
@@ -91,6 +91,7 @@ it('profile → friends → person → write: Back restores the same entries and
   const person = current();
   await step(() => router.push({ name: 'NewChat', params: { with: 'friend' } }));
   await step(() => router.replace({ name: 'Chat', params: { chatId: 'pair' } }));
+  expect(names()).toEqual(['Tabs', 'MyFriends', 'Person', 'Chat']);
   await back();
   expect(current()?.key).toBe(person?.key);
   await back();
@@ -149,10 +150,21 @@ it('feed search → pop → channel; back preserves viewer and feed keys', async
   await step(() => openPopViewer({ source: 'search', query: 'cats', startId: 'pop' }));
   const viewer = current();
   await step(() => router.push({ name: 'Channel', params: { channelId: 'news' } }));
+  expect(names()).toEqual(['Tabs', 'PopViewer', 'Channel']);
   await back();
   expect(current()).toEqual(viewer);
   await back();
   expect(current()?.key).toBe(feed?.key);
+});
+
+it('exposes the labs before sign-in and only the date screen when birth date is required', async () => {
+  mockAccount = null;
+  const view = await start();
+  expect(navigationRef.getRootState()?.routeNames).toEqual(['SignIn', 'MediaLab', 'MosaicLab']);
+  mockAccount = 'reader';
+  mockDate = 'required';
+  await view.rerender(<Harness />);
+  expect(navigationRef.getRootState()?.routeNames).toEqual(['BirthDate']);
 });
 
 it.each(['media-lab', 'mosaic-lab', 'call'])('opens %s outside tabs', async (path) => {

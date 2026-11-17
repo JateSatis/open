@@ -24,8 +24,8 @@ import { JournalSession } from '@/features/recs/journal/JournalSession';
 import { IncomingCallOverlay } from '@/features/streams/IncomingCallOverlay';
 import { BelowReturnBar, ReturnToCallBar } from '@/features/streams/ReturnToCallBar';
 import { createAppQueryClient } from '@/lib/queryClient';
+import { AppRoutes } from '@/navigation/routes/AppRoutes';
 import { type IncomingLink, useIncomingLink } from '@/navigation/useIncomingLink';
-import { AppRouter } from './AppRouter';
 
 bindHistoryReader(() => useSessionStore.getState().session?.user.id ?? null);
 SplashScreen.preventAutoHideAsync();
@@ -64,7 +64,7 @@ function AccountLayout({ incoming }: { incoming: IncomingLink | null }) {
               {/* Тап по медиа в списке на хвосте прокрутки — с первого
                     касания, см. modules/scroll-tap. Окна Modal — со своей. */}
               <ScrollTap style={styles.flex}>
-                <AppRouter incoming={incoming} />
+                <AppRoutes incoming={incoming} />
               </ScrollTap>
             </BelowReturnBar>
             <ReturnToCallBar />
