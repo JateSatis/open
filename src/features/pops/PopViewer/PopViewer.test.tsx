@@ -1,7 +1,7 @@
 import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
 
 import { ChannelPopViewer } from './ChannelPopViewer';
-import { PopViewerRoute } from '@/navigation/screens/PopViewerRoute';
+import { PopViewerScreen } from '@/features/pops/PopViewerScreen';
 
 import {
   canPublishInChannel,
@@ -345,7 +345,7 @@ describe('PopViewer', () => {
     (listPopsAfter as jest.Mock).mockResolvedValue([]);
     (listPops as jest.Mock).mockResolvedValue([]);
     (canPublishInChannel as jest.Mock).mockResolvedValue(false);
-    await renderWithQuery(<PopViewerRoute />);
+    await renderWithQuery(<PopViewerScreen />);
     await fireEvent(screen.getByTestId('pop-viewer'), 'layout', {
       nativeEvent: { layout: { width: 400, height: 800 } },
     });

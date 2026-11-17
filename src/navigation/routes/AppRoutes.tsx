@@ -7,7 +7,9 @@ import { useSession } from '@/features/auth/useSession';
 import { useBirthDateGate } from '@/features/privacy/queries';
 import { navigationRef, router, trackScreen } from '@/navigation';
 import { MainTabs } from '@/navigation/MainTabs';
-import * as Screens from '@/navigation/screens';
+import { CallScreen } from '@/features/streams/CallScreen';
+import { MediaLabScreen } from '@/features/media/MediaLabScreen';
+import { MosaicLabScreen } from '@/features/chats/MosaicLabScreen';
 import type { IncomingLink } from '@/navigation/useIncomingLink';
 import { authRoutes } from './AuthRoutes';
 import { chatsRoutes } from './ChatsRoutes';
@@ -70,7 +72,7 @@ export function AppRoutes({ incoming = null }: { incoming?: IncomingLink | null 
             <Stack.Screen
               name="Call"
               getId={callId}
-              component={Screens.CallRoute}
+              component={CallScreen}
               options={{
                 ...hidden,
                 presentation: 'fullScreenModal',
@@ -84,8 +86,8 @@ export function AppRoutes({ incoming = null }: { incoming?: IncomingLink | null 
         )}
         {phase !== 'BirthDate' && (
           <Stack.Group screenOptions={hidden}>
-            <Stack.Screen name="MediaLab" component={Screens.MediaLabScreen} />
-            <Stack.Screen name="MosaicLab" component={Screens.MosaicLabScreen} />
+            <Stack.Screen name="MediaLab" component={MediaLabScreen} />
+            <Stack.Screen name="MosaicLab" component={MosaicLabScreen} />
           </Stack.Group>
         )}
       </Stack.Navigator>

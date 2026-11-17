@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useRouter } from '@/navigation';
+import { useRouteParams, useRouter } from '@/navigation';
 import { useCallback, useState } from 'react';
 import { View } from 'react-native';
 import Animated from 'react-native-reanimated';
@@ -31,7 +31,8 @@ const noop = () => undefined;
  * ещё нет: он появится вместе с текстом. Только текст, одно сообщение —
  * так решает база; здесь лишь нет кнопок вложений, голосового и кружка.
  */
-export function DialogueRequestScreen({ userId }: { userId: string }) {
+export function DialogueRequestScreen() {
+  const { userId } = useRouteParams<'Request'>();
   const router = useRouter();
   const theme = useTheme();
   const queryClient = useQueryClient();

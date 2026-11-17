@@ -1,6 +1,6 @@
 import { act, render, screen } from '@testing-library/react-native';
 
-import { ForwardRoute } from '@/navigation/screens/ForwardRoute';
+import { ForwardScreen } from '@/features/chats/ForwardScreen';
 
 import * as drafts from '@/features/chats/composerDraftStore';
 import { ForwardSheet } from '@/features/chats/ForwardSheet';
@@ -31,7 +31,7 @@ afterEach(() => {
 });
 
 it('goes back without opening the sheet when there is nothing to forward', async () => {
-  await render(<ForwardRoute />);
+  await render(<ForwardScreen />);
 
   expect(mockBack).toHaveBeenCalledTimes(1);
   expect(sheet).not.toHaveBeenCalled();
@@ -44,7 +44,7 @@ it('completes the pick before going back and keeps the sheet visible until unmou
   const complete = jest.spyOn(drafts, 'completeForwardPick');
   const cancel = jest.spyOn(drafts, 'cancelForwardPick');
   mockBack.mockImplementationOnce(() => expect(complete).toHaveBeenCalledTimes(1));
-  await render(<ForwardRoute />);
+  await render(<ForwardScreen />);
 
   expect(mockBack).not.toHaveBeenCalled();
   await act(() => sheet.mock.lastCall?.[0].onSent());
@@ -52,7 +52,7 @@ it('completes the pick before going back and keeps the sheet visible until unmou
   expect(drafts.useComposerDrafts.getState().forwardPick).toBeNull();
 
   sheet.mockClear();
-  await screen.rerender(<ForwardRoute />);
+  await screen.rerender(<ForwardScreen />);
   expect(sheet.mock.lastCall?.[0].pick).toBe(selected);
   expect(read).toHaveBeenCalledTimes(1);
   expect(mockBack).toHaveBeenCalledTimes(1);
@@ -65,7 +65,7 @@ it('clears an unsent pick on exit and opens with the next selection', async () =
   const first = pick('first');
   drafts.startForwardPick(first);
   const complete = jest.spyOn(drafts, 'completeForwardPick');
-  await render(<ForwardRoute />);
+  await render(<ForwardScreen />);
   expect(sheet.mock.lastCall?.[0].pick).toBe(first);
 
   await screen.unmount();
@@ -75,6 +75,6 @@ it('clears an unsent pick on exit and opens with the next selection', async () =
 
   const second = pick('second');
   drafts.startForwardPick(second);
-  await render(<ForwardRoute />);
+  await render(<ForwardScreen />);
   expect(sheet.mock.lastCall?.[0].pick).toBe(second);
 });

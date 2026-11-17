@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useRouter } from '@/navigation';
+import { useRouteParams, useRouter } from '@/navigation';
 import { useCallback } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import Animated, { useAnimatedStyle } from 'react-native-reanimated';
@@ -15,16 +15,13 @@ import { channelQueryKey, useChannel } from '@/features/channels/useChannel';
 import { useTheme } from '@/hooks/use-theme';
 import { loadStateOf, reloadMissing, type LoadState } from '@/lib/loadState';
 
-export type ChannelInfoScreenProps = {
-  channelId: string;
-};
-
 /**
  * Страница информации о канале по адресу. С экрана канала канал уже в кеше,
  * и страница стоит целиком в первом же кадре; без кеша — пустая страница со
  * стрелкой, пока канал грузится.
  */
-export function ChannelInfoScreen({ channelId }: ChannelInfoScreenProps) {
+export function ChannelInfoScreen() {
+  const { channelId } = useRouteParams<'ChannelInfo'>();
   const router = useRouter();
   const query = useChannel(channelId);
   // Одна на маршрут: заглушка и страница въезжают и уходят одним движением.

@@ -1,3 +1,4 @@
+import { useRouteParams } from '@/navigation';
 import { PopViewer } from './PopViewer';
 import { ChannelPopViewer, type ChannelPopViewerProps } from './PopViewer/ChannelPopViewer';
 
@@ -8,7 +9,8 @@ type SearchParams = { source: 'search'; query: string; startId: string };
 
 export type PopViewerScreenParams = ({ source: 'channel' } & ChannelPopViewerProps) | SearchParams;
 
-export function PopViewerScreen(params: PopViewerScreenParams) {
+export function PopViewerScreen() {
+  const params = useRouteParams<'PopViewer'>();
   if (params.source === 'search') return <SearchResultsViewer {...params} />;
 
   return <ChannelPopViewer {...params} entry={params.entry ?? 'channel_grid'} />;

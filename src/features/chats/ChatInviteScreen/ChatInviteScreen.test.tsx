@@ -15,7 +15,8 @@ jest.mock('@/features/chats/useCurrentUserId', () => ({ useCurrentUserId: () => 
 
 const mockBack = jest.fn();
 
-jest.mock('@/navigation', () => ({ useRouter: () => ({ back: mockBack }) }));
+jest.mock('@/navigation', () => ({
+  useRouteParams: () => ({ chatId: 'group-1' }), useRouter: () => ({ back: mockBack }) }));
 
 const candidate = (id: string, displayName: string) => ({
   id,
@@ -69,7 +70,7 @@ beforeEach(() => {
 
 describe('ChatInviteScreen', () => {
   it('marks members and the invited, and does not let them be picked', async () => {
-    await renderWithQuery(<ChatInviteScreen chatId="group-1" />);
+    await renderWithQuery(<ChatInviteScreen />);
 
     expect(await screen.findByText('в группе')).toBeTruthy();
     expect(await screen.findByText('приглашён(а)')).toBeTruthy();
@@ -81,13 +82,13 @@ describe('ChatInviteScreen', () => {
   });
 
   it('shows who is online', async () => {
-    await renderWithQuery(<ChatInviteScreen chatId="group-1" />);
+    await renderWithQuery(<ChatInviteScreen />);
 
     expect(await screen.findByText('в сети')).toBeTruthy();
   });
 
   it('invites the picked people and goes back', async () => {
-    await renderWithQuery(<ChatInviteScreen chatId="group-1" />);
+    await renderWithQuery(<ChatInviteScreen />);
 
     await fireEvent.press(await screen.findByRole('checkbox', { name: 'Вера' }));
     await fireEvent.press(screen.getByRole('checkbox', { name: 'Глеб' }));
@@ -98,7 +99,7 @@ describe('ChatInviteScreen', () => {
   });
 
   it('searches people on the server as the query is typed', async () => {
-    await renderWithQuery(<ChatInviteScreen chatId="group-1" />);
+    await renderWithQuery(<ChatInviteScreen />);
 
     await fireEvent.changeText(await screen.findByTestId('invite-search'), 'гле');
 
@@ -107,7 +108,7 @@ describe('ChatInviteScreen', () => {
 
   it('explains a failure in plain words and stays', async () => {
     jest.mocked(inviteToChat).mockRejectedValue(new Error('сбой'));
-    await renderWithQuery(<ChatInviteScreen chatId="group-1" />);
+    await renderWithQuery(<ChatInviteScreen />);
 
     await fireEvent.press(await screen.findByRole('checkbox', { name: 'Вера' }));
     await fireEvent.press(screen.getByText('Пригласить (1)'));

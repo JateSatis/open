@@ -1,6 +1,6 @@
 import { screen, userEvent } from '@testing-library/react-native';
 
-import { BlockedRoute as BlockedUsersRoute } from '@/navigation/screens/BlockedRoute';
+import { BlockedUsersScreen } from '@/features/moderation/BlockedUsersScreen';
 
 import { listBlockedUsers, unblockUser } from '@/api/blocks';
 import { renderWithQuery } from '@/test/renderWithQuery';
@@ -36,7 +36,7 @@ it('нажатие на имя открывает профиль выбранн�
   });
   const user = userEvent.setup();
 
-  await renderWithQuery(<BlockedUsersRoute />);
+  await renderWithQuery(<BlockedUsersScreen />);
   await user.press(await screen.findByText('Борис'));
 
   expect(mockPush).toHaveBeenCalledWith({

@@ -1,3 +1,4 @@
+import { useRouter, useRouteParams } from '@/navigation';
 import { ActivityIndicator, FlatList, View } from 'react-native';
 
 import { styles } from './styles';
@@ -18,10 +19,13 @@ export type FriendsListProps = {
  * Друзья другого человека — постранично. Закрыл список настройкой — сервер
  * отказывает, и экран так и говорит, без пустого списка вместо отказа.
  */
-export function FriendsList(props: FriendsListProps) {
+export function FriendsList() {
+  const router = useRouter();
+  const { userId } = useRouteParams<'Friends'>();
+  const onOpenPerson = (userId: string) => router.push({ name: 'Person', params: { userId } });
   return (
     <Screen edges={['bottom']}>
-      <FriendsListContent {...props} />
+      <FriendsListContent userId={userId} onOpenPerson={onOpenPerson} />
     </Screen>
   );
 }

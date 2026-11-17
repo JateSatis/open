@@ -427,7 +427,10 @@ describe('ChatInfoPage', () => {
       await unmount();
 
       await renderWithQuery(<Page chat={{ ...base, ownerId: 'me' }} />);
-      expect(screen.getByTestId('info-edit')).toBeTruthy();
+      await fireEvent.press(screen.getByTestId('info-edit'));
+      expect(mockPush).toHaveBeenCalledWith({
+        name: 'EditDetails', params: { target: { kind: 'chat', id: 'chat-1' } },
+      });
     });
 
     it('shows the description above @name, and no row when it is empty', async () => {
@@ -586,6 +589,10 @@ describe('ChatInfoPage', () => {
         'Подписчики',
         'Покинуть группу',
       ]);
+      await fireEvent.press(screen.getByRole('menuitem', { name: 'Подписчики' }));
+      expect(mockPush).toHaveBeenCalledWith({
+        name: 'Subscribers', params: { target: { kind: 'chat', id: 'chat-1' } },
+      });
       await group.unmount();
 
       const own = await renderWithQuery(<Page chat={dialog} />);

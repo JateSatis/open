@@ -1,5 +1,5 @@
 import { useInfiniteQuery } from '@tanstack/react-query';
-import { useRouter } from '@/navigation';
+import { useRouteParams, useRouter } from '@/navigation';
 import { useCallback } from 'react';
 import { ActivityIndicator, FlatList, Pressable, View } from 'react-native';
 
@@ -25,11 +25,6 @@ export const channelSubscribersQueryKey = (channelId: string) =>
 
 export const chatSubscribersQueryKey = (chatId: string) => ['chat', chatId, 'subscribers'] as const;
 
-/** Чьи подписчики: канала (видит создатель) или чужого диалога и группы (видят участники). */
-export type SubscribersTarget = { kind: 'channel'; id: string } | { kind: 'chat'; id: string };
-
-export type SubscribersScreenProps = { target: SubscribersTarget };
-
 const subscriberKey = (subscriber: Subscriber) => subscriber.id;
 
 /**
@@ -37,7 +32,8 @@ const subscriberKey = (subscriber: Subscriber) => subscriber.id;
  * пометка «в чатах» (у чата уровень один — пометки нет). Тап — профиль.
  * Остальным база этот список не отдаёт.
  */
-export function SubscribersScreen({ target }: SubscribersScreenProps) {
+export function SubscribersScreen() {
+  const { target } = useRouteParams<'Subscribers'>();
   const theme = useTheme();
   // Список доходит до края окна: панели вкладок под экраном нет.
   const insets = useSafeAreaInsets();

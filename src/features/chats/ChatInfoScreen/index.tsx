@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useRouter } from '@/navigation';
+import { useRouteParams, useRouter } from '@/navigation';
 import { useCallback } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import Animated, { useAnimatedStyle } from 'react-native-reanimated';
@@ -15,16 +15,13 @@ import { chatQueryKey, useChat } from '@/features/chats/useChat';
 import { useTheme } from '@/hooks/use-theme';
 import { reloadMissing } from '@/lib/loadState';
 
-export type ChatInfoScreenProps = {
-  chatId: string;
-};
-
 /**
  * Страница информации о чате по адресу. Из переписки чат уже лежит в кеше, и
  * страница стоит целиком в первом же кадре; без кеша — пустая страница со
  * стрелкой, пока чат грузится.
  */
-export function ChatInfoScreen({ chatId }: ChatInfoScreenProps) {
+export function ChatInfoScreen() {
+  const { chatId } = useRouteParams<'ChatInfo'>();
   const router = useRouter();
   const { chat, failed, gone } = useChat(chatId);
   // Одна на маршрут: заглушка и страница въезжают и уходят одним движением.

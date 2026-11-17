@@ -1,3 +1,4 @@
+import { router } from '@/navigation';
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, StyleSheet } from 'react-native';
 
@@ -27,9 +28,7 @@ const styles = StyleSheet.create({
   bio: { minHeight: Spacing.six },
 });
 
-type EditProfileScreenProps = { onSaved: () => void };
-
-export function EditProfileScreen({ onSaved }: EditProfileScreenProps) {
+export function EditProfileScreen() {
   const { data: profile, isPending, error, refetch } = useMyProfile();
 
   return (
@@ -39,7 +38,7 @@ export function EditProfileScreen({ onSaved }: EditProfileScreenProps) {
         {profile ? (
           <EditProfileForm
             key={profile.id}
-            onSaved={onSaved}
+            onSaved={router.back}
             initial={{
               username: profile.username ?? '',
               displayName: profile.displayName ?? '',
@@ -55,7 +54,7 @@ export function EditProfileScreen({ onSaved }: EditProfileScreenProps) {
 
 type FormValues = { username: string; displayName: string; status: string; bio: string };
 
-function EditProfileForm({ initial, onSaved }: EditProfileScreenProps & { initial: FormValues }) {
+function EditProfileForm({ initial, onSaved }: { onSaved: () => void; initial: FormValues }) {
   const [values, setValues] = useState(initial);
   const [usernameError, setUsernameError] = useState<string | null>(null);
   const availability = useUsernameAvailability(values.username, {

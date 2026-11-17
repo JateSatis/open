@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { Redirect, useRouter } from '@/navigation';
+import { useRouteParams, Redirect, useRouter } from '@/navigation';
 import { useCallback } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 
@@ -27,7 +27,8 @@ import { reloadMissing } from '@/lib/loadState';
  * пальцем, под ней виден экран, откуда пришли. Открыли с холодного старта и
  * под ней пусто — назад ведёт в «Чаты».
  */
-export function ChatScreen({ chatId }: { chatId: string }) {
+export function ChatScreen() {
+  const { chatId } = useRouteParams<'Chat'>();
   const theme = useTheme();
   const queryClient = useQueryClient();
   const listed = queryClient

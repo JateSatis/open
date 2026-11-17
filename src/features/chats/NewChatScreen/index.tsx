@@ -1,3 +1,4 @@
+import { useRouter, useRouteParams } from '@/navigation';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, View } from 'react-native';
 import {
@@ -23,12 +24,6 @@ import { Spacing } from '@/theme';
 
 const GROUP_AVATAR_LABELS = { pick: 'Выбрать фото группы', change: 'Сменить фото группы' };
 
-type Props = {
-  initialUserId?: string;
-  onOpenChat: (chatId: string) => void;
-  onOpenRequest: (userId: string) => void;
-};
-
 /**
  * Выбор людей и создание чата. Один выбранный — личный диалог, несколько —
  * группа. Без запроса — друзья и люди из моих чатов; остальных находят
@@ -37,7 +32,11 @@ type Props = {
  * новый чат с тем же человеком допустим, когда в прежнем все приняли заявки.
  * Другу диалог открывается сразу, не-другу — экран заявки.
  */
-export function NewChatScreen({ initialUserId, onOpenChat, onOpenRequest }: Props) {
+export function NewChatScreen() {
+  const { with: initialUserId } = useRouteParams<'NewChat'>();
+  const router = useRouter();
+  const onOpenChat = (chatId: string) => router.replace({ name: 'Chat', params: { chatId } });
+  const onOpenRequest = (userId: string) => router.replace({ name: 'Request', params: { userId } });
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const keyboard = useReanimatedKeyboardAnimation();

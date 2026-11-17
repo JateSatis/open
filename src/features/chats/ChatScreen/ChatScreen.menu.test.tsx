@@ -11,7 +11,7 @@ import { BackHandler, StyleSheet } from 'react-native';
 
 
 
-import { ChatRoute as ChatScreen } from '@/navigation/screens/ChatRoute';
+import { ChatScreen } from '@/features/chats/ChatScreen';
 
 import type { ChatChannelHandlers, ChatSummary, Message } from '@/api/chats';
 import {

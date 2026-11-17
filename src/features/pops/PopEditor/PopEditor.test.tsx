@@ -11,7 +11,9 @@ const mockBack = jest.fn();
 let mockOnPick: ((asset: MediaLibraryItem) => void) | null = null;
 let mockFilter: GalleryFilter | null = null;
 
-jest.mock('@/navigation', () => ({ useRouter: () => ({ back: mockBack }) }));
+let mockPageParams: Record<string, unknown>;
+jest.mock('@/navigation', () => ({
+  useRouteParams: () => (mockPageParams), useRouter: () => ({ back: mockBack }) }));
 jest.mock('@tanstack/react-query', () => ({ useQueryClient: () => ({}) }));
 jest.mock('expo-video', () => ({ useVideoPlayer: () => ({}), VideoView: () => null }));
 jest.mock('@/features/auth/useSession', () => ({
@@ -74,20 +76,23 @@ beforeEach(() => {
 
 describe('PopEditor', () => {
   it('offers only videos up to 90 seconds', async () => {
-    await render(<PopEditor channelId="channel-1" from="pops" />);
+    mockPageParams = { channelId: 'channel-1', from: 'pops' };
+    await render(<PopEditor />);
 
     expect(mockFilter).toEqual({ kind: 'video', maxDurationMs: 90_000 });
   });
 
   it('keeps «Опубликовать» disabled until a video is picked', async () => {
-    await render(<PopEditor channelId="channel-1" from="pops" />);
+    mockPageParams = { channelId: 'channel-1', from: 'pops' };
+    await render(<PopEditor />);
 
     expect(screen.getByRole('button', { name: 'Опубликовать' })).toBeDisabled();
     expect(screen.queryByLabelText('Подпись')).toBeNull();
   });
 
   it('rejects a horizontal video with a clear message', async () => {
-    await render(<PopEditor channelId="channel-1" from="pops" />);
+    mockPageParams = { channelId: 'channel-1', from: 'pops' };
+    await render(<PopEditor />);
     await pick({ width: 1280, height: 720 });
 
     expect(screen.getByText('Попсы — только вертикальные видео')).toBeTruthy();
@@ -95,7 +100,8 @@ describe('PopEditor', () => {
   });
 
   it('rejects a video whose length is unknown', async () => {
-    await render(<PopEditor channelId="channel-1" from="pops" />);
+    mockPageParams = { channelId: 'channel-1', from: 'pops' };
+    await render(<PopEditor />);
     (readVideoFrame as jest.Mock).mockResolvedValue({
       uri: 'file:///frame.jpg',
       width: 720,
@@ -111,7 +117,8 @@ describe('PopEditor', () => {
   });
 
   it('publishes a vertical video with a caption, «в посты» on by default', async () => {
-    await render(<PopEditor channelId="channel-1" from="pops" />);
+    mockPageParams = { channelId: 'channel-1', from: 'pops' };
+    await render(<PopEditor />);
     await pick({ width: 720, height: 1280 });
 
     expect(screen.getByRole('checkbox', { name: 'Опубликовать в посты' })).toBeChecked();
@@ -140,7 +147,8 @@ describe('PopEditor', () => {
   });
 
   it('does not publish without a title and says why', async () => {
-    await render(<PopEditor channelId="channel-1" from="pops" />);
+    mockPageParams = { channelId: 'channel-1', from: 'pops' };
+    await render(<PopEditor />);
     await pick({ width: 720, height: 1280 });
 
     expect(screen.queryByTestId('pop-title-required')).toBeNull();
@@ -162,7 +170,8 @@ describe('PopEditor', () => {
   });
 
   it('from «Посты» asks for a title, then hands the video to the posts draft', async () => {
-    await render(<PopEditor channelId="channel-1" from="posts" />);
+    mockPageParams = { channelId: 'channel-1', from: 'posts' };
+    await render(<PopEditor />);
 
     expect(screen.queryByRole('button', { name: 'Опубликовать' })).toBeNull();
 

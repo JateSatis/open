@@ -1,3 +1,4 @@
+import { useRouter } from '@/navigation';
 import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, RefreshControl, SectionList, View } from 'react-native';
 
@@ -15,20 +16,15 @@ import { Spacing } from '@/theme';
 
 type Section = { title: string; data: ChatInvite[] };
 
-type Props = {
-  onOpenChat: (chatId: string) => void;
-  onOpenPerson: (userId: string) => void;
-  onOpenOwnProfile: () => void;
-};
-
-export function InvitesScreen({ onOpenChat, onOpenPerson, onOpenOwnProfile }: Props) {
+export function InvitesScreen() {
+  const router = useRouter();
   const currentUserId = useCurrentUserId();
   const { incoming, declined, isLoading, isRefreshing, error, refresh } = useInvites();
   const { pending, error: respondError, respond } = useRespondToInvite();
 
   const openPerson = useCallback(
-    (userId: string) => (userId === currentUserId ? onOpenOwnProfile() : onOpenPerson(userId)),
-    [currentUserId, onOpenOwnProfile, onOpenPerson],
+    (userId: string) => (userId === currentUserId ? router.navigate({ name: 'Tabs', params: { screen: 'profile' } }) : router.push({ name: 'Person', params: { userId } })),
+    [currentUserId, router],
   );
   const accept = useCallback((chatId: string) => respond(chatId, 'accept'), [respond]);
   const decline = useCallback((chatId: string) => respond(chatId, 'decline'), [respond]);
@@ -107,7 +103,7 @@ export function InvitesScreen({ onOpenChat, onOpenPerson, onOpenOwnProfile }: Pr
             invite={item}
             currentUserId={currentUserId}
             responding={pending?.chatId === item.chatId ? pending.answer : null}
-            onOpen={onOpenChat}
+            onOpen={(chatId) => router.push({ name: 'Chat', params: { chatId } })}
             onAccept={accept}
             onDecline={decline}
             onOpenPerson={openPerson}

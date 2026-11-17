@@ -55,6 +55,7 @@ const STACK_OVER_CHANNEL = {
 let mockStack = STACK_OVER_CHANNEL;
 
 jest.mock('@/navigation', () => ({
+  useRouteParams: () => ({ channelId: 'channel-1' }),
   useIsFocused: () => true,
   useNavigation: () => ({
     getState: () => mockStack,
@@ -140,7 +141,7 @@ async function menuItems() {
 }
 
 async function renderPage() {
-  await renderWithQuery(<ChannelInfoScreen channelId="channel-1" />);
+  await renderWithQuery(<ChannelInfoScreen />);
   await screen.findByTestId('channel-info-page');
 }
 
@@ -410,8 +411,7 @@ describe('ChannelInfoPage', () => {
       await fireEvent.press(screen.getByTestId('info-edit'));
 
       expect(mockPush).toHaveBeenCalledWith({
-        name: 'ChannelEdit',
-        params: { channelId: 'channel-1' },
+        name: 'EditDetails', params: { target: { kind: 'channel', id: 'channel-1' } },
       });
     });
   });
@@ -461,7 +461,7 @@ describe('ChannelInfoPage', () => {
   it('without the channel shows a back arrow and an honest failure with retry', async () => {
     jest.mocked(getChannel).mockRejectedValue(new Error('boom'));
 
-    await renderWithQuery(<ChannelInfoScreen channelId="channel-1" />);
+    await renderWithQuery(<ChannelInfoScreen />);
 
     expect(screen.getByTestId('info-back')).toBeTruthy();
     expect(await screen.findByText('Не удалось открыть канал')).toBeTruthy();

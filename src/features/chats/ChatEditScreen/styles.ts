@@ -6,11 +6,6 @@ export const styles = StyleSheet.create({
   flex: {
     flex: 1,
   },
-  centered: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   content: {
     gap: Spacing.three,
     padding: Spacing.four,

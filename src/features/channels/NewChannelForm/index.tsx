@@ -1,3 +1,4 @@
+import { useRouter } from '@/navigation';
 import { useCallback, useRef, useState } from 'react';
 import { View, type LayoutChangeEvent } from 'react-native';
 import {
@@ -32,16 +33,17 @@ const CHANNEL_AVATAR_LABELS = {
   change: 'Сменить аватарку канала',
 };
 
-export type NewChannelFormProps = {
-  onCreated: (created: CreatedChannel) => void;
-};
-
 /**
  * Форма нового канала: аватарка, название, описание, `@имя`. «Создать» стоит
  * над клавиатурой и активна, когда есть название и имя свободно. Сбой
  * создания форму не сбрасывает.
  */
-export function NewChannelForm({ onCreated }: NewChannelFormProps) {
+export function NewChannelForm() {
+  const router = useRouter();
+  const onCreated = useCallback(
+    ({ channelId }: CreatedChannel) => router.replace({ name: 'Channel', params: { channelId } }),
+    [router],
+  );
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const userId = useCurrentUserId();

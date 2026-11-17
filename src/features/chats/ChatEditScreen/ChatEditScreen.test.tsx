@@ -1,7 +1,7 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 
-import { ChatEditScreen } from '.';
+import { EditDetailsScreen } from '@/features/chats/EditDetailsScreen';
 
 import { getChatInfoSummary, setChatTitle } from '@/api/chatInfo';
 import { setChatDescription } from '@/api/groups';
@@ -47,6 +47,7 @@ const mockBack = jest.fn();
 
 // Галочка живёт в шапке стека — мок рисует её прямо на экране.
 jest.mock('@/navigation', () => ({
+  useRouteParams: () => ({ target: { kind: 'chat', id: 'group-1' } }),
   useRouter: () => ({ back: mockBack }),
   useNavigation: () => ({ addListener: () => () => undefined, dispatch: jest.fn() }),
   ScreenOptions: ({ options }: { options?: { headerRight?: () => ReactNode } }) =>
@@ -136,7 +137,7 @@ beforeEach(() => {
 
 describe('ChatEditScreen', () => {
   it('keeps the check mark off until something changes', async () => {
-    await renderWithQuery(<ChatEditScreen chatId="group-1" />);
+    await renderWithQuery(<EditDetailsScreen />);
 
     expect(await screen.findByTestId('chat-edit-save')).toBeDisabled();
 
@@ -147,7 +148,7 @@ describe('ChatEditScreen', () => {
   });
 
   it('saves a free username by the check mark and goes back', async () => {
-    await renderWithQuery(<ChatEditScreen chatId="group-1" />);
+    await renderWithQuery(<EditDetailsScreen />);
     await fireEvent.changeText(await screen.findByTestId('chat-username'), 'team');
     await screen.findByText('Имя свободно');
     expect(mockedAvailable).toHaveBeenCalledWith('group', 'team', 'group-1');
@@ -161,7 +162,7 @@ describe('ChatEditScreen', () => {
   it('clears the username', async () => {
     mockedGetChat.mockResolvedValue({ ...group, username: 'team' });
 
-    await renderWithQuery(<ChatEditScreen chatId="group-1" />);
+    await renderWithQuery(<EditDetailsScreen />);
     await fireEvent.changeText(await screen.findByTestId('chat-username'), '');
     await fireEvent.press(screen.getByTestId('chat-edit-save'));
 
@@ -169,7 +170,7 @@ describe('ChatEditScreen', () => {
   });
 
   it('refuses a dot and a taken name, and keeps the check mark off', async () => {
-    await renderWithQuery(<ChatEditScreen chatId="group-1" />);
+    await renderWithQuery(<EditDetailsScreen />);
     await fireEvent.changeText(await screen.findByTestId('chat-username'), 'a.b');
 
     expect(await screen.findByText('Точка в имени недопустима')).toBeTruthy();
@@ -185,7 +186,7 @@ describe('ChatEditScreen', () => {
   it('explains a network failure in plain words and stays on the screen', async () => {
     mockedSet.mockRejectedValue(new TypeError('Network request failed'));
 
-    await renderWithQuery(<ChatEditScreen chatId="group-1" />);
+    await renderWithQuery(<EditDetailsScreen />);
     await fireEvent.changeText(await screen.findByTestId('chat-username'), 'team');
     await screen.findByText('Имя свободно');
     await fireEvent.press(screen.getByTestId('chat-edit-save'));
@@ -198,14 +199,14 @@ describe('ChatEditScreen', () => {
 
   it('opens only for the owner: another member is told so', async () => {
     mockedGetChat.mockResolvedValue({ ...group, ownerId: 'anna' });
-    await renderWithQuery(<ChatEditScreen chatId="group-1" />);
+    await renderWithQuery(<EditDetailsScreen />);
 
     expect(await screen.findByText('Изменять группу может только её владелец.')).toBeTruthy();
     expect(screen.queryByTestId('chat-edit-title')).toBeNull();
   });
 
   it('the owner renames the group', async () => {
-    await renderWithQuery(<ChatEditScreen chatId="group-1" />);
+    await renderWithQuery(<EditDetailsScreen />);
 
     await fireEvent.changeText(await screen.findByTestId('chat-edit-title'), '  Новая  ');
     await fireEvent.press(screen.getByTestId('chat-edit-save'));
@@ -214,7 +215,7 @@ describe('ChatEditScreen', () => {
   });
 
   it('saves a multi-line description; a cleared one is removed', async () => {
-    const { unmount } = await renderWithQuery(<ChatEditScreen chatId="group-1" />);
+    const { unmount } = await renderWithQuery(<EditDetailsScreen />);
 
     await fireEvent.changeText(
       await screen.findByTestId('chat-edit-description'),
@@ -228,7 +229,7 @@ describe('ChatEditScreen', () => {
     await unmount();
 
     mockedGetChat.mockResolvedValue({ ...group, description: 'Было' });
-    await renderWithQuery(<ChatEditScreen chatId="group-1" />);
+    await renderWithQuery(<EditDetailsScreen />);
     await fireEvent.changeText(await screen.findByTestId('chat-edit-description'), '   ');
     await fireEvent.press(screen.getByTestId('chat-edit-save'));
 
@@ -236,7 +237,7 @@ describe('ChatEditScreen', () => {
   });
 
   it('shows how many characters are left near the limit', async () => {
-    await renderWithQuery(<ChatEditScreen chatId="group-1" />);
+    await renderWithQuery(<EditDetailsScreen />);
     const field = await screen.findByTestId('chat-edit-description');
 
     await fireEvent.changeText(field, 'а'.repeat(100));
@@ -248,7 +249,7 @@ describe('ChatEditScreen', () => {
 
   describe('group photo', () => {
     it('a new photo waits in the draft and is uploaded by the check mark', async () => {
-      await renderWithQuery(<ChatEditScreen chatId="group-1" />);
+      await renderWithQuery(<EditDetailsScreen />);
       await fireEvent.press(await screen.findByText('Установить новое фото'));
 
       expect(openMediaSheet).toHaveBeenCalledWith('avatar:group-edit');
@@ -273,7 +274,7 @@ describe('ChatEditScreen', () => {
       mockedGetChat.mockResolvedValue({ ...group, avatarUrl: photo });
       mockedSetAvatar.mockResolvedValue(photo);
 
-      await renderWithQuery(<ChatEditScreen chatId="group-1" />);
+      await renderWithQuery(<EditDetailsScreen />);
       await fireEvent.press(await screen.findByText('Удалить фото'));
       await fireEvent.press(screen.getByTestId('chat-edit-save'));
 
@@ -284,7 +285,7 @@ describe('ChatEditScreen', () => {
     it('a refused photo is explained and the upload is cleaned up', async () => {
       mockedSetAvatar.mockRejectedValue(new TypeError('Network request failed'));
 
-      await renderWithQuery(<ChatEditScreen chatId="group-1" />);
+      await renderWithQuery(<EditDetailsScreen />);
       await screen.findByText('Установить новое фото');
       await fireEvent.press(screen.getByTestId('avatar-sheet-done'));
       await waitFor(() => expect(screen.getByTestId('chat-edit-save')).toBeEnabled());

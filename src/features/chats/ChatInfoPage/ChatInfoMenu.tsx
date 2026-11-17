@@ -135,7 +135,7 @@ export function ChatInfoMenu({
         onDeleteChat();
         return;
       case 'subscribers':
-        router.push({ name: 'ChatSubscribers', params: { chatId } });
+        router.push({ name: 'Subscribers', params: { target: { kind: 'chat', id: chatId } } });
         return;
       case 'profile':
         if (counterpartId && !isOpaquePersonId(counterpartId)) {

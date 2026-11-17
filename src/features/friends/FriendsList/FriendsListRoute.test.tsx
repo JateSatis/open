@@ -1,7 +1,7 @@
 import { screen, userEvent, waitFor } from '@testing-library/react-native';
 
-import { MyFriendsRoute as MyFriendsScreen } from '@/navigation/screens/MyFriendsRoute';
-import { FriendsRoute as UserFriendsScreen } from '@/navigation/screens/FriendsRoute';
+import { MyFriendsScreen } from '@/features/friends/MyFriendsScreen';
+import { FriendsList } from '@/features/friends/FriendsList';
 
 import {
   acceptFriendRequest,
@@ -154,7 +154,7 @@ describe('друзья другого человека', () => {
   it('запрашивает друзей владельца и открывает выбранного друга', async () => {
       mocked.listFriends.mockResolvedValue(page([{ id: 'user-a', name: 'Аня' }]));
 
-      await renderWithQuery(<UserFriendsScreen />);
+      await renderWithQuery(<FriendsList />);
 
       await userEvent.setup().press(await screen.findByRole('button', { name: 'Аня' }));
       expect(mocked.listFriends).toHaveBeenCalledWith('user-b', null);
@@ -165,7 +165,7 @@ describe('друзья другого человека', () => {
   it('К5.3 список скрыт его настройкой — так и сказано, без пустого списка', async () => {
     mocked.listFriends.mockRejectedValue(new FriendsListHiddenError());
 
-    await renderWithQuery(<UserFriendsScreen />);
+    await renderWithQuery(<FriendsList />);
 
     expect(await screen.findByText('Список друзей скрыт.')).toBeTruthy();
     expect(screen.queryByText(/Пока ни одного друга/)).toBeNull();

@@ -1,6 +1,6 @@
 import { ScreenOptions, useRouter } from '@/navigation';
 import { useCallback, useRef, useState } from 'react';
-import { ActivityIndicator, View } from 'react-native';
+import { View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 
 import { PhotoField } from './PhotoField';
@@ -18,7 +18,6 @@ import {
   CHANNEL_TITLE_MAX_LENGTH,
 } from '@/features/channels/limits';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useChannel } from '@/features/channels/useChannel';
 import { DescriptionField } from '@/features/chats/ChatEditScreen/DescriptionField';
 import { openMediaSheet } from '@/features/chats/MediaPickerSheet';
 import { MediaAvatarSheet } from '@/features/chats/MediaPickerSheet/MediaAvatarSheet';
@@ -32,37 +31,7 @@ import { Spacing } from '@/theme';
 
 const SHEET_OWNER = 'avatar:channel-edit';
 
-export type ChannelEditScreenProps = { channelId: string };
-
-/**
- * «Изменить» канала: фото, название, описание и `@имя` — одним сохранением
- * по галочке. Только владелец: остальным карандаш не показывается, а база
- * им откажет.
- */
-export function ChannelEditScreen({ channelId }: ChannelEditScreenProps) {
-  const { data: channel } = useChannel(channelId);
-  const currentUserId = useCurrentUserId();
-
-  if (!channel) {
-    return (
-      <View style={styles.centered}>
-        <ActivityIndicator accessibilityLabel="Загрузка канала" />
-      </View>
-    );
-  }
-
-  if (channel.ownerId === null || channel.ownerId !== currentUserId) {
-    return (
-      <View style={styles.centered}>
-        <Text color="textSecondary">Изменять канал может только его владелец.</Text>
-      </View>
-    );
-  }
-
-  return <ChannelEditForm channel={channel} />;
-}
-
-function ChannelEditForm({ channel }: { channel: Channel }) {
+export function ChannelEditForm({ channel }: { channel: Channel }) {
   // Форма доходит до края окна: панели вкладок под экраном нет.
   const insets = useSafeAreaInsets();
   const theme = useTheme();

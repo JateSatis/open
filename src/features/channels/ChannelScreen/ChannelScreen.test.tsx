@@ -26,7 +26,7 @@ import {
 } from '@/api/subscriptions';
 import { ConfirmDialogHost } from '@/components/ConfirmDialog';
 import { resetConfirmDialogQueue } from '@/components/ConfirmDialog/store';
-import { ChatRoute as ChatScreen } from '@/navigation/screens/ChatRoute';
+import { ChatScreen } from '@/features/chats/ChatScreen';
 import { useSession } from '@/features/auth/useSession';
 import { readChatDraft, resetComposerDrafts } from '@/features/chats/composerDraftStore';
 import { resetOutbox } from '@/features/chats/messages/outbox';
@@ -35,6 +35,7 @@ import { DeadlineError } from '@/lib/deadline';
 import { renderWithQuery } from '@/test/renderWithQuery';
 import { longPressMessage } from '@/test/messageGestures';
 
+const mockPush = jest.fn();
 const mockRedirect = jest.fn();
 let mockParams: Record<string, string> = { chatId: 'posts-1' };
 
@@ -53,7 +54,7 @@ jest.mock('@/navigation', () => ({
     addListener: () => () => undefined,
   }),
   useRouteParams: () => mockParams,
-  useRouter: () => ({ push: jest.fn(), navigate: jest.fn(), replace: jest.fn() }),
+  useRouter: () => ({ push: mockPush, navigate: jest.fn(), replace: jest.fn() }),
   Redirect: ({ href }: { href: unknown }) => {
     mockRedirect(href);
     return null;
@@ -211,13 +212,13 @@ function signIn(userId: string) {
 }
 
 async function renderChannel() {
-  await renderWithQuery(<ChannelScreen channelId="channel-1" />);
+  await renderWithQuery(<ChannelScreen />);
   await screen.findByText('первый пост');
 }
 
 beforeEach(() => {
   jest.clearAllMocks();
-  mockParams = { chatId: 'posts-1' };
+  mockParams = { chatId: 'posts-1', channelId: 'channel-1' };
   resetOutbox();
   resetComposerDrafts();
   resetConnectionState();
@@ -312,19 +313,22 @@ describe('ChannelScreen: переход к посту снаружи', () => {
     screen.getByRole('tab', { name }).props.accessibilityState?.selected;
 
   it('opens on «Посты» for a jump to a post, even when «Попсы» were asked', async () => {
-    await renderWithQuery(<ChannelScreen channelId="channel-1" section="pops" sectionRequest={{ section: 'posts', key: '42' }} />);
+    mockParams = { channelId: 'channel-1', section: 'posts', sectionKey: '42' };
+    await renderWithQuery(<ChannelScreen />);
     await screen.findByText('первый пост');
 
     expect(selected('Посты')).toBe(true);
   });
 
   it('switches a screen left on «Попсы» back to «Посты» on each new jump', async () => {
-    const view = await renderWithQuery(<ChannelScreen channelId="channel-1" section="pops" />);
+    mockParams = { channelId: 'channel-1', section: 'pops' };
+    const view = await renderWithQuery(<ChannelScreen />);
     await screen.findByText('первый пост');
     expect(selected('Попсы')).toBe(true);
 
     await act(async () => {
-      view.rerender(<ChannelScreen channelId="channel-1" section="pops" sectionRequest={{ section: 'posts', key: '42' }} />);
+      mockParams = { channelId: 'channel-1', section: 'posts', sectionKey: '42' };
+      view.rerender(<ChannelScreen />);
     });
     expect(selected('Посты')).toBe(true);
 
@@ -333,24 +337,27 @@ describe('ChannelScreen: переход к посту снаружи', () => {
       fireEvent.press(screen.getByRole('tab', { name: 'Попсы' }));
     });
     await act(async () => {
-      view.rerender(<ChannelScreen channelId="channel-1" section="pops" sectionRequest={{ section: 'posts', key: '42' }} />);
+      mockParams = { channelId: 'channel-1', section: 'posts', sectionKey: '42' };
+      view.rerender(<ChannelScreen />);
     });
     expect(selected('Попсы')).toBe(true);
 
     await act(async () => {
-      view.rerender(<ChannelScreen channelId="channel-1" section="pops" sectionRequest={{ section: 'posts', key: '43' }} />);
+      mockParams = { channelId: 'channel-1', section: 'posts', sectionKey: '43' };
+      view.rerender(<ChannelScreen />);
     });
     expect(selected('Посты')).toBe(true);
   });
 
   it('switches a screen left on «Посты» to «Попсы» when «Попсы» are asked', async () => {
-    const view = await renderWithQuery(<ChannelScreen channelId="channel-1" />);
+    const view = await renderWithQuery(<ChannelScreen />);
     await screen.findByText('первый пост');
     expect(selected('Посты')).toBe(true);
 
     await act(async () => {
+      mockParams = { channelId: 'channel-1', section: 'pops', sectionKey: '7' };
       view.rerender(
-        <ChannelScreen channelId="channel-1" sectionRequest={{ section: 'pops', key: '7' }} />,
+        <ChannelScreen />,
       );
     });
     expect(selected('Попсы')).toBe(true);
@@ -377,7 +384,7 @@ describe('ChannelScreen subscription', () => {
     stored = current;
     await renderWithQuery(
       <>
-        <ChannelScreen channelId="channel-1" />
+        <ChannelScreen />
         <ConfirmDialogHost />
       </>,
     );
@@ -546,7 +553,10 @@ describe('ChannelScreen subscription', () => {
 
     fireEvent.press(await screen.findByRole('button', { name: 'Меню канала' }));
 
-    expect(await screen.findByRole('menuitem', { name: 'Подписчики' })).toBeTruthy();
+    await fireEvent.press(await screen.findByRole('menuitem', { name: 'Подписчики' }));
+    expect(mockPush).toHaveBeenCalledWith({
+      name: 'Subscribers', params: { target: { kind: 'channel', id: 'channel-1' } },
+    });
     expect(screen.queryByTestId('channel-subscribe-bar')).toBeNull();
     expect(getMySubscription).not.toHaveBeenCalled();
     expect(listChannelSubscribers).not.toHaveBeenCalled();
@@ -609,7 +619,7 @@ describe('ChannelScreen: не удалось открыть', () => {
   it('сервер не ответил — «Не удалось открыть канал», «Повторить» открывает канал', async () => {
     mockedGetChannel.mockRejectedValueOnce(new DeadlineError());
 
-    await renderWithQuery(<ChannelScreen channelId="channel-1" />);
+    await renderWithQuery(<ChannelScreen />);
 
     expect(await screen.findByText('Не удалось открыть канал')).toBeTruthy();
     expect(screen.queryByText('Нет связи')).toBeNull();
@@ -625,7 +635,7 @@ describe('ChannelScreen: не удалось открыть', () => {
   it('не загрузились посты — экран сбоя в «Постах», а не «Постов пока нет»', async () => {
     mockedListMessages.mockRejectedValue(new DeadlineError());
 
-    await renderWithQuery(<ChannelScreen channelId="channel-1" />);
+    await renderWithQuery(<ChannelScreen />);
 
     expect(await screen.findByText('Не удалось загрузить переписку')).toBeTruthy();
     expect(screen.queryByText('Постов пока нет.')).toBeNull();

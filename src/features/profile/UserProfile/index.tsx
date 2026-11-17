@@ -1,3 +1,5 @@
+import { useUserProfileNavigation } from './useUserProfileNavigation';
+import { useRouteParams } from '@/navigation';
 import { Button } from '@/components/Button';
 import { PlainPageBar } from '@/components/PageBar';
 import { Screen } from '@/components/Screen';
@@ -11,14 +13,6 @@ import { ProfilePage } from '@/features/profile/ProfilePage';
 import { useProfile } from '@/features/profile/queries';
 import { displayNameOf } from '@/features/profile/username';
 
-type UserProfileProps = {
-  userId: string;
-  onOpenFriends: (isMe: boolean) => void;
-  onOpenDialogs: () => void;
-  onWrite: () => void;
-  onBackFallback: () => void;
-};
-
 /**
  * Чужой профиль. Один экран на две вкладки: из переписки он открывается
  * внутри «Чатов», чтобы «назад» возвращал в чат, а не в свой профиль.
@@ -28,13 +22,9 @@ type UserProfileProps = {
  * грузится или не загрузился — простая шапка, чтобы было куда уйти. Под ним
  * пусто (открыли ссылкой) — назад ведёт в корень вкладки.
  */
-export function UserProfile({
-  userId,
-  onOpenFriends,
-  onOpenDialogs,
-  onWrite,
-  onBackFallback,
-}: UserProfileProps) {
+export function UserProfile() {
+  const { userId } = useRouteParams<'Person'>();
+  const { onOpenFriends, onOpenDialogs, onWrite, onBackFallback } = useUserProfileNavigation(userId);
   const currentUserId = useCurrentUserId();
   const { data: profile, isPending, error, refetch } = useProfile(userId);
   const isMe = currentUserId !== null && userId === currentUserId;

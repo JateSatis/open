@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Redirect, useRouter } from '@/navigation';
+import { useRouteParams, Redirect, useRouter } from '@/navigation';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -14,13 +14,12 @@ import { InfoPageSizes, Spacing } from '@/theme';
 export const channelLinkQueryKey = (username: string) =>
   ['channelLink', username.toLowerCase()] as const;
 
-export type ChannelLinkScreenProps = { username: string };
-
 /**
  * Ссылка на канал по `@имени`: пока ищем — крутилка, нашли — экран канала
  * вместо этого, нет такого — «Канал не найден» со стрелкой назад.
  */
-export function ChannelLinkScreen({ username }: ChannelLinkScreenProps) {
+export function ChannelLinkScreen() {
+  const { username } = useRouteParams<'ChannelLink'>();
   const theme = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();

@@ -7,7 +7,9 @@ import { renderWithQuery } from '@/test/renderWithQuery';
 
 const mockPush = jest.fn();
 
+let mockPageParams: Record<string, unknown>;
 jest.mock('@/navigation', () => ({
+  useRouteParams: () => (mockPageParams),
   useRouter: () => ({ push: mockPush, navigate: jest.fn() }),
 }));
 jest.mock('@/features/chats/useCurrentUserId', () => ({ useCurrentUserId: () => 'owner-1' }));
@@ -32,7 +34,8 @@ describe('SubscribersScreen', () => {
       .mocked(listChannelSubscribers)
       .mockResolvedValue([subscriber('a', true), subscriber('b', false)]);
 
-    await renderWithQuery(<SubscribersScreen target={{ kind: 'channel', id: 'channel-1' }} />);
+    mockPageParams = { target: { kind: 'channel', id: 'channel-1' } };
+    await renderWithQuery(<SubscribersScreen />);
 
     expect(await screen.findByText('Человек a')).toBeTruthy();
     expect(screen.getByText('Человек b')).toBeTruthy();
@@ -43,7 +46,8 @@ describe('SubscribersScreen', () => {
   it('opens the profile on a tap', async () => {
     jest.mocked(listChannelSubscribers).mockResolvedValue([subscriber('a', true)]);
 
-    await renderWithQuery(<SubscribersScreen target={{ kind: 'channel', id: 'channel-1' }} />);
+    mockPageParams = { target: { kind: 'channel', id: 'channel-1' } };
+    await renderWithQuery(<SubscribersScreen />);
     await userEvent.setup().press(await screen.findByRole('button', { name: 'Человек a' }));
 
     expect(mockPush).toHaveBeenCalledWith({ name: 'Person', params: { userId: 'a' } });
@@ -54,7 +58,8 @@ describe('SubscribersScreen', () => {
       .mocked(listChatSubscribers)
       .mockResolvedValue([subscriber('a', null), subscriber('b', null)]);
 
-    await renderWithQuery(<SubscribersScreen target={{ kind: 'chat', id: 'chat-1' }} />);
+    mockPageParams = { target: { kind: 'chat', id: 'chat-1' } };
+    await renderWithQuery(<SubscribersScreen />);
 
     expect(await screen.findByText('Человек a')).toBeTruthy();
     expect(screen.getByText('Человек b')).toBeTruthy();
@@ -66,7 +71,8 @@ describe('SubscribersScreen', () => {
   it('says so when there is nobody yet', async () => {
     jest.mocked(listChannelSubscribers).mockResolvedValue([]);
 
-    await renderWithQuery(<SubscribersScreen target={{ kind: 'channel', id: 'channel-1' }} />);
+    mockPageParams = { target: { kind: 'channel', id: 'channel-1' } };
+    await renderWithQuery(<SubscribersScreen />);
 
     expect(await screen.findByText('Подписчиков пока нет.')).toBeTruthy();
   });

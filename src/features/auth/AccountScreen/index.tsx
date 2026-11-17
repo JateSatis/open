@@ -1,3 +1,4 @@
+import { router } from '@/navigation';
 import { StyleSheet } from 'react-native';
 
 import { Screen } from '@/components/Screen';
@@ -16,11 +17,8 @@ const styles = StyleSheet.create({
   },
 });
 
-type AccountScreenProps = {
-  onOpenPrivacy: () => void;
-};
-
-export function AccountScreen({ onOpenPrivacy }: AccountScreenProps) {
+export function AccountScreen() {
+  const onOpenPrivacy = () => router.push({ name: 'Privacy' });
   return (
     <Screen scrollable edges={['bottom']} contentContainerStyle={styles.content}>
       <SettingsSection title="Настройки">

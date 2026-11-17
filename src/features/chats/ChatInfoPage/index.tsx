@@ -245,7 +245,7 @@ export function ChatInfoPage({ chat, slideBack }: ChatInfoPageProps) {
                 testID="info-edit"
                 icon={{ ios: 'pencil', android: 'edit', web: 'edit' }}
                 accessibilityLabel="Изменить"
-                onPress={() => router.push({ name: 'ChatEdit', params: { chatId } })}
+                onPress={() => router.push({ name: 'EditDetails', params: { target: { kind: 'chat', id: chatId } } })}
               />
             ) : null}
             <ChatInfoMenu

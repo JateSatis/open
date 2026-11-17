@@ -5,6 +5,7 @@ import { ReturnToCallBar } from '@/features/streams/ReturnToCallBar';
 import { setCall } from '@/features/streams/callStore';
 import { AppRoutes } from './AppRoutes';
 import { navigationRef, router } from '@/navigation';
+import { journalScreen } from '../journalScreen';
 import { destinationForURL } from '../links';
 import { useIncomingLink } from '../useIncomingLink';
 import { openPopViewer } from '@/features/pops/openPopViewer';
@@ -30,18 +31,41 @@ jest.mock('@/features/connection/ConnectionTitle', () => ({ ConnectionTitle: () 
 jest.mock('@/features/feed/FeedScreen', () => ({ FeedScreen: () => null }));
 jest.mock('@/features/chats/ChatsScreen', () => ({ ChatsScreen: () => null }));
 jest.mock('@/features/profile/MyProfileScreen', () => ({ MyProfileScreen: () => null }));
-jest.mock('@/navigation/screens', () => {
+jest.mock('@/features/auth/AccountScreen', () => ({ AccountScreen: () => null }));
+jest.mock('@/features/moderation/BlockedUsersScreen', () => ({ BlockedUsersScreen: () => null }));
+jest.mock('@/features/streams/CallScreen', () => ({ CallScreen: () => null }));
+jest.mock('@/features/channels/ChannelInfoScreen', () => ({ ChannelInfoScreen: () => null }));
+jest.mock('@/features/channels/ChannelScreen', () => ({ ChannelScreen: () => null }));
+jest.mock('@/features/channels/SubscribersScreen', () => ({ SubscribersScreen: () => null }));
+jest.mock('@/features/chats/EditDetailsScreen', () => ({ EditDetailsScreen: () => null }));
+jest.mock('@/features/chats/ChatInfoScreen', () => ({ ChatInfoScreen: () => null }));
+jest.mock('@/features/chats/ChatInviteScreen', () => ({ ChatInviteScreen: () => null }));
+jest.mock('@/features/chats/ChatScreen', () => ({ ChatScreen: () => null }));
+jest.mock('@/features/profile/UserChats', () => ({ UserChats: () => null }));
+jest.mock('@/features/profile/EditProfileScreen', () => ({ EditProfileScreen: () => null }));
+jest.mock('@/features/chats/ForwardScreen', () => ({ ForwardScreen: () => null }));
+jest.mock('@/features/friends/FriendsList', () => ({ FriendsList: () => null }));
+jest.mock('@/features/chats/InvitesScreen', () => ({ InvitesScreen: () => null }));
+jest.mock('@/features/friends/MyFriendsScreen', () => ({ MyFriendsScreen: () => null }));
+jest.mock('@/features/channels/NewChannelForm', () => ({ NewChannelForm: () => null }));
+jest.mock('@/features/chats/NewChatScreen', () => ({ NewChatScreen: () => null }));
+jest.mock('@/features/profile/UserProfile', () => ({ UserProfile: () => null }));
+jest.mock('@/features/pops/PopEditor', () => ({ PopEditor: () => null }));
+jest.mock('@/features/pops/PopViewerScreen', () => ({ PopViewerScreen: () => null }));
+jest.mock('@/features/privacy/PrivacyScreen', () => ({ PrivacyScreen: () => null }));
+jest.mock('@/features/chats/DialogueRequestScreen', () => ({ DialogueRequestScreen: () => null }));
+jest.mock('@/features/saved/SavedScreen', () => ({ SavedScreen: () => null }));
+jest.mock('@/features/auth/SignInScreen', () => ({ SignInScreen: () => null }));
+jest.mock('@/features/media/MediaLabScreen', () => ({ MediaLabScreen: () => null }));
+jest.mock('@/features/chats/MosaicLabScreen', () => ({ MosaicLabScreen: () => null }));
+jest.mock('@/features/privacy/BirthDateScreen', () => ({ BirthDateScreen: () => null }));
+jest.mock('@/features/channels/ChannelLinkScreen', () => {
   const { Redirect, useRouteParams } = require('@/navigation');
-  const Empty = () => null;
-  return new Proxy(
-    {
-      __esModule: true,
-      ChannelLinkRoute: () => (
-        <Redirect href={{ name: 'Channel', params: { channelId: useRouteParams().username } }} />
-      ),
-    },
-    { get: (target, key: string) => Reflect.get(target, key) ?? Empty },
-  );
+  return {
+    ChannelLinkScreen: () => (
+      <Redirect href={{ name: 'Channel', params: { channelId: useRouteParams().username } }} />
+    ),
+  };
 });
 
 function Harness() {
@@ -80,7 +104,7 @@ afterEach(() => {
   jest.restoreAllMocks();
 });
 
-it('profile → friends → person → write: Back restores the same entries and tab', async () => {
+it('profile в†’ friends в†’ person в†’ write: Back restores the same entries and tab', async () => {
   await start();
   expect(current()?.name).toBe('chats');
   await step(() => router.navigate({ name: 'Tabs', params: { screen: 'profile' } }));
@@ -100,6 +124,32 @@ it('profile → friends → person → write: Back restores the same entries and
   expect(current()?.key).toBe(profile?.key);
   await back();
   expect(current()?.name).toBe('chats');
+});
+
+it.each([
+  ['channel-subscribers', 'Subscribers', 'channel', 'Channel'],
+  ['chat-subscribers', 'Subscribers', 'chat', 'Chat'],
+  ['chat-subscribers', 'Subscribers', 'chat', 'ChatInfo'],
+  ['channel-edit', 'EditDetails', 'channel', 'ChannelInfo'],
+  ['chat-edit', 'EditDetails', 'chat', 'ChatInfo'],
+] as const)('%s opens %s for %s and returns to %s', async (path, name, kind, origin) => {
+  await start();
+  await step(() =>
+    router.push(
+      origin === 'Channel' || origin === 'ChannelInfo'
+        ? { name: origin, params: { channelId: 'one' } }
+        : { name: origin, params: { chatId: 'one' } },
+    ),
+  );
+  const previous = current();
+  await step(() => sendURL('openger://chats/' + path + '/one'));
+  expect(current()).toMatchObject({ name, params: { target: { kind, id: 'one' } } });
+  expect(journalScreen(name, 'chats', current()?.params)).toEqual({
+    screen: 'chats/' + path + '/[' + kind + 'Id]',
+    tab: 'chats',
+  });
+  await back();
+  expect(current()).toEqual(previous);
 });
 
 it('a warm channel link replaces only the resolver above the conversation', async () => {
@@ -143,7 +193,7 @@ it('cold link with restored session leaves Chats underneath; switching accounts 
   expect(current()?.name).toBe('chats');
 });
 
-it('feed search → pop → channel; back preserves viewer and feed keys', async () => {
+it('feed search в†’ pop в†’ channel; back preserves viewer and feed keys', async () => {
   await start();
   await step(() => router.navigate({ name: 'Tabs', params: { screen: 'feed' } }));
   const feed = current();

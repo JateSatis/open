@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useRouter } from '@/navigation';
+import { useRouteParams, useRouter } from '@/navigation';
 import { SymbolView } from 'expo-symbols';
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, Pressable, View } from 'react-native';
@@ -31,16 +31,14 @@ import { Sizes } from '@/theme';
  * Откуда открыт редактор: из «Постов» выбранное видео с названием уходит
  * вложением в пост, из «Попсов» — публикуется отсюда же, с подписью.
  */
-export type PopEditorSource = 'posts' | 'pops';
-
-export type PopEditorProps = { channelId: string; from: PopEditorSource };
-
 /**
  * Редактор попа — пока заглушка: тёмный экран, превью выбранного видео и «М»
  * в левом нижнем углу, которая открывает шит медиа в режиме одного видео.
  * Позже здесь будет редактор видео как в TikTok.
  */
-export function PopEditor({ channelId, from }: PopEditorProps) {
+export function PopEditor() {
+  const { channelId, from: source } = useRouteParams<'PopEditor'>();
+  const from = source === 'posts' ? 'posts' : 'pops';
   const router = useRouter();
   const theme = useTheme();
   const insets = useSafeAreaInsets();

@@ -164,7 +164,7 @@ export function ChannelInfoPage({ channel, slideBack }: ChannelInfoPageProps) {
                 icon={{ ios: 'pencil', android: 'edit', web: 'edit' }}
                 accessibilityLabel="Изменить"
                 onPress={() =>
-                  router.push({ name: 'ChannelEdit', params: { channelId } })
+                  router.push({ name: 'EditDetails', params: { target: { kind: 'channel', id: channelId } } })
                 }
               />
             ) : null}

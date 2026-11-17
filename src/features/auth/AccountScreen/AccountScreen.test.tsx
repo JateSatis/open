@@ -1,6 +1,6 @@
 import { screen, userEvent, waitFor } from '@testing-library/react-native';
 
-import { AccountRoute as AccountScreen } from '@/navigation/screens/AccountRoute';
+import { AccountScreen } from '@/features/auth/AccountScreen';
 
 import {
   deleteMyAccount,
