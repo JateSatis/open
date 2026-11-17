@@ -1,12 +1,16 @@
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { DarkTheme, DefaultTheme, NavigationContainer } from '@react-navigation/native';
 import { useCallback, useEffect } from 'react';
 import { useColorScheme } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
 
 import { useSession } from '@/features/auth/useSession';
+import { ChatsScreen } from '@/features/chats/ChatsScreen';
+import { FeedScreen } from '@/features/feed/FeedScreen';
 import { useBirthDateGate } from '@/features/privacy/queries';
+import { MyProfileScreen } from '@/features/profile/MyProfileScreen';
 import { navigationRef, router, trackScreen } from '@/navigation';
-import { MainTabs } from '@/navigation/MainTabs';
+import type { TabsParams } from '@/navigation/types';
 import { CallScreen } from '@/features/streams/CallScreen';
 import { MediaLabScreen } from '@/features/media/MediaLabScreen';
 import { MosaicLabScreen } from '@/features/chats/MosaicLabScreen';
@@ -18,6 +22,22 @@ import { profileRoutes } from './ProfileRoutes';
 import { hidden, Stack } from './rootStack';
 
 const callId = () => 'active-call';
+const Tabs = createBottomTabNavigator<TabsParams>();
+
+function MainTabs() {
+  return (
+    <Tabs.Navigator
+      initialRouteName="chats"
+      backBehavior="initialRoute"
+      tabBar={() => null}
+      screenOptions={{ headerShown: false }}
+    >
+      <Tabs.Screen name="feed" component={FeedScreen} />
+      <Tabs.Screen name="chats" component={ChatsScreen} />
+      <Tabs.Screen name="profile" component={MyProfileScreen} />
+    </Tabs.Navigator>
+  );
+}
 
 export function AppRoutes({ incoming = null }: { incoming?: IncomingLink | null }) {
   const { session, isAuthenticated, isLoading } = useSession();

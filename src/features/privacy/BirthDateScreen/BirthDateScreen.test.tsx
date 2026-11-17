@@ -18,9 +18,11 @@ jest.mock('@/features/auth/SignInScreen', () => {
   const { Text } = require('react-native');
   return { SignInScreen: () => <Text>Вход</Text> };
 });
-jest.mock('@/navigation/MainTabs', () => {
+jest.mock('@/features/feed/FeedScreen', () => ({ FeedScreen: () => null }));
+jest.mock('@/features/profile/MyProfileScreen', () => ({ MyProfileScreen: () => null }));
+jest.mock('@/features/chats/ChatsScreen', () => {
   const { Text } = require('react-native');
-  return { MainTabs: () => <Text>вкладки</Text> };
+  return { ChatsScreen: () => <Text>Чаты</Text> };
 });
 
 jest.mock('@/api/supabase', () => ({ supabase: {} }));
@@ -102,7 +104,7 @@ describe('ворота даты рождения', () => {
     await renderWithQuery(<AppRoutes />);
 
     expect(await screen.findByText('Дата рождения')).toBeTruthy();
-    expect(screen.queryByText('вкладки')).toBeNull();
+    expect(screen.queryByText('Чаты')).toBeNull();
   });
 
   it('К2.1 холодный старт без даты ведёт на экран даты', async () => {
@@ -116,7 +118,7 @@ describe('ворота даты рождения', () => {
 
     await renderWithQuery(<AppRoutes />);
 
-    expect(screen.queryByText('вкладки')).toBeNull();
+    expect(screen.queryByText('Чаты')).toBeNull();
   });
 
   it('К2.5 с датой — сразу вкладки, экран даты не показывается', async () => {
@@ -126,7 +128,7 @@ describe('ворота даты рождения', () => {
     });
 
     await renderWithQuery(<AppRoutes />);
-    expect(await screen.findByText('вкладки')).toBeTruthy();
+    expect(await screen.findByText('Чаты')).toBeTruthy();
   });
 
   it('К2.5 с датой экран даты сам уводит во вкладки', async () => {
@@ -137,7 +139,7 @@ describe('ворота даты рождения', () => {
 
     await renderWithQuery(<AppRoutes />);
 
-    expect(await screen.findByText('вкладки')).toBeTruthy();
+    expect(await screen.findByText('Чаты')).toBeTruthy();
   });
 
   it('не вошёл — экран даты ведёт ко входу', async () => {
@@ -169,7 +171,7 @@ describe('экран даты рождения', () => {
     await pickAndContinue(yearsAgo(years));
 
     await waitFor(() => expect(mocked.setBirthDate).toHaveBeenCalledWith(dateOnly(yearsAgo(years))));
-    expect(await screen.findByText('вкладки')).toBeTruthy();
+    expect(await screen.findByText('Чаты')).toBeTruthy();
   });
 
   it('К2.3 12 лет — отказ; «Изменить дату» возвращает к полю, 14 лет пускает', async () => {
@@ -187,7 +189,7 @@ describe('экран даты рождения', () => {
 
     await pickAndContinue(yearsAgo(14));
 
-    expect(await screen.findByText('вкладки')).toBeTruthy();
+    expect(await screen.findByText('Чаты')).toBeTruthy();
   });
 
   it('К2.4 «Выйти» на отказе удаляет аккаунт и выходит', async () => {
