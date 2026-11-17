@@ -115,7 +115,7 @@ describe('EditProfileScreen', () => {
         bio: 'Привет',
       }),
     );
-    await waitFor(() => expect(backMock).toHaveBeenCalled());
+    await waitFor(() => expect(backMock).toHaveBeenCalledTimes(1));
   });
 
   it('saves a cleared username as no username at all', async () => {
@@ -179,10 +179,12 @@ describe('EditProfileScreen', () => {
     updateMyProfileMock.mockRejectedValue(new Error('offline'));
 
     const { findByText, findByDisplayValue } = await renderWithQuery(<EditProfileScreen />);
+    await fireEvent.changeText(await findByDisplayValue(profile.status), 'новый статус');
     await fireEvent.press(await findByText('Сохранить'));
 
     expect(await findByText('Не удалось сохранить. Попробуйте ещё раз.')).toBeTruthy();
-    expect(await findByDisplayValue('maxim')).toBeTruthy();
+    expect(await findByDisplayValue('новый статус')).toBeTruthy();
+    expect(backMock).not.toHaveBeenCalled();
   });
 
   it('К3.5 «О себе» с адресом — сначала лист «Это увидят все», «Изменить» не сохраняет', async () => {
@@ -257,8 +259,8 @@ describe('EditProfileScreen', () => {
     uploadAvatarMock.mockResolvedValue('https://x/new.jpg');
     updateMyProfileMock.mockResolvedValue({ ...old, avatarUrl: 'https://x/new.jpg' });
 
-    const { findByText } = await renderWithQuery(<EditProfileScreen />);
-    await findByText('Изменить фото');
+    const { findByDisplayValue } = await renderWithQuery(<EditProfileScreen />);
+    await fireEvent.changeText(await findByDisplayValue(profile.status), 'черновик статуса');
     await act(async () => sheetDone?.(Promise.resolve({ uri: 'file:///a.jpg', size: 512 })));
 
     await waitFor(() => expect(uploadAvatarMock).toHaveBeenCalledWith('file:///a.jpg', 'user-1'));
@@ -266,6 +268,8 @@ describe('EditProfileScreen', () => {
       expect(updateMyProfileMock.mock.calls[0]?.[0]).toEqual({ avatarUrl: 'https://x/new.jpg' }),
     );
     await waitFor(() => expect(removeOwnAvatarMock).toHaveBeenCalledWith(old.avatarUrl, 'user-1'));
+    expect(await findByDisplayValue('черновик статуса')).toBeTruthy();
+    expect(backMock).not.toHaveBeenCalled();
   });
 
   it('explains a photo that could not be prepared and uploads nothing', async () => {
