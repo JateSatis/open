@@ -48,9 +48,8 @@ jest.mock('@/components/ConfirmDialog/store', () => ({ confirm: jest.fn() }));
 
 const mockPush = jest.fn();
 const mockNavigate = jest.fn();
-const mockDismissTo = jest.fn();
 
-jest.mock('expo-router', () => ({
+jest.mock('@/navigation', () => ({
   useIsFocused: () => true,
   useNavigation: () => ({
     getState: () => ({ index: 0, routes: [] }),
@@ -60,7 +59,6 @@ jest.mock('expo-router', () => ({
   useRouter: () => ({
     push: mockPush,
     navigate: mockNavigate,
-    dismissTo: mockDismissTo,
     back: jest.fn(),
     canGoBack: () => true,
   }),
@@ -232,7 +230,7 @@ describe('ChatInfoPage', () => {
       await fireEvent.press(await screen.findByTestId('info-member-anna'));
 
       expect(mockPush).toHaveBeenCalledWith({
-        pathname: '/chats/people/[userId]',
+        name: 'Person',
         params: { userId: 'anna' },
       });
     });
@@ -349,7 +347,7 @@ describe('ChatInfoPage', () => {
 
       await fireEvent.press(screen.getByTestId('info-person-boris'));
       expect(mockPush).toHaveBeenCalledWith({
-        pathname: '/chats/people/[userId]',
+        name: 'Person',
         params: { userId: 'boris' },
       });
     });
@@ -372,7 +370,7 @@ describe('ChatInfoPage', () => {
 
       await fireEvent.press(screen.getByTestId('info-person-anna'));
       expect(mockPush).toHaveBeenCalledWith({
-        pathname: '/chats/people/[userId]',
+        name: 'Person',
         params: { userId: 'anna' },
       });
     });
@@ -459,7 +457,7 @@ describe('ChatInfoPage', () => {
         expect.objectContaining({ title: 'Покинуть группу?', destructive: true }),
       );
       await waitFor(() => expect(leaveChat).toHaveBeenCalledWith('chat-1'));
-      await waitFor(() => expect(mockDismissTo).toHaveBeenCalledWith('/chats'));
+      await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith({ name: 'Tabs', params: { screen: 'chats' } }));
     });
 
     it('tells the owner who gets the group, or that nobody will be left', async () => {
@@ -490,7 +488,7 @@ describe('ChatInfoPage', () => {
 
       await waitFor(() => expect(confirm).toHaveBeenCalled());
       expect(leaveChat).not.toHaveBeenCalled();
-      expect(mockDismissTo).not.toHaveBeenCalled();
+      expect(mockNavigate).not.toHaveBeenCalled();
     });
 
     it('offers «Добавить участников» to members only', async () => {
@@ -498,7 +496,7 @@ describe('ChatInfoPage', () => {
 
       await fireEvent.press(screen.getByTestId('info-add-members'));
       expect(mockPush).toHaveBeenCalledWith({
-        pathname: '/chats/chat-invite/[chatId]',
+        name: 'ChatInvite',
         params: { chatId: 'chat-1' },
       });
       await unmount();

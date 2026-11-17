@@ -29,7 +29,7 @@ import { longPressMessage } from '@/test/messageGestures';
 
 const mockedPush = jest.fn();
 
-jest.mock('expo-router', () => ({
+jest.mock('@/navigation', () => ({
   useIsFocused: () => true,
   useRouter: () => ({ push: mockedPush, navigate: jest.fn(), back: jest.fn() }),
 }));
@@ -238,7 +238,7 @@ describe('comments of a pop', () => {
     await fireEvent.press(await screen.findByRole('menuitem', { name: 'Переслать' }));
 
     expect(mockedPush).toHaveBeenCalledWith(
-      expect.objectContaining({ pathname: '/chats/forward' }),
+      expect.objectContaining({ name: 'Forward' }),
     );
     const pick = readForwardPick();
     const [forwarded] = pick && 'comments' in pick ? pick.comments : [];

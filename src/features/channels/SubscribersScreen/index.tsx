@@ -1,5 +1,5 @@
 import { useInfiniteQuery } from '@tanstack/react-query';
-import { useRouter } from 'expo-router';
+import { useRouter } from '@/navigation';
 import { useCallback } from 'react';
 import { ActivityIndicator, FlatList, Pressable, View } from 'react-native';
 
@@ -65,8 +65,8 @@ export function SubscribersScreen({ target }: SubscribersScreenProps) {
 
   const openPerson = useCallback(
     (userId: string) => {
-      if (userId === currentUserId) router.navigate('/profile');
-      else router.push(`/chats/people/${userId}`);
+      if (userId === currentUserId) router.navigate({ name: 'Tabs', params: { screen: 'profile' } });
+      else router.push({ name: 'Person', params: { userId } });
     },
     [currentUserId, router],
   );

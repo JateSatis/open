@@ -1,4 +1,4 @@
-import { useIsFocused } from 'expo-router';
+import { useIsFocused } from '@/navigation';
 import { StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 

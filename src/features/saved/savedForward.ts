@@ -4,7 +4,7 @@
 // пропускается, а целиком удалённое лист не открывает. Своя заметка
 // оригинала не имеет — уходит обычным сообщением от меня с её файлами.
 
-import type { useRouter } from 'expo-router';
+import type { useRouter } from '@/navigation';
 
 import type { ChatRef, ForwardedComment, IslandOriginal } from '@/api/chats';
 import { listForwardedComments, listIslandOriginals } from '@/api/messageRows';
@@ -147,7 +147,7 @@ export async function startSavedForward(
     }
 
     startForwardPick({ batches, skipped: items.length - sent });
-    router.push('/chats/forward');
+    router.push({ name: 'Forward' });
     return true;
   } catch {
     showNotice('Не удалось переслать', 'error');

@@ -1,0 +1,480 @@
+jest.mock('@/api/historyWindow', () => ({
+  getHistoryWindow: jest.fn((...args) => jest.requireActual('@/test/historyWindowMock').fixtureHistoryWindow(...args)),
+  getHistoryGroupKeys: jest.fn(() => Promise.resolve([])),
+  getHistoryItems: jest.fn(() => Promise.resolve([])),
+}));
+import type { Session as SupabaseSession } from '@supabase/supabase-js';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react-native';
+import { BackHandler } from 'react-native';
+
+import { ChatRoute as ChatScreen } from '@/navigation/screens/ChatRoute';
+
+import type { ChatChannelHandlers, ChatSummary, Message } from '@/api/chats';
+import { getChat, listDeletedMessageIds, listMessages, subscribeToChat } from '@/api/chats';
+import { listMessageReactions, setMessageReaction } from '@/api/reactions';
+import { listPinnedMessages } from '@/api/pins';
+import { confirm } from '@/components/ConfirmDialog';
+import { useSession } from '@/features/auth/useSession';
+import { resetComposerDrafts } from '@/features/chats/composerDraftStore';
+import { resetOutbox } from '@/features/chats/messages/outbox';
+import { resetPendingReactions } from '@/features/interactions/pendingReactions';
+import { useInAppAlert } from '@/features/notifications/alertsStore';
+import { reportRealtimeJoined, resetConnectionState } from '@/features/connection/connectionStore';
+import { PRIMARY_REACTIONS } from '@/features/interactions/reactionSet';
+import { renderWithQuery } from '@/test/renderWithQuery';
+import { longPressMessage, startSelecting } from '@/test/messageGestures';
+
+// Шапку экран ставит через ScreenOptions — мок рисует и заголовок, и правую
+// кнопку прямо в дереве: так видно «Выбрано: N» и «Отмена».
+jest.mock('@/api/messageViews');
+jest.mock('@/api/reactions', () => ({
+  ...jest.requireActual('@/api/reactionCounts'),
+  listMessageReactions: jest.fn(() => Promise.resolve([])),
+  setMessageReaction: jest.fn(),
+}));
+jest.mock('@/navigation', () => ({
+  useIsFocused: () => true,
+  useNavigation: () => ({
+    getState: () => ({ index: 0, routes: [] }),
+    dispatch: jest.fn(),
+    addListener: () => () => undefined,
+  }),
+  useRouteParams: () => ({ chatId: 'chat-1' }),
+  useRouter: () => ({ push: jest.fn(), navigate: jest.fn() }),
+  ScreenOptions: ({
+      options,
+    }: {
+      options?: { headerTitle?: () => React.ReactNode; headerRight?: () => React.ReactNode };
+    }) => (
+      <>
+        {options?.headerTitle ? options.headerTitle() : null}
+        {options?.headerRight ? options.headerRight() : null}
+      </>
+    ),
+}));
+
+jest.mock('@/api/profile', () => ({ getProfile: jest.fn(() => Promise.resolve(null)) }));
+jest.mock('@/features/auth/useSession', () => ({ useSession: jest.fn() }));
+jest.mock('@/api/streams');
+
+jest.mock('@/api/chats', () => ({
+  getChat: jest.fn(),
+  listMessages: jest.fn(),
+  listMessagesSince: jest.fn(() => Promise.resolve([])),
+  markChatRead: jest.fn(() => Promise.resolve()),
+  sendMessage: jest.fn(),
+  subscribeToChat: jest.fn(),
+  subscribeToChatSignals: jest.fn(() => jest.fn()),
+  deleteMessages: jest.fn(),
+  listDeletedMessageIds: jest.fn(),
+  listMessageEdits: jest.fn(() => Promise.resolve([])),
+  listCommentCounts: jest.fn(() => Promise.resolve([])),
+  listMessagesByIds: jest.fn(() => Promise.resolve([])),
+  editMessage: jest.fn(),
+  MESSAGE_PAGE_SIZE: 30,
+}));
+// Панель комментариев в этих тестах не открывается — её сеть здесь не нужна.
+jest.mock('@/api/comments', () => ({
+  getPinnedComment: jest.fn(() => Promise.resolve(null)),
+  pinComment: jest.fn(() => Promise.resolve()),
+  unpinComment: jest.fn(() => Promise.resolve()),
+  listComments: jest.fn(() => Promise.resolve({ items: [], nextCursor: null })),
+  getCommentTarget: jest.fn(() => Promise.resolve({ state: 'missing' })),
+  subscribeToComments: jest.fn(() => () => undefined),
+}));
+jest.mock('@/api/pins', () => ({
+  listPinnedMessages: jest.fn(),
+  pinMessage: jest.fn(),
+  unpinMessage: jest.fn(),
+}));
+jest.mock('@/api/invites', () => ({
+  getMyInvite: jest.fn(() => Promise.resolve(null)),
+  acceptInvite: jest.fn(),
+  declineInvite: jest.fn(),
+}));
+jest.mock('@/components/ConfirmDialog', () => ({ confirm: jest.fn() }));
+jest.mock('expo-clipboard', () => ({ setStringAsync: jest.fn(() => Promise.resolve(true)) }));
+jest.mock('expo-haptics', () => ({
+  impactAsync: jest.fn(() => Promise.resolve()),
+  ImpactFeedbackStyle: { Medium: 'medium' },
+}));
+jest.mock('@/features/media', () => ({
+  ...jest.requireActual('@/test/outgoingMediaMock').outgoingMediaMock,
+  ...jest.requireActual('@/features/media/selectionStore'),
+  assetPreviewUri: (asset: { id: string }) => asset.id,
+  MediaGrid: () => null,
+  MediaViewer: () => null,
+  stopVoice: jest.fn(),
+}));
+jest.mock('@/features/media/HoldToRecordRow', () => ({
+  // Строка ввода как есть; справа — «Отправить», когда она стоит на месте микрофона.
+  HoldToRecordRow: ({ children, trailing }: { children: unknown; trailing?: unknown }) =>
+    jest.requireActual('react').createElement(
+      jest.requireActual('react').Fragment,
+      null,
+      children,
+      trailing,
+    ),
+}));
+jest.mock('@/features/media/galleryPrefetch', () => ({ prefetchGallery: jest.fn() }));
+
+const mockedGetChat = getChat as jest.MockedFunction<typeof getChat>;
+const mockedListMessages = listMessages as jest.MockedFunction<typeof listMessages>;
+const mockedSubscribe = subscribeToChat as jest.MockedFunction<typeof subscribeToChat>;
+const mockedSetReaction = setMessageReaction as jest.MockedFunction<typeof setMessageReaction>;
+const mockedListReactions = listMessageReactions as jest.MockedFunction<
+  typeof listMessageReactions
+>;
+const mockedTombstones = listDeletedMessageIds as jest.MockedFunction<typeof listDeletedMessageIds>;
+const mockedPins = listPinnedMessages as jest.MockedFunction<typeof listPinnedMessages>;
+const mockedConfirm = confirm as jest.MockedFunction<typeof confirm>;
+const mockedSession = useSession as jest.MockedFunction<typeof useSession>;
+
+const AT = '2026-09-27T10:00:00Z';
+const member = { id: 'user-1', displayName: 'Я', avatarUrl: null, lastReadAt: AT };
+const other = { id: 'user-2', displayName: 'Марина', avatarUrl: null, lastReadAt: AT };
+
+function chatWith(participants: ChatSummary['participants']): ChatSummary {
+  return {
+    id: 'chat-1',
+    kind: 'direct',
+    ownerId: null,
+    description: null,
+    avatarUrl: null,
+    title: 'Разговор',
+    participants,
+    waiting: [],
+    lastMessagePreview: null,
+    lastMessageAt: null,
+    lastMessageAuthorId: null,
+    lastPopAt: null,
+    lastActivityAt: null,
+    listPosition: null,
+    enteredAt: null,
+    previewIsPop: false,
+    subscription: null,
+    hasUnread: false,
+    subscribersCount: 0,
+    username: null,
+    channel: null,
+  };
+}
+
+function message(id: string, text: string, authorId: string, minute = 0): Message {
+  return {
+    id,
+    chatId: 'chat-1',
+    authorId,
+    kind: 'text',
+    text,
+    seq: Date.parse(`2026-09-27T10:0${minute}:00Z`),
+    createdAt: `2026-09-27T10:0${minute}:00Z`,
+    editedAt: null,
+    edited: false,
+    editMark: null,
+    attachments: [],
+    replies: [],
+    forward: null,
+    reactions: { members: {}, visitors: {}, mine: null },
+    commentsCount: 0,
+    viewsCount: 0,
+    readAt: null,
+  };
+}
+
+let handlers: ChatChannelHandlers | null = null;
+
+/** Долгое нажатие на облачко — так открывается его меню. */
+const tapMessage = longPressMessage;
+
+beforeEach(() => {
+  jest.clearAllMocks();
+  handlers = null;
+  resetOutbox();
+  resetPendingReactions();
+  resetComposerDrafts();
+  resetConnectionState();
+  reportRealtimeJoined();
+  useInAppAlert.setState({ alert: null });
+  mockedSession.mockReturnValue({
+    session: { user: { id: 'user-1' } } as unknown as SupabaseSession,
+    isAuthenticated: true,
+    isLoading: false,
+  });
+  mockedGetChat.mockResolvedValue(chatWith([member, other]));
+  mockedListMessages.mockResolvedValue({
+    items: [
+      message('m3', 'как дела?', 'user-1', 3),
+      message('m2', 'привет', 'user-2', 2),
+      message('m1', 'эй', 'user-1', 1),
+    ],
+    nextCursor: null,
+  });
+  mockedPins.mockResolvedValue([]);
+  mockedTombstones.mockResolvedValue([]);
+  mockedConfirm.mockResolvedValue(true);
+  mockedSubscribe.mockImplementation((_chatId, given) => {
+    handlers = given;
+    return { broadcastTyping: jest.fn(), unsubscribe: jest.fn() };
+  });
+  jest
+    .spyOn(BackHandler, 'addEventListener')
+    .mockImplementation(() => ({ remove: () => undefined }));
+});
+
+const visitor = { ...member, id: 'user-3', displayName: 'Пётр' };
+
+function asVisitor() {
+  mockedGetChat.mockResolvedValue(chatWith([other, visitor]));
+}
+
+async function pickerOptions(): Promise<string[]> {
+  const picker = await screen.findByTestId('reaction-picker');
+
+  return within(picker)
+    .getAllByRole('button')
+    .map((button) => button.props.testID as string);
+}
+
+async function react(emoji: string) {
+  fireEvent.press(await screen.findByTestId(`reaction-option-${emoji}`));
+  // Реакция ставится следующим кадром после закрытия меню, как и действие.
+  await waitFor(() => expect(screen.queryByTestId('message-menu')).toBeNull());
+}
+
+describe('reactions in the message menu', () => {
+  // Блок один для всех: и у участника, и у посетителя — ровно этот набор кнопок.
+  const BLOCK = [
+    ...PRIMARY_REACTIONS.map((emoji) => `reaction-option-${emoji}`),
+    'reaction-picker-expand',
+  ];
+
+  it('shows a member the reaction block: the primary set, then the expand button on the right', async () => {
+    await renderWithQuery(<ChatScreen />);
+    await screen.findByText('привет');
+    await tapMessage('m2');
+
+    expect(await pickerOptions()).toEqual(BLOCK);
+  });
+
+  it('shows a visitor the very same block', async () => {
+    asVisitor();
+
+    await renderWithQuery(<ChatScreen />);
+    await screen.findByText('привет');
+    await tapMessage('m2');
+
+    expect(await pickerOptions()).toEqual(BLOCK);
+  });
+
+  it('opens the whole set with the button on the right and hides the actions meanwhile', async () => {
+    await renderWithQuery(<ChatScreen />);
+    await screen.findByText('привет');
+    await tapMessage('m2');
+
+    expect(screen.queryByTestId('reaction-option-🤯')).toBeNull();
+
+    fireEvent.press(await screen.findByTestId('reaction-picker-expand'));
+
+    expect(await screen.findByTestId('reaction-option-🤯')).toBeTruthy();
+    expect(screen.getByTestId('message-menu').props.pointerEvents).toBe('none');
+  });
+
+  it('a tap outside folds the opened set first and closes the menu only on the next tap', async () => {
+    mockedSetReaction.mockReturnValue(new Promise(() => undefined));
+
+    await renderWithQuery(<ChatScreen />);
+    await screen.findByText('привет');
+    await tapMessage('m2');
+    fireEvent.press(await screen.findByTestId('reaction-picker-expand'));
+    await screen.findByLabelText('Свернуть реакции');
+
+    fireEvent.press(screen.getByTestId('message-menu-backdrop'));
+
+    expect(await screen.findByLabelText('Все реакции')).toBeTruthy();
+    expect(screen.getByTestId('message-menu').props.pointerEvents).toBe('auto');
+
+    // Свернули — раскрывается снова, и реакция ставится.
+    fireEvent.press(screen.getByTestId('reaction-picker-expand'));
+    await screen.findByLabelText('Свернуть реакции');
+    await react('🤯');
+
+    expect(mockedSetReaction).toHaveBeenCalledWith('m2', '🤯');
+  });
+
+  it('a second tap outside closes the menu', async () => {
+    await renderWithQuery(<ChatScreen />);
+    await screen.findByText('привет');
+    await tapMessage('m2');
+    fireEvent.press(await screen.findByTestId('reaction-picker-expand'));
+    await screen.findByLabelText('Свернуть реакции');
+    fireEvent.press(screen.getByTestId('message-menu-backdrop'));
+    await screen.findByLabelText('Все реакции');
+
+    fireEvent.press(screen.getByTestId('message-menu-backdrop'));
+
+    await waitFor(() => expect(screen.queryByTestId('message-menu')).toBeNull());
+  });
+
+  it('the system back button closes the menu even with the whole set open', async () => {
+    await renderWithQuery(<ChatScreen />);
+    await screen.findByText('привет');
+    await tapMessage('m2');
+    fireEvent.press(await screen.findByTestId('reaction-picker-expand'));
+    await screen.findByLabelText('Свернуть реакции');
+
+    await act(async () => fireEvent(screen.getByTestId('message-menu'), 'requestClose'));
+
+    await waitFor(() => expect(screen.queryByTestId('message-menu')).toBeNull());
+  });
+
+  it('a tap sets the reaction, closes the menu and shows the chip at once', async () => {
+    mockedSetReaction.mockReturnValue(new Promise(() => undefined));
+
+    await renderWithQuery(<ChatScreen />);
+    await screen.findByText('привет');
+    await tapMessage('m2');
+    await react('👍');
+
+    expect(mockedSetReaction).toHaveBeenCalledWith('m2', '👍');
+    expect(await screen.findByLabelText('👍 1')).toBeTruthy();
+  });
+
+  it('can react to an own sent message too', async () => {
+    mockedSetReaction.mockResolvedValue({ emoji: '🔥', audience: 'member' });
+
+    await renderWithQuery(<ChatScreen />);
+    await screen.findByText('как дела?');
+    await tapMessage('m3');
+    await react('🔥');
+
+    expect(mockedSetReaction).toHaveBeenCalledWith('m3', '🔥');
+  });
+
+  it('puts a visitor reaction into the viewers row, not among the members', async () => {
+    asVisitor();
+    mockedSetReaction.mockResolvedValue({ emoji: '🔥', audience: 'visitor' });
+
+    await renderWithQuery(<ChatScreen />);
+    await screen.findByText('привет');
+    await tapMessage('m2');
+    await react('🔥');
+
+    expect(await screen.findByTestId('visitor-reaction-🔥')).toBeTruthy();
+    expect(screen.queryByTestId('reaction-chip-🔥')).toBeNull();
+    expect(screen.getByLabelText('Зрители: 🔥 1')).toBeTruthy();
+  });
+
+  it('tapping my highlighted reaction in the block takes it off', async () => {
+    mockedListMessages.mockResolvedValue({
+      items: [
+        {
+          ...message('m2', 'привет', 'user-2', 2),
+          reactions: {
+            members: { '👍': 2 },
+            visitors: {},
+            mine: { emoji: '👍', audience: 'member' },
+          },
+        },
+      ],
+      nextCursor: null,
+    });
+    mockedSetReaction.mockResolvedValue(null);
+
+    await renderWithQuery(<ChatScreen />);
+    await screen.findByText('привет');
+    await tapMessage('m2');
+    await react('👍');
+
+    expect(mockedSetReaction).toHaveBeenCalledWith('m2', null);
+    expect(await screen.findByLabelText('👍 1')).toBeTruthy();
+  });
+
+  it('rolls back and explains when the server refuses', async () => {
+    mockedSetReaction.mockRejectedValue(new Error('boom'));
+
+    await renderWithQuery(<ChatScreen />);
+    await screen.findByText('привет');
+    await tapMessage('m2');
+    await react('😁');
+
+    await waitFor(() => expect(screen.queryByTestId('reaction-chip-😁')).toBeNull());
+    expect(useInAppAlert.getState().alert).toMatchObject({
+      tone: 'error',
+      text: 'Не удалось поставить реакцию',
+    });
+  });
+});
+
+describe('reactions in the bubble', () => {
+  function withReactions() {
+    mockedListMessages.mockResolvedValue({
+      items: [
+        {
+          ...message('m2', 'привет', 'user-2', 2),
+          reactions: { members: { '👍': 2 }, visitors: { '😁': 4 }, mine: null },
+        },
+      ],
+      nextCursor: null,
+    });
+  }
+
+  it('a member taps a member chip to add that reaction without the menu', async () => {
+    withReactions();
+    mockedSetReaction.mockResolvedValue({ emoji: '👍', audience: 'member' });
+
+    await renderWithQuery(<ChatScreen />);
+    fireEvent.press(await screen.findByTestId('reaction-chip-👍'));
+
+    expect(mockedSetReaction).toHaveBeenCalledWith('m2', '👍');
+    expect(await screen.findByLabelText('👍 3')).toBeTruthy();
+    expect(screen.queryByTestId('message-menu')).toBeNull();
+  });
+
+  it('a member tap on the viewers row sets nothing', async () => {
+    withReactions();
+
+    await renderWithQuery(<ChatScreen />);
+    await fireEvent.press(await screen.findByTestId('visitor-reaction-😁'));
+
+    // Строка зрителей не нажимается вовсе: на устройстве касание уходит
+    // облачку и открывает меню.
+    expect(mockedSetReaction).not.toHaveBeenCalled();
+  });
+
+  it('a visitor taps neither member chips nor the viewers row — reactions only via the menu', async () => {
+    withReactions();
+    asVisitor();
+    mockedSetReaction.mockResolvedValue({ emoji: '😁', audience: 'visitor' });
+
+    await renderWithQuery(<ChatScreen />);
+    // Чип участников для посетителя ничего не делает: ни реакции, ни меню.
+    await fireEvent.press(await screen.findByTestId('reaction-chip-👍'));
+
+    expect(mockedSetReaction).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('message-menu')).toBeNull();
+
+    await fireEvent.press(screen.getByTestId('visitor-reaction-😁'));
+
+    expect(mockedSetReaction).not.toHaveBeenCalled();
+  });
+
+  it('updates the counters when someone else reacts, without reloading the chat', async () => {
+    withReactions();
+    mockedListReactions.mockResolvedValue([
+      {
+        id: 'm2',
+        reactions: { members: { '👍': 3, '🔥': 1 }, visitors: { '😁': 4 }, mine: null },
+      },
+    ]);
+
+    await renderWithQuery(<ChatScreen />);
+    await screen.findByLabelText('👍 2');
+
+    await act(async () => handlers!.onReactionsChanged('m2'));
+
+    expect(await screen.findByLabelText('👍 3')).toBeTruthy();
+    expect(screen.getByLabelText('🔥 1')).toBeTruthy();
+    expect(mockedListMessages).toHaveBeenCalledTimes(1);
+  });
+});

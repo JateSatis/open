@@ -1,4 +1,4 @@
-import { useRouter } from 'expo-router';
+import { useRouter } from '@/navigation';
 
 import { isOpaquePersonId } from '@/api/opaquePeople';
 import type { Subscription } from '@/api/subscriptions';
@@ -135,11 +135,11 @@ export function ChatInfoMenu({
         onDeleteChat();
         return;
       case 'subscribers':
-        router.push({ pathname: '/chats/chat-subscribers/[chatId]', params: { chatId } });
+        router.push({ name: 'ChatSubscribers', params: { chatId } });
         return;
       case 'profile':
         if (counterpartId && !isOpaquePersonId(counterpartId)) {
-          router.push({ pathname: '/chats/people/[userId]', params: { userId: counterpartId } });
+          router.push({ name: 'Person', params: { userId: counterpartId } });
         }
         return;
       case 'mute':

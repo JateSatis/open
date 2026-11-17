@@ -1,4 +1,4 @@
-import { useNavigation } from 'expo-router';
+import { useNavigation } from '@/navigation';
 import { SymbolView, type AndroidSymbol, type SFSymbol } from 'expo-symbols';
 import { Pressable, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -25,7 +25,7 @@ const TABS: readonly {
   { name: 'profile', label: 'Профиль', icon: { ios: 'person.crop.circle', android: 'person' } },
 ];
 
-/** Навигатор вкладок (`app/(tabs)/_layout.tsx`): переход на вкладку оставляет её стек как был. */
+/** Панель работает внутри навигатора MainTabs. */
 type TabsNavigation = { navigate: (name: TabName) => void };
 
 export type TabBarProps = {
@@ -43,7 +43,7 @@ export type TabBarProps = {
 export function TabBar({ active }: TabBarProps) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const navigation = useNavigation<TabsNavigation>('/(tabs)');
+  const navigation = useNavigation<TabsNavigation>();
   const height = useTabBarHeight();
   // До верха значков дымка плотная, растворяется — над ними.
   const solid = `${Math.round((height / (height + TabBarSizes.fadeTop)) * 100)}%`;

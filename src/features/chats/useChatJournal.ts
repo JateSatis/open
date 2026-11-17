@@ -1,4 +1,4 @@
-import { useLocalSearchParams } from 'expo-router';
+import { useRouteParams } from '@/navigation';
 import { useEffect } from 'react';
 
 import { useAppActive } from '@/features/pops/PopViewer/useAppActive';
@@ -16,7 +16,7 @@ import {
  */
 export function useChatJournal(chatId: string, live: boolean, role: ChatRole) {
   const appActive = useAppActive();
-  const params = useLocalSearchParams<{ from?: string }>();
+  const params = useRouteParams<'Chat'>();
   const entry = params.from ?? 'list';
   const running = live && appActive;
 

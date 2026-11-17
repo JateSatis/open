@@ -1,4 +1,4 @@
-import { useLocalSearchParams, useNavigation } from 'expo-router';
+import { useRouteParams, useNavigation } from '@/navigation';
 import { useCallback, useState } from 'react';
 import { Keyboard } from 'react-native';
 
@@ -29,7 +29,7 @@ export type ChatSearch = MatchSearch<ChatSearchHit> & {
 export function useChatSearch(
   chatId: string,
 ): ChatSearch {
-  const params = useLocalSearchParams<ChatSearchParams>();
+  const params = useRouteParams<'Chat'>();
   const navigation = useNavigation();
   const active = params.search === '1';
   const [query, setQuery] = useState('');

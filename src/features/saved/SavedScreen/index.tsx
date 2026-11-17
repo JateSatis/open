@@ -1,4 +1,4 @@
-import { Stack } from 'expo-router';
+import { ScreenOptions } from '@/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Keyboard, View, useWindowDimensions } from 'react-native';
 import { useSharedValue, withTiming } from 'react-native-reanimated';
@@ -138,7 +138,7 @@ export function SavedScreen() {
 
   return (
     <View testID="saved-screen" style={[styles.screen, { backgroundColor: theme.background }]}>
-      <Stack.Screen options={{ headerShown: !searchOpen }} />
+      <ScreenOptions options={{ headerShown: !searchOpen }} />
       {searchOpen ? (
         <ChatSearchHeader
           search={{ query, setQuery }}

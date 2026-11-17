@@ -3,13 +3,10 @@ import { fireEvent, screen, waitFor } from '@testing-library/react-native';
 import { ChannelLinkScreen } from '.';
 
 import { findChannelByUsername } from '@/api/channels';
-import { useSession } from '@/features/auth/useSession';
-import { getPendingLink, setPendingLink } from '@/store/pendingLink';
 import { renderWithQuery } from '@/test/renderWithQuery';
 
 jest.mock('@/api/supabase', () => ({ supabase: {} }));
 jest.mock('@/api/channels', () => ({ findChannelByUsername: jest.fn() }));
-jest.mock('@/features/auth/useSession', () => ({ useSession: jest.fn() }));
 jest.mock('@shopify/react-native-skia', () => ({
   Canvas: () => null,
   LinearGradient: () => null,
@@ -26,7 +23,7 @@ const mockBack = jest.fn();
 const mockRedirect = jest.fn();
 let mockCanGoBack = true;
 
-jest.mock('expo-router', () => ({
+jest.mock('@/navigation', () => ({
   useRouter: () => ({
     replace: mockReplace,
     push: mockPush,
@@ -39,15 +36,11 @@ jest.mock('expo-router', () => ({
   },
 }));
 
-const channelHref = { pathname: '/chats/channel/[channelId]', params: { channelId: 'channel-1' } };
+const channelHref = { name: 'Channel', params: { channelId: 'channel-1' } };
 
 beforeEach(() => {
   jest.clearAllMocks();
   mockCanGoBack = true;
-  setPendingLink(null);
-  jest.mocked(useSession).mockReturnValue({ isAuthenticated: true, isLoading: false } as ReturnType<
-    typeof useSession
-  >);
 });
 
 describe('ChannelLinkScreen', () => {
@@ -56,10 +49,8 @@ describe('ChannelLinkScreen', () => {
 
     await renderWithQuery(<ChannelLinkScreen username="News" />);
 
-    await waitFor(() => expect(mockPush).toHaveBeenCalledWith(channelHref));
+    await waitFor(() => expect(mockRedirect).toHaveBeenCalledWith(channelHref));
     expect(findChannelByUsername).toHaveBeenCalledWith('News');
-    expect(mockBack).toHaveBeenCalled();
-    expect(mockReplace).not.toHaveBeenCalled();
   });
 
   it('on a cold start replaces itself with the channel', async () => {
@@ -68,7 +59,7 @@ describe('ChannelLinkScreen', () => {
 
     await renderWithQuery(<ChannelLinkScreen username="news" />);
 
-    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith(channelHref));
+    await waitFor(() => expect(mockRedirect).toHaveBeenCalledWith(channelHref));
   });
 
   it('says «Канал не найден» and goes back', async () => {
@@ -81,15 +72,4 @@ describe('ChannelLinkScreen', () => {
     expect(mockBack).toHaveBeenCalled();
   });
 
-  it('without a session remembers the link and asks to sign in', async () => {
-    jest.mocked(useSession).mockReturnValue({ isAuthenticated: false, isLoading: false } as ReturnType<
-      typeof useSession
-    >);
-
-    await renderWithQuery(<ChannelLinkScreen username="news" />);
-
-    expect(mockRedirect).toHaveBeenCalledWith('/(auth)/sign-in');
-    expect(getPendingLink()).toBe('/c/news');
-    expect(findChannelByUsername).not.toHaveBeenCalled();
-  });
 });

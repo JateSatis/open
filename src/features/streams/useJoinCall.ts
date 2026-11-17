@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useRouter } from 'expo-router';
+import { useRouter } from '@/navigation';
 import { useCallback, useState } from 'react';
 
 import { startCall, StreamJoinError } from '@/api/streams';
@@ -34,7 +34,7 @@ export function useJoinCall() {
   const enter = useCallback(
     async (streamId: string, chat: CallChat) => {
       stopRinging(streamId);
-      router.push('/call');
+      router.push({ name: 'Call' });
 
       try {
         await joinCall({

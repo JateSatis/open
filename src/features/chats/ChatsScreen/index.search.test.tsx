@@ -28,7 +28,7 @@ const mockSetOptions = jest.fn();
 /** Эффекты фокуса смонтированных хуков — «вернуться на экран» зовёт их снова. */
 const mockFocusEffects = new Set<() => void | (() => void)>();
 
-jest.mock('expo-router', () => ({
+jest.mock('@/navigation', () => ({
   useIsFocused: () => true,
   useRouter: () => ({ push: mockPush }),
   useNavigation: () => ({ setOptions: mockSetOptions }),
@@ -282,13 +282,13 @@ it('opens and remembers channels and people but leaves message results inactive'
 
   await fireEvent.press(await screen.findByRole('button', { name: 'Ёлки-палки' }));
   expect(mockPush).toHaveBeenLastCalledWith({
-    pathname: '/chats/channel/[channelId]',
+    name: 'Channel',
     params: { channelId: 'ch-1' },
   });
 
   await fireEvent.press(screen.getByRole('button', { name: 'Ёлкин' }));
   expect(mockPush).toHaveBeenLastCalledWith({
-    pathname: '/chats/people/[userId]',
+    name: 'Person',
     params: { userId: 'p1' },
   });
 

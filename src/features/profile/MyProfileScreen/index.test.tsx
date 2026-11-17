@@ -1,5 +1,5 @@
 import { fireEvent } from '@testing-library/react-native';
-import { router } from 'expo-router';
+import { router } from '@/navigation';
 
 import { MyProfileScreen } from './index';
 
@@ -7,7 +7,7 @@ import { getFriendsSummary } from '@/api/friends';
 import { getMyProfile } from '@/api/profile';
 import { renderWithQuery } from '@/features/profile/renderWithQuery';
 
-jest.mock('expo-router', () => ({
+jest.mock('@/navigation', () => ({
   useIsFocused: () => true,
   router: { push: jest.fn(), back: jest.fn() },
   useNavigation: () => ({ navigate: jest.fn() }),
@@ -91,7 +91,7 @@ describe('MyProfileScreen', () => {
     const { findByText } = await renderWithQuery(<MyProfileScreen />);
     await fireEvent.press(await findByText('Редактировать профиль'));
 
-    expect(pushMock).toHaveBeenCalledWith('/(tabs)/profile/edit');
+    expect(pushMock).toHaveBeenCalledWith({ name: 'EditProfile' });
   });
 
   it('opens «Аккаунт» from the gear on the photo — there is no header', async () => {
@@ -100,7 +100,7 @@ describe('MyProfileScreen', () => {
     const { findByLabelText } = await renderWithQuery(<MyProfileScreen />);
     await fireEvent.press(await findByLabelText('Аккаунт'));
 
-    expect(pushMock).toHaveBeenCalledWith('/profile/account');
+    expect(pushMock).toHaveBeenCalledWith({ name: 'Account' });
   });
 
   it('offers a retry when loading fails and recovers on the second try', async () => {
@@ -124,7 +124,7 @@ describe('MyProfileScreen — друзья', () => {
     expect(getByLabelText('Друзья, новых заявок: 1')).toBeTruthy();
 
     await fireEvent.press(await findByTestId('profile-friends'));
-    expect(pushMock).toHaveBeenCalledWith('/profile/friends');
+    expect(pushMock).toHaveBeenCalledWith({ name: 'MyFriends' });
   });
 
   it('без заявок — только число друзей', async () => {

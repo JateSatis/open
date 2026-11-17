@@ -1,4 +1,4 @@
-import { useIsFocused } from 'expo-router';
+import { useIsFocused } from '@/navigation';
 import { SymbolView } from 'expo-symbols';
 import { useEffect, useRef } from 'react';
 import { Pressable, TextInput, View } from 'react-native';

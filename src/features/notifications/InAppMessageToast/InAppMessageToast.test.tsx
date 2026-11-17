@@ -21,7 +21,7 @@ import { renderWithQuery } from '@/test/renderWithQuery';
 
 const mockPush = jest.fn();
 
-jest.mock('expo-router', () => ({
+jest.mock('@/navigation', () => ({
   useIsFocused: () => true,
   useRouter: () => ({ push: mockPush }),
 }));
@@ -119,7 +119,7 @@ describe('InAppMessageToast', () => {
     await user.press(await screen.findByText('ты где'));
 
     expect(mockPush).toHaveBeenCalledWith({
-      pathname: '/chats/[chatId]',
+      name: 'Chat',
       params: { chatId: 'chat-1', from: 'notification' },
     });
     await waitFor(() => expect(screen.queryByText('ты где')).toBeNull());
@@ -174,7 +174,7 @@ describe('InAppMessageToast', () => {
     await user.press(screen.getByText('Пётр: Аня, привет'));
 
     expect(mockPush).toHaveBeenCalledWith({
-      pathname: '/chats/[chatId]',
+      name: 'Chat',
       params: { chatId: 'their-chat', from: 'notification' },
     });
   });
@@ -222,7 +222,7 @@ describe('InAppMessageToast', () => {
     await user.press(screen.getByText('Зовёт вас в чат «Поход»'));
 
     expect(mockPush).toHaveBeenCalledWith({
-      pathname: '/chats/[chatId]',
+      name: 'Chat',
       params: { chatId: 'chat-7', from: 'notification' },
     });
   });
@@ -238,7 +238,7 @@ describe('InAppMessageToast', () => {
     await user.press(screen.getByText('новый трек'));
 
     expect(mockPush).toHaveBeenCalledWith({
-      pathname: '/chats/channel/[channelId]',
+      name: 'Channel',
       params: { channelId: 'channel-1', section: 'posts' },
     });
   });
@@ -261,7 +261,7 @@ describe('InAppMessageToast', () => {
     await user.press(await screen.findByText('Новый попс'));
 
     expect(mockPush).toHaveBeenCalledWith({
-      pathname: '/chats/channel/[channelId]',
+      name: 'Channel',
       params: { channelId: 'channel-1', section: 'pops' },
     });
   });

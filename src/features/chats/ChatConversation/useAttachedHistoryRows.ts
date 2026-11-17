@@ -1,5 +1,5 @@
-import { useNavigation, type NativeStackNavigationProp } from 'expo-router';
-import type { ParamListBase } from 'expo-router/react-navigation';
+import { useNavigation, type NativeStackNavigationProp } from '@/navigation';
+import type { ParamListBase } from '@react-navigation/native';
 import { useEffect, useState } from 'react';
 import type { ChatListRow } from '@/features/chats/islands/rows';
 

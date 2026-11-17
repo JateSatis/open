@@ -83,6 +83,11 @@ function closeScreen(now: number) {
   }
 }
 
+export function leaveScreen(now = Date.now()) {
+  if (backgroundSince === null) closeScreen(now);
+  screen = null;
+}
+
 /** Человек перешёл на другой экран. */
 export function enterScreen(name: string, tab: string | null, now = Date.now()): void {
   if (screen?.screen === name && screen.tab === tab) return;
@@ -121,15 +126,6 @@ export function appCameForeground(now = Date.now()): void {
     foregroundSince = now;
     journal.log('app_foreground', { at: now, data: { bg_ms: away } });
   }
-}
-
-/** Имя экрана из сегментов маршрута: группы вида `(tabs)` пропускаются, параметры остаются шаблоном. */
-export function screenOf(segments: readonly string[]): { screen: string; tab: string | null } {
-  const tabsAt = segments.indexOf('(tabs)');
-  const tab = tabsAt >= 0 ? (segments[tabsAt + 1] ?? null) : null;
-  const named = segments.filter((segment) => !/^\(.*\)$/.test(segment));
-
-  return { screen: named.join('/') || 'index', tab };
 }
 
 /** Для тестов: забыть сессию. */

@@ -8,7 +8,7 @@ import { renderWithQuery } from '@/test/renderWithQuery';
 
 const mockReplace = jest.fn();
 
-jest.mock('expo-router', () => ({
+jest.mock('@/navigation', () => ({
   useIsFocused: () => true,
   useRouter: () => ({ replace: mockReplace, back: jest.fn(), canGoBack: () => true }),
   useNavigation: () => ({ addListener: () => () => undefined, getState: () => ({ index: 1 }) }),
@@ -75,7 +75,7 @@ describe('DialogueRequestScreen', () => {
     await waitFor(() =>
       expect(mockedCreate).toHaveBeenCalledWith({ inviteeIds: ['user-2'], requestText: 'Привет!' }),
     );
-    expect(mockReplace).toHaveBeenCalledWith('/chats/chat-req');
+    expect(mockReplace).toHaveBeenCalledWith({ name: 'Chat', params: { chatId: 'chat-req' } });
   });
 
   it('К1.6 повтор после отказа — понятный отказ без подробностей', async () => {

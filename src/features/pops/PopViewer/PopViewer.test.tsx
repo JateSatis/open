@@ -1,7 +1,7 @@
 import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
 
 import { ChannelPopViewer } from './ChannelPopViewer';
-import PopViewerRoute from '@/app/pops/[channelId]';
+import { PopViewerRoute } from '@/navigation/screens/PopViewerRoute';
 
 import {
   canPublishInChannel,
@@ -29,10 +29,10 @@ import { renderWithQuery } from '@/test/renderWithQuery';
 const mockBack = jest.fn();
 const mockPush = jest.fn();
 
-jest.mock('expo-router', () => ({
+jest.mock('@/navigation', () => ({
   useRouter: () => ({ back: mockBack, push: mockPush }),
   useIsFocused: () => true,
-  useLocalSearchParams: () => ({ channelId: 'channel-1', start: 'p1', comments: '1', comment: 'c9', commentRoot: 'r1', commentKey: 'legacy' }),
+  useRouteParams: () => ({ source: 'channel', channelId: 'channel-1', startId: 'p1', comments: '1', comment: 'c9', commentRoot: 'r1', commentKey: 'legacy' }),
   useNavigation: () => ({
     getState: () => ({ index: 1, routes: [{ name: '(tabs)' }, { name: 'pops' }] }),
     addListener: () => () => undefined,

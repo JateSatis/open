@@ -1,19 +1,17 @@
-import { Redirect } from 'expo-router';
+// First: livekit-client reads WebRTC globals while its modules are loading.
+import '@/features/streams/livekitGlobals';
 
-import { useSession } from '@/features/auth/useSession';
-import { useBirthDateGate } from '@/features/privacy/queries';
+import { registerRootComponent } from 'expo';
+import { AppRoot } from '@/AppRoot';
+import { useIncomingLink } from '@/navigation/useIncomingLink';
+import { AppRouter } from './AppRouter';
 
-export default function Index() {
-  const { isAuthenticated, isLoading } = useSession();
-  const gate = useBirthDateGate();
-
-  // Redirecting before the persisted session is read would flash the sign-in
-  // screen at every cold start of an already signed-in user.
-  if (isLoading || (isAuthenticated && gate === 'loading')) {
-    return null;
-  }
-
-  if (!isAuthenticated) return <Redirect href="/(auth)/sign-in" />;
-
-  return <Redirect href={gate === 'required' ? '/birth-date' : '/(tabs)/chats'} />;
+function App() {
+  const incoming = useIncomingLink();
+  return (
+    <AppRoot>
+      <AppRouter incoming={incoming} />
+    </AppRoot>
+  );
 }
+registerRootComponent(App);

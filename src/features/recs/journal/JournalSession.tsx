@@ -1,6 +1,6 @@
 import * as Linking from 'expo-linking';
 import * as Network from 'expo-network';
-import { useSegments } from 'expo-router';
+import { navigationRef, useCurrentScreen } from '@/navigation';
 import { useEffect } from 'react';
 import { AppState } from 'react-native';
 
@@ -9,8 +9,8 @@ import {
   appCameForeground,
   appWentBackground,
   enterScreen,
+  leaveScreen,
   refineEntry,
-  screenOf,
   startAppSession,
 } from './appSession';
 import { startDeviceWatch } from './device';
@@ -30,7 +30,7 @@ function isAppLink(url: string | null): boolean {
 export function JournalSession() {
   const { session } = useSession();
   const userId = session?.user.id ?? null;
-  const segments = useSegments();
+  const { name, screen, tab } = useCurrentScreen();
 
   useEffect(() => {
     startDeviceWatch();
@@ -65,13 +65,16 @@ export function JournalSession() {
     journal.setUser(userId);
 
     if (userId) announce(userId);
+    return () => {
+      leaveScreen();
+      journal.setUser(null);
+    };
   }, [userId]);
 
   useEffect(() => {
-    const { screen, tab } = screenOf(segments);
-
-    enterScreen(screen, tab);
-  }, [segments]);
+    if (screen && navigationRef.isReady() && navigationRef.getCurrentRoute()?.name === name)
+      enterScreen(screen, tab);
+  }, [name, screen, tab, userId]);
 
   return null;
 }

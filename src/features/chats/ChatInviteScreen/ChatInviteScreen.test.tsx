@@ -15,7 +15,7 @@ jest.mock('@/features/chats/useCurrentUserId', () => ({ useCurrentUserId: () => 
 
 const mockBack = jest.fn();
 
-jest.mock('expo-router', () => ({ useRouter: () => ({ back: mockBack }) }));
+jest.mock('@/navigation', () => ({ useRouter: () => ({ back: mockBack }) }));
 
 const candidate = (id: string, displayName: string) => ({
   id,

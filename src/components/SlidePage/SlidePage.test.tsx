@@ -13,7 +13,7 @@ import {
 
 const mockBack = jest.fn();
 
-jest.mock('expo-router', () => ({
+jest.mock('@/navigation', () => ({
   useIsFocused: () => true,
   useRouter: () => ({ back: mockBack, canGoBack: () => true }),
 }));

@@ -1,5 +1,5 @@
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
-import { useRouter } from 'expo-router';
+import { useRouter } from '@/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, useWindowDimensions, View } from 'react-native';
 
@@ -107,7 +107,7 @@ export function FeedSearchPanel({ query, onPickRecent }: FeedSearchPanelProps) {
           query: results.shownQuery,
         },
       );
-      router.push({ pathname: '/channel/[channelId]', params: { channelId: entity.id } });
+      router.push({ name: 'Channel', params: { channelId: entity.id } });
     },
     [remember, results.channels, results.shownQuery, router],
   );

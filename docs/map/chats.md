@@ -8,7 +8,7 @@
 <!-- prettier-ignore -->
 | Сценарий | Читать по ходу данных |
 | --- | --- |
-| Открыть переписку | [маршрут chatId](../../src/app/%28tabs%29/chats/%5BchatId%5D.tsx) → [ChatScreen](../../src/features/chats/ChatScreen/index.tsx) → [ChatConversation](../../src/features/chats/ChatConversation/index.tsx) → [useChatMessages](../../src/features/chats/useChatMessages.ts) |
+| Открыть переписку | [маршрут chatId](../../src/navigation/screens/ChatRoute.tsx) → [ChatScreen](../../src/features/chats/ChatScreen/index.tsx) → [ChatConversation](../../src/features/chats/ChatConversation/index.tsx) → [useChatMessages](../../src/features/chats/useChatMessages.ts) |
 | Список чатов | [ChatsScreen](../../src/features/chats/ChatsScreen/index.tsx) → [useChats](../../src/features/chats/useChats.ts), [chats API](../../src/api/chats.ts) |
 | Закрепы и цитаты | [usePinnedMessages](../../src/features/chats/usePinnedMessages.ts), [PinnedBar](../../src/features/chats/PinnedBar/index.tsx), [useChatBubbles](../../src/features/chats/useChatBubbles.tsx): отображение без перехода к сообщению |
 | Открытие и подгрузка основной истории | [useChatHistory](../../src/features/chats/messages/useChatHistory.ts) → [страницы и сверка SQLite](../../src/features/chats/messages/local/loader.ts) → [группировка](../../src/features/chats/messages/historyCache.ts). [Место чтения](../../src/features/chats/ChatConversation/useReadingPlace.tsx) сохраняется по координатам строки списка |
@@ -41,8 +41,8 @@
 
 ## Проверить изменение
 
-Выбирай подходящее: [цитаты и отправка](../../src/app/%28tabs%29/chats/%5BchatId%5D.reply.test.tsx),
-[пересланные комментарии](../../src/app/%28tabs%29/chats/%5BchatId%5D.commentForward.test.tsx),
+Выбирай подходящее: [цитаты и отправка](../../src/features/chats/ChatScreen/ChatScreen.reply.test.tsx),
+[пересланные комментарии](../../src/features/chats/ChatScreen/ChatScreen.commentForward.test.tsx),
 [chats.test](../../src/api/chats.test.ts); для тредов — [chat_threads_access.sql](../../supabase/tests/chat_threads_access.sql).
 Наличие теста не означает его прохождение; SQL требует нужной среды по backend.
 

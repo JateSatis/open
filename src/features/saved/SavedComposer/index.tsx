@@ -1,4 +1,4 @@
-import { useIsFocused } from 'expo-router';
+import { useIsFocused } from '@/navigation';
 
 import { modePlate } from '@/features/chats/ChatFooter';
 import { claimKeyboardForChat } from '@/features/chats/composerKeyboard';

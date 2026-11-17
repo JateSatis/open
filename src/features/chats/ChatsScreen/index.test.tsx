@@ -25,7 +25,7 @@ import { renderWithQuery } from '@/test/renderWithQuery';
 
 const mockPush = jest.fn();
 
-jest.mock('expo-router', () => ({
+jest.mock('@/navigation', () => ({
   useIsFocused: () => true,
   useRouter: () => ({ push: mockPush }),
   useNavigation: () => ({ setOptions: jest.fn() }),
@@ -129,7 +129,7 @@ describe('ChatsScreen', () => {
     expect(screen.queryByTestId('saved-entry-count')).toBeNull();
 
     fireEvent.press(screen.getByTestId('saved-entry'));
-    expect(mockPush).toHaveBeenCalledWith('/chats/saved');
+    expect(mockPush).toHaveBeenCalledWith({ name: 'Saved' });
   });
 
   it('counts unfinished «Посмотреть позже» on the saved row, above the invites', async () => {
@@ -168,7 +168,7 @@ describe('ChatsScreen', () => {
 
     expect(screen.getByText('Канал')).toBeTruthy();
     expect(mockPush).toHaveBeenCalledWith({
-      pathname: '/chats/channel/[channelId]',
+      name: 'Channel',
       params: { channelId: 'channel-1', section: 'posts' },
     });
   });
@@ -213,7 +213,7 @@ describe('ChatsScreen', () => {
       await user.press(screen.getByRole('button', { name: 'Новости' }));
 
       expect(mockPush).toHaveBeenCalledWith({
-        pathname: '/chats/channel/[channelId]',
+        name: 'Channel',
         params: { channelId: 'channel-1', section: 'pops' },
       });
     });
@@ -236,7 +236,7 @@ describe('ChatsScreen', () => {
       await user.press(await screen.findByRole('button', { name: 'Новости' }));
 
       expect(mockPush).toHaveBeenCalledWith({
-        pathname: '/chats/channel/[channelId]',
+        name: 'Channel',
         params: { channelId: 'channel-1', section: 'posts' },
       });
     });
@@ -360,7 +360,7 @@ describe('ChatsScreen', () => {
       expect(screen.getByLabelText('Есть непрочитанные сообщения')).toBeTruthy();
 
       await user.press(screen.getByRole('button', { name: 'Аня и Пётр' }));
-      expect(mockPush).toHaveBeenCalledWith('/chats/their-1');
+      expect(mockPush).toHaveBeenCalledWith({ name: 'Chat', params: { chatId: 'their-1' } });
     });
 
     it('offers three actions on a long press — no «Не отображать в чатах»', async () => {
@@ -446,7 +446,7 @@ describe('ChatsScreen', () => {
     fireEvent.press(screen.getByTestId('create-button'));
     fireEvent.press(await screen.findByRole('menuitem', { name: 'Чат' }));
 
-    await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/chats/new'));
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith({ name: 'NewChat' }));
     measure.mockRestore();
   });
 
@@ -479,7 +479,7 @@ describe('ChatsScreen', () => {
     await renderWithQuery(<ChatsScreen />);
     await user.press(await screen.findByLabelText('Заявки: 2'));
 
-    expect(mockPush).toHaveBeenCalledWith('/chats/invites');
+    expect(mockPush).toHaveBeenCalledWith({ name: 'Invites' });
   });
 
   it('keeps the invites row for declined ones so they can still be accepted', async () => {
@@ -520,7 +520,7 @@ describe('ChatsScreen', () => {
     await renderWithQuery(<ChatsScreen />);
     await user.press(await screen.findByText('Новый чат'));
 
-    expect(mockPush).toHaveBeenCalledWith('/chats/new');
+    expect(mockPush).toHaveBeenCalledWith({ name: 'NewChat' });
   });
 
   it('marks a chat partner who is present as online', async () => {
@@ -553,7 +553,7 @@ describe('ChatsScreen', () => {
     await renderWithQuery(<ChatsScreen />);
     await user.press(await screen.findByText('Марина'));
 
-    expect(mockPush).toHaveBeenCalledWith('/chats/chat-1');
+    expect(mockPush).toHaveBeenCalledWith({ name: 'Chat', params: { chatId: 'chat-1' } });
   });
 
   it('reports a failure to load instead of showing an empty list', async () => {

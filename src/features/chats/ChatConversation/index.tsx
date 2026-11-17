@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useIsFocused, useNavigation, useRouter } from 'expo-router';
+import { useIsFocused, useNavigation, useRouter } from '@/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   ActivityIndicator,
@@ -352,14 +352,14 @@ function Conversation({
   const openPerson = useCallback(
     (personId: string) => {
       if (personId === currentUserId) {
-        router.navigate('/profile');
+        router.navigate({ name: 'Tabs', params: { screen: 'profile' } });
         return;
       }
 
       // Подменённый в диалоге: id непрозрачный, профиля за ним нет.
       if (isOpaquePersonId(personId)) return;
 
-      router.push(`/chats/people/${personId}`);
+      router.push({ name: 'Person', params: { userId: personId } });
     },
     [currentUserId, router],
   );
@@ -1052,7 +1052,7 @@ function Conversation({
           channel
             ? channelHeader?.onTitlePress
             : chat && chat.kind !== 'channel'
-              ? () => router.push(`/chats/chat-info/${chatId}`)
+              ? () => router.push({ name: 'ChatInfo', params: { chatId } })
               : undefined
         }
         titlePressLabel={channel ? 'О канале' : 'О чате'}

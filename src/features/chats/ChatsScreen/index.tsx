@@ -1,4 +1,4 @@
-import { useRouter } from 'expo-router';
+import { useRouter } from '@/navigation';
 import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, RefreshControl, View } from 'react-native';
 
@@ -58,12 +58,12 @@ export function ChatsScreen() {
       const channelId = chat?.channel?.id;
 
       if (!chat || !channelId) {
-        router.push(`/chats/${chatId}`);
+        router.push({ name: 'Chat', params: { chatId } });
         return;
       }
 
       router.push({
-        pathname: '/chats/channel/[channelId]',
+        name: 'Channel',
         params: { channelId, section: sectionToOpen(chat) },
       });
     },
@@ -79,7 +79,7 @@ export function ChatsScreen() {
   const onCreate = useCallback(
     (item: CreateMenuItem) => {
       // «Чат» — выбор людей: один человек — диалог, несколько — группа.
-      router.push(item === 'chat' ? '/chats/new' : '/chats/new-channel');
+      router.push({ name: item === 'chat' ? 'NewChat' : 'NewChannel' });
     },
     [router],
   );
@@ -144,12 +144,12 @@ export function ChatsScreen() {
             <>
               <SavedEntry
                 watchLaterCount={watchLaterCount}
-                onPress={() => router.push('/chats/saved')}
+                onPress={() => router.push({ name: 'Saved' })}
               />
               {hasInvites ? (
                 <InvitesEntry
                   incomingCount={incoming.length}
-                  onPress={() => router.push('/chats/invites')}
+                  onPress={() => router.push({ name: 'Invites' })}
                 />
               ) : null}
             </>
@@ -170,7 +170,7 @@ export function ChatsScreen() {
                   Чатов пока нет. Позовите кого-нибудь — всё, что здесь появится, сможет прочитать
                   кто угодно.
                 </Text>
-                <Button label="Новый чат" onPress={() => router.push('/chats/new')} />
+                <Button label="Новый чат" onPress={() => router.push({ name: 'NewChat' })} />
               </View>
             )
           }

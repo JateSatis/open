@@ -1,4 +1,4 @@
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect } from '@/navigation';
 import { useCallback, useState } from 'react';
 import { BackHandler, Keyboard } from 'react-native';
 

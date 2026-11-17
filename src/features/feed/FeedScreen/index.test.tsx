@@ -29,7 +29,7 @@ import { renderWithQuery } from '@/test/renderWithQuery';
 const mockPush = jest.fn();
 const mockSetOptions = jest.fn();
 
-jest.mock('expo-router', () => ({
+jest.mock('@/navigation', () => ({
   router: { push: (...args: unknown[]) => mockPush(...args) },
   useIsFocused: () => true,
   useRouter: () => ({ push: mockPush }),
@@ -235,8 +235,8 @@ it('opens a pop in the search viewer and a channel above the tabs, remembering t
 
   expect(mockPush).toHaveBeenCalledTimes(1);
   expect(mockPush).toHaveBeenLastCalledWith({
-    pathname: '/pops/search',
-    params: { q: 'елка', start: 'c' },
+    name: 'PopViewer',
+    params: { source: 'search', query: 'елка', startId: 'c' },
   });
   expect(useLastSearchPop.getState().id).toBe('c');
   expect(feedRecentQueries.useStore.getState().items).toEqual(['елка']);
@@ -248,7 +248,7 @@ it('opens a pop in the search viewer and a channel above the tabs, remembering t
 
   expect(mockPush).toHaveBeenCalledTimes(2);
   expect(mockPush).toHaveBeenLastCalledWith({
-    pathname: '/channel/[channelId]',
+    name: 'Channel',
     params: { channelId: 'ch-1' },
   });
   expect(feedRecentQueries.useStore.getState().items).toEqual(['елка']);
@@ -264,7 +264,7 @@ it('opens the visible results even when the input already contains a new query',
   await fireEvent.press(screen.getAllByTestId('search-pop')[1]);
 
   expect(mockPush.mock.calls).toEqual([
-    [{ pathname: '/pops/search', params: { q: 'елка', start: 'b' } }],
+    [{ name: 'PopViewer', params: { source: 'search', query: 'елка', startId: 'b' } }],
   ]);
 });
 

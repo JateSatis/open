@@ -13,7 +13,7 @@ const mockNavigation = {
     },
   ),
 };
-jest.mock('expo-router', () => ({ useNavigation: () => mockNavigation }));
+jest.mock('@/navigation', () => ({ useNavigation: () => mockNavigation }));
 const rows = (name: string) =>
   toChatRows([
     { ...island(name, '2026-11-10T12:00:00Z', [original({ id: 'original' })]), status: 'sent' },

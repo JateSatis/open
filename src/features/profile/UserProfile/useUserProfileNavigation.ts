@@ -1,31 +1,20 @@
-import { useRouter } from 'expo-router';
+import { useRouter } from '@/navigation';
 import { useCallback } from 'react';
 
-const routes = {
-  chats: {
-    friends: '/chats/people/friends/[userId]',
-    dialogs: '/chats/people/dialogs/[userId]',
-    root: '/chats',
-  },
-  profile: {
-    friends: '/profile/friends/[userId]',
-    dialogs: '/profile/dialogs/[userId]',
-    root: '/profile',
-  },
-} as const;
-
-export function useUserProfileNavigation(userId: string, origin: keyof typeof routes) {
+export function useUserProfileNavigation(userId: string) {
   const router = useRouter();
-  const { friends, dialogs, root } = routes[origin];
-  const onBackFallback = useCallback(() => router.replace(root), [router, root]);
+  const onBackFallback = useCallback(
+    () => router.replace({ name: 'Tabs', params: { screen: 'chats' } }),
+    [router],
+  );
 
   return {
     onOpenFriends: (isMe: boolean) => {
-      if (isMe) router.navigate('/profile/friends');
-      else router.push({ pathname: friends, params: { userId } });
+      if (isMe) router.navigate({ name: 'MyFriends' });
+      else router.push({ name: 'Friends', params: { userId } });
     },
-    onOpenDialogs: () => router.push({ pathname: dialogs, params: { userId } }),
-    onWrite: () => router.push({ pathname: '/chats/new', params: { with: userId } }),
+    onOpenDialogs: () => router.push({ name: 'Dialogs', params: { userId } }),
+    onWrite: () => router.push({ name: 'NewChat', params: { with: userId } }),
     onBackFallback,
   };
 }

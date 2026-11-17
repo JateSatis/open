@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { router } from '@/navigation';
 import { StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -48,7 +48,7 @@ export function MyProfileScreen() {
               testID="profile-settings"
               icon={{ ios: 'gearshape', android: 'settings', web: 'settings' }}
               accessibilityLabel="Аккаунт"
-              onPress={() => router.push('/profile/account')}
+              onPress={() => router.push({ name: 'Account' })}
             />
           }
           lead={
@@ -61,19 +61,19 @@ export function MyProfileScreen() {
                 </Text>
                 <Button
                   label="Придумать имя"
-                  onPress={() => router.push('/(tabs)/profile/edit')}
+                  onPress={() => router.push({ name: 'EditProfile' })}
                 />
               </View>
             ) : null
           }
           extraCards={
-            <FriendsCard userId={profile.id} onPress={() => router.push('/profile/friends')} />
+            <FriendsCard userId={profile.id} onPress={() => router.push({ name: 'MyFriends' })} />
           }
           actions={
             <Button
               label="Редактировать профиль"
               variant="secondary"
-              onPress={() => router.push('/(tabs)/profile/edit')}
+              onPress={() => router.push({ name: 'EditProfile' })}
             />
           }
         />

@@ -16,15 +16,13 @@ import { renderWithQuery } from '@/test/renderWithQuery';
 
 const mockPush = jest.fn();
 
-jest.mock('expo-router', () => ({
+jest.mock('@/navigation', () => ({
   useRouter: () => ({ push: mockPush }),
   useNavigation: () => ({ setOptions: jest.fn() }),
   useIsFocused: () => true,
   // Шапка экрана — кнопки поиска и фильтров справа.
-  Stack: {
-    Screen: ({ options }: { options?: { headerRight?: () => unknown } }) =>
+  ScreenOptions: ({ options }: { options?: { headerRight?: () => unknown } }) =>
       options?.headerRight ? options.headerRight() : null,
-  },
 }));
 jest.mock('@/api/supabase', () => ({ supabase: {} }));
 // Поле заметок — своими тестами (SavedScreen.notes.test.tsx).

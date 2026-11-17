@@ -1,10 +1,10 @@
-import { router } from 'expo-router';
+import { router } from '@/navigation';
 
 import { openPopViewer } from './openPopViewer';
 
 import { closeComments } from '@/features/interactions/comments/commentsPanelStore';
 
-jest.mock('expo-router', () => ({ router: { push: jest.fn() } }));
+jest.mock('@/navigation', () => ({ router: { push: jest.fn() } }));
 jest.mock('@/features/interactions/comments/commentsPanelStore', () => ({ closeComments: jest.fn() }));
 
 beforeEach(() => jest.clearAllMocks());
@@ -17,7 +17,7 @@ it('closes comments before opening the selected pop from a channel grid', () => 
     jest.mocked(router.push).mock.invocationCallOrder[0],
   );
   expect(jest.mocked(router.push).mock.calls).toEqual([
-    [{ pathname: '/pops/[channelId]', params: { channelId: 'channel-1', start: 'pop-2', from: 'channel_grid' } }],
+    [{ name: 'PopViewer', params: { source: 'channel', channelId: 'channel-1', startId: 'pop-2', entry: 'channel_grid' } }],
   ]);
 });
 
@@ -26,6 +26,6 @@ it('opens the selected search pop for the supplied query', () => {
 
   expect(closeComments).not.toHaveBeenCalled();
   expect(jest.mocked(router.push).mock.calls).toEqual([
-    [{ pathname: '/pops/search', params: { q: 'два слова', start: 'pop-3' } }],
+    [{ name: 'PopViewer', params: { source: 'search', query: 'два слова', startId: 'pop-3' } }],
   ]);
 });

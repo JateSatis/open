@@ -1,4 +1,4 @@
-import { useRouter } from 'expo-router';
+import { useRouter } from '@/navigation';
 
 import { chatMenuActions, type ChatMenuItem } from './actions';
 
@@ -21,7 +21,7 @@ export function ChatMenu({ chatId, isMember, subscription }: ChatMenuProps) {
   const run = (item: ChatMenuItem) => {
     switch (item) {
       case 'subscribers':
-        router.push({ pathname: '/chats/chat-subscribers/[chatId]', params: { chatId } });
+        router.push({ name: 'ChatSubscribers', params: { chatId } });
         return;
       case 'mute':
         void actions.setNotify(false);

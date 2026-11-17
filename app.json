@@ -36,11 +36,9 @@
       ]
     },
     "web": {
-      "output": "static",
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
-      "expo-router",
       [
         "expo-splash-screen",
         {
@@ -102,7 +100,6 @@
       "expo-sqlite"
     ],
     "experiments": {
-      "typedRoutes": true,
       "reactCompiler": true
     },
     "extra": {
@@ -110,7 +107,6 @@
         "webClientId": "82062890513-5vnh5a1ued1phadqfm187glu9rfu7boc.apps.googleusercontent.com",
         "iosClientId": "82062890513-pgdiipj28he9vsnl6k9mdst786q237p3.apps.googleusercontent.com"
       },
-      "router": {},
       "eas": {
         "projectId": "3dfc2778-15a0-4d8e-a02c-4afa84e8aaa7"
       }

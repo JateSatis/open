@@ -1,6 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Redirect, useRouter } from 'expo-router';
-import { useEffect } from 'react';
+import { Redirect, useRouter } from '@/navigation';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -8,10 +7,8 @@ import { findChannelByUsername } from '@/api/channels';
 import { InfoBarButton } from '@/components/InfoPage';
 import { LoadFailed } from '@/components/LoadFailed';
 import { Text } from '@/components/Text';
-import { useSession } from '@/features/auth/useSession';
 import { useTheme } from '@/hooks/use-theme';
 import { loadStateOf } from '@/lib/loadState';
-import { setPendingLink } from '@/store/pendingLink';
 import { InfoPageSizes, Spacing } from '@/theme';
 
 export const channelLinkQueryKey = (username: string) =>
@@ -21,26 +18,9 @@ export type ChannelLinkScreenProps = { username: string };
 
 /**
  * Ссылка на канал по `@имени`: пока ищем — крутилка, нашли — экран канала
- * вместо этого, нет такого — «Канал не найден» со стрелкой назад. Без сессии
- * ссылка откладывается до входа (`pendingLink`).
+ * вместо этого, нет такого — «Канал не найден» со стрелкой назад.
  */
 export function ChannelLinkScreen({ username }: ChannelLinkScreenProps) {
-  const { isAuthenticated, isLoading } = useSession();
-  const signedOut = !isLoading && !isAuthenticated;
-
-  // Без сессии ссылка ждёт входа: после него вход ведёт по ней, а не в «Чаты».
-  useEffect(() => {
-    if (signedOut) setPendingLink(`/c/${encodeURIComponent(username)}`);
-  }, [signedOut, username]);
-
-  if (isLoading) return null;
-
-  if (signedOut) return <Redirect href="/(auth)/sign-in" />;
-
-  return <ChannelLinkResolver username={username} />;
-}
-
-function ChannelLinkResolver({ username }: ChannelLinkScreenProps) {
   const theme = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -55,34 +35,13 @@ function ChannelLinkResolver({ username }: ChannelLinkScreenProps) {
   const state = loadStateOf(query);
   const channelId = query.data;
 
-  // Нашли — экран канала вместо этого. Под ссылкой уже есть вкладки — снять
-  // её и открыть канал в их «Чатах»: `replace` поставил бы на её место
-  // второй экземпляр вкладок, и «назад» из канала было бы некуда. Холодный
-  // старт — под ссылкой ничего, тогда замена (под каналом встанут «Чаты»).
-  useEffect(() => {
-    if (!channelId) return;
-
-    const href = { pathname: '/chats/channel/[channelId]', params: { channelId } } as const;
-
-    if (router.canGoBack()) {
-      router.back();
-      router.push(href);
-    } else {
-      router.replace(href);
-    }
-  }, [channelId, router]);
-
   if (channelId) {
-    return (
-      <View style={[styles.centered, { backgroundColor: theme.background }]}>
-        <ActivityIndicator accessibilityLabel="Открываем канал" />
-      </View>
-    );
+    return <Redirect href={{ name: 'Channel', params: { channelId } }} />;
   }
 
   const back = () => {
     if (router.canGoBack()) router.back();
-    else router.replace('/(tabs)/chats');
+    else router.replace({ name: 'Tabs', params: { screen: 'chats' } });
   };
 
   return (
@@ -110,7 +69,10 @@ function ChannelLinkResolver({ username }: ChannelLinkScreenProps) {
           <LoadFailed
             message="Не удалось открыть канал"
             onRetry={() =>
-              void queryClient.resetQueries({ queryKey: channelLinkQueryKey(username), exact: true })
+              void queryClient.resetQueries({
+                queryKey: channelLinkQueryKey(username),
+                exact: true,
+              })
             }
           />
         ) : state === 'paused' ? (
