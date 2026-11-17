@@ -554,9 +554,12 @@ describe('ChannelScreen subscription', () => {
     fireEvent.press(await screen.findByRole('button', { name: 'Меню канала' }));
 
     await fireEvent.press(await screen.findByRole('menuitem', { name: 'Подписчики' }));
-    expect(mockPush).toHaveBeenCalledWith({
-      name: 'Subscribers', params: { target: { kind: 'channel', id: 'channel-1' } },
-    });
+    await waitFor(() =>
+      expect(mockPush).toHaveBeenCalledWith({
+        name: 'Subscribers',
+        params: { target: { kind: 'channel', id: 'channel-1' } },
+      }),
+    );
     expect(screen.queryByTestId('channel-subscribe-bar')).toBeNull();
     expect(getMySubscription).not.toHaveBeenCalled();
     expect(listChannelSubscribers).not.toHaveBeenCalled();

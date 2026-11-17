@@ -590,9 +590,12 @@ describe('ChatInfoPage', () => {
         'Покинуть группу',
       ]);
       await fireEvent.press(screen.getByRole('menuitem', { name: 'Подписчики' }));
-      expect(mockPush).toHaveBeenCalledWith({
-        name: 'Subscribers', params: { target: { kind: 'chat', id: 'chat-1' } },
-      });
+      await waitFor(() =>
+        expect(mockPush).toHaveBeenCalledWith({
+          name: 'Subscribers',
+          params: { target: { kind: 'chat', id: 'chat-1' } },
+        }),
+      );
       await group.unmount();
 
       const own = await renderWithQuery(<Page chat={dialog} />);
