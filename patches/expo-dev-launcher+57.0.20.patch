@@ -1,9 +1,7 @@
 diff --git a/node_modules/expo-dev-launcher/android/src/debug/java/expo/modules/devlauncher/DevLauncherController.kt b/node_modules/expo-dev-launcher/android/src/debug/java/expo/modules/devlauncher/DevLauncherController.kt
 --- a/node_modules/expo-dev-launcher/android/src/debug/java/expo/modules/devlauncher/DevLauncherController.kt
 +++ b/node_modules/expo-dev-launcher/android/src/debug/java/expo/modules/devlauncher/DevLauncherController.kt
-@@ -315,7 +315,13 @@
-         }
- 
+@@ -317,3 +317,9 @@
          if (!isDevLauncherUrl(uri)) {
 -          return handleExternalIntent(intent)
 +          val handled = handleExternalIntent(intent)
@@ -14,15 +12,10 @@ diff --git a/node_modules/expo-dev-launcher/android/src/debug/java/expo/modules/
 +          }
 +          return handled
          }
- 
-         if (!hasUrlQueryParam(uri)) {
 diff --git a/node_modules/expo-dev-launcher/ios/EXDevLauncherController.m b/node_modules/expo-dev-launcher/ios/EXDevLauncherController.m
 --- a/node_modules/expo-dev-launcher/ios/EXDevLauncherController.m
 +++ b/node_modules/expo-dev-launcher/ios/EXDevLauncherController.m
-@@ -250,7 +250,12 @@
-     useDefaultLaunchUrlFallback = NO;
-   }
-   
+@@ -253,2 +253,7 @@
 -  if (_lastOpenedAppUrl != nil && shouldTryToLaunchLastOpenedBundle && [launchOptions objectForKey:@"UIApplicationLaunchOptionsURLKey"] == nil) {
 +  NSURL *launchURL = [launchOptions objectForKey:@"UIApplicationLaunchOptionsURLKey"];
 +  BOOL isAppLink = [launchURL.scheme isEqualToString:@"openger"] && ![EXDevLauncherURLHelper isDevLauncherURL:launchURL];
@@ -31,5 +24,3 @@ diff --git a/node_modules/expo-dev-launcher/ios/EXDevLauncherController.m b/node
 +  }
 +  if (_lastOpenedAppUrl != nil && shouldTryToLaunchLastOpenedBundle && (launchURL == nil || isAppLink)) {
      // When launch to the last opened url, the previous url could be unreachable because of LAN IP changed.
-     // We use a shorter timeout to prevent black screen when loading for an unreachable server.
-     [self loadApp:_lastOpenedAppUrl withProjectUrl:nil withTimeout:EXDevLauncherDefaultRequestTimeout onSuccess:nil onError:launchDefaultUrlFallbackOrNavigateToLauncher];

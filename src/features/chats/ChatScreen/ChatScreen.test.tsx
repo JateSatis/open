@@ -264,8 +264,8 @@ describe('ChatScreen', () => {
     await renderWithQuery(<ChatScreen />);
 
     // Рядом со статусом собеседника — число подписчиков переписки.
+    await waitFor(() => expect(mockedGetProfile).toHaveBeenCalledWith('user-2'));
     expect(await screen.findByText('в отпуске до понедельника · 0 подписчиков')).toBeTruthy();
-    expect(mockedGetProfile).toHaveBeenCalledWith('user-2');
 
     // Свой диалог, как и группа, ведёт на страницу информации, а не в профиль.
     await user.press(screen.getByLabelText('О чате: Разговор'));

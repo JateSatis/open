@@ -372,6 +372,8 @@ beforeEach(() => {
 
 async function renderChat() {
   await renderWithQuery(<ChatScreen />);
+  // History is requested only after the route has resolved the chat kind.
+  await waitFor(() => expect(listMessages).toHaveBeenCalled());
   await screen.findByText('текст m1');
 }
 
