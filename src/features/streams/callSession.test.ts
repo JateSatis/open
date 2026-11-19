@@ -7,6 +7,7 @@ import { requestStreamToken, StreamJoinError } from '@/api/streams';
 import { stopVoice } from '@/features/media';
 import { useInAppAlert } from '@/features/notifications/alertsStore';
 import { joinCall, leaveCall, toggleMic } from '@/features/streams/callSession';
+import { prepareLiveKit } from './livekitGlobals';
 import { getCall, setCall } from '@/features/streams/callStore';
 import { isInCall, setInCall } from '@/store/callPresence';
 
@@ -46,6 +47,34 @@ beforeEach(async () => {
   setCall(null);
   setInCall(false);
   useInAppAlert.setState({ alert: null });
+});
+
+it('вход и прогрев делят одну подготовку и подключаются один раз', async () => {
+  grant('speaker');
+  const warm = prepareLiveKit();
+  expect(prepareLiveKit()).toBe(warm);
+  const joining = joinCall(input);
+  await Promise.all([warm, joining, joinCall(input)]);
+
+  expect(mockedToken).toHaveBeenCalledTimes(1);
+  expect(lastRoom().connect).toHaveBeenCalledTimes(1);
+});
+
+it('выход во время ожидания подготовки отменяет вход до запроса токена', async () => {
+  const count = rooms().length;
+  let finish!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    finish = resolve;
+  }).then(prepareLiveKit);
+  const joining = joinCall(input, pending);
+  await leaveCall();
+  finish();
+  await joining;
+
+  expect(getCall()).toBeNull();
+  expect(mockedToken).not.toHaveBeenCalled();
+  expect(AudioSession.startAudioSession).not.toHaveBeenCalled();
+  expect(rooms()).toHaveLength(count);
 });
 
 it('слушатель входит без микрофона — публиковать ему нечем', async () => {

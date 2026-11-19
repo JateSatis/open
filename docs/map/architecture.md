@@ -34,7 +34,7 @@ Realtime возвращает сигналы в доменные хуки и к�
 | Reanimated, Gesture Handler, keyboard-controller | Шиты, просмотрщик, композер; жесты и клавиатура требуют целевого прохода на устройстве |
 | expo-image/video/audio/media-library, compressor, Skia | [Медиа](media.md), редактор попа; конкретные импорты покажут используемый пакет |
 | Supabase, TanStack Query, Zustand | API, доменные ключи/кеши/сторы; изменение ключа может затронуть Realtime и оптимистичные обновления |
-| LiveKit и WebRTC | [streams](../../src/features/streams/), [livekitGlobals](../../src/features/streams/livekitGlobals.ts), настройки плагинов |
+| LiveKit и WebRTC | [streams](../../src/features/streams/), общая [подготовка SDK](../../src/features/streams/livekitGlobals.ts) из основных вкладок и при входе в звонок, настройки плагинов |
 | Собственные модули | [modules](../../modules/): `audio-output`, `back-gesture`, `call-service`, `scroll-tap`, `text-geometry`; потребителей ищи по имени модуля |
 
 Нативную совместимость проверяй по [app.json](../../app.json), [eas.json](../../eas.json),

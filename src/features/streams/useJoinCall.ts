@@ -5,6 +5,7 @@ import { useCallback, useState } from 'react';
 import { startCall, StreamJoinError } from '@/api/streams';
 import { showNotice } from '@/features/notifications/alertsStore';
 import { askNotificationsOnce, ensureCallMicrophone } from '@/features/streams/callPermissions';
+import { prepareLiveKit, type LiveKit } from './livekitGlobals';
 import { joinCall } from '@/features/streams/callSession';
 import { stopRinging } from '@/features/streams/incomingCall';
 import { liveStreamQueryKey } from '@/features/streams/useLiveStream';
@@ -32,17 +33,20 @@ export function useJoinCall() {
   const [busy, setBusy] = useState(false);
 
   const enter = useCallback(
-    async (streamId: string, chat: CallChat) => {
+    async (streamId: string, chat: CallChat, preparation: Promise<LiveKit>) => {
       stopRinging(streamId);
       router.push({ name: 'Call' });
 
       try {
-        await joinCall({
-          streamId,
-          chatId: chat.chatId,
-          chatTitle: chat.chatTitle,
-          isDirect: chat.isDirect,
-        });
+        await joinCall(
+          {
+            streamId,
+            chatId: chat.chatId,
+            chatTitle: chat.chatTitle,
+            isDirect: chat.isDirect,
+          },
+          preparation,
+        );
       } catch (error) {
         if (router.canGoBack()) router.back();
         showNotice(joinErrorText(error), 'error');
@@ -58,6 +62,7 @@ export function useJoinCall() {
       if (busy) return;
 
       setBusy(true);
+      const preparation = prepareLiveKit();
 
       try {
         if (!(await ensureCallMicrophone())) return;
@@ -74,7 +79,7 @@ export function useJoinCall() {
         }
 
         void queryClient.invalidateQueries({ queryKey: liveStreamQueryKey(chat.chatId) });
-        await enter(streamId, chat);
+        await enter(streamId, chat, preparation);
       } finally {
         setBusy(false);
       }
@@ -88,12 +93,13 @@ export function useJoinCall() {
       if (busy) return;
 
       setBusy(true);
+      const preparation = prepareLiveKit();
 
       try {
         if (chat.isMember && !(await ensureCallMicrophone())) return;
 
         await askNotificationsOnce();
-        await enter(streamId, chat);
+        await enter(streamId, chat, preparation);
       } finally {
         setBusy(false);
       }

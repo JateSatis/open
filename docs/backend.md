@@ -511,7 +511,8 @@ RLS — на каждой таблице без исключений (табли
 
 Пакеты: livekit-client, @livekit/react-native, @livekit/react-native-expo-plugin,
 @livekit/react-native-webrtc, @config-plugins/react-native-webrtc. Оба плагина — в `plugins` `app.json`,
-в точке входа `registerGlobals()` (без него не работает), нужна новая сборка dev build.
+при изменении нативных плагинов нужна новая сборка dev build. JS-подготовка регистрирует
+WebRTC и таймеры после показа вкладок или по первому действию звонка.
 
 - токен комнаты — только Edge Function; API-секрет LiveKit никогда в клиенте.
 - identity в токене — непрозрачный id звонка (`stream_join_info` → `stream_identities`), имени нет;
