@@ -1,5 +1,4 @@
-import { AudioSession, AndroidAudioTypePresets } from '@livekit/react-native';
-import { DisconnectReason, Room, RoomEvent, type Participant } from 'livekit-client';
+import type { DisconnectReason, Participant, Room } from 'livekit-client';
 import { Platform } from 'react-native';
 
 import { startCallService, stopCallService } from '../../../modules/call-service';
@@ -12,6 +11,7 @@ import {
   toRoster,
   type RoomMember,
 } from '@/features/streams/callStore';
+import { prepareLiveKit, type LiveKit } from './livekitGlobals';
 import { stopVoice } from '@/features/media';
 import { showNotice } from '@/features/notifications/alertsStore';
 import { setInCall } from '@/store/callPresence';
@@ -31,6 +31,7 @@ const STATUS_CHECK_MS = 20_000;
 const EMPTY_CHECK_MS = 4_000;
 
 let room: Room | null = null;
+let callAudio: LiveKit['AudioSession'] | null = null;
 /** Каждому входу номер: ответ устаревшего входа не трогает новый звонок. */
 let generation = 0;
 let statusTimer: ReturnType<typeof setInterval> | null = null;
@@ -99,6 +100,9 @@ async function checkStillLive() {
 }
 
 async function routeAudio(speakerOn: boolean) {
+  const AudioSession = callAudio;
+  if (!AudioSession) return;
+
   try {
     if (Platform.OS === 'ios') {
       await AudioSession.selectAudioOutput(speakerOn ? 'force_speaker' : 'default');
@@ -130,7 +134,8 @@ async function releaseResources() {
   emptyTimer = null;
 
   const current = room;
-
+  const audio = callAudio;
+  callAudio = null;
   room = null;
 
   if (current) {
@@ -139,7 +144,7 @@ async function releaseResources() {
   }
 
   stopCallService();
-  await AudioSession.stopAudioSession().catch(() => undefined);
+  await audio?.stopAudioSession().catch(() => undefined);
   setInCall(false);
 }
 
@@ -151,20 +156,20 @@ async function endLocally(reason: string) {
   showNotice(reason);
 }
 
-function onDisconnected(reason?: DisconnectReason) {
-  if (reason === DisconnectReason.CLIENT_INITIATED) return;
+function onDisconnected(reasons: LiveKit['DisconnectReason'], reason?: DisconnectReason) {
+  if (reason === reasons.CLIENT_INITIATED) return;
 
   const text =
-    reason === DisconnectReason.ROOM_DELETED
+    reason === reasons.ROOM_DELETED
       ? 'Звонок завершён'
-      : reason === DisconnectReason.DUPLICATE_IDENTITY
+      : reason === reasons.DUPLICATE_IDENTITY
         ? 'Вы подключились к звонку с другого устройства'
         : 'Связь со звонком потеряна';
 
   void endLocally(text);
 }
 
-function attach(current: Room) {
+function attach(current: Room, { RoomEvent, DisconnectReason }: LiveKit) {
   current
     .on(RoomEvent.ParticipantConnected, refreshRoster)
     .on(RoomEvent.ParticipantDisconnected, refreshRoster)
@@ -182,14 +187,17 @@ function attach(current: Room) {
       patchCall({ connection: 'connected' });
       refreshRoster();
     })
-    .on(RoomEvent.Disconnected, onDisconnected);
+    .on(RoomEvent.Disconnected, (reason) => onDisconnected(DisconnectReason, reason));
 }
 
 /**
  * Входит в звонок. Уже в нём — ничего не делает; в другом — сначала выходит
  * из него. Бросает `StreamJoinError` с человеческим текстом, если войти нельзя.
  */
-export async function joinCall(input: JoinCallInput): Promise<void> {
+export async function joinCall(
+  input: JoinCallInput,
+  preparation?: Promise<LiveKit>,
+): Promise<void> {
   const existing = getCall();
 
   if (existing?.streamId === input.streamId) return;
@@ -213,6 +221,11 @@ export async function joinCall(input: JoinCallInput): Promise<void> {
   });
 
   try {
+    const sdk = await (preparation ?? prepareLiveKit());
+    if (current !== generation) return;
+
+    const { AudioSession, AndroidAudioTypePresets, Room } = sdk;
+    callAudio = AudioSession;
     const join = await requestStreamToken(input.streamId);
 
     if (current !== generation) return;
@@ -235,7 +248,9 @@ export async function joinCall(input: JoinCallInput): Promise<void> {
       },
       ios: { defaultOutput: speakerOn ? 'speaker' : 'earpiece' },
     });
+    if (current !== generation) return;
     await AudioSession.startAudioSession();
+    if (current !== generation) return;
 
     startCallService(
       speaks ? `В эфире · ${input.chatTitle}` : `Вы слушаете · ${input.chatTitle}`,
@@ -245,7 +260,7 @@ export async function joinCall(input: JoinCallInput): Promise<void> {
 
     const next = new Room({ adaptiveStream: false, dynacast: false });
 
-    attach(next);
+    attach(next, sdk);
     room = next;
 
     await next.connect(join.url, join.token, { autoSubscribe: true });
@@ -257,7 +272,9 @@ export async function joinCall(input: JoinCallInput): Promise<void> {
 
     if (speaks) await next.localParticipant.setMicrophoneEnabled(true);
 
+    if (current !== generation) return;
     await routeAudio(speakerOn);
+    if (current !== generation) return;
 
     patchCall({ connection: 'connected', joinedAt: Date.now() });
     refreshRoster();

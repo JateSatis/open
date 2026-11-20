@@ -1,6 +1,3 @@
-// First: livekit-client reads WebRTC globals while its modules are loading.
-import '@/features/streams/livekitGlobals';
-
 import { QueryClientProvider } from '@tanstack/react-query';
 import { registerRootComponent } from 'expo';
 import * as SplashScreen from 'expo-splash-screen';

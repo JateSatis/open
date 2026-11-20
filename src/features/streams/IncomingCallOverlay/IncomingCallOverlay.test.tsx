@@ -103,12 +103,15 @@ it('«Присоединиться» входит в звонок говорящ
 
   await waitFor(() => expect(joinCall).toHaveBeenCalled());
   expect(ensureCallMicrophone).toHaveBeenCalled();
-  expect(joinCall).toHaveBeenCalledWith({
-    streamId: 'stream-1',
-    chatId: 'chat-1',
-    chatTitle: 'Поход',
-    isDirect: false,
-  });
+  expect(joinCall).toHaveBeenCalledWith(
+    {
+      streamId: 'stream-1',
+      chatId: 'chat-1',
+      chatTitle: 'Поход',
+      isDirect: false,
+    },
+    expect.any(Promise),
+  );
   expect(mockPush).toHaveBeenCalledWith({ name: 'Call' });
   expect(useIncomingCall.getState().ringing).toBeNull();
 });

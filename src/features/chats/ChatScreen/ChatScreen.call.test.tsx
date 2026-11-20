@@ -234,12 +234,15 @@ describe('кнопка «Позвонить»', () => {
     await waitFor(() => expect(mockedJoin).toHaveBeenCalled());
     expect(mockedMicrophone).toHaveBeenCalled();
     expect(mockedStartCall).toHaveBeenCalledWith('chat-1');
-    expect(mockedJoin).toHaveBeenCalledWith({
-      streamId: 'stream-1',
-      chatId: 'chat-1',
-      chatTitle: 'Марина',
-      isDirect: true,
-    });
+    expect(mockedJoin).toHaveBeenCalledWith(
+      {
+        streamId: 'stream-1',
+        chatId: 'chat-1',
+        chatTitle: 'Марина',
+        isDirect: true,
+      },
+      expect.any(Promise),
+    );
     expect(mockPush).toHaveBeenCalledWith({ name: 'Call' });
   });
 

@@ -1,7 +1,7 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { DarkTheme, DefaultTheme, NavigationContainer } from '@react-navigation/native';
-import { useCallback, useEffect } from 'react';
-import { useColorScheme } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { useColorScheme, View } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
 
 import { useSession } from '@/features/auth/useSession';
@@ -11,6 +11,7 @@ import { useBirthDateGate } from '@/features/privacy/queries';
 import { MyProfileScreen } from '@/features/profile/MyProfileScreen';
 import { navigationRef, router, trackScreen } from '@/navigation';
 import type { TabsParams } from '@/navigation/types';
+import { prepareLiveKit } from '@/features/streams/livekitGlobals';
 import { CallScreen } from '@/features/streams/CallScreen';
 import { MediaLabScreen } from '@/features/media/MediaLabScreen';
 import { MosaicLabScreen } from '@/features/chats/MosaicLabScreen';
@@ -24,24 +25,50 @@ import { hidden, Stack } from './rootStack';
 const callId = () => 'active-call';
 const Tabs = createBottomTabNavigator<TabsParams>();
 
-function MainTabs() {
+const FIRST_TAP_WINDOW_MS = 1000;
+
+function MainTabs({ splashHidden }: { splashHidden: boolean }) {
+  const [laidOut, setLaidOut] = useState(false);
+
+  useEffect(() => {
+    if (!splashHidden || !laidOut) return;
+
+    let delay: ReturnType<typeof setTimeout> | undefined;
+    let idle: number | undefined;
+    // onLayout и hideAsync ещё не означают, что кадр показан. Даём пройти
+    // кадру, уходу заставки и первому нажатию, затем ждём свободного JS.
+    const frame = requestAnimationFrame(() => {
+      delay = setTimeout(() => {
+        idle = requestIdleCallback(prepareLiveKit);
+      }, FIRST_TAP_WINDOW_MS);
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      clearTimeout(delay);
+      if (idle !== undefined) cancelIdleCallback(idle);
+    };
+  }, [splashHidden, laidOut]);
+
   return (
-    <Tabs.Navigator
-      initialRouteName="chats"
-      backBehavior="initialRoute"
-      tabBar={() => null}
-      screenOptions={{ headerShown: false }}
-    >
-      <Tabs.Screen name="feed" component={FeedScreen} />
-      <Tabs.Screen name="chats" component={ChatsScreen} />
-      <Tabs.Screen name="profile" component={MyProfileScreen} />
-    </Tabs.Navigator>
+    <View style={{ flex: 1 }} onLayout={() => setLaidOut(true)}>
+      <Tabs.Navigator
+        initialRouteName="chats"
+        backBehavior="initialRoute"
+        tabBar={() => null}
+        screenOptions={{ headerShown: false }}
+      >
+        <Tabs.Screen name="feed" component={FeedScreen} />
+        <Tabs.Screen name="chats" component={ChatsScreen} />
+        <Tabs.Screen name="profile" component={MyProfileScreen} />
+      </Tabs.Navigator>
+    </View>
   );
 }
 
 export function AppRoutes({ incoming = null }: { incoming?: IncomingLink | null }) {
   const { session, isAuthenticated, isLoading } = useSession();
   const gate = useBirthDateGate();
+  const [splashHidden, setSplashHidden] = useState(false);
   const theme = useColorScheme() === 'dark' ? DarkTheme : DefaultTheme;
   const phase =
     isLoading || (isAuthenticated && gate === 'loading')
@@ -79,7 +106,7 @@ export function AppRoutes({ incoming = null }: { incoming?: IncomingLink | null 
       onReady={() => {
         trackScreen();
         deliver();
-        void SplashScreen.hideAsync();
+        void SplashScreen.hideAsync().then(() => setSplashHidden(true));
       }}
       onStateChange={trackScreen}
     >
@@ -88,7 +115,9 @@ export function AppRoutes({ incoming = null }: { incoming?: IncomingLink | null 
           authRoutes[phase]
         ) : (
           <Stack.Group>
-            <Stack.Screen name="Tabs" component={MainTabs} options={hidden} />
+            <Stack.Screen name="Tabs" options={hidden}>
+              {() => <MainTabs splashHidden={splashHidden} />}
+            </Stack.Screen>
             <Stack.Screen
               name="Call"
               getId={callId}

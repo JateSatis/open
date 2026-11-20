@@ -1,17 +1,19 @@
-// WebRTC и полифилы для livekit-client — до любого его использования. Файл
-// импортируется первым в корневом layout (раздел «Стримы» в CLAUDE.md).
-import { registerGlobals } from '@livekit/react-native';
-import { CriticalTimers } from 'livekit-client';
+import type { loadLiveKit } from './livekitSdk';
 
-import { backgroundTimers } from '../../../modules/call-service';
+export type LiveKit = ReturnType<typeof loadLiveKit>;
+let preparation: Promise<LiveKit> | undefined;
 
-registerGlobals();
-
-// Пинг сигнального канала LiveKit идёт на «критичных» таймерах. У свёрнутого
-// приложения таймеры JS на Android стоят, и сервер выкинул бы нас из звонка,
-// поэтому здесь они нативные.
-// Таймер в React Native — число, а в типах livekit-client — объект Node,
-// поэтому подменяются поля целиком, без проверки их типов.
-if (backgroundTimers) {
-  Object.assign(CriticalTimers, backgroundTimers);
+export function prepareLiveKit(): Promise<LiveKit> {
+  if (!preparation) {
+    preparation = Promise.resolve().then(() => {
+      const sdk = require('./livekitSdk') as typeof import('./livekitSdk');
+      return sdk.loadLiveKit();
+    });
+    // Фоновый вызов может остаться без ожидающего. Обработчик освобождает
+    // кеш для следующей попытки, а текущий вход получает исходную ошибку.
+    void preparation.catch(() => {
+      preparation = undefined;
+    });
+  }
+  return preparation;
 }
