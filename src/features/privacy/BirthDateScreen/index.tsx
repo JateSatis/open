@@ -8,7 +8,7 @@ import { Button } from '@/components/Button';
 import { Screen } from '@/components/Screen';
 import { Text } from '@/components/Text';
 import { useDeleteAccount } from '@/features/auth/accountQueries';
-import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
+import { useAuthBootstrap } from '@/features/auth/useSession';
 import { BirthDateField } from '@/features/privacy/BirthDateField';
 import { describeBirthDateError } from '@/features/privacy/birthDateErrors';
 import { useSetBirthDate } from '@/features/privacy/queries';
@@ -20,11 +20,12 @@ import { useLocalBirthDateDecision } from '@/features/privacy/useLocalBirthDateD
  * который удаляет аккаунт.
  */
 export function BirthDateScreen() {
-  const userId = useCurrentUserId();
-  return <BirthDateForm key={userId} userId={userId} />;
+  const { localAccountId, sdkStatus } = useAuthBootstrap();
+  if (!localAccountId) return null;
+  return <BirthDateForm key={localAccountId} userId={localAccountId} canSubmit={sdkStatus === 'session'} />;
 }
 
-function BirthDateForm({ userId }: { userId: string | null }) {
+function BirthDateForm({ userId, canSubmit }: { userId: string; canSubmit: boolean }) {
   const [date, setDate] = useState<string | null>(null);
   const decision = useLocalBirthDateDecision(userId);
   const [tooYoung, setTooYoung] = useState<boolean | null>(null);
@@ -32,7 +33,7 @@ function BirthDateForm({ userId }: { userId: string | null }) {
   const deletion = useDeleteAccount();
 
   const onContinue = () => {
-    if (!date) return;
+    if (!date || !canSubmit) return;
 
     save.mutate(date, {
       onError: (error) => {
@@ -61,6 +62,7 @@ function BirthDateForm({ userId }: { userId: string | null }) {
           <Button
             label="Выйти"
             variant="danger"
+            disabled={!canSubmit}
             loading={deletion.isPending}
             onPress={() => deletion.mutate()}
           />
@@ -92,7 +94,7 @@ function BirthDateForm({ userId }: { userId: string | null }) {
       <View style={styles.actions}>
         <Button
           label="Продолжить"
-          disabled={!date}
+          disabled={!date || !canSubmit}
           loading={save.isPending}
           onPress={onContinue}
         />

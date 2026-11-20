@@ -1,32 +1,11 @@
 import type { Session } from '@supabase/supabase-js';
-import { create } from 'zustand';
 
 import { readStoredSession, supabase } from '@/api/supabase';
 import { isNetworkError } from '@/lib/network';
 
-export type SessionState = {
-  session: Session | null;
-  isAuthenticated: boolean;
-  /** Ожидаем ответ SDK или чтение сохранённой сессии после сетевой ошибки. */
-  isLoading: boolean;
-};
+import { emptyState, useSessionStore, type AuthBootstrap } from './sessionState';
 
-export type AuthBootstrap = {
-  /** undefined — чтение идёт, null — владельца нет. */
-  localAccountId: string | null | undefined;
-  /** session означает получение сессии от SDK, в том числе из его кеша. */
-  sdkStatus: 'pending' | 'session' | 'signedOut' | 'offline';
-};
-
-const emptyState: SessionState & AuthBootstrap = {
-  session: null,
-  isAuthenticated: false,
-  isLoading: true,
-  localAccountId: undefined,
-  sdkStatus: 'pending',
-};
-
-export const useSessionStore = create<SessionState & AuthBootstrap>(() => emptyState);
+export { useSessionStore, type AuthBootstrap, type SessionState } from './sessionState';
 
 let stop: (() => void) | undefined;
 let refCount = 0;

@@ -35,6 +35,7 @@ import type { UserActivity } from '@/features/chats/messages/types';
 import { chatQueryKey, useChat } from '@/features/chats/useChat';
 import { pinsQueryKey } from '@/features/chats/usePinnedMessages';
 import { liveStreamQueryKey } from '@/features/streams/streamKeys';
+import { useSessionStore } from '@/features/auth/sessionState';
 
 /** How long a "печатает…" mark survives without another typing broadcast. */
 const TYPING_TIMEOUT_MS = 4000;
@@ -104,6 +105,9 @@ export function useChatChannel(chatId: string, currentUserId: string | null): Ch
   const clusterBatchRef = useRef<Batch>({ ids: new Set(), timer: null });
 
   const reader = useHistoryReader();
+  const canSubscribe = useSessionStore(
+    state => !reader || (state.sdkStatus === 'session' && state.session?.user.id === reader),
+  );
   const refreshMain = useCallback(() => {
     if (reader)
       void queryClient.invalidateQueries({ queryKey: messagesQueryKey(chatId), exact: true });
@@ -153,6 +157,7 @@ export function useChatChannel(chatId: string, currentUserId: string | null): Ch
   }, [chatId, queryClient]);
 
   useEffect(() => {
+    if (!canSubscribe) return;
     const timers = typingTimersRef.current;
     const reactionBatch = reactionBatchRef.current;
     const commentBatch = commentBatchRef.current;
@@ -311,7 +316,7 @@ export function useChatChannel(chatId: string, currentUserId: string | null): Ch
       }
       setActivities([]);
     };
-  }, [catchUp, chatId, currentUserId, isMember, onNewMessage, queryClient, refreshMain]);
+  }, [canSubscribe, catchUp, chatId, currentUserId, isMember, onNewMessage, queryClient, refreshMain]);
 
   const notifyActivity = useCallback(
     (activity: ChatActivity) => {

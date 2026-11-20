@@ -3,6 +3,7 @@ import { act, fireEvent, screen, waitFor, within } from '@testing-library/react-
 import { BackHandler } from 'react-native';
 
 import { ChatsScreen } from './index';
+import { HistoryReader } from '@/features/chats/messages/local/reader';
 
 import type { ChatSummary } from '@/api/chats';
 import { listChats } from '@/api/chats';
@@ -22,6 +23,16 @@ import {
 } from '@/features/connection/connectionStore';
 import { resetRecentSearches } from '@/features/search/recentSearches';
 import { renderWithQuery } from '@/test/renderWithQuery';
+
+jest.mock('@/features/chats/messages/local/database', () => ({
+  localHistory: () => ({ route: () => undefined, setRoute: jest.fn() }),
+}));
+
+function renderChats() {
+  return renderWithQuery(
+    <HistoryReader.Provider value="me"><ChatsScreen /></HistoryReader.Provider>,
+  );
+}
 
 const mockPush = jest.fn();
 const mockSetOptions = jest.fn();
@@ -125,7 +136,7 @@ const post: SearchMessage = {
 };
 
 async function openSearch() {
-  await renderWithQuery(<ChatsScreen />);
+  await renderChats();
   await screen.findByText('Анна Ёлкина');
   await fireEvent.press(screen.getByTestId('chats-search-open'));
 }

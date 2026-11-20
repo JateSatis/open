@@ -12,7 +12,7 @@ import {
 } from '@/api/privacy';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
 import { friendKeys } from '@/features/friends/queries';
-import { rememberBirthDate, useLocalBirthDateDecision } from './useLocalBirthDateDecision';
+import { reconcileMissingBirthDate, rememberBirthDate, useLocalBirthDateDecision } from './useLocalBirthDateDecision';
 
 /** Поле состояния экрана у каждой настройки, которую клиент меняет. */
 const SETTING_FIELDS: Record<
@@ -49,8 +49,10 @@ export function useMyPrivacySettings() {
       settingsReads.set(userId, read);
       try {
         const settings = await read;
-        if (settings?.birthDate != null && settingsReads.get(userId) === read) {
-          await rememberBirthDate(client, userId, settings.birthDate);
+        const isCurrent = () => settingsReads.get(userId) === read;
+        if (settings && isCurrent()) {
+          if (settings.birthDate === null) await reconcileMissingBirthDate(client, userId, isCurrent);
+          else await rememberBirthDate(client, userId, settings.birthDate);
         }
         return settings;
       } finally {
@@ -163,15 +165,8 @@ export function useRegenerateIdentityAlias() {
   });
 }
 
-export type BirthDateGate = 'loading' | 'required' | 'ok';
-
-/** Оба состояния формы используют существующий маршрут BirthDate. */
-export function useBirthDateGate(): BirthDateGate {
-  const userId = useCurrentUserId();
-  const { data, fetchStatus } = useMyPrivacySettings();
-  const decision = useLocalBirthDateDecision(userId);
-  if (userId === null) return 'ok';
-  if (decision === 'tooYoung') return 'required';
-  if (decision === 'required' && !data && fetchStatus === 'fetching') return 'loading';
-  return decision;
+export function useBirthDateGate(userId: string | null | undefined) {
+  // Ответ профиля уточнит локальное решение в том же кеше.
+  useMyPrivacySettings();
+  return useLocalBirthDateDecision(userId);
 }

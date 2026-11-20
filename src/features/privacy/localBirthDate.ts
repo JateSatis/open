@@ -24,8 +24,12 @@ export async function readLocalBirthDate(userId: string): Promise<LocalBirthDate
   }
 }
 
-export async function storeLocalBirthDate(userId: string, date: string): Promise<void> {
-  await AsyncStorage.setItem(dateKey(userId), date);
+export async function storeLocalBirthDate(userId: string, date: string | null): Promise<void> {
+  if (date === null) {
+    await AsyncStorage.multiRemove([dateKey(userId), `privacy.birthDateKnown.${userId}`]);
+  } else {
+    await AsyncStorage.setItem(dateKey(userId), date);
+  }
 }
 
 export function birthDateDecision(record: LocalBirthDate, now = Date.now()): BirthDateDecision {

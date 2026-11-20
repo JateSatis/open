@@ -1,4 +1,6 @@
-import { screen, userEvent, waitFor } from '@testing-library/react-native';
+import { act, screen, userEvent, waitFor } from '@testing-library/react-native';
+import type { Session } from '@supabase/supabase-js';
+import { useSessionStore } from '@/features/auth/sessionState';
 
 import { AccountScreen } from '@/features/auth/AccountScreen';
 
@@ -125,6 +127,9 @@ function renderAccount() {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  useSessionStore.setState({
+    localAccountId: 'me', sdkStatus: 'session', session: { user: { id: 'me' } } as Session,
+  });
   resetConfirmDialogQueue();
   mocked.listIdentities.mockResolvedValue([
     { id: 'id-google', provider: 'google', email: 'max@gmail.com' },
@@ -271,6 +276,17 @@ describe('AccountScreen — устройства', () => {
 });
 
 describe('AccountScreen — выход и удаление', () => {
+  it('ожидающий выход не применяется к другому подтверждённому аккаунту', async () => {
+    const user = userEvent.setup();
+    useSessionStore.setState({ sdkStatus: 'pending', session: null });
+    await renderAccount();
+    await user.press(await screen.findByText('Выйти из аккаунта'));
+    expect(screen.queryByText('Выйти из аккаунта?')).toBeNull();
+    await act(() => useSessionStore.setState({
+      sdkStatus: 'session', localAccountId: 'other', session: { user: { id: 'other' } } as Session,
+    }));
+    expect(signOutLocally).not.toHaveBeenCalled();
+  });
   it('signs out of this device only, forgetting the Google account choice', async () => {
     const user = userEvent.setup();
 

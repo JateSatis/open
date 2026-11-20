@@ -14,6 +14,7 @@ let mockAccount: string | null = 'reader';
 let mockLoading = false;
 let mockDate: 'ok' | 'required' = 'ok';
 jest.mock('@/features/auth/useSession', () => ({
+  useAuthBootstrap: () => ({ localAccountId: mockLoading ? undefined : mockAccount }),
   useSession: () => ({
     session: mockAccount ? { user: { id: mockAccount } } : null,
     isLoading: mockLoading,
@@ -23,7 +24,7 @@ jest.mock('@/features/auth/useSession', () => ({
 jest.mock('@/features/auth/sessionStore', () => ({
   useSessionStore: {
     subscribe: () => () => {},
-    getState: () => ({ session: mockAccount ? { user: { id: mockAccount } } : null }),
+    getState: () => ({ localAccountId: mockLoading ? undefined : mockAccount }),
   },
 }));
 jest.mock('@/features/privacy/queries', () => ({ useBirthDateGate: () => mockDate }));

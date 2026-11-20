@@ -5,6 +5,7 @@ import { AppState, type AppStateStatus } from 'react-native';
 
 import { AccountLifecycle } from './AccountLifecycle';
 import { useSession } from './useSession';
+import { useSessionStore } from './sessionState';
 
 import { registerDevice, signOutLocally, touchDevice } from '@/api/account';
 import { markSeen } from '@/api/chatInfo';
@@ -59,6 +60,9 @@ function sessionOf(userId: string, sessionId: string): Session {
 }
 
 function signedIn(session: Session | null) {
+  useSessionStore.setState({
+    session, localAccountId: session?.user.id ?? null, sdkStatus: session ? 'session' : 'signedOut',
+  });
   mockedSession.mockReturnValue({
     session,
     isAuthenticated: session !== null,

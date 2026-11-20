@@ -17,12 +17,12 @@ jest.mock('@supabase/supabase-js', () => {
   process.env.EXPO_PUBLIC_SUPABASE_URL = 'https://bootstrap.supabase.test';
   process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY = 'test-key';
   return {
-    createClient: () => ({
-      auth: {
+    SupabaseClient: class {
+      auth = {
         getSession: () => mockGetSession(),
         onAuthStateChange: (listener: Listener) => mockOnAuthStateChange(listener),
-      },
-    }),
+      };
+    },
   };
 });
 

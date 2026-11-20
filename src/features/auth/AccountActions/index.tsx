@@ -9,6 +9,7 @@ import { LinkButton } from '@/components/LinkButton';
 import { Text } from '@/components/Text';
 import { useDeleteAccount } from '@/features/auth/accountQueries';
 import { signOut } from '@/features/auth/signOut';
+import { confirmedAccountId, useSessionStore } from '@/features/auth/sessionState';
 
 export const DELETE_ACCOUNT_MESSAGE =
   'Профиль, имя, статус и аватар исчезнут, войти в этот аккаунт будет нельзя. ' +
@@ -19,6 +20,7 @@ export const DELETE_ACCOUNT_MESSAGE =
 export function AccountActions() {
   const [signingOut, setSigningOut] = useState(false);
   const deletion = useDeleteAccount();
+  const owner = useSessionStore(confirmedAccountId);
 
   const onSignOut = async () => {
     const agreed = await confirm({
@@ -29,12 +31,12 @@ export function AccountActions() {
       destructive: true,
     });
 
-    if (!agreed) return;
+    if (!agreed || !owner) return;
 
     setSigningOut(true);
     // Экран входа покажет навигация, как только пропадёт сессия; этот экран
     // к тому моменту уже размонтирован, поэтому состояние назад не сбрасываем.
-    await signOut();
+    await signOut(owner);
   };
 
   const onDelete = async () => {
@@ -55,7 +57,7 @@ export function AccountActions() {
         label="Выйти из аккаунта"
         variant="secondary"
         loading={signingOut}
-        disabled={deletion.isPending}
+        disabled={!owner || deletion.isPending}
         onPress={() => void onSignOut()}
       />
 
@@ -64,7 +66,7 @@ export function AccountActions() {
           label="Удалить аккаунт"
           color="textSecondary"
           loading={deletion.isPending}
-          disabled={signingOut}
+          disabled={!owner || signingOut}
           onPress={() => void onDelete()}
         />
         {deletion.error ? (

@@ -4,6 +4,7 @@ import { ChatGoneError } from '@/api/chatGone';
 import { ProfileUnavailableError } from '@/api/profileErrors';
 import { reportRequestFailed, reportRequestSucceeded } from '@/features/connection/connectionStore';
 import { isNetworkError } from '@/lib/network';
+import { requireAccountSession } from '@/features/auth/sessionState';
 
 const QUERY_RETRY_DELAY_MS = 1000;
 
@@ -22,7 +23,7 @@ function reportOutcome(error: unknown | null) {
   }
 }
 
-export function createAppQueryClient() {
+export function createAppQueryClient(owner: string | null = null) {
   return new QueryClient({
     defaultOptions: {
       queries: {
@@ -46,6 +47,7 @@ export function createAppQueryClient() {
       onError: (error) => reportOutcome(error),
     }),
     mutationCache: new MutationCache({
+      onMutate: () => requireAccountSession(owner),
       onSuccess: () => reportOutcome(null),
       onError: (error) => reportOutcome(error),
     }),

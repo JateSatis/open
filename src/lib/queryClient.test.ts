@@ -2,6 +2,8 @@ import { ChatGoneError } from '@/api/chatGone';
 import { ProfileUnavailableError } from '@/api/profileErrors';
 import { reportRequestFailed, reportRequestSucceeded } from '@/features/connection/connectionStore';
 import { createAppQueryClient } from './queryClient';
+import { emptyState, useSessionStore } from '@/features/auth/sessionState';
+import type { Session } from '@supabase/supabase-js';
 
 jest.mock('@/features/connection/connectionStore', () => ({
   reportRequestFailed: jest.fn(),
@@ -25,6 +27,29 @@ it('изолирует кеш каждого клиента', () => {
 
   expect(client.getQueryData(['chats'])).toEqual(['chat-1']);
   expect(other.getQueryData(['chats'])).toBeUndefined();
+});
+
+it('мутация локального клиента требует подтверждения его владельца даже с networkMode always', async () => {
+  const scoped = createAppQueryClient('reader');
+  const mutationFn = jest.fn().mockResolvedValue('ok');
+  const execute = () => scoped.getMutationCache().build(scoped, {
+    mutationFn, networkMode: 'always', gcTime: Infinity,
+  }).execute(undefined);
+  try {
+    useSessionStore.setState({ ...emptyState, localAccountId: 'reader' });
+    await expect(execute()).rejects.toThrow('активная сессия');
+    const confirm = (id: string) => useSessionStore.setState({
+      localAccountId: id, session: { user: { id } } as Session, sdkStatus: 'session',
+    });
+    confirm('other');
+    await expect(execute()).rejects.toThrow('активная сессия');
+    expect(mutationFn).not.toHaveBeenCalled();
+    confirm('reader');
+    await expect(execute()).resolves.toBe('ok');
+  } finally {
+    scoped.clear();
+    useSessionStore.setState(emptyState);
+  }
 });
 
 it('перечитывает запросы при восстановлении связи, включая свежие', () => {

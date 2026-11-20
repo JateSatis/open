@@ -3,6 +3,7 @@ import { fireEvent, screen, userEvent, waitFor } from '@testing-library/react-na
 import { View } from 'react-native';
 
 import { ChatsScreen } from './index';
+import { HistoryReader } from '@/features/chats/messages/local/reader';
 
 import type { ChatSummary } from '@/api/chats';
 import { getLastSeen } from '@/api/chatInfo';
@@ -19,9 +20,20 @@ import {
   unsubscribeFromChat,
   type ChannelSubscription,
 } from '@/api/subscriptions';
+import { useSessionStore } from '@/features/auth/sessionState';
 import { useSession } from '@/features/auth/useSession';
 import { reportRealtimeJoined, resetConnectionState } from '@/features/connection/connectionStore';
 import { renderWithQuery } from '@/test/renderWithQuery';
+
+jest.mock('@/features/chats/messages/local/database', () => ({
+  localHistory: () => ({ route: () => undefined, setRoute: jest.fn() }),
+}));
+
+function renderChats() {
+  return renderWithQuery(
+    <HistoryReader.Provider value="user-1"><ChatsScreen /></HistoryReader.Provider>,
+  );
+}
 
 const mockPush = jest.fn();
 
@@ -111,6 +123,7 @@ function invite(chatId: string, status: ChatInvite['status']): ChatInvite {
 beforeEach(() => {
   jest.clearAllMocks();
   signedInAs('user-1');
+  useSessionStore.setState({ sdkStatus: 'session', session: mockedSession().session });
   mockedStatuses.mockResolvedValue(new Map());
   mockedListChats.mockResolvedValue([]);
   mockedInvites.mockResolvedValue([]);
@@ -123,7 +136,7 @@ beforeEach(() => {
 
 describe('ChatsScreen', () => {
   it('always pins «Сохранённые сообщения» on top, without a counter when nothing waits', async () => {
-    await renderWithQuery(<ChatsScreen />);
+    await renderChats();
 
     expect(await screen.findByTestId('saved-entry')).toBeTruthy();
     expect(screen.queryByTestId('saved-entry-count')).toBeNull();
@@ -136,7 +149,7 @@ describe('ChatsScreen', () => {
     mockedSummary.mockResolvedValue({ watchLaterPending: 2 });
     mockedInvites.mockResolvedValue([invite('chat-9', 'pending')]);
 
-    await renderWithQuery(<ChatsScreen />);
+    await renderChats();
 
     expect(await screen.findByText('2')).toBeTruthy();
     expect(screen.getByLabelText('Сохранённые сообщения, посмотреть позже: 2')).toBeTruthy();
@@ -146,7 +159,7 @@ describe('ChatsScreen', () => {
   it('shows the other side of a direct chat with its last message', async () => {
     mockedListChats.mockResolvedValue([chat]);
 
-    await renderWithQuery(<ChatsScreen />);
+    await renderChats();
 
     expect(await screen.findByText('Марина')).toBeTruthy();
     expect(screen.getByText('до встречи')).toBeTruthy();
@@ -163,7 +176,7 @@ describe('ChatsScreen', () => {
     ]);
     const user = userEvent.setup();
 
-    await renderWithQuery(<ChatsScreen />);
+    await renderChats();
     await user.press(await screen.findByRole('button', { name: 'Новости' }));
 
     expect(screen.getByText('Канал')).toBeTruthy();
@@ -204,7 +217,7 @@ describe('ChatsScreen', () => {
       mockedListChats.mockResolvedValue([readChannel]);
       const user = userEvent.setup();
 
-      await renderWithQuery(<ChatsScreen />);
+      await renderChats();
 
       expect(await screen.findByText('Новый попс')).toBeTruthy();
       expect(screen.queryByText('старый пост')).toBeNull();
@@ -232,7 +245,7 @@ describe('ChatsScreen', () => {
       ]);
       const user = userEvent.setup();
 
-      await renderWithQuery(<ChatsScreen />);
+      await renderChats();
       await user.press(await screen.findByRole('button', { name: 'Новости' }));
 
       expect(mockPush).toHaveBeenCalledWith({
@@ -244,7 +257,7 @@ describe('ChatsScreen', () => {
     it('offers the four subscription actions on a long press', async () => {
       mockedListChats.mockResolvedValue([readChannel]);
 
-      await renderWithQuery(<ChatsScreen />);
+      await renderChats();
       fireEvent(await screen.findByRole('button', { name: 'Новости' }), 'longPress');
 
       const menu = await screen.findByTestId('subscription-menu');
@@ -279,7 +292,7 @@ describe('ChatsScreen', () => {
       mockedListChats.mockResolvedValue([readChannel]);
       const user = userEvent.setup();
 
-      await renderWithQuery(<ChatsScreen />);
+      await renderChats();
       fireEvent(await screen.findByRole('button', { name: 'Новости' }), 'longPress');
       await user.press(await screen.findByRole('menuitem', { name: label }));
 
@@ -294,7 +307,7 @@ describe('ChatsScreen', () => {
       });
       const user = userEvent.setup();
 
-      await renderWithQuery(<ChatsScreen />);
+      await renderChats();
       fireEvent(await screen.findByRole('button', { name: 'Новости' }), 'longPress');
       await user.press(await screen.findByRole('menuitem', { name: 'Не отображать в чатах' }));
 
@@ -306,7 +319,7 @@ describe('ChatsScreen', () => {
       (markChannelRead as jest.Mock).mockImplementation(() => new Promise(() => undefined));
       const user = userEvent.setup();
 
-      await renderWithQuery(<ChatsScreen />);
+      await renderChats();
       fireEvent(await screen.findByRole('button', { name: 'Новости' }), 'longPress');
       await user.press(await screen.findByRole('menuitem', { name: 'Прочитать все' }));
 
@@ -319,7 +332,7 @@ describe('ChatsScreen', () => {
     it('does nothing on a long press of my own chat or channel', async () => {
       mockedListChats.mockResolvedValue([chat]);
 
-      await renderWithQuery(<ChatsScreen />);
+      await renderChats();
       fireEvent(await screen.findByRole('button', { name: 'Марина' }), 'longPress');
 
       expect(screen.queryByTestId('subscription-menu')).toBeNull();
@@ -352,7 +365,7 @@ describe('ChatsScreen', () => {
       mockedListChats.mockResolvedValue([theirs]);
       const user = userEvent.setup();
 
-      await renderWithQuery(<ChatsScreen />);
+      await renderChats();
 
       expect(await screen.findByText('Аня и Пётр')).toBeTruthy();
       expect(screen.getByTestId('chat-avatar-pair')).toBeTruthy();
@@ -366,7 +379,7 @@ describe('ChatsScreen', () => {
     it('offers three actions on a long press — no «Не отображать в чатах»', async () => {
       mockedListChats.mockResolvedValue([theirs]);
 
-      await renderWithQuery(<ChatsScreen />);
+      await renderChats();
       fireEvent(await screen.findByRole('button', { name: 'Аня и Пётр' }), 'longPress');
 
       expect(await screen.findByTestId('subscription-menu')).toBeTruthy();
@@ -387,7 +400,7 @@ describe('ChatsScreen', () => {
       mockedListChats.mockResolvedValue([theirs]);
       const user = userEvent.setup();
 
-      await renderWithQuery(<ChatsScreen />);
+      await renderChats();
       fireEvent(await screen.findByRole('button', { name: 'Аня и Пётр' }), 'longPress');
       await user.press(await screen.findByRole('menuitem', { name: label }));
 
@@ -403,7 +416,7 @@ describe('ChatsScreen', () => {
       );
       const user = userEvent.setup();
 
-      await renderWithQuery(<ChatsScreen />);
+      await renderChats();
       fireEvent(await screen.findByRole('button', { name: 'Аня и Пётр' }), 'longPress');
       await user.press(await screen.findByRole('menuitem', { name: 'Прочитать все' }));
       await waitFor(() =>
@@ -421,7 +434,7 @@ describe('ChatsScreen', () => {
   it('keeps the «+» button even when there are no chats', async () => {
     mockedListChats.mockResolvedValue([]);
 
-    await renderWithQuery(<ChatsScreen />);
+    await renderChats();
 
     expect(await screen.findByRole('button', { name: 'Новый чат' })).toBeTruthy();
     expect(screen.getByTestId('create-button')).toBeTruthy();
@@ -438,7 +451,7 @@ describe('ChatsScreen', () => {
       )
       .mockImplementation((callback) => callback(300, 600, 56, 56));
 
-    await renderWithQuery(<ChatsScreen />);
+    await renderChats();
     await screen.findByText('Марина');
 
     expect(screen.queryByRole('button', { name: 'Новый чат' })).toBeNull();
@@ -453,7 +466,7 @@ describe('ChatsScreen', () => {
   it('marks a chat with an unread message', async () => {
     mockedListChats.mockResolvedValue([{ ...chat, hasUnread: true }]);
 
-    await renderWithQuery(<ChatsScreen />);
+    await renderChats();
 
     expect(await screen.findByLabelText('Есть непрочитанные сообщения')).toBeTruthy();
   });
@@ -461,7 +474,7 @@ describe('ChatsScreen', () => {
   it('leaves a read chat without the unread mark', async () => {
     mockedListChats.mockResolvedValue([chat]);
 
-    await renderWithQuery(<ChatsScreen />);
+    await renderChats();
 
     await screen.findByText('Марина');
     expect(screen.queryByLabelText('Есть непрочитанные сообщения')).toBeNull();
@@ -476,7 +489,7 @@ describe('ChatsScreen', () => {
     ]);
     const user = userEvent.setup();
 
-    await renderWithQuery(<ChatsScreen />);
+    await renderChats();
     await user.press(await screen.findByLabelText('Заявки: 2'));
 
     expect(mockPush).toHaveBeenCalledWith({ name: 'Invites' });
@@ -485,7 +498,7 @@ describe('ChatsScreen', () => {
   it('keeps the invites row for declined ones so they can still be accepted', async () => {
     mockedInvites.mockResolvedValue([invite('chat-9', 'declined')]);
 
-    await renderWithQuery(<ChatsScreen />);
+    await renderChats();
 
     expect(await screen.findByLabelText('Заявки')).toBeTruthy();
   });
@@ -493,7 +506,7 @@ describe('ChatsScreen', () => {
   it('has no invites row when there are no invites', async () => {
     mockedListChats.mockResolvedValue([chat]);
 
-    await renderWithQuery(<ChatsScreen />);
+    await renderChats();
 
     await screen.findByText('Марина');
     expect(screen.queryByText('Заявки')).toBeNull();
@@ -508,7 +521,7 @@ describe('ChatsScreen', () => {
       },
     ]);
 
-    await renderWithQuery(<ChatsScreen />);
+    await renderChats();
 
     expect(await screen.findByText('Марина')).toBeTruthy();
     expect(screen.getByText('ждём ответа на заявку')).toBeTruthy();
@@ -517,7 +530,7 @@ describe('ChatsScreen', () => {
   it('offers to start a chat when there are none', async () => {
     const user = userEvent.setup();
 
-    await renderWithQuery(<ChatsScreen />);
+    await renderChats();
     await user.press(await screen.findByText('Новый чат'));
 
     expect(mockPush).toHaveBeenCalledWith({ name: 'NewChat' });
@@ -527,7 +540,7 @@ describe('ChatsScreen', () => {
     mockedListChats.mockResolvedValue([chat]);
     mockedStatuses.mockResolvedValue(new Map([['user-2', { online: true, lastSeenAt: null }]]));
 
-    await renderWithQuery(<ChatsScreen />);
+    await renderChats();
 
     expect(await screen.findByText('в сети')).toBeTruthy();
     // Статус спрашивается у сервера только для собеседника: настройку
@@ -539,7 +552,7 @@ describe('ChatsScreen', () => {
     mockedListChats.mockResolvedValue([chat]);
     mockedStatuses.mockResolvedValue(new Map([['user-2', { online: false, lastSeenAt: null }]]));
 
-    await renderWithQuery(<ChatsScreen />);
+    await renderChats();
     await screen.findByText('Марина');
     await waitFor(() => expect(mockedStatuses).toHaveBeenCalled());
 
@@ -550,7 +563,7 @@ describe('ChatsScreen', () => {
     mockedListChats.mockResolvedValue([chat]);
     const user = userEvent.setup();
 
-    await renderWithQuery(<ChatsScreen />);
+    await renderChats();
     await user.press(await screen.findByText('Марина'));
 
     expect(mockPush).toHaveBeenCalledWith({ name: 'Chat', params: { chatId: 'chat-1' } });
@@ -559,7 +572,7 @@ describe('ChatsScreen', () => {
   it('reports a failure to load instead of showing an empty list', async () => {
     mockedListChats.mockRejectedValue(new Error('unexpected token in response'));
 
-    await renderWithQuery(<ChatsScreen />);
+    await renderChats();
 
     expect(await screen.findByText('Не удалось загрузить чаты')).toBeTruthy();
   });
@@ -568,7 +581,7 @@ describe('ChatsScreen', () => {
     mockedListChats.mockRejectedValue(new Error('Network request failed'));
     mockedInvites.mockResolvedValue([invite('chat-9', 'pending')]);
 
-    await renderWithQuery(<ChatsScreen />);
+    await renderChats();
 
     // Красная плашка с java.net.UnknownHostException ничего не объясняет
     // человеку и только перекрывает то, что уже загружено.

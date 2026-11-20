@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useLayoutEffect } from 'react';
 
 import { syncQueryOnlineState } from '@/features/connection/syncQueryOnlineState';
 import { useConnectionWatch } from '@/features/connection/useConnectionWatch';
@@ -8,8 +8,8 @@ import { useConnectionWatch } from '@/features/connection/useConnectionWatch';
  * компонент нужен, чтобы хук оказался внутри провайдера запросов: ему нужен
  * доступ к кешу, чтобы перечитать данные после возвращения сети.
  */
-export function ConnectionWatcher() {
-  useEffect(syncQueryOnlineState, []);
+export function ConnectionWatcher({ requestsReady }: { requestsReady: boolean }) {
+  useLayoutEffect(() => syncQueryOnlineState(requestsReady), [requestsReady]);
   useConnectionWatch();
 
   return null;
