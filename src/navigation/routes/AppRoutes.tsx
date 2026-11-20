@@ -1,10 +1,10 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { DarkTheme, DefaultTheme, NavigationContainer } from '@react-navigation/native';
-import { useCallback, useEffect, useState } from 'react';
+import { type ReactElement, useCallback, useEffect, useState } from 'react';
 import { useColorScheme, View } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
 
-import { useSession } from '@/features/auth/useSession';
+import { useAuthBootstrap } from '@/features/auth/useSession';
 import { ChatsScreen } from '@/features/chats/ChatsScreen';
 import { FeedScreen } from '@/features/feed/FeedScreen';
 import { useBirthDateGate } from '@/features/privacy/queries';
@@ -21,13 +21,24 @@ import { chatsRoutes } from './ChatsRoutes';
 import { feedRoutes } from './FeedRoutes';
 import { profileRoutes } from './ProfileRoutes';
 import { hidden, Stack } from './rootStack';
+import { StartupScreenLayout } from './StartupScreenLayout';
 
 const callId = () => 'active-call';
 const Tabs = createBottomTabNavigator<TabsParams>();
 
 const FIRST_TAP_WINDOW_MS = 1000;
+// Смена фазы или владельца перемонтирует навигацию, но нативная заставка одна.
+let hideSplash: Promise<void> | undefined;
 
-function MainTabs({ splashHidden }: { splashHidden: boolean }) {
+type ScreenLayout = (props: { children: ReactElement; route: { name: string } }) => ReactElement;
+
+function MainTabs({
+  splashHidden,
+  screenLayout,
+}: {
+  splashHidden: boolean;
+  screenLayout: ScreenLayout;
+}) {
   const [laidOut, setLaidOut] = useState(false);
 
   useEffect(() => {
@@ -52,6 +63,7 @@ function MainTabs({ splashHidden }: { splashHidden: boolean }) {
   return (
     <View style={{ flex: 1 }} onLayout={() => setLaidOut(true)}>
       <Tabs.Navigator
+        screenLayout={screenLayout}
         initialRouteName="chats"
         backBehavior="initialRoute"
         tabBar={() => null}
@@ -66,22 +78,36 @@ function MainTabs({ splashHidden }: { splashHidden: boolean }) {
 }
 
 export function AppRoutes({ incoming = null }: { incoming?: IncomingLink | null }) {
-  const { session, isAuthenticated, isLoading } = useSession();
-  const gate = useBirthDateGate();
+  const { localAccountId } = useAuthBootstrap();
+  const gate = useBirthDateGate(localAccountId);
   const [splashHidden, setSplashHidden] = useState(false);
   const theme = useColorScheme() === 'dark' ? DarkTheme : DefaultTheme;
   const phase =
-    isLoading || (isAuthenticated && gate === 'loading')
+    localAccountId === undefined || (localAccountId !== null && gate === 'loading')
       ? 'loading'
-      : !isAuthenticated
+      : localAccountId === null
         ? 'SignIn'
-        : gate === 'required'
-          ? 'BirthDate'
-          : 'Tabs';
+        : gate === 'ok'
+          ? 'Tabs'
+          : 'BirthDate';
+
+  const onScreenReady = useCallback(() => {
+    hideSplash ??= SplashScreen.hideAsync();
+    void hideSplash.then(() => setSplashHidden(true));
+  }, []);
+  const screenLayout: ScreenLayout = useCallback(
+    ({ children, route }) =>
+      route.name === 'Tabs' ? (
+        children
+      ) : (
+        <StartupScreenLayout onReady={onScreenReady}>{children}</StartupScreenLayout>
+      ),
+    [onScreenReady],
+  );
 
   const deliver = useCallback(() => {
     if (!incoming || phase === 'loading') return;
-    if (incoming.owner && incoming.owner !== session?.user.id) {
+    if (incoming.owner && incoming.owner !== localAccountId) {
       incoming.take();
       return;
     }
@@ -94,7 +120,7 @@ export function AppRoutes({ incoming = null }: { incoming?: IncomingLink | null 
     }
     if (!navigationRef.getRootState()?.routeNames.includes(destination.name)) return;
     if (incoming.take()) router.push(destination);
-  }, [incoming, phase, session?.user.id]);
+  }, [incoming, phase, localAccountId]);
 
   useEffect(deliver, [deliver]);
   if (phase === 'loading') return null;
@@ -106,17 +132,16 @@ export function AppRoutes({ incoming = null }: { incoming?: IncomingLink | null 
       onReady={() => {
         trackScreen();
         deliver();
-        void SplashScreen.hideAsync().then(() => setSplashHidden(true));
       }}
       onStateChange={trackScreen}
     >
-      <Stack.Navigator initialRouteName={phase}>
+      <Stack.Navigator initialRouteName={phase} screenLayout={screenLayout}>
         {phase !== 'Tabs' ? (
           authRoutes[phase]
         ) : (
           <Stack.Group>
             <Stack.Screen name="Tabs" options={hidden}>
-              {() => <MainTabs splashHidden={splashHidden} />}
+              {() => <MainTabs splashHidden={splashHidden} screenLayout={screenLayout} />}
             </Stack.Screen>
             <Stack.Screen
               name="Call"

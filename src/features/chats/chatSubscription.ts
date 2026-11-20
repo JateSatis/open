@@ -1,6 +1,9 @@
 import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useCallback } from 'react';
 
+import { requireAccountSession } from '@/features/auth/sessionState';
+import { useHistoryReader } from '@/features/chats/messages/local/reader';
+
 import { byChatListOrder } from '@/api/chatListOrder';
 import type { ChatSummary } from '@/api/chats';
 import {
@@ -119,6 +122,7 @@ export type ChatSubscriptionActions = {
 export function useChatSubscriptionActions(chatId: string): ChatSubscriptionActions {
   const queryClient = useQueryClient();
 
+  const owner = useHistoryReader();
   const run = useCallback(
     async (
       next: (current: Subscription | null) => Subscription | null,
@@ -137,6 +141,7 @@ export function useChatSubscriptionActions(chatId: string): ChatSubscriptionActi
       applySubscription(queryClient, chatId, current, next(current));
 
       try {
+        requireAccountSession(owner);
         await withDeadline(request(), ACTION_DEADLINE_MS);
         return true;
       } catch {
@@ -149,7 +154,7 @@ export function useChatSubscriptionActions(chatId: string): ChatSubscriptionActi
         void queryClient.invalidateQueries({ queryKey: chatsQueryKey });
       }
     },
-    [chatId, queryClient],
+    [chatId, owner, queryClient],
   );
 
   const subscribe = useCallback(

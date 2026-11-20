@@ -16,7 +16,7 @@ import { CreateMenu, type CreateMenuItem } from '@/features/chats/CreateMenu';
 import { InvitesEntry } from '@/features/chats/InvitesEntry';
 import { counterpart } from '@/features/chats/chatDisplay';
 import { useChats } from '@/features/chats/useChats';
-import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
+import { useHistoryReader } from '@/features/chats/messages/local/reader';
 import { useInvites } from '@/features/chats/useInvites';
 import type { ChatSummary } from '@/api/chats';
 import { useOnlineUsers } from '@/features/chats/useOnlineUsers';
@@ -30,7 +30,7 @@ import { Sizes, Spacing } from '@/theme';
 
 export function ChatsScreen() {
   const router = useRouter();
-  const currentUserId = useCurrentUserId();
+  const currentUserId = useHistoryReader();
   const { chats, isLoading, isRefreshing, error, refresh } = useChats();
   // Точка «в сети» — только у собеседников личных диалогов.
   const peerIds = useMemo(

@@ -1,9 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { createClient, type Session } from '@supabase/supabase-js';
+import type { Session } from '@supabase/supabase-js';
 import { AppState } from 'react-native';
 
 import { withRequestDeadline } from '@/api/requestDeadline';
-import type { Database } from '@/api/database';
+import { AccountClient } from '@/api/accountClient';
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
@@ -37,7 +37,7 @@ export async function readStoredSession() {
 // select-строк вместе со встроенными таблицами. Без неё каждый запрос
 // возвращал бы `any`, и ряды приходилось бы описывать руками рядом с каждым
 // запросом — а значит, расходиться со схемой при первой же миграции.
-export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
+export const supabase = new AccountClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     storage: AsyncStorage,
     storageKey: sessionStorageKey,

@@ -20,6 +20,7 @@ import { listChatSubscriptions, type Subscription } from '@/api/subscriptions';
 import { byChatListOrder } from '@/api/chatListOrder';
 import { opaqueFlag } from '@/api/opaquePeople';
 import { supabase } from '@/api/supabase';
+import { checkResponseOwner, requestOwner } from '@/features/auth/sessionState';
 import { randomUuid } from '@/lib/uuid';
 import {
   hiddenRangesJson,
@@ -356,10 +357,12 @@ export function toSummary(
 }
 
 export async function getCurrentUserId(): Promise<string> {
+  const owner = requestOwner();
   const { data, error } = await supabase.auth.getUser();
 
   if (error) throw error;
   if (!data.user) throw new Error('Нет активной сессии');
+  checkResponseOwner(owner, data.user.id);
 
   return data.user.id;
 }

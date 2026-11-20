@@ -44,7 +44,13 @@ jest.mock('@/api/account', () => ({
   signOutLocally: jest.fn(),
 }));
 jest.mock('@/features/auth/signIn', () => ({ signOutOfGoogle: jest.fn() }));
-jest.mock('@/features/auth/useSession', () => ({ useSession: jest.fn() }));
+jest.mock('@/features/auth/useSession', () => ({
+  useSession: jest.fn(),
+  useAuthBootstrap: () => ({
+    localAccountId: mocked.useSession().session?.user.id ?? null,
+    sdkStatus: mocked.useSession().session ? 'session' : 'signedOut',
+  }),
+}));
 
 declare global {
   // Какой день отдаёт подменённый нативный выбор даты (src/test/jest.setup.js).
@@ -223,7 +229,7 @@ describe('экран даты рождения', () => {
     expect(await screen.findByText('Регистрация в Open возможна с 13 лет')).toBeTruthy();
     expect(screen.getByText('Выйти')).toBeTruthy();
 
-    mocked.setBirthDate.mockResolvedValue(undefined);
+    serverAcceptsDate();
     await userEvent.setup().press(screen.getByText('Изменить дату'));
     expect(await screen.findByTestId('birth-date-field')).toBeTruthy();
 

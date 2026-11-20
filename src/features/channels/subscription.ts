@@ -1,6 +1,9 @@
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useCallback } from 'react';
 
+import { requireAccountSession } from '@/features/auth/sessionState';
+import { useHistoryReader } from '@/features/chats/messages/local/reader';
+
 import type { Channel } from '@/api/channels';
 import { byChatListOrder } from '@/api/chatListOrder';
 import type { ChatSummary } from '@/api/chats';
@@ -133,6 +136,7 @@ export type SubscriptionActions = {
 export function useSubscriptionActions(channelId: string): SubscriptionActions {
   const queryClient = useQueryClient();
 
+  const owner = useHistoryReader();
   const run = useCallback(
     async (
       next: (current: ChannelSubscription | null) => ChannelSubscription | null,
@@ -151,6 +155,7 @@ export function useSubscriptionActions(channelId: string): SubscriptionActions {
       applySubscription(queryClient, channelId, current, next(current));
 
       try {
+        requireAccountSession(owner);
         await withDeadline(request(), ACTION_DEADLINE_MS);
         return true;
       } catch {
@@ -163,7 +168,7 @@ export function useSubscriptionActions(channelId: string): SubscriptionActions {
         void queryClient.invalidateQueries({ queryKey: chatsQueryKey });
       }
     },
-    [channelId, queryClient],
+    [channelId, owner, queryClient],
   );
 
   const subscribe = useCallback(

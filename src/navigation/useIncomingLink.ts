@@ -21,7 +21,7 @@ export function useIncomingLink() {
       received = true;
       const link: IncomingLink = {
         destination,
-        owner: useSessionStore.getState().session?.user.id ?? null,
+        owner: useSessionStore.getState().localAccountId ?? null,
         take: () => {
           if (latest.current !== link) return false;
           latest.current = null;
@@ -32,10 +32,9 @@ export function useIncomingLink() {
       latest.current = link;
       setIncoming(link);
     };
-    const unsubscribe = useSessionStore.subscribe(({ session }) => {
+    const unsubscribe = useSessionStore.subscribe(({ localAccountId: owner }) => {
       const link = latest.current;
-      if (!link) return;
-      const owner = session?.user.id ?? null;
+      if (!link || owner === undefined) return;
       if (link.owner && link.owner !== owner) link.take();
       else if (owner) link.owner = owner;
     });

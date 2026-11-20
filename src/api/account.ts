@@ -8,6 +8,7 @@
 import type { UserIdentity } from '@supabase/supabase-js';
 
 import { supabase } from '@/api/supabase';
+import { confirmedAccountId, useSessionStore } from '@/features/auth/sessionState';
 import type { Tables } from '@/api/types.gen';
 
 export type IdentityProvider = 'google' | 'apple';
@@ -170,8 +171,9 @@ export async function markDeviceSignedOut(installationId: string): Promise<void>
  * Каналы Realtime закрываются до выхода: подписки открыты с токеном прежнего
  * пользователя, и следующий вход не должен их унаследовать.
  */
-export async function signOutLocally(): Promise<void> {
+export async function signOutLocally(owner?: string): Promise<void> {
   await supabase.removeAllChannels();
+  if (owner && confirmedAccountId(useSessionStore.getState()) !== owner) return;
 
   const { error } = await supabase.auth.signOut({ scope: 'local' });
 

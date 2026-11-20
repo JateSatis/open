@@ -11,17 +11,34 @@ import {
 const localKey = (userId: string | null | undefined) =>
   ['privacy', 'localBirthDate', userId] as const;
 
-export function useLocalBirthDateDecision(userId: string | null | undefined) {
-  const local = useQuery({
+function localBirthDateOptions(userId: string | null | undefined) {
+  return {
     queryKey: localKey(userId),
     queryFn: () => (userId ? readLocalBirthDate(userId) : null),
     enabled: Boolean(userId),
-    networkMode: 'always',
+    networkMode: 'always' as const,
     staleTime: Infinity,
     refetchOnReconnect: false,
-  });
+  };
+}
+
+export function useLocalBirthDateDecision(userId: string | null | undefined) {
+  const local = useQuery(localBirthDateOptions(userId));
   if (local.isPending) return 'loading';
   return birthDateDecision(local.data ?? null);
+}
+
+export async function reconcileMissingBirthDate(client: QueryClient, userId: string, isCurrent: () => boolean) {
+  const local = await client.ensureQueryData(localBirthDateOptions(userId));
+  // Сервер не хранит отклонённую дату младше 13 лет. Пустое поле
+  // отзывает только локальный допуск, сохраняя экран ограничения.
+  if (!isCurrent() || birthDateDecision(local) !== 'ok') return;
+  client.setQueryData(localKey(userId), null);
+  try {
+    await storeLocalBirthDate(userId, null);
+  } catch {
+    // В открытом приложении уточнение уже действует.
+  }
 }
 
 export async function rememberBirthDate(

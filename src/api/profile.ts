@@ -6,6 +6,7 @@
 
 import { ProfileUnavailableError } from '@/api/profileErrors';
 import { supabase } from '@/api/supabase';
+import { checkResponseOwner, requestOwner } from '@/features/auth/sessionState';
 import type { Database, TablesUpdate } from '@/api/types.gen';
 
 type ProfileRow = Database['public']['Functions']['profile_cards']['Returns'][number];
@@ -62,6 +63,7 @@ function toProfile(row: ProfileRow): Profile {
 }
 
 async function requireUserId(): Promise<string> {
+  const owner = requestOwner();
   const { data, error } = await supabase.auth.getSession();
 
   if (error) {
@@ -74,6 +76,7 @@ async function requireUserId(): Promise<string> {
     throw new NotAuthenticatedError();
   }
 
+  checkResponseOwner(owner, userId);
   return userId;
 }
 

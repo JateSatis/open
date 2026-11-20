@@ -12,8 +12,12 @@ import { ConfirmDialogHost } from '@/components/ConfirmDialog';
 import { AccountLifecycle } from '@/features/auth/AccountLifecycle';
 import { resetClientState } from '@/features/auth/resetClientState';
 import { useSessionStore } from '@/features/auth/sessionStore';
-import { useSession } from '@/features/auth/useSession';
-import { HistoryReader, bindHistoryReader } from '@/features/chats/messages/local/reader';
+import { useAuthBootstrap } from '@/features/auth/useSession';
+import {
+  HistoryReader,
+  bindHistoryReader,
+  useHistoryReader,
+} from '@/features/chats/messages/local/reader';
 import { HistoryReadDelivery } from '@/features/chats/useMarkChatRead';
 import { ConnectionWatcher } from '@/features/connection/ConnectionWatcher';
 import { InAppMessageToast } from '@/features/notifications/InAppMessageToast';
@@ -24,22 +28,33 @@ import { createAppQueryClient } from '@/lib/queryClient';
 import { AppRoutes } from '@/navigation/routes/AppRoutes';
 import { type IncomingLink, useIncomingLink } from '@/navigation/useIncomingLink';
 
-bindHistoryReader(() => useSessionStore.getState().session?.user.id ?? null);
+bindHistoryReader(() => useSessionStore.getState().localAccountId ?? null);
 SplashScreen.preventAutoHideAsync();
 
-function App() {
-  const { session } = useSession();
-  const reader = session?.user.id ?? null;
+export function App() {
+  const { localAccountId: reader, sdkStatus } = useAuthBootstrap();
   const incoming = useIncomingLink();
+  if (reader === undefined) return null;
   return (
     <HistoryReader.Provider value={reader}>
-      <AccountLayout key={reader ?? 'signed-out'} incoming={incoming} />
+      <AccountLayout
+        key={reader ?? 'signed-out'}
+        incoming={incoming}
+        requestsReady={reader === null || sdkStatus === 'session'}
+      />
     </HistoryReader.Provider>
   );
 }
 
-function AccountLayout({ incoming }: { incoming: IncomingLink | null }) {
-  const [queryClient] = useState(createAppQueryClient);
+function AccountLayout({
+  incoming,
+  requestsReady,
+}: {
+  incoming: IncomingLink | null;
+  requestsReady: boolean;
+}) {
+  const reader = useHistoryReader();
+  const [queryClient] = useState(() => createAppQueryClient(reader));
 
   useLayoutEffect(() => () => resetClientState(queryClient), [queryClient]);
 
@@ -52,9 +67,9 @@ function AccountLayout({ incoming }: { incoming: IncomingLink | null }) {
       <KeyboardProvider>
         <QueryClientProvider client={queryClient}>
           <SafeAreaProvider>
-            <ConnectionWatcher />
-            <HistoryReadDelivery />
-            <AccountLifecycle />
+            <ConnectionWatcher requestsReady={requestsReady} />
+            {requestsReady && <HistoryReadDelivery />}
+            {requestsReady && <AccountLifecycle />}
             <JournalSession />
             {/* Свёрнутый звонок сдвигает навигатор вниз, а не перекрывает шапки. */}
             <BelowReturnBar>

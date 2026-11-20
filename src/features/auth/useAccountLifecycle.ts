@@ -71,7 +71,7 @@ export function useAccountLifecycle() {
 
     void (async () => {
       if (!(await sessionIsAlive())) {
-        if (!cancelled) await signOutQuietly();
+        if (!cancelled) await signOutQuietly(userId);
         return;
       }
 
@@ -85,7 +85,7 @@ export function useAccountLifecycle() {
     return () => {
       cancelled = true;
     };
-  }, [sessionId]);
+  }, [sessionId, userId]);
 
   useEffect(() => {
     if (!sessionId) return;
@@ -94,12 +94,12 @@ export function useAccountLifecycle() {
       if (state !== 'active') return;
 
       void sessionIsAlive().then((alive) => {
-        if (!alive) void signOutQuietly();
+        if (!alive) void signOutQuietly(userId);
       });
     });
 
     return () => subscription.remove();
-  }, [sessionId]);
+  }, [sessionId, userId]);
 
   useEffect(() => {
     if (!sessionId) return;
