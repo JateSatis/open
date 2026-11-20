@@ -12,9 +12,11 @@
 (`expo-apple-authentication`, `@react-native-google-signin/google-signin`), id-токен →
 `supabase.auth.signInWithIdToken`. Клиент Supabase — один раз в `src/api/supabase.ts`: `AsyncStorage`,
 `autoRefreshToken: true`, `persistSession: true`, `detectSessionInUrl: false`; обновление токена
-привязано к `AppState` (фон — пауза, возврат — запуск). Состояние читается **только** через
-`useSession()` из `src/features/auth` (один `onAuthStateChange`); прямых `getSession()` в компонентах
-нет. Отмена входа — не ошибка; сетевые/серверные сбои — человеческим текстом. Включение провайдера
+привязано к `AppState` (фон — пауза, возврат — запуск). Экраны и сервисы получают сессию через
+`useSession()` из `src/features/auth`. При сетевой ошибке SDK хук восстанавливает сохранённую сессию
+для офлайн-режима. В том же модуле `useAuthBootstrap()` отдаёт владельца локальных данных
+(`localAccountId`) и результат восстановления SDK (`sdkStatus`). Оба хука разделяют одну подписку
+`onAuthStateChange`. Отмена входа — не ошибка; сетевые/серверные сбои — человеческим текстом. Включение провайдера
 — действие в дашборде Supabase (просьба к человеку).
 
 ## Модель данных
