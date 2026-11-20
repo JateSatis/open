@@ -1,10 +1,17 @@
-import { screen, userEvent, waitFor } from '@testing-library/react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { act, screen, userEvent, waitFor } from '@testing-library/react-native';
 
 import { AppRoutes } from '@/navigation/routes/AppRoutes';
 
 import { deleteMyAccount, signOutLocally } from '@/api/account';
-import { BirthDateTooYoungError, getMyPrivacySettings, setBirthDate } from '@/api/privacy';
+import {
+  BirthDateInFutureError,
+  BirthDateTooYoungError,
+  getMyPrivacySettings,
+  setBirthDate,
+} from '@/api/privacy';
 import { useSession } from '@/features/auth/useSession';
+import { readLocalBirthDate } from '@/features/privacy/localBirthDate';
 import { renderWithQuery } from '@/test/renderWithQuery';
 
 // Этот тест монтирует только экраны входа, даты и вкладок.
@@ -88,8 +95,9 @@ async function pickAndContinue(date: Date) {
   await user.press(screen.getByText('Продолжить'));
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   jest.clearAllMocks();
+  await AsyncStorage.clear();
   mocked.useSession.mockReturnValue(signedIn);
   mocked.getMyPrivacySettings.mockResolvedValue({
     birthDate: null,
@@ -107,7 +115,8 @@ describe('ворота даты рождения', () => {
     expect(screen.queryByText('Чаты')).toBeNull();
   });
 
-  it('К2.1 холодный старт без даты ведёт на экран даты', async () => {
+  it('К2.1 холодный старт без даты и сети ведёт на экран даты', async () => {
+    mocked.getMyPrivacySettings.mockRejectedValue(new Error('offline'));
     await renderWithQuery(<AppRoutes />);
 
     expect(await screen.findByText('Дата рождения')).toBeTruthy();
@@ -131,14 +140,21 @@ describe('ворота даты рождения', () => {
     expect(await screen.findByText('Чаты')).toBeTruthy();
   });
 
-  it('К2.5 с датой экран даты сам уводит во вкладки', async () => {
-    mocked.getMyPrivacySettings.mockResolvedValue({
-      birthDate: '2000-01-01',
-      friendsListVisibility: 'everyone',
-    });
-
+  it('К2.5 старая отметка работает офлайн, фактическая дата восстанавливается после обновления', async () => {
+    await AsyncStorage.setItem('privacy.birthDateKnown.new-user', '1');
+    mocked.getMyPrivacySettings.mockRejectedValue(new Error('offline'));
+    const legacy = await renderWithQuery(<AppRoutes />);
+    expect(await screen.findByText('Чаты')).toBeTruthy();
+    expect(await readLocalBirthDate('new-user')).toBe('legacy');
+    await legacy.unmount();
+    mocked.getMyPrivacySettings.mockResolvedValue({ birthDate: '2000-01-01' });
+    const online = await renderWithQuery(<AppRoutes />);
+    await waitFor(async () =>
+      expect(await readLocalBirthDate('new-user')).toEqual({ date: '2000-01-01' }),
+    );
+    await online.unmount();
+    mocked.getMyPrivacySettings.mockRejectedValue(new Error('offline'));
     await renderWithQuery(<AppRoutes />);
-
     expect(await screen.findByText('Чаты')).toBeTruthy();
   });
 
@@ -148,6 +164,24 @@ describe('ворота даты рождения', () => {
     await renderWithQuery(<AppRoutes />);
 
     expect(await screen.findByText('Вход')).toBeTruthy();
+  });
+
+  it('ответ настроек после смены аккаунта обновляет только начавший запрос ID', async () => {
+    let finish!: (value: { birthDate: string }) => void;
+    mocked.getMyPrivacySettings.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+    const app = await renderWithQuery(<AppRoutes />);
+    await waitFor(() => expect(mocked.getMyPrivacySettings).toHaveBeenCalledTimes(1));
+    mocked.useSession.mockReturnValue({ ...signedIn, session: { user: { id: 'other' } } });
+    await app.rerender(<AppRoutes />);
+    expect(await screen.findByTestId('birth-date-field')).toBeTruthy();
+    await act(async () => finish({ birthDate: '2000-04-10' }));
+    expect(await readLocalBirthDate('new-user')).toEqual({ date: '2000-04-10' });
+    expect(await readLocalBirthDate('other')).toBeNull();
+    expect(screen.getByTestId('birth-date-field')).toBeTruthy();
   });
 });
 
@@ -170,26 +204,37 @@ describe('экран даты рождения', () => {
 
     await pickAndContinue(yearsAgo(years));
 
-    await waitFor(() => expect(mocked.setBirthDate).toHaveBeenCalledWith(dateOnly(yearsAgo(years))));
+    await waitFor(() =>
+      expect(mocked.setBirthDate).toHaveBeenCalledWith(dateOnly(yearsAgo(years))),
+    );
     expect(await screen.findByText('Чаты')).toBeTruthy();
   });
 
   it('К2.3 12 лет — отказ; «Изменить дату» возвращает к полю, 14 лет пускает', async () => {
     mocked.setBirthDate.mockRejectedValueOnce(new BirthDateTooYoungError());
-    await renderWithQuery(<AppRoutes />);
+    const initial = await renderWithQuery(<AppRoutes />);
 
     await pickAndContinue(yearsAgo(12));
 
     expect(await screen.findByText('Регистрация в Open возможна с 13 лет')).toBeTruthy();
+    await initial.unmount();
+    // Новый QueryClient и состояние формы. Сервер по-прежнему отдаёт пустую дату.
+    const restored = await renderWithQuery(<AppRoutes />);
+    expect(await screen.findByText('Регистрация в Open возможна с 13 лет')).toBeTruthy();
     expect(screen.getByText('Выйти')).toBeTruthy();
 
-    serverAcceptsDate();
+    mocked.setBirthDate.mockResolvedValue(undefined);
     await userEvent.setup().press(screen.getByText('Изменить дату'));
     expect(await screen.findByTestId('birth-date-field')).toBeTruthy();
 
     await pickAndContinue(yearsAgo(14));
 
     expect(await screen.findByText('Чаты')).toBeTruthy();
+    await restored.unmount();
+    mocked.getMyPrivacySettings.mockRejectedValue(new Error('offline'));
+    await renderWithQuery(<AppRoutes />);
+    expect(await screen.findByText('Чаты')).toBeTruthy();
+    expect(await readLocalBirthDate('new-user')).toEqual({ date: dateOnly(yearsAgo(14)) });
   });
 
   it('К2.4 «Выйти» на отказе удаляет аккаунт и выходит', async () => {
@@ -204,6 +249,19 @@ describe('экран даты рождения', () => {
     await waitFor(() => expect(mocked.signOutLocally).toHaveBeenCalled());
   });
 
+  it('при расхождении часов форма принимает решение сервера в обе стороны', async () => {
+    mocked.setBirthDate.mockRejectedValueOnce(new BirthDateTooYoungError());
+    await renderWithQuery(<AppRoutes />);
+    await pickAndContinue(yearsAgo(13));
+    expect(await screen.findByText('Регистрация в Open возможна с 13 лет')).toBeTruthy();
+    expect(screen.queryByText('Чаты')).toBeNull();
+
+    await userEvent.setup().press(screen.getByText('Изменить дату'));
+    serverAcceptsDate();
+    await pickAndContinue(yearsAgo(12));
+    expect(await screen.findByText('Чаты')).toBeTruthy();
+  });
+
   it('удаление не прошло — понятный текст, аккаунт не брошен молча', async () => {
     mocked.setBirthDate.mockRejectedValue(new BirthDateTooYoungError());
     mocked.deleteMyAccount.mockRejectedValue(new Error('offline'));
@@ -213,7 +271,9 @@ describe('экран даты рождения', () => {
     await userEvent.setup().press(await screen.findByText('Выйти'));
 
     expect(
-      await screen.findByText('Не удалось удалить аккаунт. Проверьте интернет и попробуйте ещё раз.'),
+      await screen.findByText(
+        'Не удалось удалить аккаунт. Проверьте интернет и попробуйте ещё раз.',
+      ),
     ).toBeTruthy();
     expect(mocked.signOutLocally).not.toHaveBeenCalled();
   });
@@ -225,8 +285,41 @@ describe('экран даты рождения', () => {
     await pickAndContinue(yearsAgo(20));
 
     expect(
-      await screen.findByText('Не удалось сохранить дату. Проверьте интернет и попробуйте ещё раз.'),
+      await screen.findByText(
+        'Не удалось сохранить дату. Проверьте интернет и попробуйте ещё раз.',
+      ),
     ).toBeTruthy();
     expect(screen.queryByText(/PGRST/)).toBeNull();
+    expect(await readLocalBirthDate('new-user')).toBeNull();
+  });
+
+  it('OPN03 оставляет первичный ввод доступным после перезапуска', async () => {
+    mocked.setBirthDate.mockRejectedValue(new BirthDateInFutureError());
+    const initial = await renderWithQuery(<AppRoutes />);
+    await pickAndContinue(yearsAgo(-1));
+    expect(await screen.findByText(/не может быть в будущем/)).toBeTruthy();
+    await initial.unmount();
+    await renderWithQuery(<AppRoutes />);
+    expect(await screen.findByTestId('birth-date-field')).toBeTruthy();
+    expect(await readLocalBirthDate('new-user')).toBeNull();
+  });
+
+  it('ответ на сохранение после смены аккаунта попадает к исходному пользователю', async () => {
+    let accept!: () => void;
+    mocked.setBirthDate.mockReturnValue(
+      new Promise<void>((resolve) => {
+        accept = resolve;
+      }),
+    );
+    const app = await renderWithQuery(<AppRoutes />);
+    await pickAndContinue(yearsAgo(20));
+    mocked.useSession.mockReturnValue({ ...signedIn, session: { user: { id: 'other' } } });
+    await app.rerender(<AppRoutes />);
+    await act(async () => accept());
+    await waitFor(async () =>
+      expect(await readLocalBirthDate('new-user')).toEqual({ date: dateOnly(yearsAgo(20)) }),
+    );
+    expect(await readLocalBirthDate('other')).toBeNull();
+    expect(await screen.findByTestId('birth-date-field')).toBeTruthy();
   });
 });

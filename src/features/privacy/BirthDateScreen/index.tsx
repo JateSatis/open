@@ -8,9 +8,11 @@ import { Button } from '@/components/Button';
 import { Screen } from '@/components/Screen';
 import { Text } from '@/components/Text';
 import { useDeleteAccount } from '@/features/auth/accountQueries';
+import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
 import { BirthDateField } from '@/features/privacy/BirthDateField';
 import { describeBirthDateError } from '@/features/privacy/birthDateErrors';
 import { useSetBirthDate } from '@/features/privacy/queries';
+import { useLocalBirthDateDecision } from '@/features/privacy/useLocalBirthDateDecision';
 
 /**
  * Первый вход: дата рождения до вкладок. Пропустить нельзя. Возраст решает
@@ -18,9 +20,15 @@ import { useSetBirthDate } from '@/features/privacy/queries';
  * который удаляет аккаунт.
  */
 export function BirthDateScreen() {
+  const userId = useCurrentUserId();
+  return <BirthDateForm key={userId} userId={userId} />;
+}
+
+function BirthDateForm({ userId }: { userId: string | null }) {
   const [date, setDate] = useState<string | null>(null);
-  const [tooYoung, setTooYoung] = useState(false);
-  const save = useSetBirthDate();
+  const decision = useLocalBirthDateDecision(userId);
+  const [tooYoung, setTooYoung] = useState<boolean | null>(null);
+  const save = useSetBirthDate('initial');
   const deletion = useDeleteAccount();
 
   const onContinue = () => {
@@ -33,7 +41,7 @@ export function BirthDateScreen() {
     });
   };
 
-  if (tooYoung) {
+  if (tooYoung ?? (decision === 'tooYoung')) {
     return (
       <Screen scrollable contentContainerStyle={styles.content}>
         <Text variant="title">Регистрация в Open возможна с 13 лет</Text>

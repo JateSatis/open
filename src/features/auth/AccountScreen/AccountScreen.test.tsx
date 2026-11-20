@@ -24,6 +24,7 @@ import { ConfirmDialogHost } from '@/components/ConfirmDialog';
 import { resetConfirmDialogQueue } from '@/components/ConfirmDialog/store';
 import { requestGoogleIdToken, signOutOfGoogle } from '@/features/auth/signIn';
 import { useAppleSignInAvailable } from '@/features/auth/useAppleSignInAvailable';
+import { readLocalBirthDate } from '@/features/privacy/localBirthDate';
 import { renderWithQuery } from '@/test/renderWithQuery';
 
 jest.mock('@/api/account', () => ({
@@ -343,13 +344,15 @@ describe('AccountScreen — дата рождения', () => {
     globalThis.mockPickerDate = new Date(2001, 5, 2, 12);
     const user = userEvent.setup();
 
-    await renderAccount();
+    const account = await renderAccount();
     await user.press(await screen.findByTestId('account-birth-date'));
     await user.press(screen.getByTestId('birth-date-picker-pick'));
     await user.press(screen.getByText('Сохранить'));
 
     await waitFor(() => expect(mocked.setBirthDate).toHaveBeenCalledWith('2001-06-02'));
     expect(await screen.findByText('2 июня 2001')).toBeTruthy();
+    await account.unmount();
+    expect(await readLocalBirthDate('me')).toEqual({ date: '2001-06-02' });
     expect(mocked.setPrivacySetting).not.toHaveBeenCalled();
   });
 
@@ -358,13 +361,15 @@ describe('AccountScreen — дата рождения', () => {
     globalThis.mockPickerDate = new Date(new Date().getFullYear() - 10, 0, 1, 12);
     const user = userEvent.setup();
 
-    await renderAccount();
+    const account = await renderAccount();
     await user.press(await screen.findByTestId('account-birth-date'));
     await user.press(screen.getByTestId('birth-date-picker-pick'));
     await user.press(screen.getByText('Сохранить'));
 
     expect(await screen.findByText('Регистрация в Open возможна с 13 лет.')).toBeTruthy();
     expect(screen.getByText('12 марта 2008')).toBeTruthy();
+    await account.unmount();
+    expect(await readLocalBirthDate('me')).toEqual({ date: '2008-03-12' });
   });
 
   it('ведёт на экран «Конфиденциальность и безопасность»', async () => {

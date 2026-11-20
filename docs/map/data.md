@@ -16,6 +16,7 @@
 | Каналы, попсы и подписки | [channels](../../src/api/channels.ts), [pops](../../src/api/pops.ts), [subscriptions](../../src/api/subscriptions.ts): `channels`, `pops`, `subscriptions`, `subscribe_to_chat`, `subscribe_to_channel` |
 | Сохранённые и заметки | [saved](../../src/api/saved.ts): `saved_messages`, `saved_tags`, `list_saved_messages`, `list_saved_watch_later` |
 | Друзья, блокировки, приватность | [friends](../../src/api/friends.ts), [blocks](../../src/api/blocks.ts), [privacy](../../src/api/privacy.ts): `friendship_status`, `my_privacy_settings`, `privacy_allows`, `person_card` |
+| Возраст при входе | [Локальное решение по ID](../../src/features/privacy/useLocalBirthDateDecision.ts) → [дата в AsyncStorage](../../src/features/privacy/localBirthDate.ts). [Хуки настроек и сохранения](../../src/features/privacy/queries.ts) обновляют её по ответам `my_privacy_settings` и `set_birth_date`. |
 | Поиск и журнал рекомендаций | [search](../../src/api/search.ts), [recJournal](../../src/api/recJournal.ts): `search_entities`, `search_messages`, `search_pops`, `rec_record_events`; журнал не равен готовой ленте |
 | Звонки и эфиры | [streams](../../src/api/streams.ts): `start_call`, `chat_live_stream`, `my_ringing_streams`, `stream_people` |
 | Файлы и аватары | [Медиа](media.md): Storage, `media_objects`, `sanitize-media`; доступ и подписи — [chatMedia](../../src/api/chatMedia.ts), [avatars](../../src/api/avatars.ts) |
