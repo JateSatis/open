@@ -1,0 +1,44 @@
+diff --git a/node_modules/livekit-client/dist/livekit-client.esm.mjs b/node_modules/livekit-client/dist/livekit-client.esm.mjs
+--- a/node_modules/livekit-client/dist/livekit-client.esm.mjs
++++ b/node_modules/livekit-client/dist/livekit-client.esm.mjs
+@@ -20484,6 +20484,8 @@
+         });
+         return false;
+       }
++      // Older servers omit the offer ID. Capture the outstanding local offer before applying the answer.
++      const answeredOfferId = offerId || this.latestOfferId;
+       let mungedSDP = undefined;
+       if (sd.type === 'offer') {
+         let _extractStereoAndNack = extractStereoAndNackAudioFromOffer(sd),
+@@ -20571,8 +20573,8 @@
+       // ones that recurse into another offer via `renegotiate`. Callers waiting
+       // on a specific offerId can resolve as soon as their offer's answer is in.
+       if (sd.type === 'answer') {
+-        this.latestAcknowledgedOfferId = offerId;
+-        this.emit(PCEvents.OfferAnswered, offerId);
++        this.latestAcknowledgedOfferId = answeredOfferId;
++        this.emit(PCEvents.OfferAnswered, answeredOfferId);
+       }
+       if (this.renegotiate) {
+         this.renegotiate = false;
+diff --git a/node_modules/livekit-client/src/room/PCTransport.ts b/node_modules/livekit-client/src/room/PCTransport.ts
+--- a/node_modules/livekit-client/src/room/PCTransport.ts
++++ b/node_modules/livekit-client/src/room/PCTransport.ts
+@@ -250,6 +250,8 @@
+       });
+       return false;
+     }
++    // Older servers omit the offer ID. Capture the outstanding local offer before applying the answer.
++    const answeredOfferId = offerId || this.latestOfferId;
+     let mungedSDP: string | undefined = undefined;
+     if (sd.type === 'offer') {
+       let { stereoMids, nackMids } = extractStereoAndNackAudioFromOffer(sd);
+@@ -347,6 +349,6 @@
+     // ones that recurse into another offer via `renegotiate`. Callers waiting
+     // on a specific offerId can resolve as soon as their offer's answer is in.
+     if (sd.type === 'answer') {
+-      this.latestAcknowledgedOfferId = offerId;
+-      this.emit(PCEvents.OfferAnswered, offerId);
++      this.latestAcknowledgedOfferId = answeredOfferId;
++      this.emit(PCEvents.OfferAnswered, answeredOfferId);
+     }

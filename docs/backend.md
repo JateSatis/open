@@ -512,7 +512,8 @@ RLS — на каждой таблице без исключений (табли
 Пакеты: livekit-client, @livekit/react-native, @livekit/react-native-expo-plugin,
 @livekit/react-native-webrtc, @config-plugins/react-native-webrtc. Оба плагина — в `plugins` `app.json`,
 при изменении нативных плагинов нужна новая сборка dev build. JS-подготовка регистрирует
-WebRTC и таймеры после показа вкладок или по первому действию звонка.
+WebRTC и таймеры после показа вкладок или по первому действию звонка. Сервер 1.8.4 отвечает на SDP offer без номера.
+Патч клиента 2.22.3 относит такой ответ к текущему локальному offer после успешного применения SDP.
 
 - токен комнаты — только Edge Function; API-секрет LiveKit никогда в клиенте.
 - identity в токене — непрозрачный id звонка (`stream_join_info` → `stream_identities`), имени нет;
