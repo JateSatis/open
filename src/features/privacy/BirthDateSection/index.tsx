@@ -19,7 +19,7 @@ import { formatDateOnly } from '@/lib/dates';
  */
 export function BirthDateSection() {
   const { data } = useMyPrivacySettings();
-  const save = useSetBirthDate();
+  const save = useSetBirthDate('edit');
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<string | null>(null);
   const current = data?.birthDate ?? null;

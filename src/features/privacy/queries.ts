@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect } from 'react';
 
 import {
+  BirthDateTooYoungError,
   getMyPrivacySettings,
   regenerateIdentityAlias,
   setBirthDate,
@@ -12,6 +12,7 @@ import {
 } from '@/api/privacy';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
 import { friendKeys } from '@/features/friends/queries';
+import { rememberBirthDate, useLocalBirthDateDecision } from './useLocalBirthDateDecision';
 
 /** Поле состояния экрана у каждой настройки, которую клиент меняет. */
 const SETTING_FIELDS: Record<
@@ -29,29 +30,57 @@ const SETTING_FIELDS: Record<
   public_message_visibility_delay: 'publicDelay',
 };
 
-import { isBirthDateKnown, rememberBirthDateKnown } from './birthDateKnown';
-
 export const privacyKeys = {
   mine: (userId: string | null) => ['privacy', 'mine', userId] as const,
-  birthDateKnown: (userId: string | null) => ['privacy', 'birthDateKnown', userId] as const,
 };
+
+// Сохранение или более свежее чтение отменяет запись запоздавшего ответа для того же ID.
+const settingsReads = new Map<string, Promise<PrivacySettings | null>>();
 
 export function useMyPrivacySettings() {
   const userId = useCurrentUserId();
+  const client = useQueryClient();
 
   return useQuery({
     queryKey: privacyKeys.mine(userId),
-    queryFn: getMyPrivacySettings,
+    queryFn: async () => {
+      if (!userId) return null;
+      const read = getMyPrivacySettings();
+      settingsReads.set(userId, read);
+      try {
+        const settings = await read;
+        if (settings?.birthDate != null && settingsReads.get(userId) === read) {
+          await rememberBirthDate(client, userId, settings.birthDate);
+        }
+        return settings;
+      } finally {
+        if (settingsReads.get(userId) === read) settingsReads.delete(userId);
+      }
+    },
     enabled: userId !== null,
   });
 }
 
-export function useSetBirthDate() {
+export function useSetBirthDate(mode: 'initial' | 'edit') {
   const queryClient = useQueryClient();
   const userId = useCurrentUserId();
 
   return useMutation<void, Error, string>({
-    mutationFn: (birthDate) => setBirthDate(birthDate),
+    mutationKey: ['privacy', 'setBirthDate', userId, mode],
+    mutationFn: async (birthDate) => {
+      if (!userId) throw new Error('Требуется вход в аккаунт');
+      try {
+        await setBirthDate(birthDate);
+      } catch (error) {
+        if (mode === 'initial' && error instanceof BirthDateTooYoungError) {
+          settingsReads.delete(userId);
+          await rememberBirthDate(queryClient, userId, birthDate, 'tooYoung');
+        }
+        throw error;
+      }
+      settingsReads.delete(userId);
+      await rememberBirthDate(queryClient, userId, birthDate, 'ok');
+    },
     // Без сети мутация не встаёт на паузу, а честно падает — человек видит ошибку.
     networkMode: 'always',
     onSuccess: () => queryClient.invalidateQueries({ queryKey: privacyKeys.mine(userId) }),
@@ -136,34 +165,13 @@ export function useRegenerateIdentityAlias() {
 
 export type BirthDateGate = 'loading' | 'required' | 'ok';
 
-/**
- * Нужно ли сейчас показать экран даты. Ответ сервера главнее всего. Пока его
- * нет: аккаунт, у которого дата уже была, проходит сразу; новый — ждёт, но
- * только пока запрос реально идёт. Без сети (запрос на паузе) или при сбое
- * приложение не запирается: значения на сервере и так защитные, а ворота
- * сработают, когда запрос пройдёт.
- */
+/** Оба состояния формы используют существующий маршрут BirthDate. */
 export function useBirthDateGate(): BirthDateGate {
   const userId = useCurrentUserId();
   const { data, fetchStatus } = useMyPrivacySettings();
-  const known = useQuery({
-    queryKey: privacyKeys.birthDateKnown(userId),
-    queryFn: () => isBirthDateKnown(userId as string),
-    enabled: userId !== null,
-    networkMode: 'always',
-    staleTime: Infinity,
-  });
-  const hasDate = Boolean(data?.birthDate);
-
-  useEffect(() => {
-    if (userId && hasDate) void rememberBirthDateKnown(userId);
-  }, [userId, hasDate]);
-
+  const decision = useLocalBirthDateDecision(userId);
   if (userId === null) return 'ok';
-  if (data) return data.birthDate === null ? 'required' : 'ok';
-  if (known.isPending) return 'loading';
-  if (known.data) return 'ok';
-  if (fetchStatus === 'fetching') return 'loading';
-
-  return 'ok';
+  if (decision === 'tooYoung') return 'required';
+  if (decision === 'required' && !data && fetchStatus === 'fetching') return 'loading';
+  return decision;
 }
