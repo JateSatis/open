@@ -7,52 +7,83 @@ import { isNetworkError } from '@/lib/network';
 export type SessionState = {
   session: Session | null;
   isAuthenticated: boolean;
-  /** True until the persisted session has been read from storage at least once. */
+  /** Ожидаем ответ SDK или чтение сохранённой сессии после сетевой ошибки. */
   isLoading: boolean;
 };
 
-const emptyState: SessionState = {
+export type AuthBootstrap = {
+  /** undefined — чтение идёт, null — владельца нет. */
+  localAccountId: string | null | undefined;
+  /** session означает получение сессии от SDK, в том числе из его кеша. */
+  sdkStatus: 'pending' | 'session' | 'signedOut' | 'offline';
+};
+
+const emptyState: SessionState & AuthBootstrap = {
   session: null,
   isAuthenticated: false,
   isLoading: true,
+  localAccountId: undefined,
+  sdkStatus: 'pending',
 };
 
-export const useSessionStore = create<SessionState>(() => emptyState);
+export const useSessionStore = create<SessionState & AuthBootstrap>(() => emptyState);
 
-let authSubscription: { unsubscribe: () => void } | null = null;
+let stop: (() => void) | undefined;
 let refCount = 0;
 
-function settle(session: Session | null) {
-  useSessionStore.setState({ session, isAuthenticated: session !== null, isLoading: false });
+function settle(session: Session | null, sdkStatus: AuthBootstrap['sdkStatus']) {
+  useSessionStore.setState({
+    session,
+    isAuthenticated: session !== null,
+    isLoading: false,
+    localAccountId: session?.user.id ?? null,
+    sdkStatus,
+  });
 }
 
 function start() {
-  // onAuthStateChange has to be attached before the first read, otherwise a
-  // token refresh finishing mid-read would be dropped and the store would keep
-  // a session that is already stale.
-  let changed = false;
+  let active = true;
+  let sdkDecided = false;
+
+  function applySdkSession(session: Session | null) {
+    sdkDecided = true;
+    settle(session, session ? 'session' : 'signedOut');
+  }
+
   const { data } = supabase.auth.onAuthStateChange((event, session) => {
-    // INITIAL_SESSION may be null when refreshing an expired token without a network.
-    // getSession below can distinguish that condition from a real sign-out.
-    if (event === 'INITIAL_SESSION' && !session) return;
-    changed = true;
-    settle(session);
+    if (!active) return;
+    // Пустой INITIAL_SESSION приходит и при сетевой ошибке обновления токена.
+    if (event === 'INITIAL_SESSION' && (!session || sdkDecided)) return;
+    applySdkSession(session);
   });
-  authSubscription = data.subscription;
-
-  void supabase.auth.getSession().then(async ({ data: { session }, error }) => {
-    if (changed) return;
-    const local =
-      !session && isNetworkError(error) ? await readStoredSession().catch(() => null) : null;
-    if (!changed && authSubscription === data.subscription) settle(session ?? local);
-    // Only the SDK sends credentials to the server. The stored session identifies local rows.
+  const stored = readStoredSession().catch(() => null);
+  void stored.then((session) => {
+    if (active && !sdkDecided) {
+      useSessionStore.setState({ localAccountId: session?.user.id ?? null });
+    }
   });
-}
 
-function stop() {
-  authSubscription?.unsubscribe();
-  authSubscription = null;
-  useSessionStore.setState(emptyState);
+  async function finishRestore(session: Session | null, error: unknown) {
+    if (!active || sdkDecided) return;
+    if (!session && isNetworkError(error)) {
+      useSessionStore.setState({ sdkStatus: 'offline' });
+      const local = await stored;
+      if (active && !sdkDecided) settle(local, 'offline');
+    } else {
+      applySdkSession(session);
+    }
+  }
+
+  void supabase.auth.getSession().then(
+    ({ data: { session }, error }) => finishRestore(session, error),
+    (error: unknown) => finishRestore(null, error),
+  );
+
+  return () => {
+    active = false;
+    data.subscription.unsubscribe();
+    useSessionStore.setState(emptyState);
+  };
 }
 
 /**
@@ -62,10 +93,13 @@ function stop() {
  */
 export function subscribeToSession(): () => void {
   refCount += 1;
-  if (refCount === 1) start();
+  if (refCount === 1) stop = start();
 
   return () => {
     refCount -= 1;
-    if (refCount === 0) stop();
+    if (refCount === 0) {
+      stop?.();
+      stop = undefined;
+    }
   };
 }

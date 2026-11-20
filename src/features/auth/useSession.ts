@@ -1,15 +1,25 @@
 import { useEffect } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 
-import { subscribeToSession, useSessionStore, type SessionState } from './sessionStore';
+import {
+  subscribeToSession,
+  useSessionStore,
+  type AuthBootstrap,
+  type SessionState,
+} from './sessionStore';
 
-export type { SessionState };
-
-/**
- * The only place auth state is read from. Components never call
- * supabase.auth.getSession() themselves.
- */
+export type { AuthBootstrap, SessionState };
 export function useSession(): SessionState {
   useEffect(() => subscribeToSession(), []);
 
-  return useSessionStore();
+  return useSessionStore(
+    useShallow(({ session, isAuthenticated, isLoading }) => ({ session, isAuthenticated, isLoading })),
+  );
+}
+
+export function useAuthBootstrap(): AuthBootstrap {
+  useEffect(() => subscribeToSession(), []);
+  return useSessionStore(
+    useShallow(({ localAccountId, sdkStatus }) => ({ localAccountId, sdkStatus })),
+  );
 }

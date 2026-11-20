@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type Session } from '@supabase/supabase-js';
 import { AppState } from 'react-native';
 
 import { withRequestDeadline } from '@/api/requestDeadline';
@@ -14,18 +14,29 @@ if (!supabaseUrl || !supabaseAnonKey) {
   );
 }
 
+// The existing Supabase storage key, shared with the offline account bootstrap.
+const sessionStorageKey = `sb-${new URL(supabaseUrl).hostname.split('.')[0]}-auth-token`;
+
+function isNonEmptyString(value: unknown): boolean {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+export async function readStoredSession() {
+  const raw = await AsyncStorage.getItem(sessionStorageKey);
+  if (!raw) return null;
+  const value = JSON.parse(raw) as Session | null;
+  if (
+    !isNonEmptyString(value?.user?.id) ||
+    !isNonEmptyString(value?.refresh_token) ||
+    !isNonEmptyString(value?.access_token)
+  ) return null;
+  return value;
+}
+
 // Схема базы прокинута в клиент: отсюда типы строк, аргументов rpc и разбор
 // select-строк вместе со встроенными таблицами. Без неё каждый запрос
 // возвращал бы `any`, и ряды приходилось бы описывать руками рядом с каждым
 // запросом — а значит, расходиться со схемой при первой же миграции.
-// The existing Supabase storage key, shared with the offline account bootstrap.
-const sessionStorageKey = `sb-${new URL(supabaseUrl).hostname.split('.')[0]}-auth-token`;
-export async function readStoredSession() {
-  const raw = await AsyncStorage.getItem(sessionStorageKey);
-  if (!raw) return null;
-  const value = JSON.parse(raw) as import('@supabase/supabase-js').Session | null;
-  return value?.user?.id && value.refresh_token && value.access_token ? value : null;
-}
 export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   auth: {
     storage: AsyncStorage,
