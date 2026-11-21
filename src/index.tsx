@@ -30,6 +30,8 @@ import { type IncomingLink, useIncomingLink } from '@/navigation/useIncomingLink
 
 bindHistoryReader(() => useSessionStore.getState().localAccountId ?? null);
 SplashScreen.preventAutoHideAsync();
+// The system animates the mark on entry. Reveal the ready screen without Expo's exit fade.
+SplashScreen.setOptions({ duration: 0, fade: false });
 
 export function App() {
   const { localAccountId: reader, sdkStatus } = useAuthBootstrap();

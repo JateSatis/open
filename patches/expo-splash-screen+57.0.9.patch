@@ -1,0 +1,17 @@
+diff --git a/node_modules/expo-splash-screen/android/src/main/java/expo/modules/splashscreen/SplashScreenManager.kt b/node_modules/expo-splash-screen/android/src/main/java/expo/modules/splashscreen/SplashScreenManager.kt
+--- a/node_modules/expo-splash-screen/android/src/main/java/expo/modules/splashscreen/SplashScreenManager.kt
++++ b/node_modules/expo-splash-screen/android/src/main/java/expo/modules/splashscreen/SplashScreenManager.kt
+@@ -38,5 +38,13 @@ object SplashScreenManager {
+     splashScreen.setOnExitAnimationListener { splashScreenViewProvider ->
+       val splashScreenView = splashScreenViewProvider.view
++      if (duration == 0L && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
++        // Apply alpha to the animated icon's SurfaceView before detaching the splash.
++        // A zero-duration ViewPropertyAnimator can leave the icon over the first app frame.
++        val platformView = splashScreenView as SplashScreenView
++        platformView.alpha = 0f
++        platformView.remove()
++        return@setOnExitAnimationListener
++      }
+       splashScreenView
+         .animate()
+         .setDuration(duration)
