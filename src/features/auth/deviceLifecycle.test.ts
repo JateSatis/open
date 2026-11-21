@@ -2,7 +2,6 @@ import { AppState, type AppStateStatus } from 'react-native';
 
 import { registerDevice, signOutLocally, touchDevice } from '@/api/account';
 import { markSeen } from '@/api/chatInfo';
-import { supabase } from '@/api/supabase';
 import { sessionOf } from '@/test/sessionOf';
 import { currentDeviceInfo } from './deviceInfo';
 import { startDeviceLifecycle } from './deviceLifecycle';
@@ -13,6 +12,7 @@ jest.mock('@/api/account', () => ({
   ...jest.requireActual('@/api/account'),
   registerDevice: jest.fn(),
   touchDevice: jest.fn(),
+  signOutLocally: jest.fn(),
 }));
 jest.mock('@/api/supabase', () => ({
   supabase: {
@@ -50,9 +50,8 @@ beforeEach(() => {
   });
   jest.mocked(touchDevice).mockResolvedValue(true);
   jest.mocked(currentDeviceInfo).mockResolvedValue(info);
-  jest.mocked(supabase.auth.signOut).mockImplementation(async () => {
+  jest.mocked(signOutLocally).mockImplementation(async () => {
     useSessionStore.setState({ ...emptyState, localAccountId: null, sdkStatus: 'signedOut' });
-    return { error: null };
   });
   stop = startDeviceLifecycle();
 });
@@ -133,8 +132,7 @@ it.each(['вход', 'возврат'])('игнорирует запоздалы
   finish(false);
   await flush();
   expect(signOutOfGoogle).not.toHaveBeenCalled();
-  expect(supabase.removeChannel).not.toHaveBeenCalled();
-  expect(supabase.auth.signOut).not.toHaveBeenCalled();
+  expect(signOutLocally).not.toHaveBeenCalled();
   expect(useSessionStore.getState().session).toEqual(sessionOf('me', 'b'));
   expect(registerDevice).toHaveBeenLastCalledWith(info, { ...a, sessionId: 'b' });
 });
@@ -156,8 +154,7 @@ it('выходит локально при отзыве текущего сеа�
   signedIn('a');
   await flush();
   expect(registerDevice).not.toHaveBeenCalled();
-  expect(supabase.removeChannel).toHaveBeenCalledTimes(1);
-  expect(supabase.auth.signOut).toHaveBeenCalledWith({ scope: 'local' });
+  expect(signOutLocally).toHaveBeenCalledWith(a);
   expect(useSessionStore.getState().sdkStatus).toBe('signedOut');
 });
 
@@ -166,22 +163,6 @@ it('сохраняет вход при ошибке сети', async () => {
   signedIn('a');
   await flush();
   expect(registerDevice).toHaveBeenCalledWith(info, a);
-  expect(supabase.auth.signOut).not.toHaveBeenCalled();
+  expect(signOutLocally).not.toHaveBeenCalled();
   expect(useSessionStore.getState().sdkStatus).toBe('session');
-});
-
-it('не выходит из нового сеанса после ожидания отписки от старых каналов', async () => {
-  signedIn('a');
-  let finish!: () => void;
-  jest.mocked(supabase.removeChannel).mockImplementationOnce(() => new Promise(resolve => {
-    finish = () => resolve('ok');
-  }));
-  const exiting = signOutLocally(a);
-  await flush();
-  signedIn('b');
-  finish();
-  await exiting;
-  await signOutLocally(a);
-  expect(supabase.getChannels).toHaveBeenCalledTimes(1);
-  expect(supabase.auth.signOut).not.toHaveBeenCalled();
 });

@@ -21,6 +21,12 @@ import { ensureCallMicrophone } from '@/features/streams/callPermissions';
 import { joinCall } from '@/features/streams/callSession';
 import { setCall } from '@/features/streams/callStore';
 import { renderWithQuery } from '@/test/renderWithQuery';
+import { openHistoryDatabase } from '@/test/openHistoryDatabase';
+import { bindHistoryReader, HistoryReader } from '../messages/local/reader';
+import { localHistory } from '../messages/local/database';
+
+jest.mock('../messages/local/database', () => ({ localHistory: jest.fn() }));
+jest.mock('@/api/historyRead', () => ({ getHistoryRead: async () => null }));
 
 const mockPush = jest.fn();
 
@@ -334,6 +340,43 @@ describe('полоса звонка', () => {
     listeners: 0,
     joinedAt: Date.now(),
   } as const;
+
+  it('возвращает в звонок при открытии истории, ошибке и успешном повторе', async () => {
+    const db = openHistoryDatabase(':memory:');
+    jest.mocked(localHistory).mockReturnValue(db.storage);
+    bindHistoryReader(() => me.id);
+    db.storage.setRoute(me.id, 'chat/' + chat.id, chat);
+    let fail!: () => void;
+    mockedListMessages.mockImplementationOnce(() => new Promise((_resolve, reject) => {
+      fail = () => reject(new Error('history offline'));
+    }));
+    setCall({ ...active, speakers: [] });
+    const view = await renderWithQuery(<HistoryReader.Provider value={me.id}><ChatScreen /></HistoryReader.Provider>);
+    async function checkReturn() {
+      expect(screen.getByTestId('chat-header')).toBeTruthy();
+      expect(screen.getAllByTestId('return-to-call')).toHaveLength(1);
+      expect(screen.queryByTestId('chat-call-bar')).toBeNull();
+      await fireEvent.press(screen.getByTestId('return-to-call'));
+      expect(mockPush).toHaveBeenLastCalledWith({ name: 'Call' });
+      expect(mockedJoin).not.toHaveBeenCalled();
+      mockPush.mockClear();
+    }
+    try {
+      await screen.findByLabelText('Загрузка переписки');
+      await waitFor(() => expect(fail).toBeDefined());
+      await checkReturn();
+      await act(() => fail());
+      await screen.findByText('Не удалось загрузить переписку');
+      await checkReturn();
+      await fireEvent.press(screen.getByText('Повторить'));
+      await screen.findByText('привет');
+      await checkReturn();
+    } finally {
+      await view.unmount();
+      bindHistoryReader(() => null);
+      db.native.close();
+    }
+  });
 
   it('возвращает в свой звонок во время загрузки и после ответа об эфире', async () => {
     let resolveStream!: (stream: LiveStream) => void;

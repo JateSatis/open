@@ -5,7 +5,7 @@
 
 import * as Network from 'expo-network';
 
-import { supabase } from '@/api/supabase';
+import { supabase, watchApiClient } from '@/api/supabase';
 
 /**
  * Системное состояние сети. Оно приходит мгновенно, в отличие от собственных
@@ -88,24 +88,22 @@ export function watchRealtimeConnection(
 ): () => void {
   let stopped = false;
 
-  supabase.realtime.onHeartbeat((status) => {
-    if (stopped) return;
+  const unsubscribe = watchApiClient(() => {
+    const client = supabase;
+    client.realtime.onHeartbeat((status) => {
+      if (stopped || client !== supabase) return;
 
-    if (status === 'ok') {
-      onChange('joined');
-      return;
-    }
+      if (status === 'ok') onChange('joined');
 
-    if (status === 'error' || status === 'timeout' || status === 'disconnected') {
-      onChange('down');
-    }
+      if (status === 'error' || status === 'timeout' || status === 'disconnected') {
+        onChange('down');
+      }
+    });
+    onChange(client.realtime.isConnected() ? 'joined' : 'down');
   });
-
-  // Пульс приходит раз в несколько секунд, а знать состояние надо сразу после
-  // запуска — иначе экран до первого удара показывает «подключение».
-  onChange(supabase.realtime.isConnected() ? 'joined' : 'down');
 
   return () => {
     stopped = true;
+    unsubscribe();
   };
 }
