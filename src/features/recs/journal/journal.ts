@@ -3,7 +3,7 @@
 // Клиент сообщает только то, чего сервер знать не может (просмотр, звук,
 // время на экране); реакции, комментарии, подписки и сообщения база пишет в
 // журнал сама. Запись не ждёт сети и не трогает React: событие ложится в
-// очередь, очередь уходит раз в несколько секунд, при уходе в фон — сразу.
+// очередь; при уходе в фон она сразу сохраняется на диск.
 // Не дошло — повтор с растущей паузой; принятое и отклонённое сервером
 // снимается из очереди.
 
@@ -25,6 +25,7 @@ function isRetryable(error: unknown): boolean {
   return (
     code === '42501' ||
     code === 'PGRST301' ||
+    code === 'journal_delivery_unavailable' ||
     (typeof message === 'string' && /too many events/.test(message))
   );
 }
@@ -79,9 +80,12 @@ export type Journal = {
   flush: () => Promise<void>;
   /** Кто сейчас в приложении: события пишутся от его имени. null — никого. */
   setUser: (userId: string | null) => void;
+  /** Подтверждённый SDK владелец при доступной связи. */
+  setDeliveryUser: (userId: string | null) => void;
+  showFirstScreen: () => void;
   setAppSession: (appSessionId: string | null) => void;
   appSessionId: () => string | null;
-  /** Ушли в фон — отправить и сохранить сейчас. */
+  /** Ушли в фон — сохранить сейчас. */
   persist: () => Promise<void>;
   /** Сеть вернулась или приложение снова на экране — не ждать паузы повтора. */
   kick: () => void;
@@ -92,12 +96,10 @@ export function createJournal({
   storage,
   send,
   now = Date.now,
-  watchAppState = true,
 }: {
   storage: QueueStorage;
   send: (events: JournalWireEvent[]) => Promise<JournalSendResult>;
   now?: () => number;
-  watchAppState?: boolean;
 }): Journal {
   const queue = createJournalQueue({
     storage,
@@ -107,20 +109,17 @@ export function createJournal({
     now,
   });
   let userId: string | null = null;
+  let deliveryUser: string | null = null;
+  let screenShown = false;
   let appSession: string | null = null;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let sending = false;
   let failures = 0;
-  let loaded: Promise<void> | null = null;
-
-  const ensureLoaded = () => {
-    loaded ??= queue.load();
-
-    return loaded;
-  };
+  const canSend = (owner: string | null) =>
+    !!owner && screenShown && owner === userId && owner === deliveryUser;
 
   const schedule = (delay: number) => {
-    if (timer) return;
+    if (timer || sending || !canSend(userId)) return;
 
     timer = setTimeout(() => {
       timer = null;
@@ -150,12 +149,17 @@ export function createJournal({
    * выбрасывается, остальное уходит. Иначе одно событие держало бы очередь.
    */
   async function deliver(batch: JournalWireEvent[]): Promise<'sent' | 'retry'> {
+    const ids = batch.map((event) => event.id);
+    if (!canSend(batch[0].user_id)) {
+      queue.release(ids);
+      return 'retry';
+    }
     try {
       settle(batch, await send(batch));
       return 'sent';
     } catch (error) {
-      if (isRetryable(error)) {
-        queue.release(batch.map((event) => event.id));
+      if (!canSend(batch[0].user_id) || isRetryable(error)) {
+        queue.release(ids);
         return 'retry';
       }
 
@@ -182,36 +186,37 @@ export function createJournal({
       timer = null;
     }
 
-    await ensureLoaded();
-
-    if (sending || !userId) return;
-
+    const owner = userId;
+    if (sending || !owner || !canSend(owner)) return;
     sending = true;
-
+    let delay = JOURNAL_FLUSH_MS;
     try {
-      for (;;) {
-        const batch = queue.take(userId, JOURNAL_BATCH_MAX);
+      await queue.load();
+      while (canSend(owner)) {
+        const batch = queue.take(owner, JOURNAL_BATCH_MAX);
 
         if (batch.length === 0) break;
 
-        const before = queue.size(userId);
+        const before = queue.size(owner);
 
         if ((await deliver(batch)) === 'retry') {
-          failures += 1;
-          schedule(Math.min(JOURNAL_FLUSH_MS * 2 ** failures, BACKOFF_MAX_MS));
-          return;
+          if (canSend(owner)) {
+            failures += 1;
+            delay = Math.min(JOURNAL_FLUSH_MS * 2 ** failures, BACKOFF_MAX_MS);
+          }
+          break;
         }
 
         failures = 0;
 
         // Сервер ничего не назвал — не крутиться на месте.
-        if (queue.size(userId) >= before) break;
+        if (queue.size(owner) >= before) break;
       }
     } finally {
       sending = false;
     }
 
-    if (userId && queue.size(userId) > 0 && failures === 0) schedule(JOURNAL_FLUSH_MS);
+    if (userId && queue.size(userId) > 0) schedule(userId === owner ? delay : 0);
   }
 
   const journal: Journal = {
@@ -239,9 +244,8 @@ export function createJournal({
 
       queue.push(event);
 
-      // В фоне таймер может не дожить: конец показа и уход в фон пишутся уже
-      // после события AppState — отправить и сохранить сразу.
-      if (watchAppState && AppState.currentState === 'background') void journal.persist();
+      // Некоторые события приходят уже после обработчика ухода в фон.
+      if (AppState.currentState === 'background') void journal.persist();
       else schedule(JOURNAL_FLUSH_MS);
 
       return id;
@@ -254,11 +258,20 @@ export function createJournal({
 
       userId = next;
 
-      if (next) {
-        void ensureLoaded().then(() => {
-          if (queue.size(next) > 0) schedule(0);
-        });
-      }
+      if (next) void queue.load();
+      journal.kick();
+    },
+
+    setDeliveryUser(next) {
+      if (next === deliveryUser) return;
+      deliveryUser = next;
+      journal.kick();
+    },
+
+    showFirstScreen() {
+      if (screenShown) return;
+      screenShown = true;
+      journal.kick();
     },
 
     setAppSession(next) {
@@ -272,20 +285,10 @@ export function createJournal({
       void flush();
     },
 
-    async persist() {
-      await queue.save();
-      await flush();
-      await queue.save();
-    },
+    persist: queue.save,
 
     queue,
   };
-
-  if (watchAppState) {
-    AppState.addEventListener('change', (state) => {
-      if (state === 'background') void journal.persist();
-    });
-  }
 
   return journal;
 }

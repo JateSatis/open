@@ -61,6 +61,7 @@ export function createJournalQueue({
   let events: JournalWireEvent[] = [];
   const inFlight = new Set<string>();
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
+  let loaded: Promise<void> | undefined;
 
   const fresh = (event: JournalWireEvent) => now() - event.ts <= maxAgeMs;
 
@@ -74,6 +75,7 @@ export function createJournalQueue({
     if (saveTimer) clearTimeout(saveTimer);
 
     saveTimer = null;
+    await load();
     trim();
 
     try {
@@ -87,30 +89,37 @@ export function createJournalQueue({
     if (!saveTimer) saveTimer = setTimeout(() => void save(), SAVE_DELAY_MS);
   };
 
+  async function readStored() {
+    let stored: JournalWireEvent[] = [];
+
+    try {
+      const raw = await storage.getItem(key);
+      const parsed: unknown = raw ? JSON.parse(raw) : [];
+
+      stored = Array.isArray(parsed) ? parsed.filter(isEvent) : [];
+    } catch {
+      stored = [];
+    }
+
+    const known = new Set(events.map((event) => event.id));
+
+    events = [...stored.filter((event) => !known.has(event.id)), ...events];
+    trim();
+  }
+
+  function load() {
+    return (loaded ??= readStored());
+  }
+
   return {
-    async load() {
-      let stored: JournalWireEvent[] = [];
-
-      try {
-        const raw = await storage.getItem(key);
-        const parsed: unknown = raw ? JSON.parse(raw) : [];
-
-        stored = Array.isArray(parsed) ? parsed.filter(isEvent) : [];
-      } catch {
-        stored = [];
-      }
-
-      const known = new Set(events.map((event) => event.id));
-
-      events = [...stored.filter((event) => !known.has(event.id)), ...events];
-      trim();
-    },
+    load,
 
     push(event) {
       if (event.kind === 'impression_progress' && event.impression_id) {
         events = events.filter(
           (queued) =>
             inFlight.has(queued.id) ||
+            queued.user_id !== event.user_id ||
             queued.kind !== 'impression_progress' ||
             queued.impression_id !== event.impression_id,
         );
@@ -121,7 +130,7 @@ export function createJournalQueue({
 
       // Показ — самое ценное и самое хрупкое: приложение убивают посреди
       // просмотра, и отложенная запись не успела бы.
-      if (event.kind.startsWith('impression_')) void save();
+      if (event.kind === 'app_session_start' || event.kind.startsWith('impression_')) void save();
       else scheduleSave();
     },
 

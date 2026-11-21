@@ -9,6 +9,7 @@ import { ChatsScreen } from '@/features/chats/ChatsScreen';
 import { FeedScreen } from '@/features/feed/FeedScreen';
 import { useBirthDateGate } from '@/features/privacy/queries';
 import { MyProfileScreen } from '@/features/profile/MyProfileScreen';
+import { splashHidden as onJournalSplashHidden } from '@/features/recs/journal/appSession';
 import { navigationRef, router, trackScreen } from '@/navigation';
 import type { TabsParams } from '@/navigation/types';
 import { prepareLiveKit } from '@/features/streams/livekitGlobals';
@@ -93,7 +94,10 @@ export function AppRoutes({ incoming = null }: { incoming?: IncomingLink | null 
 
   const onScreenReady = useCallback(() => {
     hideSplash ??= SplashScreen.hideAsync();
-    void hideSplash.then(() => setSplashHidden(true));
+    void hideSplash.then(() => {
+      onJournalSplashHidden();
+      setSplashHidden(true);
+    });
   }, []);
   const screenLayout: ScreenLayout = useCallback(
     ({ children, route }) =>

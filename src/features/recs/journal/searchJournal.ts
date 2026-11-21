@@ -18,6 +18,11 @@ function clip(text: string): string {
 /** Выдача по запросу пришла. Тот же запрос подряд — одно событие. */
 const lastQuery: Record<SearchScope, string> = { chats: '', feed: '' };
 
+export function resetJournalQueries() {
+  lastQuery.chats = '';
+  lastQuery.feed = '';
+}
+
 export function logSearchQuery(
   scope: SearchScope,
   query: string,

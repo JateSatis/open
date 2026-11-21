@@ -6,7 +6,7 @@
 // чего он не знает.
 
 import { journal } from './journal';
-import { flushVoicePlayback } from './voiceJournal';
+import { flushVoicePlayback, resetVoiceJournal } from './voiceJournal';
 
 import { randomUuid } from '@/lib/uuid';
 
@@ -203,4 +203,11 @@ export function forwardPickerClosed(outcome: 'picked' | 'cancelled'): void {
     subject: pick.subject,
     data: { outcome, ms: Date.now() - pick.at, items: pick.items },
   });
+}
+
+export function closeChatJournal(now: number) {
+  forwardPickerClosed('cancelled');
+  resetVoiceJournal(now);
+  endChatSession(undefined, now);
+  lastVisible.clear();
 }

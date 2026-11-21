@@ -1,3 +1,4 @@
+import { journalLaunchTime } from './features/recs/journal/launch';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { registerRootComponent } from 'expo';
 import * as SplashScreen from 'expo-splash-screen';
@@ -21,7 +22,7 @@ import {
 import { startHistoryReadDelivery } from '@/features/chats/messages/local/readDelivery';
 import { startConnectionMonitor } from '@/features/connection/connectionMonitor';
 import { InAppMessageToast } from '@/features/notifications/InAppMessageToast';
-import { JournalSession } from '@/features/recs/journal/JournalSession';
+import { startJournalLifecycle } from '@/features/recs/journal/lifecycle';
 import { IncomingCallOverlay } from '@/features/streams/IncomingCallOverlay';
 import { BelowReturnBar, ReturnToCallBar } from '@/features/streams/ReturnToCallBar';
 import { createAppQueryClient, syncQueryOnlineState } from '@/lib/queryClient';
@@ -32,6 +33,7 @@ bindHistoryReader(() => useSessionStore.getState().localAccountId ?? null);
 SplashScreen.preventAutoHideAsync();
 // The system animates the mark on entry. Reveal the ready screen without Expo's exit fade.
 SplashScreen.setOptions({ duration: 0, fade: false });
+startJournalLifecycle(journalLaunchTime);
 
 export function App() {
   useEffect(startConnectionMonitor, []);
@@ -73,7 +75,6 @@ function AccountLayout({
       <KeyboardProvider>
         <QueryClientProvider client={queryClient}>
           <SafeAreaProvider>
-            <JournalSession />
             {/* Свёрнутый звонок сдвигает навигатор вниз, а не перекрывает шапки. */}
             <BelowReturnBar>
               {/* Тап по медиа в списке на хвосте прокрутки — с первого
