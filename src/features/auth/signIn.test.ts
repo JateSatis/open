@@ -5,7 +5,7 @@ import Constants from 'expo-constants';
 import { signInWithApple, signInWithGoogle } from './signIn';
 import { signInMessages } from './signInErrors';
 
-import { supabase } from '@/api/supabase';
+import { addSession } from './sessionStore';
 
 jest.mock('@react-native-google-signin/google-signin', () => ({
   GoogleSignin: {
@@ -34,14 +34,16 @@ jest.mock('expo-constants', () => ({
   default: { expoConfig: { extra: { googleSignIn: { webClientId: 'web-client-id' } } } },
 }));
 
+const mockExchange = jest.fn();
 jest.mock('@/api/supabase', () => ({
-  supabase: { auth: { signInWithIdToken: jest.fn() } },
+  createAccountClient: () => ({ auth: { signInWithIdToken: mockExchange, dispose: jest.fn() } }),
 }));
+jest.mock('./sessionStore', () => ({ addSession: jest.fn(), getSelectedAccountId: () => null }));
 
 const googleSignIn = GoogleSignin.signIn as jest.Mock;
 const hasPlayServices = GoogleSignin.hasPlayServices as jest.Mock;
 const appleSignInAsync = AppleAuthentication.signInAsync as jest.Mock;
-const signInWithIdToken = supabase.auth.signInWithIdToken as jest.Mock;
+const signInWithIdToken = mockExchange;
 
 function setGoogleConfig(config: { webClientId?: string }) {
   (Constants.expoConfig as unknown as { extra: { googleSignIn: unknown } }).extra.googleSignIn =
@@ -56,7 +58,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   setGoogleConfig({ webClientId: 'web-client-id' });
   hasPlayServices.mockResolvedValue(true);
-  signInWithIdToken.mockResolvedValue({ data: {}, error: null });
+  signInWithIdToken.mockResolvedValue({ data: { session: { user: { id: 'user' } } }, error: null });
 });
 
 describe('signInWithGoogle', () => {
@@ -69,6 +71,7 @@ describe('signInWithGoogle', () => {
       provider: 'google',
       token: 'google-id-token',
     });
+    expect(addSession).toHaveBeenCalledWith({ user: { id: 'user' } });
   });
 
   it('reports a dismissed sheet as cancelled rather than as an error', async () => {

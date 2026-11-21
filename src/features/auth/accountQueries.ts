@@ -13,7 +13,7 @@ import {
 
 import { requestAppleIdToken, requestGoogleIdToken } from './signIn';
 import { signOutQuietly } from './signOut';
-import { isCurrentSession, type SessionOwner } from './sessionOwner';
+import { confirmedSessionOwner, isCurrentSession, type SessionOwner } from './sessionOwner';
 import { describeAuthError, errorCodeOf } from './signInErrors';
 
 export const accountKeys = {
@@ -59,6 +59,7 @@ export function useLinkProvider() {
 
   return useMutation<LinkOutcome, Error, IdentityProvider>({
     mutationFn: async (provider) => {
+      const owner = confirmedSessionOwner();
       const result =
         provider === 'google' ? await requestGoogleIdToken() : await requestAppleIdToken();
 
@@ -66,6 +67,7 @@ export function useLinkProvider() {
       if (result.status === 'error') throw new Error(result.message);
 
       try {
+        if (!owner || !isCurrentSession(owner)) throw new Error('Сессия аккаунта изменилась');
         await linkIdentity(provider, result.token);
       } catch (error) {
         throw new Error(describeIdentityError(error, provider));

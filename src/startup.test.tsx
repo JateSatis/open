@@ -5,7 +5,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-
 import * as SplashScreen from 'expo-splash-screen';
 import { Linking, Text } from 'react-native';
 
-import { readStoredSession } from '@/api/supabase';
+import { readAccounts, type Accounts } from '@/features/auth/accountStorage';
 import { getMyPrivacySettings } from '@/api/privacy';
 import { listChats, subscribeToUserEvents } from '@/api/chats';
 import { stillReader } from '@/features/chats/messages/local/reader';
@@ -22,16 +22,23 @@ type AuthListener = (event: AuthChangeEvent, session: Session | null) => void;
 let mockAuthEvent: AuthListener;
 const mockGetSession = jest.fn();
 jest.mock('@/api/supabase', () => ({
-  readStoredSession: jest.fn(),
-  supabase: {
+  selectApiClient: jest.fn(),
+  createAccountClient: () => ({
+    removeAllChannels: jest.fn(),
     auth: {
+      dispose: jest.fn(),
       getSession: () => mockGetSession(),
       onAuthStateChange: (listener: AuthListener) => {
         mockAuthEvent = listener;
         return { data: { subscription: { unsubscribe: jest.fn() } } };
       },
     },
-  },
+  }),
+}));
+jest.mock('@/features/auth/accountStorage', () => ({
+  readAccounts: jest.fn(),
+  writeAccounts: jest.fn(),
+  cleanAccountStorage: jest.fn(async () => {}),
 }));
 jest.mock('expo', () => ({ ...jest.requireActual('expo'), registerRootComponent: jest.fn() }));
 jest.mock('expo-splash-screen', () => ({
@@ -92,13 +99,14 @@ function MockChatsScreen() {
 }
 
 const account = { user: { id: 'reader' } } as Session;
+const stored: Accounts = { selected: 'reader', accounts: [{ userId: 'reader', key: 'slot' }] };
 const pending = () => new Promise<never>(() => {});
 beforeEach(async () => {
   await AsyncStorage.clear();
   jest.clearAllMocks();
   jest.spyOn(Linking, 'getInitialURL').mockResolvedValue(null);
   mockGetSession.mockImplementation(pending);
-  jest.mocked(readStoredSession).mockResolvedValue(account);
+  jest.mocked(readAccounts).mockResolvedValue(stored);
   jest.mocked(getMyPrivacySettings).mockImplementation(pending);
   jest.mocked(listChats).mockImplementation(pending);
   mockReadRoute.mockReturnValue(undefined);
@@ -110,8 +118,8 @@ afterEach(() => {
 });
 
 it('показывает сохранённую строку до ответа SDK, сохраняет экран и кеш при подтверждении и очищает их при выходе', async () => {
-  let finishRead!: (value: Session) => void;
-  jest.mocked(readStoredSession).mockReturnValue(
+  let finishRead!: (value: Accounts) => void;
+  jest.mocked(readAccounts).mockReturnValue(
     new Promise((resolve) => {
       finishRead = resolve;
     }),
@@ -125,7 +133,7 @@ it('показывает сохранённую строку до ответа S
   expect(navigationRef.isReady()).toBe(false);
   expect(createAppQueryClient).not.toHaveBeenCalled();
   expect(screen.queryByText('Вход')).toBeNull();
-  await act(() => finishRead(account));
+  await act(() => finishRead(stored));
   const row = await screen.findByText('Сохранённый чат');
   const chats = navigationRef.getCurrentRoute();
   const localClient = jest.mocked(createAppQueryClient).mock.results[0].value;
@@ -188,7 +196,7 @@ it.each([
 );
 
 it('показывает вход при пустой локальной сессии до ответа SDK', async () => {
-  jest.mocked(readStoredSession).mockResolvedValue(null);
+  jest.mocked(readAccounts).mockResolvedValue({ selected: null, accounts: [] });
   await render(<App />);
   expect(await screen.findByText('Вход')).toBeTruthy();
   expect(mockReadRoute).not.toHaveBeenCalled();

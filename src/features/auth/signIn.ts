@@ -7,9 +7,9 @@ import * as AppleAuthentication from 'expo-apple-authentication';
 import Constants from 'expo-constants';
 
 import { describeAuthError, errorCodeOf, signInMessages } from './signInErrors';
-import { withSessionChange } from './sessionChange';
+import { addSession, getSelectedAccountId } from './sessionStore';
 
-import { supabase } from '@/api/supabase';
+import { createAccountClient } from '@/api/supabase';
 
 export type SignInProvider = 'google' | 'apple';
 
@@ -55,15 +55,17 @@ export type IdTokenResult =
   | { status: 'error'; message: string };
 
 async function exchangeIdToken(provider: SignInProvider, token: string): Promise<SignInResult> {
-  const { error } = await withSessionChange(() => supabase.auth.signInWithIdToken({ provider, token }));
-
-  if (error) {
+  const client = createAccountClient();
+  try {
+    const { data, error } = await client.auth.signInWithIdToken({ provider, token });
+    if (error || !data.session) return { status: 'error', message: describeAuthError(error) };
+    await addSession(data.session);
+    return { status: 'success' };
+  } catch (error) {
     return { status: 'error', message: describeAuthError(error) };
+  } finally {
+    await client.auth.dispose();
   }
-
-  // The session lands in the store through onAuthStateChange, so nothing here
-  // has to push it anywhere — routing reacts on its own.
-  return { status: 'success' };
 }
 
 async function withToken(
@@ -139,6 +141,7 @@ export async function requestAppleIdToken(): Promise<IdTokenResult> {
 }
 
 export async function signInWithGoogle(): Promise<SignInResult> {
+  if (getSelectedAccountId()) await signOutOfGoogle();
   return withToken(await requestGoogleIdToken(), 'google');
 }
 

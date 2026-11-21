@@ -310,6 +310,20 @@ describe('AccountScreen — выход и удаление', () => {
     expect(mocked.signOutLocally).not.toHaveBeenCalled();
   });
 
+  it('завершает подтверждённый выход из A, если во время запроса выбран B', async () => {
+    let finish!: () => void;
+    mocked.markDeviceSignedOut.mockImplementationOnce(() => new Promise<void>(resolve => { finish = resolve; }));
+    const user = userEvent.setup();
+    await renderAccount();
+    await user.press(await screen.findByText('Выйти из аккаунта'));
+    await user.press(await screen.findByRole('button', { name: 'Выйти' }));
+    await waitFor(() => expect(mocked.markDeviceSignedOut).toHaveBeenCalled());
+    await act(() => useSessionStore.setState({ localAccountId: 'B', session: sessionOf('B', 'second') }));
+    await act(() => finish());
+    expect(mocked.signOutLocally).toHaveBeenCalledWith({ userId: 'me', sessionId: 'first' });
+    expect(mocked.signOutOfGoogle).not.toHaveBeenCalled();
+  });
+
   it.each([
     ['Выйти из аккаунта', 'Выйти', mocked.markDeviceSignedOut],
     ['Удалить аккаунт', 'Удалить', mocked.deleteMyAccount],

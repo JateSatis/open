@@ -11,6 +11,7 @@ import { supabase } from '@/api/supabase';
 import { sessionAuthorization } from './sessionAuthorization';
 import { confirmedSessionOwner, isCurrentSession, type SessionOwner } from '@/features/auth/sessionOwner';
 import { withSessionChange } from '@/features/auth/sessionChange';
+import { signOutAccount } from '@/features/auth/sessionStore';
 import type { Tables } from '@/api/types.gen';
 
 export type IdentityProvider = 'google' | 'apple';
@@ -98,11 +99,12 @@ export async function linkIdentity(provider: IdentityProvider, token: string): P
 
 /** Последний способ входа Auth отвязать не даст — и интерфейс такую кнопку не показывает. */
 export async function unlinkIdentity(identityId: string): Promise<void> {
+  const client = supabase;
   const identity = (await fetchIdentities()).find((item) => item.identity_id === identityId);
 
   if (!identity) return;
 
-  const { error } = await supabase.auth.unlinkIdentity(identity);
+  const { error } = await client.auth.unlinkIdentity(identity);
 
   if (error) throw error;
 }
@@ -177,14 +179,7 @@ export async function markDeviceSignedOut(installationId: string, owner: Session
  * пользователя, и следующий вход не должен их унаследовать.
  */
 export async function signOutLocally(owner: SessionOwner): Promise<void> {
-  await withSessionChange(async () => {
-    if (!isCurrentSession(owner)) return;
-    // removeAllChannels также отключает общий сокет после ожидания отписок.
-    await Promise.all(supabase.getChannels().map(channel => supabase.removeChannel(channel)));
-    if (!isCurrentSession(owner)) return;
-    const { error } = await supabase.auth.signOut({ scope: 'local' });
-    if (error && __DEV__) console.warn('signOut:', error);
-  });
+  await signOutAccount(owner.userId, owner);
 }
 
 export class DeleteAccountError extends Error {

@@ -4,22 +4,22 @@ import { getInstallationId } from './installationId';
 import { withSessionChange } from './sessionChange';
 import { signOutOfGoogle } from './signIn';
 import { isCurrentSession, type SessionOwner } from './sessionOwner';
+import { useSessionStore } from './sessionState';
 
 /**
  * Выход из аккаунта на этом устройстве — только этот сеанс, остальные
  * телефоны остаются в аккаунте. Кеш и сторы чистит прежний AccountLayout.
  */
 export async function signOut(owner: SessionOwner): Promise<void> {
-  if (!isCurrentSession(owner)) return;
-  try {
-    // Пока сессия ещё есть — после выхода отметить устройство будет нечем.
-    const installation = await getInstallationId();
-    await withSessionChange(async () => {
-      if (isCurrentSession(owner)) await markDeviceSignedOut(installation, owner);
-    });
-  } catch {
-    // Без сети отметку поставит сама база: сеанс удалится при выходе, и
-    // устройство перестанет числиться активным.
+  if (isCurrentSession(owner)) {
+    try {
+      const installation = await getInstallationId();
+      await withSessionChange(async () => {
+        if (isCurrentSession(owner)) await markDeviceSignedOut(installation, owner);
+      });
+    } catch {
+      // Отзыв сеанса также убирает устройство из списка активных.
+    }
   }
 
   await signOutQuietly(owner);
@@ -31,7 +31,9 @@ export async function signOut(owner: SessionOwner): Promise<void> {
  * просто экран входа.
  */
 export async function signOutQuietly(owner: SessionOwner): Promise<void> {
-  if (!isCurrentSession(owner)) return;
-  await signOutOfGoogle();
-  if (isCurrentSession(owner)) await signOutLocally(owner);
+  if (isCurrentSession(owner)) await signOutOfGoogle();
+  // Пока был открыт лист провайдера, пользователь мог выбрать другой аккаунт.
+  // Удаляем исходный сеанс; повторный вход того же пользователя имеет другой session_id.
+  if (useSessionStore.getState().localAccountId === owner.userId && !isCurrentSession(owner)) return;
+  await signOutLocally(owner);
 }

@@ -1,84 +1,179 @@
 import type { Session } from '@supabase/supabase-js';
 
-import { readStoredSession, supabase } from '@/api/supabase';
-import { isNetworkError } from '@/lib/network';
-
-import { emptyState, useSessionStore, type AuthBootstrap } from './sessionState';
+import { selectApiClient } from '@/api/supabase';
+import { AccountSession } from './accountSession';
+import {
+  cleanAccountStorage, readAccounts, readAccountSession, saveAccountSession, writeAccounts,
+  type Accounts, type AccountSlot,
+} from './accountStorage';
+import { withSessionChange } from './sessionChange';
+import { ownerOf, sameSession, type SessionOwner } from './sessionOwner';
+import { emptyState, useSessionStore } from './sessionState';
 
 export { useSessionStore, type AuthBootstrap, type SessionState } from './sessionState';
 
-let stop: (() => void) | undefined;
-let refCount = 0;
+let index: Accounts = { accounts: [], selected: null };
+const clients = new Map<string, AccountSession>();
+let restoring: Promise<void> | undefined;
+let generation = 0;
 
-function settle(session: Session | null, sdkStatus: AuthBootstrap['sdkStatus']) {
+export function getAccounts(): string[] {
+  return index.accounts.map(slot => slot.userId);
+}
+
+export function getSelectedAccountId() {
+  return index.selected;
+}
+
+function publish() {
+  const selected = index.selected ? clients.get(index.selected) : undefined;
+  const status = selected?.status ?? 'signedOut';
+  selectApiClient(selected && status !== 'signedOut' ? selected.client : null);
   useSessionStore.setState({
-    session,
-    isAuthenticated: session !== null,
-    isLoading: false,
-    localAccountId: session?.user.id ?? null,
-    sdkStatus,
+    localAccountId: status === 'signedOut' ? null : index.selected,
+    sdkStatus: status,
+    isLoading: status === 'pending',
+    session: selected?.session ?? null,
+    isAuthenticated: !!selected?.session,
   });
 }
 
-function start() {
-  let active = true;
-  let sdkDecided = false;
+function dispose(runtime: AccountSession) {
+  clients.delete(runtime.slot.userId);
+  runtime.dispose();
+}
 
-  function applySdkSession(session: Session | null) {
-    sdkDecided = true;
-    settle(session, session ? 'session' : 'signedOut');
-  }
-
-  const { data } = supabase.auth.onAuthStateChange((event, session) => {
-    if (!active) return;
-    // Пустой INITIAL_SESSION приходит и при сетевой ошибке обновления токена.
-    if (event === 'INITIAL_SESSION' && (!session || sdkDecided)) return;
-    applySdkSession(session);
-  });
-  const stored = readStoredSession().catch(() => null);
-  void stored.then((session) => {
-    if (active && !sdkDecided) {
-      useSessionStore.setState({ localAccountId: session?.user.id ?? null });
-    }
-  });
-
-  async function finishRestore(session: Session | null, error: unknown) {
-    if (!active || sdkDecided) return;
-    if (!session && isNetworkError(error)) {
-      useSessionStore.setState({ sdkStatus: 'offline' });
-      const local = await stored;
-      if (active && !sdkDecided) settle(local, 'offline');
-    } else {
-      applySdkSession(session);
-    }
-  }
-
-  void supabase.auth.getSession().then(
-    ({ data: { session }, error }) => finishRestore(session, error),
-    (error: unknown) => finishRestore(null, error),
-  );
-
-  return () => {
-    active = false;
-    data.subscription.unsubscribe();
-    useSessionStore.setState(emptyState);
+async function remove(runtime: AccountSession) {
+  if (clients.get(runtime.slot.userId) !== runtime) return;
+  const { userId } = runtime.slot;
+  const next = {
+    accounts: index.accounts.filter(slot => slot.userId !== userId),
+    selected: index.selected === userId ? null : index.selected,
   };
+  await writeAccounts(next);
+  index = next;
+  dispose(runtime);
+  publish();
+  await cleanAccountStorage(next).catch(reportStorageError);
 }
 
-/**
- * One Supabase auth listener per app, shared by every useSession() caller, so
- * the session is read in a single place instead of once per screen. Attached
- * lazily on the first caller and torn down once the last one goes away.
- */
-export function subscribeToSession(): () => void {
-  refCount += 1;
-  if (refCount === 1) stop = start();
-
-  return () => {
-    refCount -= 1;
-    if (refCount === 0) {
-      stop?.();
-      stop = undefined;
+function observe(slot: AccountSlot, initial: Session | null = null): AccountSession {
+  const existing = clients.get(slot.userId);
+  if (existing) return existing;
+  const runtime = new AccountSession(slot, initial, account => {
+    if (account.status === 'signedOut') {
+      void withSessionChange(() => remove(account)).catch(reportStorageError);
     }
+    if (index.selected === slot.userId) publish();
+  });
+  clients.set(slot.userId, runtime);
+  return runtime;
+}
+
+function reportStorageError() {
+  if (__DEV__) console.warn('Не удалось прочитать или сохранить аккаунты устройства');
+}
+
+export function restoreAccounts(): Promise<void> {
+  const current = generation;
+  restoring ??= withSessionChange(async () => {
+    const stored = await readAccounts();
+    if (generation !== current) return;
+    index = stored;
+    const selected = index.accounts.find(slot => slot.userId === index.selected);
+    if (selected) observe(selected);
+    publish();
+    await cleanAccountStorage(stored).catch(reportStorageError);
+  }).catch((error: unknown) => {
+    if (generation === current) restoring = undefined;
+    throw error;
+  });
+  return restoring;
+}
+
+export async function selectAccount(userId: string) {
+  await restoreAccounts();
+  await withSessionChange(async () => {
+    const slot = index.accounts.find(account => account.userId === userId);
+    if (!slot) throw new Error('Аккаунт отсутствует на устройстве');
+    const next = { ...index, selected: userId };
+    await writeAccounts(next);
+    index = next;
+    observe(slot);
+    publish();
+  });
+}
+
+export async function addSession(session: Session) {
+  await restoreAccounts();
+  await withSessionChange(async () => {
+    const slot = await saveAccountSession(session);
+    const next = {
+      accounts: [...index.accounts.filter(account => account.userId !== slot.userId), slot],
+      selected: slot.userId,
+    };
+    await writeAccounts(next);
+    const previous = clients.get(slot.userId);
+    if (previous) dispose(previous);
+    index = next;
+    observe(slot, session);
+    publish();
+    await cleanAccountStorage(next).catch(reportStorageError);
+  });
+}
+
+// Блокировка общая с привязкой провайдера и добавлением сессии того же user.id.
+export async function signOutAccount(userId: string, expected?: SessionOwner) {
+  await restoreAccounts();
+  const slot = index.accounts.find(account => account.userId === userId);
+  if (!slot) return;
+  await withSessionChange(async () => {
+    if (!index.accounts.includes(slot)) return;
+    const runtime = observe(slot);
+    async function matchesOwner() {
+      if (!expected) return true;
+      const session = runtime.session ?? await readAccountSession(runtime.slot.key);
+      return sameSession(expected, ownerOf(session));
+    }
+    if (!(await matchesOwner())) return;
+    const channels = runtime.client.getChannels();
+    await Promise.allSettled(channels.map(channel => runtime.client.removeChannel(channel)));
+    if (!(await matchesOwner())) return;
+    try {
+      await runtime.client.auth.signOut({ scope: 'local' });
+    } catch {
+      // Даже при сетевой ошибке SDK локальный выход должен завершиться.
+    }
+    await remove(runtime);
+  });
+}
+
+let subscribers = 0;
+export function subscribeToSession() {
+  subscribers++;
+  if (subscribers === 1) {
+    const current = generation;
+    void restoreAccounts().catch(async () => {
+      if (generation !== current) return;
+      try {
+        await restoreAccounts();
+      } catch {
+        if (generation !== current) return;
+        reportStorageError();
+        // Диск недоступен. Можно повторить вход; до чтения индекса запись запрещена.
+        useSessionStore.setState({ ...emptyState, localAccountId: null, isLoading: false, sdkStatus: 'signedOut' });
+      }
+    });
+  }
+  return () => {
+    if (--subscribers !== 0) return;
+    generation++;
+    restoring = undefined;
+    void withSessionChange(async () => {
+      for (const runtime of clients.values()) dispose(runtime);
+      index = { accounts: [], selected: null };
+      selectApiClient(null);
+      useSessionStore.setState(emptyState);
+    });
   };
 }
