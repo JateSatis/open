@@ -1,5 +1,5 @@
 import { useIsFocused } from '@react-navigation/native';
-import { type ReactElement, useEffect, useState } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 import { View } from 'react-native';
 
 /** У стека и вкладок layout контейнера может прийти раньше layout активного экрана. */
@@ -7,7 +7,7 @@ export function StartupScreenLayout({
   children,
   onReady,
 }: {
-  children: ReactElement;
+  children: ReactNode;
   onReady: () => void;
 }) {
   const focused = useIsFocused();

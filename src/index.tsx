@@ -25,7 +25,6 @@ import { InAppMessageToast } from '@/features/notifications/InAppMessageToast';
 import { startPersonalRealtimeEvents } from '@/features/notifications/personalRealtimeEvents';
 import { startJournalLifecycle } from '@/features/recs/journal/lifecycle';
 import { IncomingCallOverlay } from '@/features/streams/IncomingCallOverlay';
-import { BelowReturnBar, ReturnToCallBar } from '@/features/streams/ReturnToCallBar';
 import { createAppQueryClient, syncQueryOnlineState } from '@/lib/queryClient';
 import { AppRoutes } from '@/navigation/routes/AppRoutes';
 import { type IncomingLink, useIncomingLink } from '@/navigation/useIncomingLink';
@@ -77,15 +76,9 @@ function AccountLayout({
       <KeyboardProvider>
         <QueryClientProvider client={queryClient}>
           <SafeAreaProvider>
-            {/* Свёрнутый звонок сдвигает навигатор вниз, а не перекрывает шапки. */}
-            <BelowReturnBar>
-              {/* Тап по медиа в списке на хвосте прокрутки — с первого
-                    касания, см. modules/scroll-tap. Окна Modal — со своей. */}
-              <ScrollTap style={styles.flex}>
-                <AppRoutes incoming={incoming} />
-              </ScrollTap>
-            </BelowReturnBar>
-            <ReturnToCallBar />
+            <ScrollTap style={styles.flex}>
+              <AppRoutes incoming={incoming} />
+            </ScrollTap>
             {/* Входящий звонок — своим окном поверх всего, включая нативные вкладки. */}
             <IncomingCallOverlay />
             {/* Поверх навигатора: уведомление не принадлежит ни одному экрану. */}

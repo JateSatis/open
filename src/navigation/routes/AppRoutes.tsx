@@ -4,6 +4,9 @@ import { type ReactElement, useCallback, useEffect, useState } from 'react';
 import { useColorScheme, View } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
 
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+
+import { ReturnToCallBar } from '@/features/streams/ReturnToCallBar';
 import { useAuthBootstrap } from '@/features/auth/useSession';
 import { ChatsScreen } from '@/features/chats/ChatsScreen';
 import { FeedScreen } from '@/features/feed/FeedScreen';
@@ -31,7 +34,11 @@ const FIRST_TAP_WINDOW_MS = 1000;
 // Смена фазы или владельца перемонтирует навигацию, но нативная заставка одна.
 let hideSplash: Promise<void> | undefined;
 
-type ScreenLayout = (props: { children: ReactElement; route: { name: string } }) => ReactElement;
+type ScreenLayout = (props: {
+  children: ReactElement;
+  route: { name: string };
+  options: { headerShown?: boolean };
+}) => ReactElement;
 
 function MainTabs({
   splashHidden,
@@ -100,12 +107,24 @@ export function AppRoutes({ incoming = null }: { incoming?: IncomingLink | null 
     });
   }, []);
   const screenLayout: ScreenLayout = useCallback(
-    ({ children, route }) =>
-      route.name === 'Tabs' ? (
-        children
-      ) : (
-        <StartupScreenLayout onReady={onScreenReady}>{children}</StartupScreenLayout>
-      ),
+    ({ children, route, options }) => {
+      if (route.name === 'Tabs') return children;
+      // Переписки размещают полосу под своей шапкой, включая состояния загрузки.
+      if (route.name === 'Chat' || route.name === 'Channel' || route.name === 'Call') {
+        return <StartupScreenLayout onReady={onScreenReady}>{children}</StartupScreenLayout>;
+      }
+      const edgeToEdge = options.headerShown === false;
+      return (
+        <StartupScreenLayout onReady={onScreenReady}>
+          <ReturnToCallBar topInset={edgeToEdge} />
+          {edgeToEdge ? (
+            <SafeAreaProvider>{children}</SafeAreaProvider>
+          ) : (
+            <View style={{ flex: 1 }}>{children}</View>
+          )}
+        </StartupScreenLayout>
+      );
+    },
     [onScreenReady],
   );
 

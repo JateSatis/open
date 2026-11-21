@@ -1,7 +1,7 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
 import { DeviceEventEmitter, Linking } from 'react-native';
 
-import { ReturnToCallBar } from '@/features/streams/ReturnToCallBar';
+import { renderWithQuery } from '@/test/renderWithQuery';
 import { setCall } from '@/features/streams/callStore';
 import { AppRoutes } from './AppRoutes';
 import { navigationRef, router } from '@/navigation';
@@ -34,7 +34,11 @@ jest.mock('@/features/chats/ChatsScreen', () => ({ ChatsScreen: () => null }));
 jest.mock('@/features/profile/MyProfileScreen', () => ({ MyProfileScreen: () => null }));
 jest.mock('@/features/auth/AccountScreen', () => ({ AccountScreen: () => null }));
 jest.mock('@/features/moderation/BlockedUsersScreen', () => ({ BlockedUsersScreen: () => null }));
-jest.mock('@/features/streams/CallScreen', () => ({ CallScreen: () => null }));
+jest.mock('@/features/streams/callSession', () => ({
+  leaveCall: jest.fn(),
+  toggleMic: jest.fn(),
+  toggleSpeaker: jest.fn(),
+}));
 jest.mock('@/features/channels/ChannelInfoScreen', () => ({ ChannelInfoScreen: () => null }));
 jest.mock('@/features/channels/ChannelScreen', () => ({ ChannelScreen: () => null }));
 jest.mock('@/features/channels/SubscribersScreen', () => ({ SubscribersScreen: () => null }));
@@ -71,12 +75,7 @@ jest.mock('@/features/channels/ChannelLinkScreen', () => {
 
 function Harness() {
   const incoming = useIncomingLink();
-  return (
-    <>
-      <ReturnToCallBar />
-      <AppRoutes key={mockAccount ?? 'signed-out'} incoming={incoming} />
-    </>
-  );
+  return <AppRoutes key={mockAccount ?? 'signed-out'} incoming={incoming} />;
 }
 
 let sendURL: (url: string) => void;
@@ -88,7 +87,7 @@ const step = async (fn: () => void) => {
 const back = () => step(router.back);
 async function start(url: string | null = null) {
   jest.spyOn(Linking, 'getInitialURL').mockResolvedValue(url);
-  return render(<Harness />);
+  return renderWithQuery(<Harness />);
 }
 
 beforeEach(() => {
@@ -248,7 +247,7 @@ it('normalizes legacy paths without losing section, query or source', () => {
   });
 });
 
-it('minimizing and returning to the active call restores its conversation on Back', async () => {
+it('minimizing and returning to the active call keeps one Call entry and restores the originating screen', async () => {
   setCall({
     streamId: 's',
     chatId: 'pair',
@@ -264,11 +263,20 @@ it('minimizing and returning to the active call restores its conversation on Bac
   await start();
   await step(() => router.push({ name: 'Chat', params: { chatId: 'pair' } }));
   const chat = current();
-  await fireEvent.press(screen.getByTestId('return-to-call'));
-  expect(current()?.name).toBe('Call');
+  await step(() => router.push({ name: 'Call' }));
   expect(screen.queryByTestId('return-to-call')).toBeNull();
-  await back();
+  await fireEvent.press(screen.getByRole('button', { name: 'Свернуть звонок' }));
   expect(current()).toEqual(chat);
+  await back();
+  expect(current()?.name).toBe('chats');
   await fireEvent.press(screen.getByTestId('return-to-call'));
-  expect(names()).toEqual(['Tabs', 'Chat', 'Call']);
+  expect(names()).toEqual(['Tabs', 'Call']);
+  expect(screen.queryByTestId('return-to-call')).toBeNull();
+  await step(() => router.push({ name: 'MyFriends' }));
+  await fireEvent.press(screen.getByTestId('return-to-call'));
+  expect(names()).toEqual(['Tabs', 'MyFriends', 'Call']);
+  await back();
+  expect(current()?.name).toBe('MyFriends');
+  await step(() => setCall(null));
+  expect(screen.queryByTestId('return-to-call')).toBeNull();
 });
