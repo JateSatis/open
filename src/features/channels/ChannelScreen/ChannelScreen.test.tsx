@@ -34,6 +34,13 @@ import { reportRealtimeJoined, resetConnectionState } from '@/features/connectio
 import { DeadlineError } from '@/lib/deadline';
 import { renderWithQuery } from '@/test/renderWithQuery';
 import { longPressMessage } from '@/test/messageGestures';
+import { setCall } from '@/features/streams/callStore';
+import { bindHistoryReader, HistoryReader } from '@/features/chats/messages/local/reader';
+import { localHistory } from '@/features/chats/messages/local/database';
+import { openHistoryDatabase } from '@/test/openHistoryDatabase';
+
+jest.mock('@/features/chats/messages/local/database', () => ({ localHistory: jest.fn() }));
+jest.mock('@/api/historyRead', () => ({ getHistoryRead: async () => null }));
 
 const mockPush = jest.fn();
 const mockRedirect = jest.fn();
@@ -232,6 +239,37 @@ beforeEach(() => {
 });
 
 describe('ChannelScreen', () => {
+  it('показывает одну полосу возврата в разделе «Посты»', async () => {
+    const db = openHistoryDatabase(':memory:');
+    jest.mocked(localHistory).mockReturnValue(db.storage);
+    bindHistoryReader(() => OWNER);
+    let fail!: () => void;
+    mockedListMessages.mockImplementationOnce(() => new Promise((_resolve, reject) => {
+      fail = () => reject(new DeadlineError());
+    }));
+    setCall({
+      streamId: 'stream', chatId: 'chat', chatTitle: 'Чат', role: 'speaker',
+      connection: 'connected', micOn: true, speakerOn: false, speakers: [], listeners: 0, joinedAt: Date.now(),
+    });
+    const view = await renderWithQuery(<HistoryReader.Provider value={OWNER}><ChannelScreen /></HistoryReader.Provider>);
+    try {
+      await waitFor(() => expect(fail).toBeDefined());
+      expect(screen.getAllByTestId('return-to-call')).toHaveLength(1);
+      await act(() => fail());
+      await screen.findByText('Не удалось загрузить переписку');
+      expect(screen.getAllByTestId('return-to-call')).toHaveLength(1);
+      await fireEvent.press(screen.getByText('Повторить'));
+      await screen.findByText('первый пост');
+      expect(screen.getAllByTestId('return-to-call')).toHaveLength(1);
+      await fireEvent.press(screen.getByTestId('return-to-call'));
+      expect(mockPush).toHaveBeenCalledWith({ name: 'Call' });
+    } finally {
+      await view.unmount();
+      setCall(null);
+      bindHistoryReader(() => null);
+      db.native.close();
+    }
+  });
   it('shows the channel in the header without a call button, «Посты» selected', async () => {
     await renderChannel();
 

@@ -214,12 +214,25 @@ export function ChatConversation(props: ChatConversationProps) {
 function HistoryOpening(props: ChatConversationProps) {
   const focused = useIsFocused();
   const opening = useHistoryOpening(props.chatId, focused && props.active !== false);
-  if (!opening.ready)
-    return opening.failed ? (
-      <LoadFailed message="Не удалось загрузить переписку" onRetry={opening.retry} />
-    ) : (
-      <ActivityIndicator />
+  if (!opening.ready) {
+    return (
+      <>
+        {!props.channel && (
+          <>
+            <ChatScreenHeader title="Чат" selectedCount={0} onCancelSelection={noop} />
+            <ReturnToCallBar />
+          </>
+        )}
+        {opening.failed ? (
+          <LoadFailed message="Не удалось загрузить переписку" onRetry={opening.retry} />
+        ) : (
+          <View style={styles.centered}>
+            <ActivityIndicator accessibilityLabel="Загрузка переписки" />
+          </View>
+        )}
+      </>
     );
+  }
   return (
     <Conversation {...props} initialPlace={opening.place ?? null} eligible={opening.eligible} />
   );
