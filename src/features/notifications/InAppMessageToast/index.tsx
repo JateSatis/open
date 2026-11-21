@@ -5,7 +5,7 @@ import { ToastCard, type ToastGroup } from './ToastCard';
 import { cachedChat } from '@/features/chats/cachedChat';
 import { chatTitle } from '@/features/chats/chatDisplay';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
-import { useInAppAlerts } from '@/features/notifications/useInAppAlerts';
+import { dismissAlert, useInAppAlert } from '@/features/notifications/alertsStore';
 
 /**
  * Карточка о новом сообщении, заявке или короткий ответ на действие («Скопировано»)
@@ -13,7 +13,7 @@ import { useInAppAlerts } from '@/features/notifications/useInAppAlerts';
  * потому что уведомление не принадлежит ни одной вкладке.
  */
 export function InAppMessageToast() {
-  const { alert, dismiss } = useInAppAlerts();
+  const alert = useInAppAlert((state) => state.alert);
   const queryClient = useQueryClient();
   const currentUserId = useCurrentUserId();
 
@@ -26,5 +26,5 @@ export function InAppMessageToast() {
       ? { title: chatTitle(chat, currentUserId), avatarUrl: chat.avatarUrl }
       : null;
 
-  return <ToastCard alert={alert} dismiss={dismiss} group={group} />;
+  return <ToastCard alert={alert} dismiss={dismissAlert} group={group} />;
 }

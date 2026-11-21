@@ -7,7 +7,7 @@ import { Linking, Text } from 'react-native';
 
 import { readStoredSession } from '@/api/supabase';
 import { getMyPrivacySettings } from '@/api/privacy';
-import { listChats } from '@/api/chats';
+import { listChats, subscribeToUserEvents } from '@/api/chats';
 import { stillReader } from '@/features/chats/messages/local/reader';
 import { useChats } from '@/features/chats/useChats';
 import { startConnectionMonitor } from '@/features/connection/connectionMonitor';
@@ -40,7 +40,12 @@ jest.mock('expo-splash-screen', () => ({
   hideAsync: jest.fn(() => Promise.resolve()),
 }));
 jest.mock('@/api/privacy', () => ({ getMyPrivacySettings: jest.fn() }));
-jest.mock('@/api/chats', () => ({ listChats: jest.fn() }));
+const mockDisconnect = jest.fn();
+jest.mock('@/api/chats', () => ({
+  listChats: jest.fn(),
+  subscribeToUserEvents: jest.fn(() => mockDisconnect),
+}));
+jest.mock('@/features/streams/callSession', () => ({ leaveCall: jest.fn() }));
 jest.mock('@/lib/queryClient', () => ({
   ...jest.requireActual('@/lib/queryClient'),
   createAppQueryClient: jest.fn((owner) => {
@@ -131,6 +136,7 @@ it('показывает сохранённую строку до ответа S
   expect(SplashScreen.hideAsync).not.toHaveBeenCalled();
   await fireEvent(row, 'layout', { nativeEvent: { layout: { width: 400, height: 800 } } });
   expect(SplashScreen.hideAsync).toHaveBeenCalledTimes(1);
+  expect(subscribeToUserEvents).not.toHaveBeenCalled();
 
   await act(() => reportDeviceNetwork(false));
   await act(() => reportDeviceNetwork(true));
@@ -144,6 +150,9 @@ it('показывает сохранённую строку до ответа S
   await waitFor(() => expect(listChats).toHaveBeenCalledTimes(1));
   expect(getMyPrivacySettings).toHaveBeenCalledTimes(1);
   expect(createAppQueryClient).toHaveBeenCalledTimes(1);
+  expect(subscribeToUserEvents).toHaveBeenCalledWith('reader', expect.any(Object));
+  await act(() => mockAuthEvent('TOKEN_REFRESHED', { ...account, access_token: 'refreshed' }));
+  expect(subscribeToUserEvents).toHaveBeenCalledTimes(1);
   expect(localClient.getQueryData(['marker'])).toBe(42);
   expect(navigationRef.getCurrentRoute()?.key).toBe(chats?.key);
   expect(screen.getByText('Сохранённый чат')).toBe(row);
@@ -154,6 +163,7 @@ it('показывает сохранённую строку до ответа S
   const signIn = await screen.findByText('Вход');
   expect(screen.queryByText('Сохранённый чат')).toBeNull();
   expect(stillReader('reader')).toBe(false);
+  expect(mockDisconnect).toHaveBeenCalledTimes(1);
   expect(startConnectionMonitor).toHaveBeenCalledTimes(1);
   expect(localClient.getQueryData(['marker'])).toBeUndefined();
   expect(getActiveChatId()).toBeNull();
