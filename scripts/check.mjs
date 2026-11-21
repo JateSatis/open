@@ -12,7 +12,8 @@ const CHECKS = [
   { name: "tsc", args: ["tsc", "--noEmit"] },
   // Предупреждения не валят проверку, а в выводе только шумят.
   { name: "eslint", args: ["eslint", ".", "--quiet"] },
-  { name: "jest", args: ["jest", "--silent"] },
+  // На машине разработчика одновременно работают Metro, tsc и ESLint.
+  { name: "jest", args: ["jest", "--silent", "--maxWorkers=3"] },
 ];
 
 function run({ name, args }) {

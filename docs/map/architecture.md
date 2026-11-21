@@ -19,7 +19,7 @@ Realtime возвращает сигналы в доменные хуки и к�
 | Локальное состояние | Zustand: [store](../../src/store/) и доменные `*Store.ts`/`*store.ts`. Только чтение `src/store` не даёт карту всех состояний |
 | Сессия и сброс кешей | [useSession и useAuthBootstrap](../../src/features/auth/useSession.ts), [resetClientState](../../src/features/auth/resetClientState.ts): учитывать при выходе/смене аккаунта |
 | Сеть и таймаут | [supabase](../../src/api/supabase.ts), [requestDeadline](../../src/api/requestDeadline.ts). [Наблюдатель приложения](../../src/features/connection/connectionMonitor.ts) обновляет [общий статус](../../src/features/connection/connectionStore.ts), [QueryClient аккаунта](../../src/lib/queryClient.ts) применяет его с учётом готовности сессии |
-| Входящие события | [useInAppAlerts](../../src/features/notifications/useInAppAlerts.ts) использует пользовательские события из [chats API](../../src/api/chats.ts); это не отдельный универсальный push-клиент |
+| Входящие события | [personalRealtimeEvents](../../src/features/notifications/personalRealtimeEvents.ts) подключает канал из [chats API](../../src/api/chats.ts) для подтверждённого аккаунта и его QueryClient. Карточки передаёт в [alertsStore](../../src/features/notifications/alertsStore.ts), звонки — в [incomingCall](../../src/features/streams/incomingCall.ts). |
 | Внешний вид | [theme](../../src/theme/), [общие компоненты](../../src/components/), [hooks](../../src/hooks/). Эталон конкретного шита/жеста ищи в соответствующей фиче |
 
 ## Пакеты и нативные связи

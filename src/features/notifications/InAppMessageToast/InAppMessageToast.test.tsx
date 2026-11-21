@@ -1,25 +1,11 @@
-import type { Session as SupabaseSession } from '@supabase/supabase-js';
-import { QueryClient, QueryClientProvider, QueryObserver } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, render, screen, userEvent, waitFor } from '@testing-library/react-native';
 
 import { InAppMessageToast } from './index';
-
-import {
-  subscribeToUserEvents,
-  type ChatSummary,
-  type IncomingInvite,
-  type IncomingMessage,
-  type IncomingPop,
-  type UserChannelHandlers,
-} from '@/api/chats';
-import { useSession } from '@/features/auth/useSession';
+import { InAppNoticeToast } from './NoticeToast';
+import type { ChatSummary, IncomingMessage, IncomingPop } from '@/api/chats';
 import { chatsQueryKey } from '@/features/chats/chatsKey';
-import { bindHistoryReader } from '@/features/chats/messages/local/reader';
-import { reportDeviceNetwork, reportRealtimeJoined, resetConnectionState } from '@/features/connection/connectionStore';
-import { friendKeys } from '@/features/friends/keys';
-import { showNotice } from '@/features/notifications/alertsStore';
-import { createAppQueryClient, syncQueryOnlineState } from '@/lib/queryClient';
-import { setActiveChatId } from '@/store/activeChat';
+import { dismissAlert, showAlert, showNotice } from '@/features/notifications/alertsStore';
 import { renderWithQuery } from '@/test/renderWithQuery';
 
 const mockPush = jest.fn();
@@ -29,26 +15,8 @@ jest.mock('@/navigation', () => ({
   useRouter: () => ({ push: mockPush }),
 }));
 
-// Звонок поднимает LiveKit и Supabase — здесь важно лишь, что из него выходят.
-jest.mock('@/features/streams/callSession', () => ({ leaveCall: jest.fn() }));
-
-jest.mock('@/features/auth/useSession', () => ({
-  useSession: jest.fn(),
-}));
-
-jest.mock('@/api/chats', () => ({
-  subscribeToUserEvents: jest.fn(),
-}));
-
-jest.mock('@/api/invites', () => ({}));
-
-const mockedSubscribe = subscribeToUserEvents as jest.MockedFunction<typeof subscribeToUserEvents>;
-const mockedSession = useSession as jest.MockedFunction<typeof useSession>;
-
-let handlers: UserChannelHandlers | null = null;
-const deliver = (message: IncomingMessage) => handlers?.onMessage(message);
-const deliverInvite = (invite: IncomingInvite) => handlers?.onInvite(invite);
-const deliverPop = (pop: IncomingPop) => handlers?.onPop?.(pop);
+jest.mock('@/features/chats/useCurrentUserId', () => ({ useCurrentUserId: () => 'user-1' }));
+jest.mock('@/api/supabase', () => ({ supabase: {} }));
 
 const channel = { id: 'channel-1', title: 'Плейлисты', avatarUrl: null };
 const post: IncomingMessage = {
@@ -83,67 +51,15 @@ const incoming: IncomingMessage = {
 };
 
 beforeEach(() => {
-  jest.clearAllMocks();
-  handlers = null;
-  setActiveChatId(null);
-  mockedSession.mockReturnValue({
-    session: { user: { id: 'user-1' } } as unknown as SupabaseSession,
-    isAuthenticated: true,
-    isLoading: false,
-  });
-  mockedSubscribe.mockImplementation((_userId, received) => {
-    handlers = received;
-    return () => {};
-  });
+  mockPush.mockClear();
+  dismissAlert();
 });
 
 describe('InAppMessageToast', () => {
-  it('один раз обновляет чаты при возврате сети и догоняет отдельный обрыв персонального канала', async () => {
-    bindHistoryReader(() => 'user-1');
-    reportRealtimeJoined();
-    const client = createAppQueryClient('user-1');
-    const stop = syncQueryOnlineState(client, true);
-    let serverRows = ['первый снимок'];
-    const load = jest.fn(async () => serverRows);
-    const observer = new QueryObserver(client, {
-      queryKey: chatsQueryKey, queryFn: load, initialData: ['локальный'], staleTime: Infinity,
-      gcTime: Infinity, meta: { refreshOnUserChannelJoin: true },
-    });
-    const unsubscribe = observer.subscribe(() => {});
-    try {
-      await render(<QueryClientProvider client={client}><InAppMessageToast /></QueryClientProvider>);
-      await act(() => handlers?.onJoined?.(false));
-      expect(load).toHaveBeenCalledTimes(1);
-      await act(() => reportDeviceNetwork(false));
-      await act(() => reportDeviceNetwork(true));
-      await act(() => reportRealtimeJoined());
-      expect(load).toHaveBeenCalledTimes(1);
-      serverRows = ['сообщение до переподписки'];
-      await act(() => handlers?.onJoined?.(true));
-      expect(load).toHaveBeenCalledTimes(2);
-      expect(client.getQueryData(chatsQueryKey)).toEqual(serverRows);
-      // Переподписка без системного разрыва может означать пропущенные сообщения.
-      await act(() => handlers?.onJoined?.(true));
-      expect(load).toHaveBeenCalledTimes(3);
-    } finally {
-      unsubscribe();
-      stop();
-      client.clear();
-      resetConnectionState();
-      bindHistoryReader(() => null);
-    }
-  });
-
-  it('stays out of the way until a message arrives', async () => {
-    await renderWithQuery(<InAppMessageToast />);
-
-    expect(screen.queryByText('Марина')).toBeNull();
-  });
-
   it('shows who wrote and what they wrote', async () => {
     await renderWithQuery(<InAppMessageToast />);
 
-    deliver(incoming);
+    await act(() => showAlert({ kind: 'message', ...incoming }));
 
     expect(await screen.findByText('Марина')).toBeTruthy();
     expect(screen.getByText('ты где')).toBeTruthy();
@@ -154,7 +70,7 @@ describe('InAppMessageToast', () => {
 
     await renderWithQuery(<InAppMessageToast />);
 
-    deliver(incoming);
+    await act(() => showAlert({ kind: 'message', ...incoming }));
     await user.press(await screen.findByText('ты где'));
 
     expect(mockPush).toHaveBeenCalledWith({
@@ -184,7 +100,7 @@ describe('InAppMessageToast', () => {
       </QueryClientProvider>,
     );
 
-    deliver({ ...incoming, chatId: 'group-1' });
+    await act(() => showAlert({ kind: 'message', ...incoming, chatId: 'group-1' }));
 
     expect(await screen.findByText('Марина: ты где')).toBeTruthy();
     expect(screen.getByLabelText('Новое сообщение в «Поход» от Марина')).toBeTruthy();
@@ -199,13 +115,14 @@ describe('InAppMessageToast', () => {
 
     await renderWithQuery(<InAppMessageToast />);
 
-    deliver({
+    await act(() => showAlert({
+      kind: 'message',
       ...incoming,
       chatId: 'their-chat',
       authorName: 'Пётр',
       text: 'Аня, привет',
       subscribedChatTitle: 'Аня и Пётр',
-    });
+    }));
 
     expect(await screen.findByText('Аня и Пётр')).toBeTruthy();
     expect(screen.getByText('Пётр: Аня, привет')).toBeTruthy();
@@ -218,45 +135,18 @@ describe('InAppMessageToast', () => {
     });
   });
 
-  it('stays silent about a subscribed dialogue with notifications off', async () => {
-    await renderWithQuery(<InAppMessageToast />);
-
-    deliver({ ...incoming, subscribedChatTitle: 'Аня и Пётр', notify: false });
-
-    await waitFor(() => expect(screen.queryByText('Аня и Пётр')).toBeNull());
-  });
-
-  it('keeps quiet about the chat the user is already reading', async () => {
-    setActiveChatId('chat-1');
-
-    await renderWithQuery(<InAppMessageToast />);
-
-    deliver(incoming);
-
-    await waitFor(() => expect(screen.queryByText('ты где')).toBeNull());
-  });
-
-  it('still reports a message from another chat while one is open', async () => {
-    setActiveChatId('chat-2');
-
-    await renderWithQuery(<InAppMessageToast />);
-
-    deliver(incoming);
-
-    expect(await screen.findByText('ты где')).toBeTruthy();
-  });
-
   it('announces an invite and opens the chat it invites to', async () => {
     const user = userEvent.setup();
 
     await renderWithQuery(<InAppMessageToast />);
 
-    deliverInvite({
+    await act(() => showAlert({
+      kind: 'invite',
       chatId: 'chat-7',
       inviterId: 'user-2',
       inviterName: 'Марина',
       chatTitle: 'Поход',
-    });
+    }));
     expect(await screen.findByText('Марина')).toBeTruthy();
     await user.press(screen.getByText('Зовёт вас в чат «Поход»'));
 
@@ -271,7 +161,7 @@ describe('InAppMessageToast', () => {
 
     await renderWithQuery(<InAppMessageToast />);
 
-    await act(async () => deliver(post));
+    await act(() => showAlert({ kind: 'message', ...post }));
     expect(await screen.findByText('Плейлисты')).toBeTruthy();
     expect(screen.queryByText('Владелец')).toBeNull();
     await user.press(screen.getByText('новый трек'));
@@ -282,21 +172,12 @@ describe('InAppMessageToast', () => {
     });
   });
 
-  it('stays silent for a channel with notifications off', async () => {
-    await renderWithQuery(<InAppMessageToast />);
-
-    await act(async () => deliver({ ...post, notify: false }));
-    await act(async () => deliverPop({ ...pop, notify: false }));
-
-    await waitFor(() => expect(screen.queryByText('Плейлисты')).toBeNull());
-  });
-
   it('announces a new pop and opens the channel on «Попсы»', async () => {
     const user = userEvent.setup();
 
     await renderWithQuery(<InAppMessageToast />);
 
-    await act(async () => deliverPop(pop));
+    await act(() => showAlert({ kind: 'pop', ...pop }));
     await user.press(await screen.findByText('Новый попс'));
 
     expect(mockPush).toHaveBeenCalledWith({
@@ -305,20 +186,10 @@ describe('InAppMessageToast', () => {
     });
   });
 
-  it('keeps quiet about a pop of the channel being read', async () => {
-    setActiveChatId('posts-1');
-
-    await renderWithQuery(<InAppMessageToast />);
-
-    await act(async () => deliverPop(pop));
-
-    await waitFor(() => expect(screen.queryByText('Новый попс')).toBeNull());
-  });
-
-  it('runs the action of a notice that carries one and closes', async () => {
+  it.each([InAppMessageToast, InAppNoticeToast])('runs a local notice action and closes', async (Toast) => {
     const retry = jest.fn();
 
-    await renderWithQuery(<InAppMessageToast />);
+    await renderWithQuery(<Toast />);
     await act(async () =>
       showNotice('Изменения не сохранены', 'error', { label: 'Повторить', run: retry }),
     );
@@ -327,37 +198,5 @@ describe('InAppMessageToast', () => {
 
     expect(retry).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(screen.queryByText('Изменения не сохранены')).toBeNull());
-  });
-
-  it('refreshes friends, requests and people when a friendship changes, without a card', async () => {
-    const queryClient = new QueryClient({ defaultOptions: { queries: { gcTime: Infinity } } });
-    queryClient.setQueryData(friendKeys.summary('user-1'), { friendsCount: 0, incomingCount: 0 });
-    queryClient.setQueryData<Partial<ChatSummary>[]>(chatsQueryKey, []);
-    queryClient.setQueryData(['messages', 'chat-1'], { pages: [], pageParams: [] });
-    await render(
-      <QueryClientProvider client={queryClient}>
-        <InAppMessageToast />
-      </QueryClientProvider>,
-    );
-
-    await act(async () => handlers?.onFriendsChanged?.());
-
-    expect(queryClient.getQueryState(friendKeys.summary('user-1'))?.isInvalidated).toBe(true);
-    // Имена в списке чатов: другу видно настоящее, бывшему — псевдоним.
-    expect(queryClient.getQueryState(chatsQueryKey)?.isInvalidated).toBe(true);
-    // Переписка тоже устарела, но перечитается при открытии, а не сейчас.
-    expect(queryClient.getQueryState(['messages', 'chat-1'])?.isInvalidated).toBe(true);
-    expect(screen.toJSON()).toBeNull();
-    queryClient.clear();
-  });
-
-  it('leaves no channel behind on unmount', async () => {
-    const unsubscribe = jest.fn();
-    mockedSubscribe.mockReturnValue(unsubscribe);
-
-    await renderWithQuery(<InAppMessageToast />);
-    await screen.unmount();
-
-    expect(unsubscribe).toHaveBeenCalled();
   });
 });

@@ -22,6 +22,7 @@ import {
 import { startHistoryReadDelivery } from '@/features/chats/messages/local/readDelivery';
 import { startConnectionMonitor } from '@/features/connection/connectionMonitor';
 import { InAppMessageToast } from '@/features/notifications/InAppMessageToast';
+import { startPersonalRealtimeEvents } from '@/features/notifications/personalRealtimeEvents';
 import { startJournalLifecycle } from '@/features/recs/journal/lifecycle';
 import { IncomingCallOverlay } from '@/features/streams/IncomingCallOverlay';
 import { BelowReturnBar, ReturnToCallBar } from '@/features/streams/ReturnToCallBar';
@@ -62,6 +63,7 @@ function AccountLayout({
   const reader = useHistoryReader();
   const [queryClient] = useState(() => createAppQueryClient(reader));
 
+  useLayoutEffect(() => startPersonalRealtimeEvents(reader, queryClient), [reader, queryClient]);
   useLayoutEffect(() => syncQueryOnlineState(queryClient, requestsReady), [queryClient, requestsReady]);
   useLayoutEffect(() => () => resetClientState(queryClient), [queryClient]);
   useEffect(() => startHistoryReadDelivery(reader, queryClient), [reader, queryClient]);
