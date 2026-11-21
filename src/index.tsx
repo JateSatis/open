@@ -1,7 +1,7 @@
 import { QueryClientProvider } from '@tanstack/react-query';
 import { registerRootComponent } from 'expo';
 import * as SplashScreen from 'expo-splash-screen';
-import { useLayoutEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useState } from 'react';
 import { StyleSheet } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
@@ -19,12 +19,12 @@ import {
   useHistoryReader,
 } from '@/features/chats/messages/local/reader';
 import { HistoryReadDelivery } from '@/features/chats/useMarkChatRead';
-import { ConnectionWatcher } from '@/features/connection/ConnectionWatcher';
+import { startConnectionMonitor } from '@/features/connection/connectionMonitor';
 import { InAppMessageToast } from '@/features/notifications/InAppMessageToast';
 import { JournalSession } from '@/features/recs/journal/JournalSession';
 import { IncomingCallOverlay } from '@/features/streams/IncomingCallOverlay';
 import { BelowReturnBar, ReturnToCallBar } from '@/features/streams/ReturnToCallBar';
-import { createAppQueryClient } from '@/lib/queryClient';
+import { createAppQueryClient, syncQueryOnlineState } from '@/lib/queryClient';
 import { AppRoutes } from '@/navigation/routes/AppRoutes';
 import { type IncomingLink, useIncomingLink } from '@/navigation/useIncomingLink';
 
@@ -34,6 +34,7 @@ SplashScreen.preventAutoHideAsync();
 SplashScreen.setOptions({ duration: 0, fade: false });
 
 export function App() {
+  useEffect(startConnectionMonitor, []);
   const { localAccountId: reader, sdkStatus } = useAuthBootstrap();
   const incoming = useIncomingLink();
   if (reader === undefined) return null;
@@ -58,6 +59,7 @@ function AccountLayout({
   const reader = useHistoryReader();
   const [queryClient] = useState(() => createAppQueryClient(reader));
 
+  useLayoutEffect(() => syncQueryOnlineState(queryClient, requestsReady), [queryClient, requestsReady]);
   useLayoutEffect(() => () => resetClientState(queryClient), [queryClient]);
 
   return (
@@ -69,7 +71,6 @@ function AccountLayout({
       <KeyboardProvider>
         <QueryClientProvider client={queryClient}>
           <SafeAreaProvider>
-            <ConnectionWatcher requestsReady={requestsReady} />
             {requestsReady && <HistoryReadDelivery />}
             {requestsReady && <AccountLifecycle />}
             <JournalSession />

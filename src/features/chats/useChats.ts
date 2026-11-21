@@ -24,6 +24,7 @@ export function useChats(): ChatsState {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const { data, isPending, fetchStatus, error, refetch } = useQuery({
     queryKey: chatsQueryKey,
+    meta: { refreshOnUserChannelJoin: true },
     ...routeOptions(reader, 'chats', listChats),
   });
 

@@ -10,6 +10,8 @@ import { getMyPrivacySettings } from '@/api/privacy';
 import { listChats } from '@/api/chats';
 import { stillReader } from '@/features/chats/messages/local/reader';
 import { useChats } from '@/features/chats/useChats';
+import { startConnectionMonitor } from '@/features/connection/connectionMonitor';
+import { reportDeviceNetwork, reportRealtimeJoined, resetConnectionState } from '@/features/connection/connectionStore';
 import { navigationRef } from '@/navigation';
 import { createAppQueryClient } from '@/lib/queryClient';
 import { App } from './index';
@@ -38,6 +40,7 @@ jest.mock('expo-splash-screen', () => ({
 jest.mock('@/api/privacy', () => ({ getMyPrivacySettings: jest.fn() }));
 jest.mock('@/api/chats', () => ({ listChats: jest.fn() }));
 jest.mock('@/lib/queryClient', () => ({
+  ...jest.requireActual('@/lib/queryClient'),
   createAppQueryClient: jest.fn((owner) => {
     const client = jest.requireActual('@/lib/queryClient').createAppQueryClient(owner);
     const options = client.getDefaultOptions();
@@ -56,7 +59,7 @@ jest.mock('@/features/chats/messages/local/database', () => ({
 }));
 
 // Оставляем настоящий bootstrap, границу кеша, навигацию и запрос списка.
-jest.mock('@/features/connection/useConnectionWatch', () => ({ useConnectionWatch: jest.fn() }));
+jest.mock('@/features/connection/connectionMonitor', () => ({ startConnectionMonitor: jest.fn() }));
 jest.mock('@/features/auth/AccountLifecycle', () => ({ AccountLifecycle: () => null }));
 jest.mock('@/features/chats/useMarkChatRead', () => ({ HistoryReadDelivery: () => null }));
 jest.mock('@/features/recs/journal/JournalSession', () => ({ JournalSession: () => null }));
@@ -94,6 +97,7 @@ beforeEach(async () => {
   mockReadRoute.mockReturnValue(undefined);
 });
 afterEach(() => {
+  resetConnectionState();
   onlineManager.setOnline(true);
   jest.restoreAllMocks();
 });
@@ -110,6 +114,7 @@ it('показывает сохранённую строку до ответа S
     userId === 'reader' && key === 'chats' ? [{ title: 'Сохранённый чат' }] : undefined,
   );
   await render(<App />);
+  expect(startConnectionMonitor).toHaveBeenCalledTimes(1);
   expect(navigationRef.isReady()).toBe(false);
   expect(createAppQueryClient).not.toHaveBeenCalled();
   expect(screen.queryByText('Вход')).toBeNull();
@@ -125,6 +130,14 @@ it('показывает сохранённую строку до ответа S
   await fireEvent(row, 'layout', { nativeEvent: { layout: { width: 400, height: 800 } } });
   expect(SplashScreen.hideAsync).toHaveBeenCalledTimes(1);
 
+  await act(() => reportDeviceNetwork(false));
+  await act(() => reportDeviceNetwork(true));
+  await act(() => reportRealtimeJoined());
+  expect(onlineManager.isOnline()).toBe(false);
+  expect(screen.getByText('Сохранённый чат')).toBe(row);
+  expect(listChats).not.toHaveBeenCalled();
+  expect(getMyPrivacySettings).not.toHaveBeenCalled();
+
   await act(() => mockAuthEvent('SIGNED_IN', account));
   await waitFor(() => expect(listChats).toHaveBeenCalledTimes(1));
   expect(getMyPrivacySettings).toHaveBeenCalledTimes(1);
@@ -137,6 +150,7 @@ it('показывает сохранённую строку до ответа S
   const signIn = await screen.findByText('Вход');
   expect(screen.queryByText('Сохранённый чат')).toBeNull();
   expect(stillReader('reader')).toBe(false);
+  expect(startConnectionMonitor).toHaveBeenCalledTimes(1);
   expect(localClient.getQueryData(['marker'])).toBeUndefined();
   await fireEvent(signIn, 'layout', { nativeEvent: { layout: { width: 400, height: 800 } } });
   expect(SplashScreen.hideAsync).toHaveBeenCalledTimes(1);

@@ -1268,7 +1268,8 @@ function chatIdOf(payload: unknown): string | null {
 }
 
 export type UserChannelHandlers = {
-  onJoined?:()=>void;
+  onJoined?: (reconnected: boolean) => void;
+  onDisconnected?: () => void;
   onHistoryRead?: (chatId:string)=>void;
   onMessage: (message: IncomingMessage) => void;
   /** В канале, который я читаю, вышел поп без поста. */
@@ -1298,7 +1299,6 @@ export type UserChannelHandlers = {
    * сообщается, списки и счётчики перечитываются.
    */
   onFriendsChanged?: () => void;
-  onReconnected?: () => void;
 };
 
 export type IncomingCall = {
@@ -1405,13 +1405,11 @@ export function subscribeToUserEvents(userId: string, handlers: UserChannelHandl
     })
     .subscribe((status) => {
       if (status === 'SUBSCRIBED') {
-        handlers.onJoined?.();
-        if (wasJoined) handlers.onReconnected?.();
-
+        handlers.onJoined?.(wasJoined);
         wasJoined = true;
         return;
       }
-
+      handlers.onDisconnected?.();
     });
 
   return () => {

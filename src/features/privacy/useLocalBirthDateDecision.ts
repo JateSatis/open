@@ -17,6 +17,7 @@ function localBirthDateOptions(userId: string | null | undefined) {
     queryFn: () => (userId ? readLocalBirthDate(userId) : null),
     enabled: Boolean(userId),
     networkMode: 'always' as const,
+    meta: { localOnly: true },
     staleTime: Infinity,
     refetchOnReconnect: false,
   };
