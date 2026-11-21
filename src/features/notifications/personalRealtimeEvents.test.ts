@@ -1,7 +1,10 @@
 import type { Session } from '@supabase/supabase-js';
 import { QueryObserver } from '@tanstack/react-query';
 import { act } from '@testing-library/react-native';
+import { createAudioPlayer } from 'expo-audio';
+import { AppState, Vibration } from 'react-native';
 
+import { listRingingStreams, type LiveStream } from '@/api/streams';
 import { subscribeToUserEvents, type IncomingCall, type IncomingMessage } from '@/api/chats';
 import { emptyState, useSessionStore } from '@/features/auth/sessionState';
 import { channelSubscriptionQueryKey } from '@/features/channels/keys';
@@ -13,13 +16,17 @@ import { friendKeys } from '@/features/friends/keys';
 import { popsQueryKey } from '@/features/pops/keys';
 import { leaveCall } from '@/features/streams/callSession';
 import { getCall } from '@/features/streams/callStore';
-import { useIncomingCall } from '@/features/streams/incomingCall';
+import { declineRinging, RING_MS, useIncomingCall } from '@/features/streams/incomingCall';
 import { createAppQueryClient, syncQueryOnlineState } from '@/lib/queryClient';
 import { setActiveChatId } from '@/store/activeChat';
 import { dismissAlert, showNotice, useInAppAlert } from './alertsStore';
 import { startPersonalRealtimeEvents } from './personalRealtimeEvents';
 
 jest.mock('@/api/chats', () => ({ subscribeToUserEvents: jest.fn() }));
+jest.mock('@/api/streams');
+jest.mock('expo-audio', () => ({
+  createAudioPlayer: jest.fn(() => ({ play: jest.fn(), pause: jest.fn(), remove: jest.fn(), release: jest.fn() })),
+}));
 jest.mock('@/api/supabase', () => ({ supabase: {} }));
 jest.mock('@/api/invites', () => ({}));
 jest.mock('@/features/streams/callSession', () => ({ leaveCall: jest.fn() }));
@@ -55,6 +62,7 @@ function start(reader = 'user-1', cache = client) {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  jest.spyOn(AppState, 'addEventListener').mockReturnValue({ remove: jest.fn() });
   subscribe.mockReturnValue(disconnect);
   client = createAppQueryClient('user-1');
   client.setDefaultOptions({ queries: { gcTime: Infinity } });
@@ -91,6 +99,96 @@ it('ждёт подтверждения SDK и сохраняет подписк
   expect(alert()).toEqual({ kind: 'message', ...message });
   expect(subscribe).toHaveBeenCalledTimes(1);
   expect(disconnect).not.toHaveBeenCalled();
+});
+
+function pendingRecheck() {
+  let resolve!: (streams: LiveStream[]) => void;
+  jest.mocked(listRingingStreams).mockReturnValueOnce(new Promise((done) => { resolve = done; }));
+  const incoming = call();
+  const respond = async () => {
+    resolve([{ id: incoming.streamId, chatId: incoming.chatId, hostId: incoming.hostId,
+      startedAt: incoming.startedAt, speakersCount: 1, listenersCount: 0 }]);
+    await act(async () => {});
+  };
+  return { incoming, respond };
+}
+
+it.each(['Realtime', 'запрос'])('первым приходит %s — один сигнал до серверного срока', async (first) => {
+  jest.useFakeTimers();
+  const vibrate = jest.spyOn(Vibration, 'vibrate').mockImplementation(() => {});
+  const cancel = jest.spyOn(Vibration, 'cancel').mockImplementation(() => {});
+  try {
+    const { incoming, respond } = pendingRecheck();
+    client.setQueryData(chatsQueryKey, [{ id: 'A', kind: 'direct', title: null,
+      participants: [{ id: 'sender', displayName: 'Марина' }] }]);
+    start();
+    const realtime = () => events().onIncomingCall?.(incoming);
+    jest.advanceTimersByTime(3000);
+    if (first === 'Realtime') realtime(); else await respond();
+    const initial = ringing();
+    expect(initial).toEqual(incoming);
+    jest.advanceTimersByTime(5000);
+    if (first === 'Realtime') await respond(); else realtime();
+    expect(ringing()).toBe(initial);
+    expect(createAudioPlayer).toHaveBeenCalledTimes(1);
+    const player = jest.mocked(createAudioPlayer).mock.results[0].value;
+    expect(player.play).toHaveBeenCalledTimes(1);
+    expect(vibrate).toHaveBeenCalledTimes(1);
+    jest.advanceTimersByTime(RING_MS - 8001);
+    expect(ringing()).toBe(initial);
+    jest.advanceTimersByTime(1);
+    expect(ringing()).toBeNull();
+    expect(player.pause).toHaveBeenCalledTimes(1);
+    expect(player.release).toHaveBeenCalledTimes(1);
+    expect(cancel).toHaveBeenCalledTimes(1);
+  } finally {
+    vibrate.mockRestore();
+    cancel.mockRestore();
+    jest.useRealTimers();
+  }
+});
+
+it.each(['смена аккаунта', 'выход', 'завершение', 'отклонение'])(
+  '%s — запоздалый ответ молчит', async (action) => {
+    const { incoming, respond } = pendingRecheck();
+    start();
+    if (action === 'смена аккаунта') confirm('user-2');
+    if (action === 'выход') useSessionStore.setState(emptyState);
+    if (action === 'завершение') events().onStreamEnded?.(incoming.streamId, incoming.chatId);
+    if (action === 'отклонение') {
+      events().onIncomingCall?.(incoming);
+      declineRinging();
+    }
+    jest.mocked(createAudioPlayer).mockClear();
+    const vibrate = jest.spyOn(Vibration, 'vibrate').mockImplementation(() => {});
+    vibrate.mockClear();
+    try {
+      await respond();
+      expect(ringing()).toBeNull();
+      expect(createAudioPlayer).not.toHaveBeenCalled();
+      expect(vibrate).not.toHaveBeenCalled();
+    } finally {
+      vibrate.mockRestore();
+    }
+  },
+);
+
+it('проверяет при подтверждении сессии и возврате на передний план', () => {
+  const listeners = jest.spyOn(AppState, 'addEventListener').mockReturnValue({ remove: jest.fn() });
+  try {
+    useSessionStore.setState({ sdkStatus: 'offline' });
+    start();
+    expect(listRingingStreams).not.toHaveBeenCalled();
+    confirm('user-1');
+    expect(listRingingStreams).toHaveBeenCalledTimes(1);
+    const change = listeners.mock.lastCall![1];
+    change('background');
+    expect(listRingingStreams).toHaveBeenCalledTimes(1);
+    change('active');
+    expect(listRingingStreams).toHaveBeenCalledTimes(2);
+  } finally {
+    listeners.mockRestore();
+  }
 });
 
 it('обновляет подписки и попсы даже при отключённых карточках', () => {
