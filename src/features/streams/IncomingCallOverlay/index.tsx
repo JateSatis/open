@@ -1,20 +1,14 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
-import { useCallback } from 'react';
 import { Modal, Pressable, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { styles } from './styles';
-import { useRinger } from './useRinger';
-import { useRingingRecheck } from './useRingingRecheck';
 
-import type { ChatSummary } from '@/api/chats';
-import type { LiveStream } from '@/api/streams';
 import { Avatar } from '@/components/Avatar';
 import { Text } from '@/components/Text';
 import { cachedChat } from '@/features/chats/cachedChat';
 import { chatAvatarUrl } from '@/features/chats/chatDisplay';
-import { chatsQueryKey } from '@/features/chats/useChats';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
 import { incomingTitle } from '@/features/streams/callText';
 import { declineRinging, takeRinging, useIncomingCall } from '@/features/streams/incomingCall';
@@ -64,27 +58,6 @@ export function IncomingCallOverlay() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { join } = useJoinCall();
-
-  useRinger(ringing !== null);
-
-  // Звонок, найденный запросом, а не событием, называем по кешу списка чатов.
-  const describe = useCallback(
-    (stream: LiveStream) => {
-      const chat = queryClient
-        .getQueryData<ChatSummary[]>(chatsQueryKey)
-        ?.find((candidate) => candidate.id === stream.chatId);
-      const host = chat?.participants.find((person) => person.id === stream.hostId);
-
-      return {
-        chatTitle: chat?.title ?? null,
-        chatKind: chat?.kind ?? 'group',
-        hostName: host?.displayName ?? 'Звонок',
-      };
-    },
-    [queryClient],
-  );
-
-  useRingingRecheck(currentUserId, describe);
 
   const accept = () => {
     const call = takeRinging();

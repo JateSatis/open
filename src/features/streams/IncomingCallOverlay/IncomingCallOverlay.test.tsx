@@ -25,6 +25,7 @@ jest.mock('expo-audio', () => ({
     play: jest.fn(),
     pause: jest.fn(),
     remove: jest.fn(),
+    release: jest.fn(),
     loop: false,
   })),
 }));
@@ -64,6 +65,8 @@ beforeEach(() => {
   });
 });
 
+afterEach(async () => { await act(() => resetRinging()); });
+
 it('молчит, пока никто не звонит', async () => {
   await renderWithQuery(<IncomingCallOverlay />);
 
@@ -71,13 +74,15 @@ it('молчит, пока никто не звонит', async () => {
 });
 
 it('показывает чат, кто звонит, и честно говорит, что звонок публичный', async () => {
-  await renderWithQuery(<IncomingCallOverlay />);
   await act(async () => ring(incoming()));
+  const view = await renderWithQuery(<IncomingCallOverlay />);
+  await view.unmount();
+  await renderWithQuery(<IncomingCallOverlay />);
 
   expect(screen.getByText('Поход')).toBeTruthy();
   expect(screen.getByText('Марина звонит')).toBeTruthy();
   expect(screen.getByText('В эфире: вас услышат слушатели')).toBeTruthy();
-  expect(Vibration.vibrate).toHaveBeenCalled();
+  expect(Vibration.vibrate).toHaveBeenCalledTimes(1);
 });
 
 it('«Отклонить» гасит звонок у меня — и только у меня: повторно он не зазвонит', async () => {

@@ -5,6 +5,7 @@ import type { IncomingCall } from '@/api/chats';
 import { getCall } from '@/features/streams/callStore';
 import { incomingTitle } from '@/features/streams/callText';
 import { showNotice } from '@/features/notifications/alertsStore';
+import { startRinger } from './ringer';
 import { isInCall } from '@/store/callPresence';
 
 /** Сколько звонит входящий. Дальше звонок идёт без звонка — через полосу в чате. */
@@ -19,13 +20,27 @@ type IncomingState = { ringing: IncomingCall | null };
  */
 export const useIncomingCall = create<IncomingState>(() => ({ ringing: null }));
 
-const declined = new Set<string>();
+// После окончания серверного окна даже запоздавший ответ уже не может зазвонить.
+const handledUntil = new Map<string, number>();
+let stopRinger: (() => void) | undefined;
 let expiry: ReturnType<typeof setTimeout> | null = null;
 
-function clear() {
-  if (expiry) clearTimeout(expiry);
+function forgetExpired(now: number) {
+  for (const [id, until] of handledUntil) {
+    if (until <= now) handledUntil.delete(id);
+  }
+}
+
+function stopSignal() {
+  if (expiry !== null) clearTimeout(expiry);
 
   expiry = null;
+  stopRinger?.();
+  stopRinger = undefined;
+}
+
+function clear() {
+  stopSignal();
   useIncomingCall.setState({ ringing: null });
 }
 
@@ -33,9 +48,10 @@ function clear() {
 export function ring(call: IncomingCall, now: number = Date.now()) {
   const left = Date.parse(call.startedAt) + RING_MS - now;
 
-  if (declined.has(call.streamId) || left <= 0) return;
+  forgetExpired(now);
+  if (handledUntil.has(call.streamId) || !Number.isFinite(left) || left <= 0) return;
+  handledUntil.set(call.streamId, now + left);
   if (getCall()?.streamId === call.streamId) return;
-  if (useIncomingCall.getState().ringing?.streamId === call.streamId) return;
 
   // Уже говорю в другом звонке — полноэкранный звонок оборвал бы разговор
   // на полуслове. Хватит короткой карточки.
@@ -47,17 +63,13 @@ export function ring(call: IncomingCall, now: number = Date.now()) {
     return;
   }
 
-  if (expiry) clearTimeout(expiry);
-
-  useIncomingCall.setState({ ringing: call });
+  stopSignal();
   expiry = setTimeout(clear, left);
+  stopRinger = startRinger();
+  useIncomingCall.setState({ ringing: call });
 }
 
 export function declineRinging() {
-  const current = useIncomingCall.getState().ringing;
-
-  if (current) declined.add(current.streamId);
-
   clear();
 }
 
@@ -72,11 +84,14 @@ export function takeRinging(): IncomingCall | null {
 
 /** Звонок кончился, пока звонил, или я вошёл в него с другого экрана. */
 export function stopRinging(streamId: string) {
+  const now = Date.now();
+  forgetExpired(now);
+  if (!handledUntil.has(streamId)) handledUntil.set(streamId, now + RING_MS);
   if (useIncomingCall.getState().ringing?.streamId === streamId) clear();
 }
 
 /** Сброс при выходе из аккаунта. */
 export function resetRinging() {
-  declined.clear();
+  handledUntil.clear();
   clear();
 }

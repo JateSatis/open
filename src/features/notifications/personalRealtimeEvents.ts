@@ -16,6 +16,7 @@ import { dismissAlert, showAlert } from '@/features/notifications/alertsStore';
 import { leaveCall } from '@/features/streams/callSession';
 import { getCall } from '@/features/streams/callStore';
 import { ring, resetRinging, stopRinging } from '@/features/streams/incomingCall';
+import { startRingingRecheck } from '@/features/streams/ringingRecheck';
 import { liveStreamQueryKey } from '@/features/streams/streamKeys';
 import { getActiveChatId } from '@/store/activeChat';
 
@@ -127,8 +128,11 @@ function bindPersonalEvents(userId: string, queryClient: QueryClient) {
     }),
   });
 
+  const stopRecheck = startRingingRecheck(queryClient);
+
   return () => {
     active = false;
+    stopRecheck();
     channel.dispose();
     unsubscribe();
   };
