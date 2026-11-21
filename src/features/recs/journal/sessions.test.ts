@@ -1,6 +1,12 @@
 import { journalScreen } from '@/navigation/journalScreen';
+import { useSessionStore, emptyState } from '@/features/auth/sessionState';
+import { sessionOf } from '@/test/sessionOf';
+import { getLinkingURL } from 'expo-linking';
+import { startJournalLifecycle } from './lifecycle';
+import { journal } from './journal';
 import {
-  announce,
+  setSessionUser,
+  splashHidden,
   appCameForeground,
   appWentBackground,
   enterScreen,
@@ -32,16 +38,23 @@ jest.mock('./journal', () => ({
   journal: {
     log: (...args: unknown[]) => mockLog(...args),
     setAppSession: jest.fn(),
+    showFirstScreen: jest.fn(),
+    setUser: jest.fn(),
+    setDeliveryUser: jest.fn(),
+    kick: jest.fn(),
+    persist: jest.fn(),
   },
   JOURNAL_FLUSH_MS: 5000,
 }));
 jest.mock('./device', () => ({
+  startDeviceWatch: jest.fn(),
   deviceContext: () => ({ platform: 'android' }),
   currentAudio: () => null,
   currentNetwork: () => 'wifi',
   currentOrientation: () => 'portrait',
   onAudioChange: () => () => undefined,
 }));
+jest.mock('expo-linking', () => ({ getLinkingURL: jest.fn() }));
 
 type Logged = { kind: string; fields: { data?: Record<string, unknown>; subject?: unknown } };
 
@@ -203,10 +216,26 @@ describe('поиск', () => {
 describe('сессия приложения', () => {
   beforeEach(() => resetAppSessionForTests());
 
+  it('распознаёт ссылку при позднем владельце, повторном подключении и обновлении токена', () => {
+    jest.mocked(getLinkingURL).mockReturnValue('openger://chats');
+    startJournalLifecycle(1000);
+    expect(logged('app_session_start')).toHaveLength(0);
+    useSessionStore.setState({ localAccountId: 'u1' });
+    startJournalLifecycle(2000);
+    useSessionStore.setState({ sdkStatus: 'session', session: sessionOf('u1', 's') });
+    useSessionStore.setState({ session: sessionOf('u1', 's', 2) });
+    expect(getLinkingURL).toHaveBeenCalledTimes(1);
+    expect(logged('app_session_start').map((e) => e.fields)).toEqual([
+      expect.objectContaining({ at: 1000, data: expect.objectContaining({ entry: 'link' }) }),
+    ]);
+    useSessionStore.setState(emptyState);
+  });
+
   it('время на экранах, уход в фон и возврат: недолгий фон — та же сессия, долгий — новая', () => {
     startAppSession('cold', 0);
-    announce('u1', 0);
+    setSessionUser('u1', 0);
     enterScreen('chats', 'chats', 0);
+    splashHidden(0);
     enterScreen('pops/[channelId]', null, 4000);
     appWentBackground(10_000);
     appCameForeground(20_000);
@@ -226,11 +255,36 @@ describe('сессия приложения', () => {
     expect(logged('app_foreground').map((e) => e.fields.data?.bg_ms)).toEqual([10_000]);
   });
 
+  it('холодный запуск получает время старта JS, маршрут — только видимое время', () => {
+    startAppSession('cold', 1000);
+    expect(mockLog).not.toHaveBeenCalled();
+    setSessionUser('u1', 2000);
+    enterScreen('chats', 'chats', 2100);
+    enterScreen('feed', 'feed', 2200);
+    splashHidden(3000);
+    startAppSession('cold', 3100);
+    setSessionUser('u1', 3200);
+    enterScreen('feed', 'feed', 3300);
+    splashHidden(3400);
+    appWentBackground(4000);
+    enterScreen('profile', 'profile', 7000);
+    appCameForeground(9000);
+    enterScreen('chats', 'chats', 9500);
+
+    expect(logged('app_session_start').map((e) => e.fields)).toEqual([
+      expect.objectContaining({ at: 1000, data: expect.objectContaining({ entry: 'cold' }) }),
+    ]);
+    expect(logged('screen_time').map((e) => e.fields.data)).toEqual([
+      { screen: 'feed', tab: 'feed', ms: 1000 },
+      { screen: 'profile', tab: 'profile', ms: 500 },
+    ]);
+  });
+
   it('вошёл другой человек — для него новая сессия', () => {
     startAppSession('cold', 0);
-    announce('u1', 0);
-    announce('u1', 10);
-    announce('u2', 20);
+    setSessionUser('u1', 0);
+    setSessionUser('u1', 10);
+    setSessionUser('u2', 20);
 
     expect(logged('app_session_start').map((e) => e.fields.data?.entry)).toEqual([
       'cold',
@@ -238,11 +292,45 @@ describe('сессия приложения', () => {
     ]);
   });
 
+  it('закрывает просмотры A до переключения на B, даже если React очистит экран позже', () => {
+    let owner: string | null = null;
+    const writes: [string | null, unknown][] = [];
+    jest.mocked(journal.setUser).mockImplementation((next) => {
+      owner = next;
+    });
+    mockLog.mockImplementation((kind) => {
+      writes.push([owner, kind]);
+      return 'id';
+    });
+    try {
+      startAppSession('cold', 0);
+      setSessionUser('a', 100);
+      startChatSession('chat-a', 'list', 'member', 110);
+      chatVisibleMessages('chat-a', ['msg-a'], 120);
+      commentsTargetChanged({ subject: { type: 'message', id: 'msg-a' } }, 130);
+      setSessionUser('b', 200);
+      endChatSession('chat-a', 210);
+      commentsTargetChanged(null, 220);
+      expect(writes).toEqual([
+        ['a', 'app_session_start'],
+        ['a', 'chat_session'],
+        ['a', 'comments_session'],
+        ['b', 'app_session_start'],
+      ]);
+    } finally {
+      mockLog.mockImplementation(() => 'id');
+      jest.mocked(journal.setUser).mockReset();
+    }
+  });
+
   it('имя экрана — по шаблону маршрута, без групп', () => {
     expect(journalScreen('Chat', 'chats')).toEqual({
       screen: 'chats/[chatId]',
       tab: 'chats',
     });
-    expect(journalScreen('PopViewer', 'feed', {source: 'search'})).toEqual({ screen: 'pops/search', tab: null });
+    expect(journalScreen('PopViewer', 'feed', { source: 'search' })).toEqual({
+      screen: 'pops/search',
+      tab: null,
+    });
   });
 });

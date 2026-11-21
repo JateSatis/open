@@ -2,8 +2,22 @@ import { createJournal } from './journal';
 import type { QueueStorage } from './queue';
 
 import type { JournalSendResult, JournalWireEvent } from '@/api/recJournal';
+import { recordJournalEvents } from '@/api/recJournal';
+import { supabase } from '@/api/supabase';
+import { emptyState, useSessionStore } from '@/features/auth/sessionState';
+import {
+  reportRequestSucceeded,
+  resetConnectionState,
+} from '@/features/connection/connectionStore';
+import { sessionOf } from '@/test/sessionOf';
 
-jest.mock('@/api/supabase', () => ({ supabase: { rpc: jest.fn() } }));
+const mockSetHeader = jest.fn();
+jest.mock('@/api/supabase', () => ({
+  supabase: {
+    rpc: jest.fn(() => ({ setHeader: mockSetHeader })),
+    auth: { getSession: jest.fn() },
+  },
+}));
 
 function memoryStorage(initial: Record<string, string> = {}) {
   const data = { ...initial };
@@ -63,15 +77,117 @@ afterEach(() => {
 });
 
 describe('журнал рекомендаций', () => {
+  it('закрепляет токен владельца за RPC и сохраняет пачку, если SDK вернул чужой токен', async () => {
+    const a = sessionOf('a', 's1');
+    const b = sessionOf('b', 's2');
+    useSessionStore.setState({ localAccountId: 'a', sdkStatus: 'session', session: a });
+    reportRequestSucceeded();
+    try {
+      const journal = createJournal({
+        storage: memoryStorage().storage,
+        send: recordJournalEvents,
+      });
+      const rpc = jest.mocked(supabase.rpc);
+      journal.setUser('a');
+      journal.setDeliveryUser('a');
+      const id = journal.log('app_session_start');
+      mockSetHeader.mockResolvedValue({ data: { accepted: [id], rejected: [] }, error: null });
+      jest
+        .mocked(supabase.auth.getSession)
+        .mockResolvedValue({ data: { session: b }, error: null });
+      journal.showFirstScreen();
+      await jest.advanceTimersByTimeAsync(0);
+      expect(rpc).not.toHaveBeenCalled();
+      expect(journal.queue.size('a')).toBe(1);
+      jest
+        .mocked(supabase.auth.getSession)
+        .mockResolvedValue({ data: { session: a }, error: null });
+      await journal.flush();
+      expect(mockSetHeader).toHaveBeenCalledWith('Authorization', 'Bearer ' + a.access_token);
+      expect(journal.queue.size('a')).toBe(0);
+    } finally {
+      useSessionStore.setState(emptyState);
+      resetConnectionState();
+    }
+  });
+
+  it('восстанавливает и сохраняет очередь под splash; отправляет только подтверждённому владельцу', async () => {
+    const key = 'rec-journal-queue-v1';
+    const old = { id: 'old', kind: 'search_query', user_id: 'a', ts: Date.now(), v: 1, data: {} };
+    const { storage, data } = memoryStorage({ [key]: JSON.stringify([old]) });
+    let finishRead!: () => void;
+    storage.getItem = () =>
+      new Promise((resolve) => {
+        finishRead = () => resolve(data[key]);
+      });
+    const server = fakeServer();
+    const journal = createJournal({ storage, send: server.send });
+    journal.setUser('a');
+    journal.log('app_session_start');
+    const saved = journal.persist();
+    journal.setDeliveryUser('a');
+    journal.kick();
+    await jest.advanceTimersByTimeAsync(15_000);
+    expect(JSON.parse(data[key])).toEqual([old]);
+    finishRead();
+    await saved;
+    expect(JSON.parse(data[key])).toHaveLength(2);
+    await journal.flush();
+    expect(server.send).not.toHaveBeenCalled();
+
+    journal.setDeliveryUser(null);
+    journal.showFirstScreen();
+    journal.setDeliveryUser('b');
+    await jest.advanceTimersByTimeAsync(15_000);
+    expect(server.send).not.toHaveBeenCalled();
+    journal.setDeliveryUser('a');
+    await jest.advanceTimersByTimeAsync(0);
+    expect(server.calls.map((batch) => batch.map((e) => [e.user_id, e.kind]))).toEqual([
+      [
+        ['a', 'search_query'],
+        ['a', 'app_session_start'],
+      ],
+    ]);
+  });
+
+  it('при смене владельца во время RPC оставляет всю неудавшуюся пачку прежнему владельцу', async () => {
+    let fail!: (error: Error) => void;
+    const server = fakeServer();
+    server.send.mockImplementationOnce(
+      () =>
+        new Promise((_resolve, reject) => {
+          fail = reject;
+        }),
+    );
+    const journal = createJournal({ storage: memoryStorage().storage, send: server.send });
+    journal.setUser('a');
+    journal.setDeliveryUser('a');
+    journal.log('app_session_start');
+    journal.log('screen_time');
+    journal.showFirstScreen();
+    await settle();
+    journal.setUser('b');
+    journal.setDeliveryUser('b');
+    journal.log('app_session_start');
+    fail(new Error('session changed'));
+    await jest.advanceTimersByTimeAsync(1);
+    expect(server.send.mock.calls.map(([batch]) => batch.map((e) => e.user_id))).toEqual([
+      ['a', 'a'],
+      ['b'],
+    ]);
+    expect(journal.queue.size('a')).toBe(2);
+  });
+
   it('копит события и отправляет пачкой через несколько секунд', async () => {
     const server = fakeServer();
     const journal = createJournal({
       storage: memoryStorage().storage,
       send: server.send,
-      watchAppState: false,
     });
 
     journal.setUser('u1');
+    journal.setDeliveryUser('u1');
+    journal.showFirstScreen();
     journal.setAppSession('s1');
     journal.log('search_query', { surface: 'search', data: { query: 'кот' } });
     journal.log('screen_time', { data: { screen: 'feed', ms: 1000 } });
@@ -95,7 +211,6 @@ describe('журнал рекомендаций', () => {
     const journal = createJournal({
       storage: memoryStorage().storage,
       send: fakeServer().send,
-      watchAppState: false,
     });
 
     expect(journal.log('search_query', { data: { query: 'x' } })).toBeNull();
@@ -107,10 +222,12 @@ describe('журнал рекомендаций', () => {
     const journal = createJournal({
       storage: memoryStorage().storage,
       send: server.send,
-      watchAppState: false,
     });
 
     journal.setUser('u1');
+    journal.setDeliveryUser('u1');
+    journal.showFirstScreen();
+    await settle();
     server.setOffline(true);
 
     for (let i = 0; i < 3; i += 1) {
@@ -150,10 +267,11 @@ describe('журнал рекомендаций', () => {
     const journal = createJournal({
       storage: memoryStorage().storage,
       send: server.send,
-      watchAppState: false,
     });
 
     journal.setUser('u1');
+    journal.setDeliveryUser('u1');
+    journal.showFirstScreen();
     journal.log('impression_end', {
       impressionId: 'i1',
       data: { watch_ms: -1, visible_ms: 0, exit: 'close' },
@@ -178,9 +296,11 @@ describe('журнал рекомендаций', () => {
 
       return { accepted: events.map((event) => event.id), rejected: [] };
     });
-    const journal = createJournal({ storage: memoryStorage().storage, send, watchAppState: false });
+    const journal = createJournal({ storage: memoryStorage().storage, send });
 
     journal.setUser('u1');
+    journal.setDeliveryUser('u1');
+    journal.showFirstScreen();
     ['a', 'b', 'poison', 'c', 'd'].forEach((query) =>
       journal.log('search_query', { data: { query } }),
     );
@@ -195,10 +315,11 @@ describe('журнал рекомендаций', () => {
     const journal = createJournal({
       storage: memoryStorage().storage,
       send: server.send,
-      watchAppState: false,
     });
 
     journal.setUser('u1');
+    journal.setDeliveryUser('u1');
+    journal.showFirstScreen();
     server.setOffline(true);
     journal.log('search_query', { data: { query: 'x' } });
     await jest.advanceTimersByTimeAsync(5000);
@@ -216,7 +337,7 @@ describe('журнал рекомендаций', () => {
   it('переживает перезапуск: что не ушло, уходит после него', async () => {
     const { storage, data } = memoryStorage();
     const offline = fakeServer();
-    const first = createJournal({ storage, send: offline.send, watchAppState: false });
+    const first = createJournal({ storage, send: offline.send });
 
     offline.setOffline(true);
     first.setUser('u1');
@@ -235,9 +356,11 @@ describe('журнал рекомендаций', () => {
 
     // Приложение убито; новый процесс.
     const server = fakeServer();
-    const second = createJournal({ storage, send: server.send, watchAppState: false });
+    const second = createJournal({ storage, send: server.send });
 
     second.setUser('u1');
+    second.setDeliveryUser('u1');
+    second.showFirstScreen();
     await settle();
     await jest.advanceTimersByTimeAsync(0);
 
@@ -253,10 +376,11 @@ describe('журнал рекомендаций', () => {
     const journal = createJournal({
       storage: memoryStorage().storage,
       send: server.send,
-      watchAppState: false,
     });
 
     journal.setUser('u1');
+    journal.setDeliveryUser('u1');
+    journal.showFirstScreen();
     server.setOffline(true);
     journal.log('impression_start', {
       impressionId: 'i1',
@@ -288,13 +412,15 @@ describe('журнал рекомендаций', () => {
     const journal = createJournal({
       storage: memoryStorage().storage,
       send: server.send,
-      watchAppState: false,
     });
 
     journal.setUser('u1');
+    journal.setDeliveryUser('u1');
+    journal.showFirstScreen();
     server.setOffline(true);
     journal.log('search_query', { data: { query: 'a' } });
     journal.setUser('u2');
+    journal.setDeliveryUser('u2');
     server.setOffline(false);
     journal.log('search_query', { data: { query: 'b' } });
     await jest.advanceTimersByTimeAsync(5000);

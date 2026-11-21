@@ -64,7 +64,7 @@ jest.mock('@/features/chats/messages/local/database', () => ({
 jest.mock('@/features/connection/connectionMonitor', () => ({ startConnectionMonitor: jest.fn() }));
 jest.mock('@/features/auth/deviceLifecycle', () => ({ startDeviceLifecycle: jest.fn() }));
 jest.mock('@/features/chats/messages/local/readDelivery', () => ({ startHistoryReadDelivery: jest.fn() }));
-jest.mock('@/features/recs/journal/JournalSession', () => ({ JournalSession: () => null }));
+jest.mock('@/features/recs/journal/lifecycle', () => ({ startJournalLifecycle: jest.fn() }));
 jest.mock('@/features/streams/IncomingCallOverlay', () => ({ IncomingCallOverlay: () => null }));
 jest.mock('@/features/notifications/InAppMessageToast', () => ({ InAppMessageToast: () => null }));
 jest.mock('@/navigation/routes/ChatsRoutes', () => ({ chatsRoutes: null }));

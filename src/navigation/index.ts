@@ -11,6 +11,7 @@ import type { NativeStackNavigationOptions } from '@react-navigation/native-stac
 import { create } from 'zustand';
 
 import { journalScreen } from './journalScreen';
+import { enterScreen } from '@/features/recs/journal/appSession';
 import type { Destination, RootParams } from './types';
 
 export { useFocusEffect, useIsFocused, useNavigation } from '@react-navigation/native';
@@ -26,14 +27,13 @@ export function trackScreen() {
   const name = route?.name ?? '';
   const tabs = navigationRef.getRootState()?.routes.find((r) => r.name === 'Tabs')?.state;
   const tab = tabs?.routes[tabs.index ?? 0]?.name;
-  useCurrentScreen.setState({
+  const current = journalScreen(
     name,
-    ...journalScreen(
-      name,
-      tab === 'feed' || tab === 'profile' || tab === 'chats' ? tab : null,
-      route?.params,
-    ),
-  });
+    tab === 'feed' || tab === 'profile' || tab === 'chats' ? tab : null,
+    route?.params,
+  );
+  useCurrentScreen.setState({ name, ...current });
+  if (route) enterScreen(current.screen, current.tab);
 }
 
 function open(destination: Destination, action: 'push' | 'replace' | 'navigate') {

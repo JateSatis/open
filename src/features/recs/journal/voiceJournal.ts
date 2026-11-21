@@ -95,3 +95,8 @@ export function voicePlaybackChanged(
 export function flushVoicePlayback(now = Date.now()): void {
   finish(now, false);
 }
+
+export function resetVoiceJournal(now: number) {
+  flushVoicePlayback(now);
+  owners.clear();
+}
