@@ -48,8 +48,15 @@ export function migrate(db: HistoryDatabase) {
 export class HistoryStorage {
   constructor(readonly db: HistoryDatabase) {}
 
+  private readonly reachedListeners = new Set<(reader: string) => void>();
+
+  onReached(listener: (reader: string) => void) {
+    this.reachedListeners.add(listener);
+    return () => this.reachedListeners.delete(listener);
+  }
+
   reach({ reader, chat }: Scope, point: { seq: number; position: number; key: string }) {
-    return (
+    const changed =
       this.db.runSync(
         `INSERT INTO history_read(reader,chat,pending_seq,pending_position,pending_key) VALUES(?,?,?,?,?)
        ON CONFLICT(reader,chat) DO UPDATE SET pending_seq=excluded.pending_seq,
@@ -61,8 +68,9 @@ export class HistoryStorage {
         point.seq,
         point.position,
         point.key,
-      ).changes > 0
-    );
+      ).changes > 0;
+    if (changed) this.reachedListeners.forEach((listener) => listener(reader));
+    return changed;
   }
 
   pending(reader: string) {
