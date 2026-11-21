@@ -4,7 +4,7 @@ import { useEffect } from 'react';
 import { subscribeToUserEvents } from '@/api/chats';
 import { channelSubscriptionQueryKey } from '@/features/channels/keys';
 import { chatQueryKey } from '@/features/chats/useChat';
-import { refreshRead } from '@/features/chats/useMarkChatRead';
+import { refreshRead } from '@/features/chats/messages/local/readQueries';
 import { chatsQueryKey } from '@/features/chats/useChats';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
 import { invitesQueryKey } from '@/features/chats/useInvites';

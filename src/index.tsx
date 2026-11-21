@@ -18,7 +18,7 @@ import {
   bindHistoryReader,
   useHistoryReader,
 } from '@/features/chats/messages/local/reader';
-import { HistoryReadDelivery } from '@/features/chats/useMarkChatRead';
+import { startHistoryReadDelivery } from '@/features/chats/messages/local/readDelivery';
 import { startConnectionMonitor } from '@/features/connection/connectionMonitor';
 import { InAppMessageToast } from '@/features/notifications/InAppMessageToast';
 import { JournalSession } from '@/features/recs/journal/JournalSession';
@@ -62,6 +62,7 @@ function AccountLayout({
 
   useLayoutEffect(() => syncQueryOnlineState(queryClient, requestsReady), [queryClient, requestsReady]);
   useLayoutEffect(() => () => resetClientState(queryClient), [queryClient]);
+  useEffect(() => startHistoryReadDelivery(reader, queryClient), [reader, queryClient]);
 
   return (
     // Нужен react-native-gesture-handler в принципе (им пользуется шит выбора
@@ -72,7 +73,6 @@ function AccountLayout({
       <KeyboardProvider>
         <QueryClientProvider client={queryClient}>
           <SafeAreaProvider>
-            {requestsReady && <HistoryReadDelivery />}
             <JournalSession />
             {/* Свёрнутый звонок сдвигает навигатор вниз, а не перекрывает шапки. */}
             <BelowReturnBar>

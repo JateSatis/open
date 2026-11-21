@@ -63,7 +63,7 @@ jest.mock('@/features/chats/messages/local/database', () => ({
 // Оставляем настоящий bootstrap, границу кеша, навигацию и запрос списка.
 jest.mock('@/features/connection/connectionMonitor', () => ({ startConnectionMonitor: jest.fn() }));
 jest.mock('@/features/auth/deviceLifecycle', () => ({ startDeviceLifecycle: jest.fn() }));
-jest.mock('@/features/chats/useMarkChatRead', () => ({ HistoryReadDelivery: () => null }));
+jest.mock('@/features/chats/messages/local/readDelivery', () => ({ startHistoryReadDelivery: jest.fn() }));
 jest.mock('@/features/recs/journal/JournalSession', () => ({ JournalSession: () => null }));
 jest.mock('@/features/streams/IncomingCallOverlay', () => ({ IncomingCallOverlay: () => null }));
 jest.mock('@/features/notifications/InAppMessageToast', () => ({ InAppMessageToast: () => null }));

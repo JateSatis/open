@@ -6,7 +6,7 @@ import { stillReader, useHistoryReader } from '../messages/local/reader';
 import { loadPage, projection } from '../messages/local/loader';
 import { messagesQueryKey } from '../messages/historyCache';
 import type { ReadingPlace } from '../messages/local/segments';
-import { fetchRead, readKey } from '../useMarkChatRead';
+import { fetchRead, readKey } from '../messages/local/readQueries';
 
 export function useHistoryOpening(chat: string, active: boolean) {
   const reader = useHistoryReader(),

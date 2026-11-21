@@ -1,4 +1,5 @@
-import { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync } from 'node:sqlite';
+import { openHistoryDatabase } from '@/test/openHistoryDatabase';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -10,7 +11,7 @@ import {
 } from '@/api/historyWindow';
 import { reconcile } from './reconcile';
 import { overlaps, uncovered, type Piece } from './segments';
-import { migrate, HistoryStorage, type HistoryDatabase } from './storage';
+import type { HistoryStorage } from './storage';
 
 jest.mock('@/api/historyWindow', () => ({
   getHistoryChanges: jest.fn(),
@@ -33,30 +34,7 @@ let directory: string;
 let native: DatabaseSync;
 let storage: HistoryStorage;
 function open() {
-  native = new DatabaseSync(join(directory, 'history.db'));
-  const db: HistoryDatabase = {
-    execSync: (sql) => native.exec(sql),
-    runSync: (sql: string, ...values: (string | number)[]) => {
-      const r = native.prepare(sql).run(...values);
-      return { changes: Number(r.changes), lastInsertRowId: Number(r.lastInsertRowid) };
-    },
-    getAllSync: <T>(sql: string, ...values: (string | number)[]) =>
-      native.prepare(sql).all(...values) as T[],
-    getFirstSync: <T>(sql: string, ...values: (string | number)[]) =>
-      (native.prepare(sql).get(...values) as T) ?? null,
-    withTransactionSync: (fn) => {
-      native.exec('BEGIN IMMEDIATE');
-      try {
-        fn();
-        native.exec('COMMIT');
-      } catch (e) {
-        native.exec('ROLLBACK');
-        throw e;
-      }
-    },
-  } as HistoryDatabase;
-  migrate(db);
-  storage = new HistoryStorage(db);
+  ({ native, storage } = openHistoryDatabase(join(directory, 'history.db')));
 }
 beforeEach(() => {
   jest.resetAllMocks();
