@@ -13,7 +13,7 @@ import {
 
 import { requestAppleIdToken, requestGoogleIdToken } from './signIn';
 import { signOutQuietly } from './signOut';
-import { requestOwner } from './sessionState';
+import { isCurrentSession, type SessionOwner } from './sessionOwner';
 import { describeAuthError, errorCodeOf } from './signInErrors';
 
 export const accountKeys = {
@@ -121,11 +121,9 @@ export function useEndOtherSessions() {
 
 export function useDeleteAccount() {
   return useMutation({
-    mutationFn: async () => {
-      const owner = requestOwner();
-      await deleteMyAccount();
-      // Аккаунта на сервере больше нет вместе с сеансом — остаётся забыть
-      // его и здесь. Кеш очистит AccountLifecycle.
+    mutationFn: async (owner: SessionOwner) => {
+      if (!isCurrentSession(owner)) return;
+      await deleteMyAccount(owner);
       await signOutQuietly(owner);
     },
   });

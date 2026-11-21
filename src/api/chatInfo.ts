@@ -3,6 +3,8 @@
 // `security invoker`): удалённое и скрытое политиками сюда не попадает.
 
 import { supabase } from '@/api/supabase';
+import { sessionAuthorization } from './sessionAuthorization';
+import type { SessionOwner } from '@/features/auth/sessionOwner';
 
 export const CHAT_INFO_PAGE_SIZE = 30;
 
@@ -245,8 +247,9 @@ export async function getLastSeen(userIds: string[]): Promise<Map<string, Activi
  * раз в минуту), уход в фон — «был(а) сейчас». Пишет только база по моему
  * токену.
  */
-export async function markSeen(online: boolean): Promise<void> {
-  const { error } = await supabase.rpc('mark_seen', { online });
+export async function markSeen(online: boolean, owner: SessionOwner): Promise<void> {
+  const { error } = await supabase.rpc('mark_seen', { online })
+    .setHeader('Authorization', await sessionAuthorization(owner));
 
   if (error) throw error;
 }

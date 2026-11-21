@@ -7,6 +7,7 @@ import * as AppleAuthentication from 'expo-apple-authentication';
 import Constants from 'expo-constants';
 
 import { describeAuthError, errorCodeOf, signInMessages } from './signInErrors';
+import { withSessionChange } from './sessionChange';
 
 import { supabase } from '@/api/supabase';
 
@@ -54,7 +55,7 @@ export type IdTokenResult =
   | { status: 'error'; message: string };
 
 async function exchangeIdToken(provider: SignInProvider, token: string): Promise<SignInResult> {
-  const { error } = await supabase.auth.signInWithIdToken({ provider, token });
+  const { error } = await withSessionChange(() => supabase.auth.signInWithIdToken({ provider, token }));
 
   if (error) {
     return { status: 'error', message: describeAuthError(error) };

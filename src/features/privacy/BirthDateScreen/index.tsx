@@ -8,6 +8,7 @@ import { Button } from '@/components/Button';
 import { Screen } from '@/components/Screen';
 import { Text } from '@/components/Text';
 import { useDeleteAccount } from '@/features/auth/accountQueries';
+import { confirmedSessionOwner } from '@/features/auth/sessionOwner';
 import { useAuthBootstrap } from '@/features/auth/useSession';
 import { BirthDateField } from '@/features/privacy/BirthDateField';
 import { describeBirthDateError } from '@/features/privacy/birthDateErrors';
@@ -64,7 +65,10 @@ function BirthDateForm({ userId, canSubmit }: { userId: string; canSubmit: boole
             variant="danger"
             disabled={!canSubmit}
             loading={deletion.isPending}
-            onPress={() => deletion.mutate()}
+            onPress={() => {
+              const owner = confirmedSessionOwner();
+              if (owner?.userId === userId) deletion.mutate(owner);
+            }}
           />
           {deletion.error ? (
             <Text variant="small" color="danger">

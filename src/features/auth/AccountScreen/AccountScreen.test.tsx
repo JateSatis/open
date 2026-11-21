@@ -1,5 +1,5 @@
 import { act, screen, userEvent, waitFor } from '@testing-library/react-native';
-import type { Session } from '@supabase/supabase-js';
+import { sessionOf } from '@/test/sessionOf';
 import { useSessionStore } from '@/features/auth/sessionState';
 
 import { AccountScreen } from '@/features/auth/AccountScreen';
@@ -128,7 +128,7 @@ function renderAccount() {
 beforeEach(() => {
   jest.clearAllMocks();
   useSessionStore.setState({
-    localAccountId: 'me', sdkStatus: 'session', session: { user: { id: 'me' } } as Session,
+    localAccountId: 'me', sdkStatus: 'session', session: sessionOf('me', 'first'),
   });
   resetConfirmDialogQueue();
   mocked.listIdentities.mockResolvedValue([
@@ -283,7 +283,7 @@ describe('AccountScreen — выход и удаление', () => {
     await user.press(await screen.findByText('Выйти из аккаунта'));
     expect(screen.queryByText('Выйти из аккаунта?')).toBeNull();
     await act(() => useSessionStore.setState({
-      sdkStatus: 'session', localAccountId: 'other', session: { user: { id: 'other' } } as Session,
+      sdkStatus: 'session', localAccountId: 'other', session: sessionOf('other', 'second'),
     }));
     expect(signOutLocally).not.toHaveBeenCalled();
   });
@@ -296,7 +296,7 @@ describe('AccountScreen — выход и удаление', () => {
     await user.press(screen.getByRole('button', { name: 'Выйти' }));
 
     await waitFor(() => expect(mocked.signOutLocally).toHaveBeenCalled());
-    expect(mocked.markDeviceSignedOut).toHaveBeenCalledWith('install-mine');
+    expect(mocked.markDeviceSignedOut).toHaveBeenCalledWith('install-mine', { userId: 'me', sessionId: 'first' });
     expect(mocked.signOutOfGoogle).toHaveBeenCalled();
   });
 
@@ -307,6 +307,23 @@ describe('AccountScreen — выход и удаление', () => {
     await user.press(await screen.findByText('Выйти из аккаунта'));
     await user.press(await screen.findByRole('button', { name: 'Отмена' }));
 
+    expect(mocked.signOutLocally).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['Выйти из аккаунта', 'Выйти', mocked.markDeviceSignedOut],
+    ['Удалить аккаунт', 'Удалить', mocked.deleteMyAccount],
+  ] as const)('запоздалый ответ на «%s» сохраняет новый сеанс', async (action, confirmation, request) => {
+    let finish!: () => void;
+    request.mockReturnValueOnce(new Promise<void>(resolve => { finish = resolve; }));
+    const user = userEvent.setup();
+    await renderAccount();
+    await user.press(await screen.findByText(action));
+    await user.press(await screen.findByRole('button', { name: confirmation }));
+    await waitFor(() => expect(request).toHaveBeenCalled());
+    await act(() => useSessionStore.setState({ session: sessionOf('me', 'second') }));
+    await act(() => finish());
+    expect(mocked.signOutOfGoogle).not.toHaveBeenCalled();
     expect(mocked.signOutLocally).not.toHaveBeenCalled();
   });
 
