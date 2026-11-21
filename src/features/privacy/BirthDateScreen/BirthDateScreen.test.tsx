@@ -11,6 +11,8 @@ import {
   setBirthDate,
 } from '@/api/privacy';
 import { useSession } from '@/features/auth/useSession';
+import { useSessionStore } from '@/features/auth/sessionState';
+import { sessionOf } from '@/test/sessionOf';
 import { readLocalBirthDate } from '@/features/privacy/localBirthDate';
 import { renderWithQuery } from '@/test/renderWithQuery';
 
@@ -65,7 +67,7 @@ const mocked = {
   useSession: useSession as jest.Mock,
 };
 
-const signedIn = { session: { user: { id: 'new-user' } }, isAuthenticated: true, isLoading: false };
+const signedIn = { session: sessionOf('new-user', 'first'), isAuthenticated: true, isLoading: false };
 
 /** День, когда человеку исполнилось бы `years`, — полдень, как отдаёт выбор на iOS. */
 function yearsAgo(years: number): Date {
@@ -105,6 +107,7 @@ beforeEach(async () => {
   jest.clearAllMocks();
   await AsyncStorage.clear();
   mocked.useSession.mockReturnValue(signedIn);
+  useSessionStore.setState({ ...signedIn, localAccountId: 'new-user', sdkStatus: 'session' });
   mocked.getMyPrivacySettings.mockResolvedValue({
     birthDate: null,
     friendsListVisibility: 'nobody',

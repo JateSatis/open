@@ -9,7 +9,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { ScrollTap } from '../modules/scroll-tap';
 import { ConfirmDialogHost } from '@/components/ConfirmDialog';
-import { AccountLifecycle } from '@/features/auth/AccountLifecycle';
+import { startDeviceLifecycle } from '@/features/auth/deviceLifecycle';
 import { resetClientState } from '@/features/auth/resetClientState';
 import { useSessionStore } from '@/features/auth/sessionStore';
 import { useAuthBootstrap } from '@/features/auth/useSession';
@@ -35,6 +35,7 @@ SplashScreen.setOptions({ duration: 0, fade: false });
 
 export function App() {
   useEffect(startConnectionMonitor, []);
+  useEffect(startDeviceLifecycle, []);
   const { localAccountId: reader, sdkStatus } = useAuthBootstrap();
   const incoming = useIncomingLink();
   if (reader === undefined) return null;
@@ -72,7 +73,6 @@ function AccountLayout({
         <QueryClientProvider client={queryClient}>
           <SafeAreaProvider>
             {requestsReady && <HistoryReadDelivery />}
-            {requestsReady && <AccountLifecycle />}
             <JournalSession />
             {/* Свёрнутый звонок сдвигает навигатор вниз, а не перекрывает шапки. */}
             <BelowReturnBar>

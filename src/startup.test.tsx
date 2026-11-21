@@ -14,6 +14,8 @@ import { startConnectionMonitor } from '@/features/connection/connectionMonitor'
 import { reportDeviceNetwork, reportRealtimeJoined, resetConnectionState } from '@/features/connection/connectionStore';
 import { navigationRef } from '@/navigation';
 import { createAppQueryClient } from '@/lib/queryClient';
+import { getActiveChatId, setActiveChatId } from '@/store/activeChat';
+import { getMediaSheetPhase, openMediaSheet } from '@/features/chats/MediaPickerSheet/sheetStore';
 import { App } from './index';
 
 type AuthListener = (event: AuthChangeEvent, session: Session | null) => void;
@@ -60,7 +62,7 @@ jest.mock('@/features/chats/messages/local/database', () => ({
 
 // Оставляем настоящий bootstrap, границу кеша, навигацию и запрос списка.
 jest.mock('@/features/connection/connectionMonitor', () => ({ startConnectionMonitor: jest.fn() }));
-jest.mock('@/features/auth/AccountLifecycle', () => ({ AccountLifecycle: () => null }));
+jest.mock('@/features/auth/deviceLifecycle', () => ({ startDeviceLifecycle: jest.fn() }));
 jest.mock('@/features/chats/useMarkChatRead', () => ({ HistoryReadDelivery: () => null }));
 jest.mock('@/features/recs/journal/JournalSession', () => ({ JournalSession: () => null }));
 jest.mock('@/features/streams/IncomingCallOverlay', () => ({ IncomingCallOverlay: () => null }));
@@ -146,12 +148,16 @@ it('показывает сохранённую строку до ответа S
   expect(navigationRef.getCurrentRoute()?.key).toBe(chats?.key);
   expect(screen.getByText('Сохранённый чат')).toBe(row);
 
+  setActiveChatId('chat-of-reader');
+  openMediaSheet();
   await act(() => mockAuthEvent('SIGNED_OUT', null));
   const signIn = await screen.findByText('Вход');
   expect(screen.queryByText('Сохранённый чат')).toBeNull();
   expect(stillReader('reader')).toBe(false);
   expect(startConnectionMonitor).toHaveBeenCalledTimes(1);
   expect(localClient.getQueryData(['marker'])).toBeUndefined();
+  expect(getActiveChatId()).toBeNull();
+  expect(getMediaSheetPhase()).toBe('closed');
   await fireEvent(signIn, 'layout', { nativeEvent: { layout: { width: 400, height: 800 } } });
   expect(SplashScreen.hideAsync).toHaveBeenCalledTimes(1);
 });

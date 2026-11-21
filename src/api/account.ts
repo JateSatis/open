@@ -8,7 +8,9 @@
 import type { UserIdentity } from '@supabase/supabase-js';
 
 import { supabase } from '@/api/supabase';
-import { confirmedAccountId, useSessionStore } from '@/features/auth/sessionState';
+import { sessionAuthorization } from './sessionAuthorization';
+import { confirmedSessionOwner, isCurrentSession, type SessionOwner } from '@/features/auth/sessionOwner';
+import { withSessionChange } from '@/features/auth/sessionChange';
 import type { Tables } from '@/api/types.gen';
 
 export type IdentityProvider = 'google' | 'apple';
@@ -86,9 +88,12 @@ export async function listIdentities(): Promise<SignInIdentity[]> {
  * должна быть включена ручная привязка (Authentication → Allow manual linking).
  */
 export async function linkIdentity(provider: IdentityProvider, token: string): Promise<void> {
-  const { error } = await supabase.auth.linkIdentity({ provider, token });
-
-  if (error) throw error;
+  const owner = confirmedSessionOwner();
+  await withSessionChange(async () => {
+    if (!owner || !isCurrentSession(owner)) throw new Error('Сессия аккаунта изменилась');
+    const { error } = await supabase.auth.linkIdentity({ provider, token });
+    if (error) throw error;
+  });
 }
 
 /** Последний способ входа Auth отвязать не даст — и интерфейс такую кнопку не показывает. */
@@ -102,7 +107,7 @@ export async function unlinkIdentity(identityId: string): Promise<void> {
   if (error) throw error;
 }
 
-export async function registerDevice(info: DeviceInfo): Promise<void> {
+export async function registerDevice(info: DeviceInfo, owner: SessionOwner): Promise<void> {
   const { error } = await supabase.rpc('register_device', {
     p_installation_id: info.installationId,
     p_platform: info.platform,
@@ -111,7 +116,7 @@ export async function registerDevice(info: DeviceInfo): Promise<void> {
     p_model: info.model ?? '',
     p_os_version: info.osVersion ?? '',
     p_app_version: info.appVersion ?? '',
-  });
+  }).setHeader('Authorization', await sessionAuthorization(owner));
 
   if (error) throw error;
 }
@@ -120,10 +125,10 @@ export async function registerDevice(info: DeviceInfo): Promise<void> {
  * Отмечает активность и отвечает, жив ли ещё сеанс этого устройства. `false`
  * значит, что сеанс завершили с другого устройства или удалили аккаунт.
  */
-export async function touchDevice(installationId: string): Promise<boolean> {
+export async function touchDevice(installationId: string, owner: SessionOwner): Promise<boolean> {
   const { data, error } = await supabase.rpc('touch_device', {
     p_installation_id: installationId,
-  });
+  }).setHeader('Authorization', await sessionAuthorization(owner));
 
   if (error) throw error;
 
@@ -156,10 +161,10 @@ export async function endOtherSessions(): Promise<void> {
   if (error) throw error;
 }
 
-export async function markDeviceSignedOut(installationId: string): Promise<void> {
+export async function markDeviceSignedOut(installationId: string, owner: SessionOwner): Promise<void> {
   const { error } = await supabase.rpc('mark_device_signed_out', {
     p_installation_id: installationId,
-  });
+  }).setHeader('Authorization', await sessionAuthorization(owner));
 
   if (error) throw error;
 }
@@ -171,15 +176,15 @@ export async function markDeviceSignedOut(installationId: string): Promise<void>
  * Каналы Realtime закрываются до выхода: подписки открыты с токеном прежнего
  * пользователя, и следующий вход не должен их унаследовать.
  */
-export async function signOutLocally(owner?: string): Promise<void> {
-  await supabase.removeAllChannels();
-  if (owner && confirmedAccountId(useSessionStore.getState()) !== owner) return;
-
-  const { error } = await supabase.auth.signOut({ scope: 'local' });
-
-  // Сеанс мог уже умереть на сервере (его завершили с другого устройства) —
-  // локальная сессия при этом всё равно стирается, и это и есть выход.
-  if (error && __DEV__) console.warn('signOut:', error);
+export async function signOutLocally(owner: SessionOwner): Promise<void> {
+  await withSessionChange(async () => {
+    if (!isCurrentSession(owner)) return;
+    // removeAllChannels также отключает общий сокет после ожидания отписок.
+    await Promise.all(supabase.getChannels().map(channel => supabase.removeChannel(channel)));
+    if (!isCurrentSession(owner)) return;
+    const { error } = await supabase.auth.signOut({ scope: 'local' });
+    if (error && __DEV__) console.warn('signOut:', error);
+  });
 }
 
 export class DeleteAccountError extends Error {
@@ -190,8 +195,11 @@ export class DeleteAccountError extends Error {
 }
 
 /** Удаляет аккаунт вызывающего через Edge Function `delete-account`. */
-export async function deleteMyAccount(): Promise<void> {
-  const { error } = await supabase.functions.invoke('delete-account', { method: 'POST' });
+export async function deleteMyAccount(owner: SessionOwner): Promise<void> {
+  const { error } = await supabase.functions.invoke('delete-account', {
+    method: 'POST',
+    headers: { Authorization: await sessionAuthorization(owner) },
+  });
 
   if (error) throw new DeleteAccountError(error);
 }

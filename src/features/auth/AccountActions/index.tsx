@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { View } from 'react-native';
+import { useShallow } from 'zustand/react/shallow';
 
 import { styles } from './styles';
 
@@ -9,7 +10,8 @@ import { LinkButton } from '@/components/LinkButton';
 import { Text } from '@/components/Text';
 import { useDeleteAccount } from '@/features/auth/accountQueries';
 import { signOut } from '@/features/auth/signOut';
-import { confirmedAccountId, useSessionStore } from '@/features/auth/sessionState';
+import { confirmedSessionOwner, isCurrentSession } from '@/features/auth/sessionOwner';
+import { useSessionStore } from '@/features/auth/sessionState';
 
 export const DELETE_ACCOUNT_MESSAGE =
   'Профиль, имя, статус и аватар исчезнут, войти в этот аккаунт будет нельзя. ' +
@@ -20,7 +22,7 @@ export const DELETE_ACCOUNT_MESSAGE =
 export function AccountActions() {
   const [signingOut, setSigningOut] = useState(false);
   const deletion = useDeleteAccount();
-  const owner = useSessionStore(confirmedAccountId);
+  const owner = useSessionStore(useShallow(confirmedSessionOwner));
 
   const onSignOut = async () => {
     const agreed = await confirm({
@@ -31,12 +33,14 @@ export function AccountActions() {
       destructive: true,
     });
 
-    if (!agreed || !owner) return;
+    if (!agreed || !owner || !isCurrentSession(owner)) return;
 
     setSigningOut(true);
-    // Экран входа покажет навигация, как только пропадёт сессия; этот экран
-    // к тому моменту уже размонтирован, поэтому состояние назад не сбрасываем.
-    await signOut(owner);
+    try {
+      await signOut(owner);
+    } finally {
+      setSigningOut(false);
+    }
   };
 
   const onDelete = async () => {
@@ -48,7 +52,7 @@ export function AccountActions() {
       destructive: true,
     });
 
-    if (agreed) deletion.mutate();
+    if (agreed && owner && isCurrentSession(owner)) deletion.mutate(owner);
   };
 
   return (
