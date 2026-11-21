@@ -8,6 +8,7 @@ import { refreshRead } from '@/features/chats/useMarkChatRead';
 import { chatsQueryKey } from '@/features/chats/useChats';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
 import { invitesQueryKey } from '@/features/chats/useInvites';
+import { bindUserChannel } from '@/lib/queryClient';
 import { myInviteQueryKey } from '@/features/chats/useMyInvite';
 import { friendKeys } from '@/features/friends/keys';
 import { profileKeys } from '@/features/profile/keys';
@@ -56,9 +57,18 @@ export function useInAppAlerts(): InAppAlertsState {
       void queryClient.invalidateQueries({ queryKey: chatQueryKey(chatId) });
     };
 
+    const channel = bindUserChannel(queryClient);
     const unsubscribe = subscribeToUserEvents(currentUserId, {
       onHistoryRead: (chat) => refreshRead(queryClient, currentUserId, chat),
-      onJoined: () => refreshRead(queryClient, currentUserId),
+      onDisconnected: channel.disconnected,
+      onJoined: (reconnected) => {
+        channel.joined();
+        refreshRead(queryClient, currentUserId);
+        if (reconnected) {
+          void queryClient.invalidateQueries({ queryKey: invitesQueryKey });
+          void queryClient.invalidateQueries({ queryKey: friendKeys.all });
+        }
+      },
       onMessage: (incoming) => {
         refreshChat(incoming.chatId);
 
@@ -140,16 +150,10 @@ export function useInAppAlerts(): InAppAlertsState {
         void queryClient.invalidateQueries({ queryKey: profileKeys.all });
         void queryClient.invalidateQueries({ queryKey: chatsQueryKey });
       },
-      onReconnected: () => {
-        // Канал возвращается после обрыва: сообщения и заявки, пришедшие за
-        // это время, мимо него прошли, и списки о них не знают.
-        void queryClient.invalidateQueries({ queryKey: chatsQueryKey });
-        void queryClient.invalidateQueries({ queryKey: invitesQueryKey });
-        void queryClient.invalidateQueries({ queryKey: friendKeys.all });
-      },
     });
 
     return () => {
+      channel.dispose();
       unsubscribe();
     };
   }, [activeChatId, currentUserId, queryClient]);

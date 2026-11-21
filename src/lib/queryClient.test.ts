@@ -52,8 +52,11 @@ it('мутация локального клиента требует подтв
   }
 });
 
-it('перечитывает запросы при восстановлении связи, включая свежие', () => {
-  expect(client.getDefaultOptions().queries?.refetchOnReconnect).toBe('always');
+it('локальное чтение не подтверждает доступность сервера', async () => {
+  await client.fetchQuery({
+    queryKey: ['local'], networkMode: 'always', meta: { localOnly: true }, queryFn: () => 'ok',
+  });
+  expect(reportRequestSucceeded).not.toHaveBeenCalled();
 });
 
 it('повторяет запрос ровно один раз через 1000 мс', async () => {

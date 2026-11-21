@@ -1,5 +1,5 @@
 import type { Session as SupabaseSession } from '@supabase/supabase-js';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, QueryObserver } from '@tanstack/react-query';
 import { act, render, screen, userEvent, waitFor } from '@testing-library/react-native';
 
 import { InAppMessageToast } from './index';
@@ -14,8 +14,11 @@ import {
 } from '@/api/chats';
 import { useSession } from '@/features/auth/useSession';
 import { chatsQueryKey } from '@/features/chats/chatsKey';
+import { bindHistoryReader } from '@/features/chats/messages/local/reader';
+import { reportDeviceNetwork, reportRealtimeJoined, resetConnectionState } from '@/features/connection/connectionStore';
 import { friendKeys } from '@/features/friends/keys';
 import { showNotice } from '@/features/notifications/alertsStore';
+import { createAppQueryClient, syncQueryOnlineState } from '@/lib/queryClient';
 import { setActiveChatId } from '@/store/activeChat';
 import { renderWithQuery } from '@/test/renderWithQuery';
 
@@ -95,6 +98,42 @@ beforeEach(() => {
 });
 
 describe('InAppMessageToast', () => {
+  it('один раз обновляет чаты при возврате сети и догоняет отдельный обрыв персонального канала', async () => {
+    bindHistoryReader(() => 'user-1');
+    reportRealtimeJoined();
+    const client = createAppQueryClient('user-1');
+    const stop = syncQueryOnlineState(client, true);
+    let serverRows = ['первый снимок'];
+    const load = jest.fn(async () => serverRows);
+    const observer = new QueryObserver(client, {
+      queryKey: chatsQueryKey, queryFn: load, initialData: ['локальный'], staleTime: Infinity,
+      gcTime: Infinity, meta: { refreshOnUserChannelJoin: true },
+    });
+    const unsubscribe = observer.subscribe(() => {});
+    try {
+      await render(<QueryClientProvider client={client}><InAppMessageToast /></QueryClientProvider>);
+      await act(() => handlers?.onJoined?.(false));
+      expect(load).toHaveBeenCalledTimes(1);
+      await act(() => reportDeviceNetwork(false));
+      await act(() => reportDeviceNetwork(true));
+      await act(() => reportRealtimeJoined());
+      expect(load).toHaveBeenCalledTimes(1);
+      serverRows = ['сообщение до переподписки'];
+      await act(() => handlers?.onJoined?.(true));
+      expect(load).toHaveBeenCalledTimes(2);
+      expect(client.getQueryData(chatsQueryKey)).toEqual(serverRows);
+      // Переподписка без системного разрыва может означать пропущенные сообщения.
+      await act(() => handlers?.onJoined?.(true));
+      expect(load).toHaveBeenCalledTimes(3);
+    } finally {
+      unsubscribe();
+      stop();
+      client.clear();
+      resetConnectionState();
+      bindHistoryReader(() => null);
+    }
+  });
+
   it('stays out of the way until a message arrives', async () => {
     await renderWithQuery(<InAppMessageToast />);
 

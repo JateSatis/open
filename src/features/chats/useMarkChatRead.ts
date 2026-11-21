@@ -84,10 +84,8 @@ export function HistoryReadDelivery() {
     wake = schedule;
     schedule();
     const off = onlineManager.subscribe((online) => {
-      if (online) {
-        refreshRead(client, reader);
-        schedule();
-      }
+      // Экран обновит QueryClient. Очередь подтверждений можно доставить сразу.
+      if (online) schedule();
     });
     const sub = AppState.addEventListener('change', (s) => {
       if (s === 'active') {

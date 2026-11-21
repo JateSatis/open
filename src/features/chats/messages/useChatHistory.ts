@@ -99,7 +99,7 @@ export function useChatHistory(
       return projection(scope, db.read(scope)) ?? { items: [], nextCursor: null };
     },
     enabled,
-    // Возвращение связи и так перезапрашивает всё через `useConnectionWatch`.
+    // После подтверждения сервера открытая история обновится вместе с другими экранами.
     refetchOnReconnect: false,
   });
   const { data } = query;
