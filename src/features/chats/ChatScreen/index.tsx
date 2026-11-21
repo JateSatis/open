@@ -4,6 +4,7 @@ import { useCallback } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 
 import type { ChatSummary } from '@/api/chats';
+import { ReturnToCallBar } from '@/features/streams/ReturnToCallBar';
 import { LoadFailed } from '@/components/LoadFailed';
 import { PlainPageBar } from '@/components/PageBar';
 import { SlidePage, useSlideBack } from '@/components/SlidePage';
@@ -58,6 +59,7 @@ export function ChatScreen() {
     return (
       <SlidePage slide={slide}>
         <PlainPageBar title="Чат" onBack={slide.close} />
+        <ReturnToCallBar />
         <View style={{ flex: 1, backgroundColor: theme.background }}>
           <LoadFailed
             message="Не удалось загрузить переписку"
@@ -74,6 +76,7 @@ export function ChatScreen() {
     return (
       <SlidePage slide={slide}>
         <PlainPageBar title="Чат" onBack={slide.close} />
+        <ReturnToCallBar />
         <View style={{ flex: 1, justifyContent: 'center', backgroundColor: theme.background }}>
           <ActivityIndicator accessibilityLabel="Загрузка переписки" />
         </View>

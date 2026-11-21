@@ -323,27 +323,52 @@ describe('полоса звонка', () => {
     await waitFor(() => expect(screen.queryByTestId('chat-call-bar')).toBeNull());
   });
 
-  it('я уже в этом звонке — полоса возвращает на экран звонка', async () => {
-    mockedLiveStream.mockResolvedValue(liveStream);
-    setCall({
-      streamId: 'stream-1',
-      chatId: 'chat-1',
-      chatTitle: 'Марина',
-      role: 'speaker',
-      connection: 'connected',
-      micOn: true,
-      speakerOn: false,
-      speakers: [],
-      listeners: 0,
-      joinedAt: Date.now(),
-    });
+  const active = {
+    streamId: 'my-stream',
+    chatId: 'chat-1',
+    chatTitle: 'Марина',
+    role: 'speaker',
+    connection: 'reconnecting',
+    micOn: true,
+    speakerOn: false,
+    listeners: 0,
+    joinedAt: Date.now(),
+  } as const;
 
+  it('возвращает в свой звонок во время загрузки и после ответа об эфире', async () => {
+    let resolveStream!: (stream: LiveStream) => void;
+    mockedLiveStream.mockReturnValue(
+      new Promise(resolve => {
+        resolveStream = resolve;
+      }),
+    );
+    setCall({ ...active, speakers: [] });
     await renderWithQuery(<ChatScreen />);
-
-    fireEvent.press(await screen.findByText('Вернуться'));
-
+    await screen.findByText('привет');
+    expect(screen.getByText('Переподключение…')).toBeTruthy();
+    expect(screen.queryByTestId('chat-call-bar')).toBeNull();
+    await fireEvent.press(screen.getByTestId('return-to-call'));
     expect(mockPush).toHaveBeenCalledWith({ name: 'Call' });
     expect(mockedJoin).not.toHaveBeenCalled();
+    await act(() => resolveStream({ ...liveStream, id: active.streamId }));
+    expect(screen.getByTestId('return-to-call')).toBeTruthy();
+    expect(screen.queryByTestId('chat-call-bar')).toBeNull();
+  });
+
+  it('в другой переписке возврат остаётся и при появлении местного эфира', async () => {
+    setCall({ ...active, speakers: [], chatId: 'other' });
+    await renderWithQuery(<ChatScreen />);
+    await screen.findByText('привет');
+    expect(screen.getByTestId('return-to-call')).toBeTruthy();
+    expect(screen.queryByTestId('chat-call-bar')).toBeNull();
+    mockedLiveStream.mockResolvedValue(liveStream);
+    await act(async () => handlers?.onStreamChanged?.());
+    await screen.findByText('Войти');
+    await fireEvent.press(screen.getByTestId('return-to-call'));
+    expect(mockPush).toHaveBeenCalledWith({ name: 'Call' });
+    expect(mockedJoin).not.toHaveBeenCalled();
+    await fireEvent.press(screen.getByTestId('chat-call-bar'));
+    await waitFor(() => expect(mockedJoin.mock.calls[0]?.[0].streamId).toBe(liveStream.id));
   });
 });
 

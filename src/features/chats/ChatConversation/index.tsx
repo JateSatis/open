@@ -137,6 +137,7 @@ import { menuReactionSet } from '@/features/interactions/reactionState';
 import { useReactToMessage } from '@/features/interactions/useReactToMessage';
 import { TileViewportContext } from '@/features/media/tileRegistry';
 import { CallButton } from '@/features/streams/CallButton';
+import { ReturnToCallBar } from '@/features/streams/ReturnToCallBar';
 import { ChatCallBar } from '@/features/streams/ChatCallBar';
 import { useChatCall } from '@/features/streams/useChatCall';
 import { reloadMissing } from '@/lib/loadState';
@@ -1098,9 +1099,9 @@ function Conversation({
 
       <Animated.View testID="chat-keyboard-area" style={[styles.flex, keyboardInsetStyle]}>
         {/* Звонок срочнее закрепа: он идёт прямо сейчас. */}
+        {(!channel || chatSearch.active) && <ReturnToCallBar />}
         <ChatCallBar
-          stream={call.stream}
-          isInThisCall={call.isInThisCall}
+          stream={call.isInThisCall ? null : call.stream}
           isMember={isMember}
           onPress={call.openBar}
         />

@@ -8,6 +8,7 @@ import { styles } from './styles';
 
 import type { Channel } from '@/api/channels';
 import type { ChannelRef } from '@/api/chats';
+import { ReturnToCallBar } from '@/features/streams/ReturnToCallBar';
 import { LoadFailed } from '@/components/LoadFailed';
 import { PlainPageBar } from '@/components/PageBar';
 import { SlidePage, useSlideBack, type SlideBack } from '@/components/SlidePage';
@@ -63,6 +64,7 @@ export function ChannelScreen() {
     return (
       <SlidePage slide={slide}>
         <PlainPageBar title="Канал" onBack={slide.close} />
+        <ReturnToCallBar />
         <View style={[styles.centered, { backgroundColor: theme.background }]}>
           {channel === null ? (
             <Text color="textSecondary">Канал недоступен</Text>
@@ -233,6 +235,7 @@ function ChannelSections({ slide, channel, initialIndex, sectionRequest, searchO
       <View style={[styles.flex, { backgroundColor: theme.background }]}>
         {/* Поиск по постам ставит своё поле на место шапки — сегменты над ним
           оказались бы под статус-баром. */}
+        {!searching && <ReturnToCallBar />}
         {searching ? null : (
           <View style={styles.segments}>
             <SegmentedControl

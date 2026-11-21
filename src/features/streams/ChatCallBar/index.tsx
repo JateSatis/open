@@ -11,8 +11,6 @@ import { Sizes } from '@/theme';
 
 export type ChatCallBarProps = {
   stream: LiveStream | null;
-  /** Я уже в этом звонке — полоса возвращает на экран звонка. */
-  isInThisCall: boolean;
   /** Участник войдёт говорящим, посетитель — слушателем. */
   isMember: boolean;
   onPress: () => void;
@@ -23,12 +21,12 @@ export type ChatCallBarProps = {
  * слушают. Для посетителя это главный путь в эфир — полоса видна ему так же,
  * как участнику, и тап подключает слушателем.
  */
-export function ChatCallBar({ stream, isInThisCall, isMember, onPress }: ChatCallBarProps) {
+export function ChatCallBar({ stream, isMember, onPress }: ChatCallBarProps) {
   const theme = useTheme();
 
   if (!stream) return null;
 
-  const action = isInThisCall ? 'Вернуться' : isMember ? 'Войти' : 'Слушать';
+  const action = isMember ? 'Войти' : 'Слушать';
 
   return (
     <Pressable

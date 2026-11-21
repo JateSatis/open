@@ -68,13 +68,8 @@ export function useChatCall(
 
     if (!target || !stream) return;
 
-    if (isInThisCall) {
-      router.push({ name: 'Call' });
-      return;
-    }
-
     void join(stream.id, target);
-  }, [callChat, isInThisCall, join, router, stream]);
+  }, [callChat, join, stream]);
 
   return { stream, isInThisCall, busy, startOrJoin, openBar };
 }

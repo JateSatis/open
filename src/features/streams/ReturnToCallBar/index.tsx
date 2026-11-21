@@ -1,9 +1,8 @@
-import { useCurrentScreen, useRouter } from '@/navigation';
+import { useIsFocused, useRouter } from '@/navigation';
 import { SymbolView } from 'expo-symbols';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { create } from 'zustand';
 
 import { styles } from './styles';
 
@@ -12,20 +11,6 @@ import { useActiveCall } from '@/features/streams/callStore';
 import { formatCallTimer } from '@/features/streams/callText';
 import { useTheme } from '@/hooks/use-theme';
 import { Sizes } from '@/theme';
-
-/**
- * Высота строки полосы без отступа под строку состояния. Её меряет сама
- * полоса: высота текста зависит от системного размера шрифта.
- */
-const useRowHeight = create<{ height: number }>(() => ({ height: 0 }));
-
-/** Звонок свёрнут: полоса видна на любом экране, кроме самого экрана звонка. */
-export function useReturnBarVisible(): boolean {
-  const call = useActiveCall();
-  const screen = useCurrentScreen(state => state.name);
-
-  return call !== null && screen !== 'Call';
-}
 
 function useTicker(active: boolean): number {
   const [now, setNow] = useState(() => Date.now());
@@ -47,28 +32,15 @@ function useTicker(active: boolean): number {
   return now;
 }
 
-/**
- * Навигатор под полосой: сдвинут вниз ровно на высоту её строки. Отступ под
- * строку состояния нативные шапки делают сами — он и уходит под полосу,
- * поэтому между полосой и шапкой нет щели, а «назад» и заголовок не спрятаны.
- */
-export function BelowReturnBar({ children }: { children: ReactNode }) {
-  const visible = useReturnBarVisible();
-  const height = useRowHeight((state) => state.height);
-
-  return <View style={[styles.below, { paddingTop: visible ? height : 0 }]}>{children}</View>;
-}
-
-/** «Вернуться к звонку» поверх верхнего края любого экрана, пока звонок свёрнут. */
-export function ReturnToCallBar() {
+export function ReturnToCallBar({ topInset = false }: { topInset?: boolean }) {
   const call = useActiveCall();
-  const visible = useReturnBarVisible();
+  const focused = useIsFocused();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const theme = useTheme();
-  const now = useTicker(visible);
+  const now = useTicker(!!call && focused);
 
-  if (!visible || !call) return null;
+  if (!call) return null;
 
   const state =
     call.connection === 'connecting'
@@ -83,18 +55,15 @@ export function ReturnToCallBar() {
       accessibilityRole="button"
       accessibilityLabel={`Вернуться к звонку в «${call.chatTitle}»`}
       onPress={() => router.push({ name: 'Call' })}
-      style={[styles.bar, { backgroundColor: theme.callBar, paddingTop: insets.top }]}
+      style={[styles.bar, { backgroundColor: theme.callBar, paddingTop: topInset ? insets.top : 0 }]}
     >
-      <View
-        style={styles.row}
-        onLayout={(event) => useRowHeight.setState({ height: event.nativeEvent.layout.height })}
-      >
+      <View style={styles.row}>
         <SymbolView
           name={{ ios: 'phone.fill', android: 'call', web: 'call' }}
           size={Sizes.callIcon}
           tintColor={theme.textOnMedia}
         />
-        <Text variant="smallBold" color="textOnMedia" numberOfLines={1} style={styles.title}>
+        <Text variant="smallBold" color="textOnMedia" style={styles.title}>
           Вернуться к звонку · {call.chatTitle}
         </Text>
         <Text variant="small" color="textOnMedia">
