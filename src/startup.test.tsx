@@ -31,6 +31,7 @@ jest.mock('@/api/supabase', () => ({
 }));
 jest.mock('expo', () => ({ ...jest.requireActual('expo'), registerRootComponent: jest.fn() }));
 jest.mock('expo-splash-screen', () => ({
+  setOptions: jest.fn(),
   preventAutoHideAsync: jest.fn(),
   hideAsync: jest.fn(() => Promise.resolve()),
 }));

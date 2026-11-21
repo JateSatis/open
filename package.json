@@ -125,6 +125,7 @@
       "android": {
         "buildFromSource": [
           "expo-image",
+          "expo-splash-screen",
           "expo-sqlite"
         ]
       }

@@ -1,0 +1,39 @@
+<animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt">
+    <aapt:attr name="android:drawable">
+        <vector android:width="288dp" android:height="288dp"
+            android:viewportWidth="288" android:viewportHeight="288">
+            <!-- PNG contour traced at 76dp. At 2x it matches Expo's 152dp static mark;
+                 starting at 0.8x gives 40% of that final size. -->
+            <group android:name="mark" android:pivotX="144" android:pivotY="144"
+                android:scaleX="0.8" android:scaleY="0.8">
+                <path android:fillColor="#FFFFFF" android:fillType="evenOdd"
+                    android:pathData="
+                        M155.05,114.08 C163.78,113.03 173.26,116.82 177.41,124.84 C182.21,132.65 179.62,142.82 173.85,149.36
+                        C168.74,155.55 161.83,160.23 154.23,162.84 C149.55,164.52 144.57,164.73 139.65,164.89
+                        C135.3,164.89 131.56,167.33 128.67,170.38 C125.84,173.49 121.76,176.14 117.36,175.24
+                        C112.87,174.74 109.48,170.04 110.84,165.62 C111.66,161.35 116.72,160.28 118.47,156.62
+                        C120.72,152.06 116.2,147.57 117.62,142.85 C118.79,134.63 124.95,128.23 131.37,123.5
+                        C138.29,118.47 146.46,114.89 155.05,114.08 Z
+                        M153.26,125.35 C144.18,126.1 134.69,130.32 129.9,138.36 C127.45,142.54 127.35,148.43 130.92,152.03
+                        C134.45,155.52 139.6,156.79 144.45,156.62 C153.55,156.06 163.12,151.69 167.7,143.5
+                        C170.18,139.31 170.34,133.46 166.82,129.79 C163.49,126 158.08,125.05 153.26,125.35 Z
+                        M156.98,132.79 C159.89,132.05 162.89,134.43 162.64,137.46 C162.57,140.18 160.19,142.29 157.64,142.8
+                        C154.78,143.71 151.76,141.2 152.11,138.22 C152.05,135.48 154.35,133.18 156.98,132.79 Z
+                        M142.58,136.79 C145.49,136.13 148.29,138.75 147.78,141.69 C147.62,144.38 145.3,146.7 142.64,146.94
+                        C139.7,147.51 137.17,144.77 137.33,141.94 C137.38,139.14 139.98,137.13 142.58,136.79 Z" />
+            </group>
+        </vector>
+    </aapt:attr>
+    <target android:name="mark">
+        <aapt:attr name="android:animation">
+            <objectAnimator android:duration="@integer/open_splash_duration"
+                android:interpolator="@android:anim/accelerate_decelerate_interpolator">
+                <propertyValuesHolder android:propertyName="scaleX" android:valueType="floatType"
+                    android:valueFrom="0.8" android:valueTo="2.0" />
+                <propertyValuesHolder android:propertyName="scaleY" android:valueType="floatType"
+                    android:valueFrom="0.8" android:valueTo="2.0" />
+            </objectAnimator>
+        </aapt:attr>
+    </target>
+</animated-vector>

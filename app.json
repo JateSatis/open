@@ -39,12 +39,19 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
+      "./plugins/withNativeSplash",
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#BD1AFA",
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76
+          "android": {
+            "backgroundColor": "#BD1AFA",
+            "image": "./assets/images/splash-icon.png",
+            "imageWidth": 152
+          },
+          "ios": {
+            "backgroundColor": "#FFFFFF",
+            "dark": { "backgroundColor": "#000000" }
+          }
         }
       ],
       [

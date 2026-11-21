@@ -27,7 +27,7 @@
         "EAS_USE_CACHE": "1"
       },
       "cache": {
-        "key": "open-android-sdk57-native-v4",
+        "key": "open-android-sdk57-native-v5",
         "paths": [
           "/home/expo/.gradle/caches/modules-2",
           "/home/expo/.gradle/wrapper",
@@ -45,7 +45,7 @@
         "EAS_USE_CACHE": "1"
       },
       "cache": {
-        "key": "open-android-sdk57-native-v4",
+        "key": "open-android-sdk57-native-v5",
         "paths": [
           "/home/expo/.gradle/caches/modules-2",
           "/home/expo/.gradle/wrapper",
