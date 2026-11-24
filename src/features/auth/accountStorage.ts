@@ -5,7 +5,7 @@ import { legacySessionKey } from '@/api/supabase';
 import { ownerOf } from './sessionOwner';
 import { randomUuid } from '@/lib/uuid';
 
-export type AccountSlot = { userId: string; key: string; sessionId?: string };
+export type AccountSlot = { userId: string; key: string; sessionId?: string; email?: string };
 export type Accounts = { accounts: AccountSlot[]; selected: string | null };
 
 const indexKey = legacySessionKey + ':accounts';
@@ -30,7 +30,7 @@ export function writeAccounts(accounts: Accounts) {
 }
 
 export async function saveAccountSession(session: Session) {
-  const slot = { userId: session.user.id, sessionId: ownerOf(session)?.sessionId, key: slotPrefix + randomUuid() };
+  const slot = { userId: session.user.id, sessionId: ownerOf(session)?.sessionId, email: session.user.email, key: slotPrefix + randomUuid() };
   await AsyncStorage.setItem(slot.key, JSON.stringify(session));
   return slot;
 }
@@ -43,7 +43,7 @@ export async function readAccounts(): Promise<Accounts> {
   const accounts: Accounts = { accounts: [], selected: null };
   if (legacy) {
     // Один и тот же адрес при повторе после прерванного копирования.
-    const slot = { userId: legacy.user.id, sessionId: ownerOf(legacy)?.sessionId, key: slotPrefix + 'legacy' };
+    const slot = { userId: legacy.user.id, sessionId: ownerOf(legacy)?.sessionId, email: legacy.user.email, key: slotPrefix + 'legacy' };
     await AsyncStorage.setItem(slot.key, JSON.stringify(legacy));
     accounts.accounts.push(slot);
     accounts.selected = slot.userId;

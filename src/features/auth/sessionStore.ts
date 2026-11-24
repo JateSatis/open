@@ -7,7 +7,7 @@ import {
   cleanAccountStorage, readAccounts, readAccountSession, saveAccountSession, writeAccounts,
   type Accounts, type AccountSlot,
 } from './accountStorage';
-import { withSessionChange } from './sessionChange';
+import { withAccountIndex, withSessionChange } from './sessionChange';
 import { ownerOf, sameSession, type SessionOwner } from './sessionOwner';
 import { emptyState, useSessionStore } from './sessionState';
 
@@ -31,6 +31,7 @@ function publish() {
   const status = selected?.status ?? 'signedOut';
   selectApiClient(selected && status !== 'signedOut' ? selected.client : null);
   useSessionStore.setState({
+    accounts: index.accounts,
     localSessionId: ownerOf(selected?.session ?? null)?.sessionId ?? selected?.slot.sessionId ?? null,
     localAccountId: status === 'signedOut' ? null : index.selected,
     sdkStatus: status,
@@ -78,7 +79,7 @@ function observe(slot: AccountSlot, initial: Session | null = null): AccountSess
     }
     owner ??= incoming;
     if (account.status === 'signedOut') {
-      void withSessionChange(() => remove(account)).catch(reportStorageError);
+      void withAccountIndex(() => remove(account)).catch(reportStorageError);
     }
     if (index.selected === slot.userId) publish();
   });
@@ -90,17 +91,38 @@ function reportStorageError() {
   if (__DEV__) console.warn('Не удалось прочитать или сохранить аккаунты устройства');
 }
 
+/** Старые каталоги не сохраняли почту. Дочитываем её только при открытии списка. */
+export async function loadAccountLabels(accounts: readonly AccountSlot[]) {
+  const missing = accounts.filter(slot => slot.email === undefined);
+  if (!missing.length) return;
+  const labels = await Promise.all(missing.map(async slot => {
+    const session = await readAccountSession(slot.key);
+    return session?.user.id === slot.userId ? session.user.email ?? '' : '';
+  }));
+  if (accounts !== index.accounts) return;
+  missing.forEach((slot, i) => { slot.email = labels[i]; });
+  index = { ...index, accounts: [...accounts] };
+  publish();
+}
+
+export async function savedSessionOwner(slot: AccountSlot) {
+  const owner = ownerOf(clients.get(slot.userId)?.session ?? await readAccountSession(slot.key));
+  return owner?.userId === slot.userId ? owner : undefined;
+}
+
 // В том числе для слотов этапа 14. Источник session_id — сохранённая SDK-сессия:
 // процесс мог остановиться между её заменой и записью индекса аккаунтов.
 async function readSlotOwner(slot: AccountSlot) {
   if (clients.has(slot.userId)) return;
-  const owner = ownerOf(await readAccountSession(slot.key));
+  const session = await readAccountSession(slot.key);
+  const owner = ownerOf(session);
+  if (session?.user.id === slot.userId) slot.email = session.user.email;
   slot.sessionId = owner?.userId === slot.userId ? owner.sessionId : undefined;
 }
 
 export function restoreAccounts(): Promise<void> {
   const current = generation;
-  restoring ??= withSessionChange(async () => {
+  restoring ??= withAccountIndex(async () => {
     const stored = await readAccounts();
     if (generation !== current) return;
     index = stored;
@@ -119,29 +141,45 @@ export function restoreAccounts(): Promise<void> {
   return restoring;
 }
 
-export async function selectAccount(userId: string) {
+export async function selectAccount(userId: string, allowed = () => true) {
   await restoreAccounts();
-  await withSessionChange(async () => {
+  return withAccountIndex(async () => {
     const slot = index.accounts.find(account => account.userId === userId);
     if (!slot) throw new Error('Аккаунт отсутствует на устройстве');
     await readSlotOwner(slot);
+    if (!allowed() || clients.get(userId)?.status === 'signedOut') return false;
     const next = { ...index, selected: userId };
     await writeAccounts(next);
+    if (!allowed() || clients.get(userId)?.status === 'signedOut') {
+      await writeAccounts(index);
+      return false;
+    }
     index = next;
     observe(slot);
     publish();
+    return true;
   });
 }
 
-export async function addSession(session: Session) {
+export async function addSession(session: Session, allowed = () => true) {
   await restoreAccounts();
-  await withSessionChange(async () => {
+  return withSessionChange(() => withAccountIndex(async () => {
+    if (!allowed()) return false;
     const slot = await saveAccountSession(session);
+    if (!allowed()) {
+      await cleanAccountStorage(index).catch(reportStorageError);
+      return false;
+    }
     const next = {
       accounts: [...index.accounts.filter(account => account.userId !== slot.userId), slot],
       selected: slot.userId,
     };
     await writeAccounts(next);
+    if (!allowed()) {
+      await writeAccounts(index);
+      await cleanAccountStorage(index).catch(reportStorageError);
+      return false;
+    }
     const previous = clients.get(slot.userId);
     if (previous) dispose(previous);
     if (index.accounts.some(account => account.userId === slot.userId)) resetRecentSearches(slot.userId);
@@ -149,22 +187,29 @@ export async function addSession(session: Session) {
     observe(slot, session);
     publish();
     await cleanAccountStorage(next).catch(reportStorageError);
-  });
+    return true;
+  }));
 }
 
 // Блокировка общая с привязкой провайдера и добавлением сессии того же user.id.
-export async function signOutAccount(userId: string, expected?: SessionOwner) {
+export async function signOutAccount(userId: string, expected?: SessionOwner, action?: {
+  allowed: () => boolean;
+  beforeRemove: (account: AccountSession) => Promise<void>;
+}) {
   await restoreAccounts();
   const slot = index.accounts.find(account => account.userId === userId);
   if (!slot) return;
   await withSessionChange(async () => {
-    if (!index.accounts.includes(slot)) return;
+    if (!index.accounts.includes(slot) || (action && !action.allowed())) return;
+    await readSlotOwner(slot);
     const runtime = observe(slot);
     async function matchesOwner() {
       if (!expected) return true;
       const session = runtime.session ?? await readAccountSession(runtime.slot.key);
       return sameSession(expected, ownerOf(session));
     }
+    if (!(await matchesOwner())) return;
+    await action?.beforeRemove(runtime);
     if (!(await matchesOwner())) return;
     const channels = runtime.client.getChannels();
     await Promise.allSettled(channels.map(channel => runtime.client.removeChannel(channel)));
@@ -174,7 +219,7 @@ export async function signOutAccount(userId: string, expected?: SessionOwner) {
     } catch {
       // Даже при сетевой ошибке SDK локальный выход должен завершиться.
     }
-    await remove(runtime);
+    await withAccountIndex(() => remove(runtime));
   });
 }
 
@@ -199,7 +244,7 @@ export function subscribeToSession() {
     if (--subscribers !== 0) return;
     generation++;
     restoring = undefined;
-    void withSessionChange(async () => {
+    void withAccountIndex(async () => {
       for (const runtime of clients.values()) dispose(runtime);
       index = { accounts: [], selected: null };
       selectApiClient(null);
