@@ -6,6 +6,7 @@
 // Ключ — сообщение, а не чат: одно сообщение показано и в своём чате, и в
 // островках других, и моя реакция должна появиться сразу везде.
 
+import { perClient } from '@/api/perClient';
 import { create } from 'zustand';
 
 import type { ReactionIntent } from '@/features/interactions/reactionState';
@@ -46,17 +47,12 @@ export function clearPendingReaction(messageId: string, intent?: ReactionIntent)
 }
 
 /**
- * Сообщения, по которым запрос уже едет: на одно сообщение — не больше
- * одного (см. `reactionSender`). Не часть отображаемого состояния, поэтому
- * не в сторе.
- */
-export const reactionsInFlight = new Set<string>();
-
-/**
  * Выход из аккаунта. Ответ на запрос прежнего пользователя может так и не
  * прийти — очередь не должна считать его сообщения занятыми навсегда.
  */
+export let reactionQueues = perClient(() => new Map<string, ReactionIntent>());
+
 export function resetPendingReactions() {
+  reactionQueues = perClient(() => new Map<string, ReactionIntent>());
   usePendingReactions.setState({ byMessage: {} });
-  reactionsInFlight.clear();
 }

@@ -1,3 +1,4 @@
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useCallback, useEffect, useRef } from 'react';
 import {
   type NativeScrollEvent,
@@ -75,6 +76,7 @@ export function useMessageViews({
   /** Рамка списка в окне — то, что человек видит. */
   measureViewport: () => Promise<AnchorRect | null>;
 }): MessageViewTracking {
+  const api = useRequestClient();
   const userRef = useRef(currentUserId);
 
   useEffect(() => {
@@ -93,14 +95,14 @@ export function useMessageViews({
 
     await Promise.all(
       [...byChat].map(([target, ids]) =>
-        recordMessageViews(target, ids, sessionId).catch(() => {
+        recordMessageViews(target, ids, sessionId, api).catch(() => {
           failed.push(...ids);
         }),
       ),
     );
 
     return failed;
-  }, []);
+  }, [api]);
 
   const { setVisible, addVisible, flush } = useViewBatcher<ViewedMessage>({
     isFocused,

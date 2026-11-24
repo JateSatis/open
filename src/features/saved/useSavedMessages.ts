@@ -1,3 +1,4 @@
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo } from 'react';
 
@@ -25,6 +26,7 @@ type Filter = { input: SavedFilterInput | null; key: string | null };
  * запросом на загруженное.
  */
 export function useSavedMessages({ input, key }: Filter) {
+  const api = useRequestClient();
   const queryClient = useQueryClient();
   const queryKey = savedMessagesKey(key);
 
@@ -37,7 +39,7 @@ export function useSavedMessages({ input, key }: Filter) {
 
   const query = useInfiniteQuery({
     queryKey,
-    queryFn: ({ pageParam }: { pageParam: PageParam }) => listSavedMessages(pageParam, undefined, input),
+    queryFn: ({ pageParam }: { pageParam: PageParam }) => listSavedMessages(pageParam, undefined, input, undefined, api),
     initialPageParam: { before: null } as PageParam,
     getNextPageParam: (page): PageParam | null =>
       page.nextCursor !== null ? { before: page.nextCursor } : null,

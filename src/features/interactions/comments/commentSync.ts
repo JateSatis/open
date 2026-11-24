@@ -7,6 +7,7 @@
 // ложатся на место. Новый ответ — в конец треда, если тред дочитан до конца;
 // иначе он за разрывом, и его догрузит «Показать ещё».
 
+import { requestClient } from '@/api/requestClient';
 import type { QueryClient } from '@tanstack/react-query';
 
 import { listMessageFragments, type Fragment } from '@/api/fragments';
@@ -56,10 +57,10 @@ const MAX_IDS = 500;
  * панели — только корни фрагментов её набора, и закреп — только если
  * закреплён комментарий одного из них.
  */
-export async function loadRoots(targetId: string, scope?: RootsScope): Promise<RootsPage> {
+export async function loadRoots(targetId: string, scope?: RootsScope, api = requestClient()): Promise<RootsPage> {
   const [page, pinned] = await Promise.all([
-    scope ? listCommentThreadRoots(targetId, { set: scope.set }) : listCommentThreadRoots(targetId),
-    scope ? getPinnedComment(targetId, scope.set) : getPinnedComment(targetId),
+    scope ? listCommentThreadRoots(targetId, { set: scope.set }, api) : listCommentThreadRoots(targetId, undefined, api),
+    scope ? getPinnedComment(targetId, scope.set, api) : getPinnedComment(targetId, undefined, api),
   ]);
 
   return scope ? { ...rootsPageOf(page, pinned), scope } : rootsPageOf(page, pinned);
@@ -78,6 +79,7 @@ async function fragmentLookup(
   queryClient: QueryClient,
   messageId: string,
   comments: readonly Comment[],
+  api = requestClient(),
 ): Promise<FragmentLookup> {
   const wanted = comments.flatMap((c) => (!c.commentThreadRootId && c.fragmentId ? [c.fragmentId] : []));
 
@@ -90,7 +92,7 @@ async function fragmentLookup(
       (await queryClient
         .fetchQuery({
           queryKey: fragmentsKey(messageId),
-          queryFn: () => listMessageFragments(messageId),
+          queryFn: () => listMessageFragments(messageId, api),
           staleTime: 0,
         })
         .catch(() => undefined)) ?? fragments;
@@ -102,11 +104,11 @@ async function fragmentLookup(
 }
 
 /** Закреп сменился (сигнал канала или своё действие не прошло) — берём его из базы. */
-export async function syncAuthorPin(queryClient: QueryClient, targetId: string): Promise<void> {
+export async function syncAuthorPin(queryClient: QueryClient, targetId: string, api = requestClient()): Promise<void> {
   const scopes = scopesOf(queryClient, targetId);
   const [fresh, scoped] = await Promise.all([
-    getPinnedComment(targetId),
-    Promise.all(scopes.map((scope) => getPinnedComment(targetId, scope.set))),
+    getPinnedComment(targetId, undefined, api),
+    Promise.all(scopes.map((scope) => getPinnedComment(targetId, scope.set, api))),
   ]);
   const byKey = new Map(scopes.map((scope, index) => [scope.key, scoped[index]]));
 
@@ -128,8 +130,9 @@ export async function loadCommentThread(
   queryClient: QueryClient,
   targetId: string,
   rootId: string,
+  api = requestClient(),
 ): Promise<CommentThreadPage> {
-  const page = await listCommentThreadReplies(rootId);
+  const page = await listCommentThreadReplies(rootId, undefined, api);
   const tail = readCommentThread(queryClient, targetId, rootId)?.tail ?? [];
 
   return appendCommentThreadHead({ ...EMPTY_COMMENT_THREAD, tail }, page.items, page.nextCursor);
@@ -224,6 +227,7 @@ export async function syncComments(
   targetId: string,
   me: string | null,
   { added, changed }: { added: string[]; changed: string[] },
+  api = requestClient(),
 ): Promise<void> {
   const loaded = loadedComments(queryClient, targetId);
   const known = changed.filter((id) => loaded.has(id));
@@ -231,7 +235,7 @@ export async function syncComments(
 
   if (ids.length === 0) return;
 
-  const fresh = await listCommentsByIds(ids);
+  const fresh = await listCommentsByIds(ids, api);
   const alive = new Set(fresh.map((comment) => comment.id));
   const addedSet = new Set(added);
   const roots = new Set<string>();
@@ -248,11 +252,12 @@ export async function syncComments(
 
   const rootIds = [...roots].filter((id) => loaded.has(id));
   const [freshRoots, fragmentOf] = await Promise.all([
-    rootIds.length > 0 ? listCommentsByIds(rootIds) : Promise.resolve([]),
+    rootIds.length > 0 ? listCommentsByIds(rootIds, api) : Promise.resolve([]),
     fragmentLookup(
       queryClient,
       targetId,
       fresh.filter((comment) => addedSet.has(comment.id)),
+      api,
     ),
   ]);
   const now = loadedComments(queryClient, targetId);
@@ -282,8 +287,9 @@ export async function syncCommentReactions(
   queryClient: QueryClient,
   targetId: string,
   ids: string[],
+  api = requestClient(),
 ): Promise<void> {
-  const fresh = await listCommentReactions(ids);
+  const fresh = await listCommentReactions(ids, api);
   const byId = new Map(fresh.map((row) => [row.id, row.reactions]));
 
   updateAllComments(queryClient, targetId, (item) => {
@@ -301,6 +307,7 @@ export async function resyncComments(
   queryClient: QueryClient,
   targetId: string,
   me: string | null,
+  api = requestClient(),
 ): Promise<void> {
   const loaded = [...loadedComments(queryClient, targetId).keys()];
   const commentThreads = [...loadedCommentThreads(queryClient, targetId)].filter(([, page]) =>
@@ -308,13 +315,13 @@ export async function resyncComments(
   );
 
   await Promise.all([
-    syncComments(queryClient, targetId, me, { added: [], changed: loaded }),
-    syncAuthorPin(queryClient, targetId),
+    syncComments(queryClient, targetId, me, { added: [], changed: loaded }, api),
+    syncAuthorPin(queryClient, targetId, api),
     ...commentThreads.map(async ([rootId, page]) => {
       const last = page.head[page.head.length - 1];
-      const newer = await listCommentThreadReplies(rootId, { cursor: last?.createdAt });
+      const newer = await listCommentThreadReplies(rootId, { cursor: last?.createdAt }, api);
 
-      const fragmentOf = await fragmentLookup(queryClient, targetId, newer.items);
+      const fragmentOf = await fragmentLookup(queryClient, targetId, newer.items, api);
 
       for (const comment of newer.items) placeAdded(queryClient, targetId, me, comment, fragmentOf);
     }),

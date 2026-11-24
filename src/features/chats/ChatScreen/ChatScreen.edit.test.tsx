@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 jest.mock('@/api/historyWindow', () => ({
   getHistoryWindow: jest.fn((...args) => jest.requireActual('@/test/historyWindowMock').fixtureHistoryWindow(...args)),
   getHistoryGroupKeys: jest.fn(() => Promise.resolve([])),
@@ -386,7 +387,7 @@ describe('editing text', () => {
     expect(await screen.findByText('эй, как ты?')).toBeTruthy();
     expect(screen.getByText('ред.')).toBeTruthy();
     expect(screen.getByLabelText('Отправляется')).toBeTruthy();
-    expect(mockedEdit).toHaveBeenCalledWith('m1', { text: 'эй, как ты?', media: [], voice: null });
+    expect(mockedEdit).toHaveBeenCalledWith('m1', { text: 'эй, как ты?', media: [], voice: null }, requestClient());
     expect(mockedSend).not.toHaveBeenCalled();
     // Правка закончилась — поле пустое, плашки нет.
     await waitFor(() => expect(screen.queryByTestId('composer-plate')).toBeNull());
@@ -564,7 +565,7 @@ describe('editing an album', () => {
         text: 'подпись',
         media: [{ attachmentId: 'p2' }],
         voice: null,
-      }),
+      }, requestClient()),
     );
   });
 
@@ -583,7 +584,7 @@ describe('editing an album', () => {
     fireEvent.press(screen.getByLabelText('Сохранить'));
 
     await waitFor(() =>
-      expect(mockedEdit).toHaveBeenCalledWith('a1', { text: 'подпись', media: [], voice: null }),
+      expect(mockedEdit).toHaveBeenCalledWith('a1', { text: 'подпись', media: [], voice: null }, requestClient()),
     );
   });
 });
@@ -637,7 +638,7 @@ describe('editing a voice message', () => {
         text: 'расшифровка',
         media: [],
         voice: null,
-      }),
+      }, requestClient()),
     );
   });
 
@@ -696,7 +697,7 @@ describe('edits by others', () => {
     await act(async () => channel?.onMessageEdited('m2'));
 
     await waitFor(() => expect(screen.getAllByText('привет, исправила')).toHaveLength(2));
-    expect(mockedByIds).toHaveBeenCalledWith(['m2']);
+    expect(mockedByIds).toHaveBeenCalledWith(['m2'], requestClient());
     expect(screen.getByText('ред.')).toBeTruthy();
   });
 
@@ -712,7 +713,7 @@ describe('edits by others', () => {
     await act(async () => channel?.onReconnected?.());
 
     expect(await screen.findByText('поправила, пока тебя не было')).toBeTruthy();
-    expect(mockedByIds).toHaveBeenCalledWith(['m2']);
+    expect(mockedByIds).toHaveBeenCalledWith(['m2'], requestClient());
   });
 
   it('ignores an edit signal for something not on screen', async () => {

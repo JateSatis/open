@@ -4,9 +4,10 @@
 // `20261101100000_identity_aliases.sql`). Тот, от кого человек скрыт, видит
 // псевдоним без username, «О себе» и статуса. Свой профиль — всегда настоящий.
 
+import type { AccountClient } from '@/api/accountClient';
+import { requestClient } from '@/api/requestClient';
 import { ProfileUnavailableError } from '@/api/profileErrors';
-import { supabase } from '@/api/supabase';
-import { checkResponseOwner, requestOwner } from '@/features/auth/sessionState';
+import { sameSession } from '@/features/auth/sessionOwner';
 import type { Database, TablesUpdate } from '@/api/types.gen';
 
 type ProfileRow = Database['public']['Functions']['profile_cards']['Returns'][number];
@@ -62,9 +63,10 @@ function toProfile(row: ProfileRow): Profile {
   };
 }
 
-async function requireUserId(): Promise<string> {
-  const owner = requestOwner();
-  const { data, error } = await supabase.auth.getSession();
+async function requireUserId(api: AccountClient): Promise<string> {
+  const owner = api.sessionOwner?.();
+  if (owner === null) throw new Error('Требуется активная сессия аккаунта');
+  const { data, error } = await api.auth.getSession();
 
   if (error) {
     throw error;
@@ -76,23 +78,25 @@ async function requireUserId(): Promise<string> {
     throw new NotAuthenticatedError();
   }
 
-  checkResponseOwner(owner, userId);
+  if (owner && (owner.userId !== userId || !sameSession(owner, api.sessionOwner?.() ?? null))) {
+    throw new Error('Сессия аккаунта изменилась');
+  }
   return userId;
 }
 
 /** Люди глазами смотрящего вне диалогов — не больше 200 за раз. Удалённых и заблокировавших меня нет. */
-export async function getProfiles(userIds: string[]): Promise<Profile[]> {
+export async function getProfiles(userIds: string[], api = requestClient()): Promise<Profile[]> {
   if (userIds.length === 0) return [];
 
-  const { data, error } = await supabase.rpc('profile_cards', { ids: userIds });
+  const { data, error } = await api.rpc('profile_cards', { ids: userIds });
 
   if (error) throw error;
 
   return (data ?? []).map(toProfile);
 }
 
-export async function getProfile(userId: string): Promise<Profile> {
-  const [profile] = await getProfiles([userId]);
+export async function getProfile(userId: string, api = requestClient()): Promise<Profile> {
+  const [profile] = await getProfiles([userId], api);
 
   // Аккаунт удалён или его владелец меня заблокировал.
   if (!profile) throw new ProfileUnavailableError();
@@ -100,12 +104,12 @@ export async function getProfile(userId: string): Promise<Profile> {
   return profile;
 }
 
-export async function getMyProfile(): Promise<Profile> {
-  return getProfile(await requireUserId());
+export async function getMyProfile(api = requestClient()): Promise<Profile> {
+  return getProfile(await requireUserId(api), api);
 }
 
-export async function updateMyProfile(input: ProfileUpdateInput): Promise<Profile> {
-  const userId = await requireUserId();
+export async function updateMyProfile(input: ProfileUpdateInput, api = requestClient()): Promise<Profile> {
+  const userId = await requireUserId(api);
 
   const patch: TablesUpdate<'profiles'> = {};
 
@@ -127,7 +131,7 @@ export async function updateMyProfile(input: ProfileUpdateInput): Promise<Profil
 
   // Обновлённую строку таблица не отдаёт — имя читается только через
   // `profile_cards`, и свой профиль она отдаёт настоящим.
-  const { error } = await supabase.from('profiles').update(patch).eq('id', userId);
+  const { error } = await api.from('profiles').update(patch).eq('id', userId);
 
   if (error) {
     // 23505 is Postgres unique_violation. The only unique key a profile
@@ -139,5 +143,5 @@ export async function updateMyProfile(input: ProfileUpdateInput): Promise<Profil
     throw error;
   }
 
-  return getProfile(userId);
+  return getProfile(userId, api);
 }

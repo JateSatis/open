@@ -1,3 +1,4 @@
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect } from 'react';
 
@@ -29,6 +30,7 @@ export function usePopViewCounting(
   rights: { canPublish: boolean; known: boolean; failed: boolean },
   focused: boolean,
 ) {
+  const api = useRequestClient();
   const { canPublish, known, failed } = rights;
   const queryClient = useQueryClient();
   const send = useCallback(
@@ -36,6 +38,7 @@ export function usePopViewCounting(
       recordPopViews(
         items.map(({ id }) => id),
         sessionId,
+        api,
       ).then(() => {
         const subscribed = [...new Set(items.map((item) => item.channelId))].filter(
           // Постороннему прочитывать нечего — и перечитывать «Чаты» на каждый
@@ -50,7 +53,7 @@ export function usePopViewCounting(
         });
         void queryClient.invalidateQueries({ queryKey: chatsQueryKey });
       }),
-    [queryClient],
+    [api, queryClient],
   );
   const { setVisible } = useViewBatcher({ isFocused: focused, send, repeat: 'appearance' });
 

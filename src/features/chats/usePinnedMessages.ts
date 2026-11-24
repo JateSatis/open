@@ -1,3 +1,4 @@
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useMemo } from 'react';
 
@@ -47,11 +48,12 @@ function toPinned(message: Message, island: { id: string; seq: number } | null):
  * угадывать, что там сделал параллельно другой участник.
  */
 export function usePinnedMessages(chatId: string): PinnedMessagesState {
+  const api = useRequestClient();
   const queryClient = useQueryClient();
   const queryKey = useMemo(() => pinsQueryKey(chatId), [chatId]);
   const { data } = useQuery({
     queryKey,
-    queryFn: () => listPinnedMessages(chatId),
+    queryFn: () => listPinnedMessages(chatId, api),
   });
   const pins = data ?? NO_PINS;
 
@@ -85,18 +87,18 @@ export function usePinnedMessages(chatId: string): PinnedMessagesState {
           current.some((pinned) => pinned.messageId === message.id)
             ? current
             : [...current, toPinned(message, island)].sort(byPlaceInChat),
-        () => pinMessage(message.id, island?.id ?? null),
+        () => pinMessage(message.id, island?.id ?? null, api),
       ),
-    [change],
+    [api, change],
   );
 
   const unpin = useCallback(
     (messageId: string) =>
       change(
         (current) => current.filter((pinned) => pinned.messageId !== messageId),
-        () => unpinMessage(messageId, chatId),
+        () => unpinMessage(messageId, chatId, api),
       ),
-    [change, chatId],
+    [api, change, chatId],
   );
 
   return { pins, isPinned, pin, unpin };

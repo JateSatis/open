@@ -7,6 +7,7 @@
 // что и переписка (`MESSAGE_COLUMNS`); своя реакция — вычисляемой связью
 // `my_reaction`, тоже в той же выборке.
 
+import { requestClient } from '@/api/requestClient';
 import {
   REACTION_COLUMNS,
   toAudience,
@@ -14,7 +15,6 @@ import {
   type MessageReactions,
   type MyReaction,
 } from '@/api/reactionCounts';
-import { supabase } from '@/api/supabase';
 
 export * from '@/api/reactionCounts';
 
@@ -26,8 +26,9 @@ export * from '@/api/reactionCounts';
 export async function setMessageReaction(
   messageId: string,
   emoji: string | null,
+  api = requestClient(),
 ): Promise<MyReaction | null> {
-  const { data, error } = await supabase.rpc('set_reaction', {
+  const { data, error } = await api.rpc('set_reaction', {
     target_type: 'message',
     target_id: messageId,
     // Снятие — это NULL, а генератор типов не размечает скалярные аргументы
@@ -50,8 +51,9 @@ export async function setMessageReaction(
 export async function setPopReaction(
   popId: string,
   emoji: string | null,
+  api = requestClient(),
 ): Promise<MyReaction | null> {
-  const { data, error } = await supabase.rpc('set_reaction', {
+  const { data, error } = await api.rpc('set_reaction', {
     target_type: 'pop',
     target_id: popId,
     reaction: emoji as string,
@@ -74,12 +76,13 @@ const MAX_IDS = 1000;
  */
 export async function listMessageReactions(
   messageIds: string[],
+  api = requestClient(),
 ): Promise<{ id: string; reactions: MessageReactions }[]> {
   if (messageIds.length === 0) return [];
 
   // Из представления: вычисляемые связи `my_reaction` и `reactors` у таблицы
   // `messages` клиенту больше не доступны — у неё закрыты колонки времени.
-  const { data, error } = await supabase
+  const { data, error } = await api
     .from('message_rows')
     .select(`id, ${REACTION_COLUMNS}` as const)
     .in('id', messageIds.slice(0, MAX_IDS));

@@ -1,3 +1,4 @@
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback } from 'react';
 
@@ -28,6 +29,7 @@ export type ReactToMessage = {
  * `me` — я как поставивший: оптимистичная реакция сразу с моим аватаром.
  */
 export function useReactToMessage(isMember: boolean, me?: Me): ReactToMessage {
+  const api = useRequestClient();
   const queryClient = useQueryClient();
   const audience = audienceOf(isMember);
 
@@ -41,9 +43,9 @@ export function useReactToMessage(isMember: boolean, me?: Me): ReactToMessage {
         emoji: nextReaction(message.reactions.mine, emoji),
         audience: rowAudience,
         me,
-      });
+      }, undefined, api);
     },
-    [audience, me, queryClient],
+    [api, audience, me, queryClient],
   );
 
   return { audience, me, toggle };

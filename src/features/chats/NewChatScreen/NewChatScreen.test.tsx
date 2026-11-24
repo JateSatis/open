@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 import type { Session as SupabaseSession } from '@supabase/supabase-js';
 import { screen, userEvent, waitFor } from '@testing-library/react-native';
 
@@ -113,7 +114,7 @@ describe('NewChatScreen', () => {
     await user.press(await screen.findByText('Марина'));
     await user.press(screen.getByText('Позвать в диалог'));
 
-    expect(mockedCreate).toHaveBeenCalledWith({ inviteeIds: ['user-2'], title: '' });
+    expect(mockedCreate).toHaveBeenCalledWith({ inviteeIds: ['user-2'], title: '' }, requestClient());
     expect(mockReplace).toHaveBeenCalledWith({ name: 'Chat', params: { chatId: 'chat-new' } });
   });
 
@@ -154,7 +155,7 @@ describe('NewChatScreen', () => {
 
     expect(screen.getByRole('checkbox', { name: 'Пётр' })).toBeChecked();
     await user.press(screen.getByText('Позвать в диалог'));
-    expect(mockedCreate).toHaveBeenCalledWith({ inviteeIds: ['user-3'], title: '' });
+    expect(mockedCreate).toHaveBeenCalledWith({ inviteeIds: ['user-3'], title: '' }, requestClient());
   });
 
   it('invites several people into a titled group', async () => {
@@ -166,7 +167,7 @@ describe('NewChatScreen', () => {
     await user.type(screen.getByLabelText('Название чата'), 'Поход');
     await user.press(screen.getByText('Позвать в группу (2)'));
 
-    expect(mockedCreate).toHaveBeenCalledWith({ inviteeIds: ['user-2', 'user-3'], title: 'Поход' });
+    expect(mockedCreate).toHaveBeenCalledWith({ inviteeIds: ['user-2', 'user-3'], title: 'Поход' }, requestClient());
   });
 
   it('unpicks a person on a second tap', async () => {
@@ -263,12 +264,12 @@ describe('NewChatScreen', () => {
       await pickPhoto(user);
       await user.press(screen.getByText('Позвать в группу (2)'));
 
-      expect(mockedUpload).toHaveBeenCalledWith('file:///g.jpg', 'user-1');
+      expect(mockedUpload).toHaveBeenCalledWith('file:///g.jpg', 'user-1', requestClient());
       expect(mockedCreate).toHaveBeenCalledWith({
         inviteeIds: ['user-2', 'user-3'],
         title: '',
         avatarUrl: 'https://x/g.jpg',
-      });
+      }, requestClient());
       expect(removePublicMedia).not.toHaveBeenCalled();
       expect(mockReplace).toHaveBeenCalledWith({ name: 'Chat', params: { chatId: 'chat-new' } });
     });
@@ -301,7 +302,7 @@ describe('NewChatScreen', () => {
       await user.press(screen.getByText('Позвать в диалог'));
 
       expect(mockedUpload).not.toHaveBeenCalled();
-      expect(mockedCreate).toHaveBeenCalledWith({ inviteeIds: ['user-2'], title: '' });
+      expect(mockedCreate).toHaveBeenCalledWith({ inviteeIds: ['user-2'], title: '' }, requestClient());
     });
 
     it('a repeat invite removes the uploaded photo', async () => {
@@ -315,7 +316,7 @@ describe('NewChatScreen', () => {
       await user.press(screen.getByText('Позвать в группу (2)'));
 
       expect(await screen.findByText(/Вы уже позвали этих людей/)).toBeTruthy();
-      expect(removePublicMedia).toHaveBeenCalledWith('user-1/group-avatar/g.jpg');
+      expect(removePublicMedia).toHaveBeenCalledWith('user-1/group-avatar/g.jpg', requestClient());
     });
 
     it('an invite from the same people opens their chat and removes the unused photo', async () => {
@@ -329,7 +330,7 @@ describe('NewChatScreen', () => {
       await user.press(screen.getByText('Позвать в группу (2)'));
 
       expect(mockReplace).toHaveBeenCalledWith({ name: 'Chat', params: { chatId: 'chat-theirs' } });
-      expect(removePublicMedia).toHaveBeenCalledWith('user-1/group-avatar/g.jpg');
+      expect(removePublicMedia).toHaveBeenCalledWith('user-1/group-avatar/g.jpg', requestClient());
     });
   });
 
@@ -354,7 +355,7 @@ describe('NewChatScreen', () => {
 
       await screen.findByText('Марина');
       // Пустой запрос — не «все пользователи», а знакомые: так отвечает база.
-      expect(mockedPeople).toHaveBeenCalledWith('', null, expect.anything());
+      expect(mockedPeople).toHaveBeenCalledWith('', null, expect.anything(), requestClient());
     });
 
     it('finds anyone else only by searching the server', async () => {
@@ -373,7 +374,7 @@ describe('NewChatScreen', () => {
       await user.type(screen.getByLabelText('Поиск людей'), 'вера');
 
       expect(await screen.findByText('Вера')).toBeTruthy();
-      await waitFor(() => expect(mockedPeople).toHaveBeenCalledWith('вера', null, expect.anything()));
+      await waitFor(() => expect(mockedPeople).toHaveBeenCalledWith('вера', null, expect.anything(), requestClient()));
     });
 
     it('explains the search rate limit in plain words', async () => {

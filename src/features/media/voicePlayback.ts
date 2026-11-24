@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 import {
   createAudioPlayer,
   setAudioModeAsync,
@@ -107,6 +108,7 @@ export type PlayVoiceInput = {
 };
 
 export async function playVoice({ key, uri, durationMs, fromFraction }: PlayVoiceInput) {
+  const api = requestClient();
   const current = ++generation;
   const knownMs = durationMs ?? 0;
   const startMs = fromFraction !== undefined ? fromFraction * knownMs : 0;
@@ -129,16 +131,16 @@ export async function playVoice({ key, uri, durationMs, fromFraction }: PlayVoic
       audioModeReady = true;
     }
 
-    const localUri = await resolveVoiceUri(uri);
+    const localUri = await resolveVoiceUri(uri, api);
 
-    if (current !== generation) return;
+    if (current !== generation || api !== requestClient()) return;
 
     const audio = ensurePlayer();
 
     audio.replace({ uri: localUri });
     audio.play();
   } catch {
-    if (current !== generation) return;
+    if (current !== generation || api !== requestClient()) return;
 
     pendingSeekMs = null;
     setState({ ...INITIAL, failedKey: key });

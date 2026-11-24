@@ -6,6 +6,9 @@
 // Живёт вне экрана чата: ушёл из переписки посреди отправки — она всё равно
 // доедет, а упавшее сообщение дождётся повтора, когда человек вернётся.
 
+import { clientIdentity } from '@/api/perClient';
+import { requestClient } from '@/api/requestClient';
+
 import { create } from 'zustand';
 
 import type { ChatMessage } from '@/features/chats/messages/types';
@@ -48,8 +51,11 @@ export function findOutboxMessage(chatId: string, localId: string): ChatMessage 
 }
 
 /** Черновики одной отправки, самые новые первыми. */
-export function addToOutbox(chatId: string, drafts: ChatMessage[]) {
-  setChat(chatId, (current) => [...drafts, ...current]);
+export function addToOutbox(chatId: string, drafts: ChatMessage[], api = requestClient()) {
+  if (api !== requestClient()) return;
+  const owner = clientIdentity(api);
+  const owned = drafts.map(draft => ({ ...draft, deliveryOwner: owner }));
+  setChat(chatId, current => [...owned, ...current]);
 }
 
 export function setOutboxStatus(chatId: string, localId: string, status: ChatMessage['status']) {

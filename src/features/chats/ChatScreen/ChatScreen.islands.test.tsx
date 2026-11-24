@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 jest.mock('@/api/historyWindow', () => ({
   getHistoryWindow: jest.fn((...args) => jest.requireActual('@/test/historyWindowMock').fixtureHistoryWindow(...args)),
   getHistoryGroupKeys: jest.fn(() => Promise.resolve([])),
@@ -387,7 +388,7 @@ describe('forward island', () => {
 
     // Я не участник «Джигана и Самойловой» — ряд посетителей, хоть в этом чате
     // я участник.
-    await waitFor(() => expect(mockedSetReaction).toHaveBeenCalledWith('o1', '👍'));
+    await waitFor(() => expect(mockedSetReaction).toHaveBeenCalledWith('o1', '👍', requestClient()));
     expect(
       await within(bubbleWith('Самойлова, ты дура!')).findByLabelText('Зрители: 👍 1'),
     ).toBeTruthy();

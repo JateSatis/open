@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 import { act, fireEvent, waitFor } from '@testing-library/react-native';
 import { router } from '@/navigation';
 
@@ -11,6 +12,7 @@ import { renderWithQuery } from '@/features/profile/renderWithQuery';
 
 jest.mock('@/navigation', () => ({
   useIsFocused: () => true,
+  useRouter: () => jest.requireMock('@/navigation').router,
   router: { push: jest.fn(), back: jest.fn() },
 }));
 
@@ -151,7 +153,7 @@ describe('EditProfileScreen', () => {
     await fireEvent.changeText(await findByPlaceholderText('username'), 'taken_name');
 
     expect(await findByText('Имя занято')).toBeTruthy();
-    expect(availableMock).toHaveBeenCalledWith('profile', 'taken_name', undefined);
+    expect(availableMock).toHaveBeenCalledWith('profile', 'taken_name', undefined, requestClient());
     await fireEvent.press(getByText('Сохранить'));
     expect(updateMyProfileMock).not.toHaveBeenCalled();
   });
@@ -263,11 +265,11 @@ describe('EditProfileScreen', () => {
     await fireEvent.changeText(await findByDisplayValue(profile.status), 'черновик статуса');
     await act(async () => sheetDone?.(Promise.resolve({ uri: 'file:///a.jpg', size: 512 })));
 
-    await waitFor(() => expect(uploadAvatarMock).toHaveBeenCalledWith('file:///a.jpg', 'user-1'));
+    await waitFor(() => expect(uploadAvatarMock).toHaveBeenCalledWith('file:///a.jpg', 'user-1', requestClient()));
     await waitFor(() =>
       expect(updateMyProfileMock.mock.calls[0]?.[0]).toEqual({ avatarUrl: 'https://x/new.jpg' }),
     );
-    await waitFor(() => expect(removeOwnAvatarMock).toHaveBeenCalledWith(old.avatarUrl, 'user-1'));
+    await waitFor(() => expect(removeOwnAvatarMock).toHaveBeenCalledWith(old.avatarUrl, 'user-1', requestClient()));
     expect(await findByDisplayValue('черновик статуса')).toBeTruthy();
     expect(backMock).not.toHaveBeenCalled();
   });

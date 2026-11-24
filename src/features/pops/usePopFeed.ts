@@ -1,6 +1,8 @@
 // Лента просмотра попсов: попсы канала в порядке сетки, от выбранного в обе
 // стороны. Выше (раньше в ленте) — новее, ниже — старше.
 
+import { requestClient } from '@/api/requestClient';
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import {
   useInfiniteQuery,
   useQueryClient,
@@ -31,31 +33,32 @@ function fromGrid(queryClient: QueryClient, channelId: string, startId: string):
   return grid.some((pop) => pop.id === startId) ? grid : null;
 }
 
-async function loadStart(channelId: string, startId: string): Promise<Pop[]> {
-  const start = await getPop(startId);
+async function loadStart(channelId: string, startId: string, api = requestClient()): Promise<Pop[]> {
+  const start = await getPop(startId, api);
 
   if (!start) return [];
 
   const [newer, older] = await Promise.all([
-    listPopsAfter(channelId, start),
-    listPops(channelId, start),
+    listPopsAfter(channelId, start, undefined, api),
+    listPops(channelId, start, undefined, api),
   ]);
 
   return [...newer, start, ...older];
 }
 
 export function usePopFeed(channelId: string, startId: string) {
+  const api = useRequestClient();
   const queryClient = useQueryClient();
 
   const query = useInfiniteQuery({
     queryKey: popFeedQueryKey(channelId, startId),
     queryFn: ({ pageParam }): Promise<Pop[]> => {
-      if (pageParam.kind === 'older') return listPops(channelId, pageParam.after);
-      if (pageParam.kind === 'newer') return listPopsAfter(channelId, pageParam.before);
+      if (pageParam.kind === 'older') return listPops(channelId, pageParam.after, undefined, api);
+      if (pageParam.kind === 'newer') return listPopsAfter(channelId, pageParam.before, undefined, api);
 
       const grid = fromGrid(queryClient, channelId, startId);
 
-      return grid ? Promise.resolve(grid) : loadStart(channelId, startId);
+      return grid ? Promise.resolve(grid) : loadStart(channelId, startId, api);
     },
     initialPageParam: { kind: 'start' } as PopFeedParam,
     initialData: (): InfiniteData<Pop[], PopFeedParam> | undefined => {

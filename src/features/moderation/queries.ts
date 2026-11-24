@@ -1,3 +1,4 @@
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
@@ -22,9 +23,10 @@ export const blockKeys = {
 
 /** Заблокировал ли я этого человека. */
 export function useIsBlocked(userId: string, enabled = true) {
+  const api = useRequestClient();
   return useQuery({
     queryKey: blockKeys.status(userId),
-    queryFn: () => isBlockedByMe(userId),
+    queryFn: () => isBlockedByMe(userId, api),
     enabled,
   });
 }
@@ -32,9 +34,10 @@ export function useIsBlocked(userId: string, enabled = true) {
 type Cursor = { at: string; id: string } | null;
 
 export function useBlockedUsers() {
+  const api = useRequestClient();
   return useInfiniteQuery<BlockedPage, Error, BlockedPage[], readonly unknown[], Cursor>({
     queryKey: blockKeys.list(),
-    queryFn: ({ pageParam }) => listBlockedUsers(pageParam),
+    queryFn: ({ pageParam }) => listBlockedUsers(pageParam, api),
     initialPageParam: null,
     getNextPageParam: (last) => last.next ?? undefined,
     select: (data) => data.pages,
@@ -61,12 +64,13 @@ export type BlockChange = { userId: string; blocked: boolean };
 
 /** Заблокировать или разблокировать. */
 export function useSetBlocked() {
+  const api = useRequestClient();
   const after = useAfterBlockChange();
   const queryClient = useQueryClient();
 
   return useMutation<void, Error, BlockChange>({
     networkMode: 'always',
-    mutationFn: ({ userId, blocked }) => (blocked ? blockUser(userId) : unblockUser(userId)),
+    mutationFn: ({ userId, blocked }) => (blocked ? blockUser(userId, api) : unblockUser(userId, api)),
     onSuccess: (_result, { userId, blocked }) => {
       queryClient.setQueryData(blockKeys.status(userId), blocked);
     },
@@ -76,11 +80,12 @@ export function useSetBlocked() {
 
 /** Жалоба, по желанию — вместе с блокировкой. */
 export function useReportUser() {
+  const api = useRequestClient();
   const after = useAfterBlockChange();
 
   return useMutation<void, Error, ReportInput>({
     networkMode: 'always',
-    mutationFn: (input) => reportUser(input),
+    mutationFn: (input) => reportUser(input, api),
     onSuccess: (_result, input) => {
       if (input.block) after(input.userId);
     },

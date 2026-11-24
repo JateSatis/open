@@ -1,3 +1,4 @@
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { FragmentHeader } from './FragmentHeader';
@@ -26,6 +27,7 @@ const NONE = {};
  * другой. Пустая область — цитата и «+».
  */
 export function AreaHeader({ messageId, subject, amMember, width }: AreaHeaderProps) {
+  const api = useRequestClient();
   const queryClient = useQueryClient();
   const me = useCurrentUserId();
   const { range } = subject;
@@ -33,7 +35,7 @@ export function AreaHeader({ messageId, subject, amMember, width }: AreaHeaderPr
   useMessageFragments(messageId, true);
   const { data: area } = useQuery({
     queryKey: areaKey(messageId, range.start, range.end),
-    queryFn: () => getAreaSummary(messageId, range.start, range.end),
+    queryFn: () => getAreaSummary(messageId, range.start, range.end, api),
     staleTime: 30_000,
   });
 
@@ -48,7 +50,7 @@ export function AreaHeader({ messageId, subject, amMember, width }: AreaHeaderPr
       clusterId: area ? area.myClusterId : undefined,
       mine: area?.mine ?? null,
       myFragmentId: area?.myFragmentId ?? null,
-    });
+    }, api);
 
     if (!sent) return;
 
@@ -59,7 +61,7 @@ export function AreaHeader({ messageId, subject, amMember, width }: AreaHeaderPr
       rangeStart: sent.range.start,
       rangeEnd: sent.range.end,
       detail: { removed: sent.removed ? 1 : 0, area: 1 },
-    });
+    }, api);
   };
 
   return (

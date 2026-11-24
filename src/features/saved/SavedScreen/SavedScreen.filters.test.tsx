@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 import type { Session as SupabaseSession } from '@supabase/supabase-js';
 import { act, fireEvent, waitFor } from '@testing-library/react-native';
 import { useLayoutEffect, useState, type ReactElement } from 'react';
@@ -182,8 +183,8 @@ describe('SavedScreen — фильтры', () => {
     await fireEvent.press(view.getByTestId('saved-tag-Работа'));
 
     await waitFor(() => expect(view.queryByText('про ёжика')).toBeNull());
-    expect(mockedList).toHaveBeenLastCalledWith({ before: null }, undefined, { tags: ['tag-w'] });
-    expect(mockedPins).toHaveBeenLastCalledWith({ tags: ['tag-w'] });
+    expect(mockedList).toHaveBeenLastCalledWith({ before: null }, undefined, { tags: ['tag-w'] }, undefined, requestClient());
+    expect(mockedPins).toHaveBeenLastCalledWith({ tags: ['tag-w'] }, requestClient());
     expect(view.getByTestId('saved-filter-chip-Работа')).toBeTruthy();
 
     await fireEvent.press(view.getByTestId('saved-filter-chip-Работа'));
@@ -230,7 +231,7 @@ describe('SavedScreen — фильтры', () => {
     await fireEvent.press(view.getByTestId('segment-1'));
 
     await waitFor(() =>
-      expect(mockedLater).toHaveBeenLastCalledWith(null, { tags: ['tag-w'] }),
+      expect(mockedLater).toHaveBeenLastCalledWith(null, { tags: ['tag-w'] }, requestClient()),
     );
     expect(await view.findByTestId('watch-later-nothing-found')).toBeTruthy();
     expect(view.getByTestId('saved-filter-chip-Работа')).toBeTruthy();
@@ -248,7 +249,7 @@ describe('SavedScreen — поиск', () => {
     await waitFor(() =>
       expect(view.getByTestId('chat-search-counter')).toHaveTextContent('Найдено: 1'),
     );
-    expect(mockedCount).toHaveBeenLastCalledWith({ q: 'ёжик' }, expect.anything());
+    expect(mockedCount).toHaveBeenLastCalledWith({ q: 'ёжик' }, expect.anything(), requestClient());
 
     await fireEvent.press(view.getByTestId('chat-search-list'));
     const result = await view.findByTestId('saved-search-result');

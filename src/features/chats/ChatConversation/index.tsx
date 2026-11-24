@@ -1,3 +1,5 @@
+import { requestClient } from '@/api/requestClient';
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { useIsFocused, useNavigation, useRouter } from '@/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -247,6 +249,7 @@ function Conversation({
   sheetSections: extraSections,
   channelHeader,
 }: ChatConversationProps & { initialPlace: ReadingPlace | null; eligible: boolean }) {
+  const api = useRequestClient();
   const router = useRouter();
   const nav = useNavigation();
   const theme = useTheme();
@@ -484,7 +487,7 @@ function Conversation({
     if (!mine) return;
     jumpAfterSend.current = null;
     const generation = ++jumpGeneration.current;
-    const current = () => generation === jumpGeneration.current && stillReader(currentUserId);
+    const current = () => generation === jumpGeneration.current && api === requestClient() && stillReader(currentUserId);
     const scope = { reader: currentUserId, chat: chatId };
     const target = { messageId: mine.id, key: mine.id, seq: mine.seq, position: 0, offset: 0 };
     const reveal = () => {
@@ -494,7 +497,7 @@ function Conversation({
       listRef.current?.scrollToOffset({ offset: 0, animated: false });
       place.settled();
     };
-    void loadPage(scope, { mode: 'around', messageId: mine.id, limit: 30 }, current)
+    void loadPage(scope, { mode: 'around', messageId: mine.id, limit: 30 }, current, api)
       .then(() => {
         if (!current()) return;
         const cached = projection(scope, localHistory().read(scope, target));
@@ -503,7 +506,7 @@ function Conversation({
         reveal();
       })
       .catch(reveal);
-  }, [chatId, currentUserId, queryClient, messages, isFocused, threadsActive, place, diskWindow]);
+  }, [api, chatId, currentUserId, queryClient, messages, isFocused, threadsActive, place, diskWindow]);
   const threadReplies = useChatThreadReplies({ chatId, active: threadsActive, me });
   const { announce: announceThreadReply } = threadReplies;
   const sendInView = useCallback(
@@ -668,8 +671,8 @@ function Conversation({
 
   // Кнопка комментария в меню фрагмента: боковая панель кластера или области.
   const commentOnFragment = useCallback(
-    (selection: TextSelection) => commentOnSelection(queryClient, selection),
-    [queryClient],
+    (selection: TextSelection) => commentOnSelection(queryClient, selection, api),
+    [api, queryClient],
   );
 
   const { renderItem: renderRow, islandHeader } = useChatRowRenderer({

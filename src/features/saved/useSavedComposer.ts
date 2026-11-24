@@ -1,3 +1,4 @@
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useMemo, useRef } from 'react';
 import type { TextInput } from 'react-native';
@@ -26,6 +27,7 @@ export const SAVED_DRAFT_KEY = 'saved';
  * «Изменить» с «Посмотреть позже» переключают на «Все» и попадают сюда же.
  */
 export function useSavedComposer(currentUserId: string | null) {
+  const api = useRequestClient();
   const queryClient = useQueryClient();
   const inputRef = useRef<TextInput | null>(null);
   const draft = useComposerDraft(SAVED_DRAFT_KEY);
@@ -73,19 +75,19 @@ export function useSavedComposer(currentUserId: string | null) {
   const send = useCallback(() => {
     if (!author) return;
 
-    sendNotePost(queryClient, author, draft.text, draft.media(), quotes);
+    sendNotePost(queryClient, author, draft.text, draft.media(), quotes, api);
     draft.clear();
-  }, [author, draft, queryClient, quotes]);
+  }, [api, author, draft, queryClient, quotes]);
 
   const sendVoice = useCallback(
     (voice: LocalMedia) => {
       if (!author) return;
 
-      sendNoteVoice(queryClient, author, voice, quotes);
+      sendNoteVoice(queryClient, author, voice, quotes, api);
       // Голосовое тоже ответ; написанный текст остаётся в поле.
       if (quotes.length > 0) setMode(null);
     },
-    [author, queryClient, quotes, setMode],
+    [api, author, queryClient, quotes, setMode],
   );
 
   const startReply = useCallback(
@@ -120,9 +122,9 @@ export function useSavedComposer(currentUserId: string | null) {
 
   const retry = useCallback(
     (localId: string) => {
-      if (currentUserId) retryNote(queryClient, currentUserId, localId);
+      if (currentUserId) retryNote(queryClient, currentUserId, localId, api);
     },
-    [currentUserId, queryClient],
+    [api, currentUserId, queryClient],
   );
 
   return {

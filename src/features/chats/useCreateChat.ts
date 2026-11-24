@@ -1,3 +1,5 @@
+import { requestClient } from '@/api/requestClient';
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useState } from 'react';
 
@@ -37,19 +39,19 @@ export type CreateChatState = {
  * фото не пригодилось — чат не создан (дубль, сбой) или это встречная заявка в
  * уже существующий чат, — файл убирается из бакета.
  */
-async function createWithAvatar(input: NewChat, userId: string | null): Promise<CreateChatResult> {
+async function createWithAvatar(input: NewChat, userId: string | null, api = requestClient()): Promise<CreateChatResult> {
   const { inviteeIds, title, avatarUri } = input;
 
-  if (!avatarUri || inviteeIds.length < 2) return createChat({ inviteeIds, title });
+  if (!avatarUri || inviteeIds.length < 2) return createChat({ inviteeIds, title }, api);
   if (!userId) throw new Error('Нет активной сессии');
 
   // Без связи загрузка в Storage не падает, а висит: срок превращает её в
   // понятную ошибку. Файл, доехавший после срока, убирается.
   const avatar = await withDeadline(
-    uploadGroupAvatar(avatarUri, userId),
+    uploadGroupAvatar(avatarUri, userId, api),
     GROUP_AVATAR_DEADLINE_MS,
     (late) => {
-      void removePublicMedia(late.path);
+      void removePublicMedia(late.path, api);
     },
   );
   let result: CreateChatResult;
@@ -57,17 +59,17 @@ async function createWithAvatar(input: NewChat, userId: string | null): Promise<
   try {
     // Без связи запрос висел бы молча, как и загрузка.
     result = await withDeadline(
-      createChat({ inviteeIds, title, avatarUrl: avatar.url }),
+      createChat({ inviteeIds, title, avatarUrl: avatar.url }, api),
       GROUP_AVATAR_DEADLINE_MS,
     );
   } catch (error) {
     // Запрос, оборванный по сроку, мог дойти до базы, и файл тогда — фото
     // группы. Лишний файл дешевле битой аватарки.
-    if (!(error instanceof DeadlineError)) void removePublicMedia(avatar.path);
+    if (!(error instanceof DeadlineError)) void removePublicMedia(avatar.path, api);
     throw error;
   }
 
-  if (result.outcome !== 'created') void removePublicMedia(avatar.path);
+  if (result.outcome !== 'created') void removePublicMedia(avatar.path, api);
   return result;
 }
 
@@ -85,6 +87,7 @@ export function useCreateChat(
   onOpen: (chatId: string) => void,
   onRequest?: (userId: string) => void,
 ): CreateChatState {
+  const api = useRequestClient();
   const queryClient = useQueryClient();
   const userId = useCurrentUserId();
   const [problem, setProblem] = useState<CreateChatProblem | null>(null);
@@ -93,8 +96,9 @@ export function useCreateChat(
     // Без связи React Query поставил бы создание на паузу, и кнопка крутилась
     // бы молча. Создание пробуется сразу и честно падает.
     networkMode: 'always',
-    mutationFn: (input: NewChat) => createWithAvatar(input, userId),
+    mutationFn: (input: NewChat) => createWithAvatar(input, userId, api),
     onSuccess: (result, input) => {
+      if (api !== requestClient()) return;
       if (result.outcome === 'request_needed') {
         onRequest?.(input.inviteeIds[0]);
         return;

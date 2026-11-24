@@ -1,3 +1,5 @@
+import { useScreenNotice } from '@/features/notifications/useScreenNotice';
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -10,7 +12,6 @@ import {
   updateCommentThread,
 } from '@/features/interactions/comments/commentsCache';
 import { loadCommentThread } from '@/features/interactions/comments/commentSync';
-import { showNotice } from '@/features/notifications/alertsStore';
 
 const NONE: CommentItem[] = [];
 
@@ -41,6 +42,8 @@ export function useCommentThread(
   rootId: string | null,
   overlay: (items: CommentItem[]) => CommentItem[],
 ): CommentThreadState {
+  const notice = useScreenNotice();
+  const api = useRequestClient();
   const queryClient = useQueryClient();
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const loadingMoreRef = useRef(false);
@@ -50,7 +53,7 @@ export function useCommentThread(
     queryFn: () => {
       const cached = readCommentThread(queryClient, targetId, rootId!);
 
-      return cached?.headLoaded ? cached : loadCommentThread(queryClient, targetId, rootId!);
+      return cached?.headLoaded ? cached : loadCommentThread(queryClient, targetId, rootId!, api);
     },
     enabled: rootId !== null,
     // Сами по себе страницы треда не перечитываются: свежесть — сигналами канала.
@@ -78,20 +81,20 @@ export function useCommentThread(
     loadingMoreRef.current = true;
     setIsLoadingMore(true);
 
-    return listCommentThreadReplies(rootId, { cursor: page.nextCursor })
+    return listCommentThreadReplies(rootId, { cursor: page.nextCursor }, api)
       .then((next) =>
         updateCommentThread(queryClient, targetId, rootId, (current) =>
           appendCommentThreadHead(current, next.items, next.nextCursor),
         ),
       )
       .catch(() => {
-        showNotice('Не удалось загрузить ответы. Попробуйте ещё раз.', 'error');
+        notice('Не удалось загрузить ответы. Попробуйте ещё раз.', 'error');
       })
       .finally(() => {
         loadingMoreRef.current = false;
         setIsLoadingMore(false);
       });
-  }, [targetId, queryClient, rootId]);
+  }, [api, notice, targetId, queryClient, rootId]);
 
   const head = useMemo(() => overlay(data?.head ?? NONE), [data, overlay]);
   const tail = useMemo(() => overlay(data?.tail ?? NONE), [data, overlay]);

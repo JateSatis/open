@@ -1,10 +1,10 @@
-import { supabase } from './supabase';
+import { requestClient } from '@/api/requestClient';
 import type { HistoryPosition } from './historyWindow';
 
 export type Reached = HistoryPosition & { key: string };
 
-export async function getHistoryRead(chat: string) {
-  const { data, error } = await supabase.rpc('history_read_state', { p_chat: chat }).maybeSingle();
+export async function getHistoryRead(chat: string, api = requestClient()) {
+  const { data, error } = await api.rpc('history_read_state', { p_chat: chat }).maybeSingle();
   if (error) throw error;
   if (!data) return null;
   return {
@@ -23,8 +23,8 @@ export async function getHistoryRead(chat: string) {
   };
 }
 
-export async function advanceHistoryRead(reader: string, chat: string, point: Reached) {
-  const { data, error } = await supabase
+export async function advanceHistoryRead(reader: string, chat: string, point: Reached, api = requestClient()) {
+  const { data, error } = await api
     .rpc('advance_history_read', {
       p_expected_reader: reader,
       p_chat: chat,

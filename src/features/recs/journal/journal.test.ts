@@ -14,6 +14,7 @@ import { sessionOf } from '@/test/sessionOf';
 const mockSetHeader = jest.fn();
 jest.mock('@/api/supabase', () => ({
   supabase: {
+    sessionOwner: () => ({ userId: 'a', sessionId: 's1' }),
     rpc: jest.fn(() => ({ setHeader: mockSetHeader })),
     auth: { getSession: jest.fn() },
   },

@@ -1,3 +1,4 @@
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useQuery } from '@tanstack/react-query';
 import { useCallback, useState } from 'react';
 
@@ -19,13 +20,14 @@ export type ChatsState = {
 };
 
 export function useChats(): ChatsState {
+  const api = useRequestClient();
   const reader = useHistoryReader();
   const connection = useConnectionStatus();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const { data, isPending, fetchStatus, error, refetch } = useQuery({
     queryKey: chatsQueryKey,
     meta: { refreshOnUserChannelJoin: true },
-    ...routeOptions(reader, 'chats', listChats),
+    ...routeOptions(reader, 'chats', () => listChats(api)),
   });
 
   // Крутилка показывается только когда список тянут пальцем. Фоновое

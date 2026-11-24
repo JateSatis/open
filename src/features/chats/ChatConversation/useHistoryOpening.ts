@@ -1,3 +1,5 @@
+import { requestClient } from '@/api/requestClient';
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { useConnectionStatus } from '@/features/connection/useConnectionStatus';
@@ -9,6 +11,7 @@ import type { ReadingPlace } from '../messages/local/segments';
 import { fetchRead, readKey } from '../messages/local/readQueries';
 
 export function useHistoryOpening(chat: string, active: boolean) {
+  const api = useRequestClient();
   const reader = useHistoryReader(),
     client = useQueryClient(),
     connection = useConnectionStatus();
@@ -18,7 +21,7 @@ export function useHistoryOpening(chat: string, active: boolean) {
   const state = useQuery({
     queryKey: readKey(reader ?? '', chat),
     enabled: !!reader && active,
-    queryFn: ({ signal }) => fetchRead(reader!, chat, signal),
+    queryFn: ({ signal }) => fetchRead(reader!, chat, signal, api),
     refetchOnMount: 'always',
   });
   const [error, setError] = useState(false);
@@ -32,7 +35,7 @@ export function useHistoryOpening(chat: string, active: boolean) {
     const first =
       state.data?.first ?? (offline ? db.route<ReadingPlace>(reader, 'first/' + chat) : null);
     let live = true;
-    const current = () => live && stillReader(reader);
+    const current = () => live && api === requestClient() && stillReader(reader);
     async function prepare() {
       const target = first ?? null;
       if (!offline)
@@ -49,6 +52,7 @@ export function useHistoryOpening(chat: string, active: boolean) {
               }
             : { mode: 'latest', limit: 20 },
           current,
+          api,
         );
       if (!current()) return;
       const cached = projection(scope, db.read(scope, target));
@@ -63,6 +67,7 @@ export function useHistoryOpening(chat: string, active: boolean) {
       live = false;
     };
   }, [
+    api,
     reader,
     chat,
     place,

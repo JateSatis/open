@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 import { QueryClient } from '@tanstack/react-query';
 import {
   getHistoryGroupKeys,
@@ -93,6 +94,7 @@ it('retains the inside-group cursor when the first realtime send fills an empty 
       mode: 'after',
       cursor: expect.objectContaining({ seq: group.seq, position: 99 }),
     }),
+      requestClient(),
   );
   client.clear();
 });
@@ -111,7 +113,7 @@ it('refreshes only loaded occurrence IDs and keeps neighbours added during the r
   expect(getHistoryItems).toHaveBeenCalledWith('chat-1', [
     'group',
     ...group.forward!.items.slice(70).map((item) => item.id),
-  ]);
+  ], requestClient());
   client.setQueryData(
     messagesQueryKey('chat-1'),
     mergeMessages(readHistory(client, 'chat-1')!, [fragment(40, 70)], 'older'),
@@ -243,7 +245,7 @@ it('discovers newly visible gaps only inside the verified slice, not the entire 
   expect(result.items[0].forward!.items.map((item) => item.position)).toEqual(
     Array.from({ length: 30 }, (_, i) => i + 40),
   );
-  expect(getHistoryItems).toHaveBeenCalledWith('chat-1', expect.arrayContaining(['group-item-50']));
+  expect(getHistoryItems).toHaveBeenCalledWith('chat-1', expect.arrayContaining(['group-item-50']), requestClient());
   expect(jest.mocked(getHistoryItems).mock.calls.flatMap((call) => call[1])).not.toContain(
     'group-item-39',
   );

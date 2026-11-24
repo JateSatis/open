@@ -1,3 +1,4 @@
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 
@@ -52,10 +53,11 @@ export function setMessageFragments(
  * сообщения и перечитываются.
  */
 export function useMessageFragments(messageId: string | null, live = false) {
+  const api = useRequestClient();
   const queryClient = useQueryClient();
   const query = useQuery({
     queryKey: fragmentsKey(messageId ?? ''),
-    queryFn: () => listMessageFragments(messageId!),
+    queryFn: () => listMessageFragments(messageId!, api),
     enabled: messageId !== null,
     // Меню встаёт заново после каждого отпускания ручки — список не
     // перечитывается каждый раз: свежесть держат сигналы и свои реакции.
@@ -75,8 +77,8 @@ export function useMessageFragments(messageId: string | null, live = false) {
       onAdded: refresh,
       onDeleted: refresh,
       onReconnected: refresh,
-    });
-  }, [live, messageId, queryClient]);
+    }, api);
+  }, [api, live, messageId, queryClient]);
 
   return query;
 }

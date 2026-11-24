@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
 
 import { ChatInfoPage } from '.';
@@ -391,7 +392,7 @@ describe('ChatInfoPage', () => {
       await fireEvent.press(await screen.findByText('Подписаться на диалог'));
 
       expect(await screen.findByText('Вы подписаны')).toBeTruthy();
-      expect(subscribeToChat).toHaveBeenCalledWith('chat-1');
+      expect(subscribeToChat).toHaveBeenCalledWith('chat-1', requestClient());
       expect(unsubscribeFromChat).not.toHaveBeenCalled();
     });
 
@@ -459,7 +460,7 @@ describe('ChatInfoPage', () => {
       expect(confirm).toHaveBeenCalledWith(
         expect.objectContaining({ title: 'Покинуть группу?', destructive: true }),
       );
-      await waitFor(() => expect(leaveChat).toHaveBeenCalledWith('chat-1'));
+      await waitFor(() => expect(leaveChat).toHaveBeenCalledWith('chat-1', requestClient()));
       await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith({ name: 'Tabs', params: { screen: 'chats' } }));
     });
 
@@ -526,14 +527,14 @@ describe('ChatInfoPage', () => {
 
       await fireEvent(await screen.findByTestId('info-member-oleg'), 'longPress');
       await fireEvent.press(await screen.findByText('Удалить из группы'));
-      await waitFor(() => expect(removeChatMember).toHaveBeenCalledWith('chat-1', 'oleg'));
+      await waitFor(() => expect(removeChatMember).toHaveBeenCalledWith('chat-1', 'oleg', requestClient()));
       expect(confirm).toHaveBeenCalledWith(
         expect.objectContaining({ title: 'Удалить Олег из группы?' }),
       );
 
       await fireEvent(screen.getByTestId('info-member-vera'), 'longPress');
       await fireEvent.press(await screen.findByText('Отменить приглашение'));
-      await waitFor(() => expect(cancelChatInvite).toHaveBeenCalledWith('chat-1', 'vera'));
+      await waitFor(() => expect(cancelChatInvite).toHaveBeenCalledWith('chat-1', 'vera', requestClient()));
     });
 
     it('opens no menu on a long press when I am not the owner', async () => {

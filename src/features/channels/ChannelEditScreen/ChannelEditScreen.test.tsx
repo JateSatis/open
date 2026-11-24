@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 import { fireEvent, screen, waitFor } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 
@@ -141,9 +142,9 @@ describe('ChannelEditScreen', () => {
     await fireEvent.press(screen.getByTestId('channel-edit-save'));
 
     await waitFor(() => expect(mockBack).toHaveBeenCalled());
-    expect(setChannelTitle).toHaveBeenCalledWith('channel-1', 'Новости дня');
-    expect(setChannelDescription).toHaveBeenCalledWith('channel-1', 'Коротко\nо главном');
-    expect(setChannelUsername).toHaveBeenCalledWith('channel-1', 'daily');
+    expect(setChannelTitle).toHaveBeenCalledWith('channel-1', 'Новости дня', requestClient());
+    expect(setChannelDescription).toHaveBeenCalledWith('channel-1', 'Коротко\nо главном', requestClient());
+    expect(setChannelUsername).toHaveBeenCalledWith('channel-1', 'daily', requestClient());
     expect(setChannelAvatar).not.toHaveBeenCalled();
   });
 
@@ -197,11 +198,11 @@ describe('ChannelEditScreen', () => {
     await waitFor(() =>
       expect(setChannelAvatar).toHaveBeenCalledWith(
         'channel-1',
-        'https://x/media/owner/channel-avatar/new.jpg',
+        'https://x/media/owner/channel-avatar/new.jpg', requestClient()
       ),
     );
-    expect(uploadChannelAvatar).toHaveBeenCalledWith('file:///c.jpg', 'owner');
-    expect(removeOwnChannelAvatar).toHaveBeenCalledWith(channel.avatarUrl, 'owner');
+    expect(uploadChannelAvatar).toHaveBeenCalledWith('file:///c.jpg', 'owner', requestClient());
+    expect(removeOwnChannelAvatar).toHaveBeenCalledWith(channel.avatarUrl, 'owner', requestClient());
     expect(mockBack).toHaveBeenCalled();
   });
 

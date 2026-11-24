@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 import { AppState } from 'react-native';
 
 import { registerDevice, touchDevice } from '@/api/account';
@@ -17,6 +18,7 @@ function report(operation: string, error: unknown) {
 }
 
 function bindDevice(owner: SessionOwner) {
+  const api = requestClient();
   let stopped = false;
   let timer: ReturnType<typeof setInterval> | undefined;
   const current = () => !stopped && isCurrentSession(owner);
@@ -26,7 +28,7 @@ function bindDevice(owner: SessionOwner) {
     try {
       const installation = await getInstallationId();
       if (!current()) return;
-      alive = await touchDevice(installation, owner);
+      alive = await touchDevice(installation, owner, api);
     } catch (error) {
       report('touch_device:', error);
     }
@@ -37,13 +39,13 @@ function bindDevice(owner: SessionOwner) {
       const info = await currentDeviceInfo();
       // Регистрация заменяет прежний сеанс этой установки на сервере.
       await withSessionChange(async () => {
-        if (current()) await registerDevice(info, owner);
+        if (current()) await registerDevice(info, owner, api);
       });
     }
   }
 
   function seen(online: boolean) {
-    if (current()) void markSeen(online, owner).catch(error => report('mark_seen:', error));
+    if (current()) void markSeen(online, owner, api).catch(error => report('mark_seen:', error));
   }
 
   function startHeartbeat() {

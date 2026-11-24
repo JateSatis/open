@@ -1,3 +1,7 @@
+import { requestClient } from '@/api/requestClient';
+import type { AccountClient } from '@/api/accountClient';
+import { recordJournalEvents, type JournalWireEvent } from '@/api/recJournal';
+import { ownerOf } from '@/features/auth/sessionOwner';
 import { getLinkingURL } from 'expo-linking';
 import { AppState } from 'react-native';
 
@@ -25,10 +29,18 @@ export function startJournalLifecycle(launchedAt: number) {
   startAppSession(url && !url.includes('expo-development-client') ? 'link' : 'cold', launchedAt);
   startDeviceWatch();
 
+  let bound: AccountClient | undefined;
+  let sender: ((events: JournalWireEvent[]) => ReturnType<typeof recordJournalEvents>) | undefined;
   function sync() {
     const state = useSessionStore.getState();
-    setSessionUser(state.localAccountId ?? null);
-    journal.setDeliveryUser(getConnectionStatus() === 'online' ? confirmedAccountId(state) : null);
+    const api = requestClient();
+    if (bound !== api) {
+      bound = api;
+      sender = events => recordJournalEvents(events, api);
+    }
+    const sessionId = ownerOf(state.session)?.sessionId ?? state.localSessionId;
+    setSessionUser(sessionId ? state.localAccountId ?? null : null, Date.now(), sessionId ?? undefined);
+    journal.setDeliveryUser(getConnectionStatus() === 'online' ? confirmedAccountId(state) : null, sender);
   }
   useSessionStore.subscribe(sync);
   subscribeToConnectionStatus(sync);

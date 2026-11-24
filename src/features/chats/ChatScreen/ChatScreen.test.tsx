@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 jest.mock('@/api/historyWindow', () => ({
   getHistoryWindow: jest.fn((...args) => jest.requireActual('@/test/historyWindowMock').fixtureHistoryWindow(...args)),
   getHistoryGroupKeys: jest.fn(() => Promise.resolve([])),
@@ -264,7 +265,7 @@ describe('ChatScreen', () => {
     await renderWithQuery(<ChatScreen />);
 
     // Рядом со статусом собеседника — число подписчиков переписки.
-    await waitFor(() => expect(mockedGetProfile).toHaveBeenCalledWith('user-2'));
+    await waitFor(() => expect(mockedGetProfile).toHaveBeenCalledWith('user-2', requestClient()));
     expect(await screen.findByText('в отпуске до понедельника · 0 подписчиков')).toBeTruthy();
 
     // Свой диалог, как и группа, ведёт на страницу информации, а не в профиль.
@@ -497,7 +498,7 @@ describe('ChatScreen', () => {
     await renderWithQuery(<ChatScreen />);
     await user.press(await screen.findByText('Принять'));
 
-    expect(mockedAccept).toHaveBeenCalledWith('chat-1');
+    expect(mockedAccept).toHaveBeenCalledWith('chat-1', requestClient());
     expect(await screen.findByLabelText('Сообщение')).toBeTruthy();
   });
 
@@ -557,7 +558,7 @@ describe('ChatScreen', () => {
     expect(await screen.findByText(formatMessageTime(SENT_AT))).toBeTruthy();
     // Рассылку о новом сообщении делает триггер в базе, клиент лишь вставляет
     // строку — проверяем именно вставку.
-    expect(mockedSendMessage).toHaveBeenCalledWith('chat-1', { text: 'как дела' });
+    expect(mockedSendMessage).toHaveBeenCalledWith('chat-1', { text: 'как дела' }, requestClient());
   });
 
   it('marks the message as failed when the server rejects the insert', async () => {

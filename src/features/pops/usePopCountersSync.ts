@@ -1,3 +1,4 @@
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useQueryClient, type InfiniteData } from '@tanstack/react-query';
 import { useEffect } from 'react';
 
@@ -22,6 +23,7 @@ const ALL_POPS = ['pops'] as const;
  * что ушли, взяты новые; одни и те же каналы не переподписываются.
  */
 export function usePopCountersSync(channels: string | readonly string[]) {
+  const api = useRequestClient();
   const queryClient = useQueryClient();
   const list = typeof channels === 'string' ? [channels] : channels;
   // Ключ эффекта — состав, а не массив: новый массив того же состава не
@@ -42,7 +44,7 @@ export function usePopCountersSync(channels: string | readonly string[]) {
       const popIds = [...queued];
 
       queued.clear();
-      listPopCounters(popIds)
+      listPopCounters(popIds, api)
         .then((counters) => {
           if (alive) applyPopCounters(queryClient, counters);
         })
@@ -74,7 +76,7 @@ export function usePopCountersSync(channels: string | readonly string[]) {
 
           enqueue([...new Set(loaded)]);
         },
-      }),
+      }, api),
     );
 
     return () => {
@@ -84,5 +86,5 @@ export function usePopCountersSync(channels: string | readonly string[]) {
 
       releases.forEach((release) => release());
     };
-  }, [key, queryClient]);
+  }, [api, key, queryClient]);
 }

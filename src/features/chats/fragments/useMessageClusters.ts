@@ -1,3 +1,4 @@
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 
@@ -25,6 +26,7 @@ type ClusteredMessage = {
  * загруженного до него.
  */
 export function useMessageClusters(message: ClusteredMessage | null) {
+  const api = useRequestClient();
   const queryClient = useQueryClient();
   const messageId = message?.id ?? null;
   const chatId = message?.chatId ?? null;
@@ -37,7 +39,7 @@ export function useMessageClusters(message: ClusteredMessage | null) {
 
   const query = useQuery({
     queryKey: clustersKey(messageId ?? '', text),
-    queryFn: () => listMessageClusters(messageId!, text),
+    queryFn: () => listMessageClusters(messageId!, text, api),
     enabled,
     staleTime: 30_000,
   });
@@ -57,8 +59,8 @@ export function useMessageClusters(message: ClusteredMessage | null) {
         void queryClient.invalidateQueries({ queryKey: fragmentsKey(messageId) });
       },
       onReconnected: refresh,
-    });
-  }, [messageId, chatId, text, queryClient]);
+    }, api);
+  }, [api, messageId, chatId, text, queryClient]);
 
   return query;
 }

@@ -1,3 +1,4 @@
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 
@@ -11,6 +12,7 @@ import { chatQueryKey } from '@/features/chats/useChat';
  * (`chatTopics`), второй слушатель канала не открывает.
  */
 export function useChatChangedSignal(chatId: string) {
+  const api = useRequestClient();
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -20,6 +22,6 @@ export function useChatChangedSignal(chatId: string) {
       onChatChanged: refresh,
       onMembersChanged: refresh,
       onReconnected: refresh,
-    });
-  }, [chatId, queryClient]);
+    }, api);
+  }, [api, chatId, queryClient]);
 }

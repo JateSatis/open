@@ -3,8 +3,8 @@
 // только с первой реакцией или первым комментарием; диапазон — code points,
 // полуоткрытый `[start, end)`, переводит его клиент (`textOffsets`).
 
+import { requestClient } from '@/api/requestClient';
 import { toAudience, type MyReaction, type ReactionCounts } from '@/api/reactionCounts';
-import { supabase } from '@/api/supabase';
 
 /** Диапазон текста, как его понимает база: code points и сам кусок для сверки. */
 export type FragmentRange = { start: number; end: number; text: string };
@@ -33,8 +33,8 @@ function toCounts(value: unknown): ReactionCounts {
 }
 
 /** Живые фрагменты сообщения со счётчиками и моей реакцией. */
-export async function listMessageFragments(messageId: string): Promise<Fragment[]> {
-  const { data, error } = await supabase.rpc('list_message_fragments', {
+export async function listMessageFragments(messageId: string, api = requestClient()): Promise<Fragment[]> {
+  const { data, error } = await api.rpc('list_message_fragments', {
     target_message: messageId,
   });
 
@@ -66,8 +66,9 @@ export async function setFragmentReaction(
   messageId: string,
   range: FragmentRange,
   emoji: string | null,
+  api = requestClient(),
 ): Promise<{ fragmentId: string | null; mine: MyReaction | null }> {
-  const { data, error } = await supabase.rpc('set_fragment_reaction', {
+  const { data, error } = await api.rpc('set_fragment_reaction', {
     target_message: messageId,
     range_start: range.start,
     range_end: range.end,

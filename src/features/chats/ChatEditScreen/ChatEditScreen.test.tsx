@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 import { fireEvent, screen, waitFor } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 
@@ -151,11 +152,11 @@ describe('ChatEditScreen', () => {
     await renderWithQuery(<EditDetailsScreen />);
     await fireEvent.changeText(await screen.findByTestId('chat-username'), 'team');
     await screen.findByText('Имя свободно');
-    expect(mockedAvailable).toHaveBeenCalledWith('group', 'team', 'group-1');
+    expect(mockedAvailable).toHaveBeenCalledWith('group', 'team', 'group-1', requestClient());
 
     await fireEvent.press(screen.getByTestId('chat-edit-save'));
 
-    await waitFor(() => expect(mockedSet).toHaveBeenCalledWith('group-1', 'team'));
+    await waitFor(() => expect(mockedSet).toHaveBeenCalledWith('group-1', 'team', requestClient()));
     expect(mockBack).toHaveBeenCalled();
   });
 
@@ -166,7 +167,7 @@ describe('ChatEditScreen', () => {
     await fireEvent.changeText(await screen.findByTestId('chat-username'), '');
     await fireEvent.press(screen.getByTestId('chat-edit-save'));
 
-    await waitFor(() => expect(mockedSet).toHaveBeenCalledWith('group-1', null));
+    await waitFor(() => expect(mockedSet).toHaveBeenCalledWith('group-1', null, requestClient()));
   });
 
   it('refuses a dot and a taken name, and keeps the check mark off', async () => {
@@ -211,7 +212,7 @@ describe('ChatEditScreen', () => {
     await fireEvent.changeText(await screen.findByTestId('chat-edit-title'), '  Новая  ');
     await fireEvent.press(screen.getByTestId('chat-edit-save'));
 
-    await waitFor(() => expect(setChatTitle).toHaveBeenCalledWith('group-1', 'Новая'));
+    await waitFor(() => expect(setChatTitle).toHaveBeenCalledWith('group-1', 'Новая', requestClient()));
   });
 
   it('saves a multi-line description; a cleared one is removed', async () => {
@@ -224,7 +225,7 @@ describe('ChatEditScreen', () => {
     await fireEvent.press(screen.getByTestId('chat-edit-save'));
 
     await waitFor(() =>
-      expect(setChatDescription).toHaveBeenCalledWith('group-1', 'Первая строка\nвторая'),
+      expect(setChatDescription).toHaveBeenCalledWith('group-1', 'Первая строка\nвторая', requestClient()),
     );
     await unmount();
 
@@ -233,7 +234,7 @@ describe('ChatEditScreen', () => {
     await fireEvent.changeText(await screen.findByTestId('chat-edit-description'), '   ');
     await fireEvent.press(screen.getByTestId('chat-edit-save'));
 
-    await waitFor(() => expect(setChatDescription).toHaveBeenCalledWith('group-1', null));
+    await waitFor(() => expect(setChatDescription).toHaveBeenCalledWith('group-1', null, requestClient()));
   });
 
   it('shows how many characters are left near the limit', async () => {
@@ -263,10 +264,10 @@ describe('ChatEditScreen', () => {
       await waitFor(() =>
         expect(mockedSetAvatar).toHaveBeenCalledWith(
           'group-1',
-          'https://x/media/me/group-avatar/new.jpg',
+          'https://x/media/me/group-avatar/new.jpg', requestClient()
         ),
       );
-      expect(mockedUpload).toHaveBeenCalledWith('file:///g.jpg', 'me');
+      expect(mockedUpload).toHaveBeenCalledWith('file:///g.jpg', 'me', requestClient());
       expect(mockBack).toHaveBeenCalled();
     });
 
@@ -278,8 +279,8 @@ describe('ChatEditScreen', () => {
       await fireEvent.press(await screen.findByText('Удалить фото'));
       await fireEvent.press(screen.getByTestId('chat-edit-save'));
 
-      await waitFor(() => expect(mockedSetAvatar).toHaveBeenCalledWith('group-1', null));
-      expect(removeOwnGroupAvatar).toHaveBeenCalledWith(photo, 'me');
+      await waitFor(() => expect(mockedSetAvatar).toHaveBeenCalledWith('group-1', null, requestClient()));
+      expect(removeOwnGroupAvatar).toHaveBeenCalledWith(photo, 'me', requestClient());
     });
 
     it('a refused photo is explained and the upload is cleaned up', async () => {
@@ -294,7 +295,7 @@ describe('ChatEditScreen', () => {
       expect(
         await screen.findByText('Нет связи. Проверьте интернет и попробуйте ещё раз.'),
       ).toBeTruthy();
-      expect(removePublicMedia).toHaveBeenCalledWith('me/group-avatar/new.jpg');
+      expect(removePublicMedia).toHaveBeenCalledWith('me/group-avatar/new.jpg', requestClient());
       expect(mockBack).not.toHaveBeenCalled();
     });
   });

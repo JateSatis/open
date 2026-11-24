@@ -12,6 +12,7 @@ export type NotePayload =
   | { type: 'voice'; voice: LocalMedia; replyTo: string[] };
 
 export type PendingNote = SavedItem & {
+  deliveryOwner?: symbol;
   localId: string;
   /** Ключ повтора: сколько ни повторяй, заметка одна. */
   clientId: string;

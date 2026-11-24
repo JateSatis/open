@@ -4,6 +4,7 @@
 // пропускается, а целиком удалённое лист не открывает. Своя заметка
 // оригинала не имеет — уходит обычным сообщением от меня с её файлами.
 
+import { requestClient } from '@/api/requestClient';
 import type { useRouter } from '@/navigation';
 
 import type { ChatRef, ForwardedComment, IslandOriginal } from '@/api/chats';
@@ -108,6 +109,7 @@ export function savedForwardBatches(
 export async function startSavedForward(
   router: ReturnType<typeof useRouter>,
   items: readonly SavedMessage[],
+  api = requestClient(),
 ): Promise<boolean> {
   if (items.length === 0) return false;
 
@@ -115,7 +117,7 @@ export async function startSavedForward(
     // Заметки отправляются своими файлами — спрашивать о них базу незачем.
     const copies = items.filter((saved) => !isNote(saved));
     const forwardable =
-      copies.length > 0 ? await listSavedForwardable(copies.map((saved) => saved.id)) : [];
+      copies.length > 0 ? await listSavedForwardable(copies.map((saved) => saved.id), api) : [];
     const live = new Map(
       forwardable.flatMap((row) =>
         row.live
@@ -126,9 +128,10 @@ export async function startSavedForward(
     const messageIds = [...live.values()].flatMap((row) => (row.messageId ? [row.messageId] : []));
     const commentIds = [...live.values()].flatMap((row) => (row.commentId ? [row.commentId] : []));
     const [originals, comments] = await Promise.all([
-      listIslandOriginals(messageIds),
-      listForwardedComments(commentIds),
+      listIslandOriginals(messageIds, api),
+      listForwardedComments(commentIds, api),
     ]);
+    if (api !== requestClient()) return false;
     const batches = savedForwardBatches(
       items,
       live,
@@ -150,7 +153,7 @@ export async function startSavedForward(
     router.push({ name: 'Forward' });
     return true;
   } catch {
-    showNotice('Не удалось переслать', 'error');
+    if (api === requestClient()) showNotice('Не удалось переслать', 'error');
     return false;
   }
 }

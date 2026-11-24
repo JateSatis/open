@@ -7,6 +7,9 @@
 // разбиение альбома, загрузка в Storage, повтор. Своё здесь только то, куда
 // комментарий уходит и куда ложится.
 
+import { clientIdentity } from '@/api/perClient';
+
+import { requestClient } from '@/api/requestClient';
 import { notifyManager, type QueryClient } from '@tanstack/react-query';
 
 import {
@@ -155,6 +158,7 @@ async function insert(
   uploaded: UploadedMedia[],
   commentThreadRootId: string | null,
   fragment: CommentFragment | undefined,
+  api = requestClient(),
 ): Promise<Comment> {
   if (outgoing.type === 'voice') {
     const [file] = uploaded;
@@ -167,8 +171,8 @@ async function insert(
     };
 
     return subject.type === 'pop'
-      ? sendVoicePopComment(subject.id, voice, outgoing.replyTo, commentThreadRootId)
-      : sendVoiceComment(subject.id, voice, outgoing.replyTo, commentThreadRootId, fragment);
+      ? sendVoicePopComment(subject.id, voice, outgoing.replyTo, commentThreadRootId, api)
+      : sendVoiceComment(subject.id, voice, outgoing.replyTo, commentThreadRootId, fragment, api);
   }
 
   if (outgoing.type !== 'post') throw new Error('Комментарий не пересылается');
@@ -179,7 +183,7 @@ async function insert(
     replyTo: outgoing.replyTo,
     commentThreadRootId,
     fragment,
-  });
+  }, api);
 }
 
 /**
@@ -263,10 +267,13 @@ export async function deliverComment(
   localId: string,
   outgoing: Outgoing,
   commentThreadRootId: string | null,
+  api = requestClient(),
 ): Promise<void> {
   const { queryClient, subject, currentUserId } = context;
   const targetId = subject.id;
 
+  const draftOwner = outboxComments(targetId).find(item => item.localId === localId)?.deliveryOwner;
+  if (draftOwner && draftOwner !== clientIdentity(api)) return;
   if (delivering.has(localId)) return;
 
   delivering.add(localId);
@@ -285,30 +292,32 @@ export async function deliverComment(
     // Путь в Storage строится от своего id — без него файлы залить некуда.
     if (hasFiles && !currentUserId) throw new Error('Нет активной сессии');
 
-    uploaded = hasFiles ? await uploadOutgoing(outgoing, currentUserId!) : [];
+    const fragment = commentThreadRootId ? undefined : fragmentRequest(context, localId);
+    uploaded = hasFiles ? await uploadOutgoing(outgoing, currentUserId!, api) : [];
 
     if (discarded.has(localId)) throw new Error('Отправка отменена');
 
-    const fragment = commentThreadRootId ? undefined : fragmentRequest(context, localId);
 
-    saved = await insert(subject, outgoing, uploaded, commentThreadRootId, fragment);
+    saved = await insert(subject, outgoing, uploaded, commentThreadRootId, fragment, api);
 
     // Уже в базе, но человек его удалил — удаляем и там, для всех.
     if (discarded.has(localId)) {
-      void deleteComment(saved.id).catch(() => undefined);
+      void deleteComment(saved.id, api).catch(() => undefined);
       bumpCount(queryClient, subject, -1);
       return;
     }
 
+    if (api !== requestClient()) return;
     settle(queryClient, targetId, localId, saved);
 
     if (fragment) context.fragment?.onSent?.();
   } catch (cause) {
     // Комментарий в базу не попал — загруженные файлы ничьи.
     if (!saved && uploaded.length > 0) {
-      void Promise.all(uploaded.map((item) => removeUploadedMedia(storedPaths(item))));
+      void Promise.all(uploaded.map((item) => removeUploadedMedia(storedPaths(item), undefined, api)));
     }
 
+    if (api !== requestClient()) return;
     if (!saved) bumpCount(queryClient, subject, -1);
 
     if (discarded.has(localId)) return;
@@ -335,6 +344,7 @@ export function sendCommentPost(
   media: OutgoingMedia[] = [],
   replies: LiveQuote[] = [],
   commentThreadRootId: string | null = null,
+  api = requestClient(),
 ) {
   const trimmed = text.trim();
 
@@ -355,14 +365,14 @@ export function sendCommentPost(
     });
   });
 
-  addOutboxComments(context.subject.id, [...drafts].reverse());
+  addOutboxComments(context.subject.id, [...drafts].reverse(), api);
 
   // По очереди: параллельная вставка перемешала бы их время на сервере.
   void (async () => {
     for (const draft of drafts) {
       const outgoing = outgoingOf(draft);
 
-      if (outgoing) await deliverComment(context, draft.localId!, outgoing, commentThreadRootId);
+      if (outgoing) await deliverComment(context, draft.localId!, outgoing, commentThreadRootId, api);
     }
   })();
 }
@@ -373,6 +383,7 @@ export function sendCommentVoice(
   voice: LocalMedia,
   replies: LiveQuote[] = [],
   commentThreadRootId: string | null = null,
+  api = requestClient(),
 ) {
   const draft = draftOf(context, Date.now(), {
     kind: 'voice',
@@ -386,21 +397,22 @@ export function sendCommentVoice(
   });
 
   draft.attachments = [toLocalVoiceAttachment(draft.localId!, voice)];
-  addOutboxComments(context.subject.id, [draft]);
+  addOutboxComments(context.subject.id, [draft], api);
   void deliverComment(
     context,
     draft.localId!,
     { type: 'voice', voice, replyTo: replies.map((quote) => quote.messageId) },
     commentThreadRootId,
+    api,
   );
 }
 
 /** «Повторить» у упавшего. */
-export function retryComment(context: CommentSendContext, localId: string) {
+export function retryComment(context: CommentSendContext, localId: string, api = requestClient()) {
   const failed = outboxComments(context.subject.id).find((item) => item.localId === localId);
   const outgoing = failed ? outgoingOf(failed) : null;
 
-  if (failed && outgoing) void deliverComment(context, localId, outgoing, failed.commentThreadRootId);
+  if (failed && outgoing) void deliverComment(context, localId, outgoing, failed.commentThreadRootId, api);
 }
 
 /** Своё неотправленное — убрать. Если оно как раз едет, по прибытии его не покажут. */

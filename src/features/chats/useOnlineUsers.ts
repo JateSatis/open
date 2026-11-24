@@ -1,3 +1,4 @@
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 
@@ -19,10 +20,11 @@ export function activityQueryKey(userIds: string[]) {
  * настройку каждого проверяет база. Пока ответа нет — `undefined`.
  */
 export function usePeopleActivity(userIds: string[]): Map<string, ActivityStatus> | undefined {
+  const api = useRequestClient();
   const ids = useMemo(() => [...new Set(userIds)].sort(), [userIds]);
   const { data } = useQuery({
     queryKey: activityQueryKey(ids),
-    queryFn: () => getLastSeen(ids),
+    queryFn: () => getLastSeen(ids, api),
     enabled: ids.length > 0,
     refetchInterval: ACTIVITY_POLL_MS,
     staleTime: ACTIVITY_POLL_MS / 2,

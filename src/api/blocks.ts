@@ -3,8 +3,8 @@
 // блокировка одной транзакцией рвёт дружбу и висящие заявки, жалобы не
 // читает никто, кроме модерации. Свои блокировки я читаю сам.
 
+import { requestClient } from '@/api/requestClient';
 import { toContactError } from '@/api/contactErrors';
-import { supabase } from '@/api/supabase';
 
 export type ReportReason = 'spam' | 'harassment' | 'threats' | 'other';
 
@@ -24,8 +24,8 @@ export type BlockedPage = {
 export const BLOCKED_PAGE_SIZE = 30;
 
 /** Заблокировал ли я этого человека. Блокировки меня другими не видны. */
-export async function isBlockedByMe(userId: string): Promise<boolean> {
-  const { data, error } = await supabase
+export async function isBlockedByMe(userId: string, api = requestClient()): Promise<boolean> {
+  const { data, error } = await api
     .from('blocks')
     .select('id')
     .eq('blocked_id', userId)
@@ -36,14 +36,14 @@ export async function isBlockedByMe(userId: string): Promise<boolean> {
   return data !== null;
 }
 
-export async function blockUser(userId: string): Promise<void> {
-  const { error } = await supabase.rpc('block_user', { p_user: userId });
+export async function blockUser(userId: string, api = requestClient()): Promise<void> {
+  const { error } = await api.rpc('block_user', { p_user: userId });
 
   if (error) throw toContactError(error);
 }
 
-export async function unblockUser(userId: string): Promise<void> {
-  const { error } = await supabase.rpc('unblock_user', { p_user: userId });
+export async function unblockUser(userId: string, api = requestClient()): Promise<void> {
+  const { error } = await api.rpc('unblock_user', { p_user: userId });
 
   if (error) throw error;
 }
@@ -51,8 +51,9 @@ export async function unblockUser(userId: string): Promise<void> {
 /** Мои заблокированные, свежие первыми. */
 export async function listBlockedUsers(
   cursor: { at: string; id: string } | null = null,
+  api = requestClient(),
 ): Promise<BlockedPage> {
-  const { data, error } = await supabase.rpc('list_blocked_users', {
+  const { data, error } = await api.rpc('list_blocked_users', {
     p_limit: BLOCKED_PAGE_SIZE,
     ...(cursor ? { p_before_created_at: cursor.at, p_before_id: cursor.id } : {}),
   });
@@ -93,8 +94,8 @@ export async function reportUser({
   chatId,
   comment,
   block,
-}: ReportInput): Promise<void> {
-  const { error } = await supabase.rpc('report_user', {
+}: ReportInput, api = requestClient()): Promise<void> {
+  const { error } = await api.rpc('report_user', {
     p_user: userId,
     p_reason: reason,
     // Функция принимает NULL, но генератор типов не размечает скалярные

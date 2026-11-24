@@ -1,14 +1,17 @@
+import { useScreenNotice } from '@/features/notifications/useScreenNotice';
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef } from 'react';
 import { getHistoryWindow } from '@/api/historyWindow';
 import type { Message } from '@/api/messageRows';
 import { mergeMessages, updateChatHistories } from '@/features/chats/messages/historyCache';
 import type { ChatMessage } from '@/features/chats/messages/types';
-import { showNotice } from '@/features/notifications/alertsStore';
 import { islandItemKey } from './rows';
 
 /** Whole-group selection is an explicit user action, never an automatic page load. */
 export function useSelectForwardGroup(start: (keys: string[]) => void, userId: string | null) {
+  const notice = useScreenNotice();
+  const api = useRequestClient();
   const queryClient = useQueryClient();
   const generation = useRef(0);
   useEffect(
@@ -25,7 +28,7 @@ export function useSelectForwardGroup(start: (keys: string[]) => void, userId: s
           mode: 'around',
           messageId: island.id,
           limit: 1,
-        });
+        }, api);
         const messages: Message[] = [];
         while (true) {
           if (generation.current !== request) return;
@@ -35,11 +38,11 @@ export function useSelectForwardGroup(start: (keys: string[]) => void, userId: s
               .map((item) => item.message),
           );
           if (!page.after || page.items.some((item) => item.message.seq > island.seq)) break;
-          page = await getHistoryWindow(island.chatId, { mode: 'after', cursor: page.after });
+          page = await getHistoryWindow(island.chatId, { mode: 'after', cursor: page.after }, api);
         }
         const group = mergeMessages({ items: [], nextCursor: null }, messages, 'older').items[0];
         if (!group?.forward) {
-          showNotice('Пересылка недоступна', 'error');
+          notice('Пересылка недоступна', 'error');
           return;
         }
         updateChatHistories(queryClient, island.chatId, (history) =>
@@ -53,9 +56,9 @@ export function useSelectForwardGroup(start: (keys: string[]) => void, userId: s
             .map((item) => islandItemKey(group.id, item.messageId)),
         );
       } catch {
-        if (generation.current === request) showNotice('Не удалось загрузить пересылку', 'error');
+        if (generation.current === request) notice('Не удалось загрузить пересылку', 'error');
       }
     },
-    [queryClient, start, userId],
+    [api, notice, queryClient, start, userId],
   );
 }

@@ -11,10 +11,10 @@ import { useSignedSource, type SignedApi, type SignedSource } from '@/hooks/use-
 
 const chatMedia: SignedApi = {
   isPath: (value): value is string => isChatMediaPath(value),
-  entry: (path) => chatMediaEntry(path),
+  entry: (path, owner) => chatMediaEntry(path, owner),
   refreshDelay: (entry) => chatMediaRefreshDelay(entry),
-  request: (path) => requestChatMediaUrl(path),
-  subscribe: (listener) => subscribeChatMediaUrls(listener),
+  request: (path, owner) => requestChatMediaUrl(path, owner),
+  subscribe: (listener, owner) => subscribeChatMediaUrls(listener, owner),
 };
 
 /**

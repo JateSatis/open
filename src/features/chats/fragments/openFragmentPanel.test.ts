@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 import { QueryClient } from '@tanstack/react-query';
 
 import { commentOnSelection } from './openFragmentPanel';
@@ -82,6 +83,7 @@ describe('💬 at a selection', () => {
     });
     expect(mockedTrack).toHaveBeenCalledWith(
       expect.objectContaining({ kind: 'cluster_opened', clusterId: 'k1', decisionId: 'd1' }),
+      requestClient(),
     );
   });
 
@@ -96,6 +98,7 @@ describe('💬 at a selection', () => {
     });
     expect(mockedTrack).toHaveBeenCalledWith(
       expect.objectContaining({ kind: 'area_opened', messageId: 'm1', rangeStart: 15, rangeEnd: 20 }),
+      requestClient(),
     );
   });
 

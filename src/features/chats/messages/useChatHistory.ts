@@ -1,3 +1,5 @@
+import { requestClient } from '@/api/requestClient';
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useMemo, useRef, useState } from 'react';
 
@@ -55,6 +57,7 @@ export function useChatHistory(
   view: HistoryView = 'all',
   enabled = true,
 ): ChatHistoryState {
+  const api = useRequestClient();
   const queryClient = useQueryClient();
   const reader = useHistoryReader();
   const scope = useMemo(
@@ -75,13 +78,13 @@ export function useChatHistory(
     initialData: disk?.history,
     initialDataUpdatedAt: 0,
     queryFn: async ({ signal }) => {
-      if (!scope) return loadHistory(queryClient, chatId, view);
-      const active = () => !signal.aborted && stillReader(scope.reader);
+      if (!scope) return loadHistory(queryClient, chatId, view, api);
+      const active = () => !signal.aborted && api === requestClient() && stillReader(scope.reader);
       const db = localHistory();
       const previous = readHistory(queryClient, chatId);
       const stable = () => active() && readHistory(queryClient, chatId) === previous;
       try {
-        await refreshLocal(scope, db.place(scope), stable);
+        await refreshLocal(scope, db.place(scope), stable, api);
       } catch (error) {
         // A sibling may already have committed a verified revocation.
         if (stable() && previous) {
@@ -111,7 +114,7 @@ export function useChatHistory(
 
   const publishPage = useCallback(
     (previous: ReturnType<typeof readHistory>) => {
-      if (!scope || !stillReader(scope.reader)) return;
+      if (!scope || api !== requestClient() || !stillReader(scope.reader)) return;
       if (previous !== readHistory(queryClient, chatId)) {
         void queryClient.invalidateQueries({ queryKey: messagesQueryKey(chatId), exact: true });
         return;
@@ -119,7 +122,7 @@ export function useChatHistory(
       const fresh = projection(scope, localHistory().read(scope));
       if (fresh) queryClient.setQueryData(messagesQueryKey(chatId), fresh);
     },
-    [chatId, queryClient, scope],
+    [api, chatId, queryClient, scope],
   );
 
   const fetchOlder = useCallback((): Promise<void> => {
@@ -134,10 +137,13 @@ export function useChatHistory(
 
     const loading = (
       scope && typeof cursor !== 'number'
-        ? loadPage(scope, { mode: 'before', cursor, limit: OLDER_PAGE_SIZE }, () =>
-            stillReader(scope.reader),
+        ? loadPage(
+            scope,
+            { mode: 'before', cursor, limit: OLDER_PAGE_SIZE },
+            () => api === requestClient() && stillReader(scope.reader),
+            api,
           ).then(() => publishPage(previous))
-        : listHistoryPage(chatId, view, cursor).then((page) => {
+        : listHistoryPage(chatId, view, cursor, api).then((page) => {
             updateHistory(
               queryClient,
               chatId,
@@ -165,7 +171,7 @@ export function useChatHistory(
     loadingMoreRef.current = loading;
 
     return loading;
-  }, [chatId, queryClient, scope, view, publishPage]);
+  }, [api, chatId, queryClient, scope, view, publishPage]);
 
   const loadMore = useCallback(
     (): Promise<void> => (stalledRef.current ? Promise.resolve() : fetchOlder()),
@@ -184,8 +190,11 @@ export function useChatHistory(
   const loadNewer = () => {
     if (!scope || !data?.afterCursor || loadingNewer.current) return;
     loadingNewer.current = true;
-    void loadPage(scope, { mode: 'after', cursor: data.afterCursor, limit: 30 }, () =>
-      stillReader(scope.reader),
+    void loadPage(
+      scope,
+      { mode: 'after', cursor: data.afterCursor, limit: 30 },
+      () => api === requestClient() && stillReader(scope.reader),
+      api,
     )
       .then(() => publishPage(data))
       .catch((cause: unknown) =>

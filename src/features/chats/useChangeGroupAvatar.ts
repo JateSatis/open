@@ -1,3 +1,4 @@
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { setChatAvatar, type ChatSummary } from '@/api/chats';
@@ -20,6 +21,7 @@ export type GroupAvatarChange =
  * говорит база: кеш мог отстать.
  */
 export function useChangeGroupAvatar(chatId: string, userId: string | null) {
+  const api = useRequestClient();
   const queryClient = useQueryClient();
 
   return useMutation<string | null, Error, GroupAvatarChange>({
@@ -30,37 +32,37 @@ export function useChangeGroupAvatar(chatId: string, userId: string | null) {
       if (!userId) throw new Error('Нет активной сессии');
 
       if (change.kind === 'remove') {
-        const replaced = await withDeadline(setChatAvatar(chatId, null), GROUP_AVATAR_DEADLINE_MS);
+        const replaced = await withDeadline(setChatAvatar(chatId, null, api), GROUP_AVATAR_DEADLINE_MS);
         // Группа уже без фото; файл убирается без ожидания — без связи
         // удаление в Storage висело бы вместе с крутилкой.
-        void removeOwnGroupAvatar(replaced, userId);
+        void removeOwnGroupAvatar(replaced, userId, api);
         return null;
       }
 
       // Загрузка в Storage без связи не падает, а висит: срок превращает её в
       // ошибку. Файл, доехавший после срока, никому не нужен.
       const uploaded = await withDeadline(
-        uploadGroupAvatar(change.uri, userId),
+        uploadGroupAvatar(change.uri, userId, api),
         GROUP_AVATAR_DEADLINE_MS,
         (late) => {
-          void removePublicMedia(late.path);
+          void removePublicMedia(late.path, api);
         },
       );
       let replaced: string | null;
 
       try {
         replaced = await withDeadline(
-          setChatAvatar(chatId, uploaded.url),
+          setChatAvatar(chatId, uploaded.url, api),
           GROUP_AVATAR_DEADLINE_MS,
         );
       } catch (error) {
         // База фото не приняла — файл никому не нужен. Кроме запроса,
         // оборванного по сроку: он мог дойти, и файл тогда — фото группы.
-        if (!(error instanceof DeadlineError)) void removePublicMedia(uploaded.path);
+        if (!(error instanceof DeadlineError)) void removePublicMedia(uploaded.path, api);
         throw error;
       }
 
-      void removeOwnGroupAvatar(replaced, userId);
+      void removeOwnGroupAvatar(replaced, userId, api);
       return uploaded.url;
     },
     onSuccess: (avatarUrl) => {

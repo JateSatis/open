@@ -22,7 +22,7 @@ export function migrate(db: HistoryDatabase) {
   db.execSync('PRAGMA journal_mode=WAL');
   db.withTransactionSync(() => {
     const version = db.getFirstSync<{ user_version: number }>('PRAGMA user_version')!.user_version;
-    if (version > 2) throw new Error('Unsupported history schema');
+    if (version > 3) throw new Error('Unsupported history schema');
     if (version === 0)
       db.execSync(`
       CREATE TABLE history_piece (
@@ -42,6 +42,7 @@ export function migrate(db: HistoryDatabase) {
         pending_seq INTEGER, pending_position INTEGER, pending_key TEXT,
         PRIMARY KEY(reader,chat));
         PRAGMA user_version=2;`);
+    if (version < 3) db.execSync('ALTER TABLE history_read ADD COLUMN pending_session TEXT; PRAGMA user_version=3;');
   });
 }
 
@@ -55,28 +56,30 @@ export class HistoryStorage {
     return () => this.reachedListeners.delete(listener);
   }
 
-  reach({ reader, chat }: Scope, point: { seq: number; position: number; key: string }) {
+  reach({ reader, chat }: Scope, point: { seq: number; position: number; key: string }, sessionId: string | null = null) {
     const changed =
       this.db.runSync(
-        `INSERT INTO history_read(reader,chat,pending_seq,pending_position,pending_key) VALUES(?,?,?,?,?)
+        `INSERT INTO history_read(reader,chat,pending_seq,pending_position,pending_key,pending_session) VALUES(?,?,?,?,?,?)
        ON CONFLICT(reader,chat) DO UPDATE SET pending_seq=excluded.pending_seq,
-       pending_position=excluded.pending_position,pending_key=excluded.pending_key
+       pending_position=excluded.pending_position,pending_key=excluded.pending_key,pending_session=excluded.pending_session
        WHERE (excluded.pending_seq,excluded.pending_position)>(seq,position)
-       AND (pending_seq IS NULL OR (excluded.pending_seq,excluded.pending_position)>(pending_seq,pending_position))`,
+       AND (pending_session IS NOT excluded.pending_session OR pending_seq IS NULL OR (excluded.pending_seq,excluded.pending_position)>(pending_seq,pending_position))`,
         reader,
         chat,
         point.seq,
         point.position,
         point.key,
+        sessionId,
       ).changes > 0;
     if (changed) this.reachedListeners.forEach((listener) => listener(reader));
     return changed;
   }
 
-  pending(reader: string) {
+  pending(reader: string, sessionId?: string) {
     return this.db.getAllSync<{ chat: string; seq: number; position: number; key: string }>(
-      'SELECT chat,pending_seq seq,pending_position position,pending_key key FROM history_read WHERE reader=? AND pending_seq IS NOT NULL',
-      reader,
+      'SELECT chat,pending_seq seq,pending_position position,pending_key key FROM history_read WHERE reader=? AND pending_seq IS NOT NULL' +
+        (sessionId === undefined ? '' : ' AND pending_session=?'),
+      ...(sessionId === undefined ? [reader] : [reader, sessionId]),
     );
   }
 

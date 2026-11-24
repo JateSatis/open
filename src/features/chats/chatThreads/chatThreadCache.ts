@@ -6,6 +6,7 @@
 // тред, и разрыв между загруженным началом и хвостом длинного треда. Корень
 // лежит среди сообщений: у него самый маленький номер.
 
+import { requestClient } from '@/api/requestClient';
 import type { QueryClient } from '@tanstack/react-query';
 
 import {
@@ -87,13 +88,13 @@ export function mergeChatThreadPage(
  * Первая загрузка: корень, начало треда и, если тред длиннее страницы, его
  * хвост — между ними разрыв «показать ещё».
  */
-async function firstLoad(chatId: string, rootId: string): Promise<ChatThreadHistory> {
+async function firstLoad(chatId: string, rootId: string, api = requestClient()): Promise<ChatThreadHistory> {
   const [[root], head] = await Promise.all([
-    listMessagesByIds([rootId]),
-    listChatThread(rootId, { limit: HEAD_SIZE + 1 }),
+    listMessagesByIds([rootId], api),
+    listChatThread(rootId, { limit: HEAD_SIZE + 1 }, api),
   ]);
   const tail = head.full
-    ? await listChatThread(rootId, { beforeSeq: 'end', limit: TAIL_SIZE })
+    ? await listChatThread(rootId, { beforeSeq: 'end', limit: TAIL_SIZE }, api)
     : null;
   const headLast = head.items[HEAD_SIZE - 1]?.seq ?? null;
   const firstMissing = head.items[HEAD_SIZE]?.seq ?? null;
@@ -116,13 +117,14 @@ async function firstLoad(chatId: string, rootId: string): Promise<ChatThreadHist
 async function fetchNewer(
   rootId: string,
   since: number,
+  api = requestClient(),
 ): Promise<Pick<ChatThreadPage, 'items' | 'quotes'> | null> {
   const items: Message[] = [];
   const quotes: Record<string, string[]> = {};
   let cursor = since;
 
   for (let page = 0; page < MAX_CATCH_UP_PAGES; page += 1) {
-    const batch = await listChatThread(rootId, { afterSeq: cursor });
+    const batch = await listChatThread(rootId, { afterSeq: cursor }, api);
 
     items.push(...batch.items);
     Object.assign(quotes, batch.quotes);
@@ -144,20 +146,21 @@ export async function loadChatThread(
   queryClient: QueryClient,
   chatId: string,
   rootId: string,
+  api = requestClient(),
 ): Promise<ChatThreadHistory> {
   const cached = readChatThread(queryClient, chatId, rootId);
   const since = cached ? newestSeq(cached) : null;
 
-  if (!cached || since === null) return firstLoad(chatId, rootId);
+  if (!cached || since === null) return firstLoad(chatId, rootId, api);
 
   const loaded = cached.items.map((message) => message.id);
   const [newer, deleted, fresh] = await Promise.all([
-    fetchNewer(rootId, since),
-    listDeletedMessageIds(loaded),
-    listMessagesByIds(loaded),
+    fetchNewer(rootId, since, api),
+    listDeletedMessageIds(loaded, api),
+    listMessagesByIds(loaded, api),
   ]);
 
-  if (newer === null) return firstLoad(chatId, rootId);
+  if (newer === null) return firstLoad(chatId, rootId, api);
 
   const latest = readChatThread(queryClient, chatId, rootId) ?? cached;
   const pruned = replaceMessages(removeMessages(latest, new Set(deleted)), fresh);
@@ -170,13 +173,14 @@ export async function pullChatThread(
   queryClient: QueryClient,
   chatId: string,
   rootId: string,
+  api = requestClient(),
 ): Promise<void> {
   const cached = readChatThread(queryClient, chatId, rootId);
   const since = cached ? newestSeq(cached) : null;
 
   if (!cached || since === null) return;
 
-  const newer = await fetchNewer(rootId, since);
+  const newer = await fetchNewer(rootId, since, api);
 
   if (!newer) {
     void queryClient.invalidateQueries({ queryKey: chatThreadQueryKey(chatId, rootId) });
@@ -193,12 +197,13 @@ export async function loadChatThreadGap(
   queryClient: QueryClient,
   chatId: string,
   rootId: string,
+  api = requestClient(),
 ): Promise<void> {
   const gap = readChatThread(queryClient, chatId, rootId)?.gap;
 
   if (!gap) return;
 
-  const page = await listChatThread(rootId, { afterSeq: gap.afterSeq });
+  const page = await listChatThread(rootId, { afterSeq: gap.afterSeq }, api);
 
   updateChatThread(queryClient, chatId, rootId, (thread) => {
     if (!thread.gap) return thread;

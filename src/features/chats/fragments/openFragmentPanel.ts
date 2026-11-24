@@ -2,6 +2,7 @@
 // выделения ровно по кластеру) или выделенной области (💬 у выделения) — и
 // событие для модели кластеров.
 
+import { requestClient } from '@/api/requestClient';
 import type { QueryClient } from '@tanstack/react-query';
 
 import { trackClusterEvent } from '@/api/fragmentClusterEvents';
@@ -21,7 +22,7 @@ export type FragmentPanelSource = {
   text: string;
 };
 
-export function openClusterPanel(source: FragmentPanelSource, cluster: FragmentCluster) {
+export function openClusterPanel(source: FragmentPanelSource, cluster: FragmentCluster, api = requestClient()) {
   const range = toServerRange(source.text, cluster.start, cluster.end);
 
   openFragmentComments(
@@ -45,11 +46,11 @@ export function openClusterPanel(source: FragmentPanelSource, cluster: FragmentC
     clusterId: cluster.id,
     rangeStart: range.start,
     rangeEnd: range.end,
-  });
+  }, api);
 }
 
 /** Выделенный кусок `[start, end)` в UTF-16 текста облачка; сразу поле ввода. */
-export function openAreaPanel(source: FragmentPanelSource, start: number, end: number) {
+export function openAreaPanel(source: FragmentPanelSource, start: number, end: number, api = requestClient()) {
   const range = toServerRange(source.text, start, end);
 
   openFragmentComments(
@@ -69,7 +70,7 @@ export function openAreaPanel(source: FragmentPanelSource, start: number, end: n
     messageId: source.messageId,
     rangeStart: range.start,
     rangeEnd: range.end,
-  });
+  }, api);
 }
 
 /**
@@ -77,7 +78,7 @@ export function openAreaPanel(source: FragmentPanelSource, start: number, end: n
  * кластера; иначе — панель области. Выделение снимается, облачко остаётся в
  * режиме фрагментов.
  */
-export function commentOnSelection(queryClient: QueryClient, selection: TextSelection) {
+export function commentOnSelection(queryClient: QueryClient, selection: TextSelection, api = requestClient()) {
   const { rowKey, messageId, chatId, amMember, text, start, end } = selection;
   const source = { rowKey, messageId, chatId, amMember, text };
   const cluster = queryClient
@@ -86,6 +87,6 @@ export function commentOnSelection(queryClient: QueryClient, selection: TextSele
 
   clearTextSelection();
 
-  if (cluster) openClusterPanel(source, cluster);
-  else openAreaPanel(source, start, end);
+  if (cluster) openClusterPanel(source, cluster, api);
+  else openAreaPanel(source, start, end, api);
 }

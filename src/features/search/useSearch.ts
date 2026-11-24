@@ -1,3 +1,4 @@
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useInfiniteQuery, useQuery, useQueryClient, type QueryKey } from '@tanstack/react-query';
 import { useFocusEffect } from '@/navigation';
 import { useCallback, useMemo, useRef } from 'react';
@@ -73,6 +74,7 @@ export type SearchResults = {
  * кешу списка «Чатов». Без сети он и остаётся, с пояснением.
  */
 export function useSearch(query: string): SearchResults {
+  const api = useRequestClient();
   const trimmed = query.trim();
   const parsed = useMemo(() => parseSearchQuery(trimmed), [trimmed]);
   const debounced = useDebounced(trimmed, SEARCH_DEBOUNCE_MS);
@@ -98,7 +100,7 @@ export function useSearch(query: string): SearchResults {
 
   const entities = useQuery({
     queryKey: [...searchQueryKey, 'entities', debounced],
-    queryFn: ({ signal }) => searchEntities(debounced, signal),
+    queryFn: ({ signal }) => searchEntities(debounced, signal, api),
     enabled,
     placeholderData: whileTyping(debounced),
     staleTime: SEARCH_STALE_MS,
@@ -106,7 +108,7 @@ export function useSearch(query: string): SearchResults {
 
   const messages = useInfiniteQuery({
     queryKey: [...searchQueryKey, 'messages', debounced],
-    queryFn: ({ pageParam, signal }) => searchMessages(debounced, pageParam, signal),
+    queryFn: ({ pageParam, signal }) => searchMessages(debounced, pageParam, signal, api),
     initialPageParam: null as SearchMessagesCursor | null,
     getNextPageParam: (page) => page.nextCursor,
     enabled,

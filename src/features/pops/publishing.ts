@@ -3,6 +3,9 @@
 // моменту уже закрыт. Плитки «в пути» — клиентское состояние, как исходящие
 // сообщения (`outbox.ts`): в кеш запросов поп попадает только с ответом базы.
 
+import { clientIdentity } from '@/api/perClient';
+
+import { requestClient } from '@/api/requestClient';
 import type { QueryClient } from '@tanstack/react-query';
 
 import { NO_POP_REACTIONS, publishPop, type Pop } from '@/api/pops';
@@ -41,10 +44,10 @@ function explain(cause: unknown) {
   }
 }
 
-async function run(queryClient: QueryClient, userId: string, channelId: string, localId: string) {
+async function run(queryClient: QueryClient, userId: string, channelId: string, localId: string, api = requestClient()) {
   const pending = find(channelId, localId);
 
-  if (!pending || running.has(localId)) return;
+  if (!pending || (pending.deliveryOwner && pending.deliveryOwner !== clientIdentity(api)) || running.has(localId)) return;
 
   running.add(localId);
   patch(channelId, localId, { status: 'publishing' });
@@ -59,10 +62,10 @@ async function run(queryClient: QueryClient, userId: string, channelId: string, 
       // Без связи загрузка висит, а не падает: срок превращает её в ошибку.
       // Файл, доехавший после срока, убирается — повтор зальёт свой.
       uploaded = await withDeadline(
-        uploadPop(pending.media, userId),
+        uploadPop(pending.media, userId, api),
         PUBLISH_DEADLINE_MS,
         (late) => {
-          void removePublicMedia(storedPaths(late));
+          void removePublicMedia(storedPaths(late), api);
         },
       );
       patch(channelId, localId, { uploaded });
@@ -84,8 +87,10 @@ async function run(queryClient: QueryClient, userId: string, channelId: string, 
         postText: pending.alsoPost ? pending.caption : null,
       },
       abort.signal,
+      api,
     );
 
+    if (api !== requestClient()) return;
     const pop: Pop = {
       id: pending.popId,
       channelId,
@@ -127,10 +132,11 @@ async function run(queryClient: QueryClient, userId: string, channelId: string, 
     // База отказала — файлы ничьи. Не дождались ответа или не достучались —
     // файлы остаются для повтора с тем же id, и дублей в Storage нет.
     if (uploaded && !unanswered && !unreached) {
-      void removePublicMedia(storedPaths(uploaded));
+      void removePublicMedia(storedPaths(uploaded), api);
       uploaded = null;
     }
 
+    if (api !== requestClient()) return;
     if (isNetworkError(cause)) reportRequestFailed();
 
     explain(cause);
@@ -146,12 +152,13 @@ async function run(queryClient: QueryClient, userId: string, channelId: string, 
 }
 
 /** «Опубликовать» в редакторе: плитка «в пути» сразу, всё остальное — в фоне. */
-export function publishNewPop(queryClient: QueryClient, userId: string, input: NewPop) {
+export function publishNewPop(queryClient: QueryClient, userId: string, input: NewPop, api = requestClient()) {
   const localId = `local-pop-${randomUuid()}`;
 
   setChannel(input.channelId, (pops) => [
     {
       ...input,
+      deliveryOwner: clientIdentity(api),
       localId,
       popId: randomUuid(),
       status: 'publishing',
@@ -161,7 +168,7 @@ export function publishNewPop(queryClient: QueryClient, userId: string, input: N
     ...pops,
   ]);
 
-  void run(queryClient, userId, input.channelId, localId);
+  void run(queryClient, userId, input.channelId, localId, api);
 }
 
 /** Повтор упавшей публикации — тем же id и, если они уже есть, теми же файлами. */
@@ -170,18 +177,19 @@ export function retryPop(
   userId: string,
   channelId: string,
   localId: string,
+  api = requestClient(),
 ) {
-  void run(queryClient, userId, channelId, localId);
+  void run(queryClient, userId, channelId, localId, api);
 }
 
 /** Отказ от упавшей публикации: плитка уходит, ничьи файлы — тоже. */
-export function discardPop(channelId: string, localId: string) {
+export function discardPop(channelId: string, localId: string, api = requestClient()) {
   const pending = find(channelId, localId);
 
-  if (!pending || running.has(localId)) return;
+  if (!pending || (pending.deliveryOwner && pending.deliveryOwner !== clientIdentity(api)) || running.has(localId)) return;
 
   if (pending.uploaded && !pending.uncertain) {
-    void removePublicMedia(storedPaths(pending.uploaded));
+    void removePublicMedia(storedPaths(pending.uploaded), api);
   }
 
   setChannel(channelId, (pops) => pops.filter((pop) => pop.localId !== localId));

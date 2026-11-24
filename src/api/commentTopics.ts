@@ -9,9 +9,12 @@
 //
 // Payload любого события — только сигнал: строки перечитываются из базы.
 
+import { perClient } from './perClient';
+
+import { requestClient } from '@/api/requestClient';
+import type { AccountClient } from '@/api/accountClient';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
-import { supabase } from '@/api/supabase';
 
 export type CommentTopicListener = {
   /** Появился комментарий; `commentThreadRootId` — тред комментариев ответа, `null` — верхнеуровневый. */
@@ -39,7 +42,7 @@ type Entry = {
 /** Сколько держать канал без слушателей — переход между экранами берёт его снова (см. `chatTopics`). */
 const LINGER_MS = 3000;
 
-const topics = new Map<string, Entry>();
+const clientTopics = perClient(() => new Map<string, Entry>());
 
 function stringField(payload: unknown, field: string): string | null {
   const value = (payload as Record<string, unknown> | undefined)?.[field];
@@ -47,13 +50,13 @@ function stringField(payload: unknown, field: string): string | null {
   return typeof value === 'string' ? value : null;
 }
 
-function open(messageId: string): Entry {
-  void supabase.realtime.setAuth();
+function open(messageId: string, api: AccountClient): Entry {
+  void api.realtime.setAuth().catch(() => undefined);
 
-  const channel = supabase.channel(`comments:${messageId}`, { config: { private: true } });
+  const channel = api.channel(`comments:${messageId}`, { config: { private: true } });
   const entry: Entry = { channel, listeners: new Set(), closing: null };
   const each = (call: (listener: CommentTopicListener) => void) =>
-    [...entry.listeners].forEach(call);
+    api === requestClient() && [...entry.listeners].forEach(call);
   let joinedBefore = false;
 
   const onComment = (
@@ -98,11 +101,13 @@ function open(messageId: string): Entry {
 export function acquireCommentTopic(
   messageId: string,
   listener: CommentTopicListener,
+  api = requestClient(),
 ): () => void {
+  const topics = clientTopics(api);
   let entry = topics.get(messageId);
 
   if (!entry) {
-    entry = open(messageId);
+    entry = open(messageId, api);
     topics.set(messageId, entry);
   }
 
@@ -131,7 +136,7 @@ export function acquireCommentTopic(
 
       if (topics.get(messageId) === current) topics.delete(messageId);
 
-      void supabase.removeChannel(current.channel);
+      void api.removeChannel(current.channel);
     }, LINGER_MS);
   };
 }

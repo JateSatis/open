@@ -12,10 +12,10 @@ export type AvatarSource = SignedSource;
 
 const avatars: SignedApi = {
   isPath: (value): value is string => isAvatarPath(value),
-  entry: (path) => avatarEntry(path),
+  entry: (path, owner) => avatarEntry(path, owner),
   refreshDelay: (entry) => avatarRefreshDelay(entry),
-  request: (path) => requestAvatarUrl(path),
-  subscribe: (listener) => subscribeAvatarUrls(listener),
+  request: (path, owner) => requestAvatarUrl(path, owner),
+  subscribe: (listener, owner) => subscribeAvatarUrls(listener, owner),
 };
 
 /**

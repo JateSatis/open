@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 jest.mock('@/api/historyWindow', () => ({
   getHistoryWindow: jest.fn((...args) => jest.requireActual('@/test/historyWindowMock').fixtureHistoryWindow(...args)),
   getHistoryGroupKeys: jest.fn(() => Promise.resolve([])),
@@ -239,7 +240,7 @@ describe('кнопка «Позвонить»', () => {
 
     await waitFor(() => expect(mockedJoin).toHaveBeenCalled());
     expect(mockedMicrophone).toHaveBeenCalled();
-    expect(mockedStartCall).toHaveBeenCalledWith('chat-1');
+    expect(mockedStartCall).toHaveBeenCalledWith('chat-1', requestClient());
     expect(mockedJoin).toHaveBeenCalledWith(
       {
         streamId: 'stream-1',
@@ -247,7 +248,7 @@ describe('кнопка «Позвонить»', () => {
         chatTitle: 'Марина',
         isDirect: true,
       },
-      expect.any(Promise),
+      expect.any(Promise), requestClient()
     );
     expect(mockPush).toHaveBeenCalledWith({ name: 'Call' });
   });

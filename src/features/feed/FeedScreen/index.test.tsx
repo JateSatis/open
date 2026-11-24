@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 import type { Session as SupabaseSession } from '@supabase/supabase-js';
 import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
 
@@ -305,7 +306,7 @@ it('shows recent feed queries — not the chats ones — repeats one on tap and 
   await fireEvent.press(screen.getByTestId('feed-search-recent'));
 
   expect(screen.getByTestId('feed-search-input').props.value).toBe('кот');
-  await waitFor(() => expect(mockedPops).toHaveBeenCalledWith('кот', null, expect.anything()));
+  await waitFor(() => expect(mockedPops).toHaveBeenCalledWith('кот', null, expect.anything(), requestClient()));
 
   await type('');
   await fireEvent.press(screen.getByRole('button', { name: 'Очистить' }));
@@ -331,7 +332,7 @@ it('loads the next page of pops at the end, passing the cursor with the first pa
     expect(mockedPops).toHaveBeenCalledWith(
       'елка',
       { rank: 7, score: 0.71, id: 'p29', scoredAt: '2026-10-13T10:00:00Z' },
-      expect.anything(),
+      expect.anything(), requestClient()
     ),
   );
 });

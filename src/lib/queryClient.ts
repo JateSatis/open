@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 import { MutationCache, onlineManager, type Query, QueryCache, QueryClient } from '@tanstack/react-query';
 
 import { ChatGoneError } from '@/api/chatGone';
@@ -98,7 +99,7 @@ export function syncQueryOnlineState(client: QueryClient, requestsReady: boolean
   };
 }
 
-export function createAppQueryClient(owner: string | null = null) {
+export function createAppQueryClient(owner: string | null = null, api = requestClient()) {
   const client: QueryClient = new QueryClient({
     defaultOptions: {
       queries: {
@@ -121,16 +122,16 @@ export function createAppQueryClient(owner: string | null = null) {
       onSuccess: (_data, query) => {
         if (query.meta?.localOnly) return;
         fetchedSinceDisconnect.add(query);
-        reportOutcome(null);
+        if (api === requestClient()) reportOutcome(null);
       },
       onError: (error, query) => {
-        if (!query.meta?.localOnly) reportOutcome(error);
+        if (!query.meta?.localOnly && api === requestClient()) reportOutcome(error);
       },
     }),
     mutationCache: new MutationCache({
-      onMutate: () => requireAccountSession(owner),
-      onSuccess: () => reportOutcome(null),
-      onError: (error) => reportOutcome(error),
+      onMutate: () => requireAccountSession(owner, api),
+      onSuccess: () => { if (api === requestClient()) reportOutcome(null); },
+      onError: (error) => { if (api === requestClient()) reportOutcome(error); },
     }),
   });
   return client;

@@ -2,6 +2,8 @@
 // ответов, видимых мне, нет). Одна запись на чат: корни приходят пачками со
 // страницами «Тредов», сигналы Realtime перечитывают только свои корни.
 
+import { requestClient } from '@/api/requestClient';
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo } from 'react';
 
@@ -69,9 +71,9 @@ function merge(
 }
 
 /** Повтор входа в вид сверяет и известные корни, не только новые страницы. */
-async function loadSummaries(queryClient: QueryClient, chatId: string, rootIds: string[]) {
+async function loadSummaries(queryClient: QueryClient, chatId: string, rootIds: string[], api = requestClient()) {
   const ids = [...new Set([...Object.keys(readChatThreadSummaries(queryClient, chatId) ?? {}), ...rootIds])];
-  await refreshChatThreadSummaries(queryClient, chatId, ids);
+  await refreshChatThreadSummaries(queryClient, chatId, ids, api);
   return readChatThreadSummaries(queryClient, chatId) ?? NO_SUMMARIES;
 }
 
@@ -80,13 +82,14 @@ export async function refreshChatThreadSummaries(
   queryClient: QueryClient,
   chatId: string,
   rootIds: string[],
+  api = requestClient(),
 ): Promise<void> {
   const unique = [...new Set(rootIds)];
 
   for (let start = 0; start < unique.length; start += MAX_ROOTS) {
     const batch = unique.slice(start, start + MAX_ROOTS);
 
-    merge(queryClient, chatId, batch, await listChatThreadSummaries(batch));
+    merge(queryClient, chatId, batch, await listChatThreadSummaries(batch, api));
   }
 }
 
@@ -160,10 +163,11 @@ export function useChatThreadSummaries(
   rootIds: string[],
   enabled: boolean,
 ): ChatThreadSummaries {
+  const api = useRequestClient();
   const queryClient = useQueryClient();
   const { data } = useQuery({
     queryKey: chatThreadSummariesKey(chatId),
-    queryFn: () => loadSummaries(queryClient, chatId, rootIds),
+    queryFn: () => loadSummaries(queryClient, chatId, rootIds, api),
     staleTime: 0,
     enabled,
   });
@@ -178,10 +182,10 @@ export function useChatThreadSummaries(
   useEffect(() => {
     if (missing.length === 0) return;
 
-    refreshChatThreadSummaries(queryClient, chatId, missing).catch(() => undefined);
+    refreshChatThreadSummaries(queryClient, chatId, missing, api).catch(() => undefined);
     // Дочитывать по составу, а не по каждой новой ссылке на массив.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chatId, missingKey, queryClient]);
+  }, [api, chatId, missingKey, queryClient]);
 
   return useMemo(() => withPendingChatThreadSummaries(summaries, pending), [pending, summaries]);
 }

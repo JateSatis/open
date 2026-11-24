@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 import type { DatabaseSync } from 'node:sqlite';
 import { openHistoryDatabase } from '@/test/openHistoryDatabase';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -91,7 +92,7 @@ it('keeps the starting ticket after empty more and failure, then replaces an exp
     .mockResolvedValueOnce({ status: 'more', parentIds: [], cursor: 'h1.next' })
     .mockRejectedValueOnce(Error('offline'));
   await expect(reconcile(storage, scope, old, () => true)).rejects.toThrow('offline');
-  expect(changes).toHaveBeenLastCalledWith('chat', 'h1.next');
+  expect(changes).toHaveBeenLastCalledWith('chat', 'h1.next', undefined, requestClient());
   expect(storage.read(scope)[0]).toEqual(old);
   const first = piece(1, 8, 'replaced'),
     second = piece(9, 16, 'next');
@@ -112,7 +113,7 @@ it('keeps the starting ticket after empty more and failure, then replaces an exp
   native.exec('DROP TRIGGER fail');
   mockRange();
   await reconcile(storage, scope, old, () => true);
-  expect(range).toHaveBeenLastCalledWith('chat', second.coverage);
+  expect(range).toHaveBeenLastCalledWith('chat', second.coverage, undefined, requestClient());
   expect(storage.read(scope).map((p) => p.syncCursor)).toEqual(['h1.replaced', 'h1.next']);
   expect(storage.read(scope, null)[0]).toEqual(before);
   expect(storage.confirm(scope, old, 'h1.late')).toBe(false);

@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 import { act, screen, userEvent, waitFor } from '@testing-library/react-native';
 import { sessionOf } from '@/test/sessionOf';
 import { useSessionStore } from '@/features/auth/sessionState';
@@ -176,7 +177,7 @@ describe('AccountScreen — способы входа', () => {
     await renderAccount();
     await user.press(await screen.findByText('Привязать Google'));
 
-    await waitFor(() => expect(mocked.linkIdentity).toHaveBeenCalledWith('google', 'google-token'));
+    await waitFor(() => expect(mocked.linkIdentity).toHaveBeenCalledWith('google', 'google-token', requestClient()));
   });
 
   it('explains a Google account that already belongs to someone else', async () => {
@@ -221,7 +222,7 @@ describe('AccountScreen — способы входа', () => {
     expect(await screen.findByText('Отвязать Apple?')).toBeTruthy();
     await user.press(screen.getAllByText('Отвязать').at(-1) as never);
 
-    await waitFor(() => expect(mocked.unlinkIdentity).toHaveBeenCalledWith('id-apple'));
+    await waitFor(() => expect(mocked.unlinkIdentity).toHaveBeenCalledWith('id-apple', requestClient()));
   });
 });
 
@@ -296,7 +297,7 @@ describe('AccountScreen — выход и удаление', () => {
     await user.press(screen.getByRole('button', { name: 'Выйти' }));
 
     await waitFor(() => expect(mocked.signOutLocally).toHaveBeenCalled());
-    expect(mocked.markDeviceSignedOut).toHaveBeenCalledWith('install-mine', { userId: 'me', sessionId: 'first' });
+    expect(mocked.markDeviceSignedOut).toHaveBeenCalledWith('install-mine', { userId: 'me', sessionId: 'first' }, requestClient());
     expect(mocked.signOutOfGoogle).toHaveBeenCalled();
   });
 
@@ -396,7 +397,7 @@ describe('AccountScreen — дата рождения', () => {
     await user.press(screen.getByTestId('birth-date-picker-pick'));
     await user.press(screen.getByText('Сохранить'));
 
-    await waitFor(() => expect(mocked.setBirthDate).toHaveBeenCalledWith('2001-06-02'));
+    await waitFor(() => expect(mocked.setBirthDate).toHaveBeenCalledWith('2001-06-02', requestClient()));
     expect(await screen.findByText('2 июня 2001')).toBeTruthy();
     await account.unmount();
     expect(await readLocalBirthDate('me')).toEqual({ date: '2001-06-02' });

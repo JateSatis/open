@@ -1,3 +1,4 @@
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 
@@ -42,6 +43,7 @@ export function useUsernameAvailability(
   value: string,
   { kind, ownId, current }: UsernameAvailabilityOptions,
 ): UsernameAvailability {
+  const api = useRequestClient();
   const username = value.trim();
   const formatError = username ? validateUsername(username) : null;
   const unchanged = !!current && username.toLowerCase() === current.toLowerCase();
@@ -55,7 +57,7 @@ export function useUsernameAvailability(
 
   const query = useQuery({
     queryKey: usernameAvailabilityKey(kind, settled, ownId),
-    queryFn: () => isUsernameAvailable(kind, settled, ownId),
+    queryFn: () => isUsernameAvailable(kind, settled, ownId, api),
     enabled: settled !== '' && settled === username && formatError === null && !unchanged,
     // Имя могут занять в любой момент: старый ответ не переиспользуем надолго.
     staleTime: 5_000,

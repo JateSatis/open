@@ -1,3 +1,5 @@
+import { requestClient } from '@/api/requestClient';
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useQuery } from '@tanstack/react-query';
 
 import { ChatGoneError } from '@/api/chatGone';
@@ -26,14 +28,15 @@ export type ChatState = {
 };
 
 export function useChat(chatId: string): ChatState {
+  const api = useRequestClient();
   const reader = useHistoryReader();
   const query = useQuery({
     queryKey: chatQueryKey(chatId),
     ...routeOptions(reader, 'chat/' + chatId, async () => {
       try {
-        return await getChat(chatId);
+        return await getChat(chatId, api);
       } catch (error) {
-        if (reader && stillReader(reader) && error instanceof ChatGoneError) {
+        if (api === requestClient() && reader && stillReader(reader) && error instanceof ChatGoneError) {
           localHistory().forget({ reader, chat: chatId });
           localHistory().setRoute(reader, 'chat/' + chatId, null);
         }

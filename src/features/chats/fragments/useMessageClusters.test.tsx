@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
@@ -63,7 +64,7 @@ describe('useMessageClusters', () => {
     const { result } = await renderHook(() => useMessageClusters(message), { wrapper: wrapper() });
 
     await waitFor(() => expect(result.current.data).toEqual([cluster]));
-    expect(mockedList).toHaveBeenCalledWith('m1', 'Огонь и вода');
+    expect(mockedList).toHaveBeenCalledWith('m1', 'Огонь и вода', requestClient());
   });
 
   it('does not ask while the message has no visible fragments, but asks on the first signal', async () => {
@@ -76,14 +77,14 @@ describe('useMessageClusters', () => {
     // Первая реакция на облачко, загруженное без фрагментов: пересчёт сообщает
     // о кластере — облачко его спрашивает.
     listener?.onClustersChanged?.('m1');
-    await waitFor(() => expect(mockedList).toHaveBeenCalledWith('m1', 'Огонь и вода'));
+    await waitFor(() => expect(mockedList).toHaveBeenCalledWith('m1', 'Огонь и вода', requestClient()));
   });
 
   it('reloads when the server says the clusters of this message changed', async () => {
     const { result } = await renderHook(() => useMessageClusters(message), { wrapper: wrapper() });
 
     await waitFor(() => expect(result.current.data).toBeDefined());
-    expect(mockedAcquire).toHaveBeenCalledWith('c1', expect.anything());
+    expect(mockedAcquire).toHaveBeenCalledWith('c1', expect.anything(), requestClient());
 
     listener?.onClustersChanged?.('other-message');
     expect(mockedList).toHaveBeenCalledTimes(1);

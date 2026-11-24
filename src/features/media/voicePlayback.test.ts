@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 import { createAudioPlayer } from 'expo-audio';
 import { act } from '@testing-library/react-native';
 
@@ -62,7 +63,7 @@ describe('voicePlayback', () => {
   it('plays the cached file, not the network URL', async () => {
     await playVoice(first);
 
-    expect(resolveVoiceUri).toHaveBeenCalledWith(first.uri);
+    expect(resolveVoiceUri).toHaveBeenCalledWith(first.uri, requestClient());
     expect(player.replace).toHaveBeenCalledWith({ uri: 'file:///cache/a.m4a' });
     expect(player.play).toHaveBeenCalled();
     expect(useVoicePlaybackStore.getState().activeKey).toBe('a');

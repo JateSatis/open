@@ -1,3 +1,5 @@
+import { requestClient } from '@/api/requestClient';
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from '@/navigation';
 import { useCallback, useState } from 'react';
@@ -28,12 +30,14 @@ function joinErrorText(error: unknown): string {
  * держать палец на кнопке.
  */
 export function useJoinCall() {
+  const api = useRequestClient();
   const router = useRouter();
   const queryClient = useQueryClient();
   const [busy, setBusy] = useState(false);
 
   const enter = useCallback(
     async (streamId: string, chat: CallChat, preparation: Promise<LiveKit>) => {
+      if (api !== requestClient()) return;
       stopRinging(streamId);
       router.push({ name: 'Call' });
 
@@ -46,14 +50,16 @@ export function useJoinCall() {
             isDirect: chat.isDirect,
           },
           preparation,
+          api,
         );
       } catch (error) {
+        if (api !== requestClient()) return;
         if (router.canGoBack()) router.back();
         showNotice(joinErrorText(error), 'error');
         void queryClient.invalidateQueries({ queryKey: liveStreamQueryKey(chat.chatId) });
       }
     },
-    [queryClient, router],
+    [api, queryClient, router],
   );
 
   /** Кнопка «Позвонить»: новый звонок или уже идущий в этом чате. */
@@ -69,11 +75,13 @@ export function useJoinCall() {
 
         await askNotificationsOnce();
 
+        if (api !== requestClient()) return;
         let streamId: string;
 
         try {
-          ({ streamId } = await startCall(chat.chatId));
+          ({ streamId } = await startCall(chat.chatId, api));
         } catch {
+          if (api !== requestClient()) return;
           showNotice('Не удалось начать звонок', 'error');
           return;
         }
@@ -84,7 +92,7 @@ export function useJoinCall() {
         setBusy(false);
       }
     },
-    [busy, enter, queryClient],
+    [api, busy, enter, queryClient],
   );
 
   /** Полоса звонка или «Присоединиться» во входящем. */

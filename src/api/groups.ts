@@ -4,7 +4,7 @@
 // участник, уйти — только функцией. Скрытая в интерфейсе кнопка — лишь
 // дополнение к отказу базы.
 
-import { supabase } from '@/api/supabase';
+import { requestClient } from '@/api/requestClient';
 
 /** Человек в выборе, кого позвать: имя, `@имя` и аватарка. */
 export type PersonCandidate = {
@@ -31,8 +31,9 @@ export async function searchPeople(
   query: string,
   cursor: PeopleCursor | null,
   signal?: AbortSignal,
+  api = requestClient(),
 ): Promise<PeoplePage> {
-  let request = supabase.rpc('search_people', {
+  let request = api.rpc('search_people', {
     query: query.trim(),
     after_name: cursor?.name,
     after_id: cursor?.id,
@@ -64,8 +65,8 @@ export async function searchPeople(
 }
 
 /** Позвать людей в группу. Отдаёт, скольких позвали (участники и уже позванные пропускаются). */
-export async function inviteToChat(chatId: string, userIds: string[]): Promise<number> {
-  const { data, error } = await supabase.rpc('invite_to_chat', {
+export async function inviteToChat(chatId: string, userIds: string[], api = requestClient()): Promise<number> {
+  const { data, error } = await api.rpc('invite_to_chat', {
     target_chat: chatId,
     invitee_ids: userIds,
   });
@@ -76,15 +77,15 @@ export async function inviteToChat(chatId: string, userIds: string[]): Promise<n
 }
 
 /** Покинуть группу. Владелец уходит — владение переходит само. */
-export async function leaveChat(chatId: string): Promise<void> {
-  const { error } = await supabase.rpc('leave_chat', { target_chat: chatId });
+export async function leaveChat(chatId: string, api = requestClient()): Promise<void> {
+  const { error } = await api.rpc('leave_chat', { target_chat: chatId });
 
   if (error) throw error;
 }
 
 /** Удалить участника из группы (только владелец). */
-export async function removeChatMember(chatId: string, userId: string): Promise<void> {
-  const { error } = await supabase.rpc('remove_chat_member', {
+export async function removeChatMember(chatId: string, userId: string, api = requestClient()): Promise<void> {
+  const { error } = await api.rpc('remove_chat_member', {
     target_chat: chatId,
     target_user: userId,
   });
@@ -93,8 +94,8 @@ export async function removeChatMember(chatId: string, userId: string): Promise<
 }
 
 /** Отменить ещё не принятое приглашение (только владелец). */
-export async function cancelChatInvite(chatId: string, userId: string): Promise<void> {
-  const { error } = await supabase.rpc('cancel_chat_invite', {
+export async function cancelChatInvite(chatId: string, userId: string, api = requestClient()): Promise<void> {
+  const { error } = await api.rpc('cancel_chat_invite', {
     target_chat: chatId,
     target_user: userId,
   });
@@ -103,8 +104,8 @@ export async function cancelChatInvite(chatId: string, userId: string): Promise<
 }
 
 /** Задать или убрать (`null`) описание группы (только владелец). */
-export async function setChatDescription(chatId: string, description: string | null): Promise<void> {
-  const { error } = await supabase.rpc('set_chat_description', {
+export async function setChatDescription(chatId: string, description: string | null, api = requestClient()): Promise<void> {
+  const { error } = await api.rpc('set_chat_description', {
     target_chat: chatId,
     new_description: description ?? '',
   });
@@ -113,8 +114,8 @@ export async function setChatDescription(chatId: string, description: string | n
 }
 
 /** Удалить свой личный диалог — для обоих и для всех, кто его читает. */
-export async function deleteDirectChat(chatId: string): Promise<void> {
-  const { error } = await supabase.rpc('delete_direct_chat', { target_chat: chatId });
+export async function deleteDirectChat(chatId: string, api = requestClient()): Promise<void> {
+  const { error } = await api.rpc('delete_direct_chat', { target_chat: chatId });
 
   if (error) throw error;
 }

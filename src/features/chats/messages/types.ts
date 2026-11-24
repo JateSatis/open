@@ -14,6 +14,8 @@ import type { HiddenRange } from '@/features/chats/hiddenText';
 export type DeliveryStatus = 'sending' | 'sent' | 'failed';
 
 export type ChatMessage = Message & {
+  /** Только у локальной исходящей записи, включая ручной повтор. */
+  deliveryOwner?: symbol;
   status: DeliveryStatus;
   /** Set only while the message exists optimistically, before the server id. */
   localId?: string;

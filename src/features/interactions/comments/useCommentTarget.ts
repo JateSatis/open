@@ -1,3 +1,4 @@
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import type { ChatSummary } from '@/api/chats';
@@ -89,12 +90,13 @@ function fromPopCache(
 
 /** Сообщение или поп, к которому открыты комментарии: живое, удалённое или не найденное. */
 export function useCommentTarget(subject: CommentSubject, chatId?: string) {
+  const api = useRequestClient();
   const queryClient = useQueryClient();
   const { type, id } = subject;
 
   return useQuery({
     queryKey: commentTargetQueryKey(id),
-    queryFn: () => (type === 'pop' ? getPopCommentTarget(id) : getCommentTarget(id)),
+    queryFn: () => (type === 'pop' ? getPopCommentTarget(id, api) : getCommentTarget(id, api)),
     placeholderData: () =>
       type === 'message' ? fromChatCache(queryClient, id, chatId) : fromPopCache(queryClient, id),
   });

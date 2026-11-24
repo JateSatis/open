@@ -2,6 +2,7 @@
 // исходящими, что и раньше (островок встаёт сразу, упавший повторяется уже в
 // том чате), и в «Сохранённые» — отдельным сохранением, мимо исходящих.
 
+import { requestClient } from '@/api/requestClient';
 import type { QueryClient } from '@tanstack/react-query';
 
 import type { SaveOptions } from '@/api/saved';
@@ -76,7 +77,9 @@ export function sendForwardPick(
   pick: ForwardPick,
   targets: ForwardTargets,
   text: string,
+  api = requestClient(),
 ) {
+  if (api !== requestClient()) return;
   const batches = forwardBatches(pick);
 
   for (const chatId of targets.chatIds) {
@@ -91,10 +94,10 @@ export function sendForwardPick(
 
       previous = (
         'comments' in batch
-          ? sendCommentForward(context, caption, batch.comments, previous)
+          ? sendCommentForward(context, caption, batch.comments, previous, api)
           : 'notes' in batch
-            ? sendNoteForward(context, caption, batch.notes, previous)
-            : sendForward(context, caption, batch.sourceChat, batch.items, previous)
+            ? sendNoteForward(context, caption, batch.notes, previous, api)
+            : sendForward(context, caption, batch.sourceChat, batch.items, previous, api)
       ).delivered;
     });
   }
@@ -108,6 +111,6 @@ export function sendForwardPick(
   const { saved } = targets;
 
   if (saved) {
-    for (const batch of batches) void saveToSaved(queryClient, saveRequestOf(batch, saved));
+    for (const batch of batches) void saveToSaved(queryClient, saveRequestOf(batch, saved), api);
   }
 }

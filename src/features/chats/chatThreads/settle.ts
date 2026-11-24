@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 import type { QueryClient } from '@tanstack/react-query';
 
 import type { Message } from '@/api/chats';
@@ -13,10 +14,10 @@ import { readChatThread, settleIntoChatThread } from '@/features/chats/chatThrea
 import { mergeMessages, readHistory, updateHistory } from '@/features/chats/messages/historyCache';
 
 /** Завершение неудачной/отменённой отправки снимает отсрочку Broadcast-сводок. */
-export function refreshSettledChatThreadSummaries(queryClient: QueryClient, chatId: string) {
+export function refreshSettledChatThreadSummaries(queryClient: QueryClient, chatId: string, api = requestClient()) {
   const known = readChatThreadSummaries(queryClient, chatId);
   const roots = [...Object.keys(known ?? {}), ...takeDeferredChatThreadRoots(chatId)];
-  if (roots.length > 0) refreshChatThreadSummaries(queryClient, chatId, roots).catch(() => undefined);
+  if (roots.length > 0) refreshChatThreadSummaries(queryClient, chatId, roots, api).catch(() => undefined);
 }
 
 /**
@@ -24,7 +25,7 @@ export function refreshSettledChatThreadSummaries(queryClient: QueryClient, chat
  * в загруженные шторки своих тредов, а плашки его корней перечитываются
  * (до того их держит оптимистичная прибавка).
  */
-export function settleIntoChatThreads(queryClient: QueryClient, chatId: string, saved: Message) {
+export function settleIntoChatThreads(queryClient: QueryClient, chatId: string, saved: Message, api = requestClient()) {
   const roots = saved.chatThreadRootIds ?? [];
 
   if (roots.length === 0) {
@@ -63,6 +64,6 @@ export function settleIntoChatThreads(queryClient: QueryClient, chatId: string, 
       });
       return next;
     });
-    refreshChatThreadSummaries(queryClient, chatId, roots).catch(() => undefined);
+    refreshChatThreadSummaries(queryClient, chatId, roots, api).catch(() => undefined);
   }
 }

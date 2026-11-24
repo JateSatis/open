@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 import { QueryClient } from '@tanstack/react-query';
 
 import { sendMessage, sendVoiceMessage } from '@/api/chats';
@@ -66,10 +67,10 @@ describe('sendNoteForward', () => {
     expect(sendMessage).toHaveBeenCalledWith('chat-a', {
       text: 'с фото',
       media: [expect.objectContaining({ url: 'user-1/photo/1.jpg', mimeType: 'image/jpeg' })],
-    });
+    }, requestClient());
     expect(sendVoiceMessage).toHaveBeenCalledWith(
       'chat-a',
-      expect.objectContaining({ url: 'user-1/voice/2.m4a', durationMs: 3000, waveform: [1, 2, 3] }),
+      expect.objectContaining({ url: 'user-1/voice/2.m4a', durationMs: 3000, waveform: [1, 2, 3] }), undefined, undefined, requestClient()
     );
   });
 });

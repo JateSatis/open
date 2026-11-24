@@ -1,3 +1,4 @@
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import type { ReactNode } from 'react';
 import { View, type Text } from 'react-native';
 
@@ -34,6 +35,7 @@ export function ClusterMode({
   amMember,
   clustersCount,
 }: ClusterModeProps) {
+  const api = useRequestClient();
   const { geometry, clusters } = useClusterHighlight({
     rowKey,
     ref: textRef,
@@ -56,7 +58,7 @@ export function ClusterMode({
           isOwn={isOwn}
           part="hits"
           onOpen={(cluster) =>
-            openClusterPanel({ rowKey, messageId, chatId, amMember, text }, cluster)
+            openClusterPanel({ rowKey, messageId, chatId, amMember, text }, cluster, api)
           }
         />
       ) : null}

@@ -5,9 +5,12 @@
 //
 // Payload — только сигнал: счётчики всегда перечитываются из базы.
 
+import { perClient } from './perClient';
+
+import { requestClient } from '@/api/requestClient';
+import type { AccountClient } from '@/api/accountClient';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
-import { supabase } from '@/api/supabase';
 
 export type PopTopicListener = {
   /** У попа сменились реакции. */
@@ -29,7 +32,7 @@ type Entry = {
 /** Сколько держать канал без слушателей: переход между экранами отпускает и тут же берёт снова. */
 const LINGER_MS = 3000;
 
-const topics = new Map<string, Entry>();
+const clientTopics = perClient(() => new Map<string, Entry>());
 
 function popIdOf(payload: unknown): string | null {
   const id = (payload as { pop_id?: unknown } | undefined)?.pop_id;
@@ -43,13 +46,13 @@ function popIdsOf(payload: unknown): string[] {
   return Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string') : [];
 }
 
-function open(channelId: string): Entry {
+function open(channelId: string, api: AccountClient): Entry {
   // Приватный канал несёт токен пользователя — его проверяют политики realtime.messages.
-  void supabase.realtime.setAuth();
+  void api.realtime.setAuth().catch(() => undefined);
 
-  const channel = supabase.channel(`pops:${channelId}`, { config: { private: true } });
+  const channel = api.channel(`pops:${channelId}`, { config: { private: true } });
   const entry: Entry = { channel, listeners: new Set(), closing: null };
-  const each = (call: (listener: PopTopicListener) => void) => [...entry.listeners].forEach(call);
+  const each = (call: (listener: PopTopicListener) => void) => api === requestClient() && [...entry.listeners].forEach(call);
   let joinedBefore = false;
 
   channel
@@ -83,11 +86,12 @@ function open(channelId: string): Entry {
  * Слушать топик попсов канала. Первый слушатель открывает канал, последний —
  * отпускает. Вызвавший обязан вызвать возвращённую функцию в cleanup.
  */
-export function acquirePopTopic(channelId: string, listener: PopTopicListener): () => void {
+export function acquirePopTopic(channelId: string, listener: PopTopicListener, api = requestClient()): () => void {
+  const topics = clientTopics(api);
   let entry = topics.get(channelId);
 
   if (!entry) {
-    entry = open(channelId);
+    entry = open(channelId, api);
     topics.set(channelId, entry);
   }
 
@@ -116,7 +120,7 @@ export function acquirePopTopic(channelId: string, listener: PopTopicListener): 
 
       if (topics.get(channelId) === current) topics.delete(channelId);
 
-      void supabase.removeChannel(current.channel);
+      void api.removeChannel(current.channel);
     }, LINGER_MS);
   };
 }

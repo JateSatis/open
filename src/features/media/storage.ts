@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 import { File } from 'expo-file-system';
 import { FunctionsHttpError } from '@supabase/supabase-js';
 
@@ -14,7 +15,6 @@ import type { LocalMedia, UploadedMedia } from './types';
 
 import { AVATARS_BUCKET } from '@/api/avatars';
 import { CHAT_MEDIA_BUCKET } from '@/api/chatMedia';
-import { supabase } from '@/api/supabase';
 
 /**
  * The only place in the app that talks to Supabase Storage. Everything above
@@ -66,15 +66,15 @@ type SanitizeResponse = { path: string; url: string; size_bytes: number };
  * Inserting that row is the caller's job — this feature never writes to the
  * database.
  */
-export async function uploadMedia(media: LocalMedia, userId: string): Promise<UploadedMedia> {
-  const main = await uploadFile(media.uri, userId, media.kind, media.mimeType);
+export async function uploadMedia(media: LocalMedia, userId: string, api = requestClient()): Promise<UploadedMedia> {
+  const main = await uploadFile(media.uri, userId, media.kind, media.mimeType, api);
   let poster: StoredFile | null = null;
 
   if (media.posterUri) {
     try {
-      poster = await uploadFile(media.posterUri, userId, 'poster', 'image/jpeg');
+      poster = await uploadFile(media.posterUri, userId, 'poster', 'image/jpeg', api);
     } catch (error) {
-      await removeUploadedMedia(main.path);
+      await removeUploadedMedia(main.path, undefined, api);
       throw error;
     }
   }
@@ -99,16 +99,16 @@ export async function uploadMedia(media: LocalMedia, userId: string): Promise<Up
  * обязателен: без него сетка канала и обложка в посте пустые, и база такой
  * поп не примет.
  */
-export async function uploadPopMedia(media: LocalMedia, userId: string): Promise<UploadedMedia> {
+export async function uploadPopMedia(media: LocalMedia, userId: string, api = requestClient()): Promise<UploadedMedia> {
   if (!media.posterUri) throw new MediaUploadError('Pop has no poster');
 
-  const main = await uploadFile(media.uri, userId, 'pop_video', media.mimeType);
+  const main = await uploadFile(media.uri, userId, 'pop_video', media.mimeType, api);
   let poster: StoredFile;
 
   try {
-    poster = await uploadFile(media.posterUri, userId, 'pop_poster', 'image/jpeg');
+    poster = await uploadFile(media.posterUri, userId, 'pop_poster', 'image/jpeg', api);
   } catch (error) {
-    await removeUploadedMedia(main.path, MEDIA_BUCKET);
+    await removeUploadedMedia(main.path, MEDIA_BUCKET, api);
     throw error;
   }
 
@@ -133,6 +133,7 @@ async function uploadFile(
   userId: string,
   kind: SanitizeKind,
   mimeType: string,
+  api = requestClient(),
 ): Promise<StoredFile> {
   const file = new File(uri);
 
@@ -146,7 +147,7 @@ async function uploadFile(
   const body = await file.arrayBuffer();
   const staged = buildStagingPath(userId, mimeType);
 
-  const { error } = await supabase.storage.from(STAGING_BUCKET).upload(staged, body, {
+  const { error } = await api.storage.from(STAGING_BUCKET).upload(staged, body, {
     contentType: mimeType,
     upsert: false,
   });
@@ -155,14 +156,14 @@ async function uploadFile(
     throw new MediaUploadError(`Failed to upload ${kind}: ${error.message}`, error);
   }
 
-  const { data, error: sanitizeError } = await supabase.functions.invoke<SanitizeResponse>(
+  const { data, error: sanitizeError } = await api.functions.invoke<SanitizeResponse>(
     'sanitize-media',
     { body: { path: staged, kind } },
   );
 
   if (sanitizeError || !data) {
     // Функция убирает временный файл сама; не дошла до него — уберём здесь.
-    void supabase.storage.from(STAGING_BUCKET).remove([staged]);
+    void api.storage.from(STAGING_BUCKET).remove([staged]);
 
     const status =
       sanitizeError instanceof FunctionsHttpError
@@ -196,8 +197,9 @@ export function storedPaths(media: Pick<UploadedMedia, 'path' | 'posterPath'>): 
 export async function removeUploadedMedia(
   path: string | string[],
   bucket: string = CHAT_MEDIA_BUCKET,
+  api = requestClient(),
 ): Promise<boolean> {
-  const { error } = await supabase.storage
+  const { error } = await api.storage
     .from(bucket)
     .remove(Array.isArray(path) ? path : [path]);
 
@@ -210,8 +212,8 @@ export async function removeUploadedMedia(
  * файла нет: показывают его по подписанной (`src/api/avatars.ts`) тем, кому
  * фото открыто.
  */
-export async function uploadAvatar(uri: string, userId: string): Promise<string> {
-  return (await uploadFile(uri, userId, 'avatar', 'image/jpeg')).path;
+export async function uploadAvatar(uri: string, userId: string, api = requestClient()): Promise<string> {
+  return (await uploadFile(uri, userId, 'avatar', 'image/jpeg', api)).path;
 }
 
 /**
@@ -221,8 +223,9 @@ export async function uploadAvatar(uri: string, userId: string): Promise<string>
 export async function uploadChannelAvatar(
   uri: string,
   userId: string,
+  api = requestClient(),
 ): Promise<{ url: string; path: string }> {
-  const { url, path } = await uploadFile(uri, userId, 'channel_avatar', 'image/jpeg');
+  const { url, path } = await uploadFile(uri, userId, 'channel_avatar', 'image/jpeg', api);
 
   return { url, path };
 }
@@ -234,15 +237,16 @@ export async function uploadChannelAvatar(
 export async function uploadGroupAvatar(
   uri: string,
   userId: string,
+  api = requestClient(),
 ): Promise<{ url: string; path: string }> {
-  const { url, path } = await uploadFile(uri, userId, 'group_avatar', 'image/jpeg');
+  const { url, path } = await uploadFile(uri, userId, 'group_avatar', 'image/jpeg', api);
 
   return { url, path };
 }
 
 /** Убрать свой файл из публичного `media`: поп, фото группы или канала. */
-export function removePublicMedia(path: string | string[]): Promise<boolean> {
-  return removeUploadedMedia(path, MEDIA_BUCKET);
+export function removePublicMedia(path: string | string[], api = requestClient()): Promise<boolean> {
+  return removeUploadedMedia(path, MEDIA_BUCKET, api);
 }
 
 /**
@@ -250,20 +254,20 @@ export function removePublicMedia(path: string | string[]): Promise<boolean> {
  * незачем. Аватар от провайдера или чужой файл не трогает. Сбой не ошибка:
  * новый аватар уже на месте, лишний файл лишь занимает место.
  */
-export async function removeOwnAvatar(url: string | null, userId: string): Promise<void> {
+export async function removeOwnAvatar(url: string | null, userId: string, api = requestClient()): Promise<void> {
   if (!url) return;
 
   const own = ownAvatarPath(url, userId);
 
   if (own) {
-    await supabase.storage.from(AVATARS_BUCKET).remove([own]);
+    await api.storage.from(AVATARS_BUCKET).remove([own]);
     return;
   }
 
   // Аватар, поставленный до переезда в закрытый бакет.
   const legacy = ownAvatarPathFromUrl(url, MEDIA_BUCKET, userId);
 
-  if (legacy) await removePublicMedia(legacy);
+  if (legacy) await removePublicMedia(legacy, api);
 }
 
 /**
@@ -271,18 +275,18 @@ export async function removeOwnAvatar(url: string | null, userId: string): Promi
  * участником, лежит в его префиксе, и удалить его нельзя (политика бакета).
  * Сбой не ошибка — у группы уже новое фото.
  */
-export async function removeOwnGroupAvatar(url: string | null, userId: string): Promise<void> {
-  await removeOwnFileIn(GROUP_AVATAR_FOLDER, url, userId);
+export async function removeOwnGroupAvatar(url: string | null, userId: string, api = requestClient()): Promise<void> {
+  await removeOwnFileIn(GROUP_AVATAR_FOLDER, url, userId, api);
 }
 
 /** Убирает прежнее фото канала, если файл — мой. Сбой не ошибка — у канала уже новое. */
-export async function removeOwnChannelAvatar(url: string | null, userId: string): Promise<void> {
-  await removeOwnFileIn(CHANNEL_AVATAR_FOLDER, url, userId);
+export async function removeOwnChannelAvatar(url: string | null, userId: string, api = requestClient()): Promise<void> {
+  await removeOwnFileIn(CHANNEL_AVATAR_FOLDER, url, userId, api);
 }
 
 /** Удалить файл по адресу, только если он лежит в папке `folder` моего префикса. */
-async function removeOwnFileIn(folder: string, url: string | null, userId: string): Promise<void> {
+async function removeOwnFileIn(folder: string, url: string | null, userId: string, api = requestClient()): Promise<void> {
   const path = url ? ownPathFromUrl(url, MEDIA_BUCKET, userId, folder) : null;
 
-  if (path) await removePublicMedia(path);
+  if (path) await removePublicMedia(path, api);
 }

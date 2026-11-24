@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 import { act, fireEvent, screen } from '@testing-library/react-native';
 
 import { CallScreen } from './index';
@@ -94,7 +95,7 @@ describe('экран звонка у говорящего', () => {
     await renderWithQuery(<CallScreen />);
 
     expect(await screen.findByLabelText('Илья Муромцев, микрофон выключен')).toBeTruthy();
-    expect(listCallPeople).toHaveBeenCalledWith('stream-1');
+    expect(listCallPeople).toHaveBeenCalledWith('stream-1', requestClient());
   });
 
   it('микрофон, динамик и выход', async () => {

@@ -1,8 +1,9 @@
+import { requestClient } from '@/api/requestClient';
 import { getHistoryItems, getHistoryGroupKeys } from '@/api/historyWindow';
 import type { Message } from '@/api/messageRows';
 import { mergeMessages, type ChatHistory } from './historyCache';
 
-export async function readForwardSlices(messages: Message[]) {
+export async function readForwardSlices(messages: Message[], api = requestClient()) {
   const byChat = new Map<string, Set<string>>();
   const requested = new Set<string>();
   for (const message of messages) {
@@ -33,7 +34,7 @@ export async function readForwardSlices(messages: Message[]) {
     });
   }
   for (const { message, start, end } of groups.values()) {
-    const members = await getHistoryGroupKeys(message.chatId, message.id);
+    const members = await getHistoryGroupKeys(message.chatId, message.id, api);
     for (const member of members) {
       if (member.position < start || member.position > end) continue;
       byChat.get(message.chatId)!.add(member.key);
@@ -44,7 +45,7 @@ export async function readForwardSlices(messages: Message[]) {
   for (const [chatId, keys] of byChat) {
     const ids = [...keys];
     for (let offset = 0; offset < ids.length; offset += 100) {
-      const rows = await getHistoryItems(chatId, ids.slice(offset, offset + 100));
+      const rows = await getHistoryItems(chatId, ids.slice(offset, offset + 100), api);
       fresh.push(...rows.map((row) => row.message));
     }
   }

@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 import { fireEvent, screen, waitFor } from '@testing-library/react-native';
 
 import { ChannelLinkScreen } from '.';
@@ -53,7 +54,7 @@ describe('ChannelLinkScreen', () => {
     await renderWithQuery(<ChannelLinkScreen />);
 
     await waitFor(() => expect(mockRedirect).toHaveBeenCalledWith(channelHref));
-    expect(findChannelByUsername).toHaveBeenCalledWith('News');
+    expect(findChannelByUsername).toHaveBeenCalledWith('News', requestClient());
   });
 
   it('on a cold start replaces itself with the channel', async () => {

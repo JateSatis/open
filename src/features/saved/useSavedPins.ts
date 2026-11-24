@@ -1,3 +1,4 @@
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useQuery } from '@tanstack/react-query';
 
 import { listSavedPins, type SavedFilterInput, type SavedPin } from '@/api/saved';
@@ -10,9 +11,10 @@ const NO_PINS: SavedPin[] = [];
  * только подходящие: полоса не ведёт к скрытой записи.
  */
 export function useSavedPins({ input, key }: { input: SavedFilterInput | null; key: string | null }) {
+  const api = useRequestClient();
   const query = useQuery({
     queryKey: savedPinsKey(key),
-    queryFn: () => listSavedPins(input),
+    queryFn: () => listSavedPins(input, api),
     refetchOnMount: 'always',
   });
 

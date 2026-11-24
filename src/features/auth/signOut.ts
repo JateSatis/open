@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 import { markDeviceSignedOut, signOutLocally } from '@/api/account';
 
 import { getInstallationId } from './installationId';
@@ -11,11 +12,12 @@ import { useSessionStore } from './sessionState';
  * телефоны остаются в аккаунте. Кеш и сторы чистит прежний AccountLayout.
  */
 export async function signOut(owner: SessionOwner): Promise<void> {
+  const api = requestClient();
   if (isCurrentSession(owner)) {
     try {
       const installation = await getInstallationId();
       await withSessionChange(async () => {
-        if (isCurrentSession(owner)) await markDeviceSignedOut(installation, owner);
+        if (isCurrentSession(owner)) await markDeviceSignedOut(installation, owner, api);
       });
     } catch {
       // Отзыв сеанса также убирает устройство из списка активных.

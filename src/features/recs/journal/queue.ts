@@ -7,6 +7,8 @@
 
 import type { JournalWireEvent } from '@/api/recJournal';
 
+type QueuedEvent = JournalWireEvent & { sessionId?: string };
+
 export type QueueStorage = {
   getItem: (key: string) => Promise<string | null>;
   setItem: (key: string, value: string) => Promise<void>;
@@ -15,14 +17,14 @@ export type QueueStorage = {
 export type JournalQueue = {
   /** Прочитать сохранённое; пришедшее до этого — остаётся следом. */
   load: () => Promise<void>;
-  push: (event: JournalWireEvent) => void;
+  push: (event: QueuedEvent) => void;
   /** До `max` ещё не отправляемых событий этого человека — они помечаются как в пути. */
-  take: (userId: string, max: number) => JournalWireEvent[];
+  take: (userId: string, max: number, sessionId?: string) => JournalWireEvent[];
   /** Дошли (приняты или отклонены сервером) — убрать насовсем. */
   ack: (ids: string[]) => void;
   /** Не дошли — снова доступны для отправки. */
   release: (ids: string[]) => void;
-  size: (userId?: string) => number;
+  size: (userId?: string, sessionId?: string) => number;
   /** Записать на телефон сейчас, не дожидаясь таймера. */
   save: () => Promise<void>;
 };
@@ -58,7 +60,7 @@ export function createJournalQueue({
   maxAgeMs: number;
   now?: () => number;
 }): JournalQueue {
-  let events: JournalWireEvent[] = [];
+  let events: QueuedEvent[] = [];
   const inFlight = new Set<string>();
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
   let loaded: Promise<void> | undefined;
@@ -90,7 +92,7 @@ export function createJournalQueue({
   };
 
   async function readStored() {
-    let stored: JournalWireEvent[] = [];
+    let stored: QueuedEvent[] = [];
 
     try {
       const raw = await storage.getItem(key);
@@ -134,15 +136,16 @@ export function createJournalQueue({
       else scheduleSave();
     },
 
-    take(userId, max) {
+    take(userId, max, sessionId) {
       const batch: JournalWireEvent[] = [];
 
       for (const event of events) {
         if (batch.length >= max) break;
-        if (event.user_id !== userId || inFlight.has(event.id)) continue;
+        if (event.user_id !== userId || event.sessionId !== sessionId || inFlight.has(event.id)) continue;
 
         inFlight.add(event.id);
-        batch.push(event);
+        const { sessionId: _owner, ...wire } = event;
+        batch.push(wire);
       }
 
       return batch;
@@ -160,8 +163,8 @@ export function createJournalQueue({
       ids.forEach((id) => inFlight.delete(id));
     },
 
-    size(userId) {
-      return userId ? events.filter((event) => event.user_id === userId).length : events.length;
+    size(userId, sessionId) {
+      return userId ? events.filter((event) => event.user_id === userId && (!sessionId || event.sessionId === sessionId)).length : events.length;
     },
 
     save,

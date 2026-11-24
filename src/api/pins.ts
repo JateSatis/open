@@ -2,10 +2,10 @@
 // публична, — закреплять и откреплять только участник: это проверяют функции
 // в базе, а не клиент (миграция `20260927100000_message_delete_and_pins.sql`).
 
+import { requestClient } from '@/api/requestClient';
 import type { QueryData } from '@supabase/supabase-js';
 
 import { toMessageKind, type MessageKind } from '@/api/chats';
-import { supabase } from '@/api/supabase';
 
 export type PinnedMessage = {
   messageId: string;
@@ -28,8 +28,8 @@ export type PinnedMessage = {
   thumbnailUrl: string | null;
 };
 
-const pinsSelect = () =>
-  supabase
+const pinsSelect = (api = requestClient()) =>
+  api
     .from('message_pins')
     .select(
       'message_id, forward_id, message:message_rows!message_pins_message_fkey(id, seq, kind, text, attachments:attachment_rows(url, poster_url, mime_type, position, pop:pops(poster_url))), forward:message_rows!message_pins_forward_fkey(seq)',
@@ -67,8 +67,8 @@ function toPinned(row: PinRow): PinnedMessage | null {
 }
 
 /** Закрепы чата от самого старого сообщения к самому новому. */
-export async function listPinnedMessages(chatId: string): Promise<PinnedMessage[]> {
-  const { data, error } = await pinsSelect().eq('chat_id', chatId).is('deleted_at', null);
+export async function listPinnedMessages(chatId: string, api = requestClient()): Promise<PinnedMessage[]> {
+  const { data, error } = await pinsSelect(api).eq('chat_id', chatId).is('deleted_at', null);
 
   if (error) throw error;
 
@@ -84,8 +84,8 @@ export function byPlaceInChat(a: PinnedMessage, b: PinnedMessage): number {
 }
 
 /** Закрепляет сообщение; `forwardId` — островок этого чата, где стоит сообщение из другого. */
-export async function pinMessage(messageId: string, forwardId: string | null = null): Promise<void> {
-  const { error } = await supabase.rpc('pin_message', {
+export async function pinMessage(messageId: string, forwardId: string | null = null, api = requestClient()): Promise<void> {
+  const { error } = await api.rpc('pin_message', {
     target_message: messageId,
     in_forward: forwardId ?? undefined,
   });
@@ -94,8 +94,8 @@ export async function pinMessage(messageId: string, forwardId: string | null = n
 }
 
 /** Открепляет сообщение в чате `chatId` — закреп сообщения из островка живёт в чате островка. */
-export async function unpinMessage(messageId: string, chatId: string): Promise<void> {
-  const { error } = await supabase.rpc('unpin_message', {
+export async function unpinMessage(messageId: string, chatId: string, api = requestClient()): Promise<void> {
+  const { error } = await api.rpc('unpin_message', {
     target_message: messageId,
     target_chat: chatId,
   });

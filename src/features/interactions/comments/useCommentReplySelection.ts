@@ -1,3 +1,4 @@
+import { useScreenNotice } from '@/features/notifications/useScreenNotice';
 import * as Clipboard from 'expo-clipboard';
 import { useCallback, useMemo, type RefObject } from 'react';
 import type { TextInput } from 'react-native';
@@ -17,7 +18,6 @@ import type { ComposerDraft } from '@/features/chats/useComposerDraft';
 import { useMessageSelection } from '@/features/chats/useMessageSelection';
 import { commentThreadOf, type CommentItem } from '@/features/interactions/comments/commentItem';
 import type { CommentsState } from '@/features/interactions/comments/useComments';
-import { showNotice } from '@/features/notifications/alertsStore';
 import { focusWithKeyboard } from '@/lib/windowFocus';
 
 const commentOf = (row: BubbleRow) => (row as MessageListRow).message as CommentItem;
@@ -75,6 +75,7 @@ export function useCommentReplySelection({
   onForward,
   replyElsewhere,
 }: Options) {
+  const notice = useScreenNotice();
   // Выбор переписки работает со строками перевёрнутого списка и отдаёт их
   // в обратном порядке — даём ему строки снизу вверх, получаем порядок экрана.
   const rows = useMemo<MessageListRow[]>(
@@ -93,7 +94,7 @@ export function useCommentReplySelection({
       if (replyElsewhere?.(picked)) return;
 
       if (!inOneCommentThread(picked)) {
-        showNotice('Ответить можно только в один тред', 'error');
+        notice('Ответить можно только в один тред', 'error');
         return;
       }
 
@@ -101,7 +102,7 @@ export function useCommentReplySelection({
       claimKeyboardForComments();
       focusWithKeyboard(inputRef, undefined, true);
     },
-    [inputRef, replyElsewhere, setMode],
+    [notice, inputRef, replyElsewhere, setMode],
   );
 
   const selected = useMemo(() => selection.selected.map(commentOf), [selection.selected]);
@@ -131,7 +132,7 @@ export function useCommentReplySelection({
 
           void Clipboard.setStringAsync(
             formatMessagesForCopy(selected, (authorId) => names.get(authorId) ?? DELETED_ACCOUNT),
-          ).then(() => showNotice('Скопировано'));
+          ).then(() => notice('Скопировано'));
           clear();
           return;
         }
@@ -149,14 +150,14 @@ export function useCommentReplySelection({
 
             for (const comment of selected) {
               await remove(comment).catch(() =>
-                showNotice('Не удалось удалить комментарий', 'error'),
+                notice('Не удалось удалить комментарий', 'error'),
               );
             }
           });
           return;
       }
     },
-    [clear, onForward, remove, selected, startReply],
+    [notice, clear, onForward, remove, selected, startReply],
   );
 
   return { selection, selectionContext: context, runSelectionAction, startReply };

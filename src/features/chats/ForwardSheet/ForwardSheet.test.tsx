@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 import type { Session as SupabaseSession } from '@supabase/supabase-js';
 import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
 
@@ -144,6 +145,7 @@ describe('ForwardSheet', () => {
         SOURCE,
         messagesPick.items,
         expect.any(Promise),
+      requestClient(),
       );
     }
     expect(mockedSaveMessages).not.toHaveBeenCalled();
@@ -187,7 +189,7 @@ describe('ForwardSheet', () => {
       expect(mockedSaveMessages).toHaveBeenCalledWith('chat-src', ['m-2', 'm-1'], {
         tagIds: [],
         watchLater: false,
-      }),
+      }, requestClient()),
     );
     expect(mockedSendForward).not.toHaveBeenCalled();
     expect(noticeText()).toBe('Сохранено');
@@ -211,7 +213,7 @@ describe('ForwardSheet', () => {
       expect(mockedSaveMessages).toHaveBeenCalledWith('chat-src', ['m-2', 'm-1'], {
         tagIds: ['tag-work', 'tag-home'],
         watchLater: true,
-      }),
+      }, requestClient()),
     );
     expect(noticeText()).toBe('Переслано и сохранено');
   });
@@ -228,7 +230,7 @@ describe('ForwardSheet', () => {
     });
 
     expect(mockedCreateTag).toHaveBeenCalledTimes(1);
-    expect(mockedCreateTag).toHaveBeenCalledWith('Идеи');
+    expect(mockedCreateTag).toHaveBeenCalledWith('Идеи', requestClient());
     expect(await screen.findByRole('checkbox', { name: 'Идеи' })).toBeChecked();
     expect(screen.getByTestId('forward-saved-row')).toBeChecked();
 
@@ -272,9 +274,10 @@ describe('ForwardSheet', () => {
       '',
       [comment],
       expect.any(Promise),
+      requestClient(),
     );
     await waitFor(() =>
-      expect(mockedSaveComments).toHaveBeenCalledWith(['c-1'], { tagIds: [], watchLater: false }),
+      expect(mockedSaveComments).toHaveBeenCalledWith(['c-1'], { tagIds: [], watchLater: false }, requestClient()),
     );
   });
 
@@ -316,6 +319,7 @@ describe('ForwardSheet', () => {
       SOURCE,
       first.items,
       expect.any(Promise),
+      requestClient(),
     );
     expect(mockedSendForward).toHaveBeenNthCalledWith(
       2,
@@ -324,12 +328,14 @@ describe('ForwardSheet', () => {
       other,
       second.items,
       expect.any(Promise),
+      requestClient(),
     );
     expect(mockedSendComments).toHaveBeenCalledWith(
       expect.objectContaining({ chatId: 'chat-a' }),
       '',
       [comment],
       expect.any(Promise),
+      requestClient(),
     );
     expect(noticeText()).toBe('Переслано 3 из 5: оригиналы двух удалены');
   });
@@ -349,6 +355,7 @@ describe('ForwardSheet', () => {
       '',
       notes,
       expect.any(Promise),
+      requestClient(),
     );
     expect(mockedSendForward).toHaveBeenCalledWith(
       expect.objectContaining({ chatId: 'chat-a' }),
@@ -356,9 +363,10 @@ describe('ForwardSheet', () => {
       SOURCE,
       island.items,
       expect.any(Promise),
+      requestClient(),
     );
     await waitFor(() =>
-      expect(copySavedNotes).toHaveBeenCalledWith(['n-1'], { tagIds: [], watchLater: false }),
+      expect(copySavedNotes).toHaveBeenCalledWith(['n-1'], { tagIds: [], watchLater: false }, requestClient()),
     );
   });
 });

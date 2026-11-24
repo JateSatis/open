@@ -1,3 +1,4 @@
+import { useScreenNotice } from '@/features/notifications/useScreenNotice';
 import * as Clipboard from 'expo-clipboard';
 import { useCallback } from 'react';
 
@@ -6,7 +7,6 @@ import { isLocalMessage } from '@/features/chats/messageActions';
 import type { CommentActionId } from '@/features/interactions/comments/commentActions';
 import type { CommentItem } from '@/features/interactions/comments/commentItem';
 import type { CommentsState } from '@/features/interactions/comments/useComments';
-import { showNotice } from '@/features/notifications/alertsStore';
 import { isNetworkError } from '@/lib/network';
 
 type Options = {
@@ -23,6 +23,7 @@ type Options = {
 
 /** Что делает каждый пункт меню комментария. */
 export function useCommentActionHandlers({ commentsState, edit, reply, select, forward }: Options) {
+  const notice = useScreenNotice();
   const { retry, discard, remove, pin, unpin } = commentsState;
 
   return useCallback(
@@ -47,7 +48,7 @@ export function useCommentActionHandlers({ commentsState, edit, reply, select, f
           unpin();
           return;
         case 'copy':
-          void Clipboard.setStringAsync(comment.text ?? '').then(() => showNotice('Скопировано'));
+          void Clipboard.setStringAsync(comment.text ?? '').then(() => notice('Скопировано'));
           return;
         case 'edit':
           edit(comment);
@@ -69,7 +70,7 @@ export function useCommentActionHandlers({ commentsState, edit, reply, select, f
             if (!confirmed) return;
 
             remove(comment).catch((cause: unknown) =>
-              showNotice(
+              notice(
                 isNetworkError(cause)
                   ? 'Не удалось удалить комментарий: нет связи'
                   : 'Не удалось удалить комментарий',
@@ -80,6 +81,6 @@ export function useCommentActionHandlers({ commentsState, edit, reply, select, f
           return;
       }
     },
-    [discard, edit, forward, pin, remove, reply, retry, select, unpin],
+    [notice, discard, edit, forward, pin, remove, reply, retry, select, unpin],
   );
 }

@@ -1,3 +1,6 @@
+import { RequestClientContext } from '@/features/auth/RequestClientContext';
+import { requestClient } from '@/api/requestClient';
+import { requestSelection } from '@/api/screenRequest';
 import { journalLaunchTime } from './features/recs/journal/launch';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { registerRootComponent } from 'expo';
@@ -39,12 +42,13 @@ export function App() {
   useEffect(startConnectionMonitor, []);
   useEffect(startDeviceLifecycle, []);
   const { localAccountId: reader, sdkStatus } = useAuthBootstrap();
+  const selection = useSessionStore(requestSelection);
   const incoming = useIncomingLink();
   if (reader === undefined) return null;
   return (
     <HistoryReader.Provider value={reader}>
       <AccountLayout
-        key={reader ?? 'signed-out'}
+        key={selection + '/' + reader}
         incoming={incoming}
         requestsReady={reader === null || sdkStatus === 'session'}
       />
@@ -60,12 +64,13 @@ function AccountLayout({
   requestsReady: boolean;
 }) {
   const reader = useHistoryReader();
-  const [queryClient] = useState(() => createAppQueryClient(reader));
+  const [api] = useState(requestClient);
+  const [queryClient] = useState(() => createAppQueryClient(reader, api));
 
-  useLayoutEffect(() => startPersonalRealtimeEvents(reader, queryClient), [reader, queryClient]);
+  useLayoutEffect(() => startPersonalRealtimeEvents(reader, queryClient, api), [reader, queryClient]);
   useLayoutEffect(() => syncQueryOnlineState(queryClient, requestsReady), [queryClient, requestsReady]);
   useLayoutEffect(() => () => resetClientState(queryClient), [queryClient]);
-  useEffect(() => startHistoryReadDelivery(reader, queryClient), [reader, queryClient]);
+  useEffect(() => startHistoryReadDelivery(reader, queryClient, api), [reader, queryClient]);
 
   return (
     // Нужен react-native-gesture-handler в принципе (им пользуется шит выбора
@@ -74,19 +79,21 @@ function AccountLayout({
       {/* Высота клавиатуры кадр в кадр с системной анимацией — в том числе
           внутри окна Modal на Android, где живёт шит выбора медиа. */}
       <KeyboardProvider>
-        <QueryClientProvider client={queryClient}>
-          <SafeAreaProvider>
-            <ScrollTap style={styles.flex}>
-              <AppRoutes incoming={incoming} />
-            </ScrollTap>
-            {/* Входящий звонок — своим окном поверх всего, включая нативные вкладки. */}
-            <IncomingCallOverlay />
-            {/* Поверх навигатора: уведомление не принадлежит ни одному экрану. */}
-            <InAppMessageToast />
-            {/* Один диалог подтверждения на всё приложение, см. src/components/ConfirmDialog. */}
-            <ConfirmDialogHost />
-          </SafeAreaProvider>
-        </QueryClientProvider>
+        <RequestClientContext.Provider value={api}>
+          <QueryClientProvider client={queryClient}>
+            <SafeAreaProvider>
+              <ScrollTap style={styles.flex}>
+                <AppRoutes incoming={incoming} />
+              </ScrollTap>
+              {/* Входящий звонок — своим окном поверх всего, включая нативные вкладки. */}
+              <IncomingCallOverlay />
+              {/* Поверх навигатора: уведомление не принадлежит ни одному экрану. */}
+              <InAppMessageToast />
+              {/* Один диалог подтверждения на всё приложение, см. src/components/ConfirmDialog. */}
+              <ConfirmDialogHost />
+            </SafeAreaProvider>
+          </QueryClientProvider>
+        </RequestClientContext.Provider>
       </KeyboardProvider>
     </GestureHandlerRootView>
   );

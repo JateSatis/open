@@ -8,6 +8,9 @@
 // чатом (`uploadOutgoing`, `toLocalAttachment`, `splitIntoAlbums`): тот же
 // путь `uploads` → `sanitize-media`.
 
+import { clientIdentity } from '@/api/perClient';
+
+import { requestClient } from '@/api/requestClient';
 import { notifyManager, type InfiniteData, type QueryClient } from '@tanstack/react-query';
 
 import { PENDING_SEQ } from '@/api/pendingSeq';
@@ -108,25 +111,25 @@ function putNewest(queryClient: QueryClient, key: string | null, saved: SavedIte
  * Подходит — встаёт внизу отфильтрованного списка, нет — человеку говорят,
  * куда она делась.
  */
-async function placeFiltered(queryClient: QueryClient, saved: SavedItem, filter: SavedFilterInput) {
-  const shown = await getSavedMessage(saved.id, filter).catch(() => null);
+async function placeFiltered(queryClient: QueryClient, saved: SavedItem, filter: SavedFilterInput, api = requestClient()) {
+  const shown = await getSavedMessage(saved.id, filter, api).catch(() => null);
 
   if (shown) {
     putNewest(queryClient, filterKey(filter), saved);
     return;
   }
 
-  showNotice('Заметка сохранена, но скрыта фильтрами', 'info');
+  if (api === requestClient()) showNotice('Заметка сохранена, но скрыта фильтрами', 'info');
 }
 
 /** Подтверждённая заметка — в «Все» без фильтра и в текущий отфильтрованный список. */
-function settle(queryClient: QueryClient, localId: string, saved: SavedItem) {
+function settle(queryClient: QueryClient, localId: string, saved: SavedItem, api = requestClient()) {
   const pending = findPending(localId);
   const confirmed: SavedItem = { ...saved, localPreviews: pending?.localPreviews };
   const filter = toFilterInput(getSavedFilters());
 
   putNewest(queryClient, null, confirmed);
-  if (filter) void placeFiltered(queryClient, confirmed, filter);
+  if (filter) void placeFiltered(queryClient, confirmed, filter, api);
 
   // Как у сообщений чата: пока страница не перерисовалась, в исходящих лежит
   // уже подтверждённая копия под настоящим id — экран склеивает их по id.
@@ -155,10 +158,10 @@ function settleUnread(queryClient: QueryClient, localId: string) {
     .then(() => removePending(localId));
 }
 
-async function deliver(queryClient: QueryClient, userId: string, localId: string) {
+async function deliver(queryClient: QueryClient, userId: string, localId: string, api = requestClient()) {
   const note = findPending(localId);
 
-  if (!note || delivering.has(localId)) return;
+  if (!note || (note.deliveryOwner && note.deliveryOwner !== clientIdentity(api)) || delivering.has(localId)) return;
 
   delivering.add(localId);
   setStatus(localId, 'sending');
@@ -174,7 +177,7 @@ async function deliver(queryClient: QueryClient, userId: string, localId: string
     // могла создаться и ссылаться именно на них.
     uploaded =
       uploadedFor.get(localId) ??
-      (hasFiles ? await uploadOutgoing(toOutgoing(payload), userId) : []);
+      (hasFiles ? await uploadOutgoing(toOutgoing(payload), userId, api) : []);
     uploadedFor.set(localId, uploaded);
 
     if (discarded.has(localId)) throw new Error('Отправка отменена');
@@ -185,19 +188,20 @@ async function deliver(queryClient: QueryClient, userId: string, localId: string
       files: uploaded.map(toNoteFile),
       replyTo: payload.replyTo,
       kind: payload.type,
-    });
+    }, api);
     uploadedFor.delete(localId);
     unanswered.delete(localId);
 
     // Уже в базе, но человек её удалил — удаляем и там.
     if (discarded.has(localId)) {
-      void deleteSavedMessages([id]).catch(() => undefined);
+      void deleteSavedMessages([id], api).catch(() => undefined);
       return;
     }
 
-    const saved = await getSavedMessage(id).catch(() => null);
+    const saved = await getSavedMessage(id, undefined, api).catch(() => null);
 
-    if (saved) settle(queryClient, localId, saved);
+    if (api !== requestClient()) return;
+    if (saved) settle(queryClient, localId, saved, api);
     else settleUnread(queryClient, localId);
   } catch (cause) {
     const lost = isNetworkError(cause);
@@ -206,16 +210,17 @@ async function deliver(queryClient: QueryClient, userId: string, localId: string
     // заметка могла создаться: её файлы не трогаем, повтор найдёт её по ключу.
     if (!id && uploaded.length > 0 && !lost) {
       uploadedFor.delete(localId);
-      void Promise.all(uploaded.map((item) => removeUploadedMedia(storedPaths(item))));
+      void Promise.all(uploaded.map((item) => removeUploadedMedia(storedPaths(item), undefined, api)));
     }
 
     if (!id && lost) unanswered.add(localId);
 
     if (discarded.has(localId)) {
-      forget(localId, note.clientId);
+      forget(localId, note.clientId, api);
       return;
     }
 
+    if (api !== requestClient()) return;
     if (lost) reportRequestFailed();
     else explainRejection(cause);
 
@@ -230,11 +235,11 @@ async function deliver(queryClient: QueryClient, userId: string, localId: string
  * Неотправленную заметку убрали насовсем. Последняя попытка осталась без
  * ответа — заметка могла создаться: удалить её и на сервере, по ключу.
  */
-function forget(localId: string, clientId: string) {
+function forget(localId: string, clientId: string, api = requestClient()) {
   uploadedFor.delete(localId);
 
   if (unanswered.delete(localId)) {
-    void deleteSavedNoteByClient(clientId).catch(() => undefined);
+    void deleteSavedNoteByClient(clientId, api).catch(() => undefined);
   }
 }
 
@@ -243,6 +248,7 @@ function draftOf(
   payload: NotePayload,
   at: number,
   quotes: LiveQuote[],
+  deliveryClient: ReturnType<typeof requestClient>,
 ): PendingNote {
   const localId = nextLocalId();
   const voice = payload.type === 'voice' ? payload.voice : null;
@@ -256,6 +262,7 @@ function draftOf(
 
   return {
     id: localId,
+    deliveryOwner: clientIdentity(deliveryClient),
     localId,
     clientId: randomUuid(),
     payload,
@@ -297,6 +304,7 @@ export function sendNotePost(
   text: string,
   media: OutgoingMedia[],
   quotes: LiveQuote[],
+  api = requestClient(),
 ) {
   const trimmed = text.trim();
 
@@ -314,13 +322,14 @@ export function sendNotePost(
       },
       now + index,
       index === 0 ? quotes : [],
+      api,
     ),
   );
 
   setItems((items) => [...[...drafts].reverse(), ...items]);
 
   void (async () => {
-    for (const draft of drafts) await deliver(queryClient, author.id, draft.localId);
+    for (const draft of drafts) await deliver(queryClient, author.id, draft.localId, api);
   })();
 }
 
@@ -329,32 +338,34 @@ export function sendNoteVoice(
   author: NoteAuthor,
   voice: LocalMedia,
   quotes: LiveQuote[],
+  api = requestClient(),
 ) {
   const draft = draftOf(
     author,
     { type: 'voice', voice, replyTo: quotes.map((quote) => quote.messageId) },
     Date.now(),
     quotes,
+    api,
   );
 
   setItems((items) => [draft, ...items]);
-  void deliver(queryClient, author.id, draft.localId);
+  void deliver(queryClient, author.id, draft.localId, api);
 }
 
 /** «Повторить» у упавшей заметки — с тем же ключом: дубля не будет. */
-export function retryNote(queryClient: QueryClient, userId: string, localId: string) {
-  void deliver(queryClient, userId, localId);
+export function retryNote(queryClient: QueryClient, userId: string, localId: string, api = requestClient()) {
+  void deliver(queryClient, userId, localId, api);
 }
 
 /**
  * Своя неотправленная заметка — убрать. Если она как раз едет на сервер, её
  * удалят сразу по прибытии.
  */
-export function discardNote(localId: string) {
+export function discardNote(localId: string, api = requestClient()) {
   const note = findPending(localId);
 
   if (delivering.has(localId)) discarded.add(localId);
-  else if (note) forget(localId, note.clientId);
+  else if (note) forget(localId, note.clientId, api);
 
   removePending(localId);
 }

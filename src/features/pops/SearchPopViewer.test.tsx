@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react-native';
 
 import { PopViewerScreen } from '@/features/pops/PopViewerScreen';
@@ -123,7 +124,7 @@ it('«Подписаться» subscribes to the channel of this pop', async () 
 
   fireEvent.press(await page.findByRole('button', { name: 'Подписаться' }));
 
-  await waitFor(() => expect(subscribeToChannel).toHaveBeenCalledWith('B', false));
+  await waitFor(() => expect(subscribeToChannel).toHaveBeenCalledWith('B', false, requestClient()));
 });
 
 it('the channel name opens that channel above the viewer, on its «Попсы»', async () => {
@@ -150,7 +151,7 @@ it('counts a view of a stranger’s pop', async () => {
   jest.useFakeTimers();
   await open(mixed, 'b');
   await act(() => jest.advanceTimersByTime(2500));
-  expect(recordPopViews).toHaveBeenCalledWith(['b'], expect.any(String));
+  expect(recordPopViews).toHaveBeenCalledWith(['b'], expect.any(String), requestClient());
   jest.useRealTimers();
 });
 
@@ -167,7 +168,7 @@ it('counts the view even when the rights of the pop’s channel could not be ask
   jest.useFakeTimers();
   await open(mixed, 'b');
   await act(() => jest.advanceTimersByTime(2500));
-  expect(recordPopViews).toHaveBeenCalledWith(['b'], expect.any(String));
+  expect(recordPopViews).toHaveBeenCalledWith(['b'], expect.any(String), requestClient());
   jest.useRealTimers();
 });
 
@@ -182,7 +183,7 @@ it('loads the next page of results when the active pop nears the end', async () 
     expect(searchPops).toHaveBeenCalledWith(
       'елка',
       { rank: 7, score: 0.71, id: 'p29', scoredAt: '2026-10-13T10:00:00Z' },
-      expect.anything(),
+      expect.anything(), requestClient()
     ),
   );
 });

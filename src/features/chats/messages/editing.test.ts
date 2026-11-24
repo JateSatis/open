@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 import { QueryClient } from '@tanstack/react-query';
 
 import { optimisticEdit, saveEdit } from './editing';
@@ -173,7 +174,7 @@ describe('saveEdit', () => {
         },
       ],
       voice: null,
-    });
+    }, requestClient());
     expect(history()?.items[0]).toMatchObject({ text: 'стало', editedAt: '2026-09-29T11:00:00Z' });
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(usePendingEdits.getState().byChat['chat-1']).toBeUndefined();
@@ -186,7 +187,7 @@ describe('saveEdit', () => {
     await saveEdit(context, original, result);
 
     expect(mockedRemove).toHaveBeenCalledTimes(1);
-    expect(mockedRemove).toHaveBeenCalledWith([uploaded.path]);
+    expect(mockedRemove).toHaveBeenCalledWith([uploaded.path], undefined, requestClient());
     expect(history()?.items[0]).toBe(original);
     expect(usePendingEdits.getState().byChat['chat-1']).toBeUndefined();
     expect(useInAppAlert.getState().alert).toMatchObject({

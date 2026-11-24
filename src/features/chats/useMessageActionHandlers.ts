@@ -1,3 +1,4 @@
+import { useScreenNotice } from '@/features/notifications/useScreenNotice';
 import * as Clipboard from 'expo-clipboard';
 import { useCallback } from 'react';
 
@@ -81,6 +82,7 @@ export function useMessageActionHandlers({
   forward,
   edit,
 }: Options): MessageActionHandlers {
+  const notice = useScreenNotice();
   const selectForwardGroup = useSelectForwardGroup(selection.start, currentUserId);
   /**
    * Удаляет у всех: свои сообщения — функцией удаления, облачка своих
@@ -126,7 +128,7 @@ export function useMessageActionHandlers({
           ...[...byIsland].map(([forwardId, ids]) => removeFromIsland(forwardId, ids)),
         ]);
       } catch (cause) {
-        showNotice(
+        notice(
           failure(
             rows.length === 1 ? 'Не удалось удалить сообщение' : 'Не удалось удалить сообщения',
             cause,
@@ -135,7 +137,7 @@ export function useMessageActionHandlers({
         );
       }
     },
-    [deleteMessages, removeFromIsland, selection],
+    [notice, deleteMessages, removeFromIsland, selection],
   );
 
   const runMessageAction = useCallback(
@@ -170,7 +172,7 @@ export function useMessageActionHandlers({
           pins
             .pin(message, anchorOf(row))
             .catch((cause: unknown) =>
-              showNotice(failure('Не удалось закрепить сообщение', cause), 'error'),
+              notice(failure('Не удалось закрепить сообщение', cause), 'error'),
             );
           return;
         case 'unpin':
@@ -179,7 +181,7 @@ export function useMessageActionHandlers({
           pins
             .unpin(message.id)
             .catch((cause: unknown) =>
-              showNotice(failure('Не удалось открепить сообщение', cause), 'error'),
+              notice(failure('Не удалось открепить сообщение', cause), 'error'),
             );
           return;
         case 'remove_from_island':
@@ -196,7 +198,7 @@ export function useMessageActionHandlers({
           return;
       }
     },
-    [comment, discard, edit, forward, pins, removeForEveryone, reply, retry, selection],
+    [notice, comment, discard, edit, forward, pins, removeForEveryone, reply, retry, selection],
   );
 
   const runSelectionAction = useCallback(
@@ -255,13 +257,13 @@ export function useMessageActionHandlers({
             if (!confirmed) return;
 
             deleteMessages([island.id]).catch((cause: unknown) =>
-              showNotice(failure('Не удалось удалить пересылку', cause), 'error'),
+              notice(failure('Не удалось удалить пересылку', cause), 'error'),
             );
           });
           return;
       }
     },
-    [deleteMessages, discard, retry, selectForwardGroup],
+    [notice, deleteMessages, discard, retry, selectForwardGroup],
   );
 
   return { runMessageAction, runSelectionAction, runIslandAction };

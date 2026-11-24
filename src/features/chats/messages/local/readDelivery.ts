@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 import type { QueryClient } from '@tanstack/react-query';
 import { AppState } from 'react-native';
 import { advanceHistoryRead } from '@/api/historyRead';
@@ -28,13 +29,13 @@ function rejectedPoint(error: unknown) {
   );
 }
 
-function bindQueue(owner: SessionOwner, client: QueryClient) {
+function bindQueue(owner: SessionOwner, client: QueryClient, api = requestClient()) {
   const reader = owner.userId;
   let stopped = false;
   let running = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let offReached: (() => void) | undefined;
-  const current = () => !stopped && isCurrentSession(owner);
+  const current = () => !stopped && api === requestClient() && isCurrentSession(owner);
   const canSend = () => current() && getConnectionStatus() === 'online';
 
   function schedule(delay = COALESCE_MS) {
@@ -56,11 +57,11 @@ function bindQueue(owner: SessionOwner, client: QueryClient) {
     running = true;
     let retry = false;
     try {
-      for (const point of db.pending(reader)) {
+      for (const point of db.pending(reader, owner.sessionId)) {
         if (!canSend()) break;
         const scope = { reader, chat: point.chat };
         try {
-          const confirmed = await advanceHistoryRead(reader, point.chat, point);
+          const confirmed = await advanceHistoryRead(reader, point.chat, point, api);
           if (!current()) return;
           db.acknowledge(scope, confirmed);
           if (compare(confirmed, point) < 0) retry = true;
@@ -76,7 +77,7 @@ function bindQueue(owner: SessionOwner, client: QueryClient) {
       }
     } finally {
       running = false;
-      if (canSend() && db.pending(reader).length) schedule(retry ? RETRY_MS : 0);
+      if (canSend() && db.pending(reader, owner.sessionId).length) schedule(retry ? RETRY_MS : 0);
     }
   }
 
@@ -97,7 +98,7 @@ function bindQueue(owner: SessionOwner, client: QueryClient) {
   };
 }
 
-export function startHistoryReadDelivery(reader: string | null, client: QueryClient) {
+export function startHistoryReadDelivery(reader: string | null, client: QueryClient, api = requestClient()) {
   if (!reader) return;
   let bound: SessionOwner | null = null;
   let stop: (() => void) | undefined;
@@ -107,7 +108,7 @@ export function startHistoryReadDelivery(reader: string | null, client: QueryCli
     if (sameSession(bound, owner)) return;
     stop?.();
     bound = owner;
-    stop = owner ? bindQueue(owner, client) : undefined;
+    stop = owner ? bindQueue(owner, client, api) : undefined;
   }
   const unsubscribe = useSessionStore.subscribe(sync);
   sync();

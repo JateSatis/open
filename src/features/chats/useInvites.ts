@@ -1,3 +1,4 @@
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useQuery } from '@tanstack/react-query';
 import { useCallback, useState } from 'react';
 
@@ -18,11 +19,12 @@ export type InvitesState = {
 
 /** Мои непринятые заявки, разложенные на ждущие ответа и отклонённые. */
 export function useInvites(): InvitesState {
+  const api = useRequestClient();
   const connection = useConnectionStatus();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const { data, isPending, fetchStatus, error, refetch } = useQuery({
     queryKey: invitesQueryKey,
-    queryFn: listInvites,
+    queryFn: () => listInvites(api),
   });
 
   const refresh = useCallback(() => {

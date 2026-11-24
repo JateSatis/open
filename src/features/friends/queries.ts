@@ -1,3 +1,4 @@
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
@@ -19,17 +20,19 @@ import { friendKeys } from '@/features/friends/keys';
 export { friendKeys };
 
 export function useFriendshipStatus(userId: string, enabled = true) {
+  const api = useRequestClient();
   return useQuery({
     queryKey: friendKeys.status(userId),
-    queryFn: () => getFriendshipStatus(userId),
+    queryFn: () => getFriendshipStatus(userId, api),
     enabled,
   });
 }
 
 export function useFriendsSummary(userId: string | null) {
+  const api = useRequestClient();
   return useQuery({
     queryKey: friendKeys.summary(userId ?? ''),
-    queryFn: () => getFriendsSummary(userId as string),
+    queryFn: () => getFriendsSummary(userId as string, api),
     enabled: userId !== null,
   });
 }
@@ -37,9 +40,10 @@ export function useFriendsSummary(userId: string | null) {
 type Cursor = { at: string; id: string } | null;
 
 export function useFriendsList(userId: string) {
+  const api = useRequestClient();
   return useInfiniteQuery<FriendsPage, Error, FriendsPage[], readonly unknown[], Cursor>({
     queryKey: friendKeys.list(userId),
-    queryFn: ({ pageParam }) => listFriends(userId, pageParam),
+    queryFn: ({ pageParam }) => listFriends(userId, pageParam, api),
     initialPageParam: null,
     getNextPageParam: (last) => last.next ?? undefined,
     select: (data) => data.pages,
@@ -47,9 +51,10 @@ export function useFriendsList(userId: string) {
 }
 
 export function useIncomingFriendRequests() {
+  const api = useRequestClient();
   return useInfiniteQuery<FriendsPage, Error, FriendsPage[], readonly unknown[], Cursor>({
     queryKey: friendKeys.incoming(),
-    queryFn: ({ pageParam }) => listIncomingFriendRequests(pageParam),
+    queryFn: ({ pageParam }) => listIncomingFriendRequests(pageParam, api),
     initialPageParam: null,
     getNextPageParam: (last) => last.next ?? undefined,
     select: (data) => data.pages,
@@ -58,7 +63,7 @@ export function useIncomingFriendRequests() {
 
 export type FriendAction = 'send' | 'cancel' | 'accept' | 'decline' | 'remove';
 
-const ACTIONS: Record<FriendAction, (userId: string) => Promise<FriendshipStatus>> = {
+const ACTIONS: Record<FriendAction, typeof sendFriendRequest> = {
   send: sendFriendRequest,
   cancel: cancelFriendRequest,
   accept: acceptFriendRequest,
@@ -68,11 +73,12 @@ const ACTIONS: Record<FriendAction, (userId: string) => Promise<FriendshipStatus
 
 /** Действие с парой «я + он». Новое состояние пары сервер возвращает сам. */
 export function useFriendAction() {
+  const api = useRequestClient();
   const queryClient = useQueryClient();
   const me = useCurrentUserId();
 
   return useMutation<FriendshipStatus, Error, { action: FriendAction; userId: string }>({
-    mutationFn: ({ action, userId }) => ACTIONS[action](userId),
+    mutationFn: ({ action, userId }) => ACTIONS[action](userId, api),
     networkMode: 'always',
     onSuccess: (status, { userId }) => {
       queryClient.setQueryData(friendKeys.status(userId), status);

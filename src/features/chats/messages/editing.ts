@@ -2,6 +2,7 @@
 // новых файлов, вызов `edit_message`, перенос подтверждённого в историю.
 // Живёт вне компонентов, как и отправка: ушёл с экрана — правка доедет.
 
+import { requestClient } from '@/api/requestClient';
 import { notifyManager, type QueryClient } from '@tanstack/react-query';
 
 import {
@@ -91,11 +92,12 @@ export function optimisticEdit(original: ChatMessage, result: EditResult): ChatM
 export async function uploadEditFiles(
   result: EditResult,
   userId: string,
+  api = requestClient(),
 ): Promise<UploadedMedia[]> {
-  if (result.voice?.type === 'new') return uploadAllMedia([result.voice.voice], userId);
+  if (result.voice?.type === 'new') return uploadAllMedia([result.voice.voice], userId, api);
   if (result.added.length === 0) return [];
 
-  return uploadAllMedia(await Promise.all(result.added.map(outgoingLocalMedia)), userId);
+  return uploadAllMedia(await Promise.all(result.added.map(outgoingLocalMedia)), userId, api);
 }
 
 /** Итог правки в том виде, в каком его принимает база: оставленное по id, новое — загруженным. */
@@ -140,13 +142,14 @@ export function toEditInput(result: EditResult, uploaded: UploadedMedia[]) {
  * правка без спроса не уходит: облачко уже показало прежнюю версию, и тихо
  * поменять его снова было бы неожиданно.
  */
-function offerRetryWhenOnline(retry: () => void) {
+function offerRetryWhenOnline(retry: () => void, api: ReturnType<typeof requestClient>) {
   let offered = false;
   const unsubscribe = subscribeToConnectionStatus(() => {
     if (offered || getConnectionStatus() !== 'online') return;
 
     offered = true;
     unsubscribe();
+    if (api !== requestClient()) return;
     showNotice('Связь вернулась, но изменения не сохранены', 'error', {
       label: 'Повторить',
       run: retry,
@@ -155,11 +158,11 @@ function offerRetryWhenOnline(retry: () => void) {
 }
 
 /** Что сказать человеку, когда правка не прошла. Сырые ошибки базы в интерфейс не попадают. */
-function explainFailure(cause: unknown, retry: () => void) {
+function explainFailure(cause: unknown, retry: () => void, api: ReturnType<typeof requestClient>) {
   if (isNetworkError(cause)) {
     reportRequestFailed();
     showNotice('Изменения не сохранены: нет связи', 'error', { label: 'Повторить', run: retry });
-    offerRetryWhenOnline(retry);
+    offerRetryWhenOnline(retry, api);
     return;
   }
 
@@ -187,10 +190,12 @@ export async function saveEdit(
   context: EditContext,
   original: ChatMessage,
   result: EditResult,
+  api = requestClient(),
 ): Promise<void> {
+  if (api !== requestClient()) return;
   const { queryClient, chatId, currentUserId } = context;
   const optimistic = optimisticEdit(original, result);
-  const retry = () => void saveEdit(context, original, result);
+  const retry = () => void saveEdit(context, original, result, api);
 
   setPendingEdit(chatId, optimistic);
 
@@ -201,9 +206,10 @@ export async function saveEdit(
 
     if (hasFiles && !currentUserId) throw new Error('Нет активной сессии');
 
-    uploaded = hasFiles ? await uploadEditFiles(result, currentUserId!) : [];
+    uploaded = hasFiles ? await uploadEditFiles(result, currentUserId!, api) : [];
 
-    const saved = await editMessage(original.id, toEditInput(result, uploaded));
+    const saved = await editMessage(original.id, toEditInput(result, uploaded), api);
+    if (api !== requestClient()) return;
 
     // Новые файлы продолжают показываться с телефона, пока грузятся
     // удалённые, — как у только что отправленного.
@@ -219,14 +225,14 @@ export async function saveEdit(
     void queryClient.invalidateQueries({ queryKey: chatsQueryKey });
     void queryClient.invalidateQueries({ queryKey: pinsQueryKey(chatId) });
   } catch (cause) {
-    clearPendingEdit(chatId, optimistic);
+    if (api === requestClient()) clearPendingEdit(chatId, optimistic);
 
     // Отказ сервера — новые файлы ничьи. При обрыве связи правка могла и
     // дойти, поэтому файлы остаются: удалить их — сломать сохранённое.
     if (uploaded.length > 0 && !isNetworkError(cause)) {
-      void Promise.all(uploaded.map((item) => removeUploadedMedia(storedPaths(item))));
+      void Promise.all(uploaded.map((item) => removeUploadedMedia(storedPaths(item), undefined, api)));
     }
 
-    explainFailure(cause, retry);
+    if (api === requestClient()) explainFailure(cause, retry, api);
   }
 }

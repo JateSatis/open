@@ -1,3 +1,5 @@
+import { requestClient } from '@/api/requestClient';
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useCallback, useMemo, useState } from 'react';
 
 import { createSavedTag, type SavedTag } from '@/api/saved';
@@ -20,6 +22,7 @@ function toggled<T>(set: ReadonlySet<T>, value: T): Set<T> {
  * адресатом: настраивают их, чтобы туда сохранить.
  */
 export function useForwardSelection() {
+  const api = useRequestClient();
   const [chatIds, setChatIds] = useState<ReadonlySet<string>>(() => new Set());
   const [saved, setSaved] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -60,16 +63,16 @@ export function useForwardSelection() {
       try {
         // Имя уже было — база отдаёт тот тег; он тоже встаёт первым, чтобы
         // выбор не спрятался за «Показать все».
-        const tag = await createSavedTag(name);
+        const tag = await createSavedTag(name, api);
 
         setCreated((list) => [tag, ...list.filter((item) => item.id !== tag.id)]);
         setTagIds((set) => new Set(set).add(tag.id));
         setSaved(true);
       } catch {
-        showNotice('Не удалось создать тег', 'error');
+        if (api === requestClient()) showNotice('Не удалось создать тег', 'error');
       }
     },
-    [],
+    [api],
   );
 
   const targets: ForwardTargets = useMemo(

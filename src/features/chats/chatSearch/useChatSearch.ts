@@ -1,3 +1,4 @@
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useRouteParams, useNavigation } from '@/navigation';
 import { useCallback, useState } from 'react';
 import { Keyboard } from 'react-native';
@@ -29,6 +30,7 @@ export type ChatSearch = MatchSearch<ChatSearchHit> & {
 export function useChatSearch(
   chatId: string,
 ): ChatSearch {
+  const api = useRequestClient();
   const params = useRouteParams<'Chat'>();
   const navigation = useNavigation();
   const active = params.search === '1';
@@ -41,8 +43,8 @@ export function useChatSearch(
     query,
     active,
     scope: ['chatSearch', chatId],
-    fetchPage: (value, cursor, signal) => searchChatMessages(chatId, value, cursor, signal),
-    count: (value, signal) => countChatSearch(chatId, value, signal),
+    fetchPage: (value, cursor, signal) => searchChatMessages(chatId, value, cursor, signal, api),
+    count: (value, signal) => countChatSearch(chatId, value, signal, api),
   });
 
   const close = useCallback(() => {

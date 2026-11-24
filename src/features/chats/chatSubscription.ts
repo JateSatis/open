@@ -1,3 +1,5 @@
+import { requestClient } from '@/api/requestClient';
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useCallback } from 'react';
 
@@ -37,9 +39,10 @@ export function useChatSubscription(
   chatId: string,
   enabled: boolean,
 ): Subscription | null | undefined {
+  const api = useRequestClient();
   const { data, isError } = useQuery({
     queryKey: chatSubscriptionQueryKey(chatId),
-    queryFn: () => getMyChatSubscription(chatId),
+    queryFn: () => getMyChatSubscription(chatId, api),
     enabled,
   });
 
@@ -120,6 +123,7 @@ export type ChatSubscriptionActions = {
  * или не ответила в срок.
  */
 export function useChatSubscriptionActions(chatId: string): ChatSubscriptionActions {
+  const api = useRequestClient();
   const queryClient = useQueryClient();
 
   const owner = useHistoryReader();
@@ -141,12 +145,12 @@ export function useChatSubscriptionActions(chatId: string): ChatSubscriptionActi
       applySubscription(queryClient, chatId, current, next(current));
 
       try {
-        requireAccountSession(owner);
+        requireAccountSession(owner, api);
         await withDeadline(request(), ACTION_DEADLINE_MS);
         return true;
       } catch {
         restore(queryClient, chatId, snapshot);
-        showNotice(failure, 'error');
+        if (api === requestClient()) showNotice(failure, 'error');
         return false;
       } finally {
         void queryClient.invalidateQueries({ queryKey: chatSubscriptionQueryKey(chatId) });
@@ -154,7 +158,7 @@ export function useChatSubscriptionActions(chatId: string): ChatSubscriptionActi
         void queryClient.invalidateQueries({ queryKey: chatsQueryKey });
       }
     },
-    [chatId, owner, queryClient],
+    [api, chatId, owner, queryClient],
   );
 
   const subscribe = useCallback(
@@ -170,40 +174,40 @@ export function useChatSubscriptionActions(chatId: string): ChatSubscriptionActi
             unreadPops: 0,
             inChatsAt: new Date().toISOString(),
           },
-        () => subscribeToChat(chatId),
+        () => subscribeToChat(chatId, api),
         'Не удалось подписаться',
       ),
-    [chatId, run],
+    [api, chatId, run],
   );
 
   const setNotify = useCallback(
     (enabled: boolean) =>
       run(
         (current) => (current ? { ...current, notify: enabled } : current),
-        () => setChatNotifications(chatId, enabled),
+        () => setChatNotifications(chatId, enabled, api),
         'Не удалось изменить уведомления',
       ),
-    [chatId, run],
+    [api, chatId, run],
   );
 
   const unsubscribe = useCallback(
     () =>
       run(
         () => null,
-        () => unsubscribeFromChat(chatId),
+        () => unsubscribeFromChat(chatId, api),
         'Не удалось отписаться',
       ),
-    [chatId, run],
+    [api, chatId, run],
   );
 
   const readAll = useCallback(
     () =>
       run(
         (current) => (current ? { ...current, unreadPosts: 0 } : current),
-        () => markChatSubscriptionRead(chatId),
+        () => markChatSubscriptionRead(chatId, api),
         'Не удалось отметить прочитанным',
       ),
-    [chatId, run],
+    [api, chatId, run],
   );
 
   return { subscribe, setNotify, unsubscribe, readAll };

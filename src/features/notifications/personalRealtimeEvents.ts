@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 import type { QueryClient } from '@tanstack/react-query';
 
 import { subscribeToUserEvents } from '@/api/chats';
@@ -20,11 +21,11 @@ import { startRingingRecheck } from '@/features/streams/ringingRecheck';
 import { liveStreamQueryKey } from '@/features/streams/streamKeys';
 import { getActiveChatId } from '@/store/activeChat';
 
-function bindPersonalEvents(userId: string, queryClient: QueryClient) {
+function bindPersonalEvents(userId: string, queryClient: QueryClient, api = requestClient()) {
   let active = true;
   function whileCurrent<Args extends unknown[]>(handle: (...args: Args) => void) {
     return (...args: Args) => {
-      if (active && confirmedAccountId(useSessionStore.getState()) === userId) handle(...args);
+      if (active && api === requestClient() && confirmedAccountId(useSessionStore.getState()) === userId) handle(...args);
     };
   }
 
@@ -126,9 +127,9 @@ function bindPersonalEvents(userId: string, queryClient: QueryClient) {
       void queryClient.invalidateQueries({ queryKey: profileKeys.all });
       void queryClient.invalidateQueries({ queryKey: chatsQueryKey });
     }),
-  });
+  }, api);
 
-  const stopRecheck = startRingingRecheck(queryClient);
+  const stopRecheck = startRingingRecheck(queryClient, api);
 
   return () => {
     active = false;
@@ -144,12 +145,12 @@ function clearPresentation() {
 }
 
 /** Один экземпляр на QueryClient корневого layout аккаунта. */
-export function startPersonalRealtimeEvents(reader: string | null, client: QueryClient) {
+export function startPersonalRealtimeEvents(reader: string | null, client: QueryClient, api = requestClient()) {
   let disconnect: (() => void) | undefined;
 
   function sync(state: ReturnType<typeof useSessionStore.getState>) {
-    if (reader && state.localAccountId === reader && confirmedAccountId(state) === reader) {
-      disconnect ??= bindPersonalEvents(reader, client);
+    if (api === requestClient() && reader && state.localAccountId === reader && confirmedAccountId(state) === reader) {
+      disconnect ??= bindPersonalEvents(reader, client, api);
     } else {
       disconnect?.();
       disconnect = undefined;
@@ -157,13 +158,17 @@ export function startPersonalRealtimeEvents(reader: string | null, client: Query
   }
 
   const unsubscribe = useSessionStore.subscribe((state, previous) => {
+    const wasConnected = !!disconnect;
     sync(state);
-    if (previous.localAccountId === reader && state.localAccountId !== reader) clearPresentation();
+    if (wasConnected && previous.localAccountId === reader && (api !== requestClient() || state.localAccountId !== reader)) {
+      clearPresentation();
+      if (getCall()) void leaveCall();
+    }
   });
   sync(useSessionStore.getState());
   return () => {
     unsubscribe();
     disconnect?.();
-    if (useSessionStore.getState().localAccountId === reader) clearPresentation();
+    if (api === requestClient() && useSessionStore.getState().localAccountId === reader) clearPresentation();
   };
 }

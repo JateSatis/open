@@ -1,3 +1,4 @@
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
 
 import { updateMyProfile, type Profile } from '@/api/profile';
@@ -18,6 +19,7 @@ export type AvatarChange =
   { kind: 'set'; uri: string; profile: Profile } | { kind: 'remove'; profile: Profile };
 
 export function useChangeAvatar() {
+  const api = useRequestClient();
   const queryClient = useQueryClient();
 
   return useMutation<Profile, Error, AvatarChange>({
@@ -28,36 +30,36 @@ export function useChangeAvatar() {
       const { profile } = change;
 
       if (change.kind === 'remove') {
-        const updated = await withDeadline(updateMyProfile({ avatarUrl: null }), SAVE_DEADLINE_MS);
+        const updated = await withDeadline(updateMyProfile({ avatarUrl: null }, api), SAVE_DEADLINE_MS);
         // Профиль уже без фото; файл убирается без ожидания — без связи
         // удаление в Storage висело бы вместе с крутилкой.
-        void removeOwnAvatar(profile.avatarUrl, profile.id);
+        void removeOwnAvatar(profile.avatarUrl, profile.id, api);
         return updated;
       }
 
       // Загрузка в Storage без связи не падает, а висит: срок превращает её в
       // ошибку. Файл, доехавший после срока, никому не нужен.
       const url = await withDeadline(
-        uploadAvatar(change.uri, profile.id),
+        uploadAvatar(change.uri, profile.id, api),
         SAVE_DEADLINE_MS,
         (late) => {
-          void removeOwnAvatar(late, profile.id);
+          void removeOwnAvatar(late, profile.id, api);
         },
       );
       let updated: Profile;
 
       try {
-        updated = await withDeadline(updateMyProfile({ avatarUrl: url }), SAVE_DEADLINE_MS);
+        updated = await withDeadline(updateMyProfile({ avatarUrl: url }, api), SAVE_DEADLINE_MS);
       } catch (error) {
         // Профиль на новый файл так и не сослался — файл никому не нужен. Кроме
         // запроса, оборванного по сроку: он мог дойти, и файл тогда — аватар.
         // Без ожидания: без связи удаление висело бы так же, как загрузка.
-        if (!(error instanceof DeadlineError)) void removeOwnAvatar(url, profile.id);
+        if (!(error instanceof DeadlineError)) void removeOwnAvatar(url, profile.id, api);
         throw error;
       }
 
       // Профиль уже на новом файле — прежний убирается без ожидания.
-      void removeOwnAvatar(profile.avatarUrl, profile.id);
+      void removeOwnAvatar(profile.avatarUrl, profile.id, api);
       return updated;
     },
     onSuccess: (profile) => {

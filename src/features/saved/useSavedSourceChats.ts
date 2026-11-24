@@ -1,3 +1,4 @@
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 
@@ -12,6 +13,7 @@ const NO_CHATS = new Map<string, ChatSummary>();
  * живые, одним запросом.
  */
 export function useSavedSourceChats(items: SavedMessage[]): ReadonlyMap<string, ChatSummary> {
+  const api = useRequestClient();
   const chatIds = useMemo(() => {
     const ids = new Set<string>();
 
@@ -27,7 +29,7 @@ export function useSavedSourceChats(items: SavedMessage[]): ReadonlyMap<string, 
   }, [items]);
   const chats = useQuery({
     queryKey: savedSourceChatsQueryKey(chatIds),
-    queryFn: () => fetchSourceChats(chatIds),
+    queryFn: () => fetchSourceChats(chatIds, api),
     enabled: chatIds.length > 0,
     placeholderData: (previous) => previous,
   });

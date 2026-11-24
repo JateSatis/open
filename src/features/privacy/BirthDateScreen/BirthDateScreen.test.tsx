@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { act, screen, userEvent, waitFor } from '@testing-library/react-native';
 
@@ -214,7 +215,7 @@ describe('экран даты рождения', () => {
     await pickAndContinue(yearsAgo(years));
 
     await waitFor(() =>
-      expect(mocked.setBirthDate).toHaveBeenCalledWith(dateOnly(yearsAgo(years))),
+      expect(mocked.setBirthDate).toHaveBeenCalledWith(dateOnly(yearsAgo(years)), requestClient()),
     );
     expect(await screen.findByText('Чаты')).toBeTruthy();
   });

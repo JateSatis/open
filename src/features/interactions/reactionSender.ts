@@ -6,6 +6,8 @@
 // последнее желаемое: запросы не обгоняют друг друга по дороге, и в базе
 // остаётся то, что человек выбрал последним.
 
+import { requestClient } from '@/api/requestClient';
+
 import type { QueryClient } from '@tanstack/react-query';
 
 import { setCommentReaction } from '@/api/comments';
@@ -14,8 +16,7 @@ import { mapOriginals } from '@/features/chats/islands/islandCache';
 import { updateAllHistories } from '@/features/chats/messages/historyCache';
 import {
   clearPendingReaction,
-  reactionsInFlight,
-  readPendingReaction,
+  reactionQueues,
   setPendingReaction,
 } from '@/features/interactions/pendingReactions';
 import { updateCommentEverywhere } from '@/features/interactions/comments/commentsCache';
@@ -113,7 +114,7 @@ export type ReactionTarget = 'message' | 'comment' | 'pop';
 const TARGETS: Record<
   ReactionTarget,
   {
-    send: (id: string, emoji: string | null) => Promise<MyReaction | null>;
+    send: typeof setMessageReaction;
     confirm: (queryClient: QueryClient, id: string, mine: MyReaction | null, me?: Me) => void;
   }
 > = {
@@ -130,29 +131,33 @@ function isReactionLimit(cause: unknown): boolean {
   return typeof cause === 'object' && cause !== null && 'code' in cause && cause.code === 'OR001';
 }
 
-async function drain(queryClient: QueryClient, messageId: string, target: ReactionTarget) {
+
+
+async function drain(queryClient: QueryClient, messageId: string, target: ReactionTarget, api: ReturnType<typeof requestClient>) {
   const { send, confirm } = TARGETS[target];
 
-  reactionsInFlight.add(messageId);
+  const queue = reactionQueues(api);
 
   try {
     for (;;) {
-      const wanted = readPendingReaction(messageId);
+      const wanted = queue.get(messageId);
 
       if (!wanted) return;
 
-      const mine = await send(messageId, wanted.emoji);
+      const mine = await send(messageId, wanted.emoji, api);
 
+      if (queue !== reactionQueues(api)) return;
       confirm(queryClient, messageId, mine, wanted.me);
 
       // Пока ехал запрос, человек передумал — отправляем новое желаемое.
-      if (readPendingReaction(messageId) !== wanted) continue;
+      if (queue.get(messageId) !== wanted) continue;
 
-      clearPendingReaction(messageId, wanted);
+      if (api === requestClient()) clearPendingReaction(messageId, wanted);
       return;
     }
   } catch (cause) {
     // Откат — снятие наложения: облачко возвращается к тому, что знает база.
+    if (api !== requestClient() || queue !== reactionQueues(api)) return;
     clearPendingReaction(messageId);
     showNotice(
       isNetworkError(cause)
@@ -163,7 +168,7 @@ async function drain(queryClient: QueryClient, messageId: string, target: Reacti
       'error',
     );
   } finally {
-    reactionsInFlight.delete(messageId);
+    queue.delete(messageId);
   }
 }
 
@@ -177,9 +182,14 @@ export function sendReaction(
   id: string,
   intent: ReactionIntent,
   target: ReactionTarget = 'message',
+  api = requestClient(),
 ) {
   // У комментария поставившие — из обоих рядов, у сообщения — только участники.
-  setPendingReaction(id, { ...intent, listsVisitors: target === 'comment' });
+  const queue = reactionQueues(api);
+  const running = queue.has(id);
+  const wanted = { ...intent, listsVisitors: target === 'comment' };
+  queue.set(id, wanted);
+  if (api === requestClient()) setPendingReaction(id, wanted);
 
-  if (!reactionsInFlight.has(id)) void drain(queryClient, id, target);
+  if (!running) void drain(queryClient, id, target, api);
 }

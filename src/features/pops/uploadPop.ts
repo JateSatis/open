@@ -2,6 +2,7 @@
 // часть публикации из «Попсов» (`publishing.ts`) и поста с новым попом из
 // «Постов» (доставка сообщений чата).
 
+import { requestClient } from '@/api/requestClient';
 import type { PopMedia } from '@/api/pops';
 import {
   prepareForUpload,
@@ -19,12 +20,12 @@ export class PopPosterError extends Error {
 }
 
 /** Сжатие, постер и загрузка видео попа. Общая часть публикации из «Попсов» и из «Постов». */
-export async function uploadPop(media: LocalMedia, userId: string): Promise<UploadedMedia> {
+export async function uploadPop(media: LocalMedia, userId: string, api = requestClient()): Promise<UploadedMedia> {
   const prepared = await prepareForUpload(media);
 
   if (!prepared.posterUri) throw new PopPosterError();
 
-  return uploadPopMedia(prepared, userId);
+  return uploadPopMedia(prepared, userId, api);
 }
 
 /** Загруженное видео — в форме, которую принимает `publish_pop`. */

@@ -4,6 +4,7 @@ import { AppState } from 'react-native';
 import { createAccountClient } from '@/api/supabase';
 import { isNetworkError } from '@/lib/network';
 import { readAccountSession, type AccountSlot } from './accountStorage';
+import { ownerOf } from './sessionOwner';
 import type { AuthBootstrap } from './sessionState';
 
 export class AccountSession {
@@ -20,14 +21,17 @@ export class AccountSession {
   ) {
     const client = createAccountClient(slot.key);
     this.client = client;
+    client.localSessionId = ownerOf(initial)?.sessionId ?? slot.sessionId;
     this.session = initial;
     this.status = initial ? 'session' : 'pending';
+    client.sessionOwner = () => !this.stopped && this.status === 'session' ? ownerOf(this.session) : null;
     let decided = false;
 
     const update = (session: Session | null, status: AuthBootstrap['sdkStatus']) => {
       if (this.stopped || this.status === 'signedOut') return;
       decided = true;
       this.session = session?.user.id === slot.userId ? session : null;
+      if (this.session) client.localSessionId = ownerOf(this.session)?.sessionId;
       this.status = this.session ? status : 'signedOut';
       changed(this);
     };
@@ -74,6 +78,7 @@ export class AccountSession {
 
   dispose() {
     this.stopped = true;
+    this.client.retired = true;
     this.unsubscribe();
     void this.client.auth.dispose();
     void this.client.removeAllChannels();

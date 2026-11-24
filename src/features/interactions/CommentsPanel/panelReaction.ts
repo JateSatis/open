@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 import type { QueryClient } from '@tanstack/react-query';
 
 import { listMessageFragments, type Fragment, type FragmentRange } from '@/api/fragments';
@@ -28,6 +29,7 @@ export type PanelReaction = {
 async function holderRange(
   queryClient: QueryClient,
   panel: PanelReaction,
+  api = requestClient(),
 ): Promise<FragmentRange | null> {
   if (!panel.myFragmentId || panel.myFragmentId === PENDING_FRAGMENT) return panel.range;
 
@@ -39,7 +41,7 @@ async function holderRange(
       await queryClient
         .fetchQuery({
           queryKey: fragmentsKey(panel.messageId),
-          queryFn: () => listMessageFragments(panel.messageId),
+          queryFn: () => listMessageFragments(panel.messageId, api),
           staleTime: 0,
         })
         .catch(() => undefined),
@@ -58,9 +60,10 @@ export async function reactInPanel(
   queryClient: QueryClient,
   emoji: string,
   panel: PanelReaction,
+  api = requestClient(),
 ): Promise<{ range: FragmentRange; removed: boolean } | null> {
   const removed = panel.mine === emoji;
-  const range = removed ? await holderRange(queryClient, panel) : panel.range;
+  const range = removed ? await holderRange(queryClient, panel, api) : panel.range;
 
   if (!range) return null;
 
@@ -71,7 +74,7 @@ export async function reactInPanel(
     audience: audienceOf(panel.amMember),
     me: panel.me,
     clusterId: panel.clusterId,
-  });
+  }, api);
 
   return { range, removed };
 }

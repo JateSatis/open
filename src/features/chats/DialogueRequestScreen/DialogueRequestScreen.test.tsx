@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 import { screen, userEvent, waitFor } from '@testing-library/react-native';
 
 import { DialogueRequestScreen } from '.';
@@ -74,7 +75,7 @@ describe('DialogueRequestScreen', () => {
     await user.press(screen.getByTestId('composer-send'));
 
     await waitFor(() =>
-      expect(mockedCreate).toHaveBeenCalledWith({ inviteeIds: ['user-2'], requestText: 'Привет!' }),
+      expect(mockedCreate).toHaveBeenCalledWith({ inviteeIds: ['user-2'], requestText: 'Привет!' }, requestClient()),
     );
     expect(mockReplace).toHaveBeenCalledWith({ name: 'Chat', params: { chatId: 'chat-req' } });
   });

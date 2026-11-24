@@ -2,7 +2,7 @@
 // прямой записи в `channels` с клиента нет. Посты канала — обычные сообщения
 // его чата постов, их шлют функции из `chats.ts`.
 
-import { supabase } from '@/api/supabase';
+import { requestClient } from '@/api/requestClient';
 import type { Tables } from '@/api/types.gen';
 
 type ChannelRow = Pick<
@@ -74,8 +74,9 @@ function toChannel(row: ChannelRow): Channel {
 export async function createChannel(
   input: CreateChannelInput,
   signal?: AbortSignal,
+  api = requestClient(),
 ): Promise<CreatedChannel> {
-  let request = supabase.rpc('create_channel', {
+  let request = api.rpc('create_channel', {
     channel_title: input.title,
     channel_username: input.username,
     channel_description: input.description ?? undefined,
@@ -106,8 +107,8 @@ export class ChannelGoneError extends Error {
   }
 }
 
-export async function getChannel(channelId: string): Promise<Channel> {
-  const { data, error } = await supabase
+export async function getChannel(channelId: string, api = requestClient()): Promise<Channel> {
+  const { data, error } = await api
     .from('channels')
     .select(COLUMNS)
     .eq('id', channelId)
@@ -121,8 +122,8 @@ export async function getChannel(channelId: string): Promise<Channel> {
 }
 
 /** Канал, чей чат постов — `chatId`; null, если это обычный чат. */
-export async function findChannelIdByChat(chatId: string): Promise<string | null> {
-  const { data, error } = await supabase
+export async function findChannelIdByChat(chatId: string, api = requestClient()): Promise<string | null> {
+  const { data, error } = await api
     .from('channels')
     .select('id')
     .eq('posts_chat_id', chatId)
@@ -134,8 +135,8 @@ export async function findChannelIdByChat(chatId: string): Promise<string | null
 }
 
 /** Канал по `@имени`, без учёта регистра и `@`; нет такого — null. */
-export async function findChannelByUsername(username: string): Promise<string | null> {
-  const { data, error } = await supabase.rpc('find_channel_by_username', { name: username });
+export async function findChannelByUsername(username: string, api = requestClient()): Promise<string | null> {
+  const { data, error } = await api.rpc('find_channel_by_username', { name: username });
 
   if (error) throw error;
 
@@ -146,8 +147,8 @@ export async function findChannelByUsername(username: string): Promise<string | 
 // Правка канала — только функциями базы, право владельца проверяет она.
 
 /** Сменить название. Пустое база отвергает. */
-export async function setChannelTitle(channelId: string, title: string): Promise<void> {
-  const { error } = await supabase.rpc('set_channel_title', {
+export async function setChannelTitle(channelId: string, title: string, api = requestClient()): Promise<void> {
+  const { error } = await api.rpc('set_channel_title', {
     target_channel: channelId,
     new_title: title,
   });
@@ -159,8 +160,9 @@ export async function setChannelTitle(channelId: string, title: string): Promise
 export async function setChannelDescription(
   channelId: string,
   description: string | null,
+  api = requestClient(),
 ): Promise<void> {
-  const { error } = await supabase.rpc('set_channel_description', {
+  const { error } = await api.rpc('set_channel_description', {
     target_channel: channelId,
     new_description: description ?? '',
   });
@@ -169,8 +171,8 @@ export async function setChannelDescription(
 }
 
 /** Сменить `@имя`. Занятое другим каналом — `ChannelUsernameTakenError`. */
-export async function setChannelUsername(channelId: string, username: string): Promise<void> {
-  const { error } = await supabase.rpc('set_channel_username', {
+export async function setChannelUsername(channelId: string, username: string, api = requestClient()): Promise<void> {
+  const { error } = await api.rpc('set_channel_username', {
     target_channel: channelId,
     new_username: username,
   });
@@ -189,8 +191,9 @@ export async function setChannelUsername(channelId: string, username: string): P
 export async function setChannelAvatar(
   channelId: string,
   avatarUrl: string | null,
+  api = requestClient(),
 ): Promise<string | null> {
-  const { data, error } = await supabase.rpc('set_channel_avatar', {
+  const { data, error } = await api.rpc('set_channel_avatar', {
     target_channel: channelId,
     new_avatar_url: avatarUrl ?? '',
   });
@@ -210,8 +213,8 @@ export type ChannelInfoSummary = {
   voices: number;
 };
 
-export async function getChannelInfoSummary(channelId: string): Promise<ChannelInfoSummary> {
-  const { data, error } = await supabase.rpc('channel_info_summary', {
+export async function getChannelInfoSummary(channelId: string, api = requestClient()): Promise<ChannelInfoSummary> {
+  const { data, error } = await api.rpc('channel_info_summary', {
     target_channel: channelId,
   });
 

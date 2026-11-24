@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 jest.mock('@/api/historyWindow', () => ({
   getHistoryWindow: jest.fn((...args) => jest.requireActual('@/test/historyWindowMock').fixtureHistoryWindow(...args)),
   getHistoryGroupKeys: jest.fn(() => Promise.resolve([])),
@@ -481,7 +482,7 @@ describe('ChannelScreen subscription', () => {
 
     fireEvent.press(await screen.findByRole('button', { name: 'Подписаться' }));
 
-    await waitFor(() => expect(subscribeToChannel).toHaveBeenCalledWith('channel-1', true));
+    await waitFor(() => expect(subscribeToChannel).toHaveBeenCalledWith('channel-1', true, requestClient()));
     expect(screen.queryByText('Хотите добавить в чаты?')).toBeNull();
     await waitFor(() => expect(screen.queryByTestId('channel-subscribe-bar')).toBeNull());
     expect(await screen.findByText('@my_channel.ch · 3 читателя')).toBeTruthy();
@@ -505,7 +506,7 @@ describe('ChannelScreen subscription', () => {
     expect(await screen.findByText('Хотите добавить в чаты?')).toBeTruthy();
     fireEvent.press(screen.getByRole('button', { name: 'Нет' }));
 
-    await waitFor(() => expect(subscribeToChannel).toHaveBeenCalledWith('channel-1', false));
+    await waitFor(() => expect(subscribeToChannel).toHaveBeenCalledWith('channel-1', false, requestClient()));
     expect(await screen.findByRole('button', { name: 'Добавить в чаты' })).toBeTruthy();
     expect(setChannelInChats).not.toHaveBeenCalled();
   });
@@ -546,7 +547,7 @@ describe('ChannelScreen subscription', () => {
     fireEvent.press(await screen.findByRole('button', { name: 'Подписаться' }));
     fireEvent.press(await screen.findByRole('button', { name: 'Добавить' }));
 
-    await waitFor(() => expect(setChannelInChats).toHaveBeenCalledWith('channel-1', true));
+    await waitFor(() => expect(setChannelInChats).toHaveBeenCalledWith('channel-1', true, requestClient()));
     await waitFor(() => expect(screen.queryByTestId('channel-subscribe-bar')).toBeNull());
   });
 
@@ -562,7 +563,7 @@ describe('ChannelScreen subscription', () => {
     expect(screen.queryByTestId('channel-subscribe-bar')).toBeNull();
 
     fireEvent.press(screen.getByRole('menuitem', { name: 'Отписаться' }));
-    await waitFor(() => expect(unsubscribeFromChannel).toHaveBeenCalledWith('channel-1'));
+    await waitFor(() => expect(unsubscribeFromChannel).toHaveBeenCalledWith('channel-1', requestClient()));
     expect(await screen.findByRole('button', { name: 'Подписаться' })).toBeTruthy();
   });
 
@@ -613,7 +614,7 @@ describe('ChannelScreen subscription', () => {
 
     await openPops();
     await waitFor(() =>
-      expect(markChannelRead).toHaveBeenCalledWith('channel-1', { posts: false, pops: true }),
+      expect(markChannelRead).toHaveBeenCalledWith('channel-1', { posts: false, pops: true }, requestClient()),
     );
     await waitFor(() => expect(screen.queryByTestId('segment-badge-1')).toBeNull());
   });

@@ -5,8 +5,8 @@
 // человека в кластере она одна). Изменения приходят сигналом
 // `clusters_changed` в топик чата.
 
+import { requestClient } from '@/api/requestClient';
 import { toReactionCounts, type ReactionCounts } from '@/api/reactionCounts';
-import { supabase } from '@/api/supabase';
 import { fromServerRange } from '@/features/chats/fragments/textOffsets';
 
 export type FragmentCluster = {
@@ -43,8 +43,9 @@ export type FragmentCluster = {
 export async function listMessageClusters(
   messageId: string,
   text: string,
+  api = requestClient(),
 ): Promise<FragmentCluster[]> {
-  const { data, error } = await supabase.rpc('list_message_clusters', {
+  const { data, error } = await api.rpc('list_message_clusters', {
     target_message: messageId,
   });
 
@@ -98,8 +99,9 @@ export async function getAreaSummary(
   messageId: string,
   start: number,
   end: number,
+  api = requestClient(),
 ): Promise<AreaSummary> {
-  const { data, error } = await supabase.rpc('fragment_area_summary', {
+  const { data, error } = await api.rpc('fragment_area_summary', {
     target_message: messageId,
     area_start: start,
     area_end: end,

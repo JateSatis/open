@@ -1,3 +1,4 @@
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useState } from 'react';
 
@@ -25,13 +26,14 @@ export type RespondToInviteState = {
  * меняет, может ли человек писать, и врать об этом нельзя.
  */
 export function useRespondToInvite(): RespondToInviteState {
+  const api = useRequestClient();
   const queryClient = useQueryClient();
   const [pending, setPending] = useState<PendingAnswer | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const mutation = useMutation({
     mutationFn: ({ chatId, answer }: { chatId: string; answer: InviteAnswer }) =>
-      answer === 'accept' ? acceptInvite(chatId) : declineInvite(chatId),
+      answer === 'accept' ? acceptInvite(chatId, api) : declineInvite(chatId, api),
     // Мутация остаётся «в процессе», пока списки не перечитаны: кнопка
     // крутится до того самого момента, когда карточка переезжает, а не гаснет
     // на секунды раньше, оставляя человека гадать, сработало ли нажатие.

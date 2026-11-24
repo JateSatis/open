@@ -5,9 +5,9 @@
 // функций и перевод строк в типы выдачи. Срок на запрос стоит в `fetch`
 // клиента (`requestDeadline.ts`), `signal` отменяет устаревший запрос.
 
+import { requestClient } from '@/api/requestClient';
 import type { Pop } from '@/api/pops';
 import { toReactionCounts } from '@/api/reactionCounts';
-import { supabase } from '@/api/supabase';
 
 /** Чем сущность открывается: чат — перепиской, канал — экраном канала, человек — профилем. */
 export type SearchEntityKind = 'direct' | 'group' | 'channel' | 'person';
@@ -78,8 +78,8 @@ function toEntityKind(value: string): SearchEntityKind | null {
 // хотя половина из них бывает пустой у части видов. Отсюда `?? null`.
 
 /** Оба блока сущностей, каждый уже упорядочен базой. */
-export async function searchEntities(query: string, signal?: AbortSignal): Promise<SearchEntity[]> {
-  let request = supabase.rpc('search_entities', {
+export async function searchEntities(query: string, signal?: AbortSignal, api = requestClient()): Promise<SearchEntity[]> {
+  let request = api.rpc('search_entities', {
     query,
     mine_limit: SEARCH_MINE_LIMIT,
     global_limit: SEARCH_GLOBAL_LIMIT,
@@ -124,8 +124,9 @@ export async function searchMessages(
   query: string,
   cursor: SearchMessagesCursor | null,
   signal?: AbortSignal,
+  api = requestClient(),
 ): Promise<SearchMessagesPage> {
-  let request = supabase.rpc('search_messages', {
+  let request = api.rpc('search_messages', {
     query,
     before_seq: cursor ?? undefined,
     page_size: SEARCH_MESSAGES_PAGE_SIZE,
@@ -188,12 +189,13 @@ export async function recheckRecentSearches(
   personIds: string[],
   messageIds: string[],
   chatIds: string[] = [],
+  api = requestClient(),
 ): Promise<RecentRecheck> {
   const result: RecentRecheck = { people: new Map(), messages: new Map(), chats: new Map() };
 
   if (personIds.length === 0 && messageIds.length === 0 && chatIds.length === 0) return result;
 
-  const { data, error } = await supabase.rpc('recheck_recent_searches', {
+  const { data, error } = await api.rpc('recheck_recent_searches', {
     person_ids: personIds,
     message_ids: messageIds,
     chat_ids: chatIds,
@@ -274,8 +276,9 @@ export const SEARCH_POPS_PAGE_SIZE = 30;
 export async function searchChannels(
   query: string,
   signal?: AbortSignal,
+  api = requestClient(),
 ): Promise<SearchChannel[]> {
-  let request = supabase.rpc('search_channels', { query, max_count: SEARCH_CHANNELS_LIMIT });
+  let request = api.rpc('search_channels', { query, max_count: SEARCH_CHANNELS_LIMIT });
 
   if (signal) request = request.abortSignal(signal);
 
@@ -304,8 +307,9 @@ export async function searchPops(
   query: string,
   cursor: SearchPopsCursor | null,
   signal?: AbortSignal,
+  api = requestClient(),
 ): Promise<SearchPop[]> {
-  let request = supabase.rpc('search_pops', {
+  let request = api.rpc('search_pops', {
     query,
     as_of: cursor?.scoredAt,
     after_rank: cursor?.rank,

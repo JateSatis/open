@@ -3,6 +3,7 @@
 // островки пересылки с оригиналами приходят той же выборкой, без догрузки на
 // каждое облачко, и облачко не прыгает по высоте, когда что-то подтянулось.
 
+import { requestClient } from '@/api/requestClient';
 import type { QueryData } from '@supabase/supabase-js';
 
 import { PREVIEW_ATTACHMENT_COLUMNS, toPreview, type MessagePreview } from '@/api/messagePreview';
@@ -10,7 +11,6 @@ import { parseHiddenRanges, type HiddenRange } from '@/features/chats/hiddenText
 import { FRAGMENT_QUOTE_COLUMNS, toFragmentQuote, type FragmentQuote } from '@/api/fragmentQuote';
 import { REACTION_COLUMNS, toReactions, type MessageReactions } from '@/api/reactionCounts';
 import { opaqueFlag } from '@/api/opaquePeople';
-import { supabase } from '@/api/supabase';
 
 export type MessageKind =
   | 'text'
@@ -368,8 +368,8 @@ export const HISTORY_PAGE_UNIQUE_EMBEDS = [
 // не гарантирует порядок вложенной выборки сам по себе — нужен явный order
 // по `position` (см. attachments_message_id_position_key в миграции). Во
 // вложенных оригиналах порядок наводит разбор ниже.
-export const messagesSelect = () =>
-  supabase
+export const messagesSelect = (api = requestClient()) =>
+  api
     .from('message_rows')
     .select(MESSAGE_COLUMNS)
     .order('position', { referencedTable: 'attachments' });
@@ -715,10 +715,10 @@ export function toMessage(row: MessageRow): Message {
  * Оригиналы по id — как их держит островок: с автором и чатом. Удалённые и
  * невидимые база не отдаёт. Для пересылки не из чата (из «Сохранённых»).
  */
-export async function listIslandOriginals(messageIds: string[]): Promise<IslandOriginal[]> {
+export async function listIslandOriginals(messageIds: string[], api = requestClient()): Promise<IslandOriginal[]> {
   if (messageIds.length === 0) return [];
 
-  const { data, error } = await supabase
+  const { data, error } = await api
     .from('message_rows')
     .select(ORIGINAL_COLUMNS)
     .in('id', messageIds)
@@ -730,10 +730,10 @@ export async function listIslandOriginals(messageIds: string[]): Promise<IslandO
 }
 
 /** Комментарии по id — как их показывает пересылка. Удалённые не отдаются. */
-export async function listForwardedComments(commentIds: string[]): Promise<ForwardedComment[]> {
+export async function listForwardedComments(commentIds: string[], api = requestClient()): Promise<ForwardedComment[]> {
   if (commentIds.length === 0) return [];
 
-  const { data, error } = await supabase
+  const { data, error } = await api
     .from('comment_rows')
     .select(FORWARDED_COMMENT_FIELDS)
     .in('id', commentIds)

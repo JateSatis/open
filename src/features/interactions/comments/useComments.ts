@@ -1,3 +1,5 @@
+import { useScreenNotice } from '@/features/notifications/useScreenNotice';
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -57,7 +59,6 @@ import {
   withMyReaction,
 } from '@/features/interactions/reactionState';
 import type { LocalMedia, OutgoingMedia } from '@/features/media';
-import { showNotice } from '@/features/notifications/alertsStore';
 import { useMyProfile } from '@/features/profile/queries';
 import { describeLoadError, isNetworkError } from '@/lib/network';
 
@@ -164,6 +165,8 @@ export function useComments(
   amMember = false,
   fragment?: FragmentScope,
 ): CommentsState {
+  const notice = useScreenNotice();
+  const api = useRequestClient();
   const queryClient = useQueryClient();
   const connection = useConnectionStatus();
   const { data: me } = useMyProfile();
@@ -193,7 +196,7 @@ export function useComments(
   const { data, isPending, error } = useQuery({
     queryKey: rootsKey(targetId, scopeKey),
     queryFn: () =>
-      loadRoots(targetId, scopeKey && scopeSet ? { key: scopeKey, set: scopeSet } : undefined),
+      loadRoots(targetId, scopeKey && scopeSet ? { key: scopeKey, set: scopeSet } : undefined, api),
     // Порядок верха меняется только новым открытием: сами по себе страницы не перечитываются.
     staleTime: Infinity,
     refetchOnReconnect: false,
@@ -235,7 +238,7 @@ export function useComments(
       timer = null;
 
       if (reactedIds.length > 0) {
-        syncCommentReactions(queryClient, targetId, reactedIds).catch(() => undefined);
+        syncCommentReactions(queryClient, targetId, reactedIds, api).catch(() => undefined);
       }
 
       if (batch.added.length === 0 && batch.changed.length === 0) return;
@@ -243,7 +246,7 @@ export function useComments(
       // Число в шапке панели живёт на сообщении или попе — перечитываем его той же пачкой.
       void queryClient.invalidateQueries({ queryKey: commentTargetQueryKey(targetId) });
       // Не вышло — дочитаем при следующем событии или переподключении.
-      syncComments(queryClient, targetId, meRef.current, batch).catch(() => undefined);
+      syncComments(queryClient, targetId, meRef.current, batch, api).catch(() => undefined);
     };
 
     const schedule = () => {
@@ -271,20 +274,20 @@ export function useComments(
         void queryClient.invalidateQueries({ queryKey: commentTargetQueryKey(targetId) });
       },
       onPinChanged: () => {
-        syncAuthorPin(queryClient, targetId).catch(() => undefined);
+        syncAuthorPin(queryClient, targetId, api).catch(() => undefined);
       },
       onReconnected: () => {
-        resyncComments(queryClient, targetId, meRef.current).catch(() => undefined);
+        resyncComments(queryClient, targetId, meRef.current, api).catch(() => undefined);
         void queryClient.invalidateQueries({ queryKey: commentTargetQueryKey(targetId) });
       },
-    });
+    }, api);
 
     return () => {
       unsubscribe();
 
       if (timer) clearTimeout(timer);
     };
-  }, [targetId, queryClient]);
+  }, [api, targetId, queryClient]);
 
   // Связь вернулась — дописываем то, что не ушло: человек уже нажал «отправить».
   useEffect(() => {
@@ -301,10 +304,10 @@ export function useComments(
       const outgoing = item.status === 'failed' ? outgoingOf(item) : null;
 
       if (outgoing && item.localId) {
-        void deliverComment(context, item.localId, outgoing, item.commentThreadRootId);
+        void deliverComment(context, item.localId, outgoing, item.commentThreadRootId, api);
       }
     }
-  }, [connection, context, targetId]);
+  }, [api, connection, context, targetId]);
 
   // ------------------------------------------------------------------ список
   const confirmed = useMemo(() => overlay(data ? rootsInOrder(data) : NONE), [data, overlay]);
@@ -350,11 +353,11 @@ export function useComments(
 
       updateRoots(queryClient, targetId, (page) => setAuthorPin(page, comment), scopeKey);
 
-      (comment ? pinComment(comment.id) : unpinComment(targetId)).catch((cause: unknown) => {
+      (comment ? pinComment(comment.id, api) : unpinComment(targetId, api)).catch((cause: unknown) => {
         // Откат — к закрепу из базы, а не к снимку: пока шёл запрос, закреп
         // мог смениться и у других.
         if (before) {
-          syncAuthorPin(queryClient, targetId).catch(() =>
+          syncAuthorPin(queryClient, targetId, api).catch(() =>
             updateRoots(
               queryClient,
               targetId,
@@ -366,7 +369,7 @@ export function useComments(
 
         const action = comment ? 'закрепить' : 'открепить';
 
-        showNotice(
+        notice(
           isNetworkError(cause)
             ? `Не удалось ${action} комментарий: нет связи`
             : `Не удалось ${action} комментарий`,
@@ -374,7 +377,7 @@ export function useComments(
         );
       });
     },
-    [scopeKey, targetId, queryClient],
+    [api, notice, scopeKey, targetId, queryClient],
   );
 
   const loadMore = useCallback(() => {
@@ -386,7 +389,7 @@ export function useComments(
     loadingMoreRef.current = true;
     setIsLoadingMore(true);
 
-    return listCommentThreadRoots(targetId, { cursor, set: loaded.scope?.set })
+    return listCommentThreadRoots(targetId, { cursor, set: loaded.scope?.set }, api)
       .then((page) =>
         updateRoots(
           queryClient,
@@ -401,7 +404,7 @@ export function useComments(
         loadingMoreRef.current = false;
         setIsLoadingMore(false);
       });
-  }, [scopeKey, targetId, queryClient]);
+  }, [api, scopeKey, targetId, queryClient]);
 
   const remove = useCallback(
     async (comment: CommentItem) => {
@@ -428,7 +431,7 @@ export function useComments(
       updateScopedRoots(queryClient, targetId, unpinRemoved);
 
       try {
-        await deleteComment(comment.id);
+        await deleteComment(comment.id, api);
       } catch (cause) {
         for (const [key, page] of snapshot) queryClient.setQueryData(key, page);
         throw cause;
@@ -436,7 +439,7 @@ export function useComments(
 
       void queryClient.invalidateQueries({ queryKey: commentTargetQueryKey(targetId) });
     },
-    [targetId, queryClient],
+    [api, targetId, queryClient],
   );
 
   return {
@@ -456,13 +459,13 @@ export function useComments(
         media: OutgoingMedia[] = [],
         replies: LiveQuote[] = [],
         commentThreadRootId: string | null = null,
-      ) => sendCommentPost(context, text, media, replies, commentThreadRootId),
-      [context],
+      ) => sendCommentPost(context, text, media, replies, commentThreadRootId, api),
+      [api, context],
     ),
     sendVoice: useCallback(
       (voice: LocalMedia, replies: LiveQuote[] = [], commentThreadRootId: string | null = null) =>
-        sendCommentVoice(context, voice, replies, commentThreadRootId),
-      [context],
+        sendCommentVoice(context, voice, replies, commentThreadRootId, api),
+      [api, context],
     ),
     react: useCallback(
       (comment: CommentItem, emoji: string) =>
@@ -481,15 +484,16 @@ export function useComments(
               : undefined,
           },
           'comment',
+          api,
         ),
-      [amMember, currentUserId, me, queryClient],
+      [api, amMember, currentUserId, me, queryClient],
     ),
-    retry: useCallback((localId: string) => retryComment(context, localId), [context]),
+    retry: useCallback((localId: string) => retryComment(context, localId, api), [api, context]),
     discard: useCallback((localId: string) => discardComment(targetId, localId), [targetId]),
     saveEdit: useCallback(
       (original: CommentItem, result: EditResult) =>
-        void saveCommentEdit({ queryClient, subject, currentUserId }, original, result),
-      [currentUserId, subject, queryClient],
+        void saveCommentEdit({ queryClient, subject, currentUserId }, original, result, api),
+      [api, currentUserId, subject, queryClient],
     ),
     remove,
     overlay,

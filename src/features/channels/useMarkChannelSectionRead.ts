@@ -1,3 +1,4 @@
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 
@@ -19,11 +20,12 @@ export function useMarkChannelSectionRead(
   newestId: string | null,
   active: boolean,
 ) {
+  const api = useRequestClient();
   const queryClient = useQueryClient();
   // Только читает кеш: запрашивает подписку тот, кто рисует кнопку (`useChannelSubscription`).
   const { data: subscription } = useQuery({
     queryKey: channelSubscriptionQueryKey(channelId ?? ''),
-    queryFn: () => getMySubscription(channelId!),
+    queryFn: () => getMySubscription(channelId!, api),
     enabled: false,
   });
   const subscribed = Boolean(subscription);
@@ -40,7 +42,7 @@ export function useMarkChannelSectionRead(
 
     let alive = true;
 
-    markChannelRead(channelId, { posts: false, pops: true })
+    markChannelRead(channelId, { posts: false, pops: true }, api)
       .then(() => {
         if (!alive) return;
 
@@ -56,5 +58,5 @@ export function useMarkChannelSectionRead(
     return () => {
       alive = false;
     };
-  }, [active, channelId, newestId, queryClient, section, subscribed]);
+  }, [api, active, channelId, newestId, queryClient, section, subscribed]);
 }

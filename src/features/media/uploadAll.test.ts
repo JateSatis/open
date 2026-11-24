@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 import { uploadAllMedia } from './uploadAll';
 import { uploadMedia, removeUploadedMedia } from './storage';
 import type { LocalMedia, UploadedMedia } from './types';
@@ -74,8 +75,8 @@ describe('uploadAllMedia', () => {
 
     // Сообщение с частью вложений в базу не попадёт — загруженные объекты
     // не должны остаться висеть в бакете без ссылки на них.
-    expect(mockedRemove).toHaveBeenCalledWith(['user-1/photo/a.jpg']);
-    expect(mockedRemove).toHaveBeenCalledWith(['user-1/photo/b.jpg']);
+    expect(mockedRemove).toHaveBeenCalledWith(['user-1/photo/a.jpg'], undefined, requestClient());
+    expect(mockedRemove).toHaveBeenCalledWith(['user-1/photo/b.jpg'], undefined, requestClient());
     expect(mockedRemove).toHaveBeenCalledTimes(2);
   });
 

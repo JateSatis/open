@@ -1,6 +1,6 @@
+import { requestClient } from '@/api/requestClient';
 // Просмотры сообщений: запись пачкой и перечитывание счётчиков.
 
-import { supabase } from '@/api/supabase';
 
 /** Сколько id принимает `record_message_views` за вызов. */
 export const MAX_VIEWS_BATCH = 200;
@@ -16,10 +16,11 @@ export async function recordMessageViews(
   chatId: string,
   messageIds: string[],
   sessionId: string,
+  api = requestClient(),
 ): Promise<void> {
   if (messageIds.length === 0) return;
 
-  const { error } = await supabase.rpc('record_message_views', {
+  const { error } = await api.rpc('record_message_views', {
     target_chat: chatId,
     message_ids: messageIds.slice(0, MAX_VIEWS_BATCH),
     session_id: sessionId,
@@ -29,12 +30,12 @@ export async function recordMessageViews(
 }
 
 /** Свежие просмотры и «прочитано» у этих сообщений — только живых. */
-export async function listMessageViews(messageIds: string[]): Promise<MessageViews[]> {
+export async function listMessageViews(messageIds: string[], api = requestClient()): Promise<MessageViews[]> {
   if (messageIds.length === 0) return [];
 
   // Из представления: просмотры участников и «прочитано» скрытого от меня
   // чата оно не отдаёт.
-  const { data, error } = await supabase
+  const { data, error } = await api
     .from('message_rows')
     .select('id, views_count, read_at')
     .in('id', messageIds);

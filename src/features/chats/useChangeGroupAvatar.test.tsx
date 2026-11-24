@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
@@ -43,17 +44,17 @@ describe('useChangeGroupAvatar', () => {
   it('uploads into my prefix and removes the file the database actually replaced', async () => {
     await expect(run({ kind: 'set', uri: 'file:///g.jpg' })).resolves.toBe(NEW.url);
 
-    expect(mockedUpload).toHaveBeenCalledWith('file:///g.jpg', 'me');
-    expect(mockedSet).toHaveBeenCalledWith('group-1', NEW.url);
-    expect(removeOwnGroupAvatar).toHaveBeenCalledWith(REPLACED, 'me');
+    expect(mockedUpload).toHaveBeenCalledWith('file:///g.jpg', 'me', requestClient());
+    expect(mockedSet).toHaveBeenCalledWith('group-1', NEW.url, requestClient());
+    expect(removeOwnGroupAvatar).toHaveBeenCalledWith(REPLACED, 'me', requestClient());
     expect(removePublicMedia).not.toHaveBeenCalled();
   });
 
   it('removing the photo deletes the replaced file, if it is mine', async () => {
     await expect(run({ kind: 'remove' })).resolves.toBeNull();
 
-    expect(mockedSet).toHaveBeenCalledWith('group-1', null);
-    expect(removeOwnGroupAvatar).toHaveBeenCalledWith(REPLACED, 'me');
+    expect(mockedSet).toHaveBeenCalledWith('group-1', null, requestClient());
+    expect(removeOwnGroupAvatar).toHaveBeenCalledWith(REPLACED, 'me', requestClient());
   });
 
   it('a refused photo removes the fresh upload and keeps the old file', async () => {
@@ -61,7 +62,7 @@ describe('useChangeGroupAvatar', () => {
 
     await expect(run({ kind: 'set', uri: 'file:///g.jpg' })).rejects.toThrow();
 
-    expect(removePublicMedia).toHaveBeenCalledWith(NEW.path);
+    expect(removePublicMedia).toHaveBeenCalledWith(NEW.path, requestClient());
     expect(removeOwnGroupAvatar).not.toHaveBeenCalled();
   });
 

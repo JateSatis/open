@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 import { onlineManager } from '@tanstack/react-query';
@@ -22,6 +23,7 @@ type AuthListener = (event: AuthChangeEvent, session: Session | null) => void;
 let mockAuthEvent: AuthListener;
 const mockGetSession = jest.fn();
 jest.mock('@/api/supabase', () => ({
+  supabase: {},
   selectApiClient: jest.fn(),
   createAccountClient: () => ({
     removeAllChannels: jest.fn(),
@@ -37,6 +39,7 @@ jest.mock('@/api/supabase', () => ({
 }));
 jest.mock('@/features/auth/accountStorage', () => ({
   readAccounts: jest.fn(),
+  readAccountSession: jest.fn(async () => null),
   writeAccounts: jest.fn(),
   cleanAccountStorage: jest.fn(async () => {}),
 }));
@@ -158,7 +161,7 @@ it('показывает сохранённую строку до ответа S
   await waitFor(() => expect(listChats).toHaveBeenCalledTimes(1));
   expect(getMyPrivacySettings).toHaveBeenCalledTimes(1);
   expect(createAppQueryClient).toHaveBeenCalledTimes(1);
-  expect(subscribeToUserEvents).toHaveBeenCalledWith('reader', expect.any(Object));
+  expect(subscribeToUserEvents).toHaveBeenCalledWith('reader', expect.any(Object), requestClient());
   await act(() => mockAuthEvent('TOKEN_REFRESHED', { ...account, access_token: 'refreshed' }));
   expect(subscribeToUserEvents).toHaveBeenCalledTimes(1);
   expect(localClient.getQueryData(['marker'])).toBe(42);

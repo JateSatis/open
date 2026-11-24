@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 import { fireEvent, screen, waitFor } from '@testing-library/react-native';
 
 import { ChatInviteScreen } from '.';
@@ -94,7 +95,7 @@ describe('ChatInviteScreen', () => {
     await fireEvent.press(screen.getByRole('checkbox', { name: 'Глеб' }));
     await fireEvent.press(screen.getByText('Пригласить (2)'));
 
-    await waitFor(() => expect(inviteToChat).toHaveBeenCalledWith('group-1', ['vera', 'gleb']));
+    await waitFor(() => expect(inviteToChat).toHaveBeenCalledWith('group-1', ['vera', 'gleb'], requestClient()));
     await waitFor(() => expect(mockBack).toHaveBeenCalled());
   });
 
@@ -103,7 +104,7 @@ describe('ChatInviteScreen', () => {
 
     await fireEvent.changeText(await screen.findByTestId('invite-search'), 'гле');
 
-    await waitFor(() => expect(searchPeople).toHaveBeenCalledWith('гле', null, expect.anything()));
+    await waitFor(() => expect(searchPeople).toHaveBeenCalledWith('гле', null, expect.anything(), requestClient()));
   });
 
   it('explains a failure in plain words and stays', async () => {

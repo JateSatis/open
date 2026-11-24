@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 import { screen, userEvent, waitFor } from '@testing-library/react-native';
 
 import { MyFriendsScreen } from '@/features/friends/MyFriendsScreen';
@@ -87,7 +88,7 @@ describe('свои друзья', () => {
     expect(screen.getByText('Друзья')).toBeTruthy();
     expect(screen.getByText('Вера')).toBeTruthy();
     expect(screen.getByText('@vera')).toBeTruthy();
-    expect(mocked.listFriends).toHaveBeenCalledWith('me', null);
+    expect(mocked.listFriends).toHaveBeenCalledWith('me', null, requestClient());
   });
 
   it('К4.2 принять — заявка уходит, человек в друзьях', async () => {
@@ -104,7 +105,7 @@ describe('свои друзья', () => {
     await renderWithQuery(<MyFriendsScreen />);
     await user.press(await screen.findByLabelText('Принять заявку: Аня'));
 
-    expect(mocked.accept).toHaveBeenCalledWith('user-a');
+    expect(mocked.accept).toHaveBeenCalledWith('user-a', requestClient());
     await waitFor(() => expect(screen.queryByText('Заявки')).toBeNull());
     expect(screen.getByText('Аня')).toBeTruthy();
   });
@@ -122,7 +123,7 @@ describe('свои друзья', () => {
     await renderWithQuery(<MyFriendsScreen />);
     await user.press(await screen.findByLabelText('Отклонить заявку: Аня'));
 
-    expect(mocked.decline).toHaveBeenCalledWith('user-a');
+    expect(mocked.decline).toHaveBeenCalledWith('user-a', requestClient());
     await waitFor(() => expect(screen.queryByText('Аня')).toBeNull());
   });
 
@@ -157,7 +158,7 @@ describe('друзья другого человека', () => {
       await renderWithQuery(<FriendsList />);
 
       await userEvent.setup().press(await screen.findByRole('button', { name: 'Аня' }));
-      expect(mocked.listFriends).toHaveBeenCalledWith('user-b', null);
+      expect(mocked.listFriends).toHaveBeenCalledWith('user-b', null, requestClient());
       expect(mockPush).toHaveBeenCalledWith({ name: 'Person', params: { userId: 'user-a' } });
     },
   );

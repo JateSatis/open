@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 jest.mock('@/api/historyWindow', () => ({
   getHistoryWindow: jest.fn((...args) => jest.requireActual('@/test/historyWindowMock').fixtureHistoryWindow(...args)),
   getHistoryGroupKeys: jest.fn(() => Promise.resolve([])),
@@ -177,7 +178,7 @@ describe('useChatMessages sending media', () => {
           sizeBytes: 1000,
         },
       ],
-    });
+    }, requestClient());
   });
 
   it('cleans up already-uploaded files when the message itself fails to send', async () => {
@@ -205,7 +206,7 @@ describe('useChatMessages sending media', () => {
     await act(() => result.current.send('подпись', [asset]));
 
     await waitFor(() => expect(result.current.messages[0].status).toBe('failed'));
-    expect(mockedRemove).toHaveBeenCalledWith(['user-1/photo/a1.jpg']);
+    expect(mockedRemove).toHaveBeenCalledWith(['user-1/photo/a1.jpg'], undefined, requestClient());
   });
 
   it('retries a failed media message from the original selection', async () => {
@@ -579,6 +580,7 @@ describe('useChatMessages voice messages', () => {
         waveform: [0, 10, 31],
       },
       [],
+      undefined, requestClient(),
     );
     expect(mockedSendMessage).not.toHaveBeenCalled();
     // Своё голосовое и дальше играет из локального файла.
@@ -595,7 +597,7 @@ describe('useChatMessages voice messages', () => {
     await act(() => result.current.sendVoice(voice));
 
     await waitFor(() => expect(result.current.messages[0].status).toBe('failed'));
-    expect(mockedRemove).toHaveBeenCalledWith(['user-1/voice/v1.m4a']);
+    expect(mockedRemove).toHaveBeenCalledWith(['user-1/voice/v1.m4a'], undefined, requestClient());
 
     await act(() => result.current.retry(result.current.messages[0].localId!));
 
@@ -651,7 +653,7 @@ describe('useChatMessages voice messages', () => {
 
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     await waitFor(() =>
-      expect(jest.requireMock('@/api/chats').getTypingAudience).toHaveBeenCalledWith('chat-1'),
+      expect(jest.requireMock('@/api/chats').getTypingAudience).toHaveBeenCalledWith('chat-1', requestClient()),
     );
     await act(async () => result.current.notifyTyping());
     await act(async () => result.current.notifyRecordingVoice());
@@ -680,7 +682,7 @@ describe('useChatMessages voice messages', () => {
 
     expect(broadcastTyping).toHaveBeenLastCalledWith('user-1', 'typing', 'members');
     // Подписка участника слушает и топик участников.
-    expect(mockedSubscribe).toHaveBeenLastCalledWith('chat-1', expect.anything(), true);
+    expect(mockedSubscribe).toHaveBeenLastCalledWith('chat-1', expect.anything(), true, requestClient());
   });
 
   it('stays silent until the database has answered where to send «typing»', async () => {
@@ -753,7 +755,7 @@ describe('useChatMessages removing own unsent messages', () => {
     await act(async () => answer(saved));
 
     // Сообщение уже в базе и разослано — убрать его можно только удалением для всех.
-    await waitFor(() => expect(mockedDeleteMessages).toHaveBeenCalledWith(['m-saved']));
+    await waitFor(() => expect(mockedDeleteMessages).toHaveBeenCalledWith(['m-saved'], requestClient()));
     expect(result.current.messages).toEqual([]);
   });
 });
@@ -801,7 +803,7 @@ describe('useChatMessages replies and forwards', () => {
       text: 'согласен',
       media: undefined,
       replyTo: ['orig'],
-    });
+    }, requestClient());
 
     await act(async () =>
       answer({
@@ -917,7 +919,7 @@ describe('useChatMessages replies and forwards', () => {
 
     await waitFor(() => expect(result.current.chat.messages.map((m) => m.status)).toEqual(['sent']));
     expect(mockedForward).toHaveBeenCalledTimes(2);
-    expect(mockedForward).toHaveBeenLastCalledWith('chat-1', 'chat-src', ['a', 'b']);
+    expect(mockedForward).toHaveBeenLastCalledWith('chat-1', 'chat-src', ['a', 'b'], requestClient());
   });
 });
 

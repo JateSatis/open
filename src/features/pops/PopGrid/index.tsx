@@ -1,3 +1,4 @@
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { FlashList, type FlashListProps, type ListRenderItem } from '@shopify/flash-list';
 import { useCallback, useMemo, type ComponentType, type ReactElement } from 'react';
@@ -79,6 +80,7 @@ export function PopGrid({
   minContentHeight = 0,
   testID = 'pop-grid',
 }: PopGridProps) {
+  const api = useRequestClient();
   const queryClient = useQueryClient();
   const userId = useCurrentUserId();
   const { width } = useWindowDimensions();
@@ -100,9 +102,9 @@ export function PopGrid({
 
   const onRetry = useCallback(
     (item: PendingPop) => {
-      if (userId) retryPop(queryClient, userId, channelId, item.localId);
+      if (userId) retryPop(queryClient, userId, channelId, item.localId, api);
     },
-    [channelId, queryClient, userId],
+    [api, channelId, queryClient, userId],
   );
 
   const onDiscard = useCallback(
@@ -114,10 +116,10 @@ export function PopGrid({
         cancelLabel: 'Отмена',
         destructive: true,
       }).then((yes) => {
-        if (yes) discardPop(channelId, item.localId);
+        if (yes) discardPop(channelId, item.localId, api);
       });
     },
-    [channelId],
+    [api, channelId],
   );
 
   const actions = useMemo<PopGridActions>(

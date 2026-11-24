@@ -3,6 +3,9 @@
 // комментарий попадает только с настоящим id. Живёт вне панели: закрыл её
 // посреди отправки — комментарий всё равно доедет.
 
+import { clientIdentity } from '@/api/perClient';
+import { requestClient } from '@/api/requestClient';
+
 import { create } from 'zustand';
 
 import type { CommentItem } from '@/features/interactions/comments/commentItem';
@@ -40,8 +43,8 @@ export function outboxComments(targetId: string): CommentItem[] {
   return useCommentOutbox.getState().byTarget[targetId] ?? EMPTY;
 }
 
-export function addOutboxComments(targetId: string, drafts: CommentItem[]) {
-  setCommentThread(targetId, (current) => [...drafts, ...current]);
+export function addOutboxComments(targetId: string, drafts: CommentItem[], api = requestClient()) {
+  setCommentThread(targetId, (current) => [...drafts.map(draft => ({ ...draft, deliveryOwner: clientIdentity(api) })), ...current]);
 }
 
 export function setOutboxCommentStatus(

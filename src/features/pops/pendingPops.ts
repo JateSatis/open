@@ -21,6 +21,7 @@ export type NewPop = {
 };
 
 export type PendingPop = NewPop & {
+  deliveryOwner?: symbol;
   localId: string;
   /** Выбран заранее: повтор отдаёт уже созданный поп, а не второй. */
   popId: string;

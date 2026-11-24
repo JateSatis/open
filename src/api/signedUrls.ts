@@ -5,7 +5,9 @@
 // Кешировать сам файл надо по пути (`cacheKey`), а не по ссылке: у каждой
 // подписи свой адрес.
 
-import { supabase } from '@/api/supabase';
+import { perClient } from './perClient';
+import { requestClient } from '@/api/requestClient';
+import type { AccountClient } from '@/api/accountClient';
 
 /** Больше путей в одном запросе Storage не подписывает за раз. */
 const BATCH_LIMIT = 100;
@@ -19,18 +21,18 @@ export type SignedEntry = { url: string | null; expiresAt: number };
 
 export type SignedUrlStore = {
   /** Попросить подписать путь, если ссылки нет или она скоро истечёт. */
-  request: (path: string) => void;
+  request: (path: string, api?: AccountClient) => void;
   /** Подписанная ссылка на путь, если она уже есть и ещё жива. */
   signed: (path: string) => string | null;
   /** Состояние подписи — новый объект после каждой подписи или отказа. */
-  entry: (path: string) => Readonly<SignedEntry> | undefined;
+  entry: (path: string, api?: AccountClient) => Readonly<SignedEntry> | undefined;
   /** Через сколько спросить снова: живую — чуть раньше срока, отказ — после паузы. */
   refreshDelay: (entry: Readonly<SignedEntry> | undefined) => number;
-  subscribe: (listener: () => void) => () => void;
+  subscribe: (listener: () => void, api?: AccountClient) => () => void;
   /** Забыть ссылки: файлы могли стать скрытыми от меня. */
   forget: () => void;
   /** Дождаться подписи пути: null — файл скрыт, его нет или нет сети. */
-  sign: (path: string) => Promise<string | null>;
+  sign: (path: string, api?: AccountClient) => Promise<string | null>;
 };
 
 export type SignedUrlOptions = {
@@ -43,6 +45,20 @@ export type SignedUrlOptions = {
 };
 
 export function createSignedUrlStore(bucket: string, options: SignedUrlOptions): SignedUrlStore {
+  const forClient = perClient(api => createClientStore(bucket, options, api));
+  const selected = () => forClient(requestClient());
+  return {
+    request: (path, api = requestClient()) => forClient(api).request(path),
+    signed: path => selected().signed(path),
+    entry: (path, api = requestClient()) => forClient(api).entry(path),
+    refreshDelay: entry => selected().refreshDelay(entry),
+    subscribe: (listener, api = requestClient()) => forClient(api).subscribe(listener),
+    forget: () => selected().forget(),
+    sign: (path, api = requestClient()) => forClient(api).sign(path),
+  };
+}
+
+function createClientStore(bucket: string, options: SignedUrlOptions, api: AccountClient): SignedUrlStore {
   const { ttlS, refreshBeforeMs, retryAfterMs } = options;
   const entries = new Map<string, SignedEntry>();
   const listeners = new Set<() => void>();
@@ -66,9 +82,9 @@ export function createSignedUrlStore(bucket: string, options: SignedUrlOptions):
     const now = Date.now();
 
     try {
-      const { data, error } = await supabase.storage.from(bucket).createSignedUrls(paths, ttlS);
+      const { data, error } = await api.storage.from(bucket).createSignedUrls(paths, ttlS);
 
-      if (error) throw error;
+      if (error || api.retired) throw error;
 
       const signed = new Map(
         (data ?? []).map((row) => [row.path, row.error ? null : row.signedUrl]),
@@ -151,6 +167,7 @@ export function createSignedUrlStore(bucket: string, options: SignedUrlOptions):
       notify();
     },
     sign: (path) => {
+      if (api.retired) return Promise.resolve(null);
       const ready = signed(path);
 
       if (ready && !stale(entries.get(path), Date.now())) return Promise.resolve(ready);
