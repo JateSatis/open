@@ -19,7 +19,7 @@ export type JournalQueue = {
   load: () => Promise<void>;
   push: (event: QueuedEvent) => void;
   /** До `max` ещё не отправляемых событий этого человека — они помечаются как в пути. */
-  take: (userId: string, max: number, sessionId?: string) => JournalWireEvent[];
+  take: (userId: string, max: number, sessionId: string) => JournalWireEvent[];
   /** Дошли (приняты или отклонены сервером) — убрать насовсем. */
   ack: (ids: string[]) => void;
   /** Не дошли — снова доступны для отправки. */
@@ -122,6 +122,7 @@ export function createJournalQueue({
           (queued) =>
             inFlight.has(queued.id) ||
             queued.user_id !== event.user_id ||
+            queued.sessionId !== event.sessionId ||
             queued.kind !== 'impression_progress' ||
             queued.impression_id !== event.impression_id,
         );

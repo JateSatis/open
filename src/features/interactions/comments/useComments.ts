@@ -300,7 +300,7 @@ export function useComments(
 
     wasOfflineRef.current = false;
 
-    for (const item of outboxComments(targetId)) {
+    for (const item of outboxComments(targetId, api)) {
       const outgoing = item.status === 'failed' ? outgoingOf(item) : null;
 
       if (outgoing && item.localId) {
@@ -489,7 +489,7 @@ export function useComments(
       [api, amMember, currentUserId, me, queryClient],
     ),
     retry: useCallback((localId: string) => retryComment(context, localId, api), [api, context]),
-    discard: useCallback((localId: string) => discardComment(targetId, localId), [targetId]),
+    discard: useCallback((localId: string) => discardComment(targetId, localId, api), [api, targetId]),
     saveEdit: useCallback(
       (original: CommentItem, result: EditResult) =>
         void saveCommentEdit({ queryClient, subject, currentUserId }, original, result, api),

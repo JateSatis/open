@@ -63,8 +63,9 @@ function reportOutcome(error: unknown | null) {
   }
 }
 
-export function syncQueryOnlineState(client: QueryClient, requestsReady: boolean) {
+export function syncQueryOnlineState(client: QueryClient, requestsReady: boolean, api = requestClient()) {
   const sync = () => {
+    if (api !== requestClient()) return;
     const status = getConnectionStatus();
     const channel = userChannels.get(client);
     if (!requestsReady || status !== 'online') {
@@ -83,6 +84,7 @@ export function syncQueryOnlineState(client: QueryClient, requestsReady: boolean
         // отдельно дочитает события, пропущенные уже после этого снимка.
         channel.fallback = setTimeout(() => {
           channel.fallback = undefined;
+          if (api !== requestClient()) return;
           void client.invalidateQueries(
             { predicate: (query) => !!query.meta?.refreshOnUserChannelJoin && !fetchedSinceDisconnect.has(query) },
             { cancelRefetch: false },

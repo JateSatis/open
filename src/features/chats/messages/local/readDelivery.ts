@@ -104,7 +104,7 @@ export function startHistoryReadDelivery(reader: string | null, client: QueryCli
   let stop: (() => void) | undefined;
   function sync() {
     const confirmed = confirmedSessionOwner();
-    const owner = confirmed?.userId === reader ? confirmed : null;
+    const owner = api === requestClient() && confirmed?.userId === reader ? confirmed : null;
     if (sameSession(bound, owner)) return;
     stop?.();
     bound = owner;

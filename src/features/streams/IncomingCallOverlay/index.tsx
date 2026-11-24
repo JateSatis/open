@@ -59,7 +59,11 @@ export function IncomingCallOverlay() {
   const insets = useSafeAreaInsets();
   const { join } = useJoinCall();
 
+  const decline = () => {
+    if (ringing && useIncomingCall.getState().ringing === ringing) declineRinging();
+  };
   const accept = () => {
+    if (!ringing || useIncomingCall.getState().ringing !== ringing) return;
     const call = takeRinging();
 
     if (!call) return;
@@ -86,7 +90,7 @@ export function IncomingCallOverlay() {
       animationType="fade"
       statusBarTranslucent
       navigationBarTranslucent
-      onRequestClose={declineRinging}
+      onRequestClose={decline}
     >
       <View
         testID="incoming-call"
@@ -121,7 +125,7 @@ export function IncomingCallOverlay() {
             label="Отклонить"
             icon={{ ios: 'phone.down.fill', android: 'call_end', web: 'call_end' }}
             color={theme.danger}
-            onPress={declineRinging}
+            onPress={decline}
           />
           <RoundButton
             label="Присоединиться"

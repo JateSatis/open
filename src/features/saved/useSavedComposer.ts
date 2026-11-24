@@ -100,13 +100,13 @@ export function useSavedComposer(currentUserId: string | null) {
       setDraftMode(SAVED_DRAFT_KEY, {
         type: 'reply',
         quotes: ordered.map((saved) => savedReplyQuote(saved, chats, currentUserId)),
-      });
+      }, api);
       claimKeyboardForChat();
       // Меню и выбор закрываются в этом же кадре — поле успевает стать
       // видимым, прежде чем получить фокус.
       focusWithKeyboard(inputRef);
     },
-    [currentUserId],
+    [api, currentUserId],
   );
 
   const { start: startEditing, leave: leaveEdit } = edit;

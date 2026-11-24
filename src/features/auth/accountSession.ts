@@ -1,6 +1,7 @@
 import type { Session } from '@supabase/supabase-js';
 import { AppState } from 'react-native';
 
+import { releaseClientResources } from '@/api/perClient';
 import { createAccountClient } from '@/api/supabase';
 import { isNetworkError } from '@/lib/network';
 import { readAccountSession, type AccountSlot } from './accountStorage';
@@ -21,6 +22,7 @@ export class AccountSession {
   ) {
     const client = createAccountClient(slot.key);
     this.client = client;
+    client.localAccountId = slot.userId;
     client.localSessionId = ownerOf(initial)?.sessionId ?? slot.sessionId;
     this.session = initial;
     this.status = initial ? 'session' : 'pending';
@@ -79,6 +81,7 @@ export class AccountSession {
   dispose() {
     this.stopped = true;
     this.client.retired = true;
+    releaseClientResources(this.client);
     this.unsubscribe();
     void this.client.auth.dispose();
     void this.client.removeAllChannels();

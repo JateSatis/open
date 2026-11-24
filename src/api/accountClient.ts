@@ -6,6 +6,7 @@ import { ownerOf, sameSession, type SessionOwner } from '@/features/auth/session
 export class AccountClient extends SupabaseClient<Database> {
   // Без слота этот клиент служит публичному API или обмену токена провайдера.
   retired = false;
+  localAccountId?: string;
   /** Диск этого сеанса доступен также до подтверждения сети. */
   localSessionId?: string;
   sessionOwner?: () => SessionOwner | null;

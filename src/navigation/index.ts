@@ -1,3 +1,4 @@
+import { useSessionStore } from '@/features/auth/sessionState';
 import { requestSelection } from '@/api/screenRequest';
 import {
   CommonActions,
@@ -65,8 +66,8 @@ export const router = {
 };
 
 export function useRouter() {
+  const selected = useSessionStore(requestSelection);
   return useMemo(() => {
-    const selected = requestSelection();
     const active = () => selected === requestSelection();
     return {
       push: (to: Destination) => { if (active()) router.push(to); },
@@ -75,7 +76,7 @@ export function useRouter() {
       back: () => { if (active()) router.back(); },
       canGoBack: () => active() && router.canGoBack(),
     };
-  }, []);
+  }, [selected]);
 }
 
 export function useRouteParams<N extends keyof RootParams>() {

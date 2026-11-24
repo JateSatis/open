@@ -111,6 +111,29 @@ it.each(['сессия', 'сеть'])(
   },
 );
 
+it('обновляет очередь v2 без присвоения старого прочтения текущей сессии', async () => {
+  stop?.();
+  disk.native.exec('ALTER TABLE history_read DROP COLUMN pending_session; PRAGMA user_version=2');
+  disk.native.prepare(
+    'INSERT INTO history_read(reader,chat,pending_seq,pending_position,pending_key) VALUES(?,?,?,?,?)',
+  ).run('a', 'chat', later.seq, later.position, later.key);
+  disk.native.close();
+  open();
+  signIn('a');
+  reportRequestSucceeded();
+  stop = startHistoryReadDelivery('a', client);
+  await batch();
+  expect(send).not.toHaveBeenCalled();
+
+  expect(disk.storage.reach(scope, early, 'session-a')).toBe(true);
+  stop?.();
+  disk.native.close();
+  open();
+  stop = startHistoryReadDelivery('a', client);
+  await batch();
+  expect(send.mock.calls).toEqual([['a', 'chat', { ...early, chat: 'chat' }, requestClient()]]);
+});
+
 it('не воспроизводит прочтения старого сеанса после нового входа с тем же userId', async () => {
   disk.storage.reach(scope, later, 'old-session');
   signIn('a');

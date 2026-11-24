@@ -9,7 +9,7 @@ import { useSessionStore } from './sessionState';
 
 /**
  * Выход из аккаунта на этом устройстве — только этот сеанс, остальные
- * телефоны остаются в аккаунте. Кеш и сторы чистит прежний AccountLayout.
+ * телефоны остаются в аккаунте.
  */
 export async function signOut(owner: SessionOwner): Promise<void> {
   const api = requestClient();

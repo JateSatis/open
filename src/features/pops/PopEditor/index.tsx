@@ -102,7 +102,7 @@ export function PopEditor() {
       width: picked.media.width,
       height: picked.media.height,
       durationMs: picked.media.durationMs,
-    });
+    }, api);
     router.back();
   };
 

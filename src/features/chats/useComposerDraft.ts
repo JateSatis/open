@@ -1,3 +1,5 @@
+import { requestClient } from '@/api/requestClient';
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useCallback, useEffect, useMemo } from 'react';
 
 import {
@@ -52,6 +54,7 @@ const NO_HIDDEN: HiddenRange[] = [];
  * с экраном и уходит.
  */
 export function useComposerDraft(chatId: string): ComposerDraft {
+  const api = useRequestClient();
   const { text, mode, pop = null, hidden = NO_HIDDEN } = useChatDraft(chatId);
   const clearSelection = useMediaSelection((state) => state.clear);
 
@@ -60,22 +63,23 @@ export function useComposerDraft(chatId: string): ComposerDraft {
   useEffect(() => {
     clearSelection();
 
-    return () => clearSelection();
-  }, [chatId, clearSelection]);
+    return () => { if (api === requestClient()) clearSelection(); };
+  }, [api, chatId, clearSelection]);
 
-  const setText = useCallback((value: string) => setDraftText(chatId, value), [chatId]);
-  const setHidden = useCallback((value: HiddenRange[]) => setDraftHidden(chatId, value), [chatId]);
+  const setText = useCallback((value: string) => setDraftText(chatId, value, api), [api, chatId]);
+  const setHidden = useCallback((value: HiddenRange[]) => setDraftHidden(chatId, value, api), [api, chatId]);
   const setMode = useCallback(
-    (value: ComposerMode | null) => setDraftMode(chatId, value),
-    [chatId],
+    (value: ComposerMode | null) => setDraftMode(chatId, value, api),
+    [api, chatId],
   );
 
-  const setPop = useCallback((value: DraftPop | null) => setDraftPop(chatId, value), [chatId]);
+  const setPop = useCallback((value: DraftPop | null) => setDraftPop(chatId, value, api), [api, chatId]);
 
   const clear = useCallback(() => {
-    clearDraft(chatId);
+    if (api !== requestClient()) return;
+    clearDraft(chatId, api);
     clearSelection();
-  }, [chatId, clearSelection]);
+  }, [api, chatId, clearSelection]);
 
   return useMemo(
     () => ({

@@ -1,4 +1,4 @@
-import { requestClient } from '@/api/requestClient';
+import { requestSelection } from '@/api/screenRequest';
 import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from '@/navigation';
@@ -33,11 +33,13 @@ export function useJoinCall() {
   const api = useRequestClient();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const [busy, setBusy] = useState(false);
+  const selection = requestSelection();
+  const [joining, setJoining] = useState<number | null>(null);
+  const busy = joining === selection;
 
   const enter = useCallback(
     async (streamId: string, chat: CallChat, preparation: Promise<LiveKit>) => {
-      if (api !== requestClient()) return;
+      if (selection !== requestSelection()) return;
       stopRinging(streamId);
       router.push({ name: 'Call' });
 
@@ -53,35 +55,36 @@ export function useJoinCall() {
           api,
         );
       } catch (error) {
-        if (api !== requestClient()) return;
+        if (selection !== requestSelection()) return;
         if (router.canGoBack()) router.back();
         showNotice(joinErrorText(error), 'error');
         void queryClient.invalidateQueries({ queryKey: liveStreamQueryKey(chat.chatId) });
       }
     },
-    [api, queryClient, router],
+    [api, queryClient, router, selection],
   );
 
   /** Кнопка «Позвонить»: новый звонок или уже идущий в этом чате. */
   const start = useCallback(
     async (chat: CallChat) => {
-      if (busy) return;
+      if (busy || selection !== requestSelection()) return;
 
-      setBusy(true);
+      setJoining(selection);
       const preparation = prepareLiveKit();
 
       try {
         if (!(await ensureCallMicrophone())) return;
 
+        if (selection !== requestSelection()) return;
         await askNotificationsOnce();
 
-        if (api !== requestClient()) return;
+        if (selection !== requestSelection()) return;
         let streamId: string;
 
         try {
           ({ streamId } = await startCall(chat.chatId, api));
         } catch {
-          if (api !== requestClient()) return;
+          if (selection !== requestSelection()) return;
           showNotice('Не удалось начать звонок', 'error');
           return;
         }
@@ -89,30 +92,31 @@ export function useJoinCall() {
         void queryClient.invalidateQueries({ queryKey: liveStreamQueryKey(chat.chatId) });
         await enter(streamId, chat, preparation);
       } finally {
-        setBusy(false);
+        setJoining(current => current === selection ? null : current);
       }
     },
-    [api, busy, enter, queryClient],
+    [api, busy, enter, queryClient, selection],
   );
 
   /** Полоса звонка или «Присоединиться» во входящем. */
   const join = useCallback(
     async (streamId: string, chat: CallChat) => {
-      if (busy) return;
+      if (busy || selection !== requestSelection()) return;
 
-      setBusy(true);
+      setJoining(selection);
       const preparation = prepareLiveKit();
 
       try {
         if (chat.isMember && !(await ensureCallMicrophone())) return;
 
+        if (selection !== requestSelection()) return;
         await askNotificationsOnce();
         await enter(streamId, chat, preparation);
       } finally {
-        setBusy(false);
+        setJoining(current => current === selection ? null : current);
       }
     },
-    [busy, enter],
+    [busy, enter, selection],
   );
 
   return { start, join, busy };

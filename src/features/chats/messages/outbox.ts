@@ -9,7 +9,7 @@
 import { clientIdentity } from '@/api/perClient';
 import { requestClient } from '@/api/requestClient';
 
-import { create } from 'zustand';
+import { createAccountStore } from '@/features/auth/accountStore';
 
 import type { ChatMessage } from '@/features/chats/messages/types';
 
@@ -20,10 +20,10 @@ type OutboxState = {
 
 const EMPTY: ChatMessage[] = [];
 
-export const useOutbox = create<OutboxState>(() => ({ byChat: {} }));
+export const useOutbox = createAccountStore<OutboxState>(() => ({ byChat: {} }));
 
-function setChat(chatId: string, update: (messages: ChatMessage[]) => ChatMessage[]) {
-  useOutbox.setState((state) => {
+function setChat(chatId: string, update: (messages: ChatMessage[]) => ChatMessage[], api = requestClient()) {
+  useOutbox.forClient(api).setState((state) => {
     const current = state.byChat[chatId] ?? EMPTY;
     const next = update(current);
 
@@ -42,35 +42,37 @@ export function useOutboxMessages(chatId: string): ChatMessage[] {
   return useOutbox((state) => state.byChat[chatId] ?? EMPTY);
 }
 
-export function outboxMessages(chatId: string): ChatMessage[] {
-  return useOutbox.getState().byChat[chatId] ?? EMPTY;
+export function outboxMessages(chatId: string, api = requestClient()): ChatMessage[] {
+  return useOutbox.forClient(api).getState().byChat[chatId] ?? EMPTY;
 }
 
-export function findOutboxMessage(chatId: string, localId: string): ChatMessage | undefined {
-  return outboxMessages(chatId).find((message) => message.localId === localId);
+export function findOutboxMessage(chatId: string, localId: string, api = requestClient()): ChatMessage | undefined {
+  return outboxMessages(chatId, api).find((message) => message.localId === localId);
 }
 
 /** Черновики одной отправки, самые новые первыми. */
 export function addToOutbox(chatId: string, drafts: ChatMessage[], api = requestClient()) {
-  if (api !== requestClient()) return;
+  if (api.retired) return;
   const owner = clientIdentity(api);
   const owned = drafts.map(draft => ({ ...draft, deliveryOwner: owner }));
-  setChat(chatId, current => [...owned, ...current]);
+  setChat(chatId, current => [...owned, ...current], api);
 }
 
-export function setOutboxStatus(chatId: string, localId: string, status: ChatMessage['status']) {
+export function setOutboxStatus(chatId: string, localId: string, status: ChatMessage['status'], api = requestClient()) {
   setChat(chatId, (current) =>
     current.some((message) => message.localId === localId && message.status !== status)
       ? current.map((message) => (message.localId === localId ? { ...message, status } : message))
       : current,
+    api,
   );
 }
 
-export function removeFromOutbox(chatId: string, localId: string) {
+export function removeFromOutbox(chatId: string, localId: string, api = requestClient()) {
   setChat(chatId, (current) =>
     current.some((message) => message.localId === localId)
       ? current.filter((message) => message.localId !== localId)
       : current,
+    api,
   );
 }
 

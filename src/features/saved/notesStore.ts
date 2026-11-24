@@ -1,7 +1,8 @@
 // Свои заметки «Сохранённых», которых сервер ещё не подтвердил, — стор без
 // сети: его чистит выход из аккаунта, а отправка живёт в `notesOutbox.ts`.
 
-import { create } from 'zustand';
+import { requestClient } from '@/api/requestClient';
+import { createAccountStore } from '@/features/auth/accountStore';
 
 import type { LocalMedia, OutgoingMedia } from '@/features/media';
 import type { SavedItem } from '@/features/saved/savedCopy';
@@ -27,37 +28,39 @@ type NotesOutboxState = {
   items: PendingNote[];
 };
 
-export const useNotesOutbox = create<NotesOutboxState>(() => ({ items: [] }));
+export const useNotesOutbox = createAccountStore<NotesOutboxState>(() => ({ items: [] }));
 
 export function usePendingNotes(): PendingNote[] {
   return useNotesOutbox((state) => state.items);
 }
 
-export function setItems(update: (items: PendingNote[]) => PendingNote[]) {
-  useNotesOutbox.setState((state) => {
+export function setItems(update: (items: PendingNote[]) => PendingNote[], api = requestClient()) {
+  useNotesOutbox.forClient(api).setState((state) => {
     const items = update(state.items);
 
     return items === state.items ? state : { items };
   });
 }
 
-export function findPending(localId: string): PendingNote | undefined {
-  return useNotesOutbox.getState().items.find((item) => item.localId === localId);
+export function findPending(localId: string, api = requestClient()): PendingNote | undefined {
+  return useNotesOutbox.forClient(api).getState().items.find((item) => item.localId === localId);
 }
 
-export function setStatus(localId: string, status: PendingNote['status']) {
+export function setStatus(localId: string, status: PendingNote['status'], api = requestClient()) {
   setItems((items) =>
     items.some((item) => item.localId === localId && item.status !== status)
       ? items.map((item) => (item.localId === localId ? { ...item, status } : item))
       : items,
+    api,
   );
 }
 
-export function removePending(localId: string) {
+export function removePending(localId: string, api = requestClient()) {
   setItems((items) =>
     items.some((item) => item.localId === localId)
       ? items.filter((item) => item.localId !== localId)
       : items,
+    api,
   );
 }
 

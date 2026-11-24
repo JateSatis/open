@@ -68,7 +68,7 @@ export async function saveCommentEdit(
   const optimistic = optimisticEdit(original, result);
   const retry = () => void saveCommentEdit(context, original, result, api);
 
-  setPendingEdit(key, optimistic);
+  setPendingEdit(key, optimistic, api);
 
   let uploaded: UploadedMedia[] = [];
 
@@ -80,15 +80,15 @@ export async function saveCommentEdit(
     uploaded = hasFiles ? await uploadEditFiles(result, currentUserId!, api) : [];
 
     const saved = await editComment(original.id, toEditInput(result, uploaded), api);
-    if (api !== requestClient()) return;
+    if (api.retired) return;
     const previews = optimistic.localPreviews?.some(Boolean)
       ? new Map([[saved.id, optimistic.localPreviews]])
       : undefined;
 
     replaceComments(queryClient, targetId, [saved], previews);
-    notifyManager.schedule(() => clearPendingEdit(key, optimistic));
+    notifyManager.schedule(() => clearPendingEdit(key, optimistic, api));
   } catch (cause) {
-    if (api === requestClient()) clearPendingEdit(key, optimistic);
+    if (!api.retired) clearPendingEdit(key, optimistic, api);
 
     // Отказ сервера — новые файлы ничьи. При обрыве связи правка могла дойти.
     if (uploaded.length > 0 && !isNetworkError(cause)) {

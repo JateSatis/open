@@ -1,3 +1,4 @@
+import { requestSelection } from '@/api/screenRequest';
 import { requestClient } from '@/api/requestClient';
 import type { DisconnectReason, Participant, Room } from 'livekit-client';
 import { Platform } from 'react-native';
@@ -33,6 +34,9 @@ const EMPTY_CHECK_MS = 4_000;
 
 let room: Room | null = null;
 let callAudio: LiveKit['AudioSession'] | null = null;
+// Нативная аудиосессия одна. Новый вход ждёт освобождения комнаты прежнего владельца.
+let resourceRelease = Promise.resolve();
+let audioSetup: Promise<void> | undefined;
 /** Каждому входу номер: ответ устаревшего входа не трогает новый звонок. */
 let generation = 0;
 let statusTimer: ReturnType<typeof setInterval> | null = null;
@@ -135,29 +139,33 @@ async function releaseResources() {
   statusTimer = null;
   emptyTimer = null;
 
-  const releasing = generation;
+  setInCall(false);
   const current = room;
   const audio = callAudio;
+  const setup = audioSetup;
   callAudio = null;
+  audioSetup = undefined;
   room = null;
 
-  if (current) {
-    current.removeAllListeners();
-    await current.disconnect().catch(() => undefined);
+  if (current || audio) {
+    current?.removeAllListeners();
+    resourceRelease = (async () => {
+      await current?.disconnect().catch(() => undefined);
+      await setup?.catch(() => undefined);
+      stopCallService();
+      await audio?.stopAudioSession().catch(() => undefined);
+    })();
   }
-
-  if (generation !== releasing) return;
-  stopCallService();
-  await audio?.stopAudioSession().catch(() => undefined);
-  if (generation === releasing) setInCall(false);
+  await resourceRelease;
 }
 
 /** Звонок кончился не по моей кнопке: объясняем, почему. */
 async function endLocally(reason: string) {
+  const selection = requestSelection();
   const ending = ++generation;
   setCall(null);
   await releaseResources();
-  if (generation === ending) showNotice(reason);
+  if (generation === ending && selection === requestSelection()) showNotice(reason);
 }
 
 function onDisconnected(reasons: LiveKit['DisconnectReason'], reason?: DisconnectReason) {
@@ -232,6 +240,7 @@ export async function joinCall(
 
   try {
     const sdk = await (preparation ?? prepareLiveKit());
+    await resourceRelease;
     if (current !== generation || api !== requestClient()) return;
 
     const { AudioSession, AndroidAudioTypePresets, Room } = sdk;
@@ -249,7 +258,7 @@ export async function joinCall(
     // секунды, а не «выключен», пока идёт подключение.
     patchCall({ role: join.role, speakerOn, micOn: speaks });
 
-    await AudioSession.configureAudio({
+    audioSetup = AudioSession.configureAudio({
       android: {
         preferredOutputList: speakerOn
           ? ['bluetooth', 'headset', 'speaker', 'earpiece']
@@ -258,8 +267,10 @@ export async function joinCall(
       },
       ios: { defaultOutput: speakerOn ? 'speaker' : 'earpiece' },
     });
+    await audioSetup;
     if (current !== generation || api !== requestClient()) return;
-    await AudioSession.startAudioSession();
+    audioSetup = AudioSession.startAudioSession();
+    await audioSetup;
     if (current !== generation || api !== requestClient()) return;
 
     startCallService(

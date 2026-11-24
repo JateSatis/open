@@ -13,10 +13,10 @@ import { myInviteQueryKey } from '@/features/chats/useMyInvite';
 import { friendKeys } from '@/features/friends/keys';
 import { profileKeys } from '@/features/profile/keys';
 import { popsQueryKey } from '@/features/pops/keys';
-import { dismissAlert, showAlert } from '@/features/notifications/alertsStore';
+import { showAlert } from '@/features/notifications/alertsStore';
 import { leaveCall } from '@/features/streams/callSession';
 import { getCall } from '@/features/streams/callStore';
-import { ring, resetRinging, stopRinging } from '@/features/streams/incomingCall';
+import { ring, stopRinging } from '@/features/streams/incomingCall';
 import { startRingingRecheck } from '@/features/streams/ringingRecheck';
 import { liveStreamQueryKey } from '@/features/streams/streamKeys';
 import { getActiveChatId } from '@/store/activeChat';
@@ -139,12 +139,7 @@ function bindPersonalEvents(userId: string, queryClient: QueryClient, api = requ
   };
 }
 
-function clearPresentation() {
-  dismissAlert();
-  resetRinging();
-}
-
-/** Один экземпляр на QueryClient корневого layout аккаунта. */
+/** Подписка живёт, пока выбранная пара API/QueryClient подтверждена SDK. */
 export function startPersonalRealtimeEvents(reader: string | null, client: QueryClient, api = requestClient()) {
   let disconnect: (() => void) | undefined;
 
@@ -157,18 +152,10 @@ export function startPersonalRealtimeEvents(reader: string | null, client: Query
     }
   }
 
-  const unsubscribe = useSessionStore.subscribe((state, previous) => {
-    const wasConnected = !!disconnect;
-    sync(state);
-    if (wasConnected && previous.localAccountId === reader && (api !== requestClient() || state.localAccountId !== reader)) {
-      clearPresentation();
-      if (getCall()) void leaveCall();
-    }
-  });
+  const unsubscribe = useSessionStore.subscribe(sync);
   sync(useSessionStore.getState());
   return () => {
     unsubscribe();
     disconnect?.();
-    if (api === requestClient() && useSessionStore.getState().localAccountId === reader) clearPresentation();
   };
 }

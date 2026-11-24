@@ -89,7 +89,7 @@ describe('журнал рекомендаций', () => {
         send: recordJournalEvents,
       });
       const rpc = jest.mocked(supabase.rpc);
-      journal.setUser('a');
+      journal.setUser('a', 's1');
       journal.setDeliveryUser('a');
       const id = journal.log('app_session_start');
       mockSetHeader.mockResolvedValue({ data: { accepted: [id], rejected: [] }, error: null });
@@ -114,7 +114,7 @@ describe('журнал рекомендаций', () => {
 
   it('восстанавливает и сохраняет очередь под splash; отправляет только подтверждённому владельцу', async () => {
     const key = 'rec-journal-queue-v1';
-    const old = { id: 'old', kind: 'search_query', user_id: 'a', ts: Date.now(), v: 1, data: {} };
+    const old = { id: 'old', sessionId: 's1', kind: 'search_query', user_id: 'a', ts: Date.now(), v: 1, data: {} };
     const { storage, data } = memoryStorage({ [key]: JSON.stringify([old]) });
     let finishRead!: () => void;
     storage.getItem = () =>
@@ -123,7 +123,7 @@ describe('журнал рекомендаций', () => {
       });
     const server = fakeServer();
     const journal = createJournal({ storage, send: server.send });
-    journal.setUser('a');
+    journal.setUser('a', 's1');
     journal.log('app_session_start');
     const saved = journal.persist();
     journal.setDeliveryUser('a');
@@ -151,6 +151,26 @@ describe('журнал рекомендаций', () => {
     ]);
   });
 
+  it('после обновления доставляет только событие с известной исходной сессией', async () => {
+    const old = { id: 'legacy', kind: 'search_query', user_id: 'a', ts: Date.now(), v: 1, data: {} };
+    const { storage } = memoryStorage({ 'rec-journal-queue-v1': JSON.stringify([old]) });
+    const server = fakeServer();
+    const first = createJournal({ storage, send: server.send });
+    first.setUser('a', 'original');
+    const id = first.log('app_session_start');
+    await first.persist();
+
+    const next = createJournal({ storage, send: server.send });
+    next.setUser('a', 'other');
+    next.setDeliveryUser('a');
+    next.showFirstScreen();
+    await jest.advanceTimersByTimeAsync(0);
+    expect(server.send).not.toHaveBeenCalled();
+    next.setUser('a', 'original');
+    await jest.advanceTimersByTimeAsync(0);
+    expect([...server.stored.keys()]).toEqual([id]);
+  });
+
   it('при смене владельца во время RPC оставляет всю неудавшуюся пачку прежнему владельцу', async () => {
     let fail!: (error: Error) => void;
     const server = fakeServer();
@@ -161,13 +181,13 @@ describe('журнал рекомендаций', () => {
         }),
     );
     const journal = createJournal({ storage: memoryStorage().storage, send: server.send });
-    journal.setUser('a');
+    journal.setUser('a', 's1');
     journal.setDeliveryUser('a');
     journal.log('app_session_start');
     journal.log('screen_time');
     journal.showFirstScreen();
     await settle();
-    journal.setUser('b');
+    journal.setUser('b', 'session-b');
     journal.setDeliveryUser('b');
     journal.log('app_session_start');
     fail(new Error('session changed'));
@@ -186,7 +206,7 @@ describe('журнал рекомендаций', () => {
       send: server.send,
     });
 
-    journal.setUser('u1');
+    journal.setUser('u1', 'session-u1');
     journal.setDeliveryUser('u1');
     journal.showFirstScreen();
     journal.setAppSession('s1');
@@ -225,7 +245,7 @@ describe('журнал рекомендаций', () => {
       send: server.send,
     });
 
-    journal.setUser('u1');
+    journal.setUser('u1', 'session-u1');
     journal.setDeliveryUser('u1');
     journal.showFirstScreen();
     await settle();
@@ -270,7 +290,7 @@ describe('журнал рекомендаций', () => {
       send: server.send,
     });
 
-    journal.setUser('u1');
+    journal.setUser('u1', 'session-u1');
     journal.setDeliveryUser('u1');
     journal.showFirstScreen();
     journal.log('impression_end', {
@@ -299,7 +319,7 @@ describe('журнал рекомендаций', () => {
     });
     const journal = createJournal({ storage: memoryStorage().storage, send });
 
-    journal.setUser('u1');
+    journal.setUser('u1', 'session-u1');
     journal.setDeliveryUser('u1');
     journal.showFirstScreen();
     ['a', 'b', 'poison', 'c', 'd'].forEach((query) =>
@@ -318,7 +338,7 @@ describe('журнал рекомендаций', () => {
       send: server.send,
     });
 
-    journal.setUser('u1');
+    journal.setUser('u1', 'session-u1');
     journal.setDeliveryUser('u1');
     journal.showFirstScreen();
     server.setOffline(true);
@@ -341,7 +361,7 @@ describe('журнал рекомендаций', () => {
     const first = createJournal({ storage, send: offline.send });
 
     offline.setOffline(true);
-    first.setUser('u1');
+    first.setUser('u1', 'session-u1');
     first.log('impression_start', {
       impressionId: 'i1',
       subject: { type: 'pop', id: 'p1' },
@@ -359,7 +379,7 @@ describe('журнал рекомендаций', () => {
     const server = fakeServer();
     const second = createJournal({ storage, send: server.send });
 
-    second.setUser('u1');
+    second.setUser('u1', 'session-u1');
     second.setDeliveryUser('u1');
     second.showFirstScreen();
     await settle();
@@ -379,7 +399,7 @@ describe('журнал рекомендаций', () => {
       send: server.send,
     });
 
-    journal.setUser('u1');
+    journal.setUser('u1', 'session-u1');
     journal.setDeliveryUser('u1');
     journal.showFirstScreen();
     server.setOffline(true);
@@ -415,12 +435,12 @@ describe('журнал рекомендаций', () => {
       send: server.send,
     });
 
-    journal.setUser('u1');
+    journal.setUser('u1', 'session-u1');
     journal.setDeliveryUser('u1');
     journal.showFirstScreen();
     server.setOffline(true);
     journal.log('search_query', { data: { query: 'a' } });
-    journal.setUser('u2');
+    journal.setUser('u2', 'session-u2');
     journal.setDeliveryUser('u2');
     server.setOffline(false);
     journal.log('search_query', { data: { query: 'b' } });

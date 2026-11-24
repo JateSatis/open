@@ -4,7 +4,8 @@
 // сервера — это просто снятие наложения: облачко само возвращается к
 // прежней версии, откатывать в кеше нечего.
 
-import { create } from 'zustand';
+import { requestClient } from '@/api/requestClient';
+import { createAccountStore } from '@/features/auth/accountStore';
 
 import type { ChatMessage } from '@/features/chats/messages/types';
 
@@ -15,14 +16,14 @@ type PendingEditsState = {
 
 const EMPTY: Record<string, ChatMessage> = {};
 
-export const usePendingEdits = create<PendingEditsState>(() => ({ byChat: {} }));
+export const usePendingEdits = createAccountStore<PendingEditsState>(() => ({ byChat: {} }));
 
 export function usePendingEditsOf(chatId: string): Record<string, ChatMessage> {
   return usePendingEdits((state) => state.byChat[chatId] ?? EMPTY);
 }
 
-export function setPendingEdit(chatId: string, message: ChatMessage) {
-  usePendingEdits.setState((state) => ({
+export function setPendingEdit(chatId: string, message: ChatMessage, api = requestClient()) {
+  usePendingEdits.forClient(api).setState((state) => ({
     byChat: {
       ...state.byChat,
       [chatId]: { ...(state.byChat[chatId] ?? EMPTY), [message.id]: message },
@@ -34,8 +35,8 @@ export function setPendingEdit(chatId: string, message: ChatMessage) {
  * Снимает наложение — только если это всё ещё та же правка: повторная правка
  * того же сообщения могла начаться, пока первая ехала.
  */
-export function clearPendingEdit(chatId: string, message: ChatMessage) {
-  usePendingEdits.setState((state) => {
+export function clearPendingEdit(chatId: string, message: ChatMessage, api = requestClient()) {
+  usePendingEdits.forClient(api).setState((state) => {
     const current = state.byChat[chatId];
 
     if (current?.[message.id] !== message) return state;

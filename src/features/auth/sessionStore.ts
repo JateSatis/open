@@ -1,5 +1,6 @@
 import type { Session } from '@supabase/supabase-js';
 
+import { resetRecentSearches } from '@/features/search/recentSearches';
 import { selectApiClient } from '@/api/supabase';
 import { AccountSession } from './accountSession';
 import {
@@ -54,6 +55,7 @@ async function remove(runtime: AccountSession) {
   await writeAccounts(next);
   index = next;
   dispose(runtime);
+  resetRecentSearches(userId);
   publish();
   await cleanAccountStorage(next).catch(reportStorageError);
 }
@@ -68,6 +70,7 @@ function observe(slot: AccountSlot, initial: Session | null = null): AccountSess
       // Auth может выдать другой session_id в том же слоте (привязка провайдера).
       // Старые замыкания сохраняют остановленный клиент даже при том же user.id.
       dispose(account);
+      resetRecentSearches(slot.userId);
       slot.sessionId = incoming.sessionId;
       observe(slot, account.session);
       if (index.selected === slot.userId) publish();
@@ -141,6 +144,7 @@ export async function addSession(session: Session) {
     await writeAccounts(next);
     const previous = clients.get(slot.userId);
     if (previous) dispose(previous);
+    if (index.accounts.some(account => account.userId === slot.userId)) resetRecentSearches(slot.userId);
     index = next;
     observe(slot, session);
     publish();

@@ -2,6 +2,7 @@
 // ответов, видимых мне, нет). Одна запись на чат: корни приходят пачками со
 // страницами «Тредов», сигналы Realtime перечитывают только свои корни.
 
+import { perClient } from '@/api/perClient';
 import { requestClient } from '@/api/requestClient';
 import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
@@ -21,11 +22,11 @@ export type ChatThreadSummaries = Record<string, ChatThreadSummary | null>;
 const NO_SUMMARIES: ChatThreadSummaries = {};
 /** Столько корней за раз — потолок функции в базе. */
 const MAX_ROOTS = 200;
-const deferredRoots = new Map<string, Set<string>>();
+const deferredRoots = perClient(() => new Map<string, Set<string>>());
 
-export function takeDeferredChatThreadRoots(chatId: string): string[] {
-  const roots = [...(deferredRoots.get(chatId) ?? [])];
-  deferredRoots.delete(chatId);
+export function takeDeferredChatThreadRoots(chatId: string, api = requestClient()): string[] {
+  const roots = [...(deferredRoots(api).get(chatId) ?? [])];
+  deferredRoots(api).delete(chatId);
   return roots;
 }
 
@@ -45,6 +46,7 @@ function merge(
   chatId: string,
   rootIds: string[],
   fresh: ChatThreadSummary[],
+  api: ReturnType<typeof requestClient>,
 ) {
   const byRoot = new Map(fresh.map((summary) => [summary.rootId, summary]));
 
@@ -56,11 +58,11 @@ function merge(
       // ответ отправляется, его считает наложение outbox. Подмена базы уже
       // включающим его снимком дала бы двойную прибавку. Подтверждение/ошибка
       // отправки перечитает сводку после смены статуса.
-      if (outboxMessages(chatId).some((message) => message.status === 'sending' &&
+      if (outboxMessages(chatId, api).some((message) => message.status === 'sending' &&
         message.chatThreadPendingAuthor && message.chatThreadRootIds?.includes(id))) {
-        const deferred = deferredRoots.get(chatId) ?? new Set<string>();
+        const deferred = deferredRoots(api).get(chatId) ?? new Set<string>();
         deferred.add(id);
-        deferredRoots.set(chatId, deferred);
+        deferredRoots(api).set(chatId, deferred);
         return;
       }
       next[id] = byRoot.get(id) ?? null;
@@ -89,7 +91,9 @@ export async function refreshChatThreadSummaries(
   for (let start = 0; start < unique.length; start += MAX_ROOTS) {
     const batch = unique.slice(start, start + MAX_ROOTS);
 
-    merge(queryClient, chatId, batch, await listChatThreadSummaries(batch, api));
+    const fresh = await listChatThreadSummaries(batch, api);
+    if (api.retired) return;
+    merge(queryClient, chatId, batch, fresh, api);
   }
 }
 

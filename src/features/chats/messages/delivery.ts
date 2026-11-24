@@ -302,7 +302,7 @@ async function insert(
 
 /** Подтверждённое сервером переезжает из исходящих в историю. */
 function settle(queryClient: QueryClient, chatId: string, localId: string, saved: Message, api = requestClient()) {
-  const localPreviews = findOutboxMessage(chatId, localId)?.localPreviews;
+  const localPreviews = findOutboxMessage(chatId, localId, api)?.localPreviews;
   const confirmed: ChatMessage = {
     ...saved, status: 'sent', localPreviews, localId,
     ...(saved.forward ? { renderId: localId } : {}),
@@ -323,7 +323,7 @@ function settle(queryClient: QueryClient, chatId: string, localId: string, saved
 
   // Пока история не перерисовалась, в исходящих лежит уже подтверждённая
   // копия под настоящим id: экран склеивает их по id, и сообщение не мигает.
-  useOutbox.setState((state) => {
+  useOutbox.forClient(api).setState((state) => {
     const current = state.byChat[chatId];
 
     if (!current) return state;
@@ -340,7 +340,7 @@ function settle(queryClient: QueryClient, chatId: string, localId: string, saved
 
   // Убрать из исходящих — в том же проходе, в котором подписчики истории
   // узнают о новой строке: один кадр, без дыры между «ушло» и «пришло».
-  notifyManager.schedule(() => removeFromOutbox(chatId, localId));
+  notifyManager.schedule(() => removeFromOutbox(chatId, localId, api));
 }
 
 export function errorCode(cause: unknown): string | null {
@@ -400,12 +400,13 @@ export async function deliver(
   outgoing: Outgoing,
   api = requestClient(),
 ): Promise<void> {
-  const draftOwner = findOutboxMessage(chatId, localId)?.deliveryOwner;
-  if (draftOwner && draftOwner !== clientIdentity(api)) return;
+  if (api.retired) return;
+  const draft = findOutboxMessage(chatId, localId, api);
+  if (!draft || draft.deliveryOwner !== clientIdentity(api)) return;
   if (delivering.has(localId)) return;
 
   delivering.add(localId);
-  setOutboxStatus(chatId, localId, 'sending');
+  setOutboxStatus(chatId, localId, 'sending', api);
 
   let uploaded: UploadedMedia[] = [];
   let saved: Message | null = null;
@@ -430,7 +431,7 @@ export async function deliver(
     // разослано всем, так что у собеседника оно тоже исчезнет.
     if (discarded.has(localId)) {
       void deleteMessages([saved.id], api).catch(() => undefined);
-    } else if (api === requestClient()) {
+    } else if (!api.retired) {
       settle(queryClient, chatId, localId, saved, api);
     }
 
@@ -465,17 +466,19 @@ export async function deliver(
       }
     }
 
-    if (api !== requestClient() || discarded.has(localId)) return;
+    if (api.retired || discarded.has(localId)) return;
 
     // Не дошло до сервера — это факт о связи, а не только об этом сообщении:
     // с него и начинается ожидание сети.
-    if (isNetworkError(cause)) reportRequestFailed();
-    else explainRejection(outgoing, cause);
+    if (api === requestClient()) {
+      if (isNetworkError(cause)) reportRequestFailed();
+      else explainRejection(outgoing, cause);
+    }
 
     // The insert policy on `messages` is what decides whether this user may
     // write here; a rejection lands the message in "failed", it is never
     // dropped silently.
-    setOutboxStatus(chatId, localId, 'failed');
+    setOutboxStatus(chatId, localId, 'failed', api);
   } finally {
     if (!saved && api === requestClient()) refreshSettledChatThreadSummaries(queryClient, chatId, api);
     delivering.delete(localId);
@@ -487,10 +490,10 @@ export async function deliver(
  * Своё неотправленное — убрать. На сервер ничего не уходит; если сообщение
  * как раз едет туда, оно будет удалено сразу по прибытии.
  */
-export function discardLocal(chatId: string, localId: string) {
+export function discardLocal(chatId: string, localId: string, api = requestClient()) {
   if (delivering.has(localId)) discarded.add(localId);
 
-  removeFromOutbox(chatId, localId);
+  removeFromOutbox(chatId, localId, api);
 }
 
 type SendContext = { queryClient: QueryClient; chatId: string; currentUserId: string | null };

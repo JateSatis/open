@@ -120,7 +120,7 @@ export function createJournal({
   let sending = false;
   let failures = 0;
   const canSend = (owner: string | null) =>
-    !!owner && screenShown && owner === userId && owner === deliveryUser;
+    !!owner && !!sessionId && screenShown && owner === userId && owner === deliveryUser;
 
   const schedule = (delay: number) => {
     if (timer || sending || !canSend(userId)) return;
@@ -194,7 +194,7 @@ export function createJournal({
     const source = sessionId;
     const sendBatch = sender;
     const current = () => sessionId === source && sender === sendBatch && canSend(owner);
-    if (sending || !owner || !canSend(owner)) return;
+    if (sending || !owner || !source || !canSend(owner)) return;
     sending = true;
     let delay = JOURNAL_FLUSH_MS;
     try {
@@ -228,7 +228,7 @@ export function createJournal({
 
   const journal: Journal = {
     log(kind, fields = {}) {
-      if (!userId) return null;
+      if (!userId || !sessionId) return null;
 
       const id = randomUuid();
       const event: JournalWireEvent = {

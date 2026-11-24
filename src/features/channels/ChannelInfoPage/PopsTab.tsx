@@ -5,7 +5,7 @@ import { PixelRatio, useWindowDimensions, View } from 'react-native';
 import type { Pop } from '@/api/pops';
 import { InfoTabList } from '@/components/InfoPage';
 import { TabStatus, tabStatusOf } from '@/features/chats/ChatInfoPage/TabStatus';
-import { openPopViewer } from '@/features/pops/openPopViewer';
+import { useOpenPopViewer } from '@/features/pops/openPopViewer';
 import {
   POP_COLUMNS,
   popGridGeometry,
@@ -36,6 +36,7 @@ export type PopsTabProps = {
  * просмотр попсов канала с этого попа.
  */
 export function PopsTab({ tab, channelId }: PopsTabProps) {
+  const openPopViewer = useOpenPopViewer();
   const queryClient = useQueryClient();
   const { width } = useWindowDimensions();
   const geometry = useMemo(() => popGridGeometry(width, PixelRatio.get()), [width]);
@@ -54,7 +55,7 @@ export function PopsTab({ tab, channelId }: PopsTabProps) {
 
   const open = useCallback(
     (pop: Pop) => openPopViewer({ source: 'channel', channelId, startId: pop.id }),
-    [channelId],
+    [channelId, openPopViewer],
   );
 
   const actions = useMemo<PopGridActions>(

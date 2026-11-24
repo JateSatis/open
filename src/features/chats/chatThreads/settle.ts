@@ -16,7 +16,7 @@ import { mergeMessages, readHistory, updateHistory } from '@/features/chats/mess
 /** Завершение неудачной/отменённой отправки снимает отсрочку Broadcast-сводок. */
 export function refreshSettledChatThreadSummaries(queryClient: QueryClient, chatId: string, api = requestClient()) {
   const known = readChatThreadSummaries(queryClient, chatId);
-  const roots = [...Object.keys(known ?? {}), ...takeDeferredChatThreadRoots(chatId)];
+  const roots = [...Object.keys(known ?? {}), ...takeDeferredChatThreadRoots(chatId, api)];
   if (roots.length > 0) refreshChatThreadSummaries(queryClient, chatId, roots, api).catch(() => undefined);
 }
 

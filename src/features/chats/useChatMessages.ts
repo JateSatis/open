@@ -174,7 +174,7 @@ export function useChatMessages(
     // Связь вернулась — дописываем то, что не ушло. Пользователь уже нажал
     // «отправить»: заставлять его тыкать «повторить» по каждому сообщению
     // значит перекладывать на него работу приложения.
-    for (const message of outboxMessages(chatId)) {
+    for (const message of outboxMessages(chatId, api)) {
       const outgoing = message.status === 'failed' ? outgoingOf(message) : null;
 
       if (outgoing && message.localId) {
@@ -206,7 +206,7 @@ export function useChatMessages(
 
   const retry = useCallback(
     (localId: string) => {
-      const failed = outboxMessages(chatId).find((message) => message.localId === localId);
+      const failed = outboxMessages(chatId, api).find((message) => message.localId === localId);
       const outgoing = failed ? outgoingOf(failed) : null;
 
       if (!outgoing) return;
@@ -216,7 +216,7 @@ export function useChatMessages(
     [api, chatId, currentUserId, queryClient],
   );
 
-  const discard = useCallback((localId: string) => discardLocal(chatId, localId), [chatId]);
+  const discard = useCallback((localId: string) => discardLocal(chatId, localId, api), [api, chatId]);
 
   const saveEdit = useCallback(
     (original: ChatMessage, result: EditResult) => void saveEditOnServer(context, original, result, api),

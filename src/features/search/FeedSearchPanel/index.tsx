@@ -11,7 +11,7 @@ import type { SearchEntity, SearchPop } from '@/api/search';
 import { useTabBarHeight } from '@/components/TabBar';
 import { Text } from '@/components/Text';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
-import { openPopViewer } from '@/features/pops/openPopViewer';
+import { useOpenPopViewer } from '@/features/pops/openPopViewer';
 import {
   buildFeedSearchRows,
   FEED_POP_COLUMNS,
@@ -38,6 +38,7 @@ export type FeedSearchPanelProps = {
  * верхними строками, попсы — рядами по два, догрузка страницами.
  */
 export function FeedSearchPanel({ query, onPickRecent }: FeedSearchPanelProps) {
+  const openPopViewer = useOpenPopViewer();
   const router = useRouter();
   const results = useFeedSearch(query);
   const recent = feedRecentQueries.useStore((state) => state.items);
@@ -129,7 +130,7 @@ export function FeedSearchPanel({ query, onPickRecent }: FeedSearchPanelProps) {
       setLastSearchPop(pop);
       openPopViewer({ source: 'search', query: shownQuery, startId: pop.id });
     },
-    [remember, results.pops, shownQuery],
+    [openPopViewer, remember, results.pops, shownQuery],
   );
 
   const toggleChannels = useCallback(

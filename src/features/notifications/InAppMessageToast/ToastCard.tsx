@@ -1,3 +1,4 @@
+import { requestSelection } from '@/api/screenRequest';
 import { useRouter } from '@/navigation';
 import { useEffect, useState } from 'react';
 import { Animated, Pressable, View } from 'react-native';
@@ -35,6 +36,7 @@ export type ToastCardProps = {
  */
 export function ToastCard({ alert, dismiss, group = null }: ToastCardProps) {
   const router = useRouter();
+  const selection = requestSelection();
   const insets = useSafeAreaInsets();
   const theme = useTheme();
   // Встроенная анимация вместо Reanimated: карточка выезжает один раз и не
@@ -55,10 +57,10 @@ export function ToastCard({ alert, dismiss, group = null }: ToastCardProps) {
     // На кнопку фразы с действием нужно успеть нажать: за ней — несохранённая работа.
     const visibleMs =
       alert.kind !== 'notice' ? VISIBLE_MS : alert.action ? ACTION_VISIBLE_MS : NOTICE_VISIBLE_MS;
-    const timer = setTimeout(dismiss, visibleMs);
+    const timer = setTimeout(() => { if (selection === requestSelection()) dismiss(); }, visibleMs);
 
     return () => clearTimeout(timer);
-  }, [alert, dismiss, slide]);
+  }, [alert, dismiss, selection, slide]);
 
   if (!alert) return null;
 
@@ -82,7 +84,7 @@ export function ToastCard({ alert, dismiss, group = null }: ToastCardProps) {
     return (
       <Animated.View style={[styles.wrapper, styles.noticeWrapper, slideStyle]}>
         <View style={[styles.card, styles.notice, cardColors]}>
-          <Pressable accessibilityRole="alert" onPress={dismiss} style={styles.body}>
+          <Pressable accessibilityRole="alert" onPress={() => { if (selection === requestSelection()) dismiss(); }} style={styles.body}>
             <Text variant="small" color={alert.tone === 'error' ? 'danger' : 'text'}>
               {alert.text}
             </Text>
@@ -95,6 +97,7 @@ export function ToastCard({ alert, dismiss, group = null }: ToastCardProps) {
               hitSlop={Spacing.two}
               testID="notice-action-button"
               onPress={() => {
+                if (selection !== requestSelection()) return;
                 dismiss();
                 action.run();
               }}
@@ -113,6 +116,7 @@ export function ToastCard({ alert, dismiss, group = null }: ToastCardProps) {
   const channel = alert.kind === 'pop' || alert.kind === 'message' ? alert.channel : null;
 
   const open = () => {
+    if (selection !== requestSelection()) return;
     dismiss();
 
     if (channel) {

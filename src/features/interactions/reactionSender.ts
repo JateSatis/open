@@ -146,19 +146,20 @@ async function drain(queryClient: QueryClient, messageId: string, target: Reacti
 
       const mine = await send(messageId, wanted.emoji, api);
 
-      if (queue !== reactionQueues(api)) return;
+      if (api.retired || queue !== reactionQueues(api)) return;
       confirm(queryClient, messageId, mine, wanted.me);
 
       // Пока ехал запрос, человек передумал — отправляем новое желаемое.
       if (queue.get(messageId) !== wanted) continue;
 
-      if (api === requestClient()) clearPendingReaction(messageId, wanted);
+      clearPendingReaction(messageId, wanted, api);
       return;
     }
   } catch (cause) {
     // Откат — снятие наложения: облачко возвращается к тому, что знает база.
-    if (api !== requestClient() || queue !== reactionQueues(api)) return;
-    clearPendingReaction(messageId);
+    if (api.retired || queue !== reactionQueues(api)) return;
+    clearPendingReaction(messageId, undefined, api);
+    if (api !== requestClient()) return;
     showNotice(
       isNetworkError(cause)
         ? 'Не удалось поставить реакцию: нет связи'
@@ -189,7 +190,7 @@ export function sendReaction(
   const running = queue.has(id);
   const wanted = { ...intent, listsVisitors: target === 'comment' };
   queue.set(id, wanted);
-  if (api === requestClient()) setPendingReaction(id, wanted);
+  setPendingReaction(id, wanted, api);
 
   if (!running) void drain(queryClient, id, target, api);
 }

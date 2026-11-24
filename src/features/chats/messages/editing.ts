@@ -197,7 +197,7 @@ export async function saveEdit(
   const optimistic = optimisticEdit(original, result);
   const retry = () => void saveEdit(context, original, result, api);
 
-  setPendingEdit(chatId, optimistic);
+  setPendingEdit(chatId, optimistic, api);
 
   let uploaded: UploadedMedia[] = [];
 
@@ -209,7 +209,7 @@ export async function saveEdit(
     uploaded = hasFiles ? await uploadEditFiles(result, currentUserId!, api) : [];
 
     const saved = await editMessage(original.id, toEditInput(result, uploaded), api);
-    if (api !== requestClient()) return;
+    if (api.retired) return;
 
     // Новые файлы продолжают показываться с телефона, пока грузятся
     // удалённые, — как у только что отправленного.
@@ -220,12 +220,12 @@ export async function saveEdit(
     updateHistory(queryClient, chatId, (history) => replaceMessages(history, [saved], previews));
     // Наложение снимается в том же проходе, в котором история узнаёт новую
     // версию: облачко не мигает прежней.
-    notifyManager.schedule(() => clearPendingEdit(chatId, optimistic));
+    notifyManager.schedule(() => clearPendingEdit(chatId, optimistic, api));
 
     void queryClient.invalidateQueries({ queryKey: chatsQueryKey });
     void queryClient.invalidateQueries({ queryKey: pinsQueryKey(chatId) });
   } catch (cause) {
-    if (api === requestClient()) clearPendingEdit(chatId, optimistic);
+    if (!api.retired) clearPendingEdit(chatId, optimistic, api);
 
     // Отказ сервера — новые файлы ничьи. При обрыве связи правка могла и
     // дойти, поэтому файлы остаются: удалить их — сломать сохранённое.

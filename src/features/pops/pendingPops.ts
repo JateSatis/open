@@ -3,7 +3,8 @@
 // Zustand: в кеш запросов поп попадает только с ответом базы. Модуль без
 // обращений к API — его сбрасывает выход из аккаунта.
 
-import { create } from 'zustand';
+import { requestClient } from '@/api/requestClient';
+import { createAccountStore } from '@/features/auth/accountStore';
 
 import type { LocalMedia, UploadedMedia } from '@/features/media/types';
 
@@ -39,10 +40,10 @@ type PendingState = { byChannel: Record<string, PendingPop[]> };
 
 const EMPTY: PendingPop[] = [];
 
-const usePendingStore = create<PendingState>(() => ({ byChannel: {} }));
+const usePendingStore = createAccountStore<PendingState>(() => ({ byChannel: {} }));
 
-export function setChannel(channelId: string, change: (pops: PendingPop[]) => PendingPop[]) {
-  usePendingStore.setState((state) => {
+export function setChannel(channelId: string, change: (pops: PendingPop[]) => PendingPop[], api = requestClient()) {
+  usePendingStore.forClient(api).setState((state) => {
     const next = change(state.byChannel[channelId] ?? EMPTY);
     const byChannel = { ...state.byChannel };
 
@@ -53,14 +54,15 @@ export function setChannel(channelId: string, change: (pops: PendingPop[]) => Pe
   });
 }
 
-export function patch(channelId: string, localId: string, change: Partial<PendingPop>) {
+export function patch(channelId: string, localId: string, change: Partial<PendingPop>, api = requestClient()) {
   setChannel(channelId, (pops) =>
     pops.map((pop) => (pop.localId === localId ? { ...pop, ...change } : pop)),
+    api,
   );
 }
 
-export function find(channelId: string, localId: string): PendingPop | undefined {
-  return usePendingStore.getState().byChannel[channelId]?.find((pop) => pop.localId === localId);
+export function find(channelId: string, localId: string, api = requestClient()): PendingPop | undefined {
+  return usePendingStore.forClient(api).getState().byChannel[channelId]?.find((pop) => pop.localId === localId);
 }
 
 /** Попсы канала в пути, новые сначала. */
