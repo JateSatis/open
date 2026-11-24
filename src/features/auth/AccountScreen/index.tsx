@@ -6,6 +6,7 @@ import { SettingsRow } from '@/components/SettingsRow';
 import { SettingsSection } from '@/components/SettingsSection';
 import { AccountActions } from '@/features/auth/AccountActions';
 import { DeviceList } from '@/features/auth/DeviceList';
+import { SavedAccounts } from '@/features/auth/SavedAccounts';
 import { SignInMethods } from '@/features/auth/SignInMethods';
 import { BirthDateSection } from '@/features/privacy/BirthDateSection';
 import { Spacing } from '@/theme';
@@ -21,6 +22,7 @@ export function AccountScreen() {
   const onOpenPrivacy = () => router.push({ name: 'Privacy' });
   return (
     <Screen scrollable edges={['bottom']} contentContainerStyle={styles.content}>
+      <SavedAccounts manage />
       <SettingsSection title="Настройки">
         <SettingsRow
           testID="account-privacy"

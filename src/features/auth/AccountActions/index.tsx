@@ -5,11 +5,12 @@ import { useShallow } from 'zustand/react/shallow';
 import { styles } from './styles';
 
 import { Button } from '@/components/Button';
+import { requestSelection } from '@/api/screenRequest';
 import { confirm } from '@/components/ConfirmDialog';
 import { LinkButton } from '@/components/LinkButton';
 import { Text } from '@/components/Text';
 import { useDeleteAccount } from '@/features/auth/accountQueries';
-import { signOut } from '@/features/auth/signOut';
+import { signOut, signOutSavedAccount } from '@/features/auth/signOut';
 import { confirmedSessionOwner, isCurrentSession } from '@/features/auth/sessionOwner';
 import { useSessionStore } from '@/features/auth/sessionState';
 
@@ -23,6 +24,9 @@ export function AccountActions() {
   const [signingOut, setSigningOut] = useState(false);
   const deletion = useDeleteAccount();
   const owner = useSessionStore(useShallow(confirmedSessionOwner));
+  const slot = useSessionStore(state => state.accounts.find(account => account.userId === state.localAccountId));
+  const selection = requestSelection();
+  const [signOutError, setSignOutError] = useState(false);
 
   const onSignOut = async () => {
     const agreed = await confirm({
@@ -33,11 +37,15 @@ export function AccountActions() {
       destructive: true,
     });
 
-    if (!agreed || !owner || !isCurrentSession(owner)) return;
+    if (!agreed || selection !== requestSelection()) return;
 
     setSigningOut(true);
+    setSignOutError(false);
     try {
-      await signOut(owner);
+      if (owner && isCurrentSession(owner)) await signOut(owner);
+      else if (!owner && slot) await signOutSavedAccount(slot, selection, slot.sessionId ? { userId: slot.userId, sessionId: slot.sessionId } : undefined);
+    } catch {
+      setSignOutError(true);
     } finally {
       setSigningOut(false);
     }
@@ -61,9 +69,10 @@ export function AccountActions() {
         label="Выйти из аккаунта"
         variant="secondary"
         loading={signingOut}
-        disabled={!owner || deletion.isPending}
+        disabled={(!owner && !slot) || deletion.isPending}
         onPress={() => void onSignOut()}
       />
+      {signOutError && <Text variant="small" color="danger">Не удалось выйти. Попробуйте ещё раз.</Text>}
 
       <View style={styles.delete}>
         <LinkButton
