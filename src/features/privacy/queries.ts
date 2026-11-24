@@ -1,3 +1,5 @@
+import { requestClient } from '@/api/requestClient';
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
@@ -38,6 +40,7 @@ export const privacyKeys = {
 const settingsReads = new Map<string, Promise<PrivacySettings | null>>();
 
 export function useMyPrivacySettings() {
+  const api = useRequestClient();
   const userId = useCurrentUserId();
   const client = useQueryClient();
 
@@ -45,11 +48,11 @@ export function useMyPrivacySettings() {
     queryKey: privacyKeys.mine(userId),
     queryFn: async () => {
       if (!userId) return null;
-      const read = getMyPrivacySettings();
+      const read = getMyPrivacySettings(api);
       settingsReads.set(userId, read);
       try {
         const settings = await read;
-        const isCurrent = () => settingsReads.get(userId) === read;
+        const isCurrent = () => api === requestClient() && settingsReads.get(userId) === read;
         if (settings && isCurrent()) {
           if (settings.birthDate === null) await reconcileMissingBirthDate(client, userId, isCurrent);
           else await rememberBirthDate(client, userId, settings.birthDate);
@@ -64,6 +67,7 @@ export function useMyPrivacySettings() {
 }
 
 export function useSetBirthDate(mode: 'initial' | 'edit') {
+  const api = useRequestClient();
   const queryClient = useQueryClient();
   const userId = useCurrentUserId();
 
@@ -72,14 +76,15 @@ export function useSetBirthDate(mode: 'initial' | 'edit') {
     mutationFn: async (birthDate) => {
       if (!userId) throw new Error('Требуется вход в аккаунт');
       try {
-        await setBirthDate(birthDate);
+        await setBirthDate(birthDate, api);
       } catch (error) {
-        if (mode === 'initial' && error instanceof BirthDateTooYoungError) {
+        if (api === requestClient() && mode === 'initial' && error instanceof BirthDateTooYoungError) {
           settingsReads.delete(userId);
           await rememberBirthDate(queryClient, userId, birthDate, 'tooYoung');
         }
         throw error;
       }
+      if (api !== requestClient()) return;
       settingsReads.delete(userId);
       await rememberBirthDate(queryClient, userId, birthDate, 'ok');
     },
@@ -91,6 +96,7 @@ export function useSetBirthDate(mode: 'initial' | 'edit') {
 
 /** Смена настройки — сразу на экране, откат, если сервер не принял. */
 export function useSetPrivacySetting() {
+  const api = useRequestClient();
   const queryClient = useQueryClient();
   const userId = useCurrentUserId();
   const key = privacyKeys.mine(userId);
@@ -102,7 +108,7 @@ export function useSetPrivacySetting() {
     { previous: PrivacySettings | null | undefined }
   >({
     mutationFn: ({ setting, value }) =>
-      setPrivacySetting(setting, value as PrivacySettingValues[typeof setting]),
+      setPrivacySetting(setting, value as PrivacySettingValues[typeof setting], api),
     networkMode: 'always',
     onMutate: async ({ setting, value }) => {
       await queryClient.cancelQueries({ queryKey: key });
@@ -149,12 +155,13 @@ export function useSetPrivacySetting() {
 
 /** «Другой псевдоним»: новый сразу в строке настроек. */
 export function useRegenerateIdentityAlias() {
+  const api = useRequestClient();
   const queryClient = useQueryClient();
   const userId = useCurrentUserId();
   const key = privacyKeys.mine(userId);
 
   return useMutation<string, Error, void>({
-    mutationFn: regenerateIdentityAlias,
+    mutationFn: () => regenerateIdentityAlias(api),
     networkMode: 'always',
     onSuccess: (alias) => {
       const previous = queryClient.getQueryData<PrivacySettings | null>(key);

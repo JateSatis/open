@@ -3,7 +3,7 @@ import { useCallback } from 'react';
 
 import type { Pop } from '@/api/pops';
 import { useMarkChannelSectionRead } from '@/features/channels/useMarkChannelSectionRead';
-import { openPopViewer } from '@/features/pops/openPopViewer';
+import { useOpenPopViewer } from '@/features/pops/openPopViewer';
 import { PopGrid } from '@/features/pops/PopGrid';
 import { useCanPublish, usePops } from '@/features/pops/queries';
 import { usePopCountersSync } from '@/features/pops/usePopCountersSync';
@@ -20,6 +20,7 @@ export type PopsSectionProps = {
  * канала с него. Просмотры на плитках — живые.
  */
 export function PopsSection({ channelId, active = true }: PopsSectionProps) {
+  const openPopViewer = useOpenPopViewer();
   const router = useRouter();
   const canPublish = useCanPublish(channelId);
   // Тот же кеш, что у сетки: свежий поп — сигнал «пришло новое».
@@ -39,7 +40,7 @@ export function PopsSection({ channelId, active = true }: PopsSectionProps) {
 
   const openPop = useCallback(
     (pop: Pop) => openPopViewer({ source: 'channel', channelId, startId: pop.id }),
-    [channelId],
+    [channelId, openPopViewer],
   );
 
   return (

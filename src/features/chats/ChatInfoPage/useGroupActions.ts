@@ -1,3 +1,5 @@
+import { requestClient } from '@/api/requestClient';
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from '@/navigation';
 import { useCallback } from 'react';
@@ -51,6 +53,7 @@ export type GroupActions = {
  * проверяет база.
  */
 export function useGroupActions(chat: ChatSummary, currentUserId: string | null): GroupActions {
+  const api = useRequestClient();
   const router = useRouter();
   const queryClient = useQueryClient();
   const chatId = chat.id;
@@ -74,20 +77,21 @@ export function useGroupActions(chat: ChatSummary, currentUserId: string | null)
       destructive: true,
     });
 
-    if (!confirmed) return;
+    if (!confirmed || api !== requestClient()) return;
 
     try {
-      await withDeadline(leaveChat(chatId), ACTION_DEADLINE_MS);
+      await withDeadline(leaveChat(chatId, api), ACTION_DEADLINE_MS);
     } catch (error) {
-      failure('покинуть группу', error);
+      if (api === requestClient()) failure('покинуть группу', error);
       return;
     }
 
     // Говорить в звонке группы я больше не вправе.
+    if (api !== requestClient()) return;
     if (getCall()?.chatId === chatId) void leaveCall();
 
     dropFromList();
-  }, [chat, chatId, currentUserId, dropFromList]);
+  }, [api, chat, chatId, currentUserId, dropFromList]);
 
   const deleteDialog = useCallback(async () => {
     const confirmed = await confirm({
@@ -98,19 +102,20 @@ export function useGroupActions(chat: ChatSummary, currentUserId: string | null)
       destructive: true,
     });
 
-    if (!confirmed) return;
+    if (!confirmed || api !== requestClient()) return;
 
     try {
-      await withDeadline(deleteDirectChat(chatId), ACTION_DEADLINE_MS);
+      await withDeadline(deleteDirectChat(chatId, api), ACTION_DEADLINE_MS);
     } catch (error) {
-      failure('удалить чат', error);
+      if (api === requestClient()) failure('удалить чат', error);
       return;
     }
 
+    if (api !== requestClient()) return;
     if (getCall()?.chatId === chatId) void leaveCall();
 
     dropFromList();
-  }, [chatId, dropFromList]);
+  }, [api, chatId, dropFromList]);
 
   const removeMember = useCallback(
     async (person: Person) => {
@@ -122,32 +127,32 @@ export function useGroupActions(chat: ChatSummary, currentUserId: string | null)
         destructive: true,
       });
 
-      if (!confirmed) return;
+      if (!confirmed || api !== requestClient()) return;
 
       try {
-        await withDeadline(removeChatMember(chatId, person.id), ACTION_DEADLINE_MS);
+        await withDeadline(removeChatMember(chatId, person.id, api), ACTION_DEADLINE_MS);
       } catch (error) {
-        failure('удалить участника', error);
+        if (api === requestClient()) failure('удалить участника', error);
         return;
       }
 
       void queryClient.invalidateQueries({ queryKey: chatQueryKey(chatId) });
     },
-    [chatId, queryClient],
+    [api, chatId, queryClient],
   );
 
   const cancelInvite = useCallback(
     async (person: Person) => {
       try {
-        await withDeadline(cancelChatInvite(chatId, person.id), ACTION_DEADLINE_MS);
+        await withDeadline(cancelChatInvite(chatId, person.id, api), ACTION_DEADLINE_MS);
       } catch (error) {
-        failure('отменить приглашение', error);
+        if (api === requestClient()) failure('отменить приглашение', error);
         return;
       }
 
       void queryClient.invalidateQueries({ queryKey: chatQueryKey(chatId) });
     },
-    [chatId, queryClient],
+    [api, chatId, queryClient],
   );
 
   return { leave, deleteDialog, removeMember, cancelInvite };

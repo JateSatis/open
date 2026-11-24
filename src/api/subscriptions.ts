@@ -5,7 +5,7 @@
 // участником чата: писать подписчик не может, это проверяет политика на
 // `messages`.
 
-import { supabase } from '@/api/supabase';
+import { requestClient } from '@/api/requestClient';
 
 /**
  * Моя подписка с тем, что для меня непрочитано: на канал (`channelId`) или на
@@ -67,8 +67,8 @@ function toSubscription(row: SubscriptionRow): Subscription {
 }
 
 /** Моя подписка на канал; `null` — не подписан. */
-export async function getMySubscription(channelId: string): Promise<ChannelSubscription | null> {
-  const { data, error } = await supabase.rpc('my_channel_subscriptions', {
+export async function getMySubscription(channelId: string, api = requestClient()): Promise<ChannelSubscription | null> {
+  const { data, error } = await api.rpc('my_channel_subscriptions', {
     target_channel: channelId,
   });
 
@@ -80,8 +80,8 @@ export async function getMySubscription(channelId: string): Promise<ChannelSubsc
 }
 
 /** Моя подписка на чужой диалог или группу; `null` — не подписан. */
-export async function getMyChatSubscription(chatId: string): Promise<Subscription | null> {
-  const { data, error } = await supabase.rpc('my_subscriptions', { target_chat: chatId });
+export async function getMyChatSubscription(chatId: string, api = requestClient()): Promise<Subscription | null> {
+  const { data, error } = await api.rpc('my_subscriptions', { target_chat: chatId });
 
   if (error) throw error;
 
@@ -94,8 +94,8 @@ export async function getMyChatSubscription(chatId: string): Promise<Subscriptio
  * Подписки, которые лежат в «Чатах», — каналы и чаты одним запросом на весь
  * список.
  */
-export async function listChatSubscriptions(): Promise<Subscription[]> {
-  const { data, error } = await supabase.rpc('my_subscriptions', {});
+export async function listChatSubscriptions(api = requestClient()): Promise<Subscription[]> {
+  const { data, error } = await api.rpc('my_subscriptions', {});
 
   if (error) throw error;
 
@@ -103,8 +103,8 @@ export async function listChatSubscriptions(): Promise<Subscription[]> {
 }
 
 /** Подписаться; `addToChats` — сразу читателем. Повтор — не ошибка. */
-export async function subscribeToChannel(channelId: string, addToChats: boolean): Promise<void> {
-  const { error } = await supabase.rpc('subscribe_to_channel', {
+export async function subscribeToChannel(channelId: string, addToChats: boolean, api = requestClient()): Promise<void> {
+  const { error } = await api.rpc('subscribe_to_channel', {
     target_channel: channelId,
     add_to_chats: addToChats,
   });
@@ -112,8 +112,8 @@ export async function subscribeToChannel(channelId: string, addToChats: boolean)
   if (error) throw error;
 }
 
-export async function setChannelInChats(channelId: string, inChats: boolean): Promise<void> {
-  const { error } = await supabase.rpc('set_channel_in_chats', {
+export async function setChannelInChats(channelId: string, inChats: boolean, api = requestClient()): Promise<void> {
+  const { error } = await api.rpc('set_channel_in_chats', {
     target_channel: channelId,
     value: inChats,
   });
@@ -121,8 +121,8 @@ export async function setChannelInChats(channelId: string, inChats: boolean): Pr
   if (error) throw error;
 }
 
-export async function setChannelNotifications(channelId: string, enabled: boolean): Promise<void> {
-  const { error } = await supabase.rpc('set_channel_notifications', {
+export async function setChannelNotifications(channelId: string, enabled: boolean, api = requestClient()): Promise<void> {
+  const { error } = await api.rpc('set_channel_notifications', {
     target_channel: channelId,
     enabled,
   });
@@ -130,8 +130,8 @@ export async function setChannelNotifications(channelId: string, enabled: boolea
   if (error) throw error;
 }
 
-export async function unsubscribeFromChannel(channelId: string): Promise<void> {
-  const { error } = await supabase.rpc('unsubscribe_from_channel', { target_channel: channelId });
+export async function unsubscribeFromChannel(channelId: string, api = requestClient()): Promise<void> {
+  const { error } = await api.rpc('unsubscribe_from_channel', { target_channel: channelId });
 
   if (error) throw error;
 }
@@ -144,8 +144,9 @@ export async function unsubscribeFromChannel(channelId: string): Promise<void> {
 export async function markChannelRead(
   channelId: string,
   sections: { posts: boolean; pops: boolean },
+  api = requestClient(),
 ): Promise<void> {
-  const { error } = await supabase.rpc('mark_channel_read', {
+  const { error } = await api.rpc('mark_channel_read', {
     target_channel: channelId,
     read_posts: sections.posts,
     read_pops: sections.pops,
@@ -163,8 +164,9 @@ export async function listChannelSubscribers(
   after: Subscriber | null,
   /** По имени или `@имени`; пусто — все. */
   query?: string,
+  api = requestClient(),
 ): Promise<Subscriber[]> {
-  const { data, error } = await supabase.rpc('list_channel_subscribers', {
+  const { data, error } = await api.rpc('list_channel_subscribers', {
     target_channel: channelId,
     before_created: after?.subscribedAt,
     before_id: after?.id,
@@ -186,14 +188,14 @@ export async function listChannelSubscribers(
 }
 
 /** Подписаться на чужой диалог или группу — он сразу в «Чатах». Повтор — не ошибка. */
-export async function subscribeToChat(chatId: string): Promise<void> {
-  const { error } = await supabase.rpc('subscribe_to_chat', { target_chat: chatId });
+export async function subscribeToChat(chatId: string, api = requestClient()): Promise<void> {
+  const { error } = await api.rpc('subscribe_to_chat', { target_chat: chatId });
 
   if (error) throw error;
 }
 
-export async function setChatNotifications(chatId: string, enabled: boolean): Promise<void> {
-  const { error } = await supabase.rpc('set_chat_notifications', {
+export async function setChatNotifications(chatId: string, enabled: boolean, api = requestClient()): Promise<void> {
+  const { error } = await api.rpc('set_chat_notifications', {
     target_chat: chatId,
     enabled,
   });
@@ -201,8 +203,8 @@ export async function setChatNotifications(chatId: string, enabled: boolean): Pr
   if (error) throw error;
 }
 
-export async function unsubscribeFromChat(chatId: string): Promise<void> {
-  const { error } = await supabase.rpc('unsubscribe_from_chat', { target_chat: chatId });
+export async function unsubscribeFromChat(chatId: string, api = requestClient()): Promise<void> {
+  const { error } = await api.rpc('unsubscribe_from_chat', { target_chat: chatId });
 
   if (error) throw error;
 }
@@ -211,8 +213,8 @@ export async function unsubscribeFromChat(chatId: string): Promise<void> {
  * Отметка прочтения подписчика чата — временем базы. Галочки «прочитано» у
  * участников она не трогает. Не подписан — база ничего не делает.
  */
-export async function markChatSubscriptionRead(chatId: string): Promise<void> {
-  const { error } = await supabase.rpc('mark_chat_subscription_read', { target_chat: chatId });
+export async function markChatSubscriptionRead(chatId: string, api = requestClient()): Promise<void> {
+  const { error } = await api.rpc('mark_chat_subscription_read', { target_chat: chatId });
 
   if (error) throw error;
 }
@@ -224,8 +226,9 @@ export async function markChatSubscriptionRead(chatId: string): Promise<void> {
 export async function listChatSubscribers(
   chatId: string,
   after: Subscriber | null,
+  api = requestClient(),
 ): Promise<Subscriber[]> {
-  const { data, error } = await supabase.rpc('list_chat_subscribers', {
+  const { data, error } = await api.rpc('list_chat_subscribers', {
     target_chat: chatId,
     before_created: after?.subscribedAt,
     before_id: after?.id,

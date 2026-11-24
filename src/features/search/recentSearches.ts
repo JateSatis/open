@@ -7,7 +7,7 @@ import type { SearchEntity, SearchMessage } from '@/api/search';
  * «Недавние» поиска. Лежат на телефоне — у каждого аккаунта свои, под своим
  * ключом: сеанс мог закончиться, пока приложение было закрыто, и тогда сброс
  * при выходе не случился бы. При выходе из аккаунта стираются вместе с
- * прочим клиентским состоянием (`resetClientState`).
+ * черновиками завершённого сеанса.
  *
  * Списков два, механика одна (`createRecentList`):
  *   «Чаты»  — что человек открывал из выдачи: снимок строки на момент тапа
@@ -36,7 +36,8 @@ export type RecentList<T> = {
   add: (item: T) => void;
   clear: () => void;
   /** Выход из аккаунта: в памяти и на телефоне — пусто. */
-  reset: () => void;
+  unload: () => void;
+  reset: (owner?: string | null) => void;
 };
 
 export function createRecentList<T>({
@@ -86,7 +87,13 @@ export function createRecentList<T>({
   // уже не кладёт: иначе вернулись бы недавние прежнего человека или стёртые.
   let generation = 0;
 
+  const unload = () => {
+    generation += 1;
+    useStore.setState({ owner: null, items: [] });
+  };
+
   return {
+    unload,
     useStore,
     parse,
     load: (owner) => {
@@ -124,11 +131,8 @@ export function createRecentList<T>({
       generation += 1;
       save(owner, []);
     },
-    reset: () => {
-      const { owner } = useStore.getState();
-
-      generation += 1;
-      useStore.setState({ owner: null, items: [] });
+    reset: (owner = useStore.getState().owner) => {
+      if (useStore.getState().owner === owner) unload();
       if (owner) void AsyncStorage.removeItem(prefix + owner).catch(() => undefined);
     },
   };
@@ -179,8 +183,13 @@ export const feedRecentQueries = createRecentList<string>({
   isItem: (value): value is string => typeof value === 'string' && value.trim() !== '',
 });
 
+export function unloadRecentSearches() {
+  chats.unload();
+  feedRecentQueries.unload();
+}
+
 /** Выход из аккаунта: оба списка — пусто. */
-export function resetRecentSearches(): void {
-  chats.reset();
-  feedRecentQueries.reset();
+export function resetRecentSearches(owner?: string): void {
+  chats.reset(owner);
+  feedRecentQueries.reset(owner);
 }

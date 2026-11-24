@@ -1,3 +1,4 @@
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 
@@ -19,9 +20,10 @@ const QUIET_BEFORE_SYNC_MS = 60_000;
  * Один раз на звонок за время жизни экрана.
  */
 export function useLiveStream(chatId: string): LiveStream | null {
+  const api = useRequestClient();
   const { data } = useQuery({
     queryKey: liveStreamQueryKey(chatId),
-    queryFn: () => fetchLiveStream(chatId),
+    queryFn: () => fetchLiveStream(chatId, api),
   });
   const synced = useRef(new Set<string>());
 
@@ -32,8 +34,8 @@ export function useLiveStream(chatId: string): LiveStream | null {
     if (Date.now() - Date.parse(stream.startedAt) < QUIET_BEFORE_SYNC_MS) return;
 
     synced.current.add(stream.id);
-    syncStream(stream.id).catch(() => undefined);
-  }, [stream]);
+    syncStream(stream.id, api).catch(() => undefined);
+  }, [api, stream]);
 
   return stream;
 }

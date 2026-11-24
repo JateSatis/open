@@ -3,6 +3,7 @@
 // правки и удаление оригинала её не меняют. Автор — глазами владельца сейчас,
 // название источника — живое, из чата (см. `fetchSourceChats`).
 
+import { requestClient } from '@/api/requestClient';
 import {
   chatsSelect,
   fetchChatPeople,
@@ -15,7 +16,6 @@ import {
 import type { PreviewAttachment } from '@/api/messagePreview';
 import { toMessageKind } from '@/api/messageRows';
 import { opaqueFlag } from '@/api/opaquePeople';
-import { supabase } from '@/api/supabase';
 
 export const SAVED_PAGE_SIZE = 30;
 const SOURCE_CHATS_BATCH = 100;
@@ -290,8 +290,9 @@ export async function listSavedMessages(
   limit = SAVED_PAGE_SIZE,
   filter: SavedFilterInput | null = null,
   signal?: AbortSignal,
+  api = requestClient(),
 ): Promise<SavedPage> {
-  let request = supabase.rpc('list_saved_messages', {
+  let request = api.rpc('list_saved_messages', {
     p_before_seq: param.before ?? undefined,
     p_limit: limit,
     p_filter: filter ?? undefined,
@@ -323,8 +324,9 @@ function watchCursorOf(item: SavedMessage): WatchLaterCursor | null {
 export async function listWatchLater(
   cursor: WatchLaterCursor | null,
   filter: SavedFilterInput | null = null,
+  api = requestClient(),
 ): Promise<WatchLaterPage> {
-  const { data, error } = await supabase.rpc('list_saved_watch_later', {
+  const { data, error } = await api.rpc('list_saved_watch_later', {
     p_after_done: cursor?.done,
     p_after_at: cursor?.at,
     p_limit: SAVED_PAGE_SIZE,
@@ -350,8 +352,9 @@ export async function saveMessages(
   sourceChatId: string,
   messageIds: string[],
   options: SaveOptions,
+  api = requestClient(),
 ): Promise<string[]> {
-  const { data, error } = await supabase.rpc('save_messages', {
+  const { data, error } = await api.rpc('save_messages', {
     p_source_chat: sourceChatId,
     p_message_ids: messageIds,
     p_tag_ids: options.tagIds,
@@ -364,8 +367,8 @@ export async function saveMessages(
 }
 
 /** Сохранить комментарии — к сообщению или к попу — каждый отдельной копией. */
-export async function saveComments(commentIds: string[], options: SaveOptions): Promise<string[]> {
-  const { data, error } = await supabase.rpc('save_comments', {
+export async function saveComments(commentIds: string[], options: SaveOptions, api = requestClient()): Promise<string[]> {
+  const { data, error } = await api.rpc('save_comments', {
     p_comment_ids: commentIds,
     p_tag_ids: options.tagIds,
     p_watch_later: options.watchLater,
@@ -377,8 +380,8 @@ export async function saveComments(commentIds: string[], options: SaveOptions): 
 }
 
 /** Свои теги: самые используемые первыми, при равенстве — новые. */
-export async function listSavedTags(): Promise<SavedTag[]> {
-  const { data, error } = await supabase
+export async function listSavedTags(api = requestClient()): Promise<SavedTag[]> {
+  const { data, error } = await api
     .from('saved_tags')
     .select('id, name, color, uses_count')
     .order('uses_count', { ascending: false })
@@ -395,8 +398,8 @@ export async function listSavedTags(): Promise<SavedTag[]> {
 }
 
 /** Новый тег; то же имя без учёта регистра — уже существующий. */
-export async function createSavedTag(name: string): Promise<SavedTag> {
-  const { data, error } = await supabase.rpc('create_saved_tag', { p_name: name });
+export async function createSavedTag(name: string, api = requestClient()): Promise<SavedTag> {
+  const { data, error } = await api.rpc('create_saved_tag', { p_name: name });
 
   if (error) throw error;
 
@@ -408,8 +411,8 @@ export async function createSavedTag(name: string): Promise<SavedTag> {
 }
 
 /** Сколько не выполнено в «Посмотреть позже». */
-export async function getSavedSummary(): Promise<{ watchLaterPending: number }> {
-  const { data, error } = await supabase.rpc('saved_summary');
+export async function getSavedSummary(api = requestClient()): Promise<{ watchLaterPending: number }> {
+  const { data, error } = await api.rpc('saved_summary');
 
   if (error) throw error;
 
@@ -420,12 +423,12 @@ export async function getSavedSummary(): Promise<{ watchLaterPending: number }> 
  * Чаты-источники сохранённого — живые, как их называет «Чаты». Удалённого или
  * недоступного чата в ответе нет.
  */
-export async function fetchSourceChats(chatIds: string[]): Promise<Map<string, ChatSummary>> {
+export async function fetchSourceChats(chatIds: string[], api = requestClient()): Promise<Map<string, ChatSummary>> {
   const byId = new Map<string, ChatSummary>();
 
   if (chatIds.length === 0) return byId;
 
-  const userId = await getCurrentUserId();
+  const userId = await getCurrentUserId(api);
   // Фильтр едет в адресе запроса: сотни id разом его переполнили бы.
   const batches: string[][] = [];
 
@@ -434,14 +437,14 @@ export async function fetchSourceChats(chatIds: string[]): Promise<Map<string, C
   }
 
   const results = await Promise.all(
-    batches.map((ids) => chatsSelect().in('id', ids).is('deleted_at', null)),
+    batches.map((ids) => chatsSelect(api).in('id', ids).is('deleted_at', null)),
   );
   const failed = results.find((result) => result.error);
 
   if (failed?.error) throw failed.error;
 
   const chats = results.flatMap((result) => result.data ?? []);
-  const people = await fetchChatPeople(chats.map((chat) => chat.id));
+  const people = await fetchChatPeople(chats.map((chat) => chat.id), api);
 
   for (const chat of chats) {
     byId.set(chat.id, toSummary(chat, people.get(chat.id) ?? { members: [], waiting: [] }, userId));
@@ -451,8 +454,8 @@ export async function fetchSourceChats(chatIds: string[]): Promise<Map<string, C
 }
 
 /** Поставить или снять тег у записи. */
-export async function setSavedTag(savedId: string, tagId: string, on: boolean): Promise<void> {
-  const { error } = await supabase.rpc('set_saved_tag', {
+export async function setSavedTag(savedId: string, tagId: string, on: boolean, api = requestClient()): Promise<void> {
+  const { error } = await api.rpc('set_saved_tag', {
     p_saved: savedId,
     p_tag: tagId,
     p_on: on,
@@ -464,8 +467,9 @@ export async function setSavedTag(savedId: string, tagId: string, on: boolean): 
 export async function setSavedWatchLater(
   savedIds: string[],
   state: WatchLaterState,
+  api = requestClient(),
 ): Promise<void> {
-  const { error } = await supabase.rpc('set_saved_watch_later', {
+  const { error } = await api.rpc('set_saved_watch_later', {
     p_ids: savedIds,
     p_state: state,
   });
@@ -478,8 +482,9 @@ export async function restoreSavedWatchLater(
   savedId: string,
   watchLaterAt: string,
   watchDoneAt: string | null,
+  api = requestClient(),
 ): Promise<void> {
-  const { error } = await supabase.rpc('restore_saved_watch_later', {
+  const { error } = await api.rpc('restore_saved_watch_later', {
     p_saved: savedId,
     p_later_at: watchLaterAt,
     p_done_at: watchDoneAt ?? undefined,
@@ -488,22 +493,22 @@ export async function restoreSavedWatchLater(
   if (error) throw error;
 }
 
-export async function setSavedPinned(savedIds: string[], pinned: boolean): Promise<void> {
-  const { error } = await supabase.rpc('set_saved_pinned', { p_ids: savedIds, p_pinned: pinned });
+export async function setSavedPinned(savedIds: string[], pinned: boolean, api = requestClient()): Promise<void> {
+  const { error } = await api.rpc('set_saved_pinned', { p_ids: savedIds, p_pinned: pinned });
 
   if (error) throw error;
 }
 
 /** Удаление из сохранённого — физическое: копия, теги, отметка и закреп. */
-export async function deleteSavedMessages(savedIds: string[]): Promise<void> {
-  const { error } = await supabase.rpc('delete_saved_messages', { p_ids: savedIds });
+export async function deleteSavedMessages(savedIds: string[], api = requestClient()): Promise<void> {
+  const { error } = await api.rpc('delete_saved_messages', { p_ids: savedIds });
 
   if (error) throw error;
 }
 
 /** Закрепы по времени закрепления: от первого к последнему; под фильтром — только подходящие. */
-export async function listSavedPins(filter: SavedFilterInput | null = null): Promise<SavedPin[]> {
-  const { data, error } = await supabase.rpc('list_saved_pins', { p_filter: filter ?? undefined });
+export async function listSavedPins(filter: SavedFilterInput | null = null, api = requestClient()): Promise<SavedPin[]> {
+  const { data, error } = await api.rpc('list_saved_pins', { p_filter: filter ?? undefined });
 
   if (error) throw error;
 
@@ -517,8 +522,8 @@ export async function listSavedPins(filter: SavedFilterInput | null = null): Pro
 }
 
 /** Что из выбранного можно переслать и откуда — решает база, по порядку `seq`. */
-export async function listSavedForwardable(savedIds: string[]): Promise<SavedForwardable[]> {
-  const { data, error } = await supabase.rpc('saved_forwardable', { p_ids: savedIds });
+export async function listSavedForwardable(savedIds: string[], api = requestClient()): Promise<SavedForwardable[]> {
+  const { data, error } = await api.rpc('saved_forwardable', { p_ids: savedIds });
 
   if (error) throw error;
 
@@ -561,8 +566,8 @@ export type SavedNoteInput = {
  * Новая заметка; отвечает её id. Строку читает `getSavedMessage` отдельно:
  * заметка уже записана, даже если чтение потом не удалось.
  */
-export async function sendSavedNote(input: SavedNoteInput): Promise<string> {
-  const { data: id, error } = await supabase.rpc('send_saved_note', {
+export async function sendSavedNote(input: SavedNoteInput, api = requestClient()): Promise<string> {
+  const { data: id, error } = await api.rpc('send_saved_note', {
     p_client_id: input.clientId,
     p_text: input.text ?? undefined,
     p_media: input.files.map((file) => ({
@@ -588,8 +593,8 @@ export async function sendSavedNote(input: SavedNoteInput): Promise<string> {
  * Неотправленную заметку убрали, а ответ сервера на неё не дошёл: она могла
  * создаться. Удаляет её по ключу повтора; нет такой — ничего.
  */
-export async function deleteSavedNoteByClient(clientId: string): Promise<void> {
-  const { error } = await supabase.rpc('delete_saved_note_by_client', { p_client_id: clientId });
+export async function deleteSavedNoteByClient(clientId: string, api = requestClient()): Promise<void> {
+  const { error } = await api.rpc('delete_saved_note_by_client', { p_client_id: clientId });
 
   if (error) throw error;
 }
@@ -601,10 +606,11 @@ export async function deleteSavedNoteByClient(clientId: string): Promise<void> {
 export async function getSavedMessage(
   id: string,
   filter: SavedFilterInput | null = null,
+  api = requestClient(),
 ): Promise<SavedMessage | null> {
   // Окно из одной записи: до её номера включительно — её не знаем, поэтому
   // через страницу «Посмотреть позже» нельзя; берём по seq из таблицы.
-  const { data: row, error } = await supabase
+  const { data: row, error } = await api
     .from('saved_messages')
     .select('seq')
     .eq('id', id)
@@ -613,7 +619,7 @@ export async function getSavedMessage(
   if (error) throw error;
   if (!row) return null;
 
-  const page = await listSavedMessages({ before: row.seq + 1 }, 1, filter);
+  const page = await listSavedMessages({ before: row.seq + 1 }, 1, filter, undefined, api);
 
   return page.items.find((item) => item.id === id) ?? null;
 }
@@ -622,8 +628,9 @@ export async function getSavedMessage(
 export async function countSavedMessages(
   filter: SavedFilterInput,
   signal?: AbortSignal,
+  api = requestClient(),
 ): Promise<number> {
-  let request = supabase.rpc('count_saved_messages', { p_filter: filter });
+  let request = api.rpc('count_saved_messages', { p_filter: filter });
 
   if (signal) request = request.abortSignal(signal);
 
@@ -638,8 +645,8 @@ export async function countSavedMessages(
  * Правка своей заметки: текст и какие вложения оставить, по порядку.
  * Копию сообщения база не правит.
  */
-export async function editSavedNote(savedId: string, text: string, keep: string[]): Promise<void> {
-  const { error } = await supabase.rpc('edit_saved_note', {
+export async function editSavedNote(savedId: string, text: string, keep: string[], api = requestClient()): Promise<void> {
+  const { error } = await api.rpc('edit_saved_note', {
     p_saved: savedId,
     p_text: text,
     p_keep: keep,
@@ -649,8 +656,8 @@ export async function editSavedNote(savedId: string, text: string, keep: string[
 }
 
 /** Копии заметок — новыми заметками с теми же файлами («★ Сохранённые» в листе пересылки). */
-export async function copySavedNotes(savedIds: string[], options: SaveOptions): Promise<string[]> {
-  const { data, error } = await supabase.rpc('copy_saved_notes', {
+export async function copySavedNotes(savedIds: string[], options: SaveOptions, api = requestClient()): Promise<string[]> {
+  const { data, error } = await api.rpc('copy_saved_notes', {
     p_ids: savedIds,
     p_tag_ids: options.tagIds,
     p_watch_later: options.watchLater,

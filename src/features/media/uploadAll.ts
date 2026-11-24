@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 import { prepareForUpload } from './lib/prepareForUpload';
 import { removeUploadedMedia, storedPaths, uploadMedia } from './storage';
 import type { LocalMedia, UploadedMedia } from './types';
@@ -12,7 +13,7 @@ const UPLOAD_CONCURRENCY = 3;
  * (сообщение с частью вложений в базу не попадёт: `send_media_message`
  * вставляет его только когда получит на руки все URL).
  */
-export async function uploadAllMedia(items: LocalMedia[], userId: string): Promise<UploadedMedia[]> {
+export async function uploadAllMedia(items: LocalMedia[], userId: string, api = requestClient()): Promise<UploadedMedia[]> {
   const prepared = await Promise.all(items.map(prepareForUpload));
   const uploaded: (UploadedMedia | undefined)[] = new Array(prepared.length);
   let cursor = 0;
@@ -21,7 +22,7 @@ export async function uploadAllMedia(items: LocalMedia[], userId: string): Promi
     while (cursor < prepared.length) {
       const index = cursor++;
 
-      uploaded[index] = await uploadMedia(prepared[index], userId);
+      uploaded[index] = await uploadMedia(prepared[index], userId, api);
     }
   }
 
@@ -33,7 +34,7 @@ export async function uploadAllMedia(items: LocalMedia[], userId: string): Promi
     await Promise.all(
       uploaded
         .filter((item): item is UploadedMedia => item !== undefined)
-        .map((item) => removeUploadedMedia(storedPaths(item))),
+        .map((item) => removeUploadedMedia(storedPaths(item), undefined, api)),
     );
 
     throw error;

@@ -1,3 +1,4 @@
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useRouteParams, useRouter } from '@/navigation';
 import { useCallback } from 'react';
@@ -33,6 +34,7 @@ const subscriberKey = (subscriber: Subscriber) => subscriber.id;
  * Остальным база этот список не отдаёт.
  */
 export function SubscribersScreen() {
+  const api = useRequestClient();
   const { target } = useRouteParams<'Subscribers'>();
   const theme = useTheme();
   // Список доходит до края окна: панели вкладок под экраном нет.
@@ -46,8 +48,8 @@ export function SubscribersScreen() {
         : chatSubscribersQueryKey(target.id),
     queryFn: ({ pageParam }) =>
       target.kind === 'channel'
-        ? listChannelSubscribers(target.id, pageParam)
-        : listChatSubscribers(target.id, pageParam),
+        ? listChannelSubscribers(target.id, pageParam, undefined, api)
+        : listChatSubscribers(target.id, pageParam, api),
     initialPageParam: null as Subscriber | null,
     getNextPageParam: (last) =>
       last.length < SUBSCRIBERS_PAGE_SIZE ? undefined : last[last.length - 1],

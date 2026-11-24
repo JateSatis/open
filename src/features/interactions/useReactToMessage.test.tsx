@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 jest.mock('@/api/historyWindow', () => ({
   getHistoryWindow: jest.fn((...args) => jest.requireActual('@/test/historyWindowMock').fixtureHistoryWindow(...args)),
   getHistoryGroupKeys: jest.fn(() => Promise.resolve([])),
@@ -130,7 +131,7 @@ describe('reacting to a message', () => {
       visitors: {},
       mine: { emoji: '👍', audience: 'member' },
     });
-    expect(mockedSet).toHaveBeenCalledWith('m1', '👍');
+    expect(mockedSet).toHaveBeenCalledWith('m1', '👍', requestClient());
 
     await act(async () => answer({ emoji: '👍', audience: 'member' }));
 
@@ -190,7 +191,7 @@ describe('reacting to a message', () => {
       result.current.react.toggle({ id: 'm1', reactions: reactionsOf(result, 'm1') }, '👍'),
     );
 
-    expect(mockedSet).toHaveBeenCalledWith('m1', null);
+    expect(mockedSet).toHaveBeenCalledWith('m1', null, requestClient());
     expect(reactionsOf(result, 'm1')).toEqual({ members: { '👍': 1 }, visitors: {}, mine: null });
   });
 
@@ -249,7 +250,7 @@ describe('reacting to a message', () => {
     await act(async () => answers[0]({ emoji: '🔥', audience: 'member' }));
 
     expect(mockedSet).toHaveBeenCalledTimes(2);
-    expect(mockedSet).toHaveBeenLastCalledWith('m1', '🎉');
+    expect(mockedSet).toHaveBeenLastCalledWith('m1', '🎉', requestClient());
     // Пока второй едет, экран показывает последнее желаемое, а не промежуточное.
     expect(reactionsOf(result, 'm1').members).toEqual({ '👍': 1, '🎉': 1 });
 
@@ -285,7 +286,7 @@ describe('reactions from others in real time', () => {
     await waitFor(() => expect(reactionsOf(result, 'm1').members).toEqual({ '👍': 4 }));
     expect(reactionsOf(result, 'm2').visitors).toEqual({ '😁': 1 });
     expect(mockedList).toHaveBeenCalledTimes(1);
-    expect(mockedList).toHaveBeenCalledWith(['m1', 'm2']);
+    expect(mockedList).toHaveBeenCalledWith(['m1', 'm2'], requestClient());
   });
 
   it('ignores events about messages that are not loaded', async () => {
@@ -307,6 +308,6 @@ describe('reactions from others in real time', () => {
     await act(async () => handlers!.onReconnected?.());
 
     await waitFor(() => expect(reactionsOf(result, 'm1').members).toEqual({ '👍': 7 }));
-    expect(mockedList).toHaveBeenCalledWith(['m2', 'm1']);
+    expect(mockedList).toHaveBeenCalledWith(['m2', 'm1'], requestClient());
   });
 });

@@ -1,3 +1,4 @@
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 
@@ -113,6 +114,7 @@ export function useChatMessages(
   currentUserId: string | null,
   view: HistoryView = 'all',
 ): ChatMessagesState {
+  const api = useRequestClient();
   const queryClient = useQueryClient();
   const connection = useConnectionStatus();
   const reader = useHistoryReader();
@@ -172,14 +174,14 @@ export function useChatMessages(
     // Связь вернулась — дописываем то, что не ушло. Пользователь уже нажал
     // «отправить»: заставлять его тыкать «повторить» по каждому сообщению
     // значит перекладывать на него работу приложения.
-    for (const message of outboxMessages(chatId)) {
+    for (const message of outboxMessages(chatId, api)) {
       const outgoing = message.status === 'failed' ? outgoingOf(message) : null;
 
       if (outgoing && message.localId) {
-        void deliver(queryClient, chatId, currentUserId, message.localId, outgoing);
+        void deliver(queryClient, chatId, currentUserId, message.localId, outgoing, api);
       }
     }
-  }, [chatId, connection, currentUserId, queryClient]);
+  }, [api, chatId, connection, currentUserId, queryClient]);
 
   const send = useCallback(
     (
@@ -187,38 +189,38 @@ export function useChatMessages(
       media: OutgoingMedia[] = [],
       replies: LiveQuote[] = [],
       hidden: HiddenRange[] = [],
-    ) => sendPost(context, text, media, replies, hidden),
-    [context],
+    ) => sendPost(context, text, media, replies, hidden, api),
+    [api, context],
   );
 
   const sendVoice = useCallback(
-    (voice: LocalMedia, replies: LiveQuote[] = []) => sendVoiceMessage(context, voice, replies),
-    [context],
+    (voice: LocalMedia, replies: LiveQuote[] = []) => sendVoiceMessage(context, voice, replies, api),
+    [api, context],
   );
 
   const sendPop = useCallback(
     (channelId: string, text: string, pop: DraftPop, replies: LiveQuote[] = []) =>
-      sendPopPost(context, channelId, text, pop, replies),
-    [context],
+      sendPopPost(context, channelId, text, pop, replies, api),
+    [api, context],
   );
 
   const retry = useCallback(
     (localId: string) => {
-      const failed = outboxMessages(chatId).find((message) => message.localId === localId);
+      const failed = outboxMessages(chatId, api).find((message) => message.localId === localId);
       const outgoing = failed ? outgoingOf(failed) : null;
 
       if (!outgoing) return;
 
-      void deliver(queryClient, chatId, currentUserId, localId, outgoing);
+      void deliver(queryClient, chatId, currentUserId, localId, outgoing, api);
     },
-    [chatId, currentUserId, queryClient],
+    [api, chatId, currentUserId, queryClient],
   );
 
-  const discard = useCallback((localId: string) => discardLocal(chatId, localId), [chatId]);
+  const discard = useCallback((localId: string) => discardLocal(chatId, localId, api), [api, chatId]);
 
   const saveEdit = useCallback(
-    (original: ChatMessage, result: EditResult) => void saveEditOnServer(context, original, result),
-    [context],
+    (original: ChatMessage, result: EditResult) => void saveEditOnServer(context, original, result, api),
+    [api, context],
   );
 
   const deleteMessages = useCallback(
@@ -233,7 +235,7 @@ export function useChatMessages(
       keepDeletedChatThreadRoots(queryClient, chatId, removedThreads);
 
       try {
-        await deleteOnServer(messageIds);
+        await deleteOnServer(messageIds, api);
         if (reader)
           void queryClient.invalidateQueries({ queryKey: messagesQueryKey(chatId), exact: true });
       } catch (cause) {
@@ -258,7 +260,7 @@ export function useChatMessages(
       void queryClient.invalidateQueries({ queryKey: chatsQueryKey });
       void queryClient.invalidateQueries({ queryKey: pinsQueryKey(chatId) });
     },
-    [chatId, queryClient, reader],
+    [api, chatId, queryClient, reader],
   );
 
   const removeFromIsland = useCallback(
@@ -286,7 +288,7 @@ export function useChatMessages(
       );
 
       try {
-        await removeForwardItems(forwardId, messageIds);
+        await removeForwardItems(forwardId, messageIds, api);
         if (reader)
           void queryClient.invalidateQueries({ queryKey: messagesQueryKey(chatId), exact: true });
       } catch (cause) {
@@ -301,7 +303,7 @@ export function useChatMessages(
       void queryClient.invalidateQueries({ queryKey: chatsQueryKey });
       void queryClient.invalidateQueries({ queryKey: pinsQueryKey(chatId) });
     },
-    [chatId, queryClient, reader],
+    [api, chatId, queryClient, reader],
   );
 
   return {

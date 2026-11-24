@@ -1,3 +1,4 @@
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { isOpaquePersonId } from '@/api/opaquePeople';
@@ -14,10 +15,12 @@ import { profileKeys } from '@/features/profile/keys';
 export { profileKeys };
 
 export function useMyProfile() {
-  return useQuery({ queryKey: profileKeys.me(), queryFn: getMyProfile });
+  const api = useRequestClient();
+  return useQuery({ queryKey: profileKeys.me(), queryFn: () => getMyProfile(api) });
 }
 
 export function useProfile(userId: string | undefined) {
+  const api = useRequestClient();
   return useQuery({
     queryKey: profileKeys.byId(userId ?? ''),
     // Непрозрачный id подменённого в диалоге: профиля за ним нет — сразу
@@ -25,16 +28,17 @@ export function useProfile(userId: string | undefined) {
     queryFn: () =>
       isOpaquePersonId(userId)
         ? Promise.reject(new ProfileUnavailableError())
-        : getProfile(userId as string),
+        : getProfile(userId as string, api),
     enabled: Boolean(userId),
   });
 }
 
 export function useUpdateMyProfile() {
+  const api = useRequestClient();
   const queryClient = useQueryClient();
 
   return useMutation<Profile, Error, ProfileUpdateInput>({
-    mutationFn: updateMyProfile,
+    mutationFn: (input: ProfileUpdateInput) => updateMyProfile(input, api),
     onSuccess: (profile) => {
       // The same row backs both cache entries — seed them rather than
       // invalidating, so returning to the profile screen shows no spinner.

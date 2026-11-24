@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 import type { Session as SupabaseSession } from '@supabase/supabase-js';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react-native';
 import { BackHandler } from 'react-native';
@@ -208,7 +209,7 @@ describe('comments of a pop', () => {
   it('lists the pop’s comments with the count and marks the channel’s publisher as the author', async () => {
     await openPanel();
 
-    expect(mockedRoots).toHaveBeenCalledWith('pop-1');
+    expect(mockedRoots).toHaveBeenCalledWith('pop-1', undefined, requestClient());
     expect(screen.getByText('3 комментария')).toBeTruthy();
     expect(screen.getAllByText(/Автор/)).toHaveLength(1);
     expect(screen.queryByText(/участник чата/)).toBeNull();
@@ -227,7 +228,7 @@ describe('comments of a pop', () => {
       media: [],
       replyTo: [],
       commentThreadRootId: null,
-    });
+    }, requestClient());
     expect(sendComment).not.toHaveBeenCalled();
   });
 
@@ -284,7 +285,7 @@ describe('comments of a pop', () => {
   it('listens to the pop’s own comments topic', async () => {
     await openPanel();
 
-    expect(subscribeToComments).toHaveBeenCalledWith('pop-1', expect.anything());
+    expect(subscribeToComments).toHaveBeenCalledWith('pop-1', expect.anything(), requestClient());
   });
 
   describe('pin', () => {
@@ -306,7 +307,7 @@ describe('comments of a pop', () => {
       await tapComment('c2');
       await fireEvent.press(await screen.findByRole('menuitem', { name: 'Закрепить' }));
 
-      expect(pinComment).toHaveBeenCalledWith('c2');
+      expect(pinComment).toHaveBeenCalledWith('c2', requestClient());
       expect(await screen.findByText('Закреплено автором')).toBeTruthy();
       expect(pinnedShown()).toBe('c2');
     });
@@ -320,7 +321,7 @@ describe('comments of a pop', () => {
       await tapComment('c2');
       await fireEvent.press(await screen.findByRole('menuitem', { name: 'Открепить' }));
 
-      expect(unpinComment).toHaveBeenCalledWith('pop-1');
+      expect(unpinComment).toHaveBeenCalledWith('pop-1', requestClient());
       await waitFor(() => expect(screen.queryByText('Закреплено автором')).toBeNull());
       expect(screen.getByTestId('message-row-c2')).toBeTruthy();
     });

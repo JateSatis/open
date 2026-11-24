@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
 
 import { ChannelPopViewer } from './ChannelPopViewer';
@@ -169,10 +170,10 @@ describe('PopViewer subscription', () => {
     await open(pop('p1'));
 
     fireEvent.press(await screen.findByRole('button', { name: 'Подписаться' }));
-    await waitFor(() => expect(subscribeToChannel).toHaveBeenCalledWith('channel-1', false));
+    await waitFor(() => expect(subscribeToChannel).toHaveBeenCalledWith('channel-1', false, requestClient()));
     fireEvent.press(await screen.findByRole('button', { name: 'Добавить в чаты' }));
 
-    await waitFor(() => expect(setChannelInChats).toHaveBeenCalledWith('channel-1', true));
+    await waitFor(() => expect(setChannelInChats).toHaveBeenCalledWith('channel-1', true, requestClient()));
     await waitFor(() => expect(screen.queryByTestId('pop-subscribe')).toBeNull());
   });
 
@@ -236,7 +237,7 @@ describe('PopViewer', () => {
     await fireEvent.press(await screen.findByTestId('reaction-option-🔥'));
 
     expect(await screen.findByTestId('reaction-chip-🔥')).toBeTruthy();
-    await waitFor(() => expect(setPopReaction).toHaveBeenCalledWith('p1', '🔥'));
+    await waitFor(() => expect(setPopReaction).toHaveBeenCalledWith('p1', '🔥', requestClient()));
   });
 
   it('tap on my reaction in the column takes it off', async () => {
@@ -244,7 +245,7 @@ describe('PopViewer', () => {
 
     await fireEvent.press(screen.getByTestId('reaction-chip-🔥'));
 
-    await waitFor(() => expect(setPopReaction).toHaveBeenCalledWith('p1', null));
+    await waitFor(() => expect(setPopReaction).toHaveBeenCalledWith('p1', null, requestClient()));
     expect(screen.queryByTestId('reaction-chip-🔥')).toBeNull();
   });
 
@@ -255,7 +256,7 @@ describe('PopViewer', () => {
 
     expect(screen.getByTestId('pop-heart')).toBeTruthy();
     expect(await screen.findByTestId('reaction-chip-❤️')).toBeTruthy();
-    await waitFor(() => expect(setPopReaction).toHaveBeenCalledWith('p1', '❤️'));
+    await waitFor(() => expect(setPopReaction).toHaveBeenCalledWith('p1', '❤️', requestClient()));
   });
 
   it('double tap over another reaction of mine only animates — the reaction stays', async () => {
@@ -367,7 +368,7 @@ describe('PopViewer', () => {
     jest.useFakeTimers();
     await open(pop('p1'));
     await act(() => jest.advanceTimersByTime(2500));
-    expect(recordPopViews).toHaveBeenCalledWith(['p1'], expect.any(String));
+    expect(recordPopViews).toHaveBeenCalledWith(['p1'], expect.any(String), requestClient());
     jest.useRealTimers();
   });
 

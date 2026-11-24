@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 jest.mock('@/api/historyWindow', () => ({
   getHistoryWindow: jest.fn((...args) => jest.requireActual('@/test/historyWindowMock').fixtureHistoryWindow(...args)),
   getHistoryGroupKeys: jest.fn(() => Promise.resolve([])),
@@ -258,7 +259,7 @@ describe("ChatScreen: someone else's dialogue", () => {
     fireEvent.press(await screen.findByTestId('chat-subscribe-button'));
 
     await waitFor(() => expect(screen.queryByTestId('chat-subscribe-bar')).toBeNull());
-    expect(subscribeToChatTarget).toHaveBeenCalledWith('chat-1');
+    expect(subscribeToChatTarget).toHaveBeenCalledWith('chat-1', requestClient());
     expect(await screen.findByText('1 подписчик')).toBeTruthy();
     // Писать подписка не даёт: поля ввода нет.
     expect(screen.queryByPlaceholderText('Сообщение')).toBeNull();
@@ -316,7 +317,7 @@ describe("ChatScreen: someone else's dialogue", () => {
     fireEvent.press(await screen.findByText('Отписаться'));
 
     expect(await screen.findByTestId('chat-subscribe-button')).toBeTruthy();
-    expect(unsubscribeFromChat).toHaveBeenCalledWith('chat-1');
+    expect(unsubscribeFromChat).toHaveBeenCalledWith('chat-1', requestClient());
     expect(await screen.findByText('0 подписчиков')).toBeTruthy();
   });
 

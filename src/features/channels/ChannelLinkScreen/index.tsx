@@ -1,3 +1,4 @@
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouteParams, Redirect, useRouter } from '@/navigation';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
@@ -19,6 +20,7 @@ export const channelLinkQueryKey = (username: string) =>
  * вместо этого, нет такого — «Канал не найден» со стрелкой назад.
  */
 export function ChannelLinkScreen() {
+  const api = useRequestClient();
   const { username } = useRouteParams<'ChannelLink'>();
   const theme = useTheme();
   const router = useRouter();
@@ -26,7 +28,7 @@ export function ChannelLinkScreen() {
   const queryClient = useQueryClient();
   const query = useQuery({
     queryKey: channelLinkQueryKey(username),
-    queryFn: () => findChannelByUsername(username),
+    queryFn: () => findChannelByUsername(username, api),
     // Имя могли отдать другому каналу: старый ответ не переиспользуем.
     staleTime: 0,
     gcTime: 0,

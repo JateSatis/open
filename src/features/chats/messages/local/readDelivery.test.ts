@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -87,11 +88,11 @@ it.each(['сессия', 'сеть'])(
   async (last) => {
     useSessionStore.setState({
       localAccountId: 'a',
-      session: sessionOf('a', 'stored'),
+      session: sessionOf('a', 'session-a'),
       sdkStatus: 'offline',
     });
     reportDeviceNetwork(false);
-    disk.storage.reach(scope, early);
+    disk.storage.reach(scope, early, 'session-a');
     await batch();
     expect(send).not.toHaveBeenCalled();
     stop?.();
@@ -105,17 +106,52 @@ it.each(['сессия', 'сеть'])(
     expect(send).not.toHaveBeenCalled();
     (last === 'сессия' ? confirmed : online)();
     await batch();
-    expect(send.mock.calls).toEqual([['a', 'chat', { ...early, chat: 'chat' }]]);
+    expect(send.mock.calls).toEqual([['a', 'chat', { ...early, chat: 'chat' }, requestClient()]]);
     expect(disk.storage.pending('a')).toEqual([]);
   },
 );
+
+it('обновляет очередь v2 без присвоения старого прочтения текущей сессии', async () => {
+  stop?.();
+  disk.native.exec('ALTER TABLE history_read DROP COLUMN pending_session; PRAGMA user_version=2');
+  disk.native.prepare(
+    'INSERT INTO history_read(reader,chat,pending_seq,pending_position,pending_key) VALUES(?,?,?,?,?)',
+  ).run('a', 'chat', later.seq, later.position, later.key);
+  disk.native.close();
+  open();
+  signIn('a');
+  reportRequestSucceeded();
+  stop = startHistoryReadDelivery('a', client);
+  await batch();
+  expect(send).not.toHaveBeenCalled();
+
+  expect(disk.storage.reach(scope, early, 'session-a')).toBe(true);
+  stop?.();
+  disk.native.close();
+  open();
+  stop = startHistoryReadDelivery('a', client);
+  await batch();
+  expect(send.mock.calls).toEqual([['a', 'chat', { ...early, chat: 'chat' }, requestClient()]]);
+});
+
+it('не воспроизводит прочтения старого сеанса после нового входа с тем же userId', async () => {
+  disk.storage.reach(scope, later, 'old-session');
+  signIn('a');
+  reportRequestSucceeded();
+  await batch();
+  expect(send).not.toHaveBeenCalled();
+  expect(disk.storage.reach(scope, early, 'session-a')).toBe(true);
+  await batch();
+  expect(send).toHaveBeenCalledWith('a', 'chat', { ...early, chat: 'chat' }, requestClient());
+  expect(disk.storage.pending('a')).toEqual([]);
+});
 
 it('повторяет временную ошибку с задержкой и применяет возвращённую сервером позицию', async () => {
   signIn('a');
   reportRequestSucceeded();
   await batch();
   send.mockRejectedValueOnce(new Error('timeout')).mockResolvedValueOnce(later);
-  disk.storage.reach(scope, early);
+  disk.storage.reach(scope, early, 'session-a');
   await batch();
   await jest.advanceTimersByTimeAsync(4999);
   expect(send).toHaveBeenCalledTimes(1);
@@ -123,18 +159,18 @@ it('повторяет временную ошибку с задержкой и 
   await jest.advanceTimersByTimeAsync(1);
   expect(send).toHaveBeenCalledTimes(2);
   expect(disk.storage.pending('a')).toHaveLength(0);
-  expect(disk.storage.reach(scope, later)).toBe(false);
+  expect(disk.storage.reach(scope, later, 'session-a')).toBe(false);
 });
 
 it.each(['22023', '42501'])('снимает отклонённый ключ без повтора (%s)', async (code) => {
   signIn('a');
   reportRequestSucceeded();
-  disk.storage.reach(scope, early);
+  disk.storage.reach(scope, early, 'session-a');
   send.mockRejectedValueOnce({ code });
   await jest.advanceTimersByTimeAsync(6000);
   expect(send).toHaveBeenCalledTimes(1);
   expect(disk.storage.pending('a')).toEqual([]);
-  expect(disk.storage.reach(scope, early)).toBe(true);
+  expect(disk.storage.reach(scope, early, 'session-a')).toBe(true);
 });
 
 it.each(['успех', '22023', '42501'])(
@@ -142,10 +178,10 @@ it.each(['успех', '22023', '42501'])(
   async (result) => {
     signIn('a');
     reportRequestSucceeded();
-    disk.storage.reach(scope, early);
+    disk.storage.reach(scope, early, 'session-a');
     const response = delayedResponse();
     await batch();
-    disk.storage.reach(scope, later);
+    disk.storage.reach(scope, later, 'session-a');
     foreground('active');
     reportDeviceNetwork(false);
     reportRequestSucceeded();
@@ -156,7 +192,7 @@ it.each(['успех', '22023', '42501'])(
     await Promise.resolve();
     expect(disk.storage.pending('a')).toEqual([{ ...later, chat: 'chat' }]);
     await batch();
-    expect(send.mock.calls[1]).toEqual(['a', 'chat', { ...later, chat: 'chat' }]);
+    expect(send.mock.calls[1]).toEqual(['a', 'chat', { ...later, chat: 'chat' }, requestClient()]);
     expect(disk.storage.pending('a')).toEqual([]);
   },
 );
@@ -166,11 +202,11 @@ it.each(['успех', '42501'])(
   async (result) => {
     signIn('a');
     reportRequestSucceeded();
-    disk.storage.reach(scope, early);
+    disk.storage.reach(scope, early, 'session-a');
     const response = delayedResponse();
     await batch();
     const other = { reader: 'b', chat: 'chat' };
-    disk.storage.reach(other, early);
+    disk.storage.reach(other, early, 'session-b');
     signIn('b');
     stop?.();
     const nextClient = new QueryClient();
@@ -185,7 +221,7 @@ it.each(['успех', '42501'])(
     expect(oldRefresh).not.toHaveBeenCalled();
     expect(newRefresh).not.toHaveBeenCalled();
     await batch();
-    expect(send).toHaveBeenLastCalledWith('b', 'chat', { ...early, chat: 'chat' });
+    expect(send).toHaveBeenLastCalledWith('b', 'chat', { ...early, chat: 'chat' }, requestClient());
     expect(disk.storage.pending('a')).toHaveLength(1);
     expect(disk.storage.pending('b')).toHaveLength(0);
     expect(newRefresh).toHaveBeenCalledWith({ queryKey: chatsQueryKey });

@@ -1,3 +1,4 @@
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
@@ -22,11 +23,13 @@ export const accountKeys = {
 };
 
 export function useIdentities() {
-  return useQuery({ queryKey: accountKeys.identities, queryFn: listIdentities });
+  const api = useRequestClient();
+  return useQuery({ queryKey: accountKeys.identities, queryFn: () => listIdentities(api) });
 }
 
 export function useDevices() {
-  return useQuery({ queryKey: accountKeys.devices, queryFn: listMyDevices });
+  const api = useRequestClient();
+  return useQuery({ queryKey: accountKeys.devices, queryFn: () => listMyDevices(api) });
 }
 
 export const PROVIDER_NAMES: Record<string, string> = { google: 'Google', apple: 'Apple' };
@@ -55,6 +58,7 @@ class LinkCancelled extends Error {}
 export type LinkOutcome = 'linked' | 'cancelled';
 
 export function useLinkProvider() {
+  const api = useRequestClient();
   const queryClient = useQueryClient();
 
   return useMutation<LinkOutcome, Error, IdentityProvider>({
@@ -68,7 +72,7 @@ export function useLinkProvider() {
 
       try {
         if (!owner || !isCurrentSession(owner)) throw new Error('Сессия аккаунта изменилась');
-        await linkIdentity(provider, result.token);
+        await linkIdentity(provider, result.token, api);
       } catch (error) {
         throw new Error(describeIdentityError(error, provider));
       }
@@ -89,12 +93,13 @@ export function isLinkCancelled(error: unknown): boolean {
 }
 
 export function useUnlinkIdentity() {
+  const api = useRequestClient();
   const queryClient = useQueryClient();
 
   return useMutation<void, Error, { identityId: string; provider: string }>({
     mutationFn: async ({ identityId, provider }) => {
       try {
-        await unlinkIdentity(identityId);
+        await unlinkIdentity(identityId, api);
       } catch (error) {
         throw new Error(describeIdentityError(error, provider));
       }
@@ -104,28 +109,31 @@ export function useUnlinkIdentity() {
 }
 
 export function useEndDeviceSession() {
+  const api = useRequestClient();
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: endDeviceSession,
+    mutationFn: (deviceId: string) => endDeviceSession(deviceId, api),
     onSettled: () => queryClient.invalidateQueries({ queryKey: accountKeys.devices }),
   });
 }
 
 export function useEndOtherSessions() {
+  const api = useRequestClient();
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: endOtherSessions,
+    mutationFn: () => endOtherSessions(api),
     onSettled: () => queryClient.invalidateQueries({ queryKey: accountKeys.devices }),
   });
 }
 
 export function useDeleteAccount() {
+  const api = useRequestClient();
   return useMutation({
     mutationFn: async (owner: SessionOwner) => {
       if (!isCurrentSession(owner)) return;
-      await deleteMyAccount(owner);
+      await deleteMyAccount(owner, api);
       await signOutQuietly(owner);
     },
   });

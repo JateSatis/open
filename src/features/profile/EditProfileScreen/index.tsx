@@ -1,4 +1,4 @@
-import { router } from '@/navigation';
+import { useRouter } from '@/navigation';
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, StyleSheet } from 'react-native';
 
@@ -29,6 +29,7 @@ const styles = StyleSheet.create({
 });
 
 export function EditProfileScreen() {
+  const router = useRouter();
   const { data: profile, isPending, error, refetch } = useMyProfile();
 
   return (

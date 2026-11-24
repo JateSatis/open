@@ -1,3 +1,5 @@
+import { useScreenNotice } from '@/features/notifications/useScreenNotice';
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useMemo, useRef, useState } from 'react';
 
@@ -11,7 +13,6 @@ import { withPendingOverlays } from '@/features/chats/messages/pendingOverlays';
 import { usePendingReactionMap } from '@/features/interactions/pendingReactions';
 import type { ChatMessage } from '@/features/chats/messages/types';
 import { loadStateOf } from '@/lib/loadState';
-import { showNotice } from '@/features/notifications/alertsStore';
 import { describeLoadError } from '@/lib/network';
 
 /** Строка шторки: облачко, разрыв «показать ещё» или загрузка. */
@@ -53,10 +54,12 @@ export function withChatThreadQuotes(
  * мои неотправленные ответы в этот тред в конце.
  */
 export function useChatThreadPane(chatId: string, rootId: string, summary: ChatThreadSummary | null) {
+  const notice = useScreenNotice();
+  const api = useRequestClient();
   const queryClient = useQueryClient();
   const query = useQuery({
     queryKey: chatThreadQueryKey(chatId, rootId),
-    queryFn: () => loadChatThread(queryClient, chatId, rootId),
+    queryFn: () => loadChatThread(queryClient, chatId, rootId, api),
     refetchOnReconnect: false,
   });
   const state = loadStateOf(query);
@@ -145,15 +148,15 @@ export function useChatThreadPane(chatId: string, rootId: string, summary: ChatT
   const loadGap = useCallback((): Promise<void> => {
     if (gapRequest.current) return gapRequest.current;
     setLoadingGap(true);
-    const request = loadChatThreadGap(queryClient, chatId, rootId)
-      .catch((cause: unknown) => showNotice(describeLoadError(cause, 'Не удалось загрузить ответы') ?? 'Не удалось загрузить ответы', 'error'))
+    const request = loadChatThreadGap(queryClient, chatId, rootId, api)
+      .catch((cause: unknown) => notice(describeLoadError(cause, 'Не удалось загрузить ответы') ?? 'Не удалось загрузить ответы', 'error'))
       .finally(() => {
         gapRequest.current = null;
         setLoadingGap(false);
       });
     gapRequest.current = request;
     return request;
-  }, [chatId, queryClient, rootId]);
+  }, [api, notice, chatId, queryClient, rootId]);
 
   const retry = useCallback(() => void query.refetch(), [query]);
 

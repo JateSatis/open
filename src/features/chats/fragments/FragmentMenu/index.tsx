@@ -1,3 +1,4 @@
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { SymbolView } from 'expo-symbols';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -73,6 +74,7 @@ function MenuBody({
   measureViewport,
   onComment,
 }: FragmentMenuProps & { selection: TextSelection }) {
+  const api = useRequestClient();
   const theme = useTheme();
   const queryClient = useQueryClient();
   const me = useCurrentUserId();
@@ -128,7 +130,7 @@ function MenuBody({
       emoji: mine?.mine === emoji ? null : emoji,
       audience: audienceOf(amMember),
       me,
-    });
+    }, api);
     clearTextSelection();
   };
 
@@ -144,7 +146,7 @@ function MenuBody({
 
   const toggleHidden = () => {
     clearTextSelection();
-    void toggleHiddenSelection(queryClient, selection, hiddenAction === 'hide');
+    void toggleHiddenSelection(queryClient, selection, hiddenAction === 'hide', api);
   };
   const place =
     frame && bounds

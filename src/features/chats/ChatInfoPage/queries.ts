@@ -1,3 +1,4 @@
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 
@@ -23,34 +24,38 @@ export const chatInfoKeys = {
 };
 
 export function useChatInfoSummary(chatId: string) {
+  const api = useRequestClient();
   return useQuery({
     queryKey: chatInfoKeys.summary(chatId),
-    queryFn: () => getChatInfoSummary(chatId),
+    queryFn: () => getChatInfoSummary(chatId, api),
   });
 }
 
 export function useChatMedia(chatId: string) {
+  const api = useRequestClient();
   return useInfiniteQuery({
     queryKey: chatInfoKeys.media(chatId),
-    queryFn: ({ pageParam }) => listChatMedia(chatId, pageParam),
+    queryFn: ({ pageParam }) => listChatMedia(chatId, pageParam, api),
     initialPageParam: null as MessageCursor | null,
     getNextPageParam: (last) => last.next ?? undefined,
   });
 }
 
 export function useChatVoices(chatId: string) {
+  const api = useRequestClient();
   return useInfiniteQuery({
     queryKey: chatInfoKeys.voices(chatId),
-    queryFn: ({ pageParam }) => listChatVoices(chatId, pageParam),
+    queryFn: ({ pageParam }) => listChatVoices(chatId, pageParam, api),
     initialPageParam: null as MessageCursor | null,
     getNextPageParam: (last) => last.next ?? undefined,
   });
 }
 
 export function useCommonGroups(userId: string | null, enabled: boolean) {
+  const api = useRequestClient();
   return useInfiniteQuery({
     queryKey: chatInfoKeys.commonGroups(userId ?? ''),
-    queryFn: ({ pageParam }) => listCommonGroups(userId as string, pageParam),
+    queryFn: ({ pageParam }) => listCommonGroups(userId as string, pageParam, api),
     initialPageParam: null as InfoCursor | null,
     getNextPageParam: (last) => last.next ?? undefined,
     enabled: enabled && Boolean(userId),

@@ -3,7 +3,7 @@
 // 20261029100000_privacy_settings.sql). Возраст считает сервер — клиент лишь
 // показывает, что тот ответил.
 
-import { supabase } from '@/api/supabase';
+import { requestClient } from '@/api/requestClient';
 import type { Database } from '@/api/types.gen';
 
 type PrivacyRow = Database['public']['Functions']['my_privacy_settings']['Returns'];
@@ -115,8 +115,8 @@ function toSettings(row: PrivacyRow): PrivacySettings {
  * Мои дата и настройки. null — строки нет: так бывает только у удалённого
  * аккаунта, чей сеанс ещё не погас.
  */
-export async function getMyPrivacySettings(): Promise<PrivacySettings | null> {
-  const { data, error } = await supabase.rpc('my_privacy_settings');
+export async function getMyPrivacySettings(api = requestClient()): Promise<PrivacySettings | null> {
+  const { data, error } = await api.rpc('my_privacy_settings');
 
   if (error) throw error;
   // Функция, вернувшая «нет строки», приходит записью из одних null.
@@ -125,8 +125,8 @@ export async function getMyPrivacySettings(): Promise<PrivacySettings | null> {
   return toSettings(data);
 }
 
-export async function setBirthDate(birthDate: string): Promise<void> {
-  const { error } = await supabase.rpc('set_birth_date', { p_birth_date: birthDate });
+export async function setBirthDate(birthDate: string, api = requestClient()): Promise<void> {
+  const { error } = await api.rpc('set_birth_date', { p_birth_date: birthDate });
 
   if (!error) return;
   if (error.code === BIRTH_DATE_TOO_YOUNG_CODE) throw new BirthDateTooYoungError();
@@ -138,8 +138,9 @@ export async function setBirthDate(birthDate: string): Promise<void> {
 export async function setPrivacySetting<K extends EditablePrivacySetting>(
   key: K,
   value: PrivacySettingValues[K],
+  api = requestClient(),
 ): Promise<void> {
-  const { error } = await supabase.rpc('set_privacy_setting', { p_key: key, p_value: value });
+  const { error } = await api.rpc('set_privacy_setting', { p_key: key, p_value: value });
 
   if (error) throw error;
 }
@@ -148,8 +149,8 @@ export async function setPrivacySetting<K extends EditablePrivacySetting>(
  * Случайный новый псевдоним — свой не вводится. Старый перестаёт находиться
  * сразу. Не больше 5 смен за сутки — дальше `AliasLimitError`.
  */
-export async function regenerateIdentityAlias(): Promise<string> {
-  const { data, error } = await supabase.rpc('regenerate_identity_alias');
+export async function regenerateIdentityAlias(api = requestClient()): Promise<string> {
+  const { data, error } = await api.rpc('regenerate_identity_alias');
 
   if (error) {
     if (error.code === ALIAS_LIMIT_CODE) throw new AliasLimitError();

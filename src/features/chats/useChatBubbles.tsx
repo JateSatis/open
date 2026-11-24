@@ -1,3 +1,4 @@
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback } from 'react';
 
@@ -78,6 +79,7 @@ export function useChatBubbles({
   showAuthors = true,
   postAuthor = null,
 }: Options): ChatBubbles {
+  const api = useRequestClient();
   const queryClient = useQueryClient();
   const { audience: myAudience, toggle } = reactions;
 
@@ -111,8 +113,9 @@ export function useChatBubbles({
           me,
         },
         'comment',
+        api,
       ),
-    [me, queryClient],
+    [api, me, queryClient],
   );
 
   // Под реакциями — свежие аватары участников чата, а не снимок из выборки.

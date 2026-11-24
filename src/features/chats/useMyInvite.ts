@@ -1,3 +1,4 @@
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useQuery } from '@tanstack/react-query';
 
 import { getMyInvite, type MyInvite } from '@/api/invites';
@@ -12,9 +13,10 @@ export function myInviteQueryKey(chatId: string) {
  * известна: «Подписаться» не мигает перед панелью заявки.
  */
 export function useMyInvite(chatId: string, enabled: boolean): MyInvite | null | undefined {
+  const api = useRequestClient();
   const { data, isError } = useQuery({
     queryKey: myInviteQueryKey(chatId),
-    queryFn: () => getMyInvite(chatId),
+    queryFn: () => getMyInvite(chatId, api),
     enabled,
   });
 

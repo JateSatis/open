@@ -1,3 +1,4 @@
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 
@@ -23,10 +24,11 @@ export type ChatsOfState = {
  * чаты, на которые он подписан.
  */
 export function useChatsOf(userId: string): ChatsOfState {
+  const api = useRequestClient();
   const { data, isPending, error, hasNextPage, isFetchingNextPage, fetchNextPage } =
     useInfiniteQuery({
       queryKey: chatsOfQueryKey(userId),
-      queryFn: ({ pageParam }) => listChatsOf(userId, pageParam),
+      queryFn: ({ pageParam }) => listChatsOf(userId, pageParam, api),
       initialPageParam: 0,
       getNextPageParam: (last) => last.nextPage,
     });

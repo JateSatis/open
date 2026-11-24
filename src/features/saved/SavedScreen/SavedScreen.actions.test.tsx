@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 import type { Session as SupabaseSession } from '@supabase/supabase-js';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react-native';
 import { State } from 'react-native-gesture-handler';
@@ -155,9 +156,9 @@ describe('SavedScreen — меню записи', () => {
 
     await fireEvent.press(await screen.findByTestId('saved-tag-Дом'));
 
-    expect(setSavedTag).toHaveBeenCalledWith('a', 'tag-h', true);
+    expect(setSavedTag).toHaveBeenCalledWith('a', 'tag-h', true, requestClient());
     expect(screen.getByTestId('message-menu')).toBeTruthy();
-    expect(screen.getByTestId('saved-tag-Дом')).toBeChecked();
+    await waitFor(() => expect(screen.getByTestId('saved-tag-Дом')).toBeChecked());
     // Тег и на облачке под затемнением.
     expect(within(screen.getAllByTestId('saved-row-a')[0]).getByText('Дом')).toBeTruthy();
   });
@@ -167,7 +168,7 @@ describe('SavedScreen — меню записи', () => {
     await longPressMessage('a');
     await fireEvent.press(await screen.findByRole('menuitem', { name: 'Посмотреть позже' }));
 
-    await waitFor(() => expect(setSavedWatchLater).toHaveBeenCalledWith(['a'], 'later'));
+    await waitFor(() => expect(setSavedWatchLater).toHaveBeenCalledWith(['a'], 'later', requestClient()));
     expect((await screen.findAllByTestId('saved-watch-later'))[0]).not.toBeChecked();
 
     await longPressMessage('a');
@@ -175,7 +176,7 @@ describe('SavedScreen — меню записи', () => {
 
     expect(toggle.props.accessibilityState).toEqual({ checked: false });
     await fireEvent.press(toggle);
-    await waitFor(() => expect(setSavedWatchLater).toHaveBeenCalledWith(['a'], 'done'));
+    await waitFor(() => expect(setSavedWatchLater).toHaveBeenCalledWith(['a'], 'done', requestClient()));
     await waitFor(() => expect(screen.getAllByTestId('saved-watch-later')[0]).toBeChecked());
   });
 
@@ -198,7 +199,7 @@ describe('SavedScreen — меню записи', () => {
     await longPressMessage('a');
     await fireEvent.press(await screen.findByRole('menuitem', { name: 'Удалить' }));
 
-    await waitFor(() => expect(deleteSavedMessages).toHaveBeenCalledWith(['a']));
+    await waitFor(() => expect(deleteSavedMessages).toHaveBeenCalledWith(['a'], requestClient()));
     await waitFor(() => expect(screen.queryByTestId('saved-row-a')).toBeNull());
     expect(screen.getByTestId('saved-row-b')).toBeTruthy();
   });
@@ -208,7 +209,7 @@ describe('SavedScreen — меню записи', () => {
     await longPressMessage('a');
     await fireEvent.press(await screen.findByRole('menuitem', { name: 'Закрепить' }));
 
-    await waitFor(() => expect(setSavedPinned).toHaveBeenCalledWith(['a'], true));
+    await waitFor(() => expect(setSavedPinned).toHaveBeenCalledWith(['a'], true, requestClient()));
     expect(await screen.findByTestId('pinned-bar')).toHaveProp(
       'accessibilityLabel',
       'Закреплённое сообщение: текст a',
@@ -277,7 +278,7 @@ describe('SavedScreen — выбор', () => {
         expect.objectContaining({ title: 'Удалить 2 из сохранённых?' }),
       ),
     );
-    await waitFor(() => expect(deleteSavedMessages).toHaveBeenCalledWith(['c', 'a']));
+    await waitFor(() => expect(deleteSavedMessages).toHaveBeenCalledWith(['c', 'a'], requestClient()));
     await waitFor(() => expect(screen.queryByTestId('selection-action-bar')).toBeNull());
   });
   it('switching to «Посмотреть позже» drops the selection and its header', async () => {
@@ -323,7 +324,7 @@ describe('SavedScreen — «Посмотреть позже»', () => {
     await fireEvent.press(screen.getByTestId('watch-later-check-new'));
 
     await waitFor(() => expect(order()).toEqual(['old', 'new', 'done']));
-    expect(setSavedWatchLater).toHaveBeenCalledWith(['new'], 'done');
+    expect(setSavedWatchLater).toHaveBeenCalledWith(['new'], 'done', requestClient());
     expect(screen.getByTestId('watch-later-check-new')).toBeChecked();
   });
 
@@ -362,7 +363,7 @@ describe('SavedScreen — «Посмотреть позже»', () => {
       ]);
     });
 
-    await waitFor(() => expect(setSavedWatchLater).toHaveBeenCalledWith(['a'], 'off'));
+    await waitFor(() => expect(setSavedWatchLater).toHaveBeenCalledWith(['a'], 'off', requestClient()));
     await waitFor(() => expect(screen.queryByTestId('watch-later-row-a')).toBeNull());
     expect(noticeText()).toBe('Убрано из «Посмотреть позже»');
 
@@ -375,7 +376,7 @@ describe('SavedScreen — «Посмотреть позже»', () => {
     expect(restoreSavedWatchLater).toHaveBeenCalledWith(
       'a',
       '2026-10-19T12:00:00Z',
-      '2026-10-19T13:00:00Z',
+      '2026-10-19T13:00:00Z', requestClient()
     );
     expect(await screen.findByTestId('watch-later-row-a')).toBeTruthy();
     expect(screen.getByTestId('watch-later-check-a')).toBeChecked();

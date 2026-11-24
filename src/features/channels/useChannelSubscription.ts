@@ -1,3 +1,4 @@
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useQuery } from '@tanstack/react-query';
 
 import { getMySubscription, type ChannelSubscription } from '@/api/subscriptions';
@@ -30,11 +31,12 @@ export function statusOf(
 }
 
 export function useChannelSubscription(channelId: string): ChannelSubscriptionState {
+  const api = useRequestClient();
   const reader = useHistoryReader();
   const { canPublish, known } = useCanPublishState(channelId);
   const { data } = useQuery({
     queryKey: channelSubscriptionQueryKey(channelId),
-    ...routeOptions(reader, 'subscription/' + channelId, () => getMySubscription(channelId)),
+    ...routeOptions(reader, 'subscription/' + channelId, () => getMySubscription(channelId, api)),
     enabled: known && !canPublish,
   });
 

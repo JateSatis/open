@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 import { fireEvent, screen } from '@testing-library/react-native';
 
 import { UserChats } from '.';
@@ -86,7 +87,7 @@ describe('UserChats', () => {
     expect(screen.getByText('Кухня')).toBeTruthy();
     // Непрочитанное — её, а не моё: только у первого чата.
     expect(screen.getAllByLabelText('Есть непрочитанные сообщения')).toHaveLength(1);
-    expect(listChatsOfMock).toHaveBeenCalledWith('user-2', 0);
+    expect(listChatsOfMock).toHaveBeenCalledWith('user-2', 0, requestClient());
   });
 
   it('opens a chat on tap — as a visitor, if I am not in it', async () => {

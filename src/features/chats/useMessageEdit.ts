@@ -1,3 +1,4 @@
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useCallback, useEffect, useMemo, type RefObject } from 'react';
 import { Keyboard, type TextInput } from 'react-native';
 
@@ -85,6 +86,7 @@ export function useMessageEdit({
   saveEdit,
   ownWindow = false,
 }: Options): MessageEdit {
+  const api = useRequestClient();
   const mode = draft.mode?.type === 'edit' ? draft.mode : null;
   const { text, clearMedia } = draft;
 
@@ -104,11 +106,11 @@ export function useMessageEdit({
 
   // Ушёл с экрана — правка не ждёт его в черновике: вернувшись, человек
   // увидит свой прежний черновик, а не полусобранное сообщение.
-  useEffect(() => () => finishEditDraft(chatId), [chatId]);
+  useEffect(() => () => finishEditDraft(chatId, api), [api, chatId]);
 
   const start = useCallback(
     (message: ChatMessage) => {
-      startEditDraft(chatId, message);
+      startEditDraft(chatId, message, api);
       clearMedia();
 
       if (message.kind === 'voice') {
@@ -123,7 +125,7 @@ export function useMessageEdit({
       focusWithKeyboard(
         composerRef,
         (input) => {
-          const end = readChatDraft(chatId).text.length;
+          const end = readChatDraft(chatId, api).text.length;
 
           // Не у каждой реализации поля есть `setSelection` — в тестовом окружении его нет.
           input.setSelection?.(end, end);
@@ -131,11 +133,11 @@ export function useMessageEdit({
         ownWindow,
       );
     },
-    [chatId, clearMedia, composerRef, ownWindow],
+    [api, chatId, clearMedia, composerRef, ownWindow],
   );
 
   const leave = useCallback(async () => {
-    const current = readChatDraft(chatId);
+    const current = readChatDraft(chatId, api);
 
     if (current.mode?.type !== 'edit') return true;
 
@@ -153,14 +155,14 @@ export function useMessageEdit({
       if (!confirmed) return false;
     }
 
-    finishEditDraft(chatId);
+    finishEditDraft(chatId, api);
     clearMedia();
 
     return true;
-  }, [chatId, clearMedia]);
+  }, [api, chatId, clearMedia]);
 
   const save = useCallback(() => {
-    const current = readChatDraft(chatId);
+    const current = readChatDraft(chatId, api);
 
     if (current.mode?.type !== 'edit') return;
 
@@ -170,14 +172,14 @@ export function useMessageEdit({
 
     if (!isEditUnchanged(current.mode.message, result)) saveEdit(current.mode.message, result);
 
-    finishEditDraft(chatId);
+    finishEditDraft(chatId, api);
     clearMedia();
-  }, [chatId, clearMedia, saveEdit]);
+  }, [api, chatId, clearMedia, saveEdit]);
 
   const recorded = useCallback(
     (voice: LocalMedia) =>
-      updateEditDraft(chatId, () => ({ kept: [], voice: { type: 'new', voice } })),
-    [chatId],
+      updateEditDraft(chatId, () => ({ kept: [], voice: { type: 'new', voice } }), api),
+    [api, chatId],
   );
 
   const removeAttachment = useCallback(
@@ -185,13 +187,13 @@ export function useMessageEdit({
       updateEditDraft(chatId, (current) => ({
         kept: current.kept.filter((attachment) => attachment.id !== attachmentId),
         voice: current.voice,
-      })),
-    [chatId],
+      }), api),
+    [api, chatId],
   );
 
   const removeVoice = useCallback(
-    () => updateEditDraft(chatId, (current) => ({ kept: current.kept, voice: null })),
-    [chatId],
+    () => updateEditDraft(chatId, (current) => ({ kept: current.kept, voice: null }), api),
+    [api, chatId],
   );
 
   const composer = useMemo(() => {

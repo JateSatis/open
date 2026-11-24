@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
 
 import { SelectableText } from '.';
@@ -97,7 +98,7 @@ describe('clusters on the text of a bubble', () => {
     expect(await screen.findAllByTestId('cluster-highlight')).toHaveLength(2);
     expect(mockedTrack).toHaveBeenCalledTimes(1);
     expect(mockedTrack).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: 'clusters_shown', messageId: 'm1', decisionId: 'd1' }),
+      expect.objectContaining({ kind: 'clusters_shown', messageId: 'm1', decisionId: 'd1' }), requestClient()
     );
   });
 
@@ -140,7 +141,7 @@ describe('clusters on the text of a bubble', () => {
       range: { start: 9, end: 15, text: 'другой' },
     });
     expect(mockedTrack).toHaveBeenLastCalledWith(
-      expect.objectContaining({ kind: 'cluster_opened', clusterId: 'k2', decisionId: 'd1' }),
+      expect.objectContaining({ kind: 'cluster_opened', clusterId: 'k2', decisionId: 'd1' }), requestClient()
     );
   });
 

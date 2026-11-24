@@ -18,9 +18,12 @@
 // правки, удаления, закрепы — до публикации их получают только участники.
 // События у топиков одни и те же.
 
+import { perClient } from './perClient';
+
+import { requestClient } from '@/api/requestClient';
+import type { AccountClient } from '@/api/accountClient';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
-import { supabase } from '@/api/supabase';
 
 /** Что человек делает прямо сейчас — для «печатает…» и «записывает голосовое…». */
 export type ChatActivity = 'typing' | 'recording_voice';
@@ -90,7 +93,7 @@ type Entry = {
  */
 const LINGER_MS = 3000;
 
-const topics = new Map<string, Entry>();
+const clientTopics = perClient(() => new Map<string, Entry>());
 
 function messageIdOf(payload: unknown): string | null {
   const id = (payload as { message_id?: unknown } | undefined)?.message_id;
@@ -120,10 +123,10 @@ function typingFrom(payload: unknown): { userId: string; activity: ChatActivity 
  * друзьям. Посторонний его не откроет — политика откажет, и канал просто
  * останется молчащим.
  */
-function openMembers(chatId: string, entry: Entry): RealtimeChannel {
-  const channel = supabase.channel(`chat-members:${chatId}`, { config: { private: true } });
+function openMembers(chatId: string, entry: Entry, api: AccountClient): RealtimeChannel {
+  const channel = api.channel(`chat-members:${chatId}`, { config: { private: true } });
 
-  bindSignals(channel, (call) => [...entry.listeners].forEach(call)).subscribe();
+  bindSignals(channel, (call) => api === requestClient() && [...entry.listeners].forEach(call)).subscribe();
 
   return channel;
 }
@@ -187,14 +190,14 @@ function bindSignals(
     });
 }
 
-function open(chatId: string): Entry {
+function open(chatId: string, api: AccountClient): Entry {
   // Private channels carry the user's token, which is what the policies on
   // realtime.messages check; without this the subscription is rejected.
-  void supabase.realtime.setAuth();
+  void api.realtime.setAuth().catch(() => undefined);
 
-  const channel = supabase.channel(`chat:${chatId}`, { config: { private: true } });
+  const channel = api.channel(`chat:${chatId}`, { config: { private: true } });
   const entry: Entry = { channel, members: null, listeners: new Set(), closing: null };
-  const each = (call: (listener: ChatTopicListener) => void) => [...entry.listeners].forEach(call);
+  const each = (call: (listener: ChatTopicListener) => void) => api === requestClient() && [...entry.listeners].forEach(call);
   let joinedBefore = false;
 
   bindSignals(channel, each).subscribe((status) => {
@@ -222,11 +225,13 @@ export function acquireChatTopic(
   chatId: string,
   listener: ChatTopicListener,
   asMember = false,
+  api = requestClient(),
 ): ChatTopic {
+  const topics = clientTopics(api);
   let entry = topics.get(chatId);
 
   if (!entry) {
-    entry = open(chatId);
+    entry = open(chatId, api);
     topics.set(chatId, entry);
   }
 
@@ -240,15 +245,15 @@ export function acquireChatTopic(
   const current = entry;
   let released = false;
 
-  if (asMember) current.members ??= openMembers(chatId, current);
+  if (asMember) current.members ??= openMembers(chatId, current, api);
 
   return {
     broadcastTyping: (userId, activity, audience) => {
-      if (audience === 'none') return;
+      if (released || api !== requestClient() || audience === 'none') return;
 
       const target =
         audience === 'members'
-          ? (current.members ??= openMembers(chatId, current))
+          ? (current.members ??= openMembers(chatId, current, api))
           : current.channel;
 
       void target.send({
@@ -272,8 +277,8 @@ export function acquireChatTopic(
 
         if (topics.get(chatId) === current) topics.delete(chatId);
 
-        void supabase.removeChannel(current.channel);
-        if (current.members) void supabase.removeChannel(current.members);
+        void api.removeChannel(current.channel);
+        if (current.members) void api.removeChannel(current.members);
       }, LINGER_MS);
     },
   };

@@ -4,6 +4,7 @@
 // живёт дольше любого экрана, а без сети запрос не встаёт на паузу — срок
 // ответа держит `withDeadline`.
 
+import { requestClient } from '@/api/requestClient';
 import type { QueryClient } from '@tanstack/react-query';
 
 import { copySavedNotes, saveComments, saveMessages, type SaveOptions } from '@/api/saved';
@@ -29,13 +30,14 @@ function refresh(queryClient: QueryClient) {
 export async function saveToSaved(
   queryClient: QueryClient,
   request: SaveRequest,
+  api = requestClient(),
 ): Promise<boolean> {
   const run =
     request.type === 'messages'
-      ? saveMessages(request.sourceChatId, request.messageIds, request.options)
+      ? saveMessages(request.sourceChatId, request.messageIds, request.options, api)
       : request.type === 'notes'
-        ? copySavedNotes(request.savedIds, request.options)
-        : saveComments(request.commentIds, request.options);
+        ? copySavedNotes(request.savedIds, request.options, api)
+        : saveComments(request.commentIds, request.options, api);
   // Срок вышел, а сохранение всё же прошло: «Повторить» тогда сохранил бы
   // вторые копии — он больше ничего не делает, а уведомление говорит правду.
   let lateSaved = false;
@@ -44,17 +46,18 @@ export async function saveToSaved(
     await withDeadline(run, SAVE_DEADLINE_MS, () => {
       lateSaved = true;
       refresh(queryClient);
-      showNotice('Сохранено');
+      if (api === requestClient()) showNotice('Сохранено');
     });
     refresh(queryClient);
     return true;
   } catch (cause) {
+    if (api !== requestClient()) return false;
     if (isNetworkError(cause)) reportRequestFailed();
 
     showNotice('Не удалось сохранить', 'error', {
       label: 'Повторить',
       run: () => {
-        if (!lateSaved) void saveToSaved(queryClient, request);
+        if (!lateSaved && api === requestClient()) void saveToSaved(queryClient, request, api);
       },
     });
     return false;

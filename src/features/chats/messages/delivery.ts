@@ -2,6 +2,9 @@
 // вставка, перенос подтверждённого в историю. Живёт вне компонентов —
 // отправка не должна обрываться, если человек ушёл с экрана чата.
 
+import { clientIdentity, perClient } from '@/api/perClient';
+
+import { requestClient } from '@/api/requestClient';
 import { notifyManager, type QueryClient } from '@tanstack/react-query';
 
 import {
@@ -185,12 +188,13 @@ export function splitIntoAlbums(
  * id идемпотентен: если ответ потерялся, а транзакция прошла, поп ссылается
  * именно на эти файлы — повтор не льёт новые и не удаляет эти.
  */
-const uploadedPops = new Map<string, UploadedMedia>();
+const uploadedPops = perClient(() => new Map<string, UploadedMedia>());
 
 /** Файлы отправки — в Storage, в свой префикс. Ими же пользуются комментарии. */
 export async function uploadOutgoing(
   outgoing: Outgoing,
   currentUserId: string,
+  api = requestClient(),
 ): Promise<UploadedMedia[]> {
   if (
     outgoing.type === 'forward' ||
@@ -203,17 +207,17 @@ export async function uploadOutgoing(
     if (outgoing.pop.type === 'existing') return [];
 
     // Повтор — теми же файлами: поп с этим id мог уже создаться и ссылаться на них.
-    const known = uploadedPops.get(outgoing.pop.popId);
-    const uploaded = known ?? (await uploadPop(newPopMedia(outgoing.pop), currentUserId));
+    const known = uploadedPops(api).get(outgoing.pop.popId);
+    const uploaded = known ?? (await uploadPop(newPopMedia(outgoing.pop), currentUserId, api));
 
-    uploadedPops.set(outgoing.pop.popId, uploaded);
+    uploadedPops(api).set(outgoing.pop.popId, uploaded);
 
     return [uploaded];
   }
-  if (outgoing.type === 'voice') return uploadAllMedia([outgoing.voice], currentUserId);
+  if (outgoing.type === 'voice') return uploadAllMedia([outgoing.voice], currentUserId, api);
   if (outgoing.media.length === 0) return [];
 
-  return uploadAllMedia(await Promise.all(outgoing.media.map(outgoingLocalMedia)), currentUserId);
+  return uploadAllMedia(await Promise.all(outgoing.media.map(outgoingLocalMedia)), currentUserId, api);
 }
 
 /** Новый поп черновика — видео на устройстве, как его знает загрузка. */
@@ -232,12 +236,13 @@ async function insert(
   chatId: string,
   outgoing: Outgoing,
   uploaded: UploadedMedia[],
+  api = requestClient(),
 ): Promise<Message> {
   if (outgoing.type === 'pop_post') {
     const { pop } = outgoing;
 
     if (pop.type === 'existing') {
-      return sendPopPostOnServer(chatId, pop.pop.id, outgoing.text || null, outgoing.replyTo);
+      return sendPopPostOnServer(chatId, pop.pop.id, outgoing.text || null, outgoing.replyTo, api);
     }
 
     // Новый поп публикуется вместе с постом, без подписи: текст — у поста.
@@ -248,27 +253,27 @@ async function insert(
       media: toPopMedia(uploaded[0], newPopMedia(pop)),
       postText: outgoing.text || null,
       replyTo: outgoing.replyTo,
-    });
+    }, api);
   }
 
   if (outgoing.type === 'forward') {
     // Островок ничего не копирует: ссылки на оригиналы, файлы — их.
-    return forwardMessages(chatId, outgoing.sourceChatId, outgoing.messageIds);
+    return forwardMessages(chatId, outgoing.sourceChatId, outgoing.messageIds, api);
   }
 
   if (outgoing.type === 'forward_comment') {
-    const [message] = await forwardComments(chatId, [outgoing.commentId]);
+    const [message] = await forwardComments(chatId, [outgoing.commentId], api);
 
     return message;
   }
 
   if (outgoing.type === 'files') {
     return outgoing.voice
-      ? sendVoiceMessage(chatId, outgoing.voice)
+      ? sendVoiceMessage(chatId, outgoing.voice, undefined, undefined, api)
       : sendMessage(chatId, {
           text: outgoing.text || undefined,
           media: outgoing.media.length > 0 ? outgoing.media : undefined,
-        });
+        }, api);
   }
 
   if (outgoing.type === 'voice') {
@@ -282,8 +287,8 @@ async function insert(
     };
 
     return outgoing.replyVia && Object.keys(outgoing.replyVia).length > 0
-      ? sendVoiceMessage(chatId, voice, outgoing.replyTo, outgoing.replyVia)
-      : sendVoiceMessage(chatId, voice, outgoing.replyTo);
+      ? sendVoiceMessage(chatId, voice, outgoing.replyTo, outgoing.replyVia, api)
+      : sendVoiceMessage(chatId, voice, outgoing.replyTo, undefined, api);
   }
 
   return sendMessage(chatId, {
@@ -292,12 +297,12 @@ async function insert(
     replyTo: outgoing.replyTo.length > 0 ? outgoing.replyTo : undefined,
     replyVia: outgoing.replyVia,
     hidden: outgoing.hidden?.length ? outgoing.hidden : undefined,
-  });
+  }, api);
 }
 
 /** Подтверждённое сервером переезжает из исходящих в историю. */
-function settle(queryClient: QueryClient, chatId: string, localId: string, saved: Message) {
-  const localPreviews = findOutboxMessage(chatId, localId)?.localPreviews;
+function settle(queryClient: QueryClient, chatId: string, localId: string, saved: Message, api = requestClient()) {
+  const localPreviews = findOutboxMessage(chatId, localId, api)?.localPreviews;
   const confirmed: ChatMessage = {
     ...saved, status: 'sent', localPreviews, localId,
     ...(saved.forward ? { renderId: localId } : {}),
@@ -314,11 +319,11 @@ function settle(queryClient: QueryClient, chatId: string, localId: string, saved
     };
   });
 
-  settleIntoChatThreads(queryClient, chatId, saved);
+  settleIntoChatThreads(queryClient, chatId, saved, api);
 
   // Пока история не перерисовалась, в исходящих лежит уже подтверждённая
   // копия под настоящим id: экран склеивает их по id, и сообщение не мигает.
-  useOutbox.setState((state) => {
+  useOutbox.forClient(api).setState((state) => {
     const current = state.byChat[chatId];
 
     if (!current) return state;
@@ -335,7 +340,7 @@ function settle(queryClient: QueryClient, chatId: string, localId: string, saved
 
   // Убрать из исходящих — в том же проходе, в котором подписчики истории
   // узнают о новой строке: один кадр, без дыры между «ушло» и «пришло».
-  notifyManager.schedule(() => removeFromOutbox(chatId, localId));
+  notifyManager.schedule(() => removeFromOutbox(chatId, localId, api));
 }
 
 export function errorCode(cause: unknown): string | null {
@@ -393,11 +398,15 @@ export async function deliver(
   currentUserId: string | null,
   localId: string,
   outgoing: Outgoing,
+  api = requestClient(),
 ): Promise<void> {
+  if (api.retired) return;
+  const draft = findOutboxMessage(chatId, localId, api);
+  if (!draft || draft.deliveryOwner !== clientIdentity(api)) return;
   if (delivering.has(localId)) return;
 
   delivering.add(localId);
-  setOutboxStatus(chatId, localId, 'sending');
+  setOutboxStatus(chatId, localId, 'sending', api);
 
   let uploaded: UploadedMedia[] = [];
   let saved: Message | null = null;
@@ -412,22 +421,22 @@ export async function deliver(
     // явный сбой лучше, чем сообщение, которое молча потеряло вложения.
     if (hasFiles && !currentUserId) throw new Error('Нет активной сессии');
 
-    uploaded = hasFiles ? await uploadOutgoing(outgoing, currentUserId!) : [];
+    uploaded = hasFiles ? await uploadOutgoing(outgoing, currentUserId!, api) : [];
 
     if (discarded.has(localId)) throw new Error('Отправка отменена');
 
-    saved = await insert(chatId, outgoing, uploaded);
+    saved = await insert(chatId, outgoing, uploaded, api);
 
     // Уже в базе, но человек его удалил — удаляем и там. Удаление мягкое и
     // разослано всем, так что у собеседника оно тоже исчезнет.
     if (discarded.has(localId)) {
-      void deleteMessages([saved.id]).catch(() => undefined);
-    } else {
-      settle(queryClient, chatId, localId, saved);
+      void deleteMessages([saved.id], api).catch(() => undefined);
+    } else if (!api.retired) {
+      settle(queryClient, chatId, localId, saved, api);
     }
 
     if (outgoing.type === 'pop_post' && outgoing.pop.type === 'new') {
-      uploadedPops.delete(outgoing.pop.popId);
+      uploadedPops(api).delete(outgoing.pop.popId);
     }
 
     // Список чатов держит последнее сообщение и порядок — после отправки он
@@ -448,28 +457,30 @@ export async function deliver(
 
     if (!saved && uploaded.length > 0 && !unanswered) {
       // Видео нового попа — в публичном `media`, медиа сообщения — в `chat-media`.
-      const remove = outgoing.type === 'pop_post' ? removePublicMedia : removeUploadedMedia;
-
-      void Promise.all(uploaded.map((item) => remove(storedPaths(item))));
+      const paths = uploaded.flatMap(storedPaths);
+      if (outgoing.type === 'pop_post') void removePublicMedia(paths, api);
+      else void removeUploadedMedia(paths, undefined, api);
 
       if (outgoing.type === 'pop_post' && outgoing.pop.type === 'new') {
-        uploadedPops.delete(outgoing.pop.popId);
+        uploadedPops(api).delete(outgoing.pop.popId);
       }
     }
 
-    if (discarded.has(localId)) return;
+    if (api.retired || discarded.has(localId)) return;
 
     // Не дошло до сервера — это факт о связи, а не только об этом сообщении:
     // с него и начинается ожидание сети.
-    if (isNetworkError(cause)) reportRequestFailed();
-    else explainRejection(outgoing, cause);
+    if (api === requestClient()) {
+      if (isNetworkError(cause)) reportRequestFailed();
+      else explainRejection(outgoing, cause);
+    }
 
     // The insert policy on `messages` is what decides whether this user may
     // write here; a rejection lands the message in "failed", it is never
     // dropped silently.
-    setOutboxStatus(chatId, localId, 'failed');
+    setOutboxStatus(chatId, localId, 'failed', api);
   } finally {
-    if (!saved) refreshSettledChatThreadSummaries(queryClient, chatId);
+    if (!saved && api === requestClient()) refreshSettledChatThreadSummaries(queryClient, chatId, api);
     delivering.delete(localId);
     discarded.delete(localId);
   }
@@ -479,10 +490,10 @@ export async function deliver(
  * Своё неотправленное — убрать. На сервер ничего не уходит; если сообщение
  * как раз едет туда, оно будет удалено сразу по прибытии.
  */
-export function discardLocal(chatId: string, localId: string) {
+export function discardLocal(chatId: string, localId: string, api = requestClient()) {
   if (delivering.has(localId)) discarded.add(localId);
 
-  removeFromOutbox(chatId, localId);
+  removeFromOutbox(chatId, localId, api);
 }
 
 type SendContext = { queryClient: QueryClient; chatId: string; currentUserId: string | null };
@@ -526,6 +537,7 @@ export function sendPost(
   media: OutgoingMedia[] = [],
   replies: LiveQuote[] = [],
   hidden: HiddenRange[] = [],
+  api = requestClient(),
 ) {
   const { queryClient, chatId, currentUserId } = context;
   // Скрытое — в смещениях обрезанного текста: так его сохранит база.
@@ -579,7 +591,7 @@ export function sendPost(
   // Shown before the server answers — this is a messenger, waiting for the
   // round trip before drawing the bubble is not an option. Все части
   // появляются сразу; список новыми вперёд, поэтому последняя часть сверху.
-  addToOutbox(chatId, [...drafts].reverse());
+  addToOutbox(chatId, [...drafts].reverse(), api);
 
   // Части уходят по очереди: параллельная вставка перемешала бы их время на
   // сервере. Каждая при этом падает и повторяется сама по себе.
@@ -587,7 +599,7 @@ export function sendPost(
     for (const draft of drafts) {
       const outgoing = outgoingOf(draft);
 
-      if (outgoing) await deliver(queryClient, chatId, currentUserId, draft.localId!, outgoing);
+      if (outgoing) await deliver(queryClient, chatId, currentUserId, draft.localId!, outgoing, api);
     }
   })();
 
@@ -598,6 +610,7 @@ export function sendVoice(
   { queryClient, chatId, currentUserId }: SendContext,
   voice: LocalMedia,
   replies: LiveQuote[] = [],
+  api = requestClient(),
 ) {
   const localId = nextLocalId();
   const draft: ChatMessage = {
@@ -627,13 +640,13 @@ export function sendVoice(
   };
 
   // Облачко с плеером — сразу, до загрузки: это мессенджер.
-  addToOutbox(chatId, [draft]);
+  addToOutbox(chatId, [draft], api);
   void deliver(queryClient, chatId, currentUserId, localId, {
     type: 'voice',
     voice,
     replyTo: replies.map((quote) => quote.messageId),
     replyVia: quoteIslandPaths(replies),
-  });
+  }, api);
 
   return localId;
 }
@@ -654,6 +667,7 @@ export function sendForward(
   items: ForwardItem[],
   /** Уходит на сервер только после этого: пачки пересылки — по порядку. */
   after: Promise<void> = Promise.resolve(),
+  api = requestClient(),
 ): Delivery {
   const { queryClient, chatId, currentUserId } = context;
 
@@ -695,7 +709,7 @@ export function sendForward(
     status: 'sending',
   };
 
-  addToOutbox(chatId, lead ? [island, lead] : [island]);
+  addToOutbox(chatId, lead ? [island, lead] : [island], api);
 
   const delivered = (async () => {
     await after;
@@ -706,14 +720,14 @@ export function sendForward(
         text: trimmed,
         media: [],
         replyTo: [],
-      });
+      }, api);
     }
 
     await deliver(queryClient, chatId, currentUserId, localId, {
       type: 'forward',
       sourceChatId: sourceChat.id,
       messageIds,
-    });
+    }, api);
   })();
 
   return { delivered };
@@ -731,6 +745,7 @@ export function sendCommentForward(
   comments: ForwardedComment[],
   /** Уходит на сервер только после этого: пачки пересылки — по порядку. */
   after: Promise<void> = Promise.resolve(),
+  api = requestClient(),
 ): Delivery {
   const { queryClient, chatId, currentUserId } = context;
 
@@ -767,7 +782,7 @@ export function sendCommentForward(
   });
 
   // Список новыми вперёд: последний пересланный — сверху.
-  addToOutbox(chatId, [...drafts].reverse().concat(lead ? [lead] : []));
+  addToOutbox(chatId, [...drafts].reverse().concat(lead ? [lead] : []), api);
 
   const delivered = (async () => {
     await after;
@@ -778,14 +793,14 @@ export function sendCommentForward(
         text: trimmed,
         media: [],
         replyTo: [],
-      });
+      }, api);
     }
 
     for (const draft of drafts) {
       await deliver(queryClient, chatId, currentUserId, draft.localId!, {
         type: 'forward_comment',
         commentId: draft.commentForward!.commentId!,
-      });
+      }, api);
     }
   })();
 
@@ -836,6 +851,7 @@ export function sendNoteForward(
   notes: NoteForward[],
   /** Уходит на сервер только после этого: пачки пересылки — по порядку. */
   after: Promise<void> = Promise.resolve(),
+  api = requestClient(),
 ): Delivery {
   const { queryClient, chatId, currentUserId } = context;
 
@@ -856,7 +872,7 @@ export function sendNoteForward(
     };
   });
 
-  addToOutbox(chatId, [...drafts].reverse().concat(lead ? [lead] : []));
+  addToOutbox(chatId, [...drafts].reverse().concat(lead ? [lead] : []), api);
 
   const delivered = (async () => {
     await after;
@@ -867,11 +883,11 @@ export function sendNoteForward(
         text: trimmed,
         media: [],
         replyTo: [],
-      });
+      }, api);
     }
 
     for (const draft of drafts) {
-      await deliver(queryClient, chatId, currentUserId, draft.localId!, draft.pendingFiles!);
+      await deliver(queryClient, chatId, currentUserId, draft.localId!, draft.pendingFiles!, api);
     }
   })();
 
@@ -888,6 +904,7 @@ export function sendPopPost(
   text: string,
   pop: DraftPop,
   replies: LiveQuote[] = [],
+  api = requestClient(),
 ) {
   const { queryClient, chatId, currentUserId } = context;
   const localId = nextLocalId();
@@ -941,13 +958,13 @@ export function sendPopPost(
     status: 'sending',
   };
 
-  addToOutbox(chatId, [draft]);
+  addToOutbox(chatId, [draft], api);
   void deliver(queryClient, chatId, currentUserId, localId, {
     type: 'pop_post',
     text: trimmed,
     replyTo: replies.map((quote) => quote.messageId),
     channelId,
     pop,
-  });
+  }, api);
   return localId;
 }

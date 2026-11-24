@@ -6,6 +6,8 @@
 // отдаёт лишь «ещё не принял» (`ChatSummary.waiting`), так что отказ не
 // утекает создателю даже прямым запросом.
 
+import type { AccountClient } from '@/api/accountClient';
+import { requestClient } from '@/api/requestClient';
 import {
   chatsSelect,
   fetchChatPeople,
@@ -18,7 +20,6 @@ import {
   type Person,
 } from '@/api/chats';
 import { toContactError } from '@/api/contactErrors';
-import { supabase } from '@/api/supabase';
 
 /** Сколько последних сообщений показывает карточка заявки. */
 export const INVITE_PREVIEW_MESSAGES = 3;
@@ -123,8 +124,8 @@ export async function createChat({
   title,
   avatarUrl,
   requestText,
-}: CreateChatInput): Promise<CreateChatResult> {
-  const { data, error } = await supabase.rpc('create_chat', {
+}: CreateChatInput, api = requestClient()): Promise<CreateChatResult> {
+  const { data, error } = await api.rpc('create_chat', {
     invitee_ids: inviteeIds,
     // Функция принимает NULL, но генератор типов не размечает скалярные
     // аргументы rpc как nullable — отсюда приведение.
@@ -144,13 +145,13 @@ export async function createChat({
   return toResult(data);
 }
 
-async function fetchRecentMessages(chatIds: string[]): Promise<Map<string, Message[]>> {
+async function fetchRecentMessages(chatIds: string[], api: AccountClient): Promise<Map<string, Message[]>> {
   const byChat = new Map<string, Message[]>();
 
   if (chatIds.length === 0) return byChat;
 
   // Одна функция на все карточки сразу, а не запрос на каждую заявку.
-  const { data, error } = await supabase
+  const { data, error } = await api
     .rpc('latest_chat_messages', { chat_ids: chatIds, per_chat: INVITE_PREVIEW_MESSAGES })
     .select(MESSAGE_COLUMNS)
     .order('created_at', { ascending: false })
@@ -171,10 +172,10 @@ async function fetchRecentMessages(chatIds: string[]): Promise<Map<string, Messa
  * чатом, его составом и последними сообщениями, чтобы решить, не открывая
  * переписку.
  */
-export async function listInvites(): Promise<ChatInvite[]> {
-  const userId = await getCurrentUserId();
+export async function listInvites(api = requestClient()): Promise<ChatInvite[]> {
+  const userId = await getCurrentUserId(api);
 
-  const { data: inviteData, error: inviteError } = await supabase
+  const { data: inviteData, error: inviteError } = await api
     .from('chat_invites')
     .select(INVITE_COLUMNS)
     .eq('invitee_id', userId)
@@ -189,9 +190,9 @@ export async function listInvites(): Promise<ChatInvite[]> {
   if (chatIds.length === 0) return [];
 
   const [chatResult, peopleByChat, messagesByChat] = await Promise.all([
-    chatsSelect().in('id', chatIds).is('deleted_at', null),
-    fetchChatPeople(chatIds),
-    fetchRecentMessages(chatIds),
+    chatsSelect(api).in('id', chatIds).is('deleted_at', null),
+    fetchChatPeople(chatIds, api),
+    fetchRecentMessages(chatIds, api),
   ]);
 
   if (chatResult.error) throw chatResult.error;
@@ -218,10 +219,10 @@ export async function listInvites(): Promise<ChatInvite[]> {
 }
 
 /** Моя заявка в этот чат или `null`, если меня туда не звали. */
-export async function getMyInvite(chatId: string): Promise<MyInvite | null> {
-  const userId = await getCurrentUserId();
+export async function getMyInvite(chatId: string, api = requestClient()): Promise<MyInvite | null> {
+  const userId = await getCurrentUserId(api);
 
-  const { data, error } = await supabase
+  const { data, error } = await api
     .from('chat_invites')
     .select(INVITE_COLUMNS)
     .eq('chat_id', chatId)
@@ -238,15 +239,15 @@ export async function getMyInvite(chatId: string): Promise<MyInvite | null> {
 }
 
 /** Принять можно и входящую, и отклонённую заявку. */
-export async function acceptInvite(chatId: string): Promise<void> {
-  const { error } = await supabase.rpc('accept_chat_invite', { target_chat: chatId });
+export async function acceptInvite(chatId: string, api = requestClient()): Promise<void> {
+  const { error } = await api.rpc('accept_chat_invite', { target_chat: chatId });
 
   if (error) throw toContactError(error);
 }
 
 /** Отклонить можно только входящую: принятая — это уже участие в чате. */
-export async function declineInvite(chatId: string): Promise<void> {
-  const { error } = await supabase.rpc('decline_chat_invite', { target_chat: chatId });
+export async function declineInvite(chatId: string, api = requestClient()): Promise<void> {
+  const { error } = await api.rpc('decline_chat_invite', { target_chat: chatId });
 
   if (error) throw error;
 }

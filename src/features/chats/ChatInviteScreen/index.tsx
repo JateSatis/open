@@ -1,3 +1,4 @@
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouteParams, useRouter } from '@/navigation';
 import { useCallback, useMemo, useRef, useState } from 'react';
@@ -36,6 +37,7 @@ const INVITE_DEADLINE_MS = 20_000;
  * приняв её. Кто уже в группе или позван — помечен и не выбирается.
  */
 export function ChatInviteScreen() {
+  const api = useRequestClient();
   const { chatId } = useRouteParams<'ChatInvite'>();
   const router = useRouter();
   const theme = useTheme();
@@ -73,7 +75,7 @@ export function ChatInviteScreen() {
     setSending(true);
 
     try {
-      await withDeadline(inviteToChat(chatId, selected), INVITE_DEADLINE_MS);
+      await withDeadline(inviteToChat(chatId, selected, api), INVITE_DEADLINE_MS);
       void queryClient.invalidateQueries({ queryKey: chatQueryKey(chatId) });
       router.back();
     } catch (failure) {
@@ -85,7 +87,7 @@ export function ChatInviteScreen() {
     } finally {
       setSending(false);
     }
-  }, [chatId, queryClient, router, selected]);
+  }, [api, chatId, queryClient, router, selected]);
 
   // Клавиатура перекрывает то, что под экраном: низ поднимается на её высоту
   // без него (тот же приём, что в «Новом чате»).

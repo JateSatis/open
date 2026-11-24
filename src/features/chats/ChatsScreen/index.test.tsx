@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 import type { Session as SupabaseSession } from '@supabase/supabase-js';
 import { fireEvent, screen, userEvent, waitFor } from '@testing-library/react-native';
 import { View } from 'react-native';
@@ -73,6 +74,7 @@ const mockedSession = useSession as jest.MockedFunction<typeof useSession>;
 const mockedSummary = getSavedSummary as jest.MockedFunction<typeof getSavedSummary>;
 
 function signedInAs(userId: string) {
+  requestClient().sessionOwner = () => ({ userId, sessionId: userId + "-session" });
   mockedSession.mockReturnValue({
     session: { user: { id: userId } } as unknown as SupabaseSession,
     isAuthenticated: true,
@@ -277,17 +279,17 @@ describe('ChatsScreen', () => {
       [
         'Прочитать все',
         () =>
-          expect(markChannelRead).toHaveBeenCalledWith('channel-1', { posts: true, pops: true }),
+          expect(markChannelRead).toHaveBeenCalledWith('channel-1', { posts: true, pops: true }, requestClient()),
       ],
       [
         'Выключить уведомления',
-        () => expect(setChannelNotifications).toHaveBeenCalledWith('channel-1', false),
+        () => expect(setChannelNotifications).toHaveBeenCalledWith('channel-1', false, requestClient()),
       ],
       [
         'Не отображать в чатах',
-        () => expect(setChannelInChats).toHaveBeenCalledWith('channel-1', false),
+        () => expect(setChannelInChats).toHaveBeenCalledWith('channel-1', false, requestClient()),
       ],
-      ['Отписаться', () => expect(unsubscribeFromChannel).toHaveBeenCalledWith('channel-1')],
+      ['Отписаться', () => expect(unsubscribeFromChannel).toHaveBeenCalledWith('channel-1', requestClient())],
     ])('«%s» goes to the database', async (label, check) => {
       mockedListChats.mockResolvedValue([readChannel]);
       const user = userEvent.setup();
@@ -390,12 +392,12 @@ describe('ChatsScreen', () => {
     });
 
     it.each([
-      ['Прочитать все', () => expect(markChatSubscriptionRead).toHaveBeenCalledWith('their-1')],
+      ['Прочитать все', () => expect(markChatSubscriptionRead).toHaveBeenCalledWith('their-1', requestClient())],
       [
         'Выключить уведомления',
-        () => expect(setChatNotifications).toHaveBeenCalledWith('their-1', false),
+        () => expect(setChatNotifications).toHaveBeenCalledWith('their-1', false, requestClient()),
       ],
-      ['Отписаться', () => expect(unsubscribeFromChat).toHaveBeenCalledWith('their-1')],
+      ['Отписаться', () => expect(unsubscribeFromChat).toHaveBeenCalledWith('their-1', requestClient())],
     ])('«%s» goes to the database for the chat', async (label, check) => {
       mockedListChats.mockResolvedValue([theirs]);
       const user = userEvent.setup();
@@ -545,7 +547,7 @@ describe('ChatsScreen', () => {
     expect(await screen.findByText('в сети')).toBeTruthy();
     // Статус спрашивается у сервера только для собеседника: настройку
     // «Кто видит, что я в сети» проверяет база.
-    expect(mockedStatuses).toHaveBeenCalledWith(['user-2']);
+    expect(mockedStatuses).toHaveBeenCalledWith(['user-2'], requestClient());
   });
 
   it('shows no online mark when the server hides the partner status', async () => {

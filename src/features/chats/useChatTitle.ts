@@ -1,3 +1,4 @@
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useQuery } from '@tanstack/react-query';
 
 import { getChat } from '@/api/chats';
@@ -11,10 +12,11 @@ import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
  * известно — пустая строка.
  */
 export function useChatTitle(chatId: string | undefined): string {
+  const api = useRequestClient();
   const currentUserId = useCurrentUserId();
   const { data } = useQuery({
     queryKey: chatQueryKey(chatId ?? ''),
-    queryFn: () => getChat(chatId!),
+    queryFn: () => getChat(chatId!, api),
     enabled: chatId !== undefined,
     staleTime: Infinity,
   });

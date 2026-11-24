@@ -1,3 +1,4 @@
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 
@@ -17,6 +18,7 @@ const RECHECK_STALE_MS = 60_000;
  * проверяет экран, который откроется.
  */
 export function useCheckedRecents(recent: RecentSearch[]): RecentSearch[] {
+  const api = useRequestClient();
   const personIds = useMemo(
     () =>
       recent.flatMap((item) =>
@@ -48,7 +50,7 @@ export function useCheckedRecents(recent: RecentSearch[]): RecentSearch[] {
       messageIds.join(','),
       chatIds.join(','),
     ],
-    queryFn: () => recheckRecentSearches(personIds, messageIds, chatIds),
+    queryFn: () => recheckRecentSearches(personIds, messageIds, chatIds, api),
     enabled: personIds.length > 0 || messageIds.length > 0 || chatIds.length > 0,
     // Новое в «Недавних» не прячет уже проверенное, пока идёт перепроверка.
     placeholderData: (previous) => previous,

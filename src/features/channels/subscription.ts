@@ -1,3 +1,5 @@
+import { requestClient } from '@/api/requestClient';
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useCallback } from 'react';
 
@@ -134,6 +136,7 @@ export type SubscriptionActions = {
  * возврате сети, когда о нём уже забыли.
  */
 export function useSubscriptionActions(channelId: string): SubscriptionActions {
+  const api = useRequestClient();
   const queryClient = useQueryClient();
 
   const owner = useHistoryReader();
@@ -155,12 +158,12 @@ export function useSubscriptionActions(channelId: string): SubscriptionActions {
       applySubscription(queryClient, channelId, current, next(current));
 
       try {
-        requireAccountSession(owner);
+        requireAccountSession(owner, api);
         await withDeadline(request(), ACTION_DEADLINE_MS);
         return true;
       } catch {
         restore(queryClient, channelId, snapshot);
-        showNotice(failure, 'error');
+        if (api === requestClient()) showNotice(failure, 'error');
         return false;
       } finally {
         void queryClient.invalidateQueries({ queryKey: channelSubscriptionQueryKey(channelId) });
@@ -168,7 +171,7 @@ export function useSubscriptionActions(channelId: string): SubscriptionActions {
         void queryClient.invalidateQueries({ queryKey: chatsQueryKey });
       }
     },
-    [channelId, owner, queryClient],
+    [api, channelId, owner, queryClient],
   );
 
   const subscribe = useCallback(
@@ -187,50 +190,50 @@ export function useSubscriptionActions(channelId: string): SubscriptionActions {
             },
             (current?.inChats ?? false) || addToChats,
           ),
-        () => subscribeToChannel(channelId, addToChats),
+        () => subscribeToChannel(channelId, addToChats, api),
         'Не удалось подписаться',
       ),
-    [channelId, queryClient, run],
+    [api, channelId, queryClient, run],
   );
 
   const setInChats = useCallback(
     (inChats: boolean) =>
       run(
         (current) => (current ? withInChats(current, inChats) : current),
-        () => setChannelInChats(channelId, inChats),
+        () => setChannelInChats(channelId, inChats, api),
         inChats ? 'Не удалось добавить в чаты' : 'Не удалось убрать из чатов',
       ),
-    [channelId, run],
+    [api, channelId, run],
   );
 
   const setNotify = useCallback(
     (enabled: boolean) =>
       run(
         (current) => (current ? { ...current, notify: enabled } : current),
-        () => setChannelNotifications(channelId, enabled),
+        () => setChannelNotifications(channelId, enabled, api),
         'Не удалось изменить уведомления',
       ),
-    [channelId, run],
+    [api, channelId, run],
   );
 
   const unsubscribe = useCallback(
     () =>
       run(
         () => null,
-        () => unsubscribeFromChannel(channelId),
+        () => unsubscribeFromChannel(channelId, api),
         'Не удалось отписаться',
       ),
-    [channelId, run],
+    [api, channelId, run],
   );
 
   const readAll = useCallback(
     () =>
       run(
         (current) => (current ? { ...current, unreadPosts: 0, unreadPops: 0 } : current),
-        () => markChannelRead(channelId, { posts: true, pops: true }),
+        () => markChannelRead(channelId, { posts: true, pops: true }, api),
         'Не удалось отметить прочитанным',
       ),
-    [channelId, run],
+    [api, channelId, run],
   );
 
   return { subscribe, setInChats, setNotify, unsubscribe, readAll };

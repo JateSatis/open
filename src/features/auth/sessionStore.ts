@@ -1,5 +1,6 @@
 import type { Session } from '@supabase/supabase-js';
 
+import { resetRecentSearches } from '@/features/search/recentSearches';
 import { selectApiClient } from '@/api/supabase';
 import { AccountSession } from './accountSession';
 import {
@@ -30,6 +31,7 @@ function publish() {
   const status = selected?.status ?? 'signedOut';
   selectApiClient(selected && status !== 'signedOut' ? selected.client : null);
   useSessionStore.setState({
+    localSessionId: ownerOf(selected?.session ?? null)?.sessionId ?? selected?.slot.sessionId ?? null,
     localAccountId: status === 'signedOut' ? null : index.selected,
     sdkStatus: status,
     isLoading: status === 'pending',
@@ -53,6 +55,7 @@ async function remove(runtime: AccountSession) {
   await writeAccounts(next);
   index = next;
   dispose(runtime);
+  resetRecentSearches(userId);
   publish();
   await cleanAccountStorage(next).catch(reportStorageError);
 }
@@ -60,7 +63,20 @@ async function remove(runtime: AccountSession) {
 function observe(slot: AccountSlot, initial: Session | null = null): AccountSession {
   const existing = clients.get(slot.userId);
   if (existing) return existing;
+  let owner = ownerOf(initial) ?? (slot.sessionId ? { userId: slot.userId, sessionId: slot.sessionId } : null);
   const runtime = new AccountSession(slot, initial, account => {
+    const incoming = ownerOf(account.session);
+    if (owner && incoming && !sameSession(owner, incoming)) {
+      // Auth может выдать другой session_id в том же слоте (привязка провайдера).
+      // Старые замыкания сохраняют остановленный клиент даже при том же user.id.
+      dispose(account);
+      resetRecentSearches(slot.userId);
+      slot.sessionId = incoming.sessionId;
+      observe(slot, account.session);
+      if (index.selected === slot.userId) publish();
+      return;
+    }
+    owner ??= incoming;
     if (account.status === 'signedOut') {
       void withSessionChange(() => remove(account)).catch(reportStorageError);
     }
@@ -74,6 +90,14 @@ function reportStorageError() {
   if (__DEV__) console.warn('Не удалось прочитать или сохранить аккаунты устройства');
 }
 
+// В том числе для слотов этапа 14. Источник session_id — сохранённая SDK-сессия:
+// процесс мог остановиться между её заменой и записью индекса аккаунтов.
+async function readSlotOwner(slot: AccountSlot) {
+  if (clients.has(slot.userId)) return;
+  const owner = ownerOf(await readAccountSession(slot.key));
+  slot.sessionId = owner?.userId === slot.userId ? owner.sessionId : undefined;
+}
+
 export function restoreAccounts(): Promise<void> {
   const current = generation;
   restoring ??= withSessionChange(async () => {
@@ -81,7 +105,11 @@ export function restoreAccounts(): Promise<void> {
     if (generation !== current) return;
     index = stored;
     const selected = index.accounts.find(slot => slot.userId === index.selected);
-    if (selected) observe(selected);
+    if (selected) {
+      await readSlotOwner(selected);
+      if (generation !== current) return;
+      observe(selected);
+    }
     publish();
     await cleanAccountStorage(stored).catch(reportStorageError);
   }).catch((error: unknown) => {
@@ -96,6 +124,7 @@ export async function selectAccount(userId: string) {
   await withSessionChange(async () => {
     const slot = index.accounts.find(account => account.userId === userId);
     if (!slot) throw new Error('Аккаунт отсутствует на устройстве');
+    await readSlotOwner(slot);
     const next = { ...index, selected: userId };
     await writeAccounts(next);
     index = next;
@@ -115,6 +144,7 @@ export async function addSession(session: Session) {
     await writeAccounts(next);
     const previous = clients.get(slot.userId);
     if (previous) dispose(previous);
+    if (index.accounts.some(account => account.userId === slot.userId)) resetRecentSearches(slot.userId);
     index = next;
     observe(slot, session);
     publish();

@@ -2,7 +2,7 @@
 // же имя может быть у всех троих сразу, сравнения между видами нет. Суффикс
 // вида (`.ch`, `.di`) в базе не хранится — это только отображение.
 
-import { supabase } from '@/api/supabase';
+import { requestClient } from '@/api/requestClient';
 
 export type UsernameKind = 'profile' | 'channel' | 'group';
 
@@ -15,8 +15,9 @@ export async function isUsernameAvailable(
   kind: UsernameKind,
   username: string,
   ownId?: string,
+  api = requestClient(),
 ): Promise<boolean> {
-  const { data, error } = await supabase.rpc('is_username_available', {
+  const { data, error } = await api.rpc('is_username_available', {
     target_kind: kind,
     candidate: username,
     own_id: ownId,

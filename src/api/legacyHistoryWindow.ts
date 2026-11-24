@@ -1,6 +1,6 @@
+import { requestClient } from '@/api/requestClient';
 import { MESSAGE_PAGE_SIZE } from '@/api/messagePage';
 import { MESSAGE_COLUMNS, toMessage, type Message } from '@/api/messageRows';
-import { supabase } from '@/api/supabase';
 
 export type HistoryCursor<D extends 'before' | 'after' = 'before' | 'after'> = {
   chatId: string;
@@ -47,6 +47,7 @@ export const HISTORY_WINDOW_MAX_SIZE = 100;
 export async function getHistoryWindow(
   chatId: string,
   request: HistoryWindowRequest = { mode: 'latest' },
+  api = requestClient(),
 ): Promise<HistoryWindow> {
   const limit = request.limit ?? MESSAGE_PAGE_SIZE;
   if (!Number.isInteger(limit) || limit < 1 || limit > HISTORY_WINDOW_MAX_SIZE) {
@@ -67,7 +68,7 @@ export async function getHistoryWindow(
   )
     throw new Error('Invalid saved history position');
 
-  const { data, error } = await supabase
+  const { data, error } = await api
     .rpc('get_history_window', {
       p_chat: chatId,
       p_mode: request.mode,

@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 import { getHistoryRange, getHistoryWindow, type HistoryWindowRequest } from '@/api/historyWindow';
 import { mergeMessages, type ChatHistory } from '../historyCache';
 import { localHistory } from './database';
@@ -28,11 +29,11 @@ export function projection(scope: Scope, pieces: StoredPiece[]): ChatHistory | u
   );
 }
 
-export async function loadPage(scope: Scope, request: HistoryWindowRequest, active: () => boolean) {
+export async function loadPage(scope: Scope, request: HistoryWindowRequest, active: () => boolean, api = requestClient()) {
   const db = localHistory();
   const epoch = db.epoch(scope);
   const expected = db.entries(scope);
-  const page = await getHistoryWindow(scope.chat, request);
+  const page = await getHistoryWindow(scope.chat, request, api);
   if (active() && epoch === db.epoch(scope) && page.coverage && page.syncCursor) {
     const replacements: Piece[] = [
       { items: page.items, coverage: page.coverage, syncCursor: page.syncCursor },
@@ -41,7 +42,7 @@ export async function loadPage(scope: Scope, request: HistoryWindowRequest, acti
       for (const remainder of uncovered(old.coverage, page.coverage)) {
         let next: typeof page.coverage | null = remainder;
         while (next && active() && epoch === db.epoch(scope)) {
-          const part = await getHistoryRange(scope.chat, next);
+          const part = await getHistoryRange(scope.chat, next, undefined, api);
           replacements.push(part);
           next = part.remaining;
         }
@@ -56,10 +57,11 @@ export async function refreshLocal(
   scope: Scope,
   place: ReadingPlace | null,
   active: () => boolean,
+  api = requestClient(),
 ) {
   const db = localHistory();
   const pieces = db.read(scope, place);
-  if (!pieces.length) await loadPage(scope, { mode: 'latest', limit: 20 }, active);
+  if (!pieces.length) await loadPage(scope, { mode: 'latest', limit: 20 }, active, api);
   else {
     // Check the anchor first; keep the number of simultaneous PostgREST requests bounded.
     const anchor = place && pieces.find((piece) => contains(piece.coverage, place));
@@ -67,7 +69,7 @@ export async function refreshLocal(
     let failure: unknown;
     for (let i = 0; i < queue.length && active(); i += 3) {
       const results = await Promise.allSettled(
-        queue.slice(i, i + 3).map((piece) => reconcile(db, scope, piece, active)),
+        queue.slice(i, i + 3).map((piece) => reconcile(db, scope, piece, active, api)),
       );
       for (const result of results) if (result.status === 'rejected') failure = result.reason;
     }
@@ -88,6 +90,7 @@ export async function refreshLocal(
           limit: 20,
         },
         active,
+        api,
       );
     }
   }

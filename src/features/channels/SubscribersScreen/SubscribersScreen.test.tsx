@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 import { screen, userEvent } from '@testing-library/react-native';
 
 import { SubscribersScreen } from '.';
@@ -40,7 +41,7 @@ describe('SubscribersScreen', () => {
     expect(await screen.findByText('Человек a')).toBeTruthy();
     expect(screen.getByText('Человек b')).toBeTruthy();
     expect(screen.getAllByText('в чатах')).toHaveLength(1);
-    expect(listChannelSubscribers).toHaveBeenCalledWith('channel-1', null);
+    expect(listChannelSubscribers).toHaveBeenCalledWith('channel-1', null, undefined, requestClient());
   });
 
   it('opens the profile on a tap', async () => {
@@ -64,7 +65,7 @@ describe('SubscribersScreen', () => {
     expect(await screen.findByText('Человек a')).toBeTruthy();
     expect(screen.getByText('Человек b')).toBeTruthy();
     expect(screen.queryByText('в чатах')).toBeNull();
-    expect(listChatSubscribers).toHaveBeenCalledWith('chat-1', null);
+    expect(listChatSubscribers).toHaveBeenCalledWith('chat-1', null, requestClient());
     expect(listChannelSubscribers).not.toHaveBeenCalled();
   });
 

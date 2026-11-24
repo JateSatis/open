@@ -1,3 +1,4 @@
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { ChatUsernameTakenError, setChatUsername, type ChatSummary } from '@/api/chats';
@@ -20,6 +21,7 @@ export function describeSetChatUsernameError(error: unknown): string {
 
 /** Задать, сменить или убрать (`null`) `@имя` группы. */
 export function useSetChatUsername(chatId: string) {
+  const api = useRequestClient();
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -27,7 +29,7 @@ export function useSetChatUsername(chatId: string) {
     // бы молча. Сохранение пробуется сразу и честно падает по сроку.
     networkMode: 'always',
     mutationFn: (username: string | null) =>
-      withDeadline(setChatUsername(chatId, username), SAVE_DEADLINE_MS),
+      withDeadline(setChatUsername(chatId, username, api), SAVE_DEADLINE_MS),
     onSuccess: (_result, username) => {
       queryClient.setQueryData<ChatSummary>(chatQueryKey(chatId), (chat) =>
         chat ? { ...chat, username } : chat,

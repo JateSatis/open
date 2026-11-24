@@ -1,3 +1,4 @@
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouteParams, useRouter } from '@/navigation';
 import { SymbolView } from 'expo-symbols';
@@ -37,6 +38,7 @@ import { Sizes } from '@/theme';
  * Позже здесь будет редактор видео как в TikTok.
  */
 export function PopEditor() {
+  const api = useRequestClient();
   const { channelId, from: source } = useRouteParams<'PopEditor'>();
   const from = source === 'posts' ? 'posts' : 'pops';
   const router = useRouter();
@@ -79,7 +81,7 @@ export function PopEditor() {
       title: name,
       caption: caption.trim() || null,
       alsoPost,
-    });
+    }, api);
     router.back();
   };
 
@@ -100,7 +102,7 @@ export function PopEditor() {
       width: picked.media.width,
       height: picked.media.height,
       durationMs: picked.media.durationMs,
-    });
+    }, api);
     router.back();
   };
 

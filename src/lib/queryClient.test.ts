@@ -2,8 +2,7 @@ import { ChatGoneError } from '@/api/chatGone';
 import { ProfileUnavailableError } from '@/api/profileErrors';
 import { reportRequestFailed, reportRequestSucceeded } from '@/features/connection/connectionStore';
 import { createAppQueryClient } from './queryClient';
-import { emptyState, useSessionStore } from '@/features/auth/sessionState';
-import type { Session } from '@supabase/supabase-js';
+import { createAccountClient } from '@/api/supabase';
 
 jest.mock('@/features/connection/connectionStore', () => ({
   reportRequestFailed: jest.fn(),
@@ -30,25 +29,24 @@ it('изолирует кеш каждого клиента', () => {
 });
 
 it('мутация локального клиента требует подтверждения его владельца даже с networkMode always', async () => {
-  const scoped = createAppQueryClient('reader');
+  const api = createAccountClient();
+  let confirmed: string | null = null;
+  api.sessionOwner = () => confirmed ? { userId: confirmed, sessionId: 'session' } : null;
+  const scoped = createAppQueryClient('reader', api);
   const mutationFn = jest.fn().mockResolvedValue('ok');
   const execute = () => scoped.getMutationCache().build(scoped, {
     mutationFn, networkMode: 'always', gcTime: Infinity,
   }).execute(undefined);
   try {
-    useSessionStore.setState({ ...emptyState, localAccountId: 'reader' });
     await expect(execute()).rejects.toThrow('активная сессия');
-    const confirm = (id: string) => useSessionStore.setState({
-      localAccountId: id, session: { user: { id } } as Session, sdkStatus: 'session',
-    });
-    confirm('other');
+    confirmed = 'other';
     await expect(execute()).rejects.toThrow('активная сессия');
     expect(mutationFn).not.toHaveBeenCalled();
-    confirm('reader');
+    confirmed = 'reader';
     await expect(execute()).resolves.toBe('ok');
   } finally {
     scoped.clear();
-    useSessionStore.setState(emptyState);
+    await api.auth.dispose();
   }
 });
 

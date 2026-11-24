@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 import { fireEvent, screen } from '@testing-library/react-native';
 
 import { PrivacyScreen } from '.';
@@ -93,7 +94,7 @@ it('смена настройки имени уходит на сервер св
 
   await fireEvent.press(await screen.findByLabelText('Кто видит моё имя и username: Никто'));
 
-  expect(mockedSet).toHaveBeenCalledWith('profile_identity_masking', 'nobody');
+  expect(mockedSet).toHaveBeenCalledWith('profile_identity_masking', 'nobody', requestClient());
 });
 
 it('К4.2 «Другой псевдоним» сразу обновляет строку', async () => {
@@ -152,7 +153,7 @@ it('смена настройки медиа уходит на сервер св
     await screen.findByLabelText('Кто видит мои фото, видео и голосовые: Никто'),
   );
 
-  expect(mockedSet).toHaveBeenCalledWith('dialogue_media_visibility', 'nobody');
+  expect(mockedSet).toHaveBeenCalledWith('dialogue_media_visibility', 'nobody', requestClient());
 });
 
 describe('этап 6: задержка и скрытый текст', () => {
@@ -183,7 +184,7 @@ describe('этап 6: задержка и скрытый текст', () => {
 
     await fireEvent.press(await screen.findByLabelText(`${TITLE}: Случайная, 1–30 минут`));
 
-    expect(mockedSet).toHaveBeenCalledWith('public_message_visibility_delay', 'random_delay');
+    expect(mockedSet).toHaveBeenCalledWith('public_message_visibility_delay', 'random_delay', requestClient());
   });
 
   it('скрытый текст — строка без переключателя', async () => {

@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 import { QueryClient } from '@tanstack/react-query';
 
 import { readRoots, rootsInOrder, rootsKey, rootsPageOf, type RootsScope } from './commentsCache';
@@ -105,8 +106,8 @@ describe('the top of a side panel', () => {
 
     const page = await loadRoots('m1', cluster);
 
-    expect(mockedRoots).toHaveBeenCalledWith('m1', { set: cluster.set });
-    expect(mockedPinned).toHaveBeenCalledWith('m1', cluster.set);
+    expect(mockedRoots).toHaveBeenCalledWith('m1', { set: cluster.set }, requestClient());
+    expect(mockedPinned).toHaveBeenCalledWith('m1', cluster.set, requestClient());
     expect(ids(rootsInOrder(page))).toEqual(['pinned', 'a']);
     expect(page.scope).toEqual(cluster);
   });

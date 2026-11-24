@@ -1,3 +1,4 @@
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useEffect, useRef, useState } from 'react';
 import type { Text } from 'react-native';
 
@@ -31,6 +32,7 @@ type Options = {
  * событие показа, одно на вход.
  */
 export function useClusterHighlight({ rowKey, ref, text, messageId, chatId, clustersCount }: Options) {
+  const api = useRequestClient();
   const active = useFragmentModeActive(rowKey);
   const selecting = useRowHasSelection(rowKey ?? '');
   const panelOpen = useCommentsPanelTarget() !== null;
@@ -85,8 +87,8 @@ export function useClusterHighlight({ rowKey, ref, text, messageId, chatId, clus
       messageId,
       decisionId: shown[0].decisionId,
       detail: { clusters: shown.length },
-    });
-  }, [active, messageId, ready, shown]);
+    }, api);
+  }, [api, active, messageId, ready, shown]);
 
   return {
     geometry: ready ? geometry : null,

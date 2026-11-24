@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 import type { Session as SupabaseSession } from '@supabase/supabase-js';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react-native';
 
@@ -157,7 +158,7 @@ describe('SavedScreen — заметки', () => {
     expect(screen.getByLabelText('Отправляется')).toBeTruthy();
     expect(field().props.value).toBe('');
     expect(sendSavedNote).toHaveBeenCalledWith(
-      expect.objectContaining({ text: 'купить хлеб', files: [], replyTo: [], kind: 'post' }),
+      expect.objectContaining({ text: 'купить хлеб', files: [], replyTo: [], kind: 'post' }), requestClient()
     );
     expect(mocked(sendSavedNote).mock.calls[0][0].clientId).toEqual(expect.any(String));
 
@@ -197,7 +198,7 @@ describe('SavedScreen — заметки', () => {
     fireEvent.press(await screen.findByTestId('composer-send'));
 
     await waitFor(() =>
-      expect(sendSavedNote).toHaveBeenCalledWith(expect.objectContaining({ replyTo: ['a'] })),
+      expect(sendSavedNote).toHaveBeenCalledWith(expect.objectContaining({ replyTo: ['a'] }), requestClient()),
     );
     expect(screen.queryByLabelText('Отменить ответ')).toBeNull();
   });
@@ -241,7 +242,7 @@ describe('SavedScreen — заметки', () => {
     fireEvent.press(await screen.findByTestId('composer-send'));
 
     expect(await screen.findByText('исправлено')).toBeTruthy();
-    expect(editSavedNote).toHaveBeenCalledWith('n1', 'исправлено', []);
+    expect(editSavedNote).toHaveBeenCalledWith('n1', 'исправлено', [], requestClient());
     expect(screen.getByText('ред.')).toBeTruthy();
   });
 
@@ -297,7 +298,7 @@ describe('SavedScreen — заметки', () => {
 
     await waitFor(() => expect(screen.queryByText('потеряна')).toBeNull());
     expect(deleteSavedNoteByClient).toHaveBeenCalledWith(
-      mocked(sendSavedNote).mock.calls[0][0].clientId,
+      mocked(sendSavedNote).mock.calls[0][0].clientId, requestClient()
     );
   });
 });

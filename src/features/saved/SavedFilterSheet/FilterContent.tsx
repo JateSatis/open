@@ -1,3 +1,5 @@
+import { useScreenNotice } from '@/features/notifications/useScreenNotice';
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useMemo, type ReactNode } from 'react';
 import { View } from 'react-native';
@@ -8,7 +10,6 @@ import { styles } from './styles';
 
 import { createSavedTag, type SavedTag } from '@/api/saved';
 import { Text } from '@/components/Text';
-import { showNotice } from '@/features/notifications/alertsStore';
 import { savedTagsQueryKey } from '@/features/saved/keys';
 import { CATEGORY_LABELS, TYPE_LABELS, type SavedFilters } from '@/features/saved/savedFilters';
 import {
@@ -41,6 +42,8 @@ function Group({ title, children }: { title: string; children: ReactNode }) {
  * сразу — список под листом обновляется, пока он открыт.
  */
 export function FilterContent({ filters, tags }: FilterContentProps) {
+  const notice = useScreenNotice();
+  const api = useRequestClient();
   const queryClient = useQueryClient();
   const selectedTags = useMemo(() => new Set(filters.tags), [filters.tags]);
 
@@ -48,17 +51,17 @@ export function FilterContent({ filters, tags }: FilterContentProps) {
   const createTag = useCallback(
     async (name: string) => {
       try {
-        const tag = await createSavedTag(name);
+        const tag = await createSavedTag(name, api);
 
         queryClient.setQueryData<SavedTag[]>(savedTagsQueryKey, (list) =>
           list && !list.some((item) => item.id === tag.id) ? [...list, tag] : list,
         );
         addFilterTag(tag.id);
       } catch {
-        showNotice('Не удалось создать тег', 'error');
+        notice('Не удалось создать тег', 'error');
       }
     },
-    [queryClient],
+    [api, notice, queryClient],
   );
 
   return (

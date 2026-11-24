@@ -7,7 +7,7 @@ import type { Destination } from './types';
 
 export type IncomingLink = { destination: Destination; owner: string | null; take: () => boolean };
 
-// Lives above the account-keyed query and navigation trees. A signed-out link survives
+// Lives above the account-keyed navigator. A signed-out link survives
 // sign-in, but a link received by an account cannot be delivered to a different one.
 export function useIncomingLink() {
   const [incoming, setIncoming] = useState<IncomingLink | null>(null);

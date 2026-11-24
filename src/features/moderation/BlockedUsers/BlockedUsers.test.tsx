@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 import { screen, userEvent, waitFor } from '@testing-library/react-native';
 
 import { BlockedUsers } from '.';
@@ -42,7 +43,7 @@ describe('BlockedUsers', () => {
     await renderWithQuery(<BlockedUsers onOpenPerson={jest.fn()} />);
     await user.press(await screen.findByLabelText('Разблокировать: Аня'));
 
-    await waitFor(() => expect(mockedUnblock).toHaveBeenCalledWith('user-a'));
+    await waitFor(() => expect(mockedUnblock).toHaveBeenCalledWith('user-a', requestClient()));
   });
 
   it('К2.10 пустой список — понятным текстом', async () => {

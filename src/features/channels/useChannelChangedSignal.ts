@@ -1,3 +1,4 @@
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 
@@ -11,6 +12,7 @@ import { channelQueryKey } from '@/features/channels/keys';
  * его же, второго канала Realtime не открывается.
  */
 export function useChannelChangedSignal(channelId: string, postsChatId: string) {
+  const api = useRequestClient();
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -20,6 +22,6 @@ export function useChannelChangedSignal(channelId: string, postsChatId: string) 
     return subscribeToChatSignals(postsChatId, {
       onChatChanged: refresh,
       onReconnected: refresh,
-    });
-  }, [channelId, postsChatId, queryClient]);
+    }, api);
+  }, [api, channelId, postsChatId, queryClient]);
 }

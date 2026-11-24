@@ -1,3 +1,4 @@
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useInfiniteQuery, useQuery, type InfiniteData } from '@tanstack/react-query';
 
 import { canPublishInChannel, listPops, POPS_PAGE_SIZE, type Pop } from '@/api/pops';
@@ -14,9 +15,10 @@ export type PopsPages = InfiniteData<Pop[], Pop | null>;
 
 /** Попсы канала страницами, новые сначала. */
 export function usePops(channelId: string) {
+  const api = useRequestClient();
   return useInfiniteQuery({
     queryKey: popsQueryKey(channelId),
-    queryFn: ({ pageParam }) => listPops(channelId, pageParam),
+    queryFn: ({ pageParam }) => listPops(channelId, pageParam, undefined, api),
     initialPageParam: null as Pop | null,
     getNextPageParam: (last) => (last.length < POPS_PAGE_SIZE ? undefined : last[last.length - 1]),
   });
@@ -37,10 +39,11 @@ export function useCanPublishState(channelId: string | null): {
   /** Спросить не удалось — ответа не будет до следующей попытки. */
   failed: boolean;
 } {
+  const api = useRequestClient();
   const reader = useHistoryReader();
   const { data, isError } = useQuery({
     queryKey: canPublishQueryKey(channelId ?? ''),
-    ...routeOptions(reader, 'publish/' + channelId, () => canPublishInChannel(channelId!)),
+    ...routeOptions(reader, 'publish/' + channelId, () => canPublishInChannel(channelId!, api)),
     enabled: channelId !== null,
   });
 

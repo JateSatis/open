@@ -1,3 +1,4 @@
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef } from 'react';
 
@@ -40,6 +41,7 @@ function sourceTargets(messages: ChatMessage[]): string {
  * (`commentTopics`): открытая панель той же ветки им не мешает.
  */
 export function useForwardedCommentSources(chatId: string, messages: ChatMessage[]) {
+  const api = useRequestClient();
   const queryClient = useQueryClient();
   const reader = useHistoryReader();
   const targets = useMemo(() => sourceTargets(messages), [messages]);
@@ -84,7 +86,7 @@ export function useForwardedCommentSources(chatId: string, messages: ChatMessage
       }
 
       // Не вышло — догонит следующий сигнал или перечитывание истории.
-      listMessagesByIds(forwards)
+      listMessagesByIds(forwards, api)
         .then((fresh) =>
           updateHistory(queryClient, chatId, (current) => replaceMessages(current, fresh)),
         )
@@ -116,7 +118,7 @@ export function useForwardedCommentSources(chatId: string, messages: ChatMessage
                 schedule();
               }
             : undefined,
-      });
+      }, api);
     });
 
     return () => {
@@ -124,5 +126,5 @@ export function useForwardedCommentSources(chatId: string, messages: ChatMessage
 
       if (timer) clearTimeout(timer);
     };
-  }, [chatId, queryClient, reader, targets]);
+  }, [api, chatId, queryClient, reader, targets]);
 }

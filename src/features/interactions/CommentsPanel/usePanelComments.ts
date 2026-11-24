@@ -1,3 +1,4 @@
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useCallback, useMemo } from 'react';
 
 import { buildCommentRows, buildCommentThreadRows, type CommentRow } from './rows';
@@ -28,6 +29,7 @@ export function usePanelComments(
   currentUserId: string | null,
   commentThreadRootId: string | null,
 ) {
+  const api = useRequestClient();
   const { subject } = target;
   const targetId = subject.id;
   const { data: about } = useCommentTarget(subject, target.chatId);
@@ -54,10 +56,10 @@ export function usePanelComments(
                 rangeStart: fragment.range.start,
                 rangeEnd: fragment.range.end,
                 detail: fragment.kind === 'area' ? { area: 1 } : {},
-              }),
+              }, api),
           }
         : undefined,
-    [fragment, targetId],
+    [api, fragment, targetId],
   );
   const comments = useComments(
     subject,

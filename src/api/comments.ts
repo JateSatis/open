@@ -17,6 +17,7 @@
 // комментарии идут по рангу, ответ ложится в тред своего корня. Тред ответа
 // база выводит из его цитат — отдельного аргумента у отправки нет.
 
+import { requestClient } from '@/api/requestClient';
 import {
   listDeletedMessageIds,
   MESSAGE_COLUMNS,
@@ -41,7 +42,6 @@ import {
 } from '@/api/reactionCounts';
 import { FRAGMENT_QUOTE_COLUMNS, toFragmentQuote, type FragmentQuote } from '@/api/fragmentQuote';
 import { opaqueFlag } from '@/api/opaquePeople';
-import { supabase } from '@/api/supabase';
 
 export type { FragmentQuote } from '@/api/fragmentQuote';
 
@@ -143,15 +143,15 @@ const COMMENT_COLUMNS =
 
 // Мозаика собирается в порядке выбора файлов, а PostgREST не гарантирует
 // порядок вложенной выборки без явного order.
-const commentsSelect = () =>
-  supabase
+const commentsSelect = (api = requestClient()) =>
+  api
     .from('comment_rows')
     .select(COMMENT_COLUMNS)
     .order('position', { referencedTable: 'comment_attachments' });
 
 // Автор (имя и аватарка) — колонки `MESSAGE_COLUMNS`, глазами смотрящего.
-const targetSelect = () =>
-  supabase
+const targetSelect = (api = requestClient()) =>
+  api
     .from('message_rows')
     .select(MESSAGE_COLUMNS)
     .order('position', { referencedTable: 'attachments' });
@@ -182,8 +182,9 @@ const rootsSelect = (
   cursor: RootCursor | undefined,
   limit: number,
   set: FragmentSet | undefined,
+  api = requestClient(),
 ) =>
-  supabase
+  api
     .rpc('list_comment_thread_roots', {
       target: targetId,
       after_rank: cursor?.rank,
@@ -197,8 +198,8 @@ const rootsSelect = (
     .order('position', { referencedTable: 'comment_attachments' });
 
 /** Закреплённый комментарий цели — функцией `pinned_comment`, те же колонки. */
-const pinnedSelect = (targetId: string, set: FragmentSet | undefined) =>
-  supabase
+const pinnedSelect = (targetId: string, set: FragmentSet | undefined, api = requestClient()) =>
+  api
     .rpc('pinned_comment', { target: targetId, ...setArgs(set) })
     .select(COMMENT_COLUMNS)
     .order('position', { referencedTable: 'comment_attachments' });
@@ -274,10 +275,11 @@ export function toComment(row: CommentRow): Comment {
 export async function listCommentThreadRoots(
   targetId: string,
   params: { cursor?: RootCursor; limit?: number; set?: FragmentSet } = {},
+  api = requestClient(),
 ): Promise<{ items: Comment[]; nextCursor: RootCursor | null }> {
   const limit = params.limit ?? COMMENT_PAGE_SIZE;
   // Лишняя строка — признак, что дальше ещё есть (как у ответов треда).
-  const { data, error } = await rootsSelect(targetId, params.cursor, limit + 1, params.set);
+  const { data, error } = await rootsSelect(targetId, params.cursor, limit + 1, params.set, api);
 
   if (error) throw error;
 
@@ -299,8 +301,9 @@ export async function listCommentThreadRoots(
 export async function getPinnedComment(
   targetId: string,
   set?: FragmentSet,
+  api = requestClient(),
 ): Promise<Comment | null> {
-  const { data, error } = await pinnedSelect(targetId, set);
+  const { data, error } = await pinnedSelect(targetId, set, api);
 
   if (error) throw error;
 
@@ -313,15 +316,15 @@ export async function getPinnedComment(
  * Закрепляет верхнеуровневый комментарий у его цели; прежний закреп снимается.
  * Право — у автора контента, его проверяет база (`pin_comment`).
  */
-export async function pinComment(commentId: string): Promise<void> {
-  const { error } = await supabase.rpc('pin_comment', { target_comment: commentId });
+export async function pinComment(commentId: string, api = requestClient()): Promise<void> {
+  const { error } = await api.rpc('pin_comment', { target_comment: commentId });
 
   if (error) throw error;
 }
 
 /** Снимает закреп у цели — сообщения или попа. */
-export async function unpinComment(targetId: string): Promise<void> {
-  const { error } = await supabase.rpc('unpin_comment', { target: targetId });
+export async function unpinComment(targetId: string, api = requestClient()): Promise<void> {
+  const { error } = await api.rpc('unpin_comment', { target: targetId });
 
   if (error) throw error;
 }
@@ -334,13 +337,14 @@ export async function unpinComment(targetId: string): Promise<void> {
 export async function listCommentThreadReplies(
   rootId: string,
   params: { cursor?: string | CommentThreadCursor; limit?: number } = {},
+  api = requestClient(),
 ): Promise<{ items: Comment[]; nextCursor: CommentThreadCursor | null }> {
   const limit = params.limit ?? COMMENT_THREAD_PAGE_SIZE;
 
   // На одну строку больше страницы: пришла лишняя — ответы ещё остались.
   // По `length === limit` тред ровно из 10 ответов показывал пустую кнопку
   // «Показать ещё».
-  let query = commentsSelect()
+  let query = commentsSelect(api)
     .eq('thread_root_id', rootId)
     .is('deleted_at', null)
     .order('created_at', { ascending: true })
@@ -372,8 +376,8 @@ export async function listCommentThreadReplies(
 }
 
 /** Пришедшие после `since`, от старых к новым, — дочитывание по сигналу. */
-export async function listCommentsSince(targetId: string, since: string): Promise<Comment[]> {
-  const { data, error } = await commentsSelect()
+export async function listCommentsSince(targetId: string, since: string, api = requestClient()): Promise<Comment[]> {
+  const { data, error } = await commentsSelect(api)
     .eq('target_id', targetId)
     .is('deleted_at', null)
     .gt('created_at', since)
@@ -390,18 +394,18 @@ export async function listCommentsSince(targetId: string, since: string): Promis
  * в ответе и есть ответ «удалён»: так одним запросом сверяются и правки, и
  * удаления.
  */
-export async function listCommentsByIds(ids: string[]): Promise<Comment[]> {
+export async function listCommentsByIds(ids: string[], api = requestClient()): Promise<Comment[]> {
   if (ids.length === 0) return [];
 
-  const { data, error } = await commentsSelect().in('id', ids).is('deleted_at', null);
+  const { data, error } = await commentsSelect(api).in('id', ids).is('deleted_at', null);
 
   if (error) throw error;
 
   return (data ?? []).map(toComment);
 }
 
-export async function fetchComment(id: string): Promise<Comment> {
-  const { data, error } = await commentsSelect().eq('id', id).single();
+export async function fetchComment(id: string, api = requestClient()): Promise<Comment> {
+  const { data, error } = await commentsSelect(api).eq('id', id).single();
 
   if (error) throw error;
 
@@ -454,8 +458,9 @@ export async function sendComment(
     /** Фрагмент текста: готовый (`id`) или свой диапазон — база найдёт или создаст. */
     fragment?: CommentFragment;
   },
+  api = requestClient(),
 ): Promise<Comment> {
-  const { data: id, error } = await supabase.rpc('send_comment', {
+  const { data: id, error } = await api.rpc('send_comment', {
     target_message: messageId,
     comment_text: input.text?.trim() ?? '',
     media: (input.media ?? []).map(toMediaJson),
@@ -467,15 +472,16 @@ export async function sendComment(
   if (error) throw error;
   if (typeof id !== 'string') throw new Error('Не удалось отправить комментарий');
 
-  return fetchComment(id);
+  return fetchComment(id, api);
 }
 
 /** Текст или альбом с подписью к попу — функцией `send_pop_comment`. */
 export async function sendPopComment(
   popId: string,
   input: Parameters<typeof sendComment>[1],
+  api = requestClient(),
 ): Promise<Comment> {
-  const { data: id, error } = await supabase.rpc('send_pop_comment', {
+  const { data: id, error } = await api.rpc('send_pop_comment', {
     target_pop: popId,
     comment_text: input.text?.trim() ?? '',
     media: (input.media ?? []).map(toMediaJson),
@@ -486,7 +492,7 @@ export async function sendPopComment(
   if (error) throw error;
   if (typeof id !== 'string') throw new Error('Не удалось отправить комментарий');
 
-  return fetchComment(id);
+  return fetchComment(id, api);
 }
 
 /** Голосовое к попу — функцией `send_voice_pop_comment`. */
@@ -495,8 +501,9 @@ export async function sendVoicePopComment(
   voice: SendVoiceInput,
   replyTo: string[] = [],
   commentThreadRootId: string | null = null,
+  api = requestClient(),
 ): Promise<Comment> {
-  const { data: id, error } = await supabase.rpc('send_voice_pop_comment', {
+  const { data: id, error } = await api.rpc('send_voice_pop_comment', {
     target_pop: popId,
     voice: toVoiceJson(voice),
     reply_to: replyTo.length ? replyTo : undefined,
@@ -506,7 +513,7 @@ export async function sendVoicePopComment(
   if (error) throw error;
   if (typeof id !== 'string') throw new Error('Не удалось отправить голосовое');
 
-  return fetchComment(id);
+  return fetchComment(id, api);
 }
 
 /** Голосовое — функцией `send_voice_comment`: один файл-звук с длительностью. */
@@ -516,8 +523,9 @@ export async function sendVoiceComment(
   replyTo: string[] = [],
   commentThreadRootId: string | null = null,
   fragment?: CommentFragment,
+  api = requestClient(),
 ): Promise<Comment> {
-  const { data: id, error } = await supabase.rpc('send_voice_comment', {
+  const { data: id, error } = await api.rpc('send_voice_comment', {
     target_message: messageId,
     voice: toVoiceJson(voice),
     reply_to: replyTo.length ? replyTo : undefined,
@@ -528,15 +536,15 @@ export async function sendVoiceComment(
   if (error) throw error;
   if (typeof id !== 'string') throw new Error('Не удалось отправить голосовое');
 
-  return fetchComment(id);
+  return fetchComment(id, api);
 }
 
 /**
  * Правит свой комментарий — `edit_comment`, одной транзакцией. Прежнюю
  * версию база сохраняет для модерации. Отдаёт комментарий, каким он стал.
  */
-export async function editComment(commentId: string, input: EditMessageInput): Promise<Comment> {
-  const { error } = await supabase.rpc('edit_comment', {
+export async function editComment(commentId: string, input: EditMessageInput, api = requestClient()): Promise<Comment> {
+  const { error } = await api.rpc('edit_comment', {
     target_comment: commentId,
     comment_text: input.text.trim(),
     media: input.media.map((item) =>
@@ -551,7 +559,7 @@ export async function editComment(commentId: string, input: EditMessageInput): P
 
   if (error) throw error;
 
-  return fetchComment(commentId);
+  return fetchComment(commentId, api);
 }
 
 /**
@@ -561,8 +569,9 @@ export async function editComment(commentId: string, input: EditMessageInput): P
 export async function setCommentReaction(
   commentId: string,
   emoji: string | null,
+  api = requestClient(),
 ): Promise<MyReaction | null> {
-  const { data, error } = await supabase.rpc('set_reaction', {
+  const { data, error } = await api.rpc('set_reaction', {
     target_type: 'comment',
     target_id: commentId,
     // Снятие — NULL, а генератор типов не размечает скалярные аргументы rpc как nullable.
@@ -579,10 +588,11 @@ export async function setCommentReaction(
 /** Свежие реакции этих комментариев — пачкой, по сигналу канала. Удалённых база не отдаёт. */
 export async function listCommentReactions(
   commentIds: string[],
+  api = requestClient(),
 ): Promise<{ id: string; reactions: MessageReactions }[]> {
   if (commentIds.length === 0) return [];
 
-  const { data, error } = await supabase
+  const { data, error } = await api
     .from('comment_rows')
     .select(`id, ${REACTION_COLUMNS}` as const)
     .in('id', commentIds.slice(0, 500))
@@ -594,8 +604,8 @@ export async function listCommentReactions(
 }
 
 /** Удаляет свой комментарий для всех — мягко. Повтор не ошибка. */
-export async function deleteComment(commentId: string): Promise<void> {
-  const { error } = await supabase.rpc('delete_comment', { target_comment: commentId });
+export async function deleteComment(commentId: string, api = requestClient()): Promise<void> {
+  const { error } = await api.rpc('delete_comment', { target_comment: commentId });
 
   if (error) throw error;
 }
@@ -605,8 +615,8 @@ export async function deleteComment(commentId: string): Promise<void> {
  * отдаёт — тогда спрашиваем, удалено ли оно, чтобы честно сказать
  * «Сообщение удалено», а не «не найдено».
  */
-export async function getCommentTarget(messageId: string): Promise<CommentTarget> {
-  const { data, error } = await targetSelect()
+export async function getCommentTarget(messageId: string, api = requestClient()): Promise<CommentTarget> {
+  const { data, error } = await targetSelect(api)
     .eq('id', messageId)
     .is('deleted_at', null)
     .maybeSingle();
@@ -622,7 +632,7 @@ export async function getCommentTarget(messageId: string): Promise<CommentTarget
     };
   }
 
-  const deleted = await listDeletedMessageIds([messageId]);
+  const deleted = await listDeletedMessageIds([messageId], api);
 
   return deleted.includes(messageId) ? { state: 'deleted' } : { state: 'missing' };
 }
@@ -631,8 +641,8 @@ export async function getCommentTarget(messageId: string): Promise<CommentTarget
  * Поп, к которому открыты комментарии. Удалённый SELECT-политика не отдаёт —
  * для панели это одно и то же: «Поп удалён», новых комментариев нет.
  */
-export async function getPopCommentTarget(popId: string): Promise<CommentTarget> {
-  const { data, error } = await supabase
+export async function getPopCommentTarget(popId: string, api = requestClient()): Promise<CommentTarget> {
+  const { data, error } = await api
     .from('pops')
     .select(
       'id, channel_id, comments_count, poster_url, caption, channel:channels(title, posts_chat_id)',
@@ -670,6 +680,6 @@ export type { CommentTopicListener as CommentChannelHandlers } from '@/api/comme
  * (`commentTopics`): его слушают и панель, и чаты с пересланными из этой
  * ветки комментариями. Отдаёт отписку: её обязательно звать в cleanup.
  */
-export function subscribeToComments(targetId: string, handlers: CommentTopicListener): () => void {
-  return acquireCommentTopic(targetId, handlers);
+export function subscribeToComments(targetId: string, handlers: CommentTopicListener, api = requestClient()): () => void {
+  return acquireCommentTopic(targetId, handlers, api);
 }

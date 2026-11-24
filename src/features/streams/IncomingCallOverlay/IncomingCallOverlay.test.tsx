@@ -1,3 +1,5 @@
+import { changeRequestSelection } from '@/api/screenRequest';
+import { requestClient } from '@/api/requestClient';
 import type { Session as SupabaseSession } from '@supabase/supabase-js';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
@@ -116,6 +118,7 @@ it('«Присоединиться» входит в звонок говорящ
       isDirect: false,
     },
     expect.any(Promise),
+      requestClient(),
   );
   expect(mockPush).toHaveBeenCalledWith({ name: 'Call' });
   expect(useIncomingCall.getState().ringing).toBeNull();
@@ -154,4 +157,21 @@ it('звонок в группе показывает фото группы из
   expect(screen.getByLabelText('Поход')).toBeTruthy();
   expect(screen.queryByText('П')).toBeNull();
   queryClient.clear();
+});
+
+it('принимает входящий B, пока старое разрешение микрофона A ожидает ответа', async () => {
+  let finish!: (allowed: boolean) => void;
+  jest.mocked(ensureCallMicrophone).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  await renderWithQuery(<IncomingCallOverlay />);
+  await act(() => ring(incoming({ streamId: 'A' })));
+  await fireEvent.press(screen.getByRole('button', { name: 'Присоединиться' }));
+  await act(() => {
+    changeRequestSelection();
+    ring(incoming({ streamId: 'B' }));
+  });
+  await fireEvent.press(screen.getByRole('button', { name: 'Присоединиться' }));
+  await act(() => finish(true));
+  expect(joinCall).toHaveBeenCalledTimes(1);
+  expect(joinCall).toHaveBeenCalledWith(expect.objectContaining({ streamId: 'B' }), expect.any(Promise), requestClient());
+  expect(mockPush).toHaveBeenCalledTimes(1);
 });

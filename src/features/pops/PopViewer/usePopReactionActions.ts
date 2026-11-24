@@ -1,3 +1,4 @@
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback } from 'react';
 
@@ -15,13 +16,14 @@ import { doubleTapReaction, withPendingPopReaction } from '@/features/pops/popRe
  * решает его база.
  */
 export function usePopReactionActions(canPublish: boolean) {
+  const api = useRequestClient();
   const queryClient = useQueryClient();
   const audience = audienceOf(canPublish);
 
   const onReaction = useCallback(
     (pop: Pop, emoji: string | null) =>
-      sendReaction(queryClient, pop.id, { emoji, audience }, 'pop'),
-    [audience, queryClient],
+      sendReaction(queryClient, pop.id, { emoji, audience }, 'pop', api),
+    [api, audience, queryClient],
   );
 
   // ❤️ — только если моей реакции нет; стоит любая — только анимация.
@@ -30,9 +32,9 @@ export function usePopReactionActions(canPublish: boolean) {
       const shown = withPendingPopReaction(pop.reactions, readPendingReaction(pop.id));
       const emoji = doubleTapReaction(shown, HEART);
 
-      if (emoji) sendReaction(queryClient, pop.id, { emoji, audience }, 'pop');
+      if (emoji) sendReaction(queryClient, pop.id, { emoji, audience }, 'pop', api);
     },
-    [audience, queryClient],
+    [api, audience, queryClient],
   );
 
   return { onReaction, onDoubleTap };

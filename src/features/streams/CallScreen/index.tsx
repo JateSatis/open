@@ -1,3 +1,4 @@
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useQuery } from '@tanstack/react-query';
 import { useIsFocused, useRouter } from '@/navigation';
 import { SymbolView } from 'expo-symbols';
@@ -38,6 +39,7 @@ function useNow(): number {
  * говорящего крупная отметка «В эфире · слушают N», у слушателя — «Вы слушаете».
  */
 export function CallScreen() {
+  const api = useRequestClient();
   const call = useActiveCall();
   const router = useRouter();
   const focused = useIsFocused();
@@ -55,7 +57,7 @@ export function CallScreen() {
   // Кто за ней стоит, говорит база, глазами смотрящего.
   const { data: people } = useQuery({
     queryKey: ['streams', 'people', streamId, speakerIds],
-    queryFn: () => listCallPeople(streamId as string),
+    queryFn: () => listCallPeople(streamId as string, api),
     enabled: Boolean(streamId) && speakerIds.length > 0,
     staleTime: 60_000,
     // Вошедшего комната показывает раньше, чем вебхук LiveKit запишет его в
@@ -208,7 +210,7 @@ export function CallScreen() {
                 : { ios: 'mic.slash.fill', android: 'mic_off', web: 'mic_off' }
             }
             active={!call.micOn}
-            onPress={() => void toggleMic()}
+            onPress={() => void toggleMic(api)}
           />
         ) : null}
         <CallControl

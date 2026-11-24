@@ -3,12 +3,12 @@
 // Лента «Тредов» — сообщения без корней; сводки плашек и сам тред считает
 // база глазами смотрящего (`20261110100000_chat_threads.sql`).
 
+import { requestClient } from '@/api/requestClient';
 import { MESSAGE_PAGE_SIZE, type MessagePage } from '@/api/messagePage';
 import { toPreview, type MessagePreview, type PreviewAttachment } from '@/api/messagePreview';
 import { messagesSelect, toMessage, toMessageKind, type Message } from '@/api/messageRows';
 import { opaqueFlag } from '@/api/opaquePeople';
 import { NO_REACTIONS } from '@/api/reactionCounts';
-import { supabase } from '@/api/supabase';
 
 /** Ответивший в треде — глазами смотрящего, как автор в `message_rows`. */
 export type ChatThreadPerson = {
@@ -86,9 +86,10 @@ export function deletedChatThreadRoot(chatId: string, id: string, seq: number): 
 export async function listChatThreadFeed(
   chatId: string,
   params: { cursor?: number; limit?: number } = {},
+  api = requestClient(),
 ): Promise<MessagePage> {
   const limit = params.limit ?? MESSAGE_PAGE_SIZE;
-  let query = messagesSelect()
+  let query = messagesSelect(api)
     .eq('chat_id', chatId)
     .is('chat_thread_root_ids', null)
     .order('seq', { ascending: false })
@@ -98,7 +99,7 @@ export async function listChatThreadFeed(
 
   const [rows, stubs] = await Promise.all([
     query,
-    supabase.rpc('list_chat_thread_deleted_roots', {
+    api.rpc('list_chat_thread_deleted_roots', {
       p_chat: chatId,
       p_before_seq: params.cursor,
       p_limit: limit,
@@ -122,8 +123,8 @@ export async function listChatThreadFeed(
 }
 
 /** Сообщения ленты «Тредов» после `sinceSeq`, старые первыми, — дочитывание по сигналу. */
-export async function listChatThreadFeedSince(chatId: string, sinceSeq: number): Promise<Message[]> {
-  const { data, error } = await messagesSelect()
+export async function listChatThreadFeedSince(chatId: string, sinceSeq: number, api = requestClient()): Promise<Message[]> {
+  const { data, error } = await messagesSelect(api)
     .eq('chat_id', chatId)
     .is('chat_thread_root_ids', null)
     .gt('seq', sinceSeq)
@@ -138,10 +139,10 @@ export async function listChatThreadFeedSince(chatId: string, sinceSeq: number):
 type SummaryPersonRow = { id: string; name: string | null; avatar_url: string | null; opaque: boolean | null };
 
 /** Сводки плашек пачкой. Корня без видимых мне ответов в ответе нет. */
-export async function listChatThreadSummaries(rootIds: string[]): Promise<ChatThreadSummary[]> {
+export async function listChatThreadSummaries(rootIds: string[], api = requestClient()): Promise<ChatThreadSummary[]> {
   if (rootIds.length === 0) return [];
 
-  const { data, error } = await supabase.rpc('chat_thread_summaries', { p_root_ids: rootIds });
+  const { data, error } = await api.rpc('chat_thread_summaries', { p_root_ids: rootIds });
 
   if (error) throw error;
 
@@ -179,9 +180,10 @@ export async function listChatThreadSummaries(rootIds: string[]): Promise<ChatTh
 export async function listChatThread(
   rootId: string,
   params: { afterSeq?: number; beforeSeq?: number | 'end'; limit?: number } = {},
+  api = requestClient(),
 ): Promise<ChatThreadPage> {
   const limit = params.limit ?? CHAT_THREAD_PAGE_SIZE;
-  const { data, error } = await supabase.rpc('list_chat_thread', {
+  const { data, error } = await api.rpc('list_chat_thread', {
     p_root: rootId,
     p_after_seq: params.afterSeq,
     p_before_seq: params.beforeSeq === 'end' ? END_SEQ : params.beforeSeq,
@@ -199,7 +201,7 @@ export async function listChatThread(
 
   if (page.length === 0) return { items: [], quotes, full: false };
 
-  const fetched = await messagesSelect().in(
+  const fetched = await messagesSelect(api).in(
     'id',
     page.map((row) => row.id),
   );

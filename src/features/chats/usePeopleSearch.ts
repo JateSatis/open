@@ -1,3 +1,4 @@
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useInfiniteQuery } from '@tanstack/react-query';
 
 import { searchPeople, type PeopleCursor } from '@/api/groups';
@@ -15,11 +16,12 @@ const PEOPLE_DEBOUNCE_MS = 250;
  * экране — прежняя выдача.
  */
 export function usePeopleSearch(query: string) {
+  const api = useRequestClient();
   const debounced = useDebounced(query.trim(), PEOPLE_DEBOUNCE_MS);
 
   const result = useInfiniteQuery({
     queryKey: ['people', 'search', debounced],
-    queryFn: ({ pageParam, signal }) => searchPeople(debounced, pageParam, signal),
+    queryFn: ({ pageParam, signal }) => searchPeople(debounced, pageParam, signal, api),
     initialPageParam: null as PeopleCursor | null,
     getNextPageParam: (last) => last.next ?? undefined,
     placeholderData: (previous) => previous,

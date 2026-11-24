@@ -4,6 +4,8 @@
 // Membership itself is never written from here: a chat is created and an
 // invite answered only through database functions (see `invites.ts`).
 
+import type { AccountClient } from '@/api/accountClient';
+import { requestClient } from '@/api/requestClient';
 import type { QueryData, RealtimeChannel } from '@supabase/supabase-js';
 
 import { ChatGoneError } from '@/api/chatGone';
@@ -19,8 +21,7 @@ import { publishPop, type PublishPopInput } from '@/api/pops';
 import { listChatSubscriptions, type Subscription } from '@/api/subscriptions';
 import { byChatListOrder } from '@/api/chatListOrder';
 import { opaqueFlag } from '@/api/opaquePeople';
-import { supabase } from '@/api/supabase';
-import { checkResponseOwner, requestOwner } from '@/features/auth/sessionState';
+import { sameSession } from '@/features/auth/sessionOwner';
 import { randomUuid } from '@/lib/uuid';
 import {
   hiddenRangesJson,
@@ -238,8 +239,8 @@ export type Page<T> = {
 const CHAT_COLUMNS =
   'id, kind, title, username, avatar_url, owner_id, description, created_by, request_pending, last_message_at, last_message_preview, last_message_author_id, subscribers_count, channel:channels(id, title, username, avatar_url, last_pop_at)';
 const WAITING_COLUMNS = 'chat_id, user_id, display_name, avatar_url, username, opaque';
-export const chatsSelect = () => supabase.from('chat_rows').select(CHAT_COLUMNS);
-const waitingSelect = () => supabase.from('chat_waiting_invitees').select(WAITING_COLUMNS);
+export const chatsSelect = (api = requestClient()) => api.from('chat_rows').select(CHAT_COLUMNS);
+const waitingSelect = (api = requestClient()) => api.from('chat_waiting_invitees').select(WAITING_COLUMNS);
 
 type ChatRow = QueryData<ReturnType<typeof chatsSelect>>[number];
 type WaitingRow = QueryData<ReturnType<typeof waitingSelect>>[number];
@@ -356,13 +357,16 @@ export function toSummary(
   };
 }
 
-export async function getCurrentUserId(): Promise<string> {
-  const owner = requestOwner();
-  const { data, error } = await supabase.auth.getUser();
+export async function getCurrentUserId(api = requestClient()): Promise<string> {
+  const owner = api.sessionOwner?.();
+  if (owner === null) throw new Error('Требуется активная сессия аккаунта');
+  const { data, error } = await api.auth.getUser();
 
   if (error) throw error;
   if (!data.user) throw new Error('Нет активной сессии');
-  checkResponseOwner(owner, data.user.id);
+  if (owner && (owner.userId !== data.user.id || !sameSession(owner, api.sessionOwner?.() ?? null))) {
+    throw new Error('Сессия аккаунта изменилась');
+  }
 
   return data.user.id;
 }
@@ -372,7 +376,7 @@ const PEOPLE_CHATS_CHUNK = 500;
 /** Строк участников за запрос — не больше предела строк PostgREST (1000). */
 const PEOPLE_PAGE_ROWS = 1000;
 
-async function fetchMembers(chatIds: string[]): Promise<MemberRow[]> {
+async function fetchMembers(chatIds: string[], api: AccountClient): Promise<MemberRow[]> {
   const chunks: string[][] = [];
 
   for (let at = 0; at < chatIds.length; at += PEOPLE_CHATS_CHUNK) {
@@ -385,7 +389,7 @@ async function fetchMembers(chatIds: string[]): Promise<MemberRow[]> {
     const rows = [];
 
     for (let from = 0; ; from += PEOPLE_PAGE_ROWS) {
-      const { data, error } = await supabase
+      const { data, error } = await api
         .rpc('chat_people', { chat_ids: ids })
         .range(from, from + PEOPLE_PAGE_ROWS - 1);
 
@@ -420,17 +424,17 @@ async function fetchMembers(chatIds: string[]): Promise<MemberRow[]> {
  * Участники — в порядке вступления: так же база называет чужой диалог в
  * карточке подписчика («Аня и Пётр»), и имя не должно переставляться.
  */
-export async function fetchChatPeople(chatIds: string[]): Promise<Map<string, ChatPeople>> {
+export async function fetchChatPeople(chatIds: string[], api = requestClient()): Promise<Map<string, ChatPeople>> {
   const byChat = new Map<string, ChatPeople>();
 
   if (chatIds.length === 0) return byChat;
 
   const [members, waiting] = await Promise.all([
-    fetchMembers(chatIds).then(
+    fetchMembers(chatIds, api).then(
       (data) => ({ data, error: null }),
       (error: unknown) => ({ data: null, error }),
     ),
-    waitingSelect().in('chat_id', chatIds).order('invited_at', { ascending: true }),
+    waitingSelect(api).in('chat_id', chatIds).order('invited_at', { ascending: true }),
   ]);
 
   if (members.error) throw members.error;
@@ -467,16 +471,16 @@ const NO_PEOPLE: ChatPeople = { members: [], waiting: [] };
  * `channels.last_pop_at`, непрочитанное подписчика — одним запросом на все
  * подписки: читать последнее сообщение по каждой строке было бы запросом на строку.
  */
-export async function listChats(): Promise<ChatSummary[]> {
-  const userId = await getCurrentUserId();
+export async function listChats(api = requestClient()): Promise<ChatSummary[]> {
+  const userId = await getCurrentUserId(api);
 
   const [list, subscriptions] = await Promise.all([
     // Место, момент входа и непрочитанное — от сервера: время чата бывает
     // скрыто от меня, а он сравнивает настоящее.
-    supabase.rpc('my_chat_list'),
+    api.rpc('my_chat_list'),
     // Сбой подписок не должен прятать свои диалоги и группы: подписки
     // вернутся со следующим перечитыванием.
-    listChatSubscriptions().catch((): Subscription[] => []),
+    listChatSubscriptions(api).catch((): Subscription[] => []),
   ]);
 
   if (list.error) throw list.error;
@@ -497,14 +501,14 @@ export async function listChats(): Promise<ChatSummary[]> {
 
   if (chatIds.length === 0) return [];
 
-  const { data: chatData, error: chatError } = await chatsSelect()
+  const { data: chatData, error: chatError } = await chatsSelect(api)
     .in('id', chatIds)
     .is('deleted_at', null);
 
   if (chatError) throw chatError;
 
   const chats = chatData ?? [];
-  const peopleByChat = await fetchChatPeople(chats.map((chat) => chat.id));
+  const peopleByChat = await fetchChatPeople(chats.map((chat) => chat.id), api);
 
   return chats
     .map((chat) =>
@@ -532,8 +536,9 @@ export const CHATS_OF_PAGE_SIZE = 30;
 export async function listChatsOf(
   userId: string,
   page: number,
+  api = requestClient(),
 ): Promise<Page<ChatSummary> & { nextPage: number | null }> {
-  const { data, error } = await supabase
+  const { data, error } = await api
     .rpc('list_person_chats', {
       p_person: userId,
       p_offset: page * CHATS_OF_PAGE_SIZE,
@@ -544,7 +549,7 @@ export async function listChatsOf(
   if (error) throw error;
 
   const chats = data ?? [];
-  const peopleByChat = await fetchChatPeople(chats.map((chat) => chat.id));
+  const peopleByChat = await fetchChatPeople(chats.map((chat) => chat.id), api);
   // Страницы упорядочены базой по последнему сообщению — строка показывает его
   // же, без «Нового попса», иначе время строки разошлось бы с её местом.
   const items = chats.map((chat) => ({
@@ -557,16 +562,16 @@ export async function listChatsOf(
   return { items, nextCursor: null, nextPage: full ? page + 1 : null };
 }
 
-export async function getChat(chatId: string): Promise<ChatSummary> {
-  const userId = await getCurrentUserId();
+export async function getChat(chatId: string, api = requestClient()): Promise<ChatSummary> {
+  const userId = await getCurrentUserId(api);
 
-  const { data, error } = await chatsSelect().eq('id', chatId).is('deleted_at', null).maybeSingle();
+  const { data, error } = await chatsSelect(api).eq('id', chatId).is('deleted_at', null).maybeSingle();
 
   if (error) throw error;
   if (!data) throw new ChatGoneError(chatId);
 
   const chat = data;
-  const peopleByChat = await fetchChatPeople([chat.id]);
+  const peopleByChat = await fetchChatPeople([chat.id], api);
 
   return toSummary(chat, peopleByChat.get(chat.id) ?? NO_PEOPLE, userId);
 }
@@ -586,8 +591,8 @@ const CHAT_USERNAME_TAKEN_CODE = 'OPN02';
  * Задать, сменить или убрать (`null`) `@имя` группы. Право — у любого
  * участника; проверяет база, посторонний получит отказ.
  */
-export async function setChatUsername(chatId: string, username: string | null): Promise<void> {
-  const { error } = await supabase.rpc('set_chat_username', {
+export async function setChatUsername(chatId: string, username: string | null, api = requestClient()): Promise<void> {
+  const { error } = await api.rpc('set_chat_username', {
     target_chat: chatId,
     new_username: username ?? '',
   });
@@ -608,8 +613,9 @@ export async function setChatUsername(chatId: string, username: string | null): 
 export async function setChatAvatar(
   chatId: string,
   avatarUrl: string | null,
+  api = requestClient(),
 ): Promise<string | null> {
-  const { data, error } = await supabase.rpc('set_chat_avatar', {
+  const { data, error } = await api.rpc('set_chat_avatar', {
     target_chat: chatId,
     new_avatar_url: avatarUrl ?? '',
   });
@@ -624,8 +630,8 @@ export async function setChatAvatar(
  * До какого момента чат прочитали все, кроме меня. Нужно облачку островка:
  * «прочитано» у своего сообщения там — по прочтению чата оригинала.
  */
-export async function getChatReadUpTo(chatId: string): Promise<string | null> {
-  const { data, error } = await supabase
+export async function getChatReadUpTo(chatId: string, api = requestClient()): Promise<string | null> {
+  const { data, error } = await api
     .from('chat_rows')
     .select('id, chat_read_up_to')
     .eq('id', chatId)
@@ -641,8 +647,8 @@ export async function getChatReadUpTo(chatId: string): Promise<string | null> {
  * the device: messages are stamped by the server, and a device clock running
  * even a few seconds behind would leave them unread forever.
  */
-export async function markChatRead(chatId: string): Promise<void> {
-  const { error } = await supabase.rpc('mark_chat_read', { target_chat: chatId });
+export async function markChatRead(chatId: string, api = requestClient()): Promise<void> {
+  const { error } = await api.rpc('mark_chat_read', { target_chat: chatId });
 
   if (error) throw error;
 }
@@ -656,10 +662,11 @@ export async function markChatRead(chatId: string): Promise<void> {
 export async function listMessages(
   chatId: string,
   params: { cursor?: number; limit?: number } = {},
+  api = requestClient(),
 ): Promise<MessagePage> {
   const limit = params.limit ?? MESSAGE_PAGE_SIZE;
 
-  let query = messagesSelect()
+  let query = messagesSelect(api)
     .eq('chat_id', chatId)
     .order('seq', { ascending: false })
     .limit(limit);
@@ -685,8 +692,8 @@ export async function listMessages(
  * broadcast: the payload is only a signal that something arrived, the rows
  * themselves always come from Postgres, where RLS decides what is visible.
  */
-export async function listMessagesSince(chatId: string, sinceSeq: number): Promise<Message[]> {
-  const { data, error } = await messagesSelect()
+export async function listMessagesSince(chatId: string, sinceSeq: number, api = requestClient()): Promise<Message[]> {
+  const { data, error } = await messagesSelect(api)
     .eq('chat_id', chatId)
     .gt('seq', sinceSeq)
     .order('seq', { ascending: true })
@@ -706,13 +713,14 @@ async function sendTextMessage(
   chatId: string,
   text: string,
   hidden: HiddenRange[],
+  api: AccountClient,
 ): Promise<Message> {
-  const authorId = await getCurrentUserId();
+  const authorId = await getCurrentUserId(api);
   // Id выбирает клиент: вставка не возвращает строку — время сообщения
   // клиенту из таблицы не читается, — а читать её из представления нужно по id.
   const id = randomUuid();
 
-  const { error } = await supabase.from('messages').insert({
+  const { error } = await api.from('messages').insert({
     id,
     chat_id: chatId,
     author_id: authorId,
@@ -724,7 +732,7 @@ async function sendTextMessage(
 
   if (error) throw error;
 
-  const { data, error: fetchError } = await messagesSelect().eq('id', id).single();
+  const { data, error: fetchError } = await messagesSelect(api).eq('id', id).single();
 
   if (fetchError) throw fetchError;
 
@@ -745,6 +753,7 @@ async function sendMediaMessage(
   replyTo: string[],
   hidden: HiddenRange[],
   replyVia: Record<string, string> = {},
+  api: AccountClient,
 ): Promise<Message> {
   const payload = {
     target_chat: chatId,
@@ -764,23 +773,23 @@ async function sendMediaMessage(
     hidden: hidden.length > 0 ? hiddenRangesJson(hidden) : undefined,
   };
   const { data: newMessageId, error } = Object.keys(replyVia).length > 0
-    ? await supabase.rpc('send_chat_thread_message', {
+    ? await api.rpc('send_chat_thread_message', {
         p_chat: chatId, p_text: text as string, p_media: payload.media,
         p_reply_to: replyTo, p_reply_via: replyVia, p_hidden: payload.hidden,
       })
-    : await supabase.rpc('send_media_message', payload);
+    : await api.rpc('send_media_message', payload);
 
   if (error) throw error;
   if (typeof newMessageId !== 'string') throw new Error('Не удалось отправить сообщение');
 
-  const { data, error: fetchError } = await messagesSelect().eq('id', newMessageId).single();
+  const { data, error: fetchError } = await messagesSelect(api).eq('id', newMessageId).single();
 
   if (fetchError) throw fetchError;
 
   return toMessage(data);
 }
 
-export async function sendMessage(chatId: string, input: SendMessageInput): Promise<Message> {
+export async function sendMessage(chatId: string, input: SendMessageInput, api = requestClient()): Promise<Message> {
   const trimmed = trimWithRanges(input.text ?? '', input.hidden ?? []);
   const text = trimmed.text || null;
   const hidden = text ? trimmed.ranges : [];
@@ -792,8 +801,8 @@ export async function sendMessage(chatId: string, input: SendMessageInput): Prom
   // Ответ идёт через функцию и у текста: цитаты база принимает только в той
   // же транзакции, что и само сообщение (см. политику `message_replies`).
   return media.length === 0 && replyTo.length === 0
-    ? sendTextMessage(chatId, text!, hidden)
-    : sendMediaMessage(chatId, text, media, replyTo, hidden, input.replyVia);
+    ? sendTextMessage(chatId, text!, hidden, api)
+    : sendMediaMessage(chatId, text, media, replyTo, hidden, input.replyVia, api);
 }
 
 /**
@@ -806,6 +815,7 @@ export async function sendVoiceMessage(
   voice: SendVoiceInput,
   replyTo: string[] = [],
   replyVia: Record<string, string> = {},
+  api = requestClient(),
 ): Promise<Message> {
   const payload = {
     target_chat: chatId,
@@ -819,15 +829,15 @@ export async function sendVoiceMessage(
     reply_to: replyTo.length > 0 ? replyTo : undefined,
   };
   const { data: newMessageId, error } = Object.keys(replyVia).length > 0
-    ? await supabase.rpc('send_chat_thread_message', {
+    ? await api.rpc('send_chat_thread_message', {
         p_chat: chatId, p_voice: payload.voice, p_reply_to: replyTo, p_reply_via: replyVia,
       })
-    : await supabase.rpc('send_voice_message', payload);
+    : await api.rpc('send_voice_message', payload);
 
   if (error) throw error;
   if (typeof newMessageId !== 'string') throw new Error('Не удалось отправить голосовое');
 
-  const { data, error: fetchError } = await messagesSelect().eq('id', newMessageId).single();
+  const { data, error: fetchError } = await messagesSelect(api).eq('id', newMessageId).single();
 
   if (fetchError) throw fetchError;
 
@@ -846,8 +856,9 @@ export async function forwardMessages(
   chatId: string,
   sourceChatId: string,
   messageIds: string[],
+  api = requestClient(),
 ): Promise<Message> {
-  const { data: forwardId, error } = await supabase.rpc('forward_messages', {
+  const { data: forwardId, error } = await api.rpc('forward_messages', {
     target_chat: chatId,
     source_chat: sourceChatId,
     message_ids: messageIds,
@@ -856,7 +867,7 @@ export async function forwardMessages(
   if (error) throw error;
   if (typeof forwardId !== 'string') throw new Error('Не удалось переслать сообщения');
 
-  const { data, error: fetchError } = await messagesSelect().eq('id', forwardId).single();
+  const { data, error: fetchError } = await messagesSelect(api).eq('id', forwardId).single();
 
   if (fetchError) throw fetchError;
 
@@ -869,8 +880,8 @@ export async function forwardMessages(
  * (миграция `20261004110000_comment_forwards.sql`). Отдаёт новые сообщения
  * старыми вперёд — в том порядке, в каком они встали в переписку.
  */
-export async function forwardComments(chatId: string, commentIds: string[]): Promise<Message[]> {
-  const { data: ids, error } = await supabase.rpc('forward_comments', {
+export async function forwardComments(chatId: string, commentIds: string[], api = requestClient()): Promise<Message[]> {
+  const { data: ids, error } = await api.rpc('forward_comments', {
     target_chat: chatId,
     comment_ids: commentIds,
   });
@@ -878,7 +889,7 @@ export async function forwardComments(chatId: string, commentIds: string[]): Pro
   if (error) throw error;
   if (!Array.isArray(ids) || ids.length === 0) throw new Error('Не удалось переслать комментарии');
 
-  const { data, error: fetchError } = await messagesSelect()
+  const { data, error: fetchError } = await messagesSelect(api)
     .in('id', ids)
     .order('seq', { ascending: true });
 
@@ -892,10 +903,10 @@ export async function forwardComments(chatId: string, commentIds: string[]): Pro
  * убрано последнее — островок удаляется целиком. Что островок мой, проверяет
  * база.
  */
-export async function removeForwardItems(forwardId: string, messageIds: string[]): Promise<void> {
+export async function removeForwardItems(forwardId: string, messageIds: string[], api = requestClient()): Promise<void> {
   if (messageIds.length === 0) return;
 
-  const { error } = await supabase.rpc('remove_forward_items', {
+  const { error } = await api.rpc('remove_forward_items', {
     target_forward: forwardId,
     message_ids: messageIds,
   });
@@ -914,9 +925,9 @@ function isKept(item: EditMediaItem | EditVoiceItem): item is { attachmentId: st
  * база (миграция `20260929180000_message_edit.sql`); время правки ставит она
  * же. Отдаёт сообщение, каким оно стало.
  */
-export async function editMessage(messageId: string, input: EditMessageInput): Promise<Message> {
+export async function editMessage(messageId: string, input: EditMessageInput, api = requestClient()): Promise<Message> {
   const trimmed = trimWithRanges(input.text, input.hidden ?? []);
-  const { error } = await supabase.rpc('edit_message', {
+  const { error } = await api.rpc('edit_message', {
     target_message: messageId,
     message_text: trimmed.text,
     // Скрытое — заново вместе с текстом: сдвинул его клиент по ходу правки.
@@ -949,7 +960,7 @@ export async function editMessage(messageId: string, input: EditMessageInput): P
 
   if (error) throw error;
 
-  const { data, error: fetchError } = await messagesSelect().eq('id', messageId).single();
+  const { data, error: fetchError } = await messagesSelect(api).eq('id', messageId).single();
 
   if (fetchError) throw fetchError;
 
@@ -959,10 +970,11 @@ export async function editMessage(messageId: string, input: EditMessageInput): P
 /** Сколько комментариев у этих сообщений — свежие числа, пачкой. Удалённые база не отдаёт. */
 export async function listCommentCounts(
   messageIds: string[],
+  api = requestClient(),
 ): Promise<{ id: string; commentsCount: number }[]> {
   if (messageIds.length === 0) return [];
 
-  const { data, error } = await supabase
+  const { data, error } = await api
     .from('messages')
     .select('id, comments_count')
     .in('id', messageIds)
@@ -976,10 +988,11 @@ export async function listCommentCounts(
 /** Сколько показываемых кластеров фрагментов у этих сообщений — свежие числа, пачкой. */
 export async function listClusterCounts(
   messageIds: string[],
+  api = requestClient(),
 ): Promise<{ id: string; clustersCount: number }[]> {
   if (messageIds.length === 0) return [];
 
-  const { data, error } = await supabase
+  const { data, error } = await api
     .from('messages')
     .select('id, clusters_count')
     .in('id', messageIds)
@@ -991,10 +1004,10 @@ export async function listClusterCounts(
 }
 
 /** Сообщения по id — живые; удалённые база не отдаёт. */
-export async function listMessagesByIds(messageIds: string[]): Promise<Message[]> {
+export async function listMessagesByIds(messageIds: string[], api = requestClient()): Promise<Message[]> {
   if (messageIds.length === 0) return [];
 
-  const { data, error } = await messagesSelect().in('id', messageIds);
+  const { data, error } = await messagesSelect(api).in('id', messageIds);
 
   if (error) throw error;
 
@@ -1008,10 +1021,11 @@ export async function listMessagesByIds(messageIds: string[]): Promise<Message[]
  */
 export async function listMessageEdits(
   messageIds: string[],
+  api = requestClient(),
 ): Promise<{ id: string; editMark: number }[]> {
   if (messageIds.length === 0) return [];
 
-  const { data, error } = await supabase.rpc('message_edits', { message_ids: messageIds });
+  const { data, error } = await api.rpc('message_edits', { message_ids: messageIds });
 
   if (error) throw error;
 
@@ -1023,10 +1037,10 @@ export async function listMessageEdits(
  * Что все они мои и из одного чата, проверяет база: чужое в пачке отвергает
  * её целиком (см. миграцию `20260927100000_message_delete_and_pins.sql`).
  */
-export async function deleteMessages(messageIds: string[]): Promise<void> {
+export async function deleteMessages(messageIds: string[], api = requestClient()): Promise<void> {
   if (messageIds.length === 0) return;
 
-  const { error } = await supabase.rpc('delete_messages', { message_ids: messageIds });
+  const { error } = await api.rpc('delete_messages', { message_ids: messageIds });
 
   if (error) throw error;
 }
@@ -1036,10 +1050,10 @@ export async function deleteMessages(messageIds: string[]): Promise<void> {
  * отдаёт, а отличить «удалено» от «не загрузилось» нужно — например, чтобы
  * после обрыва Realtime убрать с экрана то, что удалили без нас.
  */
-export async function listDeletedMessageIds(messageIds: string[]): Promise<string[]> {
+export async function listDeletedMessageIds(messageIds: string[], api = requestClient()): Promise<string[]> {
   if (messageIds.length === 0) return [];
 
-  const { data, error } = await supabase.rpc('message_tombstones', { message_ids: messageIds });
+  const { data, error } = await api.rpc('message_tombstones', { message_ids: messageIds });
 
   if (error) throw error;
 
@@ -1206,8 +1220,9 @@ export function subscribeToChat(
   chatId: string,
   handlers: ChatChannelHandlers,
   asMember = false,
+  api = requestClient(),
 ): ChatChannel {
-  const topic = acquireChatTopic(chatId, handlers, asMember);
+  const topic = acquireChatTopic(chatId, handlers, asMember, api);
 
   return {
     broadcastTyping: topic.broadcastTyping,
@@ -1220,8 +1235,8 @@ export function subscribeToChat(
  * «Кто видит, что я в сети» и по тому, все ли остальные участники мне друзья.
  * Решает база (`my_typing_audience`): не участник — никуда.
  */
-export async function getTypingAudience(chatId: string): Promise<TypingAudience> {
-  const { data, error } = await supabase.rpc('my_typing_audience', { target_chat: chatId });
+export async function getTypingAudience(chatId: string, api = requestClient()): Promise<TypingAudience> {
+  const { data, error } = await api.rpc('my_typing_audience', { target_chat: chatId });
 
   if (error) throw error;
 
@@ -1233,8 +1248,8 @@ export async function getTypingAudience(chatId: string): Promise<TypingAudience>
  * комментарии оригинала уходят в топик его чата. Через тот же общий реестр,
  * что и канал экрана чата. Отдаёт отписку.
  */
-export function subscribeToChatSignals(chatId: string, listener: ChatTopicListener): () => void {
-  return acquireChatTopic(chatId, listener).release;
+export function subscribeToChatSignals(chatId: string, listener: ChatTopicListener, api = requestClient()): () => void {
+  return acquireChatTopic(chatId, listener, false, api).release;
 }
 
 export type IncomingInvite = {
@@ -1335,10 +1350,12 @@ function toIncomingCall(payload: unknown): IncomingCall | null {
  * One channel for all of them — Realtime keeps a single channel per topic, so
  * a second subscriber to `user:<id>` would not get its own.
  */
-export function subscribeToUserEvents(userId: string, handlers: UserChannelHandlers): () => void {
-  void supabase.realtime.setAuth();
+export function subscribeToUserEvents(userId: string, handlers: UserChannelHandlers, api = requestClient()): () => void {
+  let active = true;
+  const current = () => active && api === requestClient();
+  void api.realtime.setAuth().catch(() => undefined);
 
-  const channel: RealtimeChannel = supabase.channel(`user:${userId}`, {
+  const channel: RealtimeChannel = api.channel(`user:${userId}`, {
     config: { private: true },
   });
 
@@ -1347,63 +1364,64 @@ export function subscribeToUserEvents(userId: string, handlers: UserChannelHandl
   channel
     .on('broadcast', {event:'history_read'}, ({payload})=>{
       const id=chatIdOf(payload);
-      if(id) handlers.onHistoryRead?.(id);
+      if(current() && id) handlers.onHistoryRead?.(id);
     })
     .on('broadcast', { event: 'new_message' }, ({ payload }) => {
       const incoming = toIncoming(payload);
 
-      if (incoming) handlers.onMessage(incoming);
+      if (current() && incoming) handlers.onMessage(incoming);
     })
     .on('broadcast', { event: 'new_pop' }, ({ payload }) => {
       const pop = toIncomingPop(payload);
 
-      if (pop) handlers.onPop?.(pop);
+      if (current() && pop) handlers.onPop?.(pop);
     })
     .on('broadcast', { event: 'invite' }, ({ payload }) => {
       const invite = toInvite(payload);
 
-      if (invite) handlers.onInvite(invite);
+      if (current() && invite) handlers.onInvite(invite);
     })
     .on('broadcast', { event: 'invite_changed' }, ({ payload }) => {
       const chatId = chatIdOf(payload);
 
-      if (chatId) handlers.onInviteChanged(chatId);
+      if (current() && chatId) handlers.onInviteChanged(chatId);
     })
     .on('broadcast', { event: 'invite_activity' }, ({ payload }) => {
       const chatId = chatIdOf(payload);
 
-      if (chatId) handlers.onInviteChanged(chatId);
+      if (current() && chatId) handlers.onInviteChanged(chatId);
     })
     .on('broadcast', { event: 'member_joined' }, ({ payload }) => {
       const chatId = chatIdOf(payload);
 
-      if (chatId) handlers.onMemberJoined(chatId);
+      if (current() && chatId) handlers.onMemberJoined(chatId);
     })
     .on('broadcast', { event: 'chat_changed' }, ({ payload }) => {
       const chatId = chatIdOf(payload);
 
-      if (chatId) handlers.onChatChanged(chatId);
+      if (current() && chatId) handlers.onChatChanged(chatId);
     })
     .on('broadcast', { event: 'membership_ended' }, ({ payload }) => {
       const chatId = chatIdOf(payload);
 
-      if (chatId) handlers.onMembershipEnded?.(chatId);
+      if (current() && chatId) handlers.onMembershipEnded?.(chatId);
     })
     .on('broadcast', { event: 'incoming_call' }, ({ payload }) => {
       const call = toIncomingCall(payload);
 
-      if (call) handlers.onIncomingCall?.(call);
+      if (current() && call) handlers.onIncomingCall?.(call);
     })
     .on('broadcast', { event: 'stream_ended' }, ({ payload }) => {
       const chatId = chatIdOf(payload);
       const streamId = (payload as { stream_id?: unknown } | undefined)?.stream_id;
 
-      if (chatId && typeof streamId === 'string') handlers.onStreamEnded?.(streamId, chatId);
+      if (current() && chatId && typeof streamId === 'string') handlers.onStreamEnded?.(streamId, chatId);
     })
     .on('broadcast', { event: 'friends_changed' }, () => {
-      handlers.onFriendsChanged?.();
+      if (current()) handlers.onFriendsChanged?.();
     })
     .subscribe((status) => {
+      if (!current()) return;
       if (status === 'SUBSCRIBED') {
         handlers.onJoined?.(wasJoined);
         wasJoined = true;
@@ -1413,15 +1431,16 @@ export function subscribeToUserEvents(userId: string, handlers: UserChannelHandl
     });
 
   return () => {
-    void supabase.removeChannel(channel);
+    active = false;
+    void api.removeChannel(channel);
   };
 }
 
 // Посты канала с попом — обычные сообщения его чата постов; поп публикует
 // `publish_pop` из `pops.ts`.
 
-async function fetchPost(messageId: string): Promise<Message> {
-  const { data, error } = await messagesSelect().eq('id', messageId).single();
+async function fetchPost(messageId: string, api: AccountClient): Promise<Message> {
+  const { data, error } = await messagesSelect(api).eq('id', messageId).single();
 
   if (error) throw error;
 
@@ -1431,12 +1450,13 @@ async function fetchPost(messageId: string): Promise<Message> {
 /** Пост с новым попом: поп публикуется без подписи, текст — у поста. */
 export async function publishPopPost(
   input: Omit<PublishPopInput, 'alsoPost' | 'caption'>,
+  api = requestClient(),
 ): Promise<Message> {
-  const { messageId } = await publishPop({ ...input, caption: null, alsoPost: true });
+  const { messageId } = await publishPop({ ...input, caption: null, alsoPost: true }, undefined, api);
 
   if (!messageId) throw new Error('Не удалось опубликовать пост');
 
-  return fetchPost(messageId);
+  return fetchPost(messageId, api);
 }
 
 /** Пост с уже опубликованным попом этого канала. */
@@ -1445,8 +1465,9 @@ export async function sendPopPost(
   popId: string,
   text: string | null,
   replyTo: string[] = [],
+  api = requestClient(),
 ): Promise<Message> {
-  const { data: messageId, error } = await supabase.rpc('send_pop_post', {
+  const { data: messageId, error } = await api.rpc('send_pop_post', {
     target_chat: chatId,
     pop: popId,
     message_text: text ?? undefined,
@@ -1456,7 +1477,7 @@ export async function sendPopPost(
   if (error) throw error;
   if (typeof messageId !== 'string') throw new Error('Не удалось опубликовать пост');
 
-  return fetchPost(messageId);
+  return fetchPost(messageId, api);
 }
 
 // =============================================================================
@@ -1495,8 +1516,9 @@ export async function searchChatMessages(
   query: string,
   cursor: ChatSearchCursor | null,
   signal?: AbortSignal,
+  api = requestClient(),
 ): Promise<ChatSearchPage> {
-  let request = supabase.rpc('search_chat_messages', {
+  let request = api.rpc('search_chat_messages', {
     target_chat: chatId,
     query,
     before_seq: cursor ?? undefined,
@@ -1532,8 +1554,9 @@ export async function countChatSearch(
   chatId: string,
   query: string,
   signal?: AbortSignal,
+  api = requestClient(),
 ): Promise<number> {
-  let request = supabase.rpc('count_chat_search', { target_chat: chatId, query });
+  let request = api.rpc('count_chat_search', { target_chat: chatId, query });
 
   if (signal) request = request.abortSignal(signal);
 
@@ -1553,8 +1576,9 @@ export async function setMessageHidden(
   messageId: string,
   range: HiddenRange,
   hide: boolean,
+  api = requestClient(),
 ): Promise<HiddenRange[]> {
-  const { data, error } = await supabase.rpc('set_message_hidden', {
+  const { data, error } = await api.rpc('set_message_hidden', {
     target_message: messageId,
     range_start: range.start,
     range_end: range.end,

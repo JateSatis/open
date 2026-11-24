@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 import { screen, userEvent } from '@testing-library/react-native';
 
 import { ReportSheet } from '.';
@@ -43,7 +44,7 @@ describe('ReportSheet', () => {
       chatId: 'chat-9',
       comment: 'пишет каждый день',
       block: true,
-    });
+    }, requestClient());
   });
 
   it('уже заблокированного не предлагает блокировать ещё раз', async () => {

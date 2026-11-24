@@ -2,7 +2,7 @@
 // общих групп, «был(а) в …». Все выборки идут через RLS (функции
 // `security invoker`): удалённое и скрытое политиками сюда не попадает.
 
-import { supabase } from '@/api/supabase';
+import { requestClient } from '@/api/requestClient';
 import { sessionAuthorization } from './sessionAuthorization';
 import type { SessionOwner } from '@/features/auth/sessionOwner';
 
@@ -27,8 +27,8 @@ export type ChatInfoSummary = {
   commonGroups: number;
 };
 
-export async function getChatInfoSummary(chatId: string): Promise<ChatInfoSummary> {
-  const { data, error } = await supabase.rpc('chat_info_summary', { target_chat: chatId });
+export async function getChatInfoSummary(chatId: string, api = requestClient()): Promise<ChatInfoSummary> {
+  const { data, error } = await api.rpc('chat_info_summary', { target_chat: chatId });
 
   if (error) throw error;
 
@@ -70,8 +70,9 @@ export type ChatMediaPage = { items: ChatMediaItem[]; next: MessageCursor | null
 export async function listChatMedia(
   chatId: string,
   cursor: MessageCursor | null,
+  api = requestClient(),
 ): Promise<ChatMediaPage> {
-  const { data, error } = await supabase.rpc('list_chat_media', {
+  const { data, error } = await api.rpc('list_chat_media', {
     target_chat: chatId,
     before_seq: cursor ?? undefined,
     page_size: CHAT_INFO_PAGE_SIZE,
@@ -129,8 +130,9 @@ export type ChatVoicePage = { items: ChatVoiceItem[]; next: MessageCursor | null
 export async function listChatVoices(
   chatId: string,
   cursor: MessageCursor | null,
+  api = requestClient(),
 ): Promise<ChatVoicePage> {
-  const { data, error } = await supabase.rpc('list_chat_voices', {
+  const { data, error } = await api.rpc('list_chat_voices', {
     target_chat: chatId,
     before_seq: cursor ?? undefined,
     page_size: CHAT_INFO_PAGE_SIZE,
@@ -176,8 +178,9 @@ export type CommonGroupsPage = { items: CommonGroup[]; next: InfoCursor | null }
 export async function listCommonGroups(
   otherUserId: string,
   cursor: InfoCursor | null,
+  api = requestClient(),
 ): Promise<CommonGroupsPage> {
-  const { data, error } = await supabase.rpc('list_common_groups', {
+  const { data, error } = await api.rpc('list_common_groups', {
     other_user: otherUserId,
     before_at: cursor?.at,
     before_id: cursor?.id,
@@ -218,7 +221,7 @@ export type ActivityStatus = {
 const LAST_SEEN_CHUNK = 200;
 
 /** Статусы людей: id → «в сети» и когда был. Удалённых база не отдаёт. */
-export async function getLastSeen(userIds: string[]): Promise<Map<string, ActivityStatus>> {
+export async function getLastSeen(userIds: string[], api = requestClient()): Promise<Map<string, ActivityStatus>> {
   const seen = new Map<string, ActivityStatus>();
   const chunks: string[][] = [];
 
@@ -227,7 +230,7 @@ export async function getLastSeen(userIds: string[]): Promise<Map<string, Activi
   }
 
   const results = await Promise.all(
-    chunks.map((ids) => supabase.rpc('activity_statuses', { user_ids: ids })),
+    chunks.map((ids) => api.rpc('activity_statuses', { user_ids: ids })),
   );
 
   for (const { data, error } of results) {
@@ -247,9 +250,9 @@ export async function getLastSeen(userIds: string[]): Promise<Map<string, Activi
  * раз в минуту), уход в фон — «был(а) сейчас». Пишет только база по моему
  * токену.
  */
-export async function markSeen(online: boolean, owner: SessionOwner): Promise<void> {
-  const { error } = await supabase.rpc('mark_seen', { online })
-    .setHeader('Authorization', await sessionAuthorization(owner));
+export async function markSeen(online: boolean, owner: SessionOwner, api = requestClient()): Promise<void> {
+  const { error } = await api.rpc('mark_seen', { online })
+    .setHeader('Authorization', await sessionAuthorization(owner, api));
 
   if (error) throw error;
 }
@@ -258,8 +261,8 @@ export async function markSeen(online: boolean, owner: SessionOwner): Promise<vo
  * Сменить или убрать название группы. Право — у создателя; остальным база
  * отказывает.
  */
-export async function setChatTitle(chatId: string, title: string | null): Promise<void> {
-  const { error } = await supabase.rpc('set_chat_title', {
+export async function setChatTitle(chatId: string, title: string | null, api = requestClient()): Promise<void> {
+  const { error } = await api.rpc('set_chat_title', {
     target_chat: chatId,
     // Функция принимает null, но генератор типов не размечает скалярные
     // аргументы rpc как nullable — отсюда приведение.

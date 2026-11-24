@@ -3,13 +3,13 @@
 // пост с ним одной транзакцией) и `send_pop_post` (пост с уже опубликованным
 // попом). Право публиковать проверяет база, а не клиент.
 
+import { requestClient } from '@/api/requestClient';
 import {
   toAudience,
   toReactionCounts,
   type MyReaction,
   type ReactionCounts,
 } from '@/api/reactionCounts';
-import { supabase } from '@/api/supabase';
 import type { Tables } from '@/api/types.gen';
 
 export const POPS_PAGE_SIZE = 30;
@@ -128,8 +128,9 @@ export async function listPops(
   channelId: string,
   before: Pick<Pop, 'id' | 'createdAt'> | null = null,
   limit = POPS_PAGE_SIZE,
+  api = requestClient(),
 ): Promise<Pop[]> {
-  let query = supabase
+  let query = api
     .from('pops')
     .select(COLUMNS)
     .eq('channel_id', channelId)
@@ -160,9 +161,10 @@ export async function listPopsAfter(
   channelId: string,
   after: Pick<Pop, 'id' | 'createdAt'>,
   limit = POPS_PAGE_SIZE,
+  api = requestClient(),
 ): Promise<Pop[]> {
   const at = `"${after.createdAt}"`;
-  const { data, error } = await supabase
+  const { data, error } = await api
     .from('pops')
     .select(COLUMNS)
     .eq('channel_id', channelId)
@@ -177,8 +179,8 @@ export async function listPopsAfter(
 }
 
 /** Один поп; `null` — его нет или он удалён. */
-export async function getPop(popId: string): Promise<Pop | null> {
-  const { data, error } = await supabase.from('pops').select(COLUMNS).eq('id', popId).maybeSingle();
+export async function getPop(popId: string, api = requestClient()): Promise<Pop | null> {
+  const { data, error } = await api.from('pops').select(COLUMNS).eq('id', popId).maybeSingle();
 
   if (error) throw error;
 
@@ -186,10 +188,10 @@ export async function getPop(popId: string): Promise<Pop | null> {
 }
 
 /** Свежие счётчики этих попсов — только живых. */
-export async function listPopCounters(popIds: string[]): Promise<PopCounters[]> {
+export async function listPopCounters(popIds: string[], api = requestClient()): Promise<PopCounters[]> {
   if (popIds.length === 0) return [];
 
-  const { data, error } = await supabase
+  const { data, error } = await api
     .from('pops')
     .select(`id, ${COUNTER_COLUMNS}` as const)
     .in('id', popIds.slice(0, MAX_POP_IDS));
@@ -207,10 +209,10 @@ const MAX_POP_IDS = 200;
  * засчитывает не чаще раза в 10 секунд; свои (публикующего в канале) и
  * удалённые пропускает.
  */
-export async function recordPopViews(popIds: string[], sessionId: string): Promise<void> {
+export async function recordPopViews(popIds: string[], sessionId: string, api = requestClient()): Promise<void> {
   if (popIds.length === 0) return;
 
-  const { error } = await supabase.rpc('record_pop_views', {
+  const { error } = await api.rpc('record_pop_views', {
     pop_ids: popIds.slice(0, MAX_POP_IDS),
     session_id: sessionId,
   });
@@ -219,8 +221,8 @@ export async function recordPopViews(popIds: string[], sessionId: string): Promi
 }
 
 /** Могу ли я публиковать в канале — посты и попсы. Решает база. */
-export async function canPublishInChannel(channelId: string): Promise<boolean> {
-  const { data, error } = await supabase.rpc('can_publish_in_channel', {
+export async function canPublishInChannel(channelId: string, api = requestClient()): Promise<boolean> {
+  const { data, error } = await api.rpc('can_publish_in_channel', {
     target_channel: channelId,
   });
 
@@ -233,8 +235,9 @@ export async function canPublishInChannel(channelId: string): Promise<boolean> {
 export async function publishPop(
   input: PublishPopInput,
   signal?: AbortSignal,
+  api = requestClient(),
 ): Promise<{ popId: string; messageId: string | null }> {
-  let request = supabase.rpc('publish_pop', {
+  let request = api.rpc('publish_pop', {
     target_channel: input.channelId,
     new_pop: input.popId,
     media: {

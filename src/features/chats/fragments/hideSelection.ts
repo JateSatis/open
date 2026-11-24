@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 import type { QueryClient } from '@tanstack/react-query';
 import { Alert } from 'react-native';
 
@@ -38,6 +39,7 @@ export async function toggleHiddenSelection(
   queryClient: QueryClient,
   selection: TextSelection,
   hide: boolean,
+  api = requestClient(),
 ): Promise<void> {
   if (hide) {
     const confirmed = await confirm({
@@ -54,8 +56,8 @@ export async function toggleHiddenSelection(
   const range = toServerRange(selection.text, selection.start, selection.end);
 
   try {
-    await setMessageHidden(selection.messageId, range, hide);
-    await refreshEditedMessages(queryClient, [selection.messageId]);
+    await setMessageHidden(selection.messageId, range, hide, api);
+    await refreshEditedMessages(queryClient, [selection.messageId], api);
   } catch {
     Alert.alert(
       hide ? 'Не получилось скрыть' : 'Не получилось показать',

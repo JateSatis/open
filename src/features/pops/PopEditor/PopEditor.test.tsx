@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 
 import { PopEditor } from '.';
@@ -142,6 +143,7 @@ describe('PopEditor', () => {
         posterUri: 'file:///frame.jpg',
         media: expect.objectContaining({ uri: 'file:///v.mp4', width: 720, height: 1280 }),
       }),
+      requestClient(),
     );
     expect(mockBack).toHaveBeenCalled();
   });

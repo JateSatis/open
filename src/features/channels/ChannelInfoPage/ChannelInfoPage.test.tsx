@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 import * as Clipboard from 'expo-clipboard';
 import { fireEvent, screen, waitFor } from '@testing-library/react-native';
 
@@ -239,14 +240,14 @@ describe('ChannelInfoPage', () => {
 
       await fireEvent.press(await screen.findByTestId('info-subscribe'));
 
-      expect(subscribeToChannel).toHaveBeenCalledWith('channel-1', false);
+      expect(subscribeToChannel).toHaveBeenCalledWith('channel-1', false, requestClient());
       expect(await screen.findByTestId('info-subscribed')).toBeTruthy();
       expect(screen.getByTestId('info-status')).toHaveTextContent('13 подписчиков');
       expect(screen.getByTestId('info-action-add-to-chats')).toBeTruthy();
 
       await fireEvent.press(screen.getByTestId('info-add-to-chats'));
 
-      expect(setChannelInChats).toHaveBeenCalledWith('channel-1', true);
+      expect(setChannelInChats).toHaveBeenCalledWith('channel-1', true, requestClient());
       await waitFor(() => expect(screen.queryByTestId('info-add-to-chats')).toBeNull());
       expect(screen.getByTestId('info-action-mute')).toBeTruthy();
     });
@@ -290,7 +291,7 @@ describe('ChannelInfoPage', () => {
       await fireEvent.press(await screen.findByTestId('info-action-unsubscribe'));
 
       expect(confirm).toHaveBeenCalled();
-      expect(unsubscribeFromChannel).toHaveBeenCalledWith('channel-1');
+      expect(unsubscribeFromChannel).toHaveBeenCalledWith('channel-1', requestClient());
       expect(await screen.findByTestId('info-subscribe')).toBeTruthy();
       expect(screen.getByTestId('info-status')).toHaveTextContent('12 подписчиков');
     });
@@ -314,13 +315,13 @@ describe('ChannelInfoPage', () => {
       await renderPage();
 
       await fireEvent.press(await screen.findByTestId('info-action-mute'));
-      expect(setChannelNotifications).toHaveBeenCalledWith('channel-1', false);
+      expect(setChannelNotifications).toHaveBeenCalledWith('channel-1', false, requestClient());
       await waitFor(() =>
         expect(screen.getByTestId('info-action-mute')).toHaveTextContent(/Включить звук/),
       );
 
       await fireEvent.press(screen.getByTestId('info-action-hide'));
-      expect(setChannelInChats).toHaveBeenCalledWith('channel-1', false);
+      expect(setChannelInChats).toHaveBeenCalledWith('channel-1', false, requestClient());
       expect(await screen.findByTestId('info-action-add-to-chats')).toBeTruthy();
     });
 

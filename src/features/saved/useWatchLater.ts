@@ -1,3 +1,4 @@
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo } from 'react';
 
@@ -20,10 +21,11 @@ type Filter = { input: SavedFilterInput | null; key: string | null };
  * перечитывания.
  */
 export function useWatchLater(enabled: boolean, { input, key }: Filter) {
+  const api = useRequestClient();
   const queryClient = useQueryClient();
   const query = useInfiniteQuery({
     queryKey: savedWatchLaterKey(key),
-    queryFn: ({ pageParam }) => listWatchLater(pageParam, input),
+    queryFn: ({ pageParam }) => listWatchLater(pageParam, input, api),
     initialPageParam: null as WatchLaterCursor | null,
     getNextPageParam: (page) => page.nextCursor,
     enabled,

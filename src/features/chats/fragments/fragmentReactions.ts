@@ -3,6 +3,9 @@
 // одного запроса, быстрые тапы меняют лишь желаемое, и в базе остаётся
 // последний выбор. Живёт вне компонентов — закрытое меню реакцию не обрывает.
 
+import { perClient } from '@/api/perClient';
+
+import { requestClient } from '@/api/requestClient';
 import type { QueryClient } from '@tanstack/react-query';
 
 import {
@@ -40,8 +43,7 @@ export type FragmentReactionIntent = {
   clusterId?: string | null;
 };
 
-const wanted = new Map<string, FragmentReactionIntent>();
-const inFlight = new Set<string>();
+const queues = perClient(() => new Map<string, FragmentReactionIntent>());
 
 function keyOf({ messageId, range }: Pick<FragmentReactionIntent, 'messageId' | 'range'>) {
   return `${messageId}:${range.start}-${range.end}`;
@@ -147,8 +149,8 @@ function isReactionLimit(cause: unknown): boolean {
   return typeof cause === 'object' && cause !== null && 'code' in cause && cause.code === 'OR001';
 }
 
-async function drain(queryClient: QueryClient, key: string) {
-  inFlight.add(key);
+async function drain(queryClient: QueryClient, key: string, api = requestClient()) {
+  const wanted = queues(api);
 
   let last: FragmentReactionIntent | undefined;
 
@@ -159,7 +161,7 @@ async function drain(queryClient: QueryClient, key: string) {
       if (!intent || intent === last) return;
 
       last = intent;
-      await withDeadline(setFragmentReaction(intent.messageId, intent.range, intent.emoji), DEADLINE_MS);
+      await withDeadline(setFragmentReaction(intent.messageId, intent.range, intent.emoji, api), DEADLINE_MS);
 
       // Пока ехал запрос, человек передумал — отправляем новое желаемое.
       if (wanted.get(key) !== intent) continue;
@@ -169,6 +171,7 @@ async function drain(queryClient: QueryClient, key: string) {
     }
   } catch (cause) {
     wanted.delete(key);
+    if (api !== requestClient()) return;
     showNotice(
       isNetworkError(cause)
         ? 'Не удалось поставить реакцию: нет связи'
@@ -178,7 +181,6 @@ async function drain(queryClient: QueryClient, key: string) {
       'error',
     );
   } finally {
-    inFlight.delete(key);
     // Счётчики и id фрагмента — из базы: и после успеха, и как откат. Сводные
     // счётчики кластера и моя реакция в нём меняются вместе с ними.
     if (last) {
@@ -189,7 +191,7 @@ async function drain(queryClient: QueryClient, key: string) {
 }
 
 /** Ставит, меняет или снимает мою реакцию на мой фрагмент этого диапазона. */
-export function sendFragmentReaction(queryClient: QueryClient, intent: FragmentReactionIntent) {
+export function sendFragmentReaction(queryClient: QueryClient, intent: FragmentReactionIntent, api = requestClient()) {
   const key = keyOf(intent);
 
   applyLocally(queryClient, intent);
@@ -197,7 +199,9 @@ export function sendFragmentReaction(queryClient: QueryClient, intent: FragmentR
   if (intent.clusterId !== undefined) {
     patchClusterReaction(queryClient, { ...intent, clusterId: intent.clusterId });
   }
+  const wanted = queues(api);
+  const running = wanted.has(key);
   wanted.set(key, intent);
 
-  if (!inFlight.has(key)) void drain(queryClient, key);
+  if (!running) void drain(queryClient, key, api);
 }

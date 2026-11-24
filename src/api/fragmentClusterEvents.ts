@@ -5,9 +5,10 @@
 // ошибки на экране. Уход приложения в фон отправляет накопленное сразу:
 // таймер в фоне не сработает. Диапазоны — code points, как в базе.
 
+import { requestClient } from '@/api/requestClient';
+import type { AccountClient } from '@/api/accountClient';
 import { AppState } from 'react-native';
 
-import { supabase } from '@/api/supabase';
 
 /** Сколько событий принимает `record_fragment_cluster_events` за вызов. */
 export const MAX_EVENTS_BATCH = 50;
@@ -34,7 +35,7 @@ export type ClusterEvent = {
   detail?: Record<string, number>;
 };
 
-let queue: ClusterEvent[] = [];
+const queued = new Map<AccountClient, ClusterEvent[]>();
 let timer: ReturnType<typeof setTimeout> | null = null;
 let watchingAppState = false;
 
@@ -58,24 +59,26 @@ export async function flushClusterEvents(): Promise<void> {
     timer = null;
   }
 
-  while (queue.length > 0) {
-    const batch = queue.slice(0, MAX_EVENTS_BATCH);
+  const batches = [...queued];
+  queued.clear();
+  await Promise.all(batches.map(async ([api, events]) => {
+    for (let i = 0; i < events.length; i += MAX_EVENTS_BATCH) {
+      const batch = events.slice(i, i + MAX_EVENTS_BATCH);
 
-    queue = queue.slice(MAX_EVENTS_BATCH);
+      try {
+        const { error } = await api.rpc('record_fragment_cluster_events', { events: batch.map(toRow) });
 
-    try {
-      const { error } = await supabase.rpc('record_fragment_cluster_events', { events: batch.map(toRow) });
-
-      // Отказ базы (лимит, неизвестный вид) — сигнал разработчику, не человеку.
-      if (error && __DEV__) console.warn('record_fragment_cluster_events:', error);
-    } catch {
-      // Сеть недоступна — пачка теряется: это данные для обучения, не действие человека.
+        // Отказ базы (лимит, неизвестный вид) — сигнал разработчику, не человеку.
+        if (error && __DEV__) console.warn('record_fragment_cluster_events:', error);
+      } catch {
+        // Сеть недоступна — пачка теряется: это данные для обучения, не действие человека.
+      }
     }
-  }
+  }));
 }
 
 /** Записать событие: уйдёт с ближайшей пачкой. */
-export function trackClusterEvent(event: ClusterEvent): void {
+export function trackClusterEvent(event: ClusterEvent, api = requestClient()): void {
   if (!watchingAppState) {
     watchingAppState = true;
     AppState.addEventListener('change', (state) => {
@@ -83,7 +86,9 @@ export function trackClusterEvent(event: ClusterEvent): void {
     });
   }
 
+  const queue = queued.get(api) ?? [];
   queue.push(event);
+  queued.set(api, queue);
 
   if (queue.length >= MAX_EVENTS_BATCH) {
     void flushClusterEvents();

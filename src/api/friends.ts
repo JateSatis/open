@@ -3,7 +3,8 @@
 // отправителю не раскрывается — для него отклонённая заявка выглядит как
 // неотвеченная, и различить их по ответу нельзя.
 
-import { supabase } from '@/api/supabase';
+import type { AccountClient } from '@/api/accountClient';
+import { requestClient } from '@/api/requestClient';
 
 /** Пара глазами меня. `self` — свой профиль. */
 export type FriendshipStatus = 'self' | 'none' | 'outgoing' | 'incoming' | 'friends';
@@ -84,8 +85,8 @@ function toPage<T extends PersonRow>(rows: T[], cursorAt: (row: T) => string): F
   };
 }
 
-export async function getFriendshipStatus(userId: string): Promise<FriendshipStatus> {
-  const { data, error } = await supabase.rpc('friendship_status', { p_user: userId });
+export async function getFriendshipStatus(userId: string, api = requestClient()): Promise<FriendshipStatus> {
+  const { data, error } = await api.rpc('friendship_status', { p_user: userId });
 
   if (error) throw error;
 
@@ -99,8 +100,8 @@ type FriendAction =
   | 'decline_friend_request'
   | 'remove_friend';
 
-async function act(action: FriendAction, userId: string): Promise<FriendshipStatus> {
-  const { data, error } = await supabase.rpc(action, { p_user: userId });
+async function act(action: FriendAction, userId: string, api: AccountClient): Promise<FriendshipStatus> {
+  const { data, error } = await api.rpc(action, { p_user: userId });
 
   if (error) {
     if (error.code === FRIEND_REQUEST_LIMIT_CODE) throw new FriendRequestLimitError();
@@ -111,14 +112,14 @@ async function act(action: FriendAction, userId: string): Promise<FriendshipStat
 }
 
 /** «Добавить в друзья». Если он уже звал меня — это принятие. */
-export const sendFriendRequest = (userId: string) => act('send_friend_request', userId);
-export const cancelFriendRequest = (userId: string) => act('cancel_friend_request', userId);
-export const acceptFriendRequest = (userId: string) => act('accept_friend_request', userId);
-export const declineFriendRequest = (userId: string) => act('decline_friend_request', userId);
-export const removeFriend = (userId: string) => act('remove_friend', userId);
+export const sendFriendRequest = (userId: string, api = requestClient()) => act('send_friend_request', userId, api);
+export const cancelFriendRequest = (userId: string, api = requestClient()) => act('cancel_friend_request', userId, api);
+export const acceptFriendRequest = (userId: string, api = requestClient()) => act('accept_friend_request', userId, api);
+export const declineFriendRequest = (userId: string, api = requestClient()) => act('decline_friend_request', userId, api);
+export const removeFriend = (userId: string, api = requestClient()) => act('remove_friend', userId, api);
 
-export async function getFriendsSummary(userId: string): Promise<FriendsSummary> {
-  const { data, error } = await supabase.rpc('friends_summary', { p_user: userId });
+export async function getFriendsSummary(userId: string, api = requestClient()): Promise<FriendsSummary> {
+  const { data, error } = await api.rpc('friends_summary', { p_user: userId });
 
   if (error) throw error;
 
@@ -138,8 +139,9 @@ export async function getFriendsSummary(userId: string): Promise<FriendsSummary>
 export async function listFriends(
   userId: string,
   before: { at: string; id: string } | null,
+  api = requestClient(),
 ): Promise<FriendsPage> {
-  const { data, error } = await supabase.rpc('list_friends', {
+  const { data, error } = await api.rpc('list_friends', {
     p_user: userId,
     p_limit: FRIENDS_PAGE_SIZE,
     ...(before ? { p_before_accepted_at: before.at, p_before_id: before.id } : {}),
@@ -155,8 +157,9 @@ export async function listFriends(
 
 export async function listIncomingFriendRequests(
   before: { at: string; id: string } | null,
+  api = requestClient(),
 ): Promise<FriendsPage> {
-  const { data, error } = await supabase.rpc('list_incoming_friend_requests', {
+  const { data, error } = await api.rpc('list_incoming_friend_requests', {
     p_limit: FRIENDS_PAGE_SIZE,
     ...(before ? { p_before_created_at: before.at, p_before_id: before.id } : {}),
   });

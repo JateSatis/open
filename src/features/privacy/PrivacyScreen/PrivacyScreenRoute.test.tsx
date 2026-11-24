@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 import { screen, userEvent, waitFor, within } from '@testing-library/react-native';
 
 import { PrivacyScreen } from '@/features/privacy/PrivacyScreen';
@@ -121,7 +122,7 @@ describe('Конфиденциальность и безопасность', () 
     await renderWithQuery(<PrivacyScreen />);
     await user.press(await screen.findByTestId(`${testID}-nobody`));
 
-    expect(mocked.setPrivacySetting).toHaveBeenCalledWith(key, 'nobody');
+    expect(mocked.setPrivacySetting).toHaveBeenCalledWith(key, 'nobody', requestClient());
     expect(await screen.findByLabelText(`${title}: Никто, выбрано`)).toBeTruthy();
   });
 

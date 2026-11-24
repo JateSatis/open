@@ -1,3 +1,4 @@
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouteParams, useRouter } from '@/navigation';
 import { useCallback, useState } from 'react';
@@ -32,6 +33,7 @@ const noop = () => undefined;
  * так решает база; здесь лишь нет кнопок вложений, голосового и кружка.
  */
 export function DialogueRequestScreen() {
+  const api = useRequestClient();
   const { userId } = useRouteParams<'Request'>();
   const router = useRouter();
   const theme = useTheme();
@@ -55,7 +57,7 @@ export function DialogueRequestScreen() {
   const send = useMutation({
     // Без связи React Query поставил бы отправку на паузу молча.
     networkMode: 'always',
-    mutationFn: (requestText: string) => createChat({ inviteeIds: [userId], requestText }),
+    mutationFn: (requestText: string) => createChat({ inviteeIds: [userId], requestText }, api),
     onSuccess: (result: CreateChatResult) => {
       if (result.outcome === 'incoming_invite') {
         void queryClient.invalidateQueries({ queryKey: invitesQueryKey });

@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 import type { Session as SupabaseSession } from '@supabase/supabase-js';
 import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
 
@@ -111,11 +112,11 @@ describe('cluster panel header', () => {
     await renderCluster();
     await act(async () => fireEvent.press(await screen.findByLabelText('Реакция 🤣, 1')));
 
-    expect(mockedSet).toHaveBeenLastCalledWith('m1', display, '🤣');
+    expect(mockedSet).toHaveBeenLastCalledWith('m1', display, '🤣', requestClient());
     expect(await screen.findByLabelText('Снять реакцию 🤣')).toBeTruthy();
     expect(await screen.findByLabelText('Реакция 🔥, 1')).toBeTruthy();
     expect(mockedTrack).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: 'cluster_reacted', clusterId: 'k1', decisionId: 'd1' }),
+      expect.objectContaining({ kind: 'cluster_reacted', clusterId: 'k1', decisionId: 'd1' }), requestClient()
     );
   });
 
@@ -139,14 +140,14 @@ describe('cluster panel header', () => {
     await act(async () => fireEvent.press(await screen.findByLabelText('Реакция 🤣, 1')));
     await act(async () => fireEvent.press(await screen.findByLabelText('Снять реакцию 🤣')));
 
-    await waitFor(() => expect(mockedSet).toHaveBeenLastCalledWith('m2', display, null));
+    await waitFor(() => expect(mockedSet).toHaveBeenLastCalledWith('m2', display, null, requestClient()));
   });
 
   it('a tap on my reaction takes it off where it stands — on my other fragment of the cluster', async () => {
     await renderCluster();
     await act(async () => fireEvent.press(await screen.findByLabelText('Снять реакцию 🔥')));
 
-    expect(mockedSet).toHaveBeenLastCalledWith('m1', { start: 12, end: 19, text: 'улететь' }, null);
+    expect(mockedSet).toHaveBeenLastCalledWith('m1', { start: 12, end: 19, text: 'улететь' }, null, requestClient());
     expect(await screen.findByLabelText('Реакция 🔥, 1')).toBeTruthy();
   });
 });
@@ -180,13 +181,13 @@ describe('area panel header', () => {
 
     await renderArea();
 
-    expect(mockedArea).toHaveBeenCalledWith('m1', 6, 27);
+    expect(mockedArea).toHaveBeenCalledWith('m1', 6, 27, requestClient());
     expect(await screen.findByLabelText('Снять реакцию 🔥')).toBeTruthy();
 
     await act(async () => fireEvent.press(screen.getByLabelText('Все реакции')));
     await act(async () => fireEvent.press(screen.getByTestId('reaction-option-👍')));
 
-    expect(mockedSet).toHaveBeenLastCalledWith('m1', area, '👍');
+    expect(mockedSet).toHaveBeenLastCalledWith('m1', area, '👍', requestClient());
     // Прежняя моя в кластере погасла, новая — на фрагменте ровно области — внутри.
     expect(await screen.findByLabelText('Реакция 🔥, 1')).toBeTruthy();
     expect(await screen.findByLabelText('Снять реакцию 👍')).toBeTruthy();

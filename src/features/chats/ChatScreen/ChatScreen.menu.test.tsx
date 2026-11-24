@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 jest.mock('@/api/historyWindow', () => ({
   getHistoryWindow: jest.fn((...args) => jest.requireActual('@/test/historyWindowMock').fixtureHistoryWindow(...args)),
   getHistoryGroupKeys: jest.fn(() => Promise.resolve([])),
@@ -338,7 +339,7 @@ describe('message menu', () => {
     await tapMessage('m2');
     await choose('Закрепить');
 
-    expect(mockedPin).toHaveBeenCalledWith('m2', null);
+    expect(mockedPin).toHaveBeenCalledWith('m2', null, requestClient());
     expect(await screen.findByText('Закреплённое сообщение')).toBeTruthy();
   });
 });
@@ -359,7 +360,7 @@ describe('deleting', () => {
     );
     // Исчезло до ответа сервера.
     await waitFor(() => expect(screen.queryByText('как дела?')).toBeNull());
-    expect(mockedDelete).toHaveBeenCalledWith(['m3']);
+    expect(mockedDelete).toHaveBeenCalledWith(['m3'], requestClient());
 
     await act(async () => finish());
   });
@@ -391,7 +392,7 @@ describe('deleting', () => {
 
     await waitFor(() => expect(screen.queryByText('привет')).toBeNull());
     expect(screen.getByText('как дела?')).toBeTruthy();
-    expect(mockedTombstones).toHaveBeenCalledWith(expect.arrayContaining(['m2', 'm3']));
+    expect(mockedTombstones).toHaveBeenCalledWith(expect.arrayContaining(['m2', 'm3']), requestClient());
   });
 
   it('refreshes the pinned bar when someone pins while the chat is open', async () => {
@@ -512,7 +513,7 @@ describe('selection', () => {
         expect.objectContaining({ title: 'Удалить 2 сообщения?', message: 'Они исчезнут у всех.' }),
       ),
     );
-    await waitFor(() => expect(mockedDelete).toHaveBeenCalledWith(['m1', 'm3']));
+    await waitFor(() => expect(mockedDelete).toHaveBeenCalledWith(['m1', 'm3'], requestClient()));
     await waitFor(() => expect(screen.queryByText('эй')).toBeNull());
   });
 

@@ -1,4 +1,6 @@
-import { useEffect, useSyncExternalStore } from 'react';
+import type { AccountClient } from '@/api/accountClient';
+import { useRequestClient } from '@/features/auth/RequestClientContext';
+import { useCallback, useEffect, useSyncExternalStore } from 'react';
 
 import type { SignedEntry } from '@/api/signedUrls';
 
@@ -8,10 +10,10 @@ export type SignedSource = { uri: string; cacheKey?: string };
 /** Подпись закрытого бакета — то, что отдают `avatars.ts` и `chatMedia.ts`. */
 export type SignedApi = {
   isPath: (value: string | null | undefined) => value is string;
-  entry: (path: string) => Readonly<SignedEntry> | undefined;
+  entry: (path: string, owner: AccountClient) => Readonly<SignedEntry> | undefined;
   refreshDelay: (entry: Readonly<SignedEntry> | undefined) => number;
-  request: (path: string) => void;
-  subscribe: (listener: () => void) => () => void;
+  request: (path: string, owner: AccountClient) => void;
+  subscribe: (listener: () => void, owner: AccountClient) => () => void;
 };
 
 const noSubscription = () => () => {};
@@ -24,9 +26,11 @@ const noSubscription = () => () => {};
  * (скрыто, нет сети) — через паузу.
  */
 export function useSignedSource(api: SignedApi, value: string | null | undefined): SignedSource | null {
+  const owner = useRequestClient();
+  const subscribe = useCallback((listener: () => void) => api.subscribe(listener, owner), [api, owner]);
   const path = api.isPath(value) ? value : null;
-  const entry = useSyncExternalStore(path ? api.subscribe : noSubscription, () =>
-    path ? api.entry(path) : undefined,
+  const entry = useSyncExternalStore(path ? subscribe : noSubscription, () =>
+    path ? api.entry(path, owner) : undefined,
   );
 
   useEffect(() => {
@@ -35,14 +39,14 @@ export function useSignedSource(api: SignedApi, value: string | null | undefined
     const delay = api.refreshDelay(entry);
 
     if (delay === 0) {
-      api.request(path);
+      api.request(path, owner);
       return;
     }
 
-    const timer = setTimeout(() => api.request(path), delay);
+    const timer = setTimeout(() => api.request(path, owner), delay);
 
     return () => clearTimeout(timer);
-  }, [api, path, entry]);
+  }, [api, path, entry, owner]);
 
   if (!value) return null;
   if (!path) return { uri: value };

@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 import type { Session as SupabaseSession } from '@supabase/supabase-js';
 import { fireEvent, screen, userEvent, waitFor } from '@testing-library/react-native';
 
@@ -103,7 +104,7 @@ describe('NewChannelForm', () => {
     await fill('Канал', 'taken_name');
 
     expect(await screen.findByText('Имя занято')).toBeTruthy();
-    expect(mockedAvailable).toHaveBeenCalledWith('channel', 'taken_name', undefined);
+    expect(mockedAvailable).toHaveBeenCalledWith('channel', 'taken_name', undefined, requestClient());
     expect(createButton()).toBeDisabled();
   });
 
@@ -143,7 +144,7 @@ describe('NewChannelForm', () => {
     await waitFor(() => expect(mockReplace).toHaveBeenCalledWith({ name: 'Channel', params: { channelId: 'channel-1' } }));
     expect(mockedCreate).toHaveBeenCalledWith(
       { title: 'Мой канал', username: 'my_channel', description: null, avatarUrl: null },
-      expect.anything(),
+      expect.anything(), requestClient()
     );
     expect(mockedUpload).not.toHaveBeenCalled();
   });
@@ -160,7 +161,7 @@ describe('NewChannelForm', () => {
     await user.press(createButton());
 
     expect(await screen.findByTestId('create-channel-error')).toHaveTextContent('Имя занято');
-    expect(mockedRemove).toHaveBeenCalledWith('user-1/channel-avatar/a.jpg');
+    expect(mockedRemove).toHaveBeenCalledWith('user-1/channel-avatar/a.jpg', requestClient());
     expect(screen.getByTestId('channel-title').props.value).toBe('Мой канал');
     expect(mockReplace).not.toHaveBeenCalled();
   });

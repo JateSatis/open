@@ -3,6 +3,9 @@
 // Простые функции, а не `useMutation`: без сети запрос не встаёт на паузу,
 // срок ответа держит `withDeadline` (как `saveToSaved`).
 
+import { requestClient } from '@/api/requestClient';
+
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useMemo } from 'react';
 
@@ -37,7 +40,8 @@ import { isNetworkError } from '@/lib/network';
 
 const SAVED_DEADLINE_MS = 15_000;
 
-function failed(cause: unknown, text: string) {
+function failed(api: ReturnType<typeof requestClient>, cause: unknown, text: string) {
+  if (api !== requestClient()) return;
   if (isNetworkError(cause)) reportRequestFailed();
 
   showNotice(text, 'error');
@@ -48,6 +52,7 @@ function failed(cause: unknown, text: string) {
  * обратно. Ответ после срока — правка всё же прошла: кеш перечитывается.
  */
 async function optimistic(
+  api: ReturnType<typeof requestClient>,
   queryClient: QueryClient,
   ids: readonly string[],
   patch: SavedPatch,
@@ -65,7 +70,7 @@ async function optimistic(
     rollbackSaved(queryClient, before);
     // Запись, которой не было среди загруженного «Все», откатом не вернуть.
     void queryClient.invalidateQueries({ queryKey: savedWatchLaterQueryKey });
-    failed(cause, failText);
+    failed(api, cause, failText);
     return false;
   } finally {
     refreshFiltered(queryClient);
@@ -123,6 +128,7 @@ export type SavedActions = {
 };
 
 export function useSavedActions(): SavedActions {
+  const api = useRequestClient();
   const queryClient = useQueryClient();
 
   return useMemo(() => {
@@ -131,10 +137,11 @@ export function useSavedActions(): SavedActions {
 
       bumpTagUses(queryClient, tagId, on ? 1 : -1);
       void optimistic(
+        api,
         queryClient,
         [saved.id],
         (item) => withTag(item, tagId, on),
-        () => setSavedTag(saved.id, tagId, on),
+        () => setSavedTag(saved.id, tagId, on, api),
         'Не удалось изменить теги',
       ).then((ok) => {
         if (!ok) bumpTagUses(queryClient, tagId, on ? -1 : 1);
@@ -145,7 +152,7 @@ export function useSavedActions(): SavedActions {
       toggleTag,
       createTag: async (saved, name) => {
         try {
-          const tag = await withDeadline(createSavedTag(name), SAVED_DEADLINE_MS);
+          const tag = await withDeadline(createSavedTag(name, api), SAVED_DEADLINE_MS);
 
           queryClient.setQueryData<SavedTag[]>(savedTagsQueryKey, (tags) =>
             tags && !tags.some((item) => item.id === tag.id) ? [...tags, tag] : tags,
@@ -153,17 +160,18 @@ export function useSavedActions(): SavedActions {
 
           if (!saved.tagIds.includes(tag.id)) toggleTag(saved, tag.id);
         } catch (cause) {
-          failed(cause, 'Не удалось создать тег');
+          failed(api, cause, 'Не удалось создать тег');
         }
       },
       setWatchLater: (ids, state) => {
         const now = new Date().toISOString();
 
         void optimistic(
+          api,
           queryClient,
           ids,
           (item) => withWatch(item, state, now),
-          () => setSavedWatchLater([...ids], state),
+          () => setSavedWatchLater([...ids], state, api),
           'Не удалось изменить «Посмотреть позже»',
         );
       },
@@ -180,10 +188,11 @@ export function useSavedActions(): SavedActions {
         }
 
         void optimistic(
+          api,
           queryClient,
           [saved.id],
           (item) => ({ ...item, watchLaterAt, watchDoneAt }),
-          () => restoreSavedWatchLater(saved.id, watchLaterAt, watchDoneAt),
+          () => restoreSavedWatchLater(saved.id, watchLaterAt, watchDoneAt, api),
           'Не удалось вернуть',
         );
       },
@@ -191,11 +200,12 @@ export function useSavedActions(): SavedActions {
         const now = new Date().toISOString();
 
         void optimistic(
+          api,
           queryClient,
           ids,
           (item) =>
             pinned ? { ...item, pinnedAt: item.pinnedAt ?? now } : { ...item, pinnedAt: null },
-          () => setSavedPinned([...ids], pinned),
+          () => setSavedPinned([...ids], pinned, api),
           pinned ? 'Не удалось закрепить' : 'Не удалось открепить',
         );
       },
@@ -206,6 +216,7 @@ export function useSavedActions(): SavedActions {
         );
 
         void optimistic(
+          api,
           queryClient,
           [saved.id],
           (item): SavedItem => ({
@@ -216,7 +227,7 @@ export function useSavedActions(): SavedActions {
             edited: true,
             editStatus: 'saving',
           }),
-          () => editSavedNote(saved.id, trimmed, [...keep]),
+          () => editSavedNote(saved.id, trimmed, [...keep], api),
           'Изменения не сохранены',
         ).then((ok) => {
           if (!ok) return;
@@ -249,7 +260,7 @@ export function useSavedActions(): SavedActions {
         // Ответы на удалённое — с заглушкой «Запись удалена», как их отдаст база.
         patchQuotes(queryClient, (quote) => (gone.has(quote.savedId) ? { savedId: null } : quote));
 
-        void withDeadline(deleteSavedMessages([...ids]), SAVED_DEADLINE_MS)
+        void withDeadline(deleteSavedMessages([...ids], api), SAVED_DEADLINE_MS)
           .then(() => {
             // Счётчики тегов уменьшила база.
             void queryClient.invalidateQueries({ queryKey: savedTagsQueryKey });
@@ -257,9 +268,9 @@ export function useSavedActions(): SavedActions {
           .catch((cause: unknown) => {
             // Удалённое из списков откатом не вставить на место — перечитать.
             void queryClient.invalidateQueries({ queryKey: savedQueryKey });
-            failed(cause, 'Не удалось удалить');
+            failed(api, cause, 'Не удалось удалить');
           });
       },
     };
-  }, [queryClient]);
+  }, [api, queryClient]);
 }

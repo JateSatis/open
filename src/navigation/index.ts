@@ -1,3 +1,5 @@
+import { useSessionStore } from '@/features/auth/sessionState';
+import { requestSelection } from '@/api/screenRequest';
 import {
   CommonActions,
   StackActions,
@@ -6,7 +8,7 @@ import {
   useRoute,
   type RouteProp,
 } from '@react-navigation/native';
-import { useLayoutEffect } from 'react';
+import { useLayoutEffect, useMemo } from 'react';
 import type { NativeStackNavigationOptions } from '@react-navigation/native-stack';
 import { create } from 'zustand';
 
@@ -64,7 +66,17 @@ export const router = {
 };
 
 export function useRouter() {
-  return router;
+  const selected = useSessionStore(requestSelection);
+  return useMemo(() => {
+    const active = () => selected === requestSelection();
+    return {
+      push: (to: Destination) => { if (active()) router.push(to); },
+      replace: (to: Destination) => { if (active()) router.replace(to); },
+      navigate: (to: Destination) => { if (active()) router.navigate(to); },
+      back: () => { if (active()) router.back(); },
+      canGoBack: () => active() && router.canGoBack(),
+    };
+  }, [selected]);
 }
 
 export function useRouteParams<N extends keyof RootParams>() {

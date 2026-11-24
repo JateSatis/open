@@ -1,3 +1,4 @@
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useFocusEffect } from '@/navigation';
 import { useCallback, useMemo, useRef, useState } from 'react';
@@ -36,9 +37,10 @@ const OFFLINE_NOTICE = 'Нет связи — поиск недоступен.';
  * событиями (`usePopCountersSync`), новая выдача — это новый запрос.
  */
 export function useSearchPopsQuery(query: string, enabled = true) {
+  const api = useRequestClient();
   return useInfiniteQuery({
     queryKey: searchPopsQueryKey(query),
-    queryFn: ({ pageParam, signal }) => searchPops(query, pageParam, signal),
+    queryFn: ({ pageParam, signal }) => searchPops(query, pageParam, signal, api),
     initialPageParam: null as SearchPopsCursor | null,
     getNextPageParam: nextSearchPopsCursor,
     enabled: enabled && query !== '',
@@ -89,6 +91,7 @@ export type FeedSearchResults = {
  * на экране остаётся ответ, а над ним — пояснение.
  */
 export function useFeedSearch(query: string): FeedSearchResults {
+  const api = useRequestClient();
   const trimmed = query.trim();
   const parsed = useMemo(() => parseSearchQuery(trimmed), [trimmed]);
   const debounced = useDebounced(trimmed, SEARCH_DEBOUNCE_MS);
@@ -113,7 +116,7 @@ export function useFeedSearch(query: string): FeedSearchResults {
 
   const channels = useQuery({
     queryKey: [...feedChannelsQueryKey, debounced],
-    queryFn: ({ signal }) => searchChannels(debounced, signal),
+    queryFn: ({ signal }) => searchChannels(debounced, signal, api),
     enabled,
     placeholderData: whileTyping(debounced),
     staleTime: SEARCH_STALE_MS,

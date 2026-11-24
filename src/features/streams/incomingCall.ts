@@ -1,3 +1,4 @@
+import { requestSelection } from '@/api/screenRequest';
 import { router } from '@/navigation';
 import { create } from 'zustand';
 
@@ -56,9 +57,12 @@ export function ring(call: IncomingCall, now: number = Date.now()) {
   // Уже говорю в другом звонке — полноэкранный звонок оборвал бы разговор
   // на полуслове. Хватит короткой карточки.
   if (isInCall()) {
+    const selection = requestSelection();
     showNotice(`Входящий звонок · ${incomingTitle(call)}`, 'info', {
       label: 'Открыть чат',
-      run: () => router.push({ name: 'Chat', params: { chatId: call.chatId } }),
+      run: () => {
+        if (selection === requestSelection()) router.push({ name: 'Chat', params: { chatId: call.chatId } });
+      },
     });
     return;
   }

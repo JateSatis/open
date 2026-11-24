@@ -3,6 +3,7 @@
 // что у правки сообщений (`messages/editing`): наложение в `pendingEdits`
 // под ключом ветки, отказ — снятие наложения.
 
+import { requestClient } from '@/api/requestClient';
 import { notifyManager, type QueryClient } from '@tanstack/react-query';
 
 import { editComment, type CommentSubject } from '@/api/comments';
@@ -58,14 +59,16 @@ export async function saveCommentEdit(
   context: EditContext,
   original: CommentItem,
   result: EditResult,
+  api = requestClient(),
 ): Promise<void> {
+  if (api !== requestClient()) return;
   const { queryClient, subject, currentUserId } = context;
   const targetId = subject.id;
   const key = commentThreadKey(targetId);
   const optimistic = optimisticEdit(original, result);
-  const retry = () => void saveCommentEdit(context, original, result);
+  const retry = () => void saveCommentEdit(context, original, result, api);
 
-  setPendingEdit(key, optimistic);
+  setPendingEdit(key, optimistic, api);
 
   let uploaded: UploadedMedia[] = [];
 
@@ -74,23 +77,24 @@ export async function saveCommentEdit(
 
     if (hasFiles && !currentUserId) throw new Error('Нет активной сессии');
 
-    uploaded = hasFiles ? await uploadEditFiles(result, currentUserId!) : [];
+    uploaded = hasFiles ? await uploadEditFiles(result, currentUserId!, api) : [];
 
-    const saved = await editComment(original.id, toEditInput(result, uploaded));
+    const saved = await editComment(original.id, toEditInput(result, uploaded), api);
+    if (api.retired) return;
     const previews = optimistic.localPreviews?.some(Boolean)
       ? new Map([[saved.id, optimistic.localPreviews]])
       : undefined;
 
     replaceComments(queryClient, targetId, [saved], previews);
-    notifyManager.schedule(() => clearPendingEdit(key, optimistic));
+    notifyManager.schedule(() => clearPendingEdit(key, optimistic, api));
   } catch (cause) {
-    clearPendingEdit(key, optimistic);
+    if (!api.retired) clearPendingEdit(key, optimistic, api);
 
     // Отказ сервера — новые файлы ничьи. При обрыве связи правка могла дойти.
     if (uploaded.length > 0 && !isNetworkError(cause)) {
-      void Promise.all(uploaded.map((item) => removeUploadedMedia(storedPaths(item))));
+      void Promise.all(uploaded.map((item) => removeUploadedMedia(storedPaths(item), undefined, api)));
     }
 
-    explainFailure(cause, subject, retry);
+    if (api === requestClient()) explainFailure(cause, subject, retry);
   }
 }

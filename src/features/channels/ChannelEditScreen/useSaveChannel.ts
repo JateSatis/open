@@ -1,3 +1,5 @@
+import { requestClient } from '@/api/requestClient';
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback } from 'react';
 
@@ -50,6 +52,7 @@ export function describeSaveChannelError(error: unknown): string {
  * база: кеш мог отстать.
  */
 export function useSaveChannel(channel: Channel, userId: string | null) {
+  const api = useRequestClient();
   const queryClient = useQueryClient();
   const channelId = channel.id;
 
@@ -65,13 +68,13 @@ export function useSaveChannel(channel: Channel, userId: string | null) {
     async (changes: ChannelChanges) => {
       try {
         if (changes.title !== undefined) {
-          await withDeadline(setChannelTitle(channelId, changes.title), TEXT_DEADLINE_MS);
+          await withDeadline(setChannelTitle(channelId, changes.title, api), TEXT_DEADLINE_MS);
           patch({ title: changes.title });
         }
 
         if (changes.description !== undefined) {
           await withDeadline(
-            setChannelDescription(channelId, changes.description),
+            setChannelDescription(channelId, changes.description, api),
             TEXT_DEADLINE_MS,
           );
           patch({ description: changes.description });
@@ -81,7 +84,7 @@ export function useSaveChannel(channel: Channel, userId: string | null) {
           const username = changes.username;
 
           try {
-            await withDeadline(setChannelUsername(channelId, username), TEXT_DEADLINE_MS);
+            await withDeadline(setChannelUsername(channelId, username, api), TEXT_DEADLINE_MS);
           } catch (error) {
             // Имя заняли между проверкой и отправкой: старый «свободно» больше не правда.
             if (error instanceof ChannelUsernameTakenError) {
@@ -97,7 +100,7 @@ export function useSaveChannel(channel: Channel, userId: string | null) {
         if (changes.photo.kind !== 'keep') {
           if (!userId) throw new Error('Нет активной сессии');
 
-          const avatarUrl = await savePhoto(channelId, userId, changes.photo);
+          const avatarUrl = await savePhoto(channelId, userId, changes.photo, api);
 
           patch({ avatarUrl });
         }
@@ -108,7 +111,7 @@ export function useSaveChannel(channel: Channel, userId: string | null) {
         void queryClient.invalidateQueries({ queryKey: searchQueryKey });
       }
     },
-    [channelId, patch, queryClient, userId],
+    [api, channelId, patch, queryClient, userId],
   );
 }
 
@@ -116,33 +119,34 @@ async function savePhoto(
   channelId: string,
   userId: string,
   photo: Exclude<PhotoDraft, { kind: 'keep' }>,
+  api = requestClient(),
 ): Promise<string | null> {
   if (photo.kind === 'remove') {
-    const replaced = await withDeadline(setChannelAvatar(channelId, null), PHOTO_DEADLINE_MS);
+    const replaced = await withDeadline(setChannelAvatar(channelId, null, api), PHOTO_DEADLINE_MS);
     // Канал уже без фото; файл убирается без ожидания.
-    void removeOwnChannelAvatar(replaced, userId);
+    void removeOwnChannelAvatar(replaced, userId, api);
     return null;
   }
 
   // Загрузка в Storage без связи не падает, а висит: срок превращает её в ошибку.
   const uploaded = await withDeadline(
-    uploadChannelAvatar(photo.uri, userId),
+    uploadChannelAvatar(photo.uri, userId, api),
     PHOTO_DEADLINE_MS,
     (late) => {
-      void removePublicMedia(late.path);
+      void removePublicMedia(late.path, api);
     },
   );
   let replaced: string | null;
 
   try {
-    replaced = await withDeadline(setChannelAvatar(channelId, uploaded.url), PHOTO_DEADLINE_MS);
+    replaced = await withDeadline(setChannelAvatar(channelId, uploaded.url, api), PHOTO_DEADLINE_MS);
   } catch (error) {
     // База фото не приняла — файл никому не нужен. Кроме запроса, оборванного
     // по сроку: он мог дойти, и файл тогда — фото канала.
-    if (!(error instanceof DeadlineError)) void removePublicMedia(uploaded.path);
+    if (!(error instanceof DeadlineError)) void removePublicMedia(uploaded.path, api);
     throw error;
   }
 
-  void removeOwnChannelAvatar(replaced, userId);
+  void removeOwnChannelAvatar(replaced, userId, api);
   return uploaded.url;
 }

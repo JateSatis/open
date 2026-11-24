@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 import { QueryClient } from '@tanstack/react-query';
 
 import { sendFragmentReaction } from './fragmentReactions';
@@ -175,7 +176,7 @@ describe('my reaction on a fragment', () => {
     await flush();
 
     expect(mockedSet).toHaveBeenCalledTimes(2);
-    expect(mockedSet).toHaveBeenLastCalledWith(messageId, range, null);
+    expect(mockedSet).toHaveBeenLastCalledWith(messageId, range, null, requestClient());
   });
 
   it('says so in human words when the network is gone, and the cache goes back to the server', async () => {

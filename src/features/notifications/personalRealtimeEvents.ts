@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 import type { QueryClient } from '@tanstack/react-query';
 
 import { subscribeToUserEvents } from '@/api/chats';
@@ -12,19 +13,19 @@ import { myInviteQueryKey } from '@/features/chats/useMyInvite';
 import { friendKeys } from '@/features/friends/keys';
 import { profileKeys } from '@/features/profile/keys';
 import { popsQueryKey } from '@/features/pops/keys';
-import { dismissAlert, showAlert } from '@/features/notifications/alertsStore';
+import { showAlert } from '@/features/notifications/alertsStore';
 import { leaveCall } from '@/features/streams/callSession';
 import { getCall } from '@/features/streams/callStore';
-import { ring, resetRinging, stopRinging } from '@/features/streams/incomingCall';
+import { ring, stopRinging } from '@/features/streams/incomingCall';
 import { startRingingRecheck } from '@/features/streams/ringingRecheck';
 import { liveStreamQueryKey } from '@/features/streams/streamKeys';
 import { getActiveChatId } from '@/store/activeChat';
 
-function bindPersonalEvents(userId: string, queryClient: QueryClient) {
+function bindPersonalEvents(userId: string, queryClient: QueryClient, api = requestClient()) {
   let active = true;
   function whileCurrent<Args extends unknown[]>(handle: (...args: Args) => void) {
     return (...args: Args) => {
-      if (active && confirmedAccountId(useSessionStore.getState()) === userId) handle(...args);
+      if (active && api === requestClient() && confirmedAccountId(useSessionStore.getState()) === userId) handle(...args);
     };
   }
 
@@ -126,9 +127,9 @@ function bindPersonalEvents(userId: string, queryClient: QueryClient) {
       void queryClient.invalidateQueries({ queryKey: profileKeys.all });
       void queryClient.invalidateQueries({ queryKey: chatsQueryKey });
     }),
-  });
+  }, api);
 
-  const stopRecheck = startRingingRecheck(queryClient);
+  const stopRecheck = startRingingRecheck(queryClient, api);
 
   return () => {
     active = false;
@@ -138,32 +139,23 @@ function bindPersonalEvents(userId: string, queryClient: QueryClient) {
   };
 }
 
-function clearPresentation() {
-  dismissAlert();
-  resetRinging();
-}
-
-/** Один экземпляр на QueryClient корневого layout аккаунта. */
-export function startPersonalRealtimeEvents(reader: string | null, client: QueryClient) {
+/** Подписка живёт, пока выбранная пара API/QueryClient подтверждена SDK. */
+export function startPersonalRealtimeEvents(reader: string | null, client: QueryClient, api = requestClient()) {
   let disconnect: (() => void) | undefined;
 
   function sync(state: ReturnType<typeof useSessionStore.getState>) {
-    if (reader && state.localAccountId === reader && confirmedAccountId(state) === reader) {
-      disconnect ??= bindPersonalEvents(reader, client);
+    if (api === requestClient() && reader && state.localAccountId === reader && confirmedAccountId(state) === reader) {
+      disconnect ??= bindPersonalEvents(reader, client, api);
     } else {
       disconnect?.();
       disconnect = undefined;
     }
   }
 
-  const unsubscribe = useSessionStore.subscribe((state, previous) => {
-    sync(state);
-    if (previous.localAccountId === reader && state.localAccountId !== reader) clearPresentation();
-  });
+  const unsubscribe = useSessionStore.subscribe(sync);
   sync(useSessionStore.getState());
   return () => {
     unsubscribe();
     disconnect?.();
-    if (useSessionStore.getState().localAccountId === reader) clearPresentation();
   };
 }

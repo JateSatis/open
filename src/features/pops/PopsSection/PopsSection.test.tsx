@@ -18,7 +18,7 @@ jest.mock('@/features/auth/useSession', () => ({
 jest.mock('@/features/chats/useChats', () => ({ chatsQueryKey: ['chats'] }));
 const mockOpenPopViewer = jest.fn();
 jest.mock('@/features/pops/openPopViewer', () => ({
-  openPopViewer: (...args: unknown[]) => mockOpenPopViewer(...args),
+  useOpenPopViewer: () => mockOpenPopViewer,
 }));
 jest.mock('@/api/popTopics', () => ({ acquirePopTopic: () => () => undefined }));
 jest.mock('@/api/pops', () => ({

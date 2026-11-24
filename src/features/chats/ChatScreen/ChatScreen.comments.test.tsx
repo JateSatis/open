@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 jest.mock('@/api/historyWindow', () => ({
   getHistoryWindow: jest.fn((...args) => jest.requireActual('@/test/historyWindowMock').fixtureHistoryWindow(...args)),
   getHistoryGroupKeys: jest.fn(() => Promise.resolve([])),
@@ -552,7 +553,7 @@ describe('comments panel', () => {
       media: [],
       replyTo: [],
       commentThreadRootId: null,
-    });
+    }, requestClient());
 
     await act(async () => refuse({ code: '42501', message: 'denied' }));
 
@@ -637,7 +638,7 @@ describe('a visitor in the comments', () => {
     await tapComment('c1');
     await fireEvent.press(await screen.findByTestId('reaction-option-🔥'));
 
-    await waitFor(() => expect(mockedReact).toHaveBeenCalledWith('c1', '🔥'));
+    await waitFor(() => expect(mockedReact).toHaveBeenCalledWith('c1', '🔥', requestClient()));
     // У комментария строки зрителей нет: реакция — в общем ряду.
     expect(await screen.findByLabelText('🔥 1')).toBeTruthy();
     expect(screen.queryByTestId('visitor-reactions')).toBeNull();
@@ -668,7 +669,7 @@ describe('a visitor in the comments', () => {
         media: [],
         replyTo: [],
         commentThreadRootId: 'c1',
-      }),
+      }, requestClient()),
     );
     // Остаёмся в треде, свой ответ — в его конце.
     expect(screen.getByText('Ответы')).toBeTruthy();
@@ -788,7 +789,7 @@ describe('comment threads', () => {
     expect(screen.getByTestId('comment-thread-root')).toBeTruthy();
     // Основной список не тронут — тред под корнем не раскрывается.
     expect(rowKeys()).toEqual(['root', 'other']);
-    expect(mockedReplies).toHaveBeenCalledWith('root');
+    expect(mockedReplies).toHaveBeenCalledWith('root', undefined, requestClient());
   });
 
   it('a message without a quote in the comment thread window goes into the comment thread, at its end', async () => {
@@ -805,7 +806,7 @@ describe('comment threads', () => {
         media: [],
         replyTo: [],
         commentThreadRootId: 'root',
-      }),
+      }, requestClient()),
     );
 
     const keys = rowKeys('comment-thread-list');
@@ -834,7 +835,7 @@ describe('comment threads', () => {
         media: [],
         replyTo: ['r2'],
         commentThreadRootId: 'root',
-      }),
+      }, requestClient()),
     );
   });
 
@@ -884,7 +885,7 @@ describe('comment threads', () => {
         media: [],
         replyTo: [],
         commentThreadRootId: null,
-      }),
+      }, requestClient()),
     );
     expect(rowKeys()[0]).toMatch(/^local-/);
   });

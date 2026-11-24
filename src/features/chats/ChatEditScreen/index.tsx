@@ -1,3 +1,4 @@
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { ScreenOptions, useNavigation, useRouter } from '@/navigation';
 import { SymbolView } from 'expo-symbols';
@@ -46,6 +47,7 @@ const TEXT_DEADLINE_MS = 20_000;
 type PhotoDraft = { kind: 'keep' } | { kind: 'set'; uri: string } | { kind: 'remove' };
 
 export function ChatEditForm({ chat }: { chat: ChatSummary }) {
+  const api = useRequestClient();
   // Форма доходит до края окна: панели вкладок под экраном нет.
   const insets = useSafeAreaInsets();
   const theme = useTheme();
@@ -94,14 +96,14 @@ export function ChatEditForm({ chat }: { chat: ChatSummary }) {
 
     try {
       if (titleChanged) {
-        await withDeadline(setChatTitle(chat.id, cleanTitle || null), TEXT_DEADLINE_MS);
+        await withDeadline(setChatTitle(chat.id, cleanTitle || null, api), TEXT_DEADLINE_MS);
         queryClient.setQueryData<ChatSummary>(chatQueryKey(chat.id), (current) =>
           current ? { ...current, title: cleanTitle || null } : current,
         );
       }
 
       if (descriptionChanged) {
-        await withDeadline(setChatDescription(chat.id, cleanDescription || null), TEXT_DEADLINE_MS);
+        await withDeadline(setChatDescription(chat.id, cleanDescription || null, api), TEXT_DEADLINE_MS);
         // Страница под этим экраном показывает новое описание сразу, не
         // дожидаясь перечитывания.
         queryClient.setQueryData<ChatSummary>(chatQueryKey(chat.id), (current) =>
@@ -128,6 +130,7 @@ export function ChatEditForm({ chat }: { chat: ChatSummary }) {
       setSaving(false);
     }
   }, [
+    api,
     changePhoto,
     chat.id,
     cleanDescription,

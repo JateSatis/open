@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 jest.mock('@/api/historyWindow', () => ({
   getHistoryWindow: jest.fn((...args) => jest.requireActual('@/test/historyWindowMock').fixtureHistoryWindow(...args)),
   getHistoryGroupKeys: jest.fn(() => Promise.resolve([])),
@@ -299,7 +300,7 @@ describe('reactions in the message menu', () => {
     await screen.findByLabelText('Свернуть реакции');
     await react('🤯');
 
-    expect(mockedSetReaction).toHaveBeenCalledWith('m2', '🤯');
+    expect(mockedSetReaction).toHaveBeenCalledWith('m2', '🤯', requestClient());
   });
 
   it('a second tap outside closes the menu', async () => {
@@ -336,7 +337,7 @@ describe('reactions in the message menu', () => {
     await tapMessage('m2');
     await react('👍');
 
-    expect(mockedSetReaction).toHaveBeenCalledWith('m2', '👍');
+    expect(mockedSetReaction).toHaveBeenCalledWith('m2', '👍', requestClient());
     expect(await screen.findByLabelText('👍 1')).toBeTruthy();
   });
 
@@ -348,7 +349,7 @@ describe('reactions in the message menu', () => {
     await tapMessage('m3');
     await react('🔥');
 
-    expect(mockedSetReaction).toHaveBeenCalledWith('m3', '🔥');
+    expect(mockedSetReaction).toHaveBeenCalledWith('m3', '🔥', requestClient());
   });
 
   it('puts a visitor reaction into the viewers row, not among the members', async () => {
@@ -386,7 +387,7 @@ describe('reactions in the message menu', () => {
     await tapMessage('m2');
     await react('👍');
 
-    expect(mockedSetReaction).toHaveBeenCalledWith('m2', null);
+    expect(mockedSetReaction).toHaveBeenCalledWith('m2', null, requestClient());
     expect(await screen.findByLabelText('👍 1')).toBeTruthy();
   });
 
@@ -426,7 +427,7 @@ describe('reactions in the bubble', () => {
     await renderWithQuery(<ChatScreen />);
     fireEvent.press(await screen.findByTestId('reaction-chip-👍'));
 
-    expect(mockedSetReaction).toHaveBeenCalledWith('m2', '👍');
+    expect(mockedSetReaction).toHaveBeenCalledWith('m2', '👍', requestClient());
     expect(await screen.findByLabelText('👍 3')).toBeTruthy();
     expect(screen.queryByTestId('message-menu')).toBeNull();
   });

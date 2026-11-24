@@ -6,6 +6,7 @@ import { AppState, Vibration } from 'react-native';
 
 import { listRingingStreams, type LiveStream } from '@/api/streams';
 import { subscribeToUserEvents, type IncomingCall, type IncomingMessage } from '@/api/chats';
+import { startAccountPresentation } from '@/features/auth/accountPresentation';
 import { emptyState, useSessionStore } from '@/features/auth/sessionState';
 import { channelSubscriptionQueryKey } from '@/features/channels/keys';
 import { chatsQueryKey } from '@/features/chats/chatsKey';
@@ -67,6 +68,7 @@ beforeEach(() => {
   client = createAppQueryClient('user-1');
   client.setDefaultOptions({ queries: { gcTime: Infinity } });
   confirm('user-1');
+  stops.push(startAccountPresentation());
   bindHistoryReader(() => useSessionStore.getState().localAccountId ?? null);
 });
 

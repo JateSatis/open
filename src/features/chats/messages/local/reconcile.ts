@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 import { getHistoryChanges, getHistoryRange } from '@/api/historyWindow';
 import type { HistoryCoverage } from '@/api/historyWindow';
 import type { Piece, Scope, StoredPiece } from './segments';
@@ -23,11 +24,12 @@ export async function reconcile(
   scope: Scope,
   piece: StoredPiece,
   active: () => boolean,
+  api = requestClient(),
 ) {
   let cursor = piece.syncCursor;
   if (!hasDependencies(piece)) {
     while (active()) {
-      const step = await getHistoryChanges(scope.chat, cursor);
+      const step = await getHistoryChanges(scope.chat, cursor, undefined, api);
       if (!active()) return;
       if (step.status === 'more') {
         cursor = step.cursor;
@@ -43,7 +45,7 @@ export async function reconcile(
   const parts: Piece[] = [];
   let range: HistoryCoverage | null = piece.coverage;
   while (range && active()) {
-    const page = await getHistoryRange(scope.chat, range);
+    const page = await getHistoryRange(scope.chat, range, undefined, api);
     parts.push(page);
     range = page.remaining;
   }

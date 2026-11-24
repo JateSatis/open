@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 import { AppState, type AppStateStatus } from 'react-native';
 
 import { registerDevice, signOutLocally, touchDevice } from '@/api/account';
@@ -73,7 +74,7 @@ it.each(['pending', 'offline'] as const)('ждёт подтверждения SD
   expect(markSeen).not.toHaveBeenCalled();
   signedIn('a');
   await flush();
-  expect(registerDevice).toHaveBeenCalledWith(info, a);
+  expect(registerDevice).toHaveBeenCalledWith(info, a, requestClient());
 });
 
 it('регистрирует один раз для пары, включая refresh и смену владельца', async () => {
@@ -96,12 +97,12 @@ it('проверяет сеанс при возврате и подтвержд�
   await jest.advanceTimersByTimeAsync(60_000);
   change('background');
   await jest.advanceTimersByTimeAsync(120_000);
-  expect(jest.mocked(markSeen).mock.calls).toEqual([[true, a], [true, a], [false, a]]);
+  expect(jest.mocked(markSeen).mock.calls).toEqual([[true, a, requestClient()], [true, a, requestClient()], [false, a, requestClient()]]);
   change('active');
   await jest.advanceTimersByTimeAsync(60_000);
   expect(touchDevice).toHaveBeenCalledTimes(2);
   expect(registerDevice).toHaveBeenCalledTimes(1);
-  expect(jest.mocked(markSeen).mock.calls.slice(3)).toEqual([[true, a], [true, a]]);
+  expect(jest.mocked(markSeen).mock.calls.slice(3)).toEqual([[true, a, requestClient()], [true, a, requestClient()]]);
   useSessionStore.setState(emptyState);
   await jest.advanceTimersByTimeAsync(60_000);
   expect(markSeen).toHaveBeenCalledTimes(5);
@@ -113,7 +114,7 @@ it('не сообщает об активности, если SDK восстан
   await jest.advanceTimersByTimeAsync(60_000);
   expect(markSeen).not.toHaveBeenCalled();
   change('active');
-  expect(markSeen).toHaveBeenCalledWith(true, a);
+  expect(markSeen).toHaveBeenCalledWith(true, a, requestClient());
 });
 
 it.each(['вход', 'возврат'])('игнорирует запоздалый отзыв прежнего сеанса (%s)', async phase => {
@@ -134,7 +135,7 @@ it.each(['вход', 'возврат'])('игнорирует запоздалы
   expect(signOutOfGoogle).not.toHaveBeenCalled();
   expect(signOutLocally).not.toHaveBeenCalled();
   expect(useSessionStore.getState().session).toEqual(sessionOf('me', 'b'));
-  expect(registerDevice).toHaveBeenLastCalledWith(info, { ...a, sessionId: 'b' });
+  expect(registerDevice).toHaveBeenLastCalledWith(info, { ...a, sessionId: 'b' }, requestClient());
 });
 
 it('игнорирует свойства устройства, полученные после повторного входа', async () => {
@@ -146,7 +147,7 @@ it('игнорирует свойства устройства, полученн
   finish(info);
   await flush();
   expect(registerDevice).toHaveBeenCalledTimes(1);
-  expect(registerDevice).toHaveBeenCalledWith(info, { ...a, sessionId: 'b' });
+  expect(registerDevice).toHaveBeenCalledWith(info, { ...a, sessionId: 'b' }, requestClient());
 });
 
 it('выходит локально при отзыве текущего сеанса', async () => {
@@ -162,7 +163,7 @@ it('сохраняет вход при ошибке сети', async () => {
   jest.mocked(touchDevice).mockRejectedValue(new TypeError('Network request failed'));
   signedIn('a');
   await flush();
-  expect(registerDevice).toHaveBeenCalledWith(info, a);
+  expect(registerDevice).toHaveBeenCalledWith(info, a, requestClient());
   expect(signOutLocally).not.toHaveBeenCalled();
   expect(useSessionStore.getState().sdkStatus).toBe('session');
 });

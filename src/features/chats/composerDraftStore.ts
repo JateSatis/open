@@ -4,7 +4,8 @@
 // Выбранные файлы сюда не входят: выбор живёт в `selectionStore` и
 // сбрасывается с экраном.
 
-import { create } from 'zustand';
+import { requestClient } from '@/api/requestClient';
+import { createAccountStore } from '@/features/auth/accountStore';
 
 import type { ChatRef, ForwardedComment, MessageAttachment } from '@/api/chats';
 import type { Pop } from '@/api/pops';
@@ -120,10 +121,11 @@ type DraftsState = {
 
 const EMPTY: ChatDraft = { text: '', mode: null };
 
-export const useComposerDrafts = create<DraftsState>(() => ({ byChat: {}, forwardPick: null }));
+export const useComposerDrafts = createAccountStore<DraftsState>(() => ({ byChat: {}, forwardPick: null }));
 
-function update(chatId: string, change: (draft: ChatDraft) => ChatDraft) {
-  useComposerDrafts.setState((state) => {
+function update(chatId: string, change: (draft: ChatDraft) => ChatDraft, api = requestClient()) {
+  if (api.retired) return;
+  useComposerDrafts.forClient(api).setState((state) => {
     const current = state.byChat[chatId] ?? EMPTY;
     const next = change(current);
 
@@ -142,11 +144,11 @@ export function useChatDraft(chatId: string): ChatDraft {
   return useComposerDrafts((state) => state.byChat[chatId] ?? EMPTY);
 }
 
-export function readChatDraft(chatId: string): ChatDraft {
-  return useComposerDrafts.getState().byChat[chatId] ?? EMPTY;
+export function readChatDraft(chatId: string, api = requestClient()): ChatDraft {
+  return useComposerDrafts.forClient(api).getState().byChat[chatId] ?? EMPTY;
 }
 
-export function setDraftText(chatId: string, text: string) {
+export function setDraftText(chatId: string, text: string, api = requestClient()) {
   update(chatId, (draft) =>
     draft.text === text
       ? draft
@@ -155,21 +157,22 @@ export function setDraftText(chatId: string, text: string) {
           text,
           hidden: draft.hidden?.length ? shiftRanges(draft.text, text, draft.hidden) : draft.hidden,
         },
+    api,
   );
 }
 
 /** Скрытое от зрителей в черновике — целиком, новым набором. */
-export function setDraftHidden(chatId: string, hidden: HiddenRange[]) {
-  update(chatId, (draft) => ({ ...draft, hidden }));
+export function setDraftHidden(chatId: string, hidden: HiddenRange[], api = requestClient()) {
+  update(chatId, (draft) => ({ ...draft, hidden }), api);
 }
 
-export function setDraftMode(chatId: string, mode: ComposerMode | null) {
-  update(chatId, (draft) => (draft.mode === mode ? draft : { ...draft, mode }));
+export function setDraftMode(chatId: string, mode: ComposerMode | null, api = requestClient()) {
+  update(chatId, (draft) => (draft.mode === mode ? draft : { ...draft, mode }), api);
 }
 
 /** Прикрепляет поп к посту или открепляет его (`null`). */
-export function setDraftPop(chatId: string, pop: DraftPop | null) {
-  update(chatId, (draft) => (draft.pop === pop ? draft : { ...draft, pop }));
+export function setDraftPop(chatId: string, pop: DraftPop | null, api = requestClient()) {
+  update(chatId, (draft) => (draft.pop === pop ? draft : { ...draft, pop }), api);
 }
 
 /**
@@ -177,7 +180,7 @@ export function setDraftPop(chatId: string, pop: DraftPop | null) {
  * черновик откладывается; если уже шла правка другого сообщения, откладывать
  * нужно тот, что был до неё.
  */
-export function startEditDraft(chatId: string, message: ChatMessage) {
+export function startEditDraft(chatId: string, message: ChatMessage, api = requestClient()) {
   update(chatId, (draft) => {
     const restore = draft.mode?.type === 'edit' ? draft.mode.restore : draft;
     const voice = message.kind === 'voice' ? message.attachments[0] : undefined;
@@ -196,29 +199,31 @@ export function startEditDraft(chatId: string, message: ChatMessage) {
         restore,
       },
     };
-  });
+  }, api);
 }
 
 /** Меняет вложения идущей правки. Вне правки — ничего. */
 export function updateEditDraft(
   chatId: string,
   change: (mode: EditMode) => Pick<EditMode, 'kept' | 'voice'>,
+  api = requestClient(),
 ) {
   update(chatId, (draft) =>
     draft.mode?.type === 'edit'
       ? { ...draft, mode: { ...draft.mode, ...change(draft.mode) } }
       : draft,
+    api,
   );
 }
 
 /** Выход из правки — сохранённой или нет: возвращается черновик, который был до неё. */
-export function finishEditDraft(chatId: string) {
-  update(chatId, (draft) => (draft.mode?.type === 'edit' ? draft.mode.restore : draft));
+export function finishEditDraft(chatId: string, api = requestClient()) {
+  update(chatId, (draft) => (draft.mode?.type === 'edit' ? draft.mode.restore : draft), api);
 }
 
 /** Отправлено: поле пустое, плашки нет. */
-export function clearDraft(chatId: string) {
-  update(chatId, () => EMPTY);
+export function clearDraft(chatId: string, api = requestClient()) {
+  update(chatId, () => EMPTY, api);
 }
 
 /** Запоминает, что пересылать, пока человек выбирает, куда. */

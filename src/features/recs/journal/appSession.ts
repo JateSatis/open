@@ -12,6 +12,7 @@ type SessionEntry = 'cold' | 'link' | 'resume' | 'account';
 
 let session: { entry: SessionEntry; startedAt: number } | null = null;
 let user: string | null = null;
+let sourceSession: string | undefined;
 let announcedFor: string | null = null;
 let foregroundSince = 0;
 let backgroundSince: number | null = null;
@@ -56,8 +57,8 @@ function showScreen(now: number) {
   journal.showFirstScreen();
 }
 
-export function setSessionUser(next: string | null, now = Date.now()) {
-  if (next === user) return;
+export function setSessionUser(next: string | null, now = Date.now(), sessionId?: string) {
+  if (next === user && sessionId === sourceSession) return;
   closeScreen(now);
   // React закроет старые экраны позже. Завершаем накопленные просмотры,
   // пока и очередь, и app_session_id ещё принадлежат прежнему владельцу.
@@ -67,8 +68,9 @@ export function setSessionUser(next: string | null, now = Date.now()) {
   resetJournalQueries();
   // У каждого владельца своё дерево навигации. Его маршрут придёт из onReady.
   route = null;
+  sourceSession = sessionId;
   user = next;
-  journal.setUser(next);
+  journal.setUser(next, sessionId);
   if (next && next !== announcedFor) {
     if (announcedFor) begin('account', now);
     else announce();

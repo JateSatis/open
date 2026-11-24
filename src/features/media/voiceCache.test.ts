@@ -1,3 +1,4 @@
+import { createAccountClient } from '@/api/supabase';
 import { File } from 'expo-file-system';
 
 import { cachedVoiceUri, resolveVoiceUri } from './voiceCache';
@@ -38,7 +39,7 @@ jest.mock('expo-file-system', () => {
 
   return {
     File: FileMock,
-    Directory: jest.fn().mockImplementation(() => ({ uri: 'cache/voice', exists: true })),
+    Directory: jest.fn().mockImplementation((_base, ...parts: string[]) => ({ uri: ['cache', ...parts].join('/'), exists: true })),
     Paths: { cache: { uri: 'cache' } },
   };
 });
@@ -92,6 +93,23 @@ describe('voice from the closed chat-media bucket', () => {
       expect.anything(),
     );
     expect(cachedVoiceUri('user-1/voice/a.m4a')).toBe(local);
+  });
+
+  it('открывает локальную копию закрытого файла только для его сеанса', async () => {
+    const a = createAccountClient();
+    const b = createAccountClient();
+    a.localSessionId = 'a';
+    b.localSessionId = 'b';
+    const path = 'same/voice.m4a';
+    try {
+      const local = await resolveVoiceUri(path, a);
+      expect(cachedVoiceUri(path, a)).toBe(local);
+      expect(cachedVoiceUri(path, b)).toBeNull();
+      a.retired = true;
+      expect(cachedVoiceUri(path, a)).toBeNull();
+    } finally {
+      await Promise.all([a.auth.dispose(), b.auth.dispose()]);
+    }
   });
 
   it('a hidden voice is not downloaded at all', async () => {

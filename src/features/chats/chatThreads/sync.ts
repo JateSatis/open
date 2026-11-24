@@ -3,6 +3,7 @@
 // «Тредов» дочитывает свои не-ответы, плашки — корни пришедших ответов,
 // открытая шторка — свои новые ответы.
 
+import { requestClient } from '@/api/requestClient';
 import type { QueryClient } from '@tanstack/react-query';
 
 import { deletedChatThreadRoot } from '@/api/chats';
@@ -35,21 +36,22 @@ export async function pullChatThreads(
   queryClient: QueryClient,
   chatId: string,
   incoming: Message[],
+  api = requestClient(),
 ): Promise<void> {
   const tasks: Promise<unknown>[] = [];
   const roots = rootsOf(incoming);
   const pane = openedChatThread();
 
   if (readHistory(queryClient, chatId, 'chat-threads')) {
-    tasks.push(pullNewMessages(queryClient, chatId, 'chat-threads'));
+    tasks.push(pullNewMessages(queryClient, chatId, 'chat-threads', api));
   }
 
   if (roots.length > 0 && readChatThreadSummaries(queryClient, chatId)) {
-    tasks.push(refreshChatThreadSummaries(queryClient, chatId, roots));
+    tasks.push(refreshChatThreadSummaries(queryClient, chatId, roots, api));
   }
 
   // Шторка дочитывает и без известных корней: переписка могла дочитать не всё.
-  if (pane?.chatId === chatId) tasks.push(pullChatThread(queryClient, chatId, pane.rootId));
+  if (pane?.chatId === chatId) tasks.push(pullChatThread(queryClient, chatId, pane.rootId, api));
 
   await Promise.all(tasks);
 }
@@ -63,6 +65,7 @@ export async function refreshChatThreadsAfterChange(
   queryClient: QueryClient,
   chatId: string,
   messageIds: string[],
+  api = requestClient(),
 ): Promise<void> {
   if (!readChatThreadSummaries(queryClient, chatId)) return;
 
@@ -72,19 +75,20 @@ export async function refreshChatThreadsAfterChange(
     .filter((message) => ids.has(message.id));
   const roots = changed.length > 0 ? rootsOf(changed) : knownChatThreadRoots(queryClient, chatId);
 
-  if (roots.length > 0) await refreshChatThreadSummaries(queryClient, chatId, roots);
+  if (roots.length > 0) await refreshChatThreadSummaries(queryClient, chatId, roots, api);
 }
 
 /** После обрыва: все известные плашки — заново. */
 export async function refreshAllChatThreadSummaries(
   queryClient: QueryClient,
   chatId: string,
+  api = requestClient(),
 ): Promise<void> {
   const known = readChatThreadSummaries(queryClient, chatId);
 
   if (!known) return;
 
-  await refreshChatThreadSummaries(queryClient, chatId, Object.keys(known));
+  await refreshChatThreadSummaries(queryClient, chatId, Object.keys(known), api);
 }
 
 /** Сообщения ленты «Тредов» с этими id — снимок до удаления. */

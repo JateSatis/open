@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 import type { Session as SupabaseSession } from '@supabase/supabase-js';
 import { screen, userEvent, waitFor } from '@testing-library/react-native';
 
@@ -167,7 +168,7 @@ describe('InvitesScreen', () => {
     await renderWithQuery(<InvitesScreen />);
     await user.press(await screen.findByText('Принять'));
 
-    expect(mockedAccept).toHaveBeenCalledWith('chat-7');
+    expect(mockedAccept).toHaveBeenCalledWith('chat-7', requestClient());
   });
 
   it('declines an incoming invite', async () => {
@@ -177,7 +178,7 @@ describe('InvitesScreen', () => {
     await renderWithQuery(<InvitesScreen />);
     await user.press(await screen.findByText('Отклонить'));
 
-    expect(mockedDecline).toHaveBeenCalledWith('chat-7');
+    expect(mockedDecline).toHaveBeenCalledWith('chat-7', requestClient());
   });
 
   it('lets a declined invite be accepted but not declined again', async () => {
@@ -188,7 +189,7 @@ describe('InvitesScreen', () => {
     await user.press(await screen.findByText('Принять'));
 
     expect(screen.queryByText('Отклонить')).toBeNull();
-    expect(mockedAccept).toHaveBeenCalledWith('chat-7');
+    expect(mockedAccept).toHaveBeenCalledWith('chat-7', requestClient());
   });
 
   it('opens the chat to read it before deciding', async () => {
@@ -290,7 +291,7 @@ describe('InvitesScreen', () => {
       // Последняя — кнопка диалога подтверждения, первая — на карточке.
       await user.press(screen.getAllByRole('button', { name: 'Заблокировать' }).at(-1)!);
 
-      await waitFor(() => expect(mockedBlock).toHaveBeenCalledWith('user-2'));
+      await waitFor(() => expect(mockedBlock).toHaveBeenCalledWith('user-2', requestClient()));
     });
 
     it('К3.3 жалоба на заявку с причиной и блокировкой — «Жалоба отправлена»', async () => {
@@ -309,7 +310,7 @@ describe('InvitesScreen', () => {
           reason: 'spam',
           chatId: 'chat-9',
           block: true,
-        }),
+        }), requestClient()
       );
     });
 

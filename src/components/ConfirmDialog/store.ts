@@ -63,6 +63,12 @@ export function resolveConfirmDialog(id: number, confirmed: boolean) {
   }));
 }
 
+export function dismissConfirmDialogs() {
+  const { queue } = useConfirmDialogStore.getState();
+  useConfirmDialogStore.setState({ queue: [] });
+  queue.forEach(request => request.resolve(false));
+}
+
 /**
  * Отменяет верхний вопрос, если он задан. Нужно системной кнопке «назад»:
  * пока на экране висит вопрос, она отвечает на него, а не закрывает то, что

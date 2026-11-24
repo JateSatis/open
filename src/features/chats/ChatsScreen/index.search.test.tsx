@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 import type { Session as SupabaseSession } from '@supabase/supabase-js';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react-native';
 import { BackHandler } from 'react-native';
@@ -339,7 +340,7 @@ it('К3.4 forgets a person in «Недавние» once the server no longer let
   await fireEvent.press(await screen.findByRole('button', { name: 'Ёлкин' }));
   await type('');
 
-  await waitFor(() => expect(mockedRecheck).toHaveBeenCalledWith(['p1'], [], []));
+  await waitFor(() => expect(mockedRecheck).toHaveBeenCalledWith(['p1'], [], [], requestClient()));
   await waitFor(() => expect(screen.queryByRole('button', { name: 'Ёлкин' })).toBeNull());
 });
 
@@ -411,6 +412,7 @@ it('loads the next page of messages when scrolled to the end', async () => {
       'елк',
       post.seq,
       expect.anything(),
+      requestClient(),
     ),
   );
   await waitFor(() => expect(screen.getAllByTestId('search-message')).toHaveLength(2));
@@ -422,7 +424,7 @@ it('does not say «Ничего не нашлось» while messages are still o
 
   await type('zzz');
 
-  await waitFor(() => expect(mockedEntities).toHaveBeenCalledWith('zzz', expect.anything()));
+  await waitFor(() => expect(mockedEntities).toHaveBeenCalledWith('zzz', expect.anything(), requestClient()));
   expect(screen.queryByText('Ничего не нашлось')).toBeNull();
   expect(screen.getByLabelText('Ищем')).toBeTruthy();
 });
@@ -438,7 +440,7 @@ it('does not show the answer to an old query after the field was cleared', async
   await type('');
   await type('новое');
 
-  await waitFor(() => expect(mockedEntities).toHaveBeenCalledWith('новое', expect.anything()));
+  await waitFor(() => expect(mockedEntities).toHaveBeenCalledWith('новое', expect.anything(), requestClient()));
   expect(screen.queryByText('@elki.ch')).toBeNull();
 });
 
@@ -452,7 +454,7 @@ it('keeps the previous answer while the same query is typed further', async () =
 
   await type('елки');
 
-  await waitFor(() => expect(mockedEntities).toHaveBeenCalledWith('елки', expect.anything()));
+  await waitFor(() => expect(mockedEntities).toHaveBeenCalledWith('елки', expect.anything(), requestClient()));
   expect(screen.getByText('@elki.ch')).toBeTruthy();
 });
 

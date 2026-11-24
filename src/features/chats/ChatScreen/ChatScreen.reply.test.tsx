@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 jest.mock('@/api/historyWindow', () => ({
   getHistoryWindow: jest.fn((...args) => jest.requireActual('@/test/historyWindowMock').fixtureHistoryWindow(...args)),
   getHistoryGroupKeys: jest.fn(() => Promise.resolve([])),
@@ -241,7 +242,7 @@ describe('replying', () => {
         text: 'согласна',
         media: undefined,
         replyTo: ['m2'],
-      }),
+      }, requestClient()),
     );
     // Ответ уже на экране — с цитатой; плашка ушла вместе с текстом.
     await waitFor(() => expect(screen.queryByTestId('composer-plate')).toBeNull());

@@ -1,3 +1,4 @@
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 
 import { getChannelInfoSummary } from '@/api/channels';
@@ -13,9 +14,10 @@ export const channelInfoKeys = {
 };
 
 export function useChannelInfoSummary(channelId: string) {
+  const api = useRequestClient();
   return useQuery({
     queryKey: channelInfoKeys.summary(channelId),
-    queryFn: () => getChannelInfoSummary(channelId),
+    queryFn: () => getChannelInfoSummary(channelId, api),
   });
 }
 
@@ -24,9 +26,10 @@ export function useChannelInfoSummary(channelId: string) {
  * по имени и `@имени`: пустой — все. Видит только владелец.
  */
 export function useChannelSubscribers(channelId: string, query: string, enabled: boolean) {
+  const api = useRequestClient();
   return useInfiniteQuery({
     queryKey: channelInfoKeys.subscribers(channelId, query),
-    queryFn: ({ pageParam }) => listChannelSubscribers(channelId, pageParam, query),
+    queryFn: ({ pageParam }) => listChannelSubscribers(channelId, pageParam, query, api),
     initialPageParam: null as Subscriber | null,
     getNextPageParam: (last) =>
       last.length < SUBSCRIBERS_PAGE_SIZE ? undefined : last[last.length - 1],

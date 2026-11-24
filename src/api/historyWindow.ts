@@ -1,3 +1,5 @@
+import type { AccountClient } from '@/api/accountClient';
+import { requestClient } from '@/api/requestClient';
 import { MESSAGE_PAGE_SIZE } from '@/api/messagePage';
 import {
   HISTORY_ELEMENT_COLUMNS,
@@ -7,7 +9,6 @@ import {
   type Message,
 } from '@/api/messageRows';
 import type { Json } from '@/api/types.gen';
-import { supabase } from '@/api/supabase';
 
 export type HistoryPosition = { seq: number; position: number };
 export type HistoryCursor<D extends 'before' | 'after' = 'before' | 'after'> = HistoryPosition & {
@@ -113,7 +114,7 @@ function bound(value: Json | undefined): HistoryCoverage['lower'] {
   return { ...position(row), inclusive: row.inclusive };
 }
 
-const selectItems = () => supabase.from('history_element_rows').select(HISTORY_ELEMENT_COLUMNS);
+const selectItems = (api = requestClient()) => api.from('history_element_rows').select(HISTORY_ELEMENT_COLUMNS);
 type ElementRow = NonNullable<Awaited<ReturnType<typeof selectItems>>['data']>[number];
 function toHistoryItem(row: ElementRow): HistoryItem {
   if (!row.id || !row.message || !row.message_id || row.seq === null || row.position === null)
@@ -139,6 +140,7 @@ function syncCursor(value: Json | undefined): HistorySyncCursor {
 async function readWindow(
   chatId: string,
   request: HistoryWindowRequest | RangeRequest,
+  api: AccountClient,
 ): Promise<HistoryWindow> {
   const limit = request.limit ?? MESSAGE_PAGE_SIZE;
   if (!Number.isInteger(limit) || limit < 1 || limit > HISTORY_WINDOW_MAX_SIZE)
@@ -161,12 +163,12 @@ async function readWindow(
     throw new Error('Invalid saved history position');
   const rpc =
     request.mode === 'range'
-      ? supabase.rpc('get_history_range', {
+      ? api.rpc('get_history_range', {
           p_chat: chatId,
           p_range: request.coverage,
           p_limit: limit,
         })
-      : supabase.rpc('get_history_element_window', {
+      : api.rpc('get_history_element_window', {
           p_chat: chatId,
           p_mode: request.mode,
           p_limit: limit,
@@ -274,8 +276,9 @@ async function readWindow(
 export function getHistoryWindow(
   chatId: string,
   request: HistoryWindowRequest = { mode: 'latest' },
+  api = requestClient(),
 ) {
-  return readWindow(chatId, request);
+  return readWindow(chatId, request, api);
 }
 
 /** Replace only the returned coverage. If it grew, load remaining as another independent piece. */
@@ -283,8 +286,9 @@ export async function getHistoryRange(
   chatId: string,
   coverage: HistoryCoverage,
   limit = HISTORY_WINDOW_MAX_SIZE,
+  api = requestClient(),
 ) {
-  const page = await readWindow(chatId, { mode: 'range', coverage, limit });
+  const page = await readWindow(chatId, { mode: 'range', coverage, limit }, api);
   if (!page.coverage || !page.syncCursor) throw new Error('Missing history range');
   let remaining: HistoryCoverage | null = null;
   if (!page.reachedEnd) {
@@ -304,10 +308,11 @@ export async function getHistoryChanges(
   chatId: string,
   ticket: HistorySyncCursor,
   limit = MESSAGE_PAGE_SIZE,
+  api = requestClient(),
 ): Promise<HistoryChangePage> {
   if (!Number.isInteger(limit) || limit < 1 || limit > HISTORY_WINDOW_MAX_SIZE)
     throw new Error('Invalid history change limit');
-  const { data, error } = await supabase.rpc('get_history_changes', {
+  const { data, error } = await api.rpc('get_history_changes', {
     p_chat: chatId,
     p_cursor: ticket,
     p_limit: limit,
@@ -324,8 +329,8 @@ export async function getHistoryChanges(
 }
 
 /** Lightweight membership only: no original contents or group expansion. */
-export async function getHistoryGroupKeys(chatId: string, messageId: string) {
-  const { data, error } = await supabase
+export async function getHistoryGroupKeys(chatId: string, messageId: string, api = requestClient()) {
+  const { data, error } = await api
     .from('history_element_rows')
     .select('id,position')
     .eq('chat_id', chatId)
@@ -337,10 +342,10 @@ export async function getHistoryGroupKeys(chatId: string, messageId: string) {
 }
 
 /** Reconcile only already-loaded occurrences after parent/original events. */
-export async function getHistoryItems(chatId: string, keys: string[]): Promise<HistoryItem[]> {
+export async function getHistoryItems(chatId: string, keys: string[], api = requestClient()): Promise<HistoryItem[]> {
   if (!keys.length) return [];
   if (keys.length > HISTORY_WINDOW_MAX_SIZE) throw new Error('History items limit is 100');
-  const { data, error } = await supabase
+  const { data, error } = await api
     .rpc('get_history_elements', { p_chat: chatId, p_ids: keys })
     .select(HISTORY_ELEMENT_COLUMNS)
     .order('seq')

@@ -1,3 +1,4 @@
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 
@@ -29,6 +30,7 @@ const NONE = {};
  * известное.
  */
 export function ClusterHeader({ messageId, chatId, subject, amMember, width }: ClusterHeaderProps) {
+  const api = useRequestClient();
   const queryClient = useQueryClient();
   const me = useCurrentUserId();
   // Живые счётчики: сигналы реакций и комментариев перечитывают и кластеры.
@@ -57,7 +59,7 @@ export function ClusterHeader({ messageId, chatId, subject, amMember, width }: C
       clusterId: subject.clusterId,
       mine: cluster?.mine ?? null,
       myFragmentId: cluster?.myFragmentId ?? null,
-    });
+    }, api);
 
     if (!sent) return;
 
@@ -69,7 +71,7 @@ export function ClusterHeader({ messageId, chatId, subject, amMember, width }: C
       rangeStart: sent.range.start,
       rangeEnd: sent.range.end,
       detail: { removed: sent.removed ? 1 : 0 },
-    });
+    }, api);
   };
 
   return (

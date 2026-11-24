@@ -75,13 +75,15 @@ const STORAGE_KEY = 'rec-journal-queue-v1';
 /** Сколько событий принимает `rec_record_events` за вызов. */
 const JOURNAL_BATCH_MAX = 100;
 
+type SendBatch = (events: JournalWireEvent[]) => Promise<JournalSendResult>;
+
 export type Journal = {
   log: (kind: JournalKind, fields?: JournalFields) => string | null;
   flush: () => Promise<void>;
   /** Кто сейчас в приложении: события пишутся от его имени. null — никого. */
-  setUser: (userId: string | null) => void;
+  setUser: (userId: string | null, sessionId?: string) => void;
   /** Подтверждённый SDK владелец при доступной связи. */
-  setDeliveryUser: (userId: string | null) => void;
+  setDeliveryUser: (userId: string | null, sender?: SendBatch) => void;
   showFirstScreen: () => void;
   setAppSession: (appSessionId: string | null) => void;
   appSessionId: () => string | null;
@@ -109,6 +111,8 @@ export function createJournal({
     now,
   });
   let userId: string | null = null;
+  let sessionId: string | undefined;
+  let sender = send;
   let deliveryUser: string | null = null;
   let screenShown = false;
   let appSession: string | null = null;
@@ -116,7 +120,7 @@ export function createJournal({
   let sending = false;
   let failures = 0;
   const canSend = (owner: string | null) =>
-    !!owner && screenShown && owner === userId && owner === deliveryUser;
+    !!owner && !!sessionId && screenShown && owner === userId && owner === deliveryUser;
 
   const schedule = (delay: number) => {
     if (timer || sending || !canSend(userId)) return;
@@ -148,17 +152,17 @@ export function createJournal({
    * json): пачка делится пополам, пока виноватое не останется одно — оно
    * выбрасывается, остальное уходит. Иначе одно событие держало бы очередь.
    */
-  async function deliver(batch: JournalWireEvent[]): Promise<'sent' | 'retry'> {
+  async function deliver(batch: JournalWireEvent[], sendBatch: SendBatch, current: () => boolean): Promise<'sent' | 'retry'> {
     const ids = batch.map((event) => event.id);
-    if (!canSend(batch[0].user_id)) {
+    if (!current() || !canSend(batch[0].user_id)) {
       queue.release(ids);
       return 'retry';
     }
     try {
-      settle(batch, await send(batch));
+      settle(batch, await sendBatch(batch));
       return 'sent';
     } catch (error) {
-      if (!canSend(batch[0].user_id) || isRetryable(error)) {
+      if (!current() || !canSend(batch[0].user_id) || isRetryable(error)) {
         queue.release(ids);
         return 'retry';
       }
@@ -171,12 +175,12 @@ export function createJournal({
 
       const half = Math.ceil(batch.length / 2);
 
-      if ((await deliver(batch.slice(0, half))) === 'retry') {
+      if ((await deliver(batch.slice(0, half), sendBatch, current)) === 'retry') {
         queue.release(batch.slice(half).map((event) => event.id));
         return 'retry';
       }
 
-      return deliver(batch.slice(half));
+      return deliver(batch.slice(half), sendBatch, current);
     }
   }
 
@@ -187,19 +191,22 @@ export function createJournal({
     }
 
     const owner = userId;
-    if (sending || !owner || !canSend(owner)) return;
+    const source = sessionId;
+    const sendBatch = sender;
+    const current = () => sessionId === source && sender === sendBatch && canSend(owner);
+    if (sending || !owner || !source || !canSend(owner)) return;
     sending = true;
     let delay = JOURNAL_FLUSH_MS;
     try {
       await queue.load();
-      while (canSend(owner)) {
-        const batch = queue.take(owner, JOURNAL_BATCH_MAX);
+      while (current()) {
+        const batch = queue.take(owner, JOURNAL_BATCH_MAX, source);
 
         if (batch.length === 0) break;
 
         const before = queue.size(owner);
 
-        if ((await deliver(batch)) === 'retry') {
+        if ((await deliver(batch, sendBatch, current)) === 'retry') {
           if (canSend(owner)) {
             failures += 1;
             delay = Math.min(JOURNAL_FLUSH_MS * 2 ** failures, BACKOFF_MAX_MS);
@@ -216,12 +223,12 @@ export function createJournal({
       sending = false;
     }
 
-    if (userId && queue.size(userId) > 0) schedule(userId === owner ? delay : 0);
+    if (userId && queue.size(userId, sessionId) > 0) schedule(userId === owner ? delay : 0);
   }
 
   const journal: Journal = {
     log(kind, fields = {}) {
-      if (!userId) return null;
+      if (!userId || !sessionId) return null;
 
       const id = randomUuid();
       const event: JournalWireEvent = {
@@ -242,7 +249,7 @@ export function createJournal({
       }
       if (fields.surface) event.surface = fields.surface;
 
-      queue.push(event);
+      queue.push({ ...event, sessionId });
 
       // Некоторые события приходят уже после обработчика ухода в фон.
       if (AppState.currentState === 'background') void journal.persist();
@@ -253,17 +260,19 @@ export function createJournal({
 
     flush,
 
-    setUser(next) {
-      if (next === userId) return;
+    setUser(next, nextSession) {
+      if (next === userId && nextSession === sessionId) return;
 
+      sessionId = nextSession;
       userId = next;
 
       if (next) void queue.load();
       journal.kick();
     },
 
-    setDeliveryUser(next) {
-      if (next === deliveryUser) return;
+    setDeliveryUser(next, nextSender = send) {
+      if (next === deliveryUser && sender === nextSender) return;
+      sender = nextSender;
       deliveryUser = next;
       journal.kick();
     },

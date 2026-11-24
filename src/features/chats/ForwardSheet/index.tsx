@@ -1,3 +1,4 @@
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -30,6 +31,7 @@ export type ForwardSheetProps = {
  * KeyboardAvoidingView на Android с edge-to-edge его не поднимает.
  */
 export function ForwardSheet({ pick, onSent }: ForwardSheetProps) {
+  const api = useRequestClient();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
@@ -59,10 +61,10 @@ export function ForwardSheet({ pick, onSent }: ForwardSheetProps) {
       if (sent.current) return;
 
       sent.current = true;
-      sendForwardPick(queryClient, currentUserId, pick, targets, text);
+      sendForwardPick(queryClient, currentUserId, pick, targets, text, api);
       onSent();
     },
-    [currentUserId, onSent, pick, queryClient, targets],
+    [api, currentUserId, onSent, pick, queryClient, targets],
   );
 
   return (

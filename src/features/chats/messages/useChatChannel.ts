@@ -1,3 +1,4 @@
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
@@ -76,6 +77,7 @@ export type ChatChannelState = {
  * добавит в чужую переписку и ничего из неё не уберёт.
  */
 export function useChatChannel(chatId: string, currentUserId: string | null): ChatChannelState {
+  const api = useRequestClient();
   const queryClient = useQueryClient();
   const { chat } = useChat(chatId);
   const isMember = chat ? isChatMember(chat, currentUserId) : false;
@@ -83,7 +85,7 @@ export function useChatChannel(chatId: string, currentUserId: string | null): Ch
   // я в сети». Пока ответа нет — никуда: лучше промолчать, чем показаться.
   const { data: audience = 'none' } = useQuery({
     queryKey: typingAudienceKey(chatId),
-    queryFn: () => getTypingAudience(chatId),
+    queryFn: () => getTypingAudience(chatId, api),
     enabled: isMember,
     staleTime: TYPING_AUDIENCE_STALE_MS,
   });
@@ -120,9 +122,9 @@ export function useChatChannel(chatId: string, currentUserId: string | null): Ch
         await queryClient.invalidateQueries({ queryKey: messagesQueryKey(chatId), exact: true });
         incoming =
           readHistory(queryClient, chatId)?.items.filter((message) => message.seq > before) ?? [];
-      } else incoming = await pullNewMessages(queryClient, chatId);
+      } else incoming = await pullNewMessages(queryClient, chatId, undefined, api);
 
-      pullChatThreads(queryClient, chatId, incoming).catch(() => undefined);
+      pullChatThreads(queryClient, chatId, incoming, api).catch(() => undefined);
 
       // Сообщение пришло — «печатает…» и «записывает…» его автора больше
       // не правда, ждать таймаута незачем.
@@ -142,7 +144,7 @@ export function useChatChannel(chatId: string, currentUserId: string | null): Ch
       // A failed catch-up is not worth an error banner: the next broadcast or
       // a re-entry into the chat reloads the page anyway.
     }
-  }, [chatId, queryClient, reader]);
+  }, [api, chatId, queryClient, reader]);
 
   const catchUp = useCallback(() => {
     // Пока канала не было, события терялись: сообщения, удаления, закрепы и
@@ -150,11 +152,11 @@ export function useChatChannel(chatId: string, currentUserId: string | null): Ch
     // `loadHistory`), а не перезагрузка.
     // Ключ переписки — префикс и «Тредов», и открытой шторки треда.
     void queryClient.invalidateQueries({ queryKey: messagesQueryKey(chatId) });
-    refreshAllChatThreadSummaries(queryClient, chatId).catch(() => undefined);
+    refreshAllChatThreadSummaries(queryClient, chatId, api).catch(() => undefined);
     void queryClient.invalidateQueries({ queryKey: pinsQueryKey(chatId) });
     void queryClient.invalidateQueries({ queryKey: chatQueryKey(chatId) });
     void queryClient.invalidateQueries({ queryKey: liveStreamQueryKey(chatId) });
-  }, [chatId, queryClient]);
+  }, [api, chatId, queryClient]);
 
   useEffect(() => {
     if (!canSubscribe) return;
@@ -167,7 +169,7 @@ export function useChatChannel(chatId: string, currentUserId: string | null): Ch
     // Не вышло перечитать — дочитаем при следующем событии или переподключении.
     const collect = (
       batch: Batch,
-      refresh: (client: typeof queryClient, ids: string[]) => Promise<void>,
+      refresh: (client: typeof queryClient, ids: string[], owner: typeof api) => Promise<void>,
       messageId: string,
     ) => {
       batch.ids.add(messageId);
@@ -179,7 +181,7 @@ export function useChatChannel(chatId: string, currentUserId: string | null): Ch
 
         batch.ids.clear();
         batch.timer = null;
-        refresh(queryClient, ids).catch(() => undefined);
+        refresh(queryClient, ids, api).catch(() => undefined);
       }, REACTIONS_BATCH_MS);
     };
 
@@ -210,19 +212,19 @@ export function useChatChannel(chatId: string, currentUserId: string | null): Ch
         onMessagesDeleted: (messageIds) => {
           refreshMain();
           // Плашки — первыми: корни удалённого ответа видны, пока он в истории.
-          refreshChatThreadsAfterChange(queryClient, chatId, messageIds).catch(() => undefined);
+          refreshChatThreadsAfterChange(queryClient, chatId, messageIds, api).catch(() => undefined);
           const feedItems = chatThreadFeedItems(queryClient, chatId, messageIds);
 
           // Не вышло сверить — сверим при следующем событии или переподключении.
-          dropDeletedMessages(queryClient, messageIds)
+          dropDeletedMessages(queryClient, messageIds, api)
             .then(() => keepDeletedChatThreadRoots(queryClient, chatId, feedItems))
             .catch(() => undefined);
         },
         onMessageEdited: (messageId) => {
           refreshMain();
-          refreshEditedMessages(queryClient, [messageId]).catch(() => undefined);
+          refreshEditedMessages(queryClient, [messageId], api).catch(() => undefined);
           // Правленое могло быть последним ответом треда — его текст на плашке.
-          refreshChatThreadsAfterChange(queryClient, chatId, [messageId]).catch(() => undefined);
+          refreshChatThreadsAfterChange(queryClient, chatId, [messageId], api).catch(() => undefined);
           // Правленое могло быть закреплено — полоса показывает его текст.
           void queryClient.invalidateQueries({ queryKey: pinsQueryKey(chatId) });
         },
@@ -234,8 +236,8 @@ export function useChatChannel(chatId: string, currentUserId: string | null): Ch
           refreshMain();
           // Участник сменил, кому видно время: время, даты и прочтение у
           // загруженных сообщений и у участников — перечитать на месте.
-          refreshChatTimes(queryClient, chatId).catch(() => undefined);
-          refreshAllChatThreadSummaries(queryClient, chatId).catch(() => undefined);
+          refreshChatTimes(queryClient, chatId, api).catch(() => undefined);
+          refreshAllChatThreadSummaries(queryClient, chatId, api).catch(() => undefined);
           void queryClient.invalidateQueries({ queryKey: chatQueryKey(chatId) });
         },
         onPeopleChanged: () => {
@@ -244,8 +246,8 @@ export function useChatChannel(chatId: string, currentUserId: string | null): Ch
           // загруженных сообщений и участники — глазами меня заново. Прежние
           // подписанные ссылки на фото могли стать чужими.
           forgetAvatarUrls();
-          refreshChatTimes(queryClient, chatId).catch(() => undefined);
-          refreshAllChatThreadSummaries(queryClient, chatId).catch(() => undefined);
+          refreshChatTimes(queryClient, chatId, api).catch(() => undefined);
+          refreshAllChatThreadSummaries(queryClient, chatId, api).catch(() => undefined);
           void queryClient.invalidateQueries({ queryKey: chatQueryKey(chatId) });
         },
         onMediaChanged: () => {
@@ -254,8 +256,8 @@ export function useChatChannel(chatId: string, currentUserId: string | null): Ch
           // автором» у загруженных сообщений и во вкладках — глазами меня
           // заново, прежние подписанные ссылки могли стать чужими.
           forgetChatMediaUrls();
-          refreshChatTimes(queryClient, chatId).catch(() => undefined);
-          refreshAllChatThreadSummaries(queryClient, chatId).catch(() => undefined);
+          refreshChatTimes(queryClient, chatId, api).catch(() => undefined);
+          refreshAllChatThreadSummaries(queryClient, chatId, api).catch(() => undefined);
           // Ключ чата — префикс и вкладок «Медиа» и «Голосовые».
           void queryClient.invalidateQueries({ queryKey: chatQueryKey(chatId) });
         },
@@ -264,7 +266,7 @@ export function useChatChannel(chatId: string, currentUserId: string | null): Ch
         },
         onForwardChanged: (forwardId) => {
           refreshMain();
-          refreshIsland(queryClient, chatId, forwardId).catch(() => undefined);
+          refreshIsland(queryClient, chatId, forwardId, api).catch(() => undefined);
           // Закреп убранного облачка база уже сняла.
           void queryClient.invalidateQueries({ queryKey: pinsQueryKey(chatId) });
         },
@@ -298,6 +300,7 @@ export function useChatChannel(chatId: string, currentUserId: string | null): Ch
         },
       },
       isMember,
+      api,
     );
 
     channelRef.current = channel;
@@ -316,7 +319,7 @@ export function useChatChannel(chatId: string, currentUserId: string | null): Ch
       }
       setActivities([]);
     };
-  }, [canSubscribe, catchUp, chatId, currentUserId, isMember, onNewMessage, queryClient, refreshMain]);
+  }, [api, canSubscribe, catchUp, chatId, currentUserId, isMember, onNewMessage, queryClient, refreshMain]);
 
   const notifyActivity = useCallback(
     (activity: ChatActivity) => {

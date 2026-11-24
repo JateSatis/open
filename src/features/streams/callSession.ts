@@ -1,3 +1,5 @@
+import { requestSelection } from '@/api/screenRequest';
+import { requestClient } from '@/api/requestClient';
 import type { DisconnectReason, Participant, Room } from 'livekit-client';
 import { Platform } from 'react-native';
 
@@ -32,6 +34,9 @@ const EMPTY_CHECK_MS = 4_000;
 
 let room: Room | null = null;
 let callAudio: LiveKit['AudioSession'] | null = null;
+// Нативная аудиосессия одна. Новый вход ждёт освобождения комнаты прежнего владельца.
+let resourceRelease = Promise.resolve();
+let audioSetup: Promise<void> | undefined;
 /** Каждому входу номер: ответ устаревшего входа не трогает новый звонок. */
 let generation = 0;
 let statusTimer: ReturnType<typeof setInterval> | null = null;
@@ -61,7 +66,7 @@ function members(current: Room): RoomMember[] {
   ];
 }
 
-function refreshRoster() {
+function refreshRoster(api = requestClient()) {
   if (!room || !getCall()) return;
 
   const roster = toRoster(members(room));
@@ -75,14 +80,14 @@ function refreshRoster() {
   // Слушатель остался в комнате без говорящих — вебхук вот-вот закроет её;
   // если нет, спросим базу сами, чтобы не висеть в тишине.
   if (roster.speakers.length === 0 && getCall()?.connection === 'connected') {
-    if (!emptyTimer) emptyTimer = setTimeout(() => void checkStillLive(), EMPTY_CHECK_MS);
+    if (!emptyTimer) emptyTimer = setTimeout(() => void checkStillLive(api), EMPTY_CHECK_MS);
   } else if (emptyTimer) {
     clearTimeout(emptyTimer);
     emptyTimer = null;
   }
 }
 
-async function checkStillLive() {
+async function checkStillLive(api = requestClient()) {
   emptyTimer = null;
 
   const call = getCall();
@@ -90,9 +95,10 @@ async function checkStillLive() {
   if (!call) return;
 
   try {
-    const status = await fetchStreamStatus(call.streamId);
+    const checking = generation;
+    const status = await fetchStreamStatus(call.streamId, api);
 
-    if (getCall()?.streamId !== call.streamId) return;
+    if (checking !== generation || api !== requestClient() || getCall()?.streamId !== call.streamId) return;
     if (!status || status.status === 'ended') await endLocally('Звонок завершён');
   } catch {
     // Сети нет — это покажет переподключение LiveKit, а не эта проверка.
@@ -133,27 +139,33 @@ async function releaseResources() {
   statusTimer = null;
   emptyTimer = null;
 
+  setInCall(false);
   const current = room;
   const audio = callAudio;
+  const setup = audioSetup;
   callAudio = null;
+  audioSetup = undefined;
   room = null;
 
-  if (current) {
-    current.removeAllListeners();
-    await current.disconnect().catch(() => undefined);
+  if (current || audio) {
+    current?.removeAllListeners();
+    resourceRelease = (async () => {
+      await current?.disconnect().catch(() => undefined);
+      await setup?.catch(() => undefined);
+      stopCallService();
+      await audio?.stopAudioSession().catch(() => undefined);
+    })();
   }
-
-  stopCallService();
-  await audio?.stopAudioSession().catch(() => undefined);
-  setInCall(false);
+  await resourceRelease;
 }
 
 /** Звонок кончился не по моей кнопке: объясняем, почему. */
 async function endLocally(reason: string) {
-  generation += 1;
+  const selection = requestSelection();
+  const ending = ++generation;
   setCall(null);
   await releaseResources();
-  showNotice(reason);
+  if (generation === ending && selection === requestSelection()) showNotice(reason);
 }
 
 function onDisconnected(reasons: LiveKit['DisconnectReason'], reason?: DisconnectReason) {
@@ -169,25 +181,28 @@ function onDisconnected(reasons: LiveKit['DisconnectReason'], reason?: Disconnec
   void endLocally(text);
 }
 
-function attach(current: Room, { RoomEvent, DisconnectReason }: LiveKit) {
+function attach(current: Room, { RoomEvent, DisconnectReason }: LiveKit, api = requestClient()) {
+  const active = () => room === current && api === requestClient();
+  const refresh = () => { if (active()) refreshRoster(api); };
   current
-    .on(RoomEvent.ParticipantConnected, refreshRoster)
-    .on(RoomEvent.ParticipantDisconnected, refreshRoster)
-    .on(RoomEvent.ParticipantMetadataChanged, refreshRoster)
-    .on(RoomEvent.ActiveSpeakersChanged, refreshRoster)
-    .on(RoomEvent.TrackMuted, refreshRoster)
-    .on(RoomEvent.TrackUnmuted, refreshRoster)
-    .on(RoomEvent.TrackPublished, refreshRoster)
-    .on(RoomEvent.TrackUnpublished, refreshRoster)
-    .on(RoomEvent.LocalTrackPublished, refreshRoster)
-    .on(RoomEvent.LocalTrackUnpublished, refreshRoster)
-    .on(RoomEvent.Reconnecting, () => patchCall({ connection: 'reconnecting' }))
-    .on(RoomEvent.SignalReconnecting, () => patchCall({ connection: 'reconnecting' }))
+    .on(RoomEvent.ParticipantConnected, refresh)
+    .on(RoomEvent.ParticipantDisconnected, refresh)
+    .on(RoomEvent.ParticipantMetadataChanged, refresh)
+    .on(RoomEvent.ActiveSpeakersChanged, refresh)
+    .on(RoomEvent.TrackMuted, refresh)
+    .on(RoomEvent.TrackUnmuted, refresh)
+    .on(RoomEvent.TrackPublished, refresh)
+    .on(RoomEvent.TrackUnpublished, refresh)
+    .on(RoomEvent.LocalTrackPublished, refresh)
+    .on(RoomEvent.LocalTrackUnpublished, refresh)
+    .on(RoomEvent.Reconnecting, () => active() && patchCall({ connection: 'reconnecting' }))
+    .on(RoomEvent.SignalReconnecting, () => active() && patchCall({ connection: 'reconnecting' }))
     .on(RoomEvent.Reconnected, () => {
+      if (!active()) return;
       patchCall({ connection: 'connected' });
-      refreshRoster();
+      refreshRoster(api);
     })
-    .on(RoomEvent.Disconnected, (reason) => onDisconnected(DisconnectReason, reason));
+    .on(RoomEvent.Disconnected, (reason) => active() && onDisconnected(DisconnectReason, reason));
 }
 
 /**
@@ -197,12 +212,15 @@ function attach(current: Room, { RoomEvent, DisconnectReason }: LiveKit) {
 export async function joinCall(
   input: JoinCallInput,
   preparation?: Promise<LiveKit>,
+  api = requestClient(),
 ): Promise<void> {
+  if (api !== requestClient()) return;
   const existing = getCall();
 
   if (existing?.streamId === input.streamId) return;
   if (existing) await leaveCall();
 
+  if (api !== requestClient()) return;
   const current = ++generation;
 
   stopVoice();
@@ -222,13 +240,14 @@ export async function joinCall(
 
   try {
     const sdk = await (preparation ?? prepareLiveKit());
-    if (current !== generation) return;
+    await resourceRelease;
+    if (current !== generation || api !== requestClient()) return;
 
     const { AudioSession, AndroidAudioTypePresets, Room } = sdk;
     callAudio = AudioSession;
-    const join = await requestStreamToken(input.streamId);
+    const join = await requestStreamToken(input.streamId, api);
 
-    if (current !== generation) return;
+    if (current !== generation || api !== requestClient()) return;
 
     const speaks = join.role !== 'listener';
     // Эфир слушают с громкой; в личном диалоге говорящий по привычке держит
@@ -239,7 +258,7 @@ export async function joinCall(
     // секунды, а не «выключен», пока идёт подключение.
     patchCall({ role: join.role, speakerOn, micOn: speaks });
 
-    await AudioSession.configureAudio({
+    audioSetup = AudioSession.configureAudio({
       android: {
         preferredOutputList: speakerOn
           ? ['bluetooth', 'headset', 'speaker', 'earpiece']
@@ -248,9 +267,11 @@ export async function joinCall(
       },
       ios: { defaultOutput: speakerOn ? 'speaker' : 'earpiece' },
     });
-    if (current !== generation) return;
-    await AudioSession.startAudioSession();
-    if (current !== generation) return;
+    await audioSetup;
+    if (current !== generation || api !== requestClient()) return;
+    audioSetup = AudioSession.startAudioSession();
+    await audioSetup;
+    if (current !== generation || api !== requestClient()) return;
 
     startCallService(
       speaks ? `В эфире · ${input.chatTitle}` : `Вы слушаете · ${input.chatTitle}`,
@@ -260,28 +281,28 @@ export async function joinCall(
 
     const next = new Room({ adaptiveStream: false, dynacast: false });
 
-    attach(next, sdk);
+    attach(next, sdk, api);
     room = next;
 
     await next.connect(join.url, join.token, { autoSubscribe: true });
 
-    if (current !== generation) {
+    if (current !== generation || api !== requestClient()) {
       await next.disconnect();
       return;
     }
 
     if (speaks) await next.localParticipant.setMicrophoneEnabled(true);
 
-    if (current !== generation) return;
+    if (current !== generation || api !== requestClient()) return;
     await routeAudio(speakerOn);
-    if (current !== generation) return;
+    if (current !== generation || api !== requestClient()) return;
 
     patchCall({ connection: 'connected', joinedAt: Date.now() });
-    refreshRoster();
+    refreshRoster(api);
 
-    statusTimer = setInterval(() => void checkStillLive(), STATUS_CHECK_MS);
+    statusTimer = setInterval(() => void checkStillLive(api), STATUS_CHECK_MS);
   } catch (error) {
-    if (current !== generation) return;
+    if (current !== generation || api !== requestClient()) return;
 
     generation += 1;
     setCall(null);
@@ -297,11 +318,12 @@ export async function leaveCall(): Promise<void> {
   await releaseResources();
 }
 
-export async function toggleMic(): Promise<void> {
+export async function toggleMic(api = requestClient()): Promise<void> {
   const call = getCall();
 
   if (!room || !call || call.role === 'listener') return;
 
+  const currentRoom = room;
   const next = !room.localParticipant.isMicrophoneEnabled;
 
   patchCall({ micOn: next });
@@ -309,11 +331,12 @@ export async function toggleMic(): Promise<void> {
   try {
     await room.localParticipant.setMicrophoneEnabled(next);
   } catch {
+    if (room !== currentRoom || api !== requestClient()) return;
     patchCall({ micOn: !next });
     showNotice('Не удалось переключить микрофон', 'error');
   }
 
-  refreshRoster();
+  if (room === currentRoom && api === requestClient()) refreshRoster(api);
 }
 
 export async function toggleSpeaker(): Promise<void> {

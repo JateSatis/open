@@ -3,6 +3,9 @@
 // моменту уже закрыт. Плитки «в пути» — клиентское состояние, как исходящие
 // сообщения (`outbox.ts`): в кеш запросов поп попадает только с ответом базы.
 
+import { clientIdentity } from '@/api/perClient';
+
+import { requestClient } from '@/api/requestClient';
 import type { QueryClient } from '@tanstack/react-query';
 
 import { NO_POP_REACTIONS, publishPop, type Pop } from '@/api/pops';
@@ -41,13 +44,13 @@ function explain(cause: unknown) {
   }
 }
 
-async function run(queryClient: QueryClient, userId: string, channelId: string, localId: string) {
-  const pending = find(channelId, localId);
+async function run(queryClient: QueryClient, userId: string, channelId: string, localId: string, api = requestClient()) {
+  const pending = find(channelId, localId, api);
 
-  if (!pending || running.has(localId)) return;
+  if (!pending || (pending.deliveryOwner && pending.deliveryOwner !== clientIdentity(api)) || running.has(localId)) return;
 
   running.add(localId);
-  patch(channelId, localId, { status: 'publishing' });
+  patch(channelId, localId, { status: 'publishing' }, api);
 
   let uploaded = pending.uploaded;
   const abort = new AbortController();
@@ -59,13 +62,13 @@ async function run(queryClient: QueryClient, userId: string, channelId: string, 
       // Без связи загрузка висит, а не падает: срок превращает её в ошибку.
       // Файл, доехавший после срока, убирается — повтор зальёт свой.
       uploaded = await withDeadline(
-        uploadPop(pending.media, userId),
+        uploadPop(pending.media, userId, api),
         PUBLISH_DEADLINE_MS,
         (late) => {
-          void removePublicMedia(storedPaths(late));
+          void removePublicMedia(storedPaths(late), api);
         },
       );
-      patch(channelId, localId, { uploaded });
+      patch(channelId, localId, { uploaded }, api);
     }
 
     timer = setTimeout(() => abort.abort(), PUBLISH_DEADLINE_MS);
@@ -84,8 +87,10 @@ async function run(queryClient: QueryClient, userId: string, channelId: string, 
         postText: pending.alsoPost ? pending.caption : null,
       },
       abort.signal,
+      api,
     );
 
+    if (api.retired) return;
     const pop: Pop = {
       id: pending.popId,
       channelId,
@@ -116,7 +121,7 @@ async function run(queryClient: QueryClient, userId: string, channelId: string, 
           }
         : data,
     );
-    setChannel(channelId, (pops) => pops.filter((item) => item.localId !== localId));
+    setChannel(channelId, (pops) => pops.filter((item) => item.localId !== localId), api);
     void queryClient.invalidateQueries({ queryKey: popsQueryKey(channelId) });
 
     if (pending.alsoPost) void queryClient.invalidateQueries({ queryKey: chatsQueryKey });
@@ -127,18 +132,20 @@ async function run(queryClient: QueryClient, userId: string, channelId: string, 
     // База отказала — файлы ничьи. Не дождались ответа или не достучались —
     // файлы остаются для повтора с тем же id, и дублей в Storage нет.
     if (uploaded && !unanswered && !unreached) {
-      void removePublicMedia(storedPaths(uploaded));
+      void removePublicMedia(storedPaths(uploaded), api);
       uploaded = null;
     }
 
-    if (isNetworkError(cause)) reportRequestFailed();
-
-    explain(cause);
+    if (api.retired) return;
+    if (api === requestClient()) {
+      if (isNetworkError(cause)) reportRequestFailed();
+      explain(cause);
+    }
     patch(channelId, localId, {
       status: 'failed',
       uploaded,
       uncertain: requested && (unanswered || unreached),
-    });
+    }, api);
   } finally {
     if (timer) clearTimeout(timer);
     running.delete(localId);
@@ -146,12 +153,13 @@ async function run(queryClient: QueryClient, userId: string, channelId: string, 
 }
 
 /** «Опубликовать» в редакторе: плитка «в пути» сразу, всё остальное — в фоне. */
-export function publishNewPop(queryClient: QueryClient, userId: string, input: NewPop) {
+export function publishNewPop(queryClient: QueryClient, userId: string, input: NewPop, api = requestClient()) {
   const localId = `local-pop-${randomUuid()}`;
 
   setChannel(input.channelId, (pops) => [
     {
       ...input,
+      deliveryOwner: clientIdentity(api),
       localId,
       popId: randomUuid(),
       status: 'publishing',
@@ -159,9 +167,9 @@ export function publishNewPop(queryClient: QueryClient, userId: string, input: N
       uncertain: false,
     },
     ...pops,
-  ]);
+  ], api);
 
-  void run(queryClient, userId, input.channelId, localId);
+  void run(queryClient, userId, input.channelId, localId, api);
 }
 
 /** Повтор упавшей публикации — тем же id и, если они уже есть, теми же файлами. */
@@ -170,19 +178,20 @@ export function retryPop(
   userId: string,
   channelId: string,
   localId: string,
+  api = requestClient(),
 ) {
-  void run(queryClient, userId, channelId, localId);
+  void run(queryClient, userId, channelId, localId, api);
 }
 
 /** Отказ от упавшей публикации: плитка уходит, ничьи файлы — тоже. */
-export function discardPop(channelId: string, localId: string) {
-  const pending = find(channelId, localId);
+export function discardPop(channelId: string, localId: string, api = requestClient()) {
+  const pending = find(channelId, localId, api);
 
-  if (!pending || running.has(localId)) return;
+  if (!pending || (pending.deliveryOwner && pending.deliveryOwner !== clientIdentity(api)) || running.has(localId)) return;
 
   if (pending.uploaded && !pending.uncertain) {
-    void removePublicMedia(storedPaths(pending.uploaded));
+    void removePublicMedia(storedPaths(pending.uploaded), api);
   }
 
-  setChannel(channelId, (pops) => pops.filter((pop) => pop.localId !== localId));
+  setChannel(channelId, (pops) => pops.filter((pop) => pop.localId !== localId), api);
 }

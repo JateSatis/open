@@ -1,3 +1,5 @@
+import { useScreenNotice } from '@/features/notifications/useScreenNotice';
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import * as Clipboard from 'expo-clipboard';
 import { useRouter } from '@/navigation';
 import { useCallback } from 'react';
@@ -5,7 +7,6 @@ import { useCallback } from 'react';
 import type { ChatSummary } from '@/api/chats';
 import type { SavedMessage } from '@/api/saved';
 import { confirm } from '@/components/ConfirmDialog/store';
-import { showNotice } from '@/features/notifications/alertsStore';
 import { discardNote } from '@/features/saved/notesOutbox';
 import type { SavedActionId } from '@/features/saved/savedActions';
 import { formatSavedForCopy, isNote, type SavedItem } from '@/features/saved/savedCopy';
@@ -49,6 +50,8 @@ export function useSavedItemActions({
   onEdit,
   onRetry,
 }: Options) {
+  const notice = useScreenNotice();
+  const api = useRequestClient();
   const router = useRouter();
   const actions = useSavedActions();
   const { setWatchLater, setPinned, remove } = actions;
@@ -56,10 +59,10 @@ export function useSavedItemActions({
   const copy = useCallback(
     (items: readonly SavedMessage[]) => {
       void Clipboard.setStringAsync(formatSavedForCopy(items, chats, currentUserId)).then(() =>
-        showNotice('Скопировано'),
+        notice('Скопировано'),
       );
     },
-    [chats, currentUserId],
+    [notice, chats, currentUserId],
   );
 
   /** Удаление — после подтверждения; отвечает, подтвердили ли. */
@@ -80,8 +83,8 @@ export function useSavedItemActions({
   );
 
   const forward = useCallback(
-    (items: readonly SavedMessage[]) => startSavedForward(router, items),
-    [router],
+    (items: readonly SavedMessage[]) => startSavedForward(router, items, api),
+    [api, router],
   );
 
   const run = useCallback(
@@ -117,12 +120,12 @@ export function useSavedItemActions({
           return;
         case 'delete':
           // Неотправленную заметку сервер не знает — она просто уходит.
-          if (saved.localId) discardNote(saved.localId);
+          if (saved.localId) discardNote(saved.localId, api);
           else void removeConfirmed([saved]);
           return;
       }
     },
-    [copy, forward, onEdit, onReply, onRetry, onSelect, removeConfirmed, setPinned, setWatchLater],
+    [api, copy, forward, onEdit, onReply, onRetry, onSelect, removeConfirmed, setPinned, setWatchLater],
   );
 
   return { run, copy, forward, removeConfirmed, actions };

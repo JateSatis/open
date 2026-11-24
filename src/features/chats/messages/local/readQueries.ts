@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 import type { QueryClient } from '@tanstack/react-query';
 import { getHistoryRead } from '@/api/historyRead';
 import { chatsQueryKey } from '../../chatsKey';
@@ -6,9 +7,9 @@ import { stillReader } from './reader';
 
 export const readKey = (reader: string, chat: string) => ['history-read', reader, chat] as const;
 
-export async function fetchRead(reader: string, chat: string, signal: AbortSignal) {
-  const state = await getHistoryRead(chat);
-  if (signal.aborted || !stillReader(reader)) throw new Error('History reader changed');
+export async function fetchRead(reader: string, chat: string, signal: AbortSignal, api = requestClient()) {
+  const state = await getHistoryRead(chat, api);
+  if (api !== requestClient() || signal.aborted || !stillReader(reader)) throw new Error('History reader changed');
   const db = localHistory();
   if (state) db.acknowledge({ reader, chat }, state);
   db.setRoute(reader, 'read-role/' + chat, !!state);

@@ -1,3 +1,5 @@
+import { requestClient } from '@/api/requestClient';
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { ChannelUsernameTakenError, createChannel, type CreatedChannel } from '@/api/channels';
@@ -22,15 +24,15 @@ export type NewChannel = {
  * Аватарка загружается первой: канал создаётся сразу с её адресом. Если
  * создание сорвалось — файл убирается из бакета, висеть ему не за чем.
  */
-async function createWithAvatar(input: NewChannel, userId: string): Promise<CreatedChannel> {
+async function createWithAvatar(input: NewChannel, userId: string, api = requestClient()): Promise<CreatedChannel> {
   // Без связи загрузка в Storage и запрос не падают, а висят: срок превращает
   // их в понятную ошибку. Файл, доехавший после срока, убирается.
   const avatar = input.avatarUri
     ? await withDeadline(
-        uploadChannelAvatar(input.avatarUri, userId),
+        uploadChannelAvatar(input.avatarUri, userId, api),
         CREATE_DEADLINE_MS,
         (late) => {
-          void removePublicMedia(late.path);
+          void removePublicMedia(late.path, api);
         },
       )
     : null;
@@ -46,12 +48,13 @@ async function createWithAvatar(input: NewChannel, userId: string): Promise<Crea
         avatarUrl: avatar?.url ?? null,
       },
       abort.signal,
+      api,
     );
   } catch (error) {
     // Оборванный по сроку запрос мог дойти до базы: канал тогда есть и
     // ссылается на файл. Удалять его нельзя — лишний файл дешевле битой аватарки.
     if (abort.signal.aborted) throw new DeadlineError();
-    if (avatar) await removePublicMedia(avatar.path);
+    if (avatar) await removePublicMedia(avatar.path, api);
     throw error;
   } finally {
     clearTimeout(timer);
@@ -70,6 +73,7 @@ export function useCreateChannel(
   userId: string | null,
   onCreated: (created: CreatedChannel) => void,
 ) {
+  const api = useRequestClient();
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -79,7 +83,7 @@ export function useCreateChannel(
     mutationFn: (input: NewChannel) => {
       if (!userId) throw new Error('Нет активной сессии');
 
-      return createWithAvatar(input, userId);
+      return createWithAvatar(input, userId, api);
     },
     onSuccess: (created) => {
       void queryClient.invalidateQueries({ queryKey: chatsQueryKey });

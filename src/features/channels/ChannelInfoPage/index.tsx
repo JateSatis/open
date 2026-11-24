@@ -1,3 +1,4 @@
+import { useScreenNotice } from '@/features/notifications/useScreenNotice';
 import * as Clipboard from 'expo-clipboard';
 import { useRouter } from '@/navigation';
 import { useCallback, useState } from 'react';
@@ -23,7 +24,6 @@ import { useChannelChangedSignal } from '@/features/channels/useChannelChangedSi
 import { useChannelSubscription } from '@/features/channels/useChannelSubscription';
 import { useCurrentUserId } from '@/features/chats/useCurrentUserId';
 import { MediaViewer } from '@/features/media';
-import { showNotice } from '@/features/notifications/alertsStore';
 import { useProfile } from '@/features/profile/queries';
 
 export type ChannelInfoPageProps = {
@@ -38,6 +38,7 @@ export type ChannelInfoPageProps = {
  * из постов, попсы — сеткой канала, подписчики — только владельцу.
  */
 export function ChannelInfoPage({ channel, slideBack }: ChannelInfoPageProps) {
+  const notice = useScreenNotice();
   const router = useRouter();
   const currentUserId = useCurrentUserId();
   const channelId = channel.id;
@@ -78,7 +79,7 @@ export function ChannelInfoPage({ channel, slideBack }: ChannelInfoPageProps) {
   }, [page]);
   const closeSubscriberSearch = useCallback(() => setSubscriberQuery(null), []);
 
-  const onCopied = useCallback(() => showNotice('Скопировано'), []);
+  const onCopied = useCallback(() => notice('Скопировано'), [notice]);
 
   const selectMenu = useCallback(
     (item: ChannelInfoMenuItem) => {
@@ -88,7 +89,7 @@ export function ChannelInfoPage({ channel, slideBack }: ChannelInfoPageProps) {
           return;
         case 'copy_link':
           void Clipboard.setStringAsync(channelLink(channel.username)).then(() =>
-            showNotice('Ссылка скопирована'),
+            notice('Ссылка скопирована'),
           );
           return;
         case 'subscribers':
@@ -99,7 +100,7 @@ export function ChannelInfoPage({ channel, slideBack }: ChannelInfoPageProps) {
           return;
       }
     },
-    [channel.username, openSubscribers, searchPosts, unsubscribe],
+    [notice, channel.username, openSubscribers, searchPosts, unsubscribe],
   );
 
   const actions = channelInfoActions(role, subscription, {

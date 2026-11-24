@@ -1,3 +1,5 @@
+import { addSession, getAccounts, selectAccount, signOutAccount } from '@/features/auth/sessionStore';
+import { sessionOf } from '@/test/sessionOf';
 import { AudioSession } from '@livekit/react-native';
 import { Room, RoomEvent } from 'livekit-client';
 
@@ -41,9 +43,10 @@ function grant(role: 'host' | 'speaker' | 'listener') {
   });
 }
 
-beforeEach(async () => {
+afterEach(() => leaveCall());
+
+beforeEach(() => {
   jest.clearAllMocks();
-  await leaveCall();
   setCall(null);
   setInCall(false);
   useInAppAlert.setState({ alert: null });
@@ -132,16 +135,58 @@ it('обрыв — «переподключение», вернулись — с
   expect(getCall()?.connection).toBe('connected');
 });
 
-it('комнату закрыли (вышел последний участник) — выход с объяснением', async () => {
+it.each([false, true])('задержанное отключение освобождает ресурсы и сообщает причину только в A (выбран B: %s)', async switchAccount => {
+  jest.spyOn(global, 'fetch').mockResolvedValue(new Response(null, { status: 204 }));
+  try {
+    for (const id of ['B', 'A']) {
+      await addSession({
+        ...sessionOf(id, 'session-' + id),
+        expires_at: Math.floor(Date.now() / 1000) + 3600,
+        refresh_token: 'fixture-' + id,
+      });
+    }
+    grant('listener');
+    await joinCall(input);
+    const room = lastRoom();
+    let finish!: () => void;
+    room.disconnect.mockImplementationOnce(() => new Promise<void>(done => { finish = done; }));
+    jest.mocked(stopCallService).mockClear();
+    room.emit(RoomEvent.Disconnected, 5);
+    expect(getCall()).toBeNull();
+    expect(room.disconnect).toHaveBeenCalledTimes(1);
+    expect(isInCall()).toBe(false);
+    if (switchAccount) await selectAccount('B');
+    finish();
+    await new Promise(resolve => setImmediate(resolve));
+    expect(stopCallService).toHaveBeenCalledTimes(1);
+    expect(AudioSession.stopAudioSession).toHaveBeenCalledTimes(1);
+    expect(isInCall()).toBe(false);
+    expect(useInAppAlert.getState().alert).toEqual(switchAccount ? null : {
+      kind: 'notice', text: 'Звонок завершён', tone: 'info',
+    });
+  } finally {
+    for (const id of getAccounts()) await signOutAccount(id);
+    jest.restoreAllMocks();
+  }
+});
+
+it('отмена следующего входа во время disconnect не оставляет старую аудиосессию включённой', async () => {
   grant('listener');
   await joinCall(input);
-
+  let disconnect!: () => void;
+  lastRoom().disconnect.mockImplementationOnce(() => new Promise<void>(done => { disconnect = done; }));
   lastRoom().emit(RoomEvent.Disconnected, 5);
-  await new Promise((resolve) => setImmediate(resolve));
-
-  expect(getCall()).toBeNull();
-  const alert = useInAppAlert.getState().alert;
-  expect(alert?.kind === 'notice' && alert.text).toBe('Звонок завершён');
+  const preparing = prepareLiveKit();
+  let finishPreparation!: () => void;
+  const next = joinCall({ ...input, streamId: 'next' },
+    new Promise<void>(done => { finishPreparation = done; }).then(() => preparing));
+  const leaving = leaveCall();
+  disconnect();
+  finishPreparation();
+  await Promise.all([leaving, next]);
+  expect(AudioSession.startAudioSession).toHaveBeenCalledTimes(1);
+  expect(AudioSession.stopAudioSession).toHaveBeenCalledTimes(1);
+  expect(isInCall()).toBe(false);
 });
 
 it('не удалось переподключиться — выход, а не молчаливый обрыв', async () => {

@@ -1,3 +1,4 @@
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 
@@ -23,6 +24,7 @@ export function useSavedSearch(
   active: boolean,
   filter: Filter,
 ) {
+  const api = useRequestClient();
   const { input, key } = filter;
   const queryClient = useQueryClient();
   const open = query !== null;
@@ -43,10 +45,11 @@ export function useSavedSearch(
         SAVED_PAGE_SIZE,
         { ...input, q: value },
         signal,
+        api,
       );
 
       return { items: page.items, nextCursor: page.nextCursor };
     },
-    count: (value, signal) => countSavedMessages({ ...input, q: value }, signal),
+    count: (value, signal) => countSavedMessages({ ...input, q: value }, signal, api),
   });
 }

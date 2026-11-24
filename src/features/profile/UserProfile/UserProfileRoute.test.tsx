@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 import { fireEvent, screen, waitFor } from '@testing-library/react-native';
 import { useRouteParams } from '@/navigation';
 
@@ -164,7 +165,7 @@ describe('UserProfile', () => {
     expect(getByText('@anna')).toBeTruthy();
     expect(getByText('в отпуске до понедельника')).toBeTruthy();
     expect(getByText('Пишу о еде')).toBeTruthy();
-    expect(getProfileMock).toHaveBeenCalledWith('user-2');
+    expect(getProfileMock).toHaveBeenCalledWith('user-2', requestClient());
   });
 
   it('renders someone without a username without crashing', async () => {
@@ -231,7 +232,7 @@ describe('UserProfile — друзья', () => {
 
     await fireEvent.press(await screen.findByText('Добавить в друзья'));
 
-    expect(friends.send).toHaveBeenCalledWith('user-2');
+    expect(friends.send).toHaveBeenCalledWith('user-2', requestClient());
     expect(await screen.findByText('Заявка отправлена')).toBeTruthy();
   });
 
@@ -243,7 +244,7 @@ describe('UserProfile — друзья', () => {
     await fireEvent.press(await screen.findByText('Заявка отправлена'));
     await fireEvent.press(await screen.findByRole('button', { name: 'Отменить заявку' }));
 
-    await waitFor(() => expect(friends.cancel).toHaveBeenCalledWith('user-2'));
+    await waitFor(() => expect(friends.cancel).toHaveBeenCalledWith('user-2', requestClient()));
     expect(await screen.findByText('Добавить в друзья')).toBeTruthy();
   });
 
@@ -254,7 +255,7 @@ describe('UserProfile — друзья', () => {
 
     await fireEvent.press(await screen.findByText('Принять заявку'));
 
-    expect(friends.accept).toHaveBeenCalledWith('user-2');
+    expect(friends.accept).toHaveBeenCalledWith('user-2', requestClient());
     expect(await screen.findByText('Вы друзья')).toBeTruthy();
   });
 
@@ -266,7 +267,7 @@ describe('UserProfile — друзья', () => {
     await fireEvent.press(await screen.findByText('Вы друзья'));
     await fireEvent.press(await screen.findByText('Удалить из друзей'));
 
-    expect(friends.remove).toHaveBeenCalledWith('user-2');
+    expect(friends.remove).toHaveBeenCalledWith('user-2', requestClient());
     expect(await screen.findByText('Добавить в друзья')).toBeTruthy();
   });
 
@@ -340,7 +341,7 @@ describe('UserProfile — блокировка и жалоба', () => {
     const buttons = screen.getAllByRole('button', { name: 'Заблокировать' });
     await fireEvent.press(buttons[buttons.length - 1]);
 
-    await waitFor(() => expect(blockUser).toHaveBeenCalledWith('user-2'));
+    await waitFor(() => expect(blockUser).toHaveBeenCalledWith('user-2', requestClient()));
   });
 
   it('заблокированному мной — «Разблокировать» в меню', async () => {
@@ -364,7 +365,7 @@ describe('UserProfile — блокировка и жалоба', () => {
 
     expect(await screen.findByText('Жалоба отправлена')).toBeTruthy();
     expect(reportUser).toHaveBeenCalledWith(
-      expect.objectContaining({ userId: 'user-2', reason: 'threats', chatId: null, block: false }),
+      expect.objectContaining({ userId: 'user-2', reason: 'threats', chatId: null, block: false }), requestClient()
     );
   });
 

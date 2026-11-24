@@ -1,3 +1,4 @@
+import { useRequestClient } from '@/features/auth/RequestClientContext';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo } from 'react';
 
@@ -73,6 +74,7 @@ function sourceChats(chatId: string, messages: ChatMessage[]): string {
  * мешают друг другу, отписка одного не глушит другого.
  */
 export function useIslandSources(chatId: string, messages: ChatMessage[]) {
+  const api = useRequestClient();
   const queryClient = useQueryClient();
   const reader = useHistoryReader();
   const sources = useMemo(() => sourceChats(chatId, messages), [chatId, messages]);
@@ -97,18 +99,18 @@ export function useIslandSources(chatId: string, messages: ChatMessage[]) {
         onTimeVisibilityChanged: refresh,
         onMessagesDeleted: (ids) => {
           refresh();
-          dropDeletedMessages(queryClient, ids).catch(() => undefined);
+          dropDeletedMessages(queryClient, ids, api).catch(() => undefined);
         },
         onMessageEdited: (id) => {
           refresh();
-          refreshEditedMessages(queryClient, [id]).catch(() => undefined);
+          refreshEditedMessages(queryClient, [id], api).catch(() => undefined);
         },
         onReactionsChanged: (id) => reactions.add(id),
         onCommentsChanged: (id) => comments.add(id),
         onViewsChanged: (ids) => ids.forEach((id) => views.add(id)),
         onClustersChanged: (id) => clusters.add(id),
         onRead: () => {
-          getChatReadUpTo(sourceId)
+          getChatReadUpTo(sourceId, api)
             .then((readUpTo) => patchOriginChat(queryClient, sourceId, readUpTo))
             .catch(() => undefined);
         },
@@ -117,7 +119,7 @@ export function useIslandSources(chatId: string, messages: ChatMessage[]) {
         onReconnected: () => {
           void queryClient.invalidateQueries({ queryKey: messagesQueryKey(chatId) });
         },
-      }),
+      }, api),
     );
 
     return () => {
@@ -127,5 +129,5 @@ export function useIslandSources(chatId: string, messages: ChatMessage[]) {
       views.stop();
       clusters.stop();
     };
-  }, [chatId, queryClient, reader, sources]);
+  }, [api, chatId, queryClient, reader, sources]);
 }

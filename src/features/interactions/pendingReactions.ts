@@ -6,7 +6,9 @@
 // Ключ — сообщение, а не чат: одно сообщение показано и в своём чате, и в
 // островках других, и моя реакция должна появиться сразу везде.
 
-import { create } from 'zustand';
+import { requestClient } from '@/api/requestClient';
+import { perClient } from '@/api/perClient';
+import { createAccountStore } from '@/features/auth/accountStore';
 
 import type { ReactionIntent } from '@/features/interactions/reactionState';
 
@@ -15,7 +17,7 @@ type PendingReactionsState = {
   byMessage: Record<string, ReactionIntent>;
 };
 
-export const usePendingReactions = create<PendingReactionsState>(() => ({ byMessage: {} }));
+export const usePendingReactions = createAccountStore<PendingReactionsState>(() => ({ byMessage: {} }));
 
 /** Все мои неподтверждённые реакции — наложение для любой переписки. */
 export function usePendingReactionMap(): Record<string, ReactionIntent> {
@@ -26,15 +28,15 @@ export function readPendingReaction(messageId: string): ReactionIntent | undefin
   return usePendingReactions.getState().byMessage[messageId];
 }
 
-export function setPendingReaction(messageId: string, intent: ReactionIntent) {
-  usePendingReactions.setState((state) => ({
+export function setPendingReaction(messageId: string, intent: ReactionIntent, api = requestClient()) {
+  usePendingReactions.forClient(api).setState((state) => ({
     byMessage: { ...state.byMessage, [messageId]: intent },
   }));
 }
 
 /** Снимает наложение — только если это всё ещё то же желание: новый тап мог прийти, пока ехал прежний. */
-export function clearPendingReaction(messageId: string, intent?: ReactionIntent) {
-  usePendingReactions.setState((state) => {
+export function clearPendingReaction(messageId: string, intent?: ReactionIntent, api = requestClient()) {
+  usePendingReactions.forClient(api).setState((state) => {
     const current = state.byMessage[messageId];
 
     if (!current || (intent && current !== intent)) return state;
@@ -46,17 +48,12 @@ export function clearPendingReaction(messageId: string, intent?: ReactionIntent)
 }
 
 /**
- * Сообщения, по которым запрос уже едет: на одно сообщение — не больше
- * одного (см. `reactionSender`). Не часть отображаемого состояния, поэтому
- * не в сторе.
- */
-export const reactionsInFlight = new Set<string>();
-
-/**
  * Выход из аккаунта. Ответ на запрос прежнего пользователя может так и не
  * прийти — очередь не должна считать его сообщения занятыми навсегда.
  */
+export const reactionQueues = perClient(() => new Map<string, ReactionIntent>());
+
 export function resetPendingReactions() {
+  reactionQueues(requestClient()).clear();
   usePendingReactions.setState({ byMessage: {} });
-  reactionsInFlight.clear();
 }

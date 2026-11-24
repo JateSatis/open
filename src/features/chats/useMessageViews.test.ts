@@ -1,3 +1,4 @@
+import { requestClient } from '@/api/requestClient';
 import { act, renderHook } from '@testing-library/react-native';
 import { AppState, type AppStateStatus, type ViewToken } from 'react-native';
 
@@ -122,7 +123,7 @@ describe('useMessageViews', () => {
     await act(() => jest.advanceTimersByTime(2000));
 
     expect(record).toHaveBeenCalledTimes(1);
-    expect(record).toHaveBeenCalledWith('chat-1', ['m2', 'm1'], expect.any(String));
+    expect(record).toHaveBeenCalledWith('chat-1', ['m2', 'm1'], expect.any(String), requestClient());
 
     await act(() => result.current.onViewableItemsChanged({ viewableItems: tokens(rows) }));
     await act(() => jest.advanceTimersByTime(5000));
@@ -140,8 +141,8 @@ describe('useMessageViews', () => {
     await act(() => result.current.onViewableItemsChanged({ viewableItems: tokens(rows) }));
     await act(() => jest.advanceTimersByTime(2000));
 
-    expect(record).toHaveBeenCalledWith('chat-1', ['m1'], expect.any(String));
-    expect(record).toHaveBeenCalledWith('chat-src', ['o1'], expect.any(String));
+    expect(record).toHaveBeenCalledWith('chat-1', ['m1'], expect.any(String), requestClient());
+    expect(record).toHaveBeenCalledWith('chat-src', ['o1'], expect.any(String), requestClient());
   });
 
   it('уход с экрана отправляет сразу, новый вход — новая сессия', async () => {
@@ -186,7 +187,7 @@ describe('useMessageViews', () => {
     await act(() => appStateListener?.('active'));
     await act(() => jest.advanceTimersByTime(2000));
 
-    expect(record).toHaveBeenCalledWith('chat-1', ['new'], expect.any(String));
+    expect(record).toHaveBeenCalledWith('chat-1', ['new'], expect.any(String), requestClient());
   });
 
   it('пока экран чата не наверху, не засчитывает', async () => {
@@ -207,7 +208,7 @@ describe('useMessageViews', () => {
     await rerender({ focused: true });
     await act(() => jest.advanceTimersByTime(2000));
 
-    expect(record).toHaveBeenCalledWith('chat-1', ['m1'], expect.any(String));
+    expect(record).toHaveBeenCalledWith('chat-1', ['m1'], expect.any(String), requestClient());
   });
 
   it('своё не отправляет вовсе', async () => {
@@ -236,7 +237,7 @@ describe('useMessageViews', () => {
     });
     await act(() => jest.advanceTimersByTime(2000));
 
-    expect(record).toHaveBeenCalledWith('chat-1', ['m2'], expect.any(String));
+    expect(record).toHaveBeenCalledWith('chat-1', ['m2'], expect.any(String), requestClient());
   });
 
   it('из пачки пришедших снизу засчитываются только легшие в рамку списка', async () => {
@@ -266,7 +267,7 @@ describe('useMessageViews', () => {
     });
     await act(() => jest.advanceTimersByTime(2000));
 
-    expect(record).toHaveBeenCalledWith('chat-1', ['m4', 'm3'], expect.any(String));
+    expect(record).toHaveBeenCalledWith('chat-1', ['m4', 'm3'], expect.any(String), requestClient());
   });
 
   it('новое снизу, пока человек читает выше, не засчитывается', async () => {

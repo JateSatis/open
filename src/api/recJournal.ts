@@ -2,8 +2,8 @@
 // событий клиента. Дубли сервер принимает молча, мусор — отклоняет с
 // причиной; и то и другое клиент снимает из очереди.
 
-import { supabase } from '@/api/supabase';
-import { confirmedSessionOwner, isCurrentSession } from '@/features/auth/sessionOwner';
+import { requestClient } from '@/api/requestClient';
+import { isCurrentSession } from '@/features/auth/sessionOwner';
 import { getConnectionStatus } from '@/features/connection/connectionStore';
 import { sessionAuthorization } from './sessionAuthorization';
 import type { Json } from '@/api/types.gen';
@@ -47,20 +47,20 @@ function isResult(value: unknown): value is JournalSendResult {
  * Отправить пачку. Отказ целиком (лимит частоты, сеть) — исключение:
  * очередь подождёт и повторит.
  */
-export async function recordJournalEvents(events: JournalWireEvent[]): Promise<JournalSendResult> {
+export async function recordJournalEvents(events: JournalWireEvent[], api = requestClient()): Promise<JournalSendResult> {
   if (events.length === 0) return { accepted: [], rejected: [] };
 
-  const owner = confirmedSessionOwner();
+  const owner = api.sessionOwner?.();
   if (!owner || events.some((event) => event.user_id !== owner.userId)) {
     throw deliveryUnavailable();
   }
   // Обновление токена или смена аккаунта во время подготовки RPC не должны
   // превратить временный отказ авторизации в окончательное отклонение пачки.
-  const authorization = await sessionAuthorization(owner).catch((cause: unknown) => {
+  const authorization = await sessionAuthorization(owner, api).catch((cause: unknown) => {
     throw deliveryUnavailable(cause);
   });
   if (!isCurrentSession(owner) || getConnectionStatus() !== 'online') throw deliveryUnavailable();
-  const { data, error } = await supabase
+  const { data, error } = await api
     .rpc('rec_record_events', {
       batch: { sent_at: Date.now(), events: events.slice(0, JOURNAL_BATCH_MAX) },
     })

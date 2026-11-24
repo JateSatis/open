@@ -1,4 +1,5 @@
-import type { Session } from '@supabase/supabase-js';
+import { sessionOf } from '@/test/sessionOf';
+import { confirmedSessionOwner } from '@/features/auth/sessionOwner';
 import { emptyState, useSessionStore } from '@/features/auth/sessionState';
 import { AccountClient } from './accountClient';
 
@@ -8,7 +9,8 @@ const client = new AccountClient('https://bootstrap.test', 'test-key', {
   global: { fetch: transport },
   db: { retry: false },
 });
-const account = (id: string) => ({ user: { id }, access_token: 'test-' + id }) as Session;
+const account = (id: string) => sessionOf(id, id + '-session');
+client.sessionOwner = confirmedSessionOwner;
 const write = () => client.rpc('unsubscribe_from_chat', { target_chat: 'cached' });
 
 afterEach(() => {
@@ -29,7 +31,7 @@ it('прямой RPC локального аккаунта не ожидает �
   getSession.mockResolvedValue({ data: { session: b }, error: null });
   expect((await write()).error).toBeNull();
   expect(transport).toHaveBeenCalledTimes(1);
-  expect(transport.mock.calls[0][1].headers.get('Authorization')).toBe('Bearer test-b');
+  expect(transport.mock.calls[0][1].headers.get('Authorization')).toBe(`Bearer ${b.access_token}`);
 });
 
 it('отклоняет RPC, если владелец сменился во время refresh', async () => {

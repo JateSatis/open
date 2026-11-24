@@ -5,11 +5,12 @@
 // берётся из JWT внутри функций, а не из запроса (миграция
 // 20260926150000_account_devices.sql).
 
+import type { AccountClient } from '@/api/accountClient';
+import { requestClient } from '@/api/requestClient';
 import type { UserIdentity } from '@supabase/supabase-js';
 
-import { supabase } from '@/api/supabase';
 import { sessionAuthorization } from './sessionAuthorization';
-import { confirmedSessionOwner, isCurrentSession, type SessionOwner } from '@/features/auth/sessionOwner';
+import { sameSession, type SessionOwner } from '@/features/auth/sessionOwner';
 import { withSessionChange } from '@/features/auth/sessionChange';
 import { signOutAccount } from '@/features/auth/sessionStore';
 import type { Tables } from '@/api/types.gen';
@@ -66,16 +67,17 @@ function emailOf(identity: UserIdentity): string | null {
   return typeof email === 'string' && email.length > 0 ? email : null;
 }
 
-async function fetchIdentities(): Promise<UserIdentity[]> {
-  const { data, error } = await supabase.auth.getUserIdentities();
+async function fetchIdentities(api: AccountClient): Promise<UserIdentity[]> {
+  if (!api.sessionOwner?.()) throw new Error('Требуется активная сессия аккаунта');
+  const { data, error } = await api.auth.getUserIdentities();
 
   if (error) throw error;
 
   return data.identities;
 }
 
-export async function listIdentities(): Promise<SignInIdentity[]> {
-  const identities = await fetchIdentities();
+export async function listIdentities(api = requestClient()): Promise<SignInIdentity[]> {
+  const identities = await fetchIdentities(api);
 
   return identities.map((identity) => ({
     id: identity.identity_id,
@@ -88,29 +90,30 @@ export async function listIdentities(): Promise<SignInIdentity[]> {
  * Привязка второго способа входа по id-токену из нативного листа. На сервере
  * должна быть включена ручная привязка (Authentication → Allow manual linking).
  */
-export async function linkIdentity(provider: IdentityProvider, token: string): Promise<void> {
-  const owner = confirmedSessionOwner();
+export async function linkIdentity(provider: IdentityProvider, token: string, api = requestClient()): Promise<void> {
+  const owner = api.sessionOwner?.();
   await withSessionChange(async () => {
-    if (!owner || !isCurrentSession(owner)) throw new Error('Сессия аккаунта изменилась');
-    const { error } = await supabase.auth.linkIdentity({ provider, token });
+    if (!owner || !sameSession(owner, api.sessionOwner?.() ?? null)) throw new Error('Сессия аккаунта изменилась');
+    const { error } = await api.auth.linkIdentity({ provider, token });
     if (error) throw error;
   });
 }
 
 /** Последний способ входа Auth отвязать не даст — и интерфейс такую кнопку не показывает. */
-export async function unlinkIdentity(identityId: string): Promise<void> {
-  const client = supabase;
-  const identity = (await fetchIdentities()).find((item) => item.identity_id === identityId);
-
-  if (!identity) return;
-
-  const { error } = await client.auth.unlinkIdentity(identity);
-
-  if (error) throw error;
+export async function unlinkIdentity(identityId: string, api = requestClient()): Promise<void> {
+  const owner = api.sessionOwner?.();
+  await withSessionChange(async () => {
+    if (!owner || !sameSession(owner, api.sessionOwner?.() ?? null)) throw new Error('Сессия аккаунта изменилась');
+    const identity = (await fetchIdentities(api)).find(item => item.identity_id === identityId);
+    if (!identity) return;
+    if (!sameSession(owner, api.sessionOwner?.() ?? null)) throw new Error('Сессия аккаунта изменилась');
+    const { error } = await api.auth.unlinkIdentity(identity);
+    if (error) throw error;
+  });
 }
 
-export async function registerDevice(info: DeviceInfo, owner: SessionOwner): Promise<void> {
-  const { error } = await supabase.rpc('register_device', {
+export async function registerDevice(info: DeviceInfo, owner: SessionOwner, api = requestClient()): Promise<void> {
+  const { error } = await api.rpc('register_device', {
     p_installation_id: info.installationId,
     p_platform: info.platform,
     // Аргументы функций генератор типов считает обязательными строками:
@@ -118,7 +121,7 @@ export async function registerDevice(info: DeviceInfo, owner: SessionOwner): Pro
     p_model: info.model ?? '',
     p_os_version: info.osVersion ?? '',
     p_app_version: info.appVersion ?? '',
-  }).setHeader('Authorization', await sessionAuthorization(owner));
+  }).setHeader('Authorization', await sessionAuthorization(owner, api));
 
   if (error) throw error;
 }
@@ -127,10 +130,10 @@ export async function registerDevice(info: DeviceInfo, owner: SessionOwner): Pro
  * Отмечает активность и отвечает, жив ли ещё сеанс этого устройства. `false`
  * значит, что сеанс завершили с другого устройства или удалили аккаунт.
  */
-export async function touchDevice(installationId: string, owner: SessionOwner): Promise<boolean> {
-  const { data, error } = await supabase.rpc('touch_device', {
+export async function touchDevice(installationId: string, owner: SessionOwner, api = requestClient()): Promise<boolean> {
+  const { data, error } = await api.rpc('touch_device', {
     p_installation_id: installationId,
-  }).setHeader('Authorization', await sessionAuthorization(owner));
+  }).setHeader('Authorization', await sessionAuthorization(owner, api));
 
   if (error) throw error;
 
@@ -138,8 +141,8 @@ export async function touchDevice(installationId: string, owner: SessionOwner): 
 }
 
 /** Устройства, где сейчас выполнен вход. Своё текущее — тоже здесь. */
-export async function listMyDevices(): Promise<Device[]> {
-  const { data, error } = await supabase
+export async function listMyDevices(api = requestClient()): Promise<Device[]> {
+  const { data, error } = await api
     .from('devices')
     .select(DEVICE_COLUMNS)
     .not('session_id', 'is', null)
@@ -151,22 +154,22 @@ export async function listMyDevices(): Promise<Device[]> {
   return (data ?? []).map(toDevice);
 }
 
-export async function endDeviceSession(deviceId: string): Promise<void> {
-  const { error } = await supabase.rpc('end_device_session', { p_device_id: deviceId });
+export async function endDeviceSession(deviceId: string, api = requestClient()): Promise<void> {
+  const { error } = await api.rpc('end_device_session', { p_device_id: deviceId });
 
   if (error) throw error;
 }
 
-export async function endOtherSessions(): Promise<void> {
-  const { error } = await supabase.rpc('end_other_sessions');
+export async function endOtherSessions(api = requestClient()): Promise<void> {
+  const { error } = await api.rpc('end_other_sessions');
 
   if (error) throw error;
 }
 
-export async function markDeviceSignedOut(installationId: string, owner: SessionOwner): Promise<void> {
-  const { error } = await supabase.rpc('mark_device_signed_out', {
+export async function markDeviceSignedOut(installationId: string, owner: SessionOwner, api = requestClient()): Promise<void> {
+  const { error } = await api.rpc('mark_device_signed_out', {
     p_installation_id: installationId,
-  }).setHeader('Authorization', await sessionAuthorization(owner));
+  }).setHeader('Authorization', await sessionAuthorization(owner, api));
 
   if (error) throw error;
 }
@@ -190,10 +193,10 @@ export class DeleteAccountError extends Error {
 }
 
 /** Удаляет аккаунт вызывающего через Edge Function `delete-account`. */
-export async function deleteMyAccount(owner: SessionOwner): Promise<void> {
-  const { error } = await supabase.functions.invoke('delete-account', {
+export async function deleteMyAccount(owner: SessionOwner, api = requestClient()): Promise<void> {
+  const { error } = await api.functions.invoke('delete-account', {
     method: 'POST',
-    headers: { Authorization: await sessionAuthorization(owner) },
+    headers: { Authorization: await sessionAuthorization(owner, api) },
   });
 
   if (error) throw new DeleteAccountError(error);
