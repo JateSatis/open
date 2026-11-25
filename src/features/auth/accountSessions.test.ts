@@ -122,6 +122,32 @@ it('выход из выбранного B оставляет A доступны
   auth.stop();
 });
 
+it('повторный вход через Google выбирает существующий B один раз и сохраняет сеанс A', async () => {
+  const auth = loadAuth();
+  await auth.restoreAccounts();
+  const clientA = auth.api.supabase;
+  await auth.addSession(b);
+  await auth.selectAccount('A');
+  const { activateProviderSession }: typeof import('./accountChoice') = require('./accountChoice');
+  const { requestSelection }: typeof import('@/api/screenRequest') = require('@/api/screenRequest');
+  async function chooseGoogleB() {
+    mockGoogle.mockResolvedValueOnce({ type: 'success', data: { idToken: 'provider-fixture' } });
+    transport.mockResolvedValueOnce(new Response(JSON.stringify(b), { status: 200 }));
+    expect(await auth.provider.signInWithGoogle(activateProviderSession(requestSelection()))).toEqual({ status: 'success' });
+    expect(auth.getSelectedAccountId()).toBe('B');
+    expect(auth.getAccounts()).toEqual(['A', 'B']);
+  }
+  try {
+    await chooseGoogleB();
+    const clientB = auth.api.supabase;
+    await chooseGoogleB();
+    expect(auth.api.supabase).toBe(clientB);
+    expect((await clientA.auth.getSession()).data.session).toEqual(a);
+  } finally {
+    auth.stop();
+  }
+});
+
 it('выход из спящего B использует его сохранённый сеанс после смены session_id', async () => {
   const key = legacy + ':session:older-B';
   const storage: typeof import('./accountStorage') = require('./accountStorage');
