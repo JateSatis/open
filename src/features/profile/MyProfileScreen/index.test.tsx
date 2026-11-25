@@ -53,9 +53,11 @@ describe('MyProfileScreen', () => {
   it('shows a spinner while the profile is loading', async () => {
     getMyProfileMock.mockReturnValue(new Promise(() => {}));
 
-    const { getByLabelText } = await renderWithQuery(<MyProfileScreen />);
+    const { getByLabelText, getByRole } = await renderWithQuery(<MyProfileScreen />);
 
     expect(getByLabelText('Загрузка профиля')).toBeTruthy();
+    await fireEvent.press(getByRole('button', { name: 'Аккаунт' }));
+    expect(pushMock).toHaveBeenCalledWith({ name: 'Account' });
   });
 
   it('shows the loaded profile', async () => {

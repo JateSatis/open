@@ -34,6 +34,7 @@ const a = fixture('A');
 const b = fixture('B');
 const transport = jest.fn<ReturnType<typeof fetch>, Parameters<typeof fetch>>();
 const originalFetch = global.fetch;
+jest.mock('./installationId', () => ({ getInstallationId: async () => 'fixture-installation' }));
 beforeEach(async () => {
   process.env.EXPO_PUBLIC_SUPABASE_URL = 'https://isolation.test';
   process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY = 'fixture-key';
@@ -119,6 +120,95 @@ it('выход из выбранного B оставляет A доступны
   await auth.selectAccount('A');
   expect((await auth.api.supabase.auth.getSession()).data.session).toEqual(a);
   auth.stop();
+});
+
+it('повторный вход через Google выбирает существующий B один раз и сохраняет сеанс A', async () => {
+  const auth = loadAuth();
+  await auth.restoreAccounts();
+  const clientA = auth.api.supabase;
+  await auth.addSession(b);
+  await auth.selectAccount('A');
+  const { activateProviderSession }: typeof import('./accountChoice') = require('./accountChoice');
+  const { requestSelection }: typeof import('@/api/screenRequest') = require('@/api/screenRequest');
+  async function chooseGoogleB() {
+    mockGoogle.mockResolvedValueOnce({ type: 'success', data: { idToken: 'provider-fixture' } });
+    transport.mockResolvedValueOnce(new Response(JSON.stringify(b), { status: 200 }));
+    expect(await auth.provider.signInWithGoogle(activateProviderSession(requestSelection()))).toEqual({ status: 'success' });
+    expect(auth.getSelectedAccountId()).toBe('B');
+    expect(auth.getAccounts()).toEqual(['A', 'B']);
+  }
+  try {
+    await chooseGoogleB();
+    const clientB = auth.api.supabase;
+    await chooseGoogleB();
+    expect(auth.api.supabase).toBe(clientB);
+    expect((await clientA.auth.getSession()).data.session).toEqual(a);
+  } finally {
+    auth.stop();
+  }
+});
+
+it('выход из спящего B использует его сохранённый сеанс после смены session_id', async () => {
+  const key = legacy + ':session:older-B';
+  const storage: typeof import('./accountStorage') = require('./accountStorage');
+  await storage.writeAccounts({
+    accounts: [
+      { userId: 'A', key: legacy + ':session:A' },
+      { userId: 'B', key, sessionId: 'previous-B-session' },
+    ],
+    selected: 'A',
+  });
+  await AsyncStorage.setItem(legacy + ':session:A', JSON.stringify(a));
+  await AsyncStorage.setItem(key, JSON.stringify(b));
+  const auth = loadAuth();
+  await auth.restoreAccounts();
+  const slot = auth.useSessionStore.getState().accounts[1];
+  const owner = await auth.savedSessionOwner(slot);
+  const { signOutSavedAccount }: typeof import('./signOut') = require('./signOut');
+  const { requestSelection }: typeof import('@/api/screenRequest') = require('@/api/screenRequest');
+  transport.mockImplementation(async () => new Response(null, { status: 204 }));
+  await signOutSavedAccount(slot, requestSelection(), owner);
+  expect(auth.getAccounts()).toEqual(['A']);
+  expect(auth.getSelectedAccountId()).toBe('A');
+  expect(transport.mock.calls.map(([url]) => String(url))).toEqual(expect.arrayContaining([
+    expect.stringContaining('mark_device_signed_out'), expect.stringContaining('scope=local'),
+  ]));
+  for (const [, init] of transport.mock.calls) {
+    expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer ' + b.access_token);
+  }
+  auth.stop();
+});
+
+it('отказ Auth обновить отозванный сеанс B удаляет только B при выбранном A', async () => {
+  const auth = loadAuth();
+  await auth.restoreAccounts();
+  const now = Date.now();
+  await auth.addSession({ ...b, expires_at: Math.floor(now / 1000) + 300 });
+  const clientB = auth.api.supabase;
+  await auth.selectAccount('A');
+  const clientA = auth.api.supabase;
+  const removed = new Promise<void>(resolve => {
+    const unsubscribe = auth.useSessionStore.subscribe(state => {
+      if (state.accounts.some(slot => slot.userId === 'B')) return;
+      unsubscribe();
+      resolve();
+    });
+  });
+  transport.mockResolvedValueOnce(new Response(JSON.stringify({
+    error: 'invalid_grant', error_code: 'refresh_token_not_found', message: 'Invalid Refresh Token',
+  }), { status: 400 }));
+  const clock = jest.spyOn(Date, 'now').mockReturnValue(now + 600_000);
+  try {
+    const { error } = await clientB.auth.refreshSession({ refresh_token: b.refresh_token });
+    expect(error).not.toBeNull();
+    await removed;
+    expect(auth.getSelectedAccountId()).toBe('A');
+    expect(auth.api.supabase).toBe(clientA);
+    expect((await clientA.auth.getSession()).data.session).toEqual(a);
+  } finally {
+    clock.mockRestore();
+    auth.stop();
+  }
 });
 
 it.each(['до индекса', 'после индекса'])('продолжает прерванную миграцию (%s)', async phase => {

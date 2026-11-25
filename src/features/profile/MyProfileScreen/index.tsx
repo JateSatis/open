@@ -79,6 +79,7 @@ export function MyProfileScreen() {
         />
       ) : (
         <Screen edges={['top']}>
+          <Button testID="profile-settings" label="Аккаунт" variant="secondary" onPress={() => router.push({ name: 'Account' })} />
           <ProfileLoader isPending={isPending} error={error} onRetry={() => refetch()}>
             {null}
           </ProfileLoader>

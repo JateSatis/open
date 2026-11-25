@@ -41,19 +41,25 @@ type CallStoreState = { call: ActiveCall | null };
  * и сколько в нём людей — читается запросами (`useLiveStream`), а не отсюда.
  */
 export const useCallStore = create<CallStoreState>(() => ({ call: null }));
+let participation = 0;
+
+export function callParticipation() {
+  return participation;
+}
 
 export function getCall(): ActiveCall | null {
   return useCallStore.getState().call;
 }
 
 export function setCall(call: ActiveCall | null) {
+  if (call) participation++;
   useCallStore.setState({ call });
 }
 
 export function patchCall(patch: Partial<ActiveCall>) {
   const call = getCall();
 
-  if (call) setCall({ ...call, ...patch });
+  if (call) useCallStore.setState({ call: { ...call, ...patch } });
 }
 
 export function useActiveCall(): ActiveCall | null {

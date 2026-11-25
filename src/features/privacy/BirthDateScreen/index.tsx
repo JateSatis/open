@@ -5,6 +5,7 @@ import { styles } from './styles';
 
 import { BirthDateTooYoungError } from '@/api/privacy';
 import { Button } from '@/components/Button';
+import { SavedAccounts } from '@/features/auth/SavedAccounts';
 import { Screen } from '@/components/Screen';
 import { Text } from '@/components/Text';
 import { useDeleteAccount } from '@/features/auth/accountQueries';
@@ -76,6 +77,7 @@ function BirthDateForm({ userId, canSubmit }: { userId: string; canSubmit: boole
             </Text>
           ) : null}
         </View>
+        <SavedAccounts otherAccountsOnly />
       </Screen>
     );
   }
@@ -103,6 +105,7 @@ function BirthDateForm({ userId, canSubmit }: { userId: string; canSubmit: boole
           onPress={onContinue}
         />
       </View>
+      <SavedAccounts otherAccountsOnly />
     </Screen>
   );
 }

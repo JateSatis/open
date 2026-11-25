@@ -5,6 +5,7 @@ import {
 } from '@react-native-google-signin/google-signin';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import Constants from 'expo-constants';
+import type { Session } from '@supabase/supabase-js';
 
 import { describeAuthError, errorCodeOf, signInMessages } from './signInErrors';
 import { addSession, getSelectedAccountId } from './sessionStore';
@@ -54,12 +55,14 @@ export type IdTokenResult =
   | { status: 'cancelled' }
   | { status: 'error'; message: string };
 
-async function exchangeIdToken(provider: SignInProvider, token: string): Promise<SignInResult> {
+type Activate = (session: Session) => Promise<boolean>;
+
+async function exchangeIdToken(provider: SignInProvider, token: string, activate: Activate): Promise<SignInResult> {
   const client = createAccountClient();
   try {
     const { data, error } = await client.auth.signInWithIdToken({ provider, token });
     if (error || !data.session) return { status: 'error', message: describeAuthError(error) };
-    await addSession(data.session);
+    if (await activate(data.session) === false) return { status: 'cancelled' };
     return { status: 'success' };
   } catch (error) {
     return { status: 'error', message: describeAuthError(error) };
@@ -71,10 +74,11 @@ async function exchangeIdToken(provider: SignInProvider, token: string): Promise
 async function withToken(
   result: IdTokenResult,
   provider: SignInProvider,
+  activate: Activate,
 ): Promise<SignInResult> {
   if (result.status !== 'token') return result;
 
-  return exchangeIdToken(provider, result.token);
+  return exchangeIdToken(provider, result.token, activate);
 }
 
 export async function requestGoogleIdToken(): Promise<IdTokenResult> {
@@ -140,13 +144,13 @@ export async function requestAppleIdToken(): Promise<IdTokenResult> {
   }
 }
 
-export async function signInWithGoogle(): Promise<SignInResult> {
+export async function signInWithGoogle(activate: Activate = addSession): Promise<SignInResult> {
   if (getSelectedAccountId()) await signOutOfGoogle();
-  return withToken(await requestGoogleIdToken(), 'google');
+  return withToken(await requestGoogleIdToken(), 'google', activate);
 }
 
-export async function signInWithApple(): Promise<SignInResult> {
-  return withToken(await requestAppleIdToken(), 'apple');
+export async function signInWithApple(activate: Activate = addSession): Promise<SignInResult> {
+  return withToken(await requestAppleIdToken(), 'apple', activate);
 }
 
 /**

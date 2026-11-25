@@ -1,4 +1,5 @@
 import type { AccountClient } from '@/api/accountClient';
+import type { AccountSlot } from './accountStorage';
 import type { Session } from '@supabase/supabase-js';
 import { create } from 'zustand';
 
@@ -17,7 +18,10 @@ export type AuthBootstrap = {
   sdkStatus: 'pending' | 'session' | 'signedOut' | 'offline';
 };
 
-export const emptyState: SessionState & AuthBootstrap = {
+type DeviceState = SessionState & AuthBootstrap & { accounts: readonly AccountSlot[] };
+
+export const emptyState: DeviceState = {
+  accounts: [],
   session: null,
   isAuthenticated: false,
   isLoading: true,
@@ -26,7 +30,7 @@ export const emptyState: SessionState & AuthBootstrap = {
   sdkStatus: 'pending',
 };
 
-export const useSessionStore = create<SessionState & AuthBootstrap>(() => emptyState);
+export const useSessionStore = create<DeviceState>(() => emptyState);
 
 export function confirmedAccountId({ sdkStatus, session }: SessionState & AuthBootstrap) {
   return sdkStatus === 'session' ? session?.user.id ?? null : null;

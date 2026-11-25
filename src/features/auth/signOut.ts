@@ -6,6 +6,30 @@ import { withSessionChange } from './sessionChange';
 import { signOutOfGoogle } from './signIn';
 import { isCurrentSession, type SessionOwner } from './sessionOwner';
 import { useSessionStore } from './sessionState';
+import { signOutAccount } from './sessionStore';
+import type { AccountSlot } from './accountStorage';
+import { requestSelection } from '@/api/screenRequest';
+import { ownerOf } from './sessionOwner';
+
+export async function signOutSavedAccount(slot: AccountSlot, selection: number, expected?: SessionOwner) {
+  const allowed = () => requestSelection() === selection && useSessionStore.getState().accounts.includes(slot);
+  if (!allowed()) return;
+  await signOutAccount(slot.userId, expected, {
+    allowed,
+    async beforeRemove({ client }) {
+      try {
+        const { data } = await client.auth.getSession();
+        const owner = ownerOf(data.session);
+        if (owner && owner.userId === slot.userId) {
+          await markDeviceSignedOut(await getInstallationId(), owner, client);
+        }
+      } catch {
+        // Локальный выход доступен и без сети.
+      }
+      if (useSessionStore.getState().localAccountId === slot.userId) await signOutOfGoogle();
+    },
+  });
+}
 
 /**
  * Выход из аккаунта на этом устройстве — только этот сеанс, остальные
