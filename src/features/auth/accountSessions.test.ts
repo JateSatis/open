@@ -153,6 +153,38 @@ it('выход из спящего B использует его сохранё�
   auth.stop();
 });
 
+it('отказ Auth обновить отозванный сеанс B удаляет только B при выбранном A', async () => {
+  const auth = loadAuth();
+  await auth.restoreAccounts();
+  const now = Date.now();
+  await auth.addSession({ ...b, expires_at: Math.floor(now / 1000) + 300 });
+  const clientB = auth.api.supabase;
+  await auth.selectAccount('A');
+  const clientA = auth.api.supabase;
+  const removed = new Promise<void>(resolve => {
+    const unsubscribe = auth.useSessionStore.subscribe(state => {
+      if (state.accounts.some(slot => slot.userId === 'B')) return;
+      unsubscribe();
+      resolve();
+    });
+  });
+  transport.mockResolvedValueOnce(new Response(JSON.stringify({
+    error: 'invalid_grant', error_code: 'refresh_token_not_found', message: 'Invalid Refresh Token',
+  }), { status: 400 }));
+  const clock = jest.spyOn(Date, 'now').mockReturnValue(now + 600_000);
+  try {
+    const { error } = await clientB.auth.refreshSession({ refresh_token: b.refresh_token });
+    expect(error).not.toBeNull();
+    await removed;
+    expect(auth.getSelectedAccountId()).toBe('A');
+    expect(auth.api.supabase).toBe(clientA);
+    expect((await clientA.auth.getSession()).data.session).toEqual(a);
+  } finally {
+    clock.mockRestore();
+    auth.stop();
+  }
+});
+
 it.each(['до индекса', 'после индекса'])('продолжает прерванную миграцию (%s)', async phase => {
   const storage: typeof import('./accountStorage') = require('./accountStorage');
   if (phase === 'до индекса') {
